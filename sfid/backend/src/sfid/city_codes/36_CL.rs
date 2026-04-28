@@ -1,463 +1,20413 @@
 use super::{CityCode, TownCode, VillageCode};
 
 static TOWNS_CL_001: [TownCode; 19] = [
-    TownCode { name: "恰萨街道", code: "001", villages: &[VillageCode { name: "天南路社区居委会", code: "001" }, VillageCode { name: "帕依那甫路社区居委会", code: "002" }, VillageCode { name: "人民广场社区居委会", code: "003" }, VillageCode { name: "塔里木路社区居委会", code: "004" }, VillageCode { name: "蓝湾路社区居委会", code: "005" }, VillageCode { name: "雪莲路社区居委会", code: "006" }, VillageCode { name: "南湖路社区居委会", code: "007" }, VillageCode { name: "恒昌社区居委会", code: "008" }, VillageCode { name: "阳光社区居委会", code: "009" }, VillageCode { name: "彩虹社区居委会", code: "010" }, VillageCode { name: "盘橐村委会", code: "011" }] },
-    TownCode { name: "亚瓦格街道", code: "002", villages: &[VillageCode { name: "北大桥社区居委会", code: "001" }, VillageCode { name: "幸福苑社区居委会", code: "002" }, VillageCode { name: "玉瑞克巴扎社区居委会", code: "003" }, VillageCode { name: "滨河北路社区居委会", code: "004" }, VillageCode { name: "榆树巷社区居委会", code: "005" }, VillageCode { name: "阔纳乃则尔巴格路社区", code: "006" }, VillageCode { name: "师范学院社区", code: "007" }, VillageCode { name: "克然木巴格社区居委会", code: "008" }, VillageCode { name: "巴格艾日克村委会", code: "009" }, VillageCode { name: "乃则尔巴格村委会", code: "010" }] },
-    TownCode { name: "吾斯塘博依街道", code: "003", villages: &[VillageCode { name: "吾斯塘博依路社区居委会", code: "001" }, VillageCode { name: "其尼瓦克社区居委会", code: "002" }, VillageCode { name: "色满路社区居委会", code: "003" }, VillageCode { name: "古扎社区居委会", code: "004" }, VillageCode { name: "萨合亚社区居委会", code: "005" }, VillageCode { name: "吐尔亚瓦格社区居委会", code: "006" }, VillageCode { name: "布拉克贝西社区居委会", code: "007" }, VillageCode { name: "库木代尔瓦扎社区", code: "008" }, VillageCode { name: "徕宁城社区", code: "009" }, VillageCode { name: "吐曼路社区", code: "010" }, VillageCode { name: "尤木拉克协海尔社区", code: "011" }, VillageCode { name: "夏马勒巴格社区", code: "012" }, VillageCode { name: "夏马勒巴格村委会", code: "013" }] },
-    TownCode { name: "库木代尔瓦扎街道", code: "004", villages: &[VillageCode { name: "解放南路社区居委会", code: "001" }, VillageCode { name: "七里桥社区居委会", code: "002" }, VillageCode { name: "克孜都维路社区居委会", code: "003" }, VillageCode { name: "文化路社区居委会", code: "004" }, VillageCode { name: "大十字社区", code: "005" }, VillageCode { name: "长安社区", code: "006" }, VillageCode { name: "明宇路社区", code: "007" }, VillageCode { name: "大众路社区居委会", code: "008" }, VillageCode { name: "人民西路社区居委会", code: "009" }, VillageCode { name: "汇康村委会", code: "010" }, VillageCode { name: "玉吉米力克村委会", code: "011" }] },
-    TownCode { name: "西域大道街道", code: "005", villages: &[VillageCode { name: "努尔巴格社区", code: "001" }, VillageCode { name: "天山南路社区", code: "002" }, VillageCode { name: "和谐社区", code: "003" }, VillageCode { name: "西域大道社区", code: "004" }, VillageCode { name: "托克扎克路社区", code: "005" }, VillageCode { name: "兰干路社区", code: "006" }, VillageCode { name: "库如克铁热克村委会", code: "007" }, VillageCode { name: "吐尕依兰干村委会", code: "008" }] },
-    TownCode { name: "东湖街道", code: "006", villages: &[VillageCode { name: "东湖社区", code: "001" }, VillageCode { name: "时代广场社区", code: "002" }, VillageCode { name: "汇城社区", code: "003" }, VillageCode { name: "新兴纺织社区居委会", code: "004" }, VillageCode { name: "永康社区", code: "005" }, VillageCode { name: "慕士塔格路社区", code: "006" }, VillageCode { name: "世纪大道社区", code: "007" }, VillageCode { name: "百花村委会", code: "008" }] },
-    TownCode { name: "迎宾大道街道", code: "007", villages: &[VillageCode { name: "英努尔社区", code: "001" }, VillageCode { name: "天山西路社区", code: "002" }, VillageCode { name: "阿瓦提路社区", code: "003" }, VillageCode { name: "机场路社区", code: "004" }, VillageCode { name: "科创社区", code: "005" }, VillageCode { name: "火车站社区", code: "006" }, VillageCode { name: "空港社区居委会", code: "007" }, VillageCode { name: "远方社区居委会", code: "008" }, VillageCode { name: "托库孜塔什村委会", code: "009" }] },
-    TownCode { name: "西公园街道", code: "008", villages: &[VillageCode { name: "东艾力克社区", code: "001" }, VillageCode { name: "斯尔克其社区", code: "002" }, VillageCode { name: "佳和社区", code: "003" }, VillageCode { name: "园丁路社区", code: "004" }, VillageCode { name: "明珠路社区", code: "005" }, VillageCode { name: "科克艾日克社区", code: "006" }, VillageCode { name: "米兰路社区", code: "007" }, VillageCode { name: "团结社区", code: "008" }, VillageCode { name: "晨光社区", code: "009" }] },
-    TownCode { name: "乃则尔巴格镇", code: "009", villages: &[VillageCode { name: "康安社区", code: "001" }, VillageCode { name: "金磨社区", code: "002" }, VillageCode { name: "樱桃村委会", code: "003" }, VillageCode { name: "前进村委会", code: "004" }, VillageCode { name: "皮合森村委会", code: "005" }, VillageCode { name: "塔合塔科瑞克村委会", code: "006" }, VillageCode { name: "恰尔巴格村委会", code: "007" }, VillageCode { name: "阔什库勒村委会", code: "008" }, VillageCode { name: "亚贝希村委会", code: "009" }, VillageCode { name: "古鲁巴格村委会", code: "010" }, VillageCode { name: "喀萨甫买里村委会", code: "011" }, VillageCode { name: "布恰村委会", code: "012" }, VillageCode { name: "尤喀克喀孜热克村委会", code: "013" }, VillageCode { name: "琼布斯村委会", code: "014" }, VillageCode { name: "红樱桃村委会", code: "015" }, VillageCode { name: "木桥村委会", code: "016" }, VillageCode { name: "幸福村委会", code: "017" }] },
-    TownCode { name: "夏马勒巴格镇", code: "010", villages: &[VillageCode { name: "克孜勒河社区居委会", code: "001" }, VillageCode { name: "索喀库勒贝希村委会", code: "002" }, VillageCode { name: "斯尔克其村委会", code: "003" }, VillageCode { name: "城西村委会", code: "004" }, VillageCode { name: "科克艾日克霍依拉村委会", code: "005" }, VillageCode { name: "团结村委会", code: "006" }, VillageCode { name: "克孜勒都维村委会", code: "007" }, VillageCode { name: "阿亚格帕合太克里村委会", code: "008" }, VillageCode { name: "苏孜克布拉克村委会", code: "009" }, VillageCode { name: "努尔贝希买里村委会", code: "010" }, VillageCode { name: "库木塔依村委会", code: "011" }, VillageCode { name: "和谐村委会", code: "012" }, VillageCode { name: "喀希博依村委会", code: "013" }] },
-    TownCode { name: "多来特巴格乡", code: "011", villages: &[VillageCode { name: "央布拉克社区", code: "001" }, VillageCode { name: "廊桥水岸社区居委会", code: "002" }, VillageCode { name: "文化苑社区居委会", code: "003" }, VillageCode { name: "学府社区居委会", code: "004" }, VillageCode { name: "世纪名城社区居委会", code: "005" }, VillageCode { name: "琼库勒贝希村委会", code: "006" }, VillageCode { name: "阿克亚贝希村委会", code: "007" }, VillageCode { name: "亚尔库勒贝希村委会", code: "008" }, VillageCode { name: "科瑞克贝希村委会", code: "009" }, VillageCode { name: "艾斯里库勒村委会", code: "010" }, VillageCode { name: "喀迪木加依村委会", code: "011" }, VillageCode { name: "巴格其村委会", code: "012" }, VillageCode { name: "吐鲁番库恰村委会", code: "013" }, VillageCode { name: "塔吾古孜村委会", code: "014" }, VillageCode { name: "央不拉克村委会", code: "015" }, VillageCode { name: "艾格日亚村委会", code: "016" }, VillageCode { name: "花园村委会", code: "017" }, VillageCode { name: "阿亚克苏扎克村委会", code: "018" }, VillageCode { name: "托喀依村委会", code: "019" }, VillageCode { name: "托万克霍依拉村委会", code: "020" }, VillageCode { name: "兰杆村委会", code: "021" }, VillageCode { name: "提勒苏扎克村委会", code: "022" }, VillageCode { name: "奥依库恰村委会", code: "023" }, VillageCode { name: "新城村委会", code: "024" }, VillageCode { name: "建设村委会", code: "025" }, VillageCode { name: "塔格拉克村委会", code: "026" }, VillageCode { name: "布拉克村委会", code: "027" }, VillageCode { name: "苏鲁克村委会", code: "028" }, VillageCode { name: "拍什塔克村委会", code: "029" }, VillageCode { name: "东湾村委会", code: "030" }, VillageCode { name: "波热克买里斯村委会", code: "031" }, VillageCode { name: "青格力克村委会", code: "032" }, VillageCode { name: "墩托喀依村委会", code: "033" }, VillageCode { name: "库勒贝西村委会", code: "034" }] },
-    TownCode { name: "浩罕乡", code: "012", villages: &[VillageCode { name: "二号南社区居委会", code: "001" }, VillageCode { name: "二号北社区居委会", code: "002" }, VillageCode { name: "塔尔布谷孜社区", code: "003" }, VillageCode { name: "百合苑社区", code: "004" }, VillageCode { name: "香妃村委会", code: "005" }, VillageCode { name: "小亚郎村委会", code: "006" }, VillageCode { name: "库恰比西村委会", code: "007" }, VillageCode { name: "沙普艾热克村委会", code: "008" }, VillageCode { name: "沙依村委会", code: "009" }, VillageCode { name: "恰克萨村委会", code: "010" }, VillageCode { name: "库木普提克村委会", code: "011" }, VillageCode { name: "巴西苏扎克村委会", code: "012" }, VillageCode { name: "红山村委会", code: "013" }, VillageCode { name: "园丁村委会", code: "014" }, VillageCode { name: "托万喀孜艾日克村委会", code: "015" }, VillageCode { name: "依西强村委会", code: "016" }, VillageCode { name: "曲古尔村委会", code: "017" }, VillageCode { name: "库康村委会", code: "018" }, VillageCode { name: "克其克艾日克村委会", code: "019" }, VillageCode { name: "民生村委会", code: "020" }, VillageCode { name: "振兴村委会", code: "021" }, VillageCode { name: "吾斯塘博依村委会", code: "022" }, VillageCode { name: "华电村委会", code: "023" }] },
-    TownCode { name: "色满乡", code: "013", villages: &[VillageCode { name: "阿克吾依拉村委会", code: "001" }, VillageCode { name: "阿塔古村委会", code: "002" }, VillageCode { name: "吐格村委会", code: "003" }, VillageCode { name: "墩艾日克村委会", code: "004" }, VillageCode { name: "幸福村委会", code: "005" }, VillageCode { name: "墩吾依拉村委会", code: "006" }, VillageCode { name: "提坎贝什村委会", code: "007" }, VillageCode { name: "科克艾日克村委会", code: "008" }, VillageCode { name: "红旗村委会", code: "009" }, VillageCode { name: "朝阳村委会", code: "010" }] },
-    TownCode { name: "荒地乡", code: "014", villages: &[VillageCode { name: "绿洲社区", code: "001" }, VillageCode { name: "莫尔吐木村委会", code: "002" }, VillageCode { name: "托万克莫尔吐木村委会", code: "003" }, VillageCode { name: "索盖塔格村委会", code: "004" }, VillageCode { name: "艾日克博依村委会", code: "005" }, VillageCode { name: "玫瑰花村委会", code: "006" }, VillageCode { name: "萨依巴格村委会", code: "007" }, VillageCode { name: "园艺村委会", code: "008" }, VillageCode { name: "库木巴格村委会", code: "009" }, VillageCode { name: "金胡杨村委会", code: "010" }, VillageCode { name: "富民村委会", code: "011" }, VillageCode { name: "博斯坦村委会", code: "012" }] },
-    TownCode { name: "帕哈太克里乡", code: "015", villages: &[VillageCode { name: "托万克喀库拉村委会", code: "001" }, VillageCode { name: "帕哈太克里村委会", code: "002" }, VillageCode { name: "尤喀克帕哈太克里村委会", code: "003" }, VillageCode { name: "索古鲁克村委会", code: "004" }, VillageCode { name: "肖尔巴格村委会", code: "005" }, VillageCode { name: "尤喀尔克喀库拉村委会", code: "006" }, VillageCode { name: "尤勒古鲁克村委会", code: "007" }, VillageCode { name: "稻香村委会", code: "008" }, VillageCode { name: "帕万拉村委会", code: "009" }] },
-    TownCode { name: "伯什克然木乡", code: "016", villages: &[VillageCode { name: "巴什斯代村委会", code: "001" }, VillageCode { name: "博依拉村委会", code: "002" }, VillageCode { name: "依恰村委会", code: "003" }, VillageCode { name: "叶汗里村委会", code: "004" }, VillageCode { name: "塘乐库勒村委会", code: "005" }, VillageCode { name: "尤喀克萨依巴格村委会", code: "006" }, VillageCode { name: "阿亚格萨依巴格村委会", code: "007" }, VillageCode { name: "兰干村委会", code: "008" }, VillageCode { name: "尤喀克库木巴格村委会", code: "009" }, VillageCode { name: "阿亚格库木巴格村委会", code: "010" }, VillageCode { name: "比格艾日克村委会", code: "011" }, VillageCode { name: "巴依拉村委会", code: "012" }, VillageCode { name: "英阿瓦提村委会", code: "013" }, VillageCode { name: "博斯坦村委会", code: "014" }, VillageCode { name: "塔格阿格孜村委会", code: "015" }, VillageCode { name: "莫尔村委会", code: "016" }, VillageCode { name: "杏花村委会", code: "017" }, VillageCode { name: "喀拉库木村委会", code: "018" }, VillageCode { name: "佰什托克拉克村委会", code: "019" }, VillageCode { name: "阿亚克斯代村委会", code: "020" }, VillageCode { name: "巴格吾尔曼村委会", code: "021" }, VillageCode { name: "新依恰村委会", code: "022" }, VillageCode { name: "库木巴格新村委会", code: "023" }, VillageCode { name: "拉依勒干村委会", code: "024" }, VillageCode { name: "东风村委会", code: "025" }, VillageCode { name: "永丰村委会", code: "026" }, VillageCode { name: "古城村委会", code: "027" }, VillageCode { name: "康宁村委会", code: "028" }, VillageCode { name: "百园村委会", code: "029" }, VillageCode { name: "永红村委会", code: "030" }] },
-    TownCode { name: "阿瓦提乡", code: "017", villages: &[VillageCode { name: "阿克吾斯塘村委会", code: "001" }, VillageCode { name: "亚郎村委会", code: "002" }, VillageCode { name: "英其开村委会", code: "003" }, VillageCode { name: "亚尔贝希村委会", code: "004" }, VillageCode { name: "吐格曼贝希村委会", code: "005" }, VillageCode { name: "亚喀塔木村委会", code: "006" }, VillageCode { name: "乌鲁格尤勒村委会", code: "007" }, VillageCode { name: "阿萨村委会", code: "008" }, VillageCode { name: "布尕什村委会", code: "009" }, VillageCode { name: "巴格霍伊拉村委会", code: "010" }, VillageCode { name: "科克其村委会", code: "011" }, VillageCode { name: "哈番拉村委会", code: "012" }, VillageCode { name: "阿曼拉村委会", code: "013" }, VillageCode { name: "喀鲁克村委会", code: "014" }, VillageCode { name: "其特勒克村委会", code: "015" }, VillageCode { name: "买提克斯木买里斯村委会", code: "016" }, VillageCode { name: "喀塔尔克拉克什村委会", code: "017" }, VillageCode { name: "恰尕村委会", code: "018" }, VillageCode { name: "其格勒克村委会", code: "019" }, VillageCode { name: "托尕其勒克村委会", code: "020" }, VillageCode { name: "古再力村委会", code: "021" }, VillageCode { name: "吐格贝希村委会", code: "022" }, VillageCode { name: "托喀木买里斯村委会", code: "023" }, VillageCode { name: "阿萨新村", code: "024" }, VillageCode { name: "夏合夏格村委会", code: "025" }, VillageCode { name: "亚曼拉村委会", code: "026" }, VillageCode { name: "英巴格村委会", code: "027" }] },
-    TownCode { name: "英吾斯坦乡", code: "018", villages: &[VillageCode { name: "裁缝艾日克村民委员会", code: "001" }, VillageCode { name: "吐喀依艾日克村委会", code: "002" }, VillageCode { name: "墩艾日克村村民委员会", code: "003" }, VillageCode { name: "海孜尼博依村民委员会", code: "004" }, VillageCode { name: "托喀依村民委员会", code: "005" }, VillageCode { name: "艾日木巴格村民委员会", code: "006" }, VillageCode { name: "古尼恰艾日克村委员会", code: "007" }, VillageCode { name: "英乃喀什村村民委员会", code: "008" }, VillageCode { name: "其且克力克村委员会", code: "009" }, VillageCode { name: "松古拉其村委员会", code: "010" }, VillageCode { name: "喀什博依村村民委员会", code: "011" }, VillageCode { name: "墩库勒村村民委员会", code: "012" }, VillageCode { name: "栏杆村村民委员会", code: "013" }, VillageCode { name: "吾斯曼吐孜艾日克村委会", code: "014" }, VillageCode { name: "英艾日克村村民委员会", code: "015" }, VillageCode { name: "吉格迪力克村委员会", code: "016" }, VillageCode { name: "阿热卖拉村民委员会", code: "017" }, VillageCode { name: "阿瓦提艾日克村委员会", code: "018" }, VillageCode { name: "巴扎村委会", code: "019" }, VillageCode { name: "铁日克艾日克村委会", code: "020" }, VillageCode { name: "水磨村委会", code: "021" }, VillageCode { name: "英喀依村委会", code: "022" }, VillageCode { name: "古勒巴格村委会", code: "023" }, VillageCode { name: "英喀什村委会", code: "024" }, VillageCode { name: "库木阔恰村委会", code: "025" }, VillageCode { name: "英买里村委会", code: "026" }, VillageCode { name: "英尤木提村委会", code: "027" }] },
-    TownCode { name: "阿克喀什乡", code: "019", villages: &[VillageCode { name: "阿克喀什村委会", code: "001" }, VillageCode { name: "墩艾日克村委会", code: "002" }, VillageCode { name: "阿克艾日克村委会", code: "003" }, VillageCode { name: "西开尔巴格村委会", code: "004" }, VillageCode { name: "库勒村委会", code: "005" }, VillageCode { name: "库木买里斯村委会", code: "006" }, VillageCode { name: "兰干村委会", code: "007" }, VillageCode { name: "巴扎村委会", code: "008" }, VillageCode { name: "琼布龙村委会", code: "009" }, VillageCode { name: "佰什艾日克村委会", code: "010" }] },
+    TownCode {
+        name: "恰萨街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "天南路社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "帕依那甫路社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "人民广场社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "塔里木路社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "蓝湾路社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "雪莲路社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "南湖路社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "恒昌社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阳光社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "彩虹社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "盘橐村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚瓦格街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "北大桥社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "幸福苑社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "玉瑞克巴扎社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "滨河北路社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "榆树巷社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔纳乃则尔巴格路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "师范学院社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "克然木巴格社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "乃则尔巴格村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "吾斯塘博依街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "吾斯塘博依路社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "其尼瓦克社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "色满路社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古扎社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨合亚社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐尔亚瓦格社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "布拉克贝西社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库木代尔瓦扎社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "徕宁城社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "吐曼路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤木拉克协海尔社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "夏马勒巴格社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "夏马勒巴格村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "库木代尔瓦扎街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "解放南路社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "七里桥社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "克孜都维路社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文化路社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大十字社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "长安社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "明宇路社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "大众路社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "人民西路社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "汇康村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉吉米力克村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "西域大道街道",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "努尔巴格社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "天山南路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "和谐社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "西域大道社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "托克扎克路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "兰干路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "库如克铁热克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "吐尕依兰干村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "东湖街道",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "东湖社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "时代广场社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "汇城社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "新兴纺织社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "永康社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "慕士塔格路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "世纪大道社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "百花村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "迎宾大道街道",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "英努尔社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "天山西路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿瓦提路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "机场路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "科创社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "火车站社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "空港社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "远方社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托库孜塔什村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "西公园街道",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "东艾力克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "斯尔克其社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "佳和社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "园丁路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "明珠路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "科克艾日克社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "米兰路社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "晨光社区",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "乃则尔巴格镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "康安社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "金磨社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "樱桃村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "皮合森村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阔什库勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "亚贝希村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "古鲁巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀萨甫买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布恰村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "尤喀克喀孜热克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "琼布斯村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "红樱桃村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "木桥村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "夏马勒巴格镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "克孜勒河社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "索喀库勒贝希村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "斯尔克其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "城西村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "科克艾日克霍依拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "克孜勒都维村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格帕合太克里村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "苏孜克布拉克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "努尔贝希买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库木塔依村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀希博依村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "多来特巴格乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "央布拉克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "廊桥水岸社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "文化苑社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "学府社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "世纪名城社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "琼库勒贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿克亚贝希村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "亚尔库勒贝希村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "科瑞克贝希村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "艾斯里库勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀迪木加依村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴格其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "吐鲁番库恰村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "塔吾古孜村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "央不拉克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "艾格日亚村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "花园村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿亚克苏扎克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "托喀依村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "托万克霍依拉村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "兰杆村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "提勒苏扎克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "奥依库恰村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "新城村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "建设村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "塔格拉克村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "布拉克村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "苏鲁克村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "拍什塔克村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "东湾村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "波热克买里斯村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "青格力克村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "墩托喀依村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "库勒贝西村委会",
+                code: "034",
+            },
+        ],
+    },
+    TownCode {
+        name: "浩罕乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "二号南社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "二号北社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔尔布谷孜社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "百合苑社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "香妃村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "小亚郎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库恰比西村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "沙普艾热克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "沙依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "恰克萨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库木普提克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴西苏扎克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "红山村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "园丁村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托万喀孜艾日克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "依西强村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "曲古尔村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "库康村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "克其克艾日克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "民生村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "振兴村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "华电村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "色满乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "阿克吾依拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿塔古村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩吾依拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "提坎贝什村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "科克艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "朝阳村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "荒地乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "绿洲社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "莫尔吐木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万克莫尔吐木村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "索盖塔格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "艾日克博依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玫瑰花村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "园艺村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "金胡杨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "富民村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "帕哈太克里乡",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "托万克喀库拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "帕哈太克里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克帕哈太克里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "索古鲁克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "肖尔巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀尔克喀库拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤勒古鲁克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "稻香村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "帕万拉村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "伯什克然木乡",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "巴什斯代村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博依拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "依恰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "叶汗里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "塘乐库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克萨依巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿亚格萨依巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤喀克库木巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚格库木巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "比格艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴依拉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "塔格阿格孜村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "莫尔村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "杏花村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀拉库木村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "佰什托克拉克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿亚克斯代村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "巴格吾尔曼村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "新依恰村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "库木巴格新村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "拉依勒干村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "东风村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "永丰村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "古城村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "康宁村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "百园村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "永红村委会",
+                code: "030",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿瓦提乡",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "阿克吾斯塘村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "亚郎村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英其开村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚尔贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "亚喀塔木村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "乌鲁格尤勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿萨村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "布尕什村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴格霍伊拉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "科克其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "哈番拉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿曼拉村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀鲁克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "其特勒克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "买提克斯木买里斯村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "喀塔尔克拉克什村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "恰尕村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "其格勒克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "托尕其勒克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "古再力村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "吐格贝希村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "托喀木买里斯村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "阿萨新村",
+                code: "024",
+            },
+            VillageCode {
+                name: "夏合夏格村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "亚曼拉村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "027",
+            },
+        ],
+    },
+    TownCode {
+        name: "英吾斯坦乡",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "裁缝艾日克村民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吐喀依艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "墩艾日克村村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海孜尼博依村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托喀依村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "艾日木巴格村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古尼恰艾日克村委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英乃喀什村村民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "其且克力克村委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "松古拉其村委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀什博依村村民委员会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩库勒村村民委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "栏杆村村民委员会",
+                code: "013",
+            },
+            VillageCode {
+                name: "吾斯曼吐孜艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "英艾日克村村民委员会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吉格迪力克村委员会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿热卖拉村民委员会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿瓦提艾日克村委员会",
+                code: "018",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "铁日克艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "水磨村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "英喀依村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "英喀什村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "库木阔恰村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "英尤木提村委会",
+                code: "027",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克喀什乡",
+        code: "019",
+        villages: &[
+            VillageCode {
+                name: "阿克喀什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "西开尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库木买里斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "琼布龙村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "佰什艾日克村委会",
+                code: "010",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_002: [TownCode; 18] = [
-    TownCode { name: "兰干街道", code: "001", villages: &[VillageCode { name: "前进社区居民委员会", code: "001" }, VillageCode { name: "柯柯牙社区居民委员会", code: "002" }, VillageCode { name: "海江社区居民委员会", code: "003" }, VillageCode { name: "兰干社区居民委员会", code: "004" }, VillageCode { name: "朝阳社区居民委员会", code: "005" }, VillageCode { name: "绿苑社区居民委员会", code: "006" }, VillageCode { name: "英阿瓦提社区居民委员会", code: "007" }, VillageCode { name: "红光社区居民委员会", code: "008" }] },
-    TownCode { name: "英巴扎街道", code: "002", villages: &[VillageCode { name: "水韵社区居民委员会", code: "001" }, VillageCode { name: "英巴扎社区居民委员会", code: "002" }, VillageCode { name: "英买里社区居民委员会", code: "003" }, VillageCode { name: "巴格其社区居民委员会", code: "004" }, VillageCode { name: "晨光社区居民委员会", code: "005" }] },
-    TownCode { name: "红桥街道", code: "003", villages: &[VillageCode { name: "多浪社区居民委员会", code: "001" }, VillageCode { name: "红桥社区居民委员会", code: "002" }, VillageCode { name: "长安社区居民委员会", code: "003" }, VillageCode { name: "双拥社区居民委员会", code: "004" }] },
-    TownCode { name: "新城街道", code: "004", villages: &[VillageCode { name: "育园社区居民委员会", code: "001" }, VillageCode { name: "文化社区居民委员会", code: "002" }, VillageCode { name: "教育社区居民委员会", code: "003" }, VillageCode { name: "团结社区居民委员会", code: "004" }, VillageCode { name: "康居社区居民委员会", code: "005" }, VillageCode { name: "百合园社区居民委员会", code: "006" }, VillageCode { name: "晶水社区居民委员会", code: "007" }, VillageCode { name: "健康社区居民委员会", code: "008" }] },
-    TownCode { name: "南城街道", code: "005", villages: &[VillageCode { name: "铁热克买里社区居民委员会", code: "001" }, VillageCode { name: "托万克巴扎巴格社区居民委员会", code: "002" }, VillageCode { name: "火车站社区居民委员会", code: "003" }, VillageCode { name: "丽都社区居民委员会", code: "004" }] },
-    TownCode { name: "柯柯牙街道", code: "006", villages: &[VillageCode { name: "红旗坡社区居民委员会", code: "001" }, VillageCode { name: "苹果园社区居民委员会", code: "002" }, VillageCode { name: "大榆树社区居民委员会", code: "003" }, VillageCode { name: "萨合提社区居民委员会", code: "004" }, VillageCode { name: "红旗社区居民委员会", code: "005" }, VillageCode { name: "祥云社区居民委员会", code: "006" }, VillageCode { name: "解放碑社区居民委员会", code: "007" }, VillageCode { name: "库木巴扎社区居民委员会", code: "008" }, VillageCode { name: "林海社区居民委员会", code: "009" }] },
-    TownCode { name: "多浪街道", code: "007", villages: &[VillageCode { name: "英巴格社区居民委员会", code: "001" }, VillageCode { name: "依尔玛社区居民委员会", code: "002" }, VillageCode { name: "友谊社区居民委员会", code: "003" }, VillageCode { name: "努尔巴格社区居民委员会", code: "004" }, VillageCode { name: "吾斯塘博依社区居民委员会", code: "005" }, VillageCode { name: "巴格莞社区居民委员会", code: "006" }] },
-    TownCode { name: "喀拉塔勒镇", code: "008", villages: &[VillageCode { name: "英博斯坦社区居民委员会", code: "001" }, VillageCode { name: "阔库拉村委会", code: "002" }, VillageCode { name: "喀让古托格拉克村委会", code: "003" }, VillageCode { name: "博斯坦村委会", code: "004" }, VillageCode { name: "尤喀克博孜其村委会", code: "005" }, VillageCode { name: "托吾热其村委会", code: "006" }, VillageCode { name: "喀拉喀什村委会", code: "007" }, VillageCode { name: "托万克博孜其村委会", code: "008" }, VillageCode { name: "乔纳克村委会", code: "009" }, VillageCode { name: "尤喀克萨提村委会", code: "010" }, VillageCode { name: "萨提村委会", code: "011" }, VillageCode { name: "托万克萨提村委会", code: "012" }, VillageCode { name: "尤喀克阿勒迪尔村委会", code: "013" }, VillageCode { name: "托万克阿勒迪尔村委会", code: "014" }, VillageCode { name: "玛坦村委会", code: "015" }, VillageCode { name: "英阿克艾日克村委会", code: "016" }, VillageCode { name: "英买里村委会", code: "017" }, VillageCode { name: "却日库木村委会", code: "018" }, VillageCode { name: "克地木阿依玛克村委会", code: "019" }, VillageCode { name: "尕旺村委会", code: "020" }, VillageCode { name: "纳玛特村委会", code: "021" }, VillageCode { name: "色日克克尔钦村委会", code: "022" }, VillageCode { name: "哈萨克村委会", code: "023" }, VillageCode { name: "吐格曼贝希村委会", code: "024" }, VillageCode { name: "多斯库里村委会", code: "025" }] },
-    TownCode { name: "阿依库勒镇", code: "009", villages: &[VillageCode { name: "和顺社区居民委员会", code: "001" }, VillageCode { name: "墩买里村委会", code: "002" }, VillageCode { name: "吉格代巴格村委会", code: "003" }, VillageCode { name: "库勒村委会", code: "004" }, VillageCode { name: "托万克买里村委会", code: "005" }, VillageCode { name: "协合力村委会", code: "006" }, VillageCode { name: "尤喀克提根村委会", code: "007" }, VillageCode { name: "恰其村委会", code: "008" }, VillageCode { name: "阔纳巴扎村委会", code: "009" }, VillageCode { name: "兰干村委会", code: "010" }, VillageCode { name: "托万克提根村委会", code: "011" }, VillageCode { name: "帕依那普村委会", code: "012" }, VillageCode { name: "塔西巴格村委会", code: "013" }, VillageCode { name: "尤喀日克阔什艾日克村委会", code: "014" }, VillageCode { name: "萨依买里村委会", code: "015" }, VillageCode { name: "克什勒克艾日克村委会", code: "016" }, VillageCode { name: "阿克提坎村委会", code: "017" }, VillageCode { name: "塔什塔村委会", code: "018" }, VillageCode { name: "阿萨村委会", code: "019" }, VillageCode { name: "黄宫村委会", code: "020" }, VillageCode { name: "墩阔坦村委会", code: "021" }] },
-    TownCode { name: "依干其镇", code: "010", villages: &[VillageCode { name: "永定社区居民委员会", code: "001" }, VillageCode { name: "长兴社区居民委员会", code: "002" }, VillageCode { name: "凤泉社区居民委员会", code: "003" }, VillageCode { name: "育才社区居民委员会", code: "004" }, VillageCode { name: "巴格其村委会", code: "005" }, VillageCode { name: "喀拉木克其村委会", code: "006" }, VillageCode { name: "尤喀克巴里当村委会", code: "007" }, VillageCode { name: "阔什托格拉克村委会", code: "008" }, VillageCode { name: "依尔玛村委会", code: "009" }, VillageCode { name: "托万克巴里当村委会", code: "010" }, VillageCode { name: "民乐村委会", code: "011" }, VillageCode { name: "依干其村委会", code: "012" }, VillageCode { name: "良种托万克科克巴什村委会", code: "013" }, VillageCode { name: "尤喀克科克巴什村委会", code: "014" }, VillageCode { name: "尤勒滚鲁克村委会", code: "015" }, VillageCode { name: "布隆科瑞克村委会", code: "016" }, VillageCode { name: "赛克帕其村委会", code: "017" }, VillageCode { name: "阿苏克兰干村委会", code: "018" }, VillageCode { name: "良种尤喀克乔格塔勒村委会", code: "019" }, VillageCode { name: "良种库木克什拉克村委会", code: "020" }, VillageCode { name: "良种托万克乔格塔勒村委会", code: "021" }, VillageCode { name: "绿水村委会", code: "022" }, VillageCode { name: "华阳村委会", code: "023" }] },
-    TownCode { name: "拜什吐格曼乡", code: "011", villages: &[VillageCode { name: "科克巴什村委会", code: "001" }, VillageCode { name: "尤喀克兰干村委会", code: "002" }, VillageCode { name: "阿热兰干村委会", code: "003" }, VillageCode { name: "尤喀克英巴扎村委会", code: "004" }, VillageCode { name: "托万克英巴扎村委会", code: "005" }, VillageCode { name: "英巴扎村委会", code: "006" }, VillageCode { name: "托万克阿布来希艾日克村委会", code: "007" }, VillageCode { name: "尤喀克格西木艾日克村委会", code: "008" }, VillageCode { name: "托万克格西木艾日克村委会", code: "009" }, VillageCode { name: "兴旺村委会", code: "010" }, VillageCode { name: "富安村委会", code: "011" }, VillageCode { name: "欧吐拉艾日克村委会", code: "012" }, VillageCode { name: "吉格代阔坦村委会", code: "013" }, VillageCode { name: "河源村委会", code: "014" }, VillageCode { name: "下河村委会", code: "015" }, VillageCode { name: "吾甫尔巴什村委会", code: "016" }, VillageCode { name: "尤喀克英吾斯塘村委会", code: "017" }, VillageCode { name: "英阿瓦提村委会", code: "018" }] },
-    TownCode { name: "托普鲁克乡", code: "012", villages: &[VillageCode { name: "尤喀克喀拉喀勒村委会", code: "001" }, VillageCode { name: "托万克喀拉喀勒村委会", code: "002" }, VillageCode { name: "托普鲁克村委会", code: "003" }, VillageCode { name: "喀什贝希村委会", code: "004" }, VillageCode { name: "硝尔村委会", code: "005" }, VillageCode { name: "喀拉库勒村委会", code: "006" }, VillageCode { name: "喀拉央塔克村委会", code: "007" }, VillageCode { name: "色日克苏村委会", code: "008" }, VillageCode { name: "帕合特勒克村委会", code: "009" }, VillageCode { name: "吾斯塘博依村委会", code: "010" }, VillageCode { name: "木日开旦木村委会", code: "011" }] },
-    TownCode { name: "库木巴什乡", code: "013", villages: &[VillageCode { name: "巴什巴格村委会", code: "001" }, VillageCode { name: "巴格万村委会", code: "002" }, VillageCode { name: "帕来其村委会", code: "003" }, VillageCode { name: "阿克艾日克村委会", code: "004" }, VillageCode { name: "托帕克阿热勒村委会", code: "005" }, VillageCode { name: "尤喀克喀日纳斯村委会", code: "006" }, VillageCode { name: "索勒尕依村委会", code: "007" }, VillageCode { name: "托万克喀日纳斯村委会", code: "008" }, VillageCode { name: "阔什艾日克村委会", code: "009" }, VillageCode { name: "尤喀克玉特其村委会", code: "010" }, VillageCode { name: "托万克玉特其村委会", code: "011" }, VillageCode { name: "塔尕尔其村委会", code: "012" }, VillageCode { name: "阿亚克巴格其村委会", code: "013" }, VillageCode { name: "阿热买里村委会", code: "014" }] },
-    TownCode { name: "实验林场", code: "014", villages: &[VillageCode { name: "兴林社区", code: "001" }, VillageCode { name: "枣林社区", code: "002" }, VillageCode { name: "园林社区", code: "003" }, VillageCode { name: "祥林社区", code: "004" }] },
-    TownCode { name: "纺织工业城", code: "015", villages: &[VillageCode { name: "巨龙社区", code: "001" }, VillageCode { name: "沙河庄社区", code: "002" }, VillageCode { name: "盛苑社区", code: "003" }, VillageCode { name: "静湖社区", code: "004" }, VillageCode { name: "南苑社区", code: "005" }] },
-    TownCode { name: "经济技术开发区", code: "016", villages: &[VillageCode { name: "林园社区", code: "001" }, VillageCode { name: "西园社区", code: "002" }] },
-    TownCode { name: "特色产业园区", code: "017", villages: &[VillageCode { name: "特色产业园区虚拟社区", code: "001" }] },
-    TownCode { name: "柳源农场", code: "018", villages: &[VillageCode { name: "永兴社区", code: "001" }, VillageCode { name: "天海社区", code: "002" }, VillageCode { name: "瑞丰社区", code: "003" }, VillageCode { name: "祥和社区", code: "004" }, VillageCode { name: "永和社区", code: "005" }] },
+    TownCode {
+        name: "兰干街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "前进社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "柯柯牙社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "海江社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "兰干社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "朝阳社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "绿苑社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英阿瓦提社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红光社区居民委员会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "英巴扎街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "水韵社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英巴扎社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英买里社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴格其社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "晨光社区居民委员会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "红桥街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "多浪社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红桥社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长安社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "双拥社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "新城街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "育园社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "文化社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "教育社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "团结社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "康居社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "百合园社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "晶水社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "健康社区居民委员会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "南城街道",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "铁热克买里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克巴扎巴格社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "火车站社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "丽都社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "柯柯牙街道",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "红旗坡社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苹果园社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大榆树社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "萨合提社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "红旗社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "祥云社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "解放碑社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库木巴扎社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "林海社区居民委员会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "多浪街道",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "英巴格社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "依尔玛社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "友谊社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "努尔巴格社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吾斯塘博依社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格莞社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "喀拉塔勒镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "英博斯坦社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阔库拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀让古托格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤喀克博孜其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托吾热其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉喀什村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万克博孜其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "乔纳克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克萨提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨提村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万克萨提村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "尤喀克阿勒迪尔村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托万克阿勒迪尔村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "玛坦村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "英阿克艾日克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "却日库木村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "克地木阿依玛克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "尕旺村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "纳玛特村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "色日克克尔钦村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "哈萨克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "多斯库里村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿依库勒镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "和顺社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吉格代巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "协合力村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤喀克提根村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "恰其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托万克提根村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "帕依那普村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "塔西巴格村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀日克阔什艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "萨依买里村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "克什勒克艾日克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿克提坎村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "塔什塔村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "阿萨村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "黄宫村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "墩阔坦村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "依干其镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "永定社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "长兴社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "凤泉社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "育才社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴格其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉木克其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤喀克巴里当村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阔什托格拉克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依尔玛村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万克巴里当村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "民乐村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "依干其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "良种托万克科克巴什村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克科克巴什村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尤勒滚鲁克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "布隆科瑞克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "赛克帕其村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿苏克兰干村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "良种尤喀克乔格塔勒村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "良种库木克什拉克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "良种托万克乔格塔勒村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "绿水村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "华阳村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "拜什吐格曼乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "科克巴什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤喀克兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热兰干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤喀克英巴扎村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克英巴扎村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克阿布来希艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "尤喀克格西木艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克格西木艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "兴旺村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "富安村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "欧吐拉艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "吉格代阔坦村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "河源村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "下河村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吾甫尔巴什村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "尤喀克英吾斯塘村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "托普鲁克乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "尤喀克喀拉喀勒村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克喀拉喀勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托普鲁克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀什贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "硝尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉央塔克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "色日克苏村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "帕合特勒克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "木日开旦木村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "库木巴什乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "巴什巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格万村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "帕来其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿克艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托帕克阿热勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克喀日纳斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "索勒尕依村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万克喀日纳斯村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔什艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克玉特其村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托万克玉特其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔尕尔其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿亚克巴格其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "实验林场",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "兴林社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "枣林社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "园林社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "祥林社区",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "纺织工业城",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "巨龙社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "沙河庄社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "盛苑社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "静湖社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "南苑社区",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "经济技术开发区",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "林园社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "西园社区",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "特色产业园区",
+        code: "017",
+        villages: &[VillageCode {
+            name: "特色产业园区虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "柳源农场",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "永兴社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "天海社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "瑞丰社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "祥和社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "永和社区",
+                code: "005",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_003: [TownCode; 21] = [
-    TownCode { name: "热斯坦街道", code: "001", villages: &[VillageCode { name: "热斯坦社区", code: "001" }, VillageCode { name: "林基路社区", code: "002" }, VillageCode { name: "古勒巴格社区", code: "003" }, VillageCode { name: "阳光社区", code: "004" }] },
-    TownCode { name: "萨克萨克街道", code: "002", villages: &[VillageCode { name: "阿克店社区", code: "001" }, VillageCode { name: "库其艾日克社区", code: "002" }, VillageCode { name: "试验城社区", code: "003" }, VillageCode { name: "建设路社区", code: "004" }, VillageCode { name: "惠民新居社区", code: "005" }, VillageCode { name: "萨依巴格社区", code: "006" }] },
-    TownCode { name: "新城街道", code: "003", villages: &[VillageCode { name: "友谊社区", code: "001" }, VillageCode { name: "文化路社区", code: "002" }, VillageCode { name: "新华社区", code: "003" }, VillageCode { name: "杏花园社区", code: "004" }, VillageCode { name: "幸福社区", code: "005" }, VillageCode { name: "天福社区", code: "006" }, VillageCode { name: "天河社区", code: "007" }, VillageCode { name: "清风苑社区", code: "008" }] },
-    TownCode { name: "东城街道", code: "004", villages: &[VillageCode { name: "长安社区", code: "001" }, VillageCode { name: "光明社区", code: "002" }, VillageCode { name: "水韵社区", code: "003" }, VillageCode { name: "福阳社区", code: "004" }, VillageCode { name: "新天地社区", code: "005" }] },
-    TownCode { name: "乌恰镇", code: "005", villages: &[VillageCode { name: "萨克萨克社区", code: "001" }, VillageCode { name: "皮浪社区", code: "002" }, VillageCode { name: "乌恰二社区", code: "003" }, VillageCode { name: "喀拉玉吉买社区", code: "004" }, VillageCode { name: "萨喀古社区", code: "005" }, VillageCode { name: "乌恰三村", code: "006" }, VillageCode { name: "乌恰一村", code: "007" }, VillageCode { name: "清水村", code: "008" }, VillageCode { name: "杏花村", code: "009" }, VillageCode { name: "喀拉布喀村", code: "010" }, VillageCode { name: "吐孜鲁克墩村", code: "011" }, VillageCode { name: "克其力克村", code: "012" }, VillageCode { name: "蔬菜新村", code: "013" }] },
-    TownCode { name: "阿拉哈格镇", code: "006", villages: &[VillageCode { name: "库纳斯村", code: "001" }, VillageCode { name: "兰干村", code: "002" }, VillageCode { name: "博孜村", code: "003" }, VillageCode { name: "奥依托格拉克村", code: "004" }, VillageCode { name: "红旗村", code: "005" }, VillageCode { name: "巴格万村", code: "006" }, VillageCode { name: "乌库托格拉克村", code: "007" }, VillageCode { name: "乔喀博斯坦村", code: "008" }, VillageCode { name: "铁热克艾日克村", code: "009" }, VillageCode { name: "墩吕克村", code: "010" }, VillageCode { name: "央都玛村", code: "011" }, VillageCode { name: "英萨村", code: "012" }, VillageCode { name: "田园村", code: "013" }, VillageCode { name: "巴扎村", code: "014" }, VillageCode { name: "吉日木勒克村", code: "015" }, VillageCode { name: "铁提尔其村", code: "016" }, VillageCode { name: "托乎拉村", code: "017" }, VillageCode { name: "排孜巴格村", code: "018" }, VillageCode { name: "英其开艾日克村", code: "019" }, VillageCode { name: "比苏特村", code: "020" }, VillageCode { name: "孜格尔其村", code: "021" }, VillageCode { name: "希望村", code: "022" }, VillageCode { name: "吐格曼拜什村", code: "023" }, VillageCode { name: "喀拉尕奇艾日克村", code: "024" }, VillageCode { name: "阔什艾日克村", code: "025" }] },
-    TownCode { name: "齐满镇", code: "007", villages: &[VillageCode { name: "阿克吾斯塘村", code: "001" }, VillageCode { name: "平安村", code: "002" }, VillageCode { name: "甬库团结村", code: "003" }, VillageCode { name: "仓村", code: "004" }, VillageCode { name: "阿热博孜村", code: "005" }, VillageCode { name: "科克提坎艾日克村", code: "006" }, VillageCode { name: "英吐尔村", code: "007" }, VillageCode { name: "阿曼托格拉克村", code: "008" }, VillageCode { name: "阿克吐尔村", code: "009" }, VillageCode { name: "白杨村", code: "010" }, VillageCode { name: "绿园村", code: "011" }, VillageCode { name: "渭干村", code: "012" }, VillageCode { name: "巴扎村", code: "013" }, VillageCode { name: "喀依罗村", code: "014" }, VillageCode { name: "代尔瓦扎铁热克村", code: "015" }, VillageCode { name: "琼博孜村", code: "016" }, VillageCode { name: "红星村", code: "017" }, VillageCode { name: "齐满村", code: "018" }, VillageCode { name: "胜利村", code: "019" }] },
-    TownCode { name: "墩阔坦镇", code: "008", villages: &[VillageCode { name: "阔什艾日克村", code: "001" }, VillageCode { name: "繁荣村", code: "002" }, VillageCode { name: "光明村", code: "003" }, VillageCode { name: "英吐尔村", code: "004" }, VillageCode { name: "色根苏盖特村", code: "005" }, VillageCode { name: "亚喀买里斯村", code: "006" }, VillageCode { name: "荷花村", code: "007" }, VillageCode { name: "墩阔坦村", code: "008" }, VillageCode { name: "兰干村", code: "009" }, VillageCode { name: "亚喀守努特村", code: "010" }, VillageCode { name: "都维勒克村", code: "011" }, VillageCode { name: "乌恰村", code: "012" }, VillageCode { name: "玉奇喀拉村", code: "013" }, VillageCode { name: "喀拉布喀村", code: "014" }, VillageCode { name: "阔恰托格拉克村", code: "015" }, VillageCode { name: "塔格玛克村", code: "016" }, VillageCode { name: "乌尊村", code: "017" }, VillageCode { name: "央艾日克村", code: "018" }, VillageCode { name: "排孜阿瓦提村", code: "019" }] },
-    TownCode { name: "牙哈镇", code: "009", villages: &[VillageCode { name: "团结社区", code: "001" }, VillageCode { name: "晨光村", code: "002" }, VillageCode { name: "红光村", code: "003" }, VillageCode { name: "星光村", code: "004" }, VillageCode { name: "阿克布亚村", code: "005" }, VillageCode { name: "塔格玛克村", code: "006" }, VillageCode { name: "博斯坦托格拉克村", code: "007" }, VillageCode { name: "塔尕尔其二村", code: "008" }, VillageCode { name: "玉奇玉吉买村", code: "009" }, VillageCode { name: "守努特村", code: "010" }, VillageCode { name: "吾斯塘博依村", code: "011" }, VillageCode { name: "克日希村", code: "012" }, VillageCode { name: "艾日克博依村", code: "013" }, VillageCode { name: "布拉克村", code: "014" }, VillageCode { name: "托克乃村", code: "015" }, VillageCode { name: "拜什布拉克村", code: "016" }, VillageCode { name: "兰干村", code: "017" }, VillageCode { name: "虽润勒克村", code: "018" }, VillageCode { name: "苏盖特力克村", code: "019" }, VillageCode { name: "恰其库木村", code: "020" }, VillageCode { name: "牙哈村", code: "021" }, VillageCode { name: "巴格村", code: "022" }, VillageCode { name: "塔尕尔其一村", code: "023" }, VillageCode { name: "阿克艾日克村", code: "024" }] },
-    TownCode { name: "乌尊镇", code: "010", villages: &[VillageCode { name: "阿克提其社区", code: "001" }, VillageCode { name: "亚贝希社区", code: "002" }, VillageCode { name: "英尼和村", code: "003" }, VillageCode { name: "乌尊艾日克村", code: "004" }, VillageCode { name: "乌尊一村", code: "005" }, VillageCode { name: "博斯坦村", code: "006" }, VillageCode { name: "布喀其村", code: "007" }, VillageCode { name: "三星村", code: "008" }, VillageCode { name: "锦绣村", code: "009" }, VillageCode { name: "果勒艾日克村", code: "010" }, VillageCode { name: "库木艾日克村", code: "011" }, VillageCode { name: "塔格其村", code: "012" }, VillageCode { name: "色根苏盖特三村", code: "013" }, VillageCode { name: "色根苏盖特四村", code: "014" }, VillageCode { name: "色根苏盖特一村", code: "015" }, VillageCode { name: "色根苏盖特二村", code: "016" }, VillageCode { name: "英吐尔一村", code: "017" }, VillageCode { name: "英吐尔二村", code: "018" }, VillageCode { name: "乌尊二村", code: "019" }] },
-    TownCode { name: "伊西哈拉镇", code: "011", villages: &[VillageCode { name: "科克社区", code: "001" }, VillageCode { name: "龟兹一社区", code: "002" }, VillageCode { name: "龟兹二社区", code: "003" }, VillageCode { name: "喀格其社区", code: "004" }, VillageCode { name: "玉斯屯社区", code: "005" }, VillageCode { name: "托万比加克社区", code: "006" }, VillageCode { name: "双拥社区", code: "007" }, VillageCode { name: "库木艾日克社区", code: "008" }, VillageCode { name: "夏玛勒巴格社区", code: "009" }, VillageCode { name: "安乐宫社区", code: "010" }, VillageCode { name: "多来特巴格社区", code: "011" }, VillageCode { name: "阿热买里社区", code: "012" }, VillageCode { name: "硝尔巴克社区", code: "013" }, VillageCode { name: "红旗社区", code: "014" }, VillageCode { name: "依迪克村", code: "015" }, VillageCode { name: "兰干村", code: "016" }, VillageCode { name: "艾日克阿热斯村", code: "017" }] },
-    TownCode { name: "二八台镇", code: "012", villages: &[VillageCode { name: "富明社区委员会", code: "001" }, VillageCode { name: "支青村", code: "002" }, VillageCode { name: "阿瓦提村", code: "003" }, VillageCode { name: "奥依苏克塞克村", code: "004" }, VillageCode { name: "拉依苏村", code: "005" }, VillageCode { name: "伯日力克村", code: "006" }] },
-    TownCode { name: "塔里木镇", code: "013", villages: &[VillageCode { name: "胡杨社区居委会", code: "001" }, VillageCode { name: "羊场社区居委会", code: "002" }, VillageCode { name: "塔里木社区居委会", code: "003" }, VillageCode { name: "依坎库勒社区居委会", code: "004" }, VillageCode { name: "阿恰勒村委会", code: "005" }, VillageCode { name: "阳光村委会", code: "006" }, VillageCode { name: "长兴村委会", code: "007" }, VillageCode { name: "草湖二村委会", code: "008" }, VillageCode { name: "英达里亚村委会", code: "009" }, VillageCode { name: "朗喀村委会", code: "010" }, VillageCode { name: "草湖一村委会", code: "011" }, VillageCode { name: "阿克库勒村", code: "012" }] },
-    TownCode { name: "玉奇吾斯塘乡", code: "014", villages: &[VillageCode { name: "库木吐尔村", code: "001" }, VillageCode { name: "兰干村", code: "002" }, VillageCode { name: "拜什格然木村", code: "003" }, VillageCode { name: "玉奇吾斯塘村", code: "004" }, VillageCode { name: "阔什吐尔村", code: "005" }, VillageCode { name: "吐格其村", code: "006" }, VillageCode { name: "喀拉苏村", code: "007" }, VillageCode { name: "柳树村", code: "008" }, VillageCode { name: "阿热吾斯塘村", code: "009" }, VillageCode { name: "杭甫巴格村", code: "010" }, VillageCode { name: "代尔瓦扎亚村", code: "011" }, VillageCode { name: "阿热买里村", code: "012" }, VillageCode { name: "排孜阿瓦提村", code: "013" }] },
-    TownCode { name: "比西巴格乡", code: "015", villages: &[VillageCode { name: "其乃巴格村", code: "001" }, VillageCode { name: "依格孜库木村", code: "002" }, VillageCode { name: "牛场村", code: "003" }, VillageCode { name: "硝尔库勒村", code: "004" }, VillageCode { name: "团结村", code: "005" }, VillageCode { name: "科克提坎村", code: "006" }, VillageCode { name: "林场村", code: "007" }, VillageCode { name: "博斯坦一村", code: "008" }, VillageCode { name: "博斯坦二村", code: "009" }, VillageCode { name: "东风村", code: "010" }, VillageCode { name: "库库什一村", code: "011" }, VillageCode { name: "库库什二村", code: "012" }, VillageCode { name: "格代库勒村", code: "013" }, VillageCode { name: "幸福村", code: "014" }, VillageCode { name: "蔬菜村", code: "015" }] },
-    TownCode { name: "哈尼喀塔木乡", code: "016", villages: &[VillageCode { name: "西乡村", code: "001" }, VillageCode { name: "托依堡勒迪村", code: "002" }, VillageCode { name: "英也尔村", code: "003" }, VillageCode { name: "阿热买里村", code: "004" }, VillageCode { name: "诺巴什拉木村", code: "005" }, VillageCode { name: "乌尊村", code: "006" }, VillageCode { name: "巴扎村", code: "007" }, VillageCode { name: "英吐尔村", code: "008" }, VillageCode { name: "巴格万村", code: "009" }, VillageCode { name: "萨依艾日克村", code: "010" }, VillageCode { name: "克其克萨依艾日克村", code: "011" }, VillageCode { name: "琼萨依日克村", code: "012" }, VillageCode { name: "博孜艾日克村", code: "013" }, VillageCode { name: "英买里村", code: "014" }, VillageCode { name: "齐满村", code: "015" }, VillageCode { name: "新光村", code: "016" }, VillageCode { name: "库木艾日克村", code: "017" }, VillageCode { name: "阿克协海尔村", code: "018" }, VillageCode { name: "托库孜托玛村", code: "019" }, VillageCode { name: "古勒巴格村", code: "020" }, VillageCode { name: "阿克艾日克村", code: "021" }, VillageCode { name: "博斯坦村", code: "022" }, VillageCode { name: "渭干村", code: "023" }, VillageCode { name: "琼协海尔村", code: "024" }, VillageCode { name: "锦绣村", code: "025" }] },
-    TownCode { name: "阿克吾斯塘乡", code: "017", villages: &[VillageCode { name: "排孜阿瓦提村", code: "001" }, VillageCode { name: "长水村", code: "002" }, VillageCode { name: "托帕艾日克村", code: "003" }, VillageCode { name: "硝尔库勒艾日克村", code: "004" }, VillageCode { name: "吐格曼拜什村", code: "005" }, VillageCode { name: "吐尔塔木村", code: "006" }, VillageCode { name: "阿克吾斯塘村", code: "007" }, VillageCode { name: "花园村", code: "008" }, VillageCode { name: "胡杨村", code: "009" }, VillageCode { name: "博斯坦村", code: "010" }, VillageCode { name: "果勒艾日克村", code: "011" }, VillageCode { name: "也克先贝巴扎村", code: "012" }, VillageCode { name: "喀拉萨村", code: "013" }] },
-    TownCode { name: "阿格乡", code: "018", villages: &[VillageCode { name: "阿格村", code: "001" }, VillageCode { name: "北山村", code: "002" }, VillageCode { name: "康村村", code: "003" }, VillageCode { name: "喀热古勒村", code: "004" }] },
-    TownCode { name: "库车经济技术开发区", code: "019", villages: &[VillageCode { name: "库车经济技术开发区虚拟社区", code: "001" }] },
-    TownCode { name: "城南片区管委会", code: "020", villages: &[VillageCode { name: "古杨树社区", code: "001" }, VillageCode { name: "五一路社区", code: "002" }, VillageCode { name: "黄河路社区", code: "003" }, VillageCode { name: "禧源社区", code: "004" }, VillageCode { name: "荷花苑社区", code: "005" }] },
-    TownCode { name: "五眼泉片区管委会", code: "021", villages: &[VillageCode { name: "石化新村社区", code: "001" }, VillageCode { name: "园艺场社区", code: "002" }] },
+    TownCode {
+        name: "热斯坦街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "热斯坦社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "林基路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "古勒巴格社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "阳光社区",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "萨克萨克街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "阿克店社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "库其艾日克社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "试验城社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "建设路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "惠民新居社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "萨依巴格社区",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "新城街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "友谊社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "新华社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "杏花园社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "天福社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "天河社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "清风苑社区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "东城街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "长安社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "光明社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "水韵社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "福阳社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "新天地社区",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌恰镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "萨克萨克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "皮浪社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "乌恰二社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉玉吉买社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨喀古社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "乌恰三村",
+                code: "006",
+            },
+            VillageCode {
+                name: "乌恰一村",
+                code: "007",
+            },
+            VillageCode {
+                name: "清水村",
+                code: "008",
+            },
+            VillageCode {
+                name: "杏花村",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀拉布喀村",
+                code: "010",
+            },
+            VillageCode {
+                name: "吐孜鲁克墩村",
+                code: "011",
+            },
+            VillageCode {
+                name: "克其力克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "蔬菜新村",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿拉哈格镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "库纳斯村",
+                code: "001",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "002",
+            },
+            VillageCode {
+                name: "博孜村",
+                code: "003",
+            },
+            VillageCode {
+                name: "奥依托格拉克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "红旗村",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格万村",
+                code: "006",
+            },
+            VillageCode {
+                name: "乌库托格拉克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "乔喀博斯坦村",
+                code: "008",
+            },
+            VillageCode {
+                name: "铁热克艾日克村",
+                code: "009",
+            },
+            VillageCode {
+                name: "墩吕克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "央都玛村",
+                code: "011",
+            },
+            VillageCode {
+                name: "英萨村",
+                code: "012",
+            },
+            VillageCode {
+                name: "田园村",
+                code: "013",
+            },
+            VillageCode {
+                name: "巴扎村",
+                code: "014",
+            },
+            VillageCode {
+                name: "吉日木勒克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "铁提尔其村",
+                code: "016",
+            },
+            VillageCode {
+                name: "托乎拉村",
+                code: "017",
+            },
+            VillageCode {
+                name: "排孜巴格村",
+                code: "018",
+            },
+            VillageCode {
+                name: "英其开艾日克村",
+                code: "019",
+            },
+            VillageCode {
+                name: "比苏特村",
+                code: "020",
+            },
+            VillageCode {
+                name: "孜格尔其村",
+                code: "021",
+            },
+            VillageCode {
+                name: "希望村",
+                code: "022",
+            },
+            VillageCode {
+                name: "吐格曼拜什村",
+                code: "023",
+            },
+            VillageCode {
+                name: "喀拉尕奇艾日克村",
+                code: "024",
+            },
+            VillageCode {
+                name: "阔什艾日克村",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "齐满镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "阿克吾斯塘村",
+                code: "001",
+            },
+            VillageCode {
+                name: "平安村",
+                code: "002",
+            },
+            VillageCode {
+                name: "甬库团结村",
+                code: "003",
+            },
+            VillageCode {
+                name: "仓村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿热博孜村",
+                code: "005",
+            },
+            VillageCode {
+                name: "科克提坎艾日克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "英吐尔村",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿曼托格拉克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿克吐尔村",
+                code: "009",
+            },
+            VillageCode {
+                name: "白杨村",
+                code: "010",
+            },
+            VillageCode {
+                name: "绿园村",
+                code: "011",
+            },
+            VillageCode {
+                name: "渭干村",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴扎村",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀依罗村",
+                code: "014",
+            },
+            VillageCode {
+                name: "代尔瓦扎铁热克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "琼博孜村",
+                code: "016",
+            },
+            VillageCode {
+                name: "红星村",
+                code: "017",
+            },
+            VillageCode {
+                name: "齐满村",
+                code: "018",
+            },
+            VillageCode {
+                name: "胜利村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "墩阔坦镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "阔什艾日克村",
+                code: "001",
+            },
+            VillageCode {
+                name: "繁荣村",
+                code: "002",
+            },
+            VillageCode {
+                name: "光明村",
+                code: "003",
+            },
+            VillageCode {
+                name: "英吐尔村",
+                code: "004",
+            },
+            VillageCode {
+                name: "色根苏盖特村",
+                code: "005",
+            },
+            VillageCode {
+                name: "亚喀买里斯村",
+                code: "006",
+            },
+            VillageCode {
+                name: "荷花村",
+                code: "007",
+            },
+            VillageCode {
+                name: "墩阔坦村",
+                code: "008",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "009",
+            },
+            VillageCode {
+                name: "亚喀守努特村",
+                code: "010",
+            },
+            VillageCode {
+                name: "都维勒克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "乌恰村",
+                code: "012",
+            },
+            VillageCode {
+                name: "玉奇喀拉村",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀拉布喀村",
+                code: "014",
+            },
+            VillageCode {
+                name: "阔恰托格拉克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "塔格玛克村",
+                code: "016",
+            },
+            VillageCode {
+                name: "乌尊村",
+                code: "017",
+            },
+            VillageCode {
+                name: "央艾日克村",
+                code: "018",
+            },
+            VillageCode {
+                name: "排孜阿瓦提村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "牙哈镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "团结社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "晨光村",
+                code: "002",
+            },
+            VillageCode {
+                name: "红光村",
+                code: "003",
+            },
+            VillageCode {
+                name: "星光村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿克布亚村",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔格玛克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "博斯坦托格拉克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔尕尔其二村",
+                code: "008",
+            },
+            VillageCode {
+                name: "玉奇玉吉买村",
+                code: "009",
+            },
+            VillageCode {
+                name: "守努特村",
+                code: "010",
+            },
+            VillageCode {
+                name: "吾斯塘博依村",
+                code: "011",
+            },
+            VillageCode {
+                name: "克日希村",
+                code: "012",
+            },
+            VillageCode {
+                name: "艾日克博依村",
+                code: "013",
+            },
+            VillageCode {
+                name: "布拉克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "托克乃村",
+                code: "015",
+            },
+            VillageCode {
+                name: "拜什布拉克村",
+                code: "016",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "017",
+            },
+            VillageCode {
+                name: "虽润勒克村",
+                code: "018",
+            },
+            VillageCode {
+                name: "苏盖特力克村",
+                code: "019",
+            },
+            VillageCode {
+                name: "恰其库木村",
+                code: "020",
+            },
+            VillageCode {
+                name: "牙哈村",
+                code: "021",
+            },
+            VillageCode {
+                name: "巴格村",
+                code: "022",
+            },
+            VillageCode {
+                name: "塔尕尔其一村",
+                code: "023",
+            },
+            VillageCode {
+                name: "阿克艾日克村",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌尊镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "阿克提其社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "亚贝希社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "英尼和村",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌尊艾日克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "乌尊一村",
+                code: "005",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "006",
+            },
+            VillageCode {
+                name: "布喀其村",
+                code: "007",
+            },
+            VillageCode {
+                name: "三星村",
+                code: "008",
+            },
+            VillageCode {
+                name: "锦绣村",
+                code: "009",
+            },
+            VillageCode {
+                name: "果勒艾日克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "库木艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔格其村",
+                code: "012",
+            },
+            VillageCode {
+                name: "色根苏盖特三村",
+                code: "013",
+            },
+            VillageCode {
+                name: "色根苏盖特四村",
+                code: "014",
+            },
+            VillageCode {
+                name: "色根苏盖特一村",
+                code: "015",
+            },
+            VillageCode {
+                name: "色根苏盖特二村",
+                code: "016",
+            },
+            VillageCode {
+                name: "英吐尔一村",
+                code: "017",
+            },
+            VillageCode {
+                name: "英吐尔二村",
+                code: "018",
+            },
+            VillageCode {
+                name: "乌尊二村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "伊西哈拉镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "科克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "龟兹一社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "龟兹二社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀格其社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉斯屯社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万比加克社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "双拥社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "库木艾日克社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "夏玛勒巴格社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "安乐宫社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "多来特巴格社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿热买里社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "硝尔巴克社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "红旗社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "依迪克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "016",
+            },
+            VillageCode {
+                name: "艾日克阿热斯村",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "二八台镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "富明社区委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "支青村",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿瓦提村",
+                code: "003",
+            },
+            VillageCode {
+                name: "奥依苏克塞克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "拉依苏村",
+                code: "005",
+            },
+            VillageCode {
+                name: "伯日力克村",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔里木镇",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "胡杨社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "羊场社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔里木社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "依坎库勒社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阳光村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "长兴村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "草湖二村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英达里亚村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "朗喀村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "草湖一村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿克库勒村",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "玉奇吾斯塘乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "库木吐尔村",
+                code: "001",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "002",
+            },
+            VillageCode {
+                name: "拜什格然木村",
+                code: "003",
+            },
+            VillageCode {
+                name: "玉奇吾斯塘村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阔什吐尔村",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格其村",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉苏村",
+                code: "007",
+            },
+            VillageCode {
+                name: "柳树村",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿热吾斯塘村",
+                code: "009",
+            },
+            VillageCode {
+                name: "杭甫巴格村",
+                code: "010",
+            },
+            VillageCode {
+                name: "代尔瓦扎亚村",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿热买里村",
+                code: "012",
+            },
+            VillageCode {
+                name: "排孜阿瓦提村",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "比西巴格乡",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "其乃巴格村",
+                code: "001",
+            },
+            VillageCode {
+                name: "依格孜库木村",
+                code: "002",
+            },
+            VillageCode {
+                name: "牛场村",
+                code: "003",
+            },
+            VillageCode {
+                name: "硝尔库勒村",
+                code: "004",
+            },
+            VillageCode {
+                name: "团结村",
+                code: "005",
+            },
+            VillageCode {
+                name: "科克提坎村",
+                code: "006",
+            },
+            VillageCode {
+                name: "林场村",
+                code: "007",
+            },
+            VillageCode {
+                name: "博斯坦一村",
+                code: "008",
+            },
+            VillageCode {
+                name: "博斯坦二村",
+                code: "009",
+            },
+            VillageCode {
+                name: "东风村",
+                code: "010",
+            },
+            VillageCode {
+                name: "库库什一村",
+                code: "011",
+            },
+            VillageCode {
+                name: "库库什二村",
+                code: "012",
+            },
+            VillageCode {
+                name: "格代库勒村",
+                code: "013",
+            },
+            VillageCode {
+                name: "幸福村",
+                code: "014",
+            },
+            VillageCode {
+                name: "蔬菜村",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "哈尼喀塔木乡",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "西乡村",
+                code: "001",
+            },
+            VillageCode {
+                name: "托依堡勒迪村",
+                code: "002",
+            },
+            VillageCode {
+                name: "英也尔村",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热买里村",
+                code: "004",
+            },
+            VillageCode {
+                name: "诺巴什拉木村",
+                code: "005",
+            },
+            VillageCode {
+                name: "乌尊村",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴扎村",
+                code: "007",
+            },
+            VillageCode {
+                name: "英吐尔村",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴格万村",
+                code: "009",
+            },
+            VillageCode {
+                name: "萨依艾日克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "克其克萨依艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "琼萨依日克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "博孜艾日克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "英买里村",
+                code: "014",
+            },
+            VillageCode {
+                name: "齐满村",
+                code: "015",
+            },
+            VillageCode {
+                name: "新光村",
+                code: "016",
+            },
+            VillageCode {
+                name: "库木艾日克村",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿克协海尔村",
+                code: "018",
+            },
+            VillageCode {
+                name: "托库孜托玛村",
+                code: "019",
+            },
+            VillageCode {
+                name: "古勒巴格村",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿克艾日克村",
+                code: "021",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "022",
+            },
+            VillageCode {
+                name: "渭干村",
+                code: "023",
+            },
+            VillageCode {
+                name: "琼协海尔村",
+                code: "024",
+            },
+            VillageCode {
+                name: "锦绣村",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克吾斯塘乡",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "排孜阿瓦提村",
+                code: "001",
+            },
+            VillageCode {
+                name: "长水村",
+                code: "002",
+            },
+            VillageCode {
+                name: "托帕艾日克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "硝尔库勒艾日克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "吐格曼拜什村",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐尔塔木村",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿克吾斯塘村",
+                code: "007",
+            },
+            VillageCode {
+                name: "花园村",
+                code: "008",
+            },
+            VillageCode {
+                name: "胡杨村",
+                code: "009",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "010",
+            },
+            VillageCode {
+                name: "果勒艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "也克先贝巴扎村",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀拉萨村",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿格乡",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "阿格村",
+                code: "001",
+            },
+            VillageCode {
+                name: "北山村",
+                code: "002",
+            },
+            VillageCode {
+                name: "康村村",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀热古勒村",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "库车经济技术开发区",
+        code: "019",
+        villages: &[VillageCode {
+            name: "库车经济技术开发区虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "城南片区管委会",
+        code: "020",
+        villages: &[
+            VillageCode {
+                name: "古杨树社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "五一路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "黄河路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "禧源社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "荷花苑社区",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "五眼泉片区管委会",
+        code: "021",
+        villages: &[
+            VillageCode {
+                name: "石化新村社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "园艺场社区",
+                code: "002",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_004: [TownCode; 13] = [
-    TownCode { name: "温宿镇", code: "001", villages: &[VillageCode { name: "新泉社区", code: "001" }, VillageCode { name: "迎宾社区", code: "002" }, VillageCode { name: "姑墨社区", code: "003" }, VillageCode { name: "稻香社区", code: "004" }, VillageCode { name: "友谊社区", code: "005" }, VillageCode { name: "欣业社区", code: "006" }, VillageCode { name: "龙泉社区", code: "007" }, VillageCode { name: "民生社区", code: "008" }, VillageCode { name: "泉城社区", code: "009" }, VillageCode { name: "托乎拉村委会", code: "010" }, VillageCode { name: "金华新村", code: "011" }] },
-    TownCode { name: "吐木秀克镇", code: "002", villages: &[VillageCode { name: "尤喀克塔尕克村委会", code: "001" }, VillageCode { name: "托万克塔尕克村委会", code: "002" }, VillageCode { name: "托万托喀依村委会", code: "003" }, VillageCode { name: "曲达村委会", code: "004" }, VillageCode { name: "尤喀克斯日木村委会", code: "005" }, VillageCode { name: "托万斯日木村委会", code: "006" }, VillageCode { name: "帕万拉村委会", code: "007" }, VillageCode { name: "河崖村", code: "008" }, VillageCode { name: "吐木秀克村委会", code: "009" }, VillageCode { name: "塔木里克村委会", code: "010" }, VillageCode { name: "兰杆村委会", code: "011" }] },
-    TownCode { name: "克孜勒镇", code: "003", villages: &[VillageCode { name: "其克特村委会", code: "001" }, VillageCode { name: "其曼村委会", code: "002" }, VillageCode { name: "巴夏克其村委会", code: "003" }, VillageCode { name: "古洛克村委会", code: "004" }, VillageCode { name: "加格达村委会", code: "005" }, VillageCode { name: "阿热买里村委会", code: "006" }, VillageCode { name: "帕满村委会", code: "007" }, VillageCode { name: "喀力克坎特村", code: "008" }, VillageCode { name: "喀拉萨村委会", code: "009" }, VillageCode { name: "喀什克沙亚提村", code: "010" }, VillageCode { name: "博然其村", code: "011" }, VillageCode { name: "克尔库木村", code: "012" }, VillageCode { name: "依尔玛村委会", code: "013" }, VillageCode { name: "青年新村委会", code: "014" }, VillageCode { name: "乌克铁热克村委会", code: "015" }, VillageCode { name: "纺织城温宿县生活区", code: "016" }] },
-    TownCode { name: "阿热勒镇", code: "004", villages: &[VillageCode { name: "依尔玛村委会", code: "001" }, VillageCode { name: "吾斯塘博依村委会", code: "002" }, VillageCode { name: "吐尔拜提尤喀克买里村委会", code: "003" }, VillageCode { name: "吐尔拜提阿热买里村委会", code: "004" }, VillageCode { name: "乌尔其托万买里村委会", code: "005" }, VillageCode { name: "夏合吐尔村委会", code: "006" }, VillageCode { name: "巴格其艾日克村委会", code: "007" }, VillageCode { name: "大杨树村", code: "008" }, VillageCode { name: "喀什博依村委会", code: "009" }, VillageCode { name: "托万克麦盖提村委会", code: "010" }, VillageCode { name: "提格艾日克村委会", code: "011" }, VillageCode { name: "结格吉村委会", code: "012" }, VillageCode { name: "花果村", code: "013" }, VillageCode { name: "尤喀克麦盖提村委会", code: "014" }, VillageCode { name: "吐尔拜提喀拉都维村委会", code: "015" }, VillageCode { name: "皮亚其村委会", code: "016" }] },
-    TownCode { name: "佳木镇", code: "005", villages: &[VillageCode { name: "阿热勒巴格村委会", code: "001" }, VillageCode { name: "托万克吐曼村委会", code: "002" }, VillageCode { name: "尤喀克吐曼村委会", code: "003" }, VillageCode { name: "兰干村委会", code: "004" }, VillageCode { name: "绿园村", code: "005" }, VillageCode { name: "喀什艾日克村委会", code: "006" }, VillageCode { name: "拉帕村委会", code: "007" }, VillageCode { name: "通吐尔村委会", code: "008" }, VillageCode { name: "加依村委会", code: "009" }, VillageCode { name: "英买里村委会", code: "010" }, VillageCode { name: "喀赞阿斯玛村委会", code: "011" }] },
-    TownCode { name: "托甫汗镇", code: "006", villages: &[VillageCode { name: "托甫汗村委会", code: "001" }, VillageCode { name: "托万克托甫汗村委会", code: "002" }, VillageCode { name: "尤喀克托甫汗村委会", code: "003" }, VillageCode { name: "阿亚克其村委会", code: "004" }, VillageCode { name: "新村村委会", code: "005" }, VillageCode { name: "稻泉村村委会", code: "006" }, VillageCode { name: "酒花楼村委会", code: "007" }] },
-    TownCode { name: "共青团镇", code: "007", villages: &[VillageCode { name: "温宿产业园区管理委员会社区", code: "001" }, VillageCode { name: "千亩地村委会", code: "002" }, VillageCode { name: "尤喀克买里村委会", code: "003" }, VillageCode { name: "吉日木苏盖特村委会", code: "004" }, VillageCode { name: "铁路新村", code: "005" }, VillageCode { name: "尤喀克佳木村委会", code: "006" }, VillageCode { name: "托万佳木村委会", code: "007" }, VillageCode { name: "喀拉布运村委会", code: "008" }, VillageCode { name: "恰其力克村委会", code: "009" }, VillageCode { name: "萨叶科普村委会", code: "010" }] },
-    TownCode { name: "柯柯牙镇", code: "008", villages: &[VillageCode { name: "果林村委会", code: "001" }, VillageCode { name: "园林村委会", code: "002" }, VillageCode { name: "绿化新村委会", code: "003" }, VillageCode { name: "戈壁新村委会", code: "004" }, VillageCode { name: "柯柯牙村委会", code: "005" }, VillageCode { name: "英沿村委会", code: "006" }, VillageCode { name: "塔格拉克村委会", code: "007" }, VillageCode { name: "帕克勒克村委会", code: "008" }, VillageCode { name: "英巴村委会", code: "009" }, VillageCode { name: "艾肯博依村委会", code: "010" }, VillageCode { name: "萨依巴格村委会", code: "011" }, VillageCode { name: "核桃新村委会", code: "012" }] },
-    TownCode { name: "托乎拉乡", code: "009", villages: &[VillageCode { name: "托万克苏布拉克村委会", code: "001" }, VillageCode { name: "托万克库尔巴格村委会", code: "002" }, VillageCode { name: "尤喀克苏布拉克村委会", code: "003" }, VillageCode { name: "尤喀克库尔巴格村委会", code: "004" }, VillageCode { name: "思源村", code: "005" }, VillageCode { name: "河畔村", code: "006" }, VillageCode { name: "稻园村委会", code: "007" }] },
-    TownCode { name: "恰格拉克乡", code: "010", villages: &[VillageCode { name: "叶克艾日克村委会", code: "001" }, VillageCode { name: "喀拉萨尔村委会", code: "002" }, VillageCode { name: "恰格拉克村委会", code: "003" }, VillageCode { name: "吉格代村委会", code: "004" }, VillageCode { name: "前进村委会", code: "005" }, VillageCode { name: "苏亚克斯村委会", code: "006" }, VillageCode { name: "古勒巴格村委会", code: "007" }, VillageCode { name: "喀拉都维村委会", code: "008" }, VillageCode { name: "庆塔拉买里村", code: "009" }, VillageCode { name: "和谐村", code: "010" }] },
-    TownCode { name: "依希来木其乡", code: "011", villages: &[VillageCode { name: "温宿国家农业科技园区社区", code: "001" }, VillageCode { name: "克孜勒都瓦村委会", code: "002" }, VillageCode { name: "阿克托格拉克村委会", code: "003" }, VillageCode { name: "阔依其村委会", code: "004" }, VillageCode { name: "拜什买热克村委会", code: "005" }, VillageCode { name: "海楼村委会", code: "006" }, VillageCode { name: "苏鲁瓦村委会", code: "007" }, VillageCode { name: "强尕克村委会", code: "008" }, VillageCode { name: "依来克村委会", code: "009" }, VillageCode { name: "斯也克村委会", code: "010" }, VillageCode { name: "苏盖特艾日克村", code: "011" }, VillageCode { name: "团结村", code: "012" }, VillageCode { name: "依希来木其村委会", code: "013" }] },
-    TownCode { name: "古勒阿瓦提乡", code: "012", villages: &[VillageCode { name: "古勒阿瓦提村委会", code: "001" }, VillageCode { name: "古勒艾日克村委会", code: "002" }, VillageCode { name: "巴格其村委会", code: "003" }, VillageCode { name: "买里艾日克村委会", code: "004" }, VillageCode { name: "桥头村委会", code: "005" }, VillageCode { name: "博斯坦托格拉克村委会", code: "006" }, VillageCode { name: "提根村委会", code: "007" }, VillageCode { name: "米勒克艾日克村委会", code: "008" }, VillageCode { name: "色格孜勒克村委会", code: "009" }, VillageCode { name: "英艾日克村委会", code: "010" }] },
-    TownCode { name: "博孜墩柯尔克孜族乡", code: "013", villages: &[VillageCode { name: "克孜勒布拉克村委会", code: "001" }, VillageCode { name: "博孜墩村委会", code: "002" }, VillageCode { name: "阿克布拉克村委会", code: "003" }, VillageCode { name: "雪源村委会", code: "004" }, VillageCode { name: "库尔干村", code: "005" }, VillageCode { name: "博孜也尔村", code: "006" }, VillageCode { name: "吾斯塘博依村", code: "007" }, VillageCode { name: "提坎库如克村委会", code: "008" }] },
+    TownCode {
+        name: "温宿镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "新泉社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "迎宾社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "姑墨社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "稻香社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "友谊社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "欣业社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙泉社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "民生社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "泉城社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "托乎拉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "金华新村",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "吐木秀克镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "尤喀克塔尕克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克塔尕克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万托喀依村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "曲达村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤喀克斯日木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万斯日木村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "帕万拉村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "河崖村",
+                code: "008",
+            },
+            VillageCode {
+                name: "吐木秀克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "塔木里克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰杆村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "其克特村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "其曼村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴夏克其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古洛克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加格达村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "帕满村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀力克坎特村",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀拉萨村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀什克沙亚提村",
+                code: "010",
+            },
+            VillageCode {
+                name: "博然其村",
+                code: "011",
+            },
+            VillageCode {
+                name: "克尔库木村",
+                code: "012",
+            },
+            VillageCode {
+                name: "依尔玛村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "青年新村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "乌克铁热克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "纺织城温宿县生活区",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿热勒镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "依尔玛村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐尔拜提尤喀克买里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吐尔拜提阿热买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "乌尔其托万买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "夏合吐尔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴格其艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大杨树村",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀什博依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万克麦盖提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "提格艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "结格吉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "花果村",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克麦盖提村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吐尔拜提喀拉都维村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "皮亚其村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "佳木镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "阿热勒巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克吐曼村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克吐曼村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "绿园村",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "拉帕村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "通吐尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "加依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀赞阿斯玛村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "托甫汗镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "托甫汗村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克托甫汗村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克托甫汗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿亚克其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "稻泉村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "酒花楼村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "共青团镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "温宿产业园区管理委员会社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "千亩地村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克买里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吉日木苏盖特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "铁路新村",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克佳木村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万佳木村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉布运村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰其力克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "萨叶科普村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "柯柯牙镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "果林村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "园林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "绿化新村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "戈壁新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "柯柯牙村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英沿村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔格拉克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "帕克勒克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英巴村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "艾肯博依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "核桃新村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "托乎拉乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "托万克苏布拉克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克库尔巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克苏布拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤喀克库尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "思源村",
+                code: "005",
+            },
+            VillageCode {
+                name: "河畔村",
+                code: "006",
+            },
+            VillageCode {
+                name: "稻园村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "恰格拉克乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "叶克艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀拉萨尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "恰格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吉格代村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "苏亚克斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉都维村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "庆塔拉买里村",
+                code: "009",
+            },
+            VillageCode {
+                name: "和谐村",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "依希来木其乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "温宿国家农业科技园区社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "克孜勒都瓦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克托格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阔依其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "拜什买热克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "海楼村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏鲁瓦村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "强尕克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依来克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "苏盖特艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "团结村",
+                code: "012",
+            },
+            VillageCode {
+                name: "依希来木其村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "古勒阿瓦提乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "古勒阿瓦提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "古勒艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴格其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "买里艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "桥头村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博斯坦托格拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "提根村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "米勒克艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "色格孜勒克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "博孜墩柯尔克孜族乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "克孜勒布拉克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博孜墩村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克布拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "雪源村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库尔干村",
+                code: "005",
+            },
+            VillageCode {
+                name: "博孜也尔村",
+                code: "006",
+            },
+            VillageCode {
+                name: "吾斯塘博依村",
+                code: "007",
+            },
+            VillageCode {
+                name: "提坎库如克村委会",
+                code: "008",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_005: [TownCode; 12] = [
-    TownCode { name: "沙雅镇", code: "001", villages: &[VillageCode { name: "朝阳社区", code: "001" }, VillageCode { name: "金雁河社区", code: "002" }, VillageCode { name: "文化社区", code: "003" }, VillageCode { name: "康泰社区", code: "004" }, VillageCode { name: "明珠社区", code: "005" }, VillageCode { name: "友好社区", code: "006" }, VillageCode { name: "幸福社区", code: "007" }, VillageCode { name: "团结社区", code: "008" }, VillageCode { name: "向阳社区", code: "009" }, VillageCode { name: "兴盛社区", code: "010" }, VillageCode { name: "新村", code: "011" }] },
-    TownCode { name: "托依堡勒迪镇", code: "002", villages: &[VillageCode { name: "润城社区", code: "001" }, VillageCode { name: "泰和社区", code: "002" }, VillageCode { name: "托依堡勒迪村委会", code: "003" }, VillageCode { name: "铁热克村委会", code: "004" }, VillageCode { name: "排孜阿瓦提村委会", code: "005" }, VillageCode { name: "克其玛塔村", code: "006" }, VillageCode { name: "色日玛克村委会", code: "007" }, VillageCode { name: "阔纳其满村委会", code: "008" }, VillageCode { name: "英其满村委会", code: "009" }, VillageCode { name: "牙勒古孜铁热克村委会", code: "010" }, VillageCode { name: "塔勒克布隆村委会", code: "011" }, VillageCode { name: "兰干村委会", code: "012" }, VillageCode { name: "英依干其村委会", code: "013" }, VillageCode { name: "英科克布运村委会", code: "014" }, VillageCode { name: "色格孜勒克村委会", code: "015" }, VillageCode { name: "园艺场村", code: "016" }, VillageCode { name: "胜利村委会", code: "017" }, VillageCode { name: "库木艾日克村委会", code: "018" }, VillageCode { name: "喀拉库木村委会", code: "019" }, VillageCode { name: "阿克艾日克村委会", code: "020" }, VillageCode { name: "一农场村委会", code: "021" }, VillageCode { name: "二农场村委会", code: "022" }, VillageCode { name: "三农场村委会", code: "023" }, VillageCode { name: "四农场村委会", code: "024" }, VillageCode { name: "新安村委会", code: "025" }] },
-    TownCode { name: "红旗镇", code: "003", villages: &[VillageCode { name: "阳光社区", code: "001" }, VillageCode { name: "兰干村委会", code: "002" }, VillageCode { name: "先进村", code: "003" }, VillageCode { name: "多勒昆村委会", code: "004" }, VillageCode { name: "央买力村委会", code: "005" }, VillageCode { name: "巴格万村委会", code: "006" }, VillageCode { name: "古再勒村委会", code: "007" }, VillageCode { name: "友谊村委会", code: "008" }, VillageCode { name: "塔勒克阔坦村委会", code: "009" }, VillageCode { name: "克孜勒萨村委会", code: "010" }, VillageCode { name: "包尔海村委会", code: "011" }, VillageCode { name: "布吉塔村委会", code: "012" }, VillageCode { name: "吾斯塘博依村委会", code: "013" }, VillageCode { name: "喀什托格拉克村委会", code: "014" }, VillageCode { name: "阿合瓦西村委会", code: "015" }, VillageCode { name: "塔勒克村委会", code: "016" }, VillageCode { name: "也先拜巴扎村委会", code: "017" }, VillageCode { name: "塔勒克努尔村委会", code: "018" }, VillageCode { name: "巴扎村", code: "019" }] },
-    TownCode { name: "英买力镇", code: "004", villages: &[VillageCode { name: "和平社区", code: "001" }, VillageCode { name: "央艾日克村委会", code: "002" }, VillageCode { name: "博斯坦村委会", code: "003" }, VillageCode { name: "铁日克艾日克村委会", code: "004" }, VillageCode { name: "塔什墩村委会", code: "005" }, VillageCode { name: "英亚布拉克村委会", code: "006" }, VillageCode { name: "英喀勒尕奇村委会", code: "007" }, VillageCode { name: "帕夏勒克村委会", code: "008" }, VillageCode { name: "阔什科瑞克村委会", code: "009" }, VillageCode { name: "阿其墩村委会", code: "010" }, VillageCode { name: "央买里村委会", code: "011" }, VillageCode { name: "库如勒库木村委会", code: "012" }, VillageCode { name: "喀什艾日克村委会", code: "013" }, VillageCode { name: "库尔玛村委会", code: "014" }, VillageCode { name: "喀勒尕奇村委会", code: "015" }, VillageCode { name: "喀什贝希村委会", code: "016" }, VillageCode { name: "赛克孜沃塔克村委会", code: "017" }, VillageCode { name: "英买力村委会", code: "018" }, VillageCode { name: "也克先拜巴扎村", code: "019" }, VillageCode { name: "阔什苏盖特村委会", code: "020" }, VillageCode { name: "墩买里村委会", code: "021" }] },
-    TownCode { name: "沙雅县哈德墩镇", code: "005", villages: &[VillageCode { name: "奥普坎村", code: "001" }, VillageCode { name: "哈德墩村委会", code: "002" }, VillageCode { name: "阿特贝希村", code: "003" }, VillageCode { name: "油田村", code: "004" }] },
-    TownCode { name: "古勒巴格镇", code: "006", villages: &[VillageCode { name: "河畔社区", code: "001" }, VillageCode { name: "琼古勒巴格村委会", code: "002" }, VillageCode { name: "色日克苏盖提村委会", code: "003" }, VillageCode { name: "尤库日库勒达希村委会", code: "004" }, VillageCode { name: "奥吐拉库勒达希村委会", code: "005" }, VillageCode { name: "阿克村委会", code: "006" }, VillageCode { name: "阿牙克库勒达希村委会", code: "007" }, VillageCode { name: "阿克艾日克村委会", code: "008" }, VillageCode { name: "英阿克艾日克村委会", code: "009" }, VillageCode { name: "博孜村委会", code: "010" }, VillageCode { name: "萨依巴格村", code: "011" }, VillageCode { name: "古如其阔坦村委会", code: "012" }, VillageCode { name: "库木托喀依村委会", code: "013" }, VillageCode { name: "英汗旦村委会", code: "014" }, VillageCode { name: "啤酒花村", code: "015" }, VillageCode { name: "音其开村", code: "016" }, VillageCode { name: "阿勒迪尔村委会", code: "017" }, VillageCode { name: "提木村委会", code: "018" }, VillageCode { name: "库如勒库木村委会", code: "019" }, VillageCode { name: "萨拉斯提村委会", code: "020" }, VillageCode { name: "先锋村委会", code: "021" }, VillageCode { name: "新垦村", code: "022" }] },
-    TownCode { name: "海楼镇", code: "007", villages: &[VillageCode { name: "杜先拜巴扎村委会", code: "001" }, VillageCode { name: "诺尔如孜库木村委会", code: "002" }, VillageCode { name: "科克布运村委会", code: "003" }, VillageCode { name: "海楼村", code: "004" }, VillageCode { name: "亚克布拉克村委会", code: "005" }, VillageCode { name: "团结村委会", code: "006" }, VillageCode { name: "喀什巴格村委会", code: "007" }, VillageCode { name: "阿克墩村委会", code: "008" }, VillageCode { name: "依干齐村委会", code: "009" }, VillageCode { name: "达坂库木村委会", code: "010" }, VillageCode { name: "克孜勒塔木村委会", code: "011" }, VillageCode { name: "羌尕铁热克村委会", code: "012" }, VillageCode { name: "博孜墩村委会", code: "013" }, VillageCode { name: "古再勒博斯坦村委会", code: "014" }, VillageCode { name: "花园村", code: "015" }] },
-    TownCode { name: "努尔巴格乡", code: "008", villages: &[VillageCode { name: "英买力村委会", code: "001" }, VillageCode { name: "和谐村", code: "002" }, VillageCode { name: "亚当村委会", code: "003" }, VillageCode { name: "努尔巴格村委会", code: "004" }, VillageCode { name: "苏盖提托喀依村委会", code: "005" }, VillageCode { name: "英阿瓦提村委会", code: "006" }, VillageCode { name: "阿热勒村委会", code: "007" }, VillageCode { name: "吉格代托喀依村委会", code: "008" }, VillageCode { name: "良种场村委会", code: "009" }, VillageCode { name: "振兴村", code: "010" }] },
-    TownCode { name: "塔里木乡", code: "009", villages: &[VillageCode { name: "克里也特村委会", code: "001" }, VillageCode { name: "央塔克巴什村委会", code: "002" }, VillageCode { name: "墩阔坦村委会", code: "003" }, VillageCode { name: "其格格热木村委会", code: "004" }, VillageCode { name: "仓塔木村委会", code: "005" }, VillageCode { name: "拜什托格拉克村委会", code: "006" }, VillageCode { name: "库木库勒村委会", code: "007" }] },
-    TownCode { name: "盖孜库木乡", code: "010", villages: &[VillageCode { name: "盖孜库木村委会", code: "001" }, VillageCode { name: "库木博斯坦村委会", code: "002" }, VillageCode { name: "吐央村委会", code: "003" }, VillageCode { name: "牧场村委会", code: "004" }, VillageCode { name: "英博斯坦村委会", code: "005" }, VillageCode { name: "结然巴西村委会", code: "006" }, VillageCode { name: "卡尔墩村委会", code: "007" }] },
-    TownCode { name: "央塔克协海尔乡", code: "011", villages: &[VillageCode { name: "沃吐孜鲁克村委会", code: "001" }, VillageCode { name: "库尔玛买力村委会", code: "002" }, VillageCode { name: "央塔克协海尔村委会", code: "003" }, VillageCode { name: "丘吾克鲁克村委会", code: "004" }, VillageCode { name: "牙勒古孜托格拉克村委会", code: "005" }, VillageCode { name: "铁热克博斯坦村委会", code: "006" }, VillageCode { name: "英也尔村委会", code: "007" }, VillageCode { name: "坡托格拉克村委会", code: "008" }, VillageCode { name: "前进村", code: "009" }, VillageCode { name: "幸福村", code: "010" }] },
-    TownCode { name: "沙雅县塔河管理委员会", code: "012", villages: &[VillageCode { name: "夏勒克塔木村委会", code: "001" }, VillageCode { name: "喀斯坎村委会", code: "002" }, VillageCode { name: "泰安村生活区", code: "003" }, VillageCode { name: "空阿勒恰克拜勒村委会", code: "004" }, VillageCode { name: "玉其库尔迪村委会", code: "005" }] },
+    TownCode {
+        name: "沙雅镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "朝阳社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "金雁河社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "文化社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "康泰社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "明珠社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "友好社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "向阳社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "兴盛社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "新村",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "托依堡勒迪镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "润城社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "泰和社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "托依堡勒迪村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁热克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "排孜阿瓦提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "克其玛塔村",
+                code: "006",
+            },
+            VillageCode {
+                name: "色日玛克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阔纳其满村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英其满村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "牙勒古孜铁热克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "塔勒克布隆村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英依干其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "英科克布运村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "色格孜勒克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "园艺场村",
+                code: "016",
+            },
+            VillageCode {
+                name: "胜利村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "喀拉库木村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿克艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "一农场村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "二农场村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "三农场村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "四农场村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "新安村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "红旗镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "阳光社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "先进村",
+                code: "003",
+            },
+            VillageCode {
+                name: "多勒昆村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "央买力村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格万村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古再勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "友谊村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "塔勒克阔坦村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "克孜勒萨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "包尔海村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布吉塔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀什托格拉克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿合瓦西村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "塔勒克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "也先拜巴扎村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "塔勒克努尔村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "巴扎村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "英买力镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "和平社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "央艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁日克艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "塔什墩村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英亚布拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英喀勒尕奇村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "帕夏勒克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔什科瑞克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿其墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "央买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库如勒库木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库尔玛村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "喀勒尕奇村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "喀什贝希村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "赛克孜沃塔克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英买力村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "也克先拜巴扎村",
+                code: "019",
+            },
+            VillageCode {
+                name: "阔什苏盖特村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "沙雅县哈德墩镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "奥普坎村",
+                code: "001",
+            },
+            VillageCode {
+                name: "哈德墩村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿特贝希村",
+                code: "003",
+            },
+            VillageCode {
+                name: "油田村",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "古勒巴格镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "河畔社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "琼古勒巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "色日克苏盖提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤库日库勒达希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "奥吐拉库勒达希村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿牙克库勒达希村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿克艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英阿克艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "博孜村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨依巴格村",
+                code: "011",
+            },
+            VillageCode {
+                name: "古如其阔坦村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木托喀依村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "英汗旦村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "啤酒花村",
+                code: "015",
+            },
+            VillageCode {
+                name: "音其开村",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿勒迪尔村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "提木村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "库如勒库木村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "萨拉斯提村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "先锋村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "新垦村",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "海楼镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "杜先拜巴扎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "诺尔如孜库木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "科克布运村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海楼村",
+                code: "004",
+            },
+            VillageCode {
+                name: "亚克布拉克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀什巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿克墩村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依干齐村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "达坂库木村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "克孜勒塔木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "羌尕铁热克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博孜墩村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "古再勒博斯坦村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "花园村",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "努尔巴格乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "英买力村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和谐村",
+                code: "002",
+            },
+            VillageCode {
+                name: "亚当村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "苏盖提托喀依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿热勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "吉格代托喀依村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "良种场村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "振兴村",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔里木乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "克里也特村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "央塔克巴什村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "墩阔坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "其格格热木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "仓塔木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "拜什托格拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库木库勒村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "盖孜库木乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "盖孜库木村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库木博斯坦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐央村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "牧场村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英博斯坦村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "结然巴西村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "卡尔墩村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "央塔克协海尔乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "沃吐孜鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库尔玛买力村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "央塔克协海尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "丘吾克鲁克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "牙勒古孜托格拉克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "铁热克博斯坦村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英也尔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "坡托格拉克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "前进村",
+                code: "009",
+            },
+            VillageCode {
+                name: "幸福村",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "沙雅县塔河管理委员会",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "夏勒克塔木村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀斯坎村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "泰安村生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "空阿勒恰克拜勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉其库尔迪村委会",
+                code: "005",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_006: [TownCode; 12] = [
-    TownCode { name: "新和镇", code: "001", villages: &[VillageCode { name: "热斯坦社区居委会", code: "001" }, VillageCode { name: "新城社区居委会", code: "002" }, VillageCode { name: "滨湖社区居委会", code: "003" }, VillageCode { name: "城北社区居委会", code: "004" }, VillageCode { name: "团结社区居委会", code: "005" }, VillageCode { name: "南城社区居委会", code: "006" }, VillageCode { name: "班超社区居委会", code: "007" }, VillageCode { name: "向阳社区居委会", code: "008" }] },
-    TownCode { name: "尤鲁都斯巴格镇", code: "002", villages: &[VillageCode { name: "龟兹社区居委会", code: "001" }, VillageCode { name: "李崇社区居委会", code: "002" }, VillageCode { name: "石榴社区居委会", code: "003" }, VillageCode { name: "定远社区居委会", code: "004" }, VillageCode { name: "它亁城社区居委会", code: "005" }, VillageCode { name: "归义社区居委会", code: "006" }, VillageCode { name: "塔格艾日克村委会", code: "007" }, VillageCode { name: "阿恰勒村委会", code: "008" }, VillageCode { name: "康庄村委会", code: "009" }, VillageCode { name: "乔拉克吐尔村委会", code: "010" }, VillageCode { name: "硝依鲁克村委会", code: "011" }, VillageCode { name: "玉吉买艾日克村委会", code: "012" }] },
-    TownCode { name: "依其艾日克镇", code: "003", villages: &[VillageCode { name: "汇通社区居委会", code: "001" }, VillageCode { name: "新时代社区居委会", code: "002" }, VillageCode { name: "滨河社区居委会", code: "003" }, VillageCode { name: "文化社区居委会", code: "004" }, VillageCode { name: "汉唐社区居委会", code: "005" }, VillageCode { name: "幸福社区居委会", code: "006" }, VillageCode { name: "边城社区居委会", code: "007" }, VillageCode { name: "胡杨社区居委会", code: "008" }, VillageCode { name: "加依社区居委会", code: "009" }, VillageCode { name: "希望社区居委会", code: "010" }, VillageCode { name: "古塔社区居委会", code: "011" }, VillageCode { name: "友谊社区居委会", code: "012" }, VillageCode { name: "托特塔什社区居委会", code: "013" }, VillageCode { name: "红星社区居委会", code: "014" }, VillageCode { name: "和平社区居委会", code: "015" }, VillageCode { name: "阳光社区居委会", code: "016" }, VillageCode { name: "托玛社区居委会", code: "017" }] },
-    TownCode { name: "塔什艾日克镇", code: "004", villages: &[VillageCode { name: "盛唐社区居委会", code: "001" }, VillageCode { name: "钟鼓楼社区居委会", code: "002" }, VillageCode { name: "光明社区居委会", code: "003" }, VillageCode { name: "博斯坦社区居委会", code: "004" }, VillageCode { name: "汉庭社区居委会", code: "005" }, VillageCode { name: "天兴社区居委会", code: "006" }, VillageCode { name: "花海社区居委会", code: "007" }, VillageCode { name: "安宁社区居委会", code: "008" }, VillageCode { name: "安康村委会", code: "009" }, VillageCode { name: "阔纳博孜村委会", code: "010" }, VillageCode { name: "阿热吐格曼村委会", code: "011" }, VillageCode { name: "库木什鲁克艾日克村委会", code: "012" }, VillageCode { name: "英阿瓦提村委会", code: "013" }, VillageCode { name: "阿克提干协尔村委会", code: "014" }] },
-    TownCode { name: "排先拜巴扎镇", code: "005", villages: &[VillageCode { name: "前进社区居委会", code: "001" }, VillageCode { name: "腾飞社区居委会", code: "002" }, VillageCode { name: "振兴社区居委会", code: "003" }, VillageCode { name: "努尔巴格村委会", code: "004" }, VillageCode { name: "康乐村委会", code: "005" }, VillageCode { name: "库木库勒村委会", code: "006" }, VillageCode { name: "苏盖特阔坦村委会", code: "007" }, VillageCode { name: "永丰庄村委会", code: "008" }, VillageCode { name: "莫玛托格拉克村委会", code: "009" }, VillageCode { name: "炮台村委会", code: "010" }, VillageCode { name: "小康村委会", code: "011" }] },
-    TownCode { name: "玉奇喀特镇", code: "006", villages: &[VillageCode { name: "古城社区居委会", code: "001" }, VillageCode { name: "强汉社区居委会", code: "002" }, VillageCode { name: "和谐社区居委会", code: "003" }, VillageCode { name: "胡杨村委会", code: "004" }, VillageCode { name: "吐格曼艾日克村委会", code: "005" }, VillageCode { name: "阿孜那巴扎村委会", code: "006" }, VillageCode { name: "团结新村委会", code: "007" }, VillageCode { name: "五星村委会", code: "008" }, VillageCode { name: "奥依艾日克村委会", code: "009" }, VillageCode { name: "拜勒开斯提村委会", code: "010" }, VillageCode { name: "阿其墩村委会", code: "011" }, VillageCode { name: "尤勒滚协海尔村委会", code: "012" }, VillageCode { name: "先锋村委会", code: "013" }, VillageCode { name: "幸福新村委会", code: "014" }] },
-    TownCode { name: "渭干乡", code: "007", villages: &[VillageCode { name: "胜利社区居委会", code: "001" }, VillageCode { name: "红旗社区居委会", code: "002" }, VillageCode { name: "布喀塔木村委会", code: "003" }, VillageCode { name: "渭干买里村委会", code: "004" }, VillageCode { name: "古勒阿瓦提村委会", code: "005" }, VillageCode { name: "初心村委会", code: "006" }, VillageCode { name: "托格拉艾日克村委会", code: "007" }, VillageCode { name: "文明新村委会", code: "008" }, VillageCode { name: "苏盖提阔孜来克村委会", code: "009" }, VillageCode { name: "克孜勒协海尔村委会", code: "010" }, VillageCode { name: "建安新村委会", code: "011" }, VillageCode { name: "吾日勒克村委会", code: "012" }, VillageCode { name: "平安新村委会", code: "013" }] },
-    TownCode { name: "塔木托格拉克乡", code: "008", villages: &[VillageCode { name: "安西社区居委会", code: "001" }, VillageCode { name: "阿克库木村委会", code: "002" }, VillageCode { name: "库英地艾日克村委会", code: "003" }, VillageCode { name: "乔拉克吐尔村委会", code: "004" }, VillageCode { name: "拜什托玛村委会", code: "005" }, VillageCode { name: "英也尔村委会", code: "006" }, VillageCode { name: "英艾日克村委会", code: "007" }, VillageCode { name: "古城村委会", code: "008" }] },
-    TownCode { name: "央塔库都片区管委会", code: "009", villages: &[VillageCode { name: "桑塔木社区居委会", code: "001" }, VillageCode { name: "园区新村委会", code: "002" }, VillageCode { name: "园艺新村委会", code: "003" }, VillageCode { name: "伊斯克苏村委会", code: "004" }, VillageCode { name: "托西坎布拉村委会", code: "005" }, VillageCode { name: "依干库勒村委会", code: "006" }, VillageCode { name: "永兴村委会", code: "007" }, VillageCode { name: "英买力村委会", code: "008" }] },
-    TownCode { name: "新和县轻工业园区生活区", code: "010", villages: &[VillageCode { name: "工业园区虚拟社区", code: "001" }] },
-    TownCode { name: "新和县物流园区生活区", code: "011", villages: &[VillageCode { name: "库木吐拉电站虚拟社区", code: "001" }] },
-    TownCode { name: "新和县新材料园区生活区", code: "012", villages: &[VillageCode { name: "伊斯克苏虚拟社区", code: "001" }] },
+    TownCode {
+        name: "新和镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "热斯坦社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新城社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "滨湖社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "城北社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "团结社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南城社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "班超社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "向阳社区居委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "尤鲁都斯巴格镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "龟兹社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "李崇社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "石榴社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "定远社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "它亁城社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "归义社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔格艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "康庄村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "乔拉克吐尔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "硝依鲁克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "玉吉买艾日克村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "依其艾日克镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "汇通社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新时代社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "滨河社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文化社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "汉唐社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "幸福社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "边城社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "胡杨社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "加依社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "希望社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "古塔社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "友谊社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托特塔什社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "红星社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "和平社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阳光社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "托玛社区居委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔什艾日克镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "盛唐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "钟鼓楼社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "光明社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "博斯坦社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "汉庭社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "天兴社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "花海社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "安宁社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "安康村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阔纳博孜村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿热吐格曼村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库木什鲁克艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿克提干协尔村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "排先拜巴扎镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "前进社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "腾飞社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "振兴社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "康乐村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库木库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏盖特阔坦村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "永丰庄村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "莫玛托格拉克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "炮台村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "小康村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "玉奇喀特镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "古城社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "强汉社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "和谐社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "胡杨村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吐格曼艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿孜那巴扎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "团结新村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "五星村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "奥依艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "拜勒开斯提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿其墩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤勒滚协海尔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "先锋村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "幸福新村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "渭干乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "胜利社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红旗社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "布喀塔木村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "渭干买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古勒阿瓦提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "初心村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托格拉艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "文明新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "苏盖提阔孜来克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "克孜勒协海尔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "建安新村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吾日勒克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "平安新村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔木托格拉克乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "安西社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克库木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库英地艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乔拉克吐尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "拜什托玛村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英也尔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "古城村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "央塔库都片区管委会",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "桑塔木社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "园区新村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "园艺新村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "伊斯克苏村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托西坎布拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "依干库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "永兴村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英买力村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "新和县轻工业园区生活区",
+        code: "010",
+        villages: &[VillageCode {
+            name: "工业园区虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "新和县物流园区生活区",
+        code: "011",
+        villages: &[VillageCode {
+            name: "库木吐拉电站虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "新和县新材料园区生活区",
+        code: "012",
+        villages: &[VillageCode {
+            name: "伊斯克苏虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_007: [TownCode; 14] = [
-    TownCode { name: "拜城镇", code: "001", villages: &[VillageCode { name: "福乐社区居委会", code: "001" }, VillageCode { name: "新苑社区居委会", code: "002" }, VillageCode { name: "北大桥社区", code: "003" }, VillageCode { name: "铁提尔社区", code: "004" }, VillageCode { name: "花园社区居委会", code: "005" }, VillageCode { name: "协里克买里社区居委会", code: "006" }, VillageCode { name: "团结社区居委会", code: "007" }, VillageCode { name: "胜利社区居委会", code: "008" }, VillageCode { name: "幸福社区居委会", code: "009" }, VillageCode { name: "滨河社区居委会", code: "010" }, VillageCode { name: "兰亭居委会", code: "011" }, VillageCode { name: "新城居委会", code: "012" }, VillageCode { name: "军苑居委会", code: "013" }, VillageCode { name: "吐孜贝希居委会", code: "014" }, VillageCode { name: "拜城产业园区管理委员会社区", code: "015" }] },
-    TownCode { name: "铁热克镇", code: "002", villages: &[VillageCode { name: "恰玛古鲁克居委会", code: "001" }, VillageCode { name: "苏杭居委会", code: "002" }, VillageCode { name: "铁热克居委会", code: "003" }, VillageCode { name: "机关居委会", code: "004" }, VillageCode { name: "拜城水泥厂居委会", code: "005" }, VillageCode { name: "铁热克煤矿居委会", code: "006" }] },
-    TownCode { name: "察尔齐镇", code: "003", villages: &[VillageCode { name: "七泉社区", code: "001" }, VillageCode { name: "恰克其居委会", code: "002" }, VillageCode { name: "喀依库拉克居委会", code: "003" }, VillageCode { name: "阿热硝尔居委会", code: "004" }, VillageCode { name: "察尔齐巴扎居委会", code: "005" }, VillageCode { name: "兰干居委会", code: "006" }, VillageCode { name: "博孜居委会", code: "007" }, VillageCode { name: "博斯坦居委会", code: "008" }, VillageCode { name: "依力克其居委会", code: "009" }, VillageCode { name: "红旗居委会", code: "010" }, VillageCode { name: "阿克布隆居委会", code: "011" }, VillageCode { name: "吾斯塘布依居委会", code: "012" }, VillageCode { name: "木扎提居委会", code: "013" }, VillageCode { name: "孜尔克力克居委会", code: "014" }, VillageCode { name: "生活区", code: "015" }] },
-    TownCode { name: "赛里木镇", code: "004", villages: &[VillageCode { name: "英扎曼社区", code: "001" }, VillageCode { name: "硝尔买里居委会", code: "002" }, VillageCode { name: "乌希买里斯居委会", code: "003" }, VillageCode { name: "夏合买里斯居委会", code: "004" }, VillageCode { name: "拉帕居委会", code: "005" }, VillageCode { name: "赛里木居委会", code: "006" }, VillageCode { name: "喀拉墩布拉克居委会", code: "007" }, VillageCode { name: "托克买里居委会", code: "008" }, VillageCode { name: "托喀其买里居委会", code: "009" }, VillageCode { name: "明吉格代居委会", code: "010" }, VillageCode { name: "喀拉亚尕奇布拉克居委会", code: "011" }, VillageCode { name: "布干居委会", code: "012" }, VillageCode { name: "库台买居委会", code: "013" }, VillageCode { name: "英买里居委会", code: "014" }, VillageCode { name: "英巴格居委会", code: "015" }, VillageCode { name: "英赛买里居委会", code: "016" }, VillageCode { name: "生活区", code: "017" }] },
-    TownCode { name: "黑英山乡", code: "005", villages: &[VillageCode { name: "喀赞其村委会", code: "001" }, VillageCode { name: "明布拉克村委会", code: "002" }, VillageCode { name: "墩其木然村委会", code: "003" }, VillageCode { name: "亚吐尔村委会", code: "004" }, VillageCode { name: "都维力克村委会", code: "005" }, VillageCode { name: "尤勒滚亚喀村委会", code: "006" }, VillageCode { name: "喀拉果勒村委会", code: "007" }, VillageCode { name: "博斯坦铁热克村委会", code: "008" }, VillageCode { name: "玉开都维村委会", code: "009" }, VillageCode { name: "克尧勒村委会", code: "010" }, VillageCode { name: "阿热盖买村委会", code: "011" }, VillageCode { name: "米斯布拉克村委会", code: "012" }, VillageCode { name: "推普斯孜村委会", code: "013" }] },
-    TownCode { name: "克孜尔乡", code: "006", villages: &[VillageCode { name: "铁提尔村委会", code: "001" }, VillageCode { name: "米斯买里村委会", code: "002" }, VillageCode { name: "吉格代力克村委会", code: "003" }, VillageCode { name: "乌堂村委会", code: "004" }, VillageCode { name: "墩硝尔村委会", code: "005" }, VillageCode { name: "丘纳克买里村委会", code: "006" }, VillageCode { name: "喀日尕依买里村委会", code: "007" }, VillageCode { name: "拜格其买里斯村委会", code: "008" }, VillageCode { name: "克孜勒吐尔村委会", code: "009" }, VillageCode { name: "克孜水库村委会", code: "010" }, VillageCode { name: "石油勘探队村委会", code: "011" }] },
-    TownCode { name: "托克逊乡", code: "007", villages: &[VillageCode { name: "吉格郎村委会", code: "001" }, VillageCode { name: "亚吐尔村委会", code: "002" }, VillageCode { name: "巴拉克孜村委会", code: "003" }, VillageCode { name: "阿娜克孜兰干村委会", code: "004" }, VillageCode { name: "布隆村委会", code: "005" }, VillageCode { name: "尤喀克托克逊村委会", code: "006" }, VillageCode { name: "阔纳协海尔村委会", code: "007" }, VillageCode { name: "康其铁米村委会", code: "008" }, VillageCode { name: "阿热吐尔村委会", code: "009" }, VillageCode { name: "吉赛克喀依古村委会", code: "010" }, VillageCode { name: "库木格然木村委会", code: "011" }, VillageCode { name: "生活区", code: "012" }] },
-    TownCode { name: "亚吐尔乡", code: "008", villages: &[VillageCode { name: "库木买里村委会", code: "001" }, VillageCode { name: "喀孜干村委会", code: "002" }, VillageCode { name: "塔格其村委会", code: "003" }, VillageCode { name: "欧特贝希村委会", code: "004" }, VillageCode { name: "英兰干村委会", code: "005" }, VillageCode { name: "布吉尕村委会", code: "006" }, VillageCode { name: "依希塔其村委会", code: "007" }, VillageCode { name: "亚吐尔村委会", code: "008" }, VillageCode { name: "帕什塔其村委会", code: "009" }, VillageCode { name: "欧勒旁村委会", code: "010" }, VillageCode { name: "古勒阿塔村委会", code: "011" }, VillageCode { name: "哈拉苏村委会", code: "012" }, VillageCode { name: "休相村", code: "013" }, VillageCode { name: "生活区", code: "014" }] },
-    TownCode { name: "康其乡", code: "009", villages: &[VillageCode { name: "墩艾日克村委会", code: "001" }, VillageCode { name: "阿热勒村委会", code: "002" }, VillageCode { name: "库依巴格村委会", code: "003" }, VillageCode { name: "曲结村委会", code: "004" }, VillageCode { name: "欧斯库依村委会", code: "005" }, VillageCode { name: "赛比墩村委会", code: "006" }, VillageCode { name: "康其村委会", code: "007" }, VillageCode { name: "库尔玛村委会", code: "008" }, VillageCode { name: "尕勒村委会", code: "009" }, VillageCode { name: "欧勒旁村委会", code: "010" }, VillageCode { name: "贝勒克其村委会", code: "011" }, VillageCode { name: "和谐村", code: "012" }, VillageCode { name: "农试站村委会", code: "013" }] },
-    TownCode { name: "布隆乡", code: "010", villages: &[VillageCode { name: "奥依买里村委会", code: "001" }, VillageCode { name: "阿克墩村委会", code: "002" }, VillageCode { name: "牙斯热木库鲁其村委会", code: "003" }, VillageCode { name: "欧吐拉布隆村委会", code: "004" }, VillageCode { name: "托万克布隆村委会", code: "005" }, VillageCode { name: "牙斯热木英阿依玛克村委会", code: "006" }, VillageCode { name: "乌斯坎木村", code: "007" }, VillageCode { name: "乔格塔勒村", code: "008" }, VillageCode { name: "生活区", code: "009" }] },
-    TownCode { name: "米吉克乡", code: "011", villages: &[VillageCode { name: "亚阔坦村委会", code: "001" }, VillageCode { name: "墩买里村委会", code: "002" }, VillageCode { name: "亚曼苏村委会", code: "003" }, VillageCode { name: "尤喀克阿热其格村委会", code: "004" }, VillageCode { name: "库木买里村委会", code: "005" }, VillageCode { name: "欧勒旁村委会", code: "006" }, VillageCode { name: "喀纳依买里村委会", code: "007" }, VillageCode { name: "米斯铁米村委会", code: "008" }, VillageCode { name: "索克索克力克村委会", code: "009" }, VillageCode { name: "库库拉托格拉克村委会", code: "010" }, VillageCode { name: "阿热其格村委会", code: "011" }, VillageCode { name: "园艺村委会", code: "012" }, VillageCode { name: "阿热买里村", code: "013" }, VillageCode { name: "希尔尕塔依村", code: "014" }, VillageCode { name: "生活区", code: "015" }, VillageCode { name: "良种场村委会", code: "016" }, VillageCode { name: "农副产品加工园生活区", code: "017" }] },
-    TownCode { name: "温巴什乡", code: "012", villages: &[VillageCode { name: "吉格代力克村委会", code: "001" }, VillageCode { name: "阿瓦提村委会", code: "002" }, VillageCode { name: "乌堂村委会", code: "003" }, VillageCode { name: "墩买里村委会", code: "004" }, VillageCode { name: "尤喀克温巴什村委会", code: "005" }, VillageCode { name: "托喀依买里村委会", code: "006" }, VillageCode { name: "托万克温巴什村委会", code: "007" }, VillageCode { name: "阔纳吐尔村委会", code: "008" }, VillageCode { name: "开外孜力克村委会", code: "009" }, VillageCode { name: "托万克开外孜力克村委会", code: "010" }, VillageCode { name: "托格拉克勒克买里村委会", code: "011" }, VillageCode { name: "秋木喀村委会", code: "012" }, VillageCode { name: "奥依库木希村委会", code: "013" }, VillageCode { name: "博斯坦村委会", code: "014" }, VillageCode { name: "生活区", code: "015" }] },
-    TownCode { name: "大桥乡", code: "013", villages: &[VillageCode { name: "阔纳买里村委会", code: "001" }, VillageCode { name: "央都玛村委会", code: "002" }, VillageCode { name: "塔合塔村委会", code: "003" }, VillageCode { name: "奥其格村委会", code: "004" }, VillageCode { name: "库西提米村委会", code: "005" }, VillageCode { name: "吐格曼贝希村委会", code: "006" }, VillageCode { name: "阔纳乌堂村委会", code: "007" }, VillageCode { name: "台斯坎力克村委会", code: "008" }, VillageCode { name: "英买里村委会", code: "009" }, VillageCode { name: "托万买里村委会", code: "010" }, VillageCode { name: "奥吐拉买里村委会", code: "011" }, VillageCode { name: "阿克塔木村委会", code: "012" }, VillageCode { name: "阿热恰特村委会", code: "013" }, VillageCode { name: "科台克吐尔村委会", code: "014" }, VillageCode { name: "和谐村委会", code: "015" }, VillageCode { name: "生活区", code: "016" }] },
-    TownCode { name: "老虎台乡", code: "014", villages: &[VillageCode { name: "开普台尔哈纳村委会", code: "001" }, VillageCode { name: "科克亚村委会", code: "002" }, VillageCode { name: "科克兰木村委会", code: "003" }, VillageCode { name: "亚木古鲁克村委会", code: "004" }, VillageCode { name: "科台克吐尔村委会", code: "005" }, VillageCode { name: "托普鲁克村委会", code: "006" }, VillageCode { name: "乔喀塔什村", code: "007" }, VillageCode { name: "玉瑞克里克村委会", code: "008" }, VillageCode { name: "雪连村委会", code: "009" }, VillageCode { name: "琼阿尔帕村委会", code: "010" }, VillageCode { name: "阿合布隆村委会", code: "011" }] },
+    TownCode {
+        name: "拜城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "福乐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新苑社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "北大桥社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁提尔社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "花园社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "协里克买里社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "团结社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "胜利社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "幸福社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "滨河社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰亭居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "新城居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "军苑居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "吐孜贝希居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "拜城产业园区管理委员会社区",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁热克镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "恰玛古鲁克居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏杭居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "铁热克居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "机关居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "拜城水泥厂居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "铁热克煤矿居委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "察尔齐镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "七泉社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰克其居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀依库拉克居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热硝尔居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "察尔齐巴扎居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "兰干居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "博孜居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "博斯坦居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依力克其居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "红旗居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿克布隆居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吾斯塘布依居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "木扎提居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "孜尔克力克居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "赛里木镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "英扎曼社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "硝尔买里居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "乌希买里斯居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "夏合买里斯居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "拉帕居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "赛里木居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉墩布拉克居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托克买里居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托喀其买里居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "明吉格代居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀拉亚尕奇布拉克居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布干居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库台买居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "英买里居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "英巴格居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "英赛买里居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "黑英山乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "喀赞其村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "明布拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "墩其木然村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚吐尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "都维力克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤勒滚亚喀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉果勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "博斯坦铁热克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "玉开都维村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "克尧勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿热盖买村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "米斯布拉克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "推普斯孜村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜尔乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "铁提尔村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "米斯买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吉格代力克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "墩硝尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "丘纳克买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀日尕依买里村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "拜格其买里斯村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "克孜勒吐尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "克孜水库村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "石油勘探队村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "托克逊乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "吉格郎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "亚吐尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴拉克孜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿娜克孜兰干村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "布隆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克托克逊村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔纳协海尔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "康其铁米村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿热吐尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "吉赛克喀依古村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库木格然木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚吐尔乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "库木买里村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀孜干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔格其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "欧特贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英兰干村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "布吉尕村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "依希塔其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "亚吐尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "帕什塔其村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "欧勒旁村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "古勒阿塔村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "哈拉苏村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "休相村",
+                code: "013",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "康其乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿热勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库依巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "曲结村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "欧斯库依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "赛比墩村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "康其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库尔玛村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尕勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "欧勒旁村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "贝勒克其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "和谐村",
+                code: "012",
+            },
+            VillageCode {
+                name: "农试站村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "布隆乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "奥依买里村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克墩村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "牙斯热木库鲁其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "欧吐拉布隆村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克布隆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "牙斯热木英阿依玛克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "乌斯坎木村",
+                code: "007",
+            },
+            VillageCode {
+                name: "乔格塔勒村",
+                code: "008",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "米吉克乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "亚阔坦村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "亚曼苏村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤喀克阿热其格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "欧勒旁村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀纳依买里村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "米斯铁米村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "索克索克力克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库库拉托格拉克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿热其格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "园艺村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿热买里村",
+                code: "013",
+            },
+            VillageCode {
+                name: "希尔尕塔依村",
+                code: "014",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "015",
+            },
+            VillageCode {
+                name: "良种场村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "农副产品加工园生活区",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "温巴什乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "吉格代力克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤喀克温巴什村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托喀依买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克温巴什村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阔纳吐尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "开外孜力克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万克开外孜力克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托格拉克勒克买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "秋木喀村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "奥依库木希村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "大桥乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "阔纳买里村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "央都玛村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔合塔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "奥其格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库西提米村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔纳乌堂村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "台斯坎力克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "奥吐拉买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿克塔木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿热恰特村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "科台克吐尔村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "生活区",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "老虎台乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "开普台尔哈纳村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "科克亚村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "科克兰木村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚木古鲁克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "科台克吐尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托普鲁克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "乔喀塔什村",
+                code: "007",
+            },
+            VillageCode {
+                name: "玉瑞克里克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "雪连村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "琼阿尔帕村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿合布隆村委会",
+                code: "011",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_008: [TownCode; 9] = [
-    TownCode { name: "乌什镇", code: "001", villages: &[VillageCode { name: "团结居民委员会", code: "001" }, VillageCode { name: "南关居委会", code: "002" }, VillageCode { name: "新华居委会", code: "003" }, VillageCode { name: "燕山居民委员会", code: "004" }, VillageCode { name: "新城居民委员会", code: "005" }, VillageCode { name: "虹桥居委会", code: "006" }, VillageCode { name: "和谐社区居民委员会", code: "007" }, VillageCode { name: "幸福社区居民委员会", code: "008" }, VillageCode { name: "永安社区居民委员会", code: "009" }] },
-    TownCode { name: "阿合雅镇", code: "002", villages: &[VillageCode { name: "兴业社区居民委员会", code: "001" }, VillageCode { name: "丝路社区居民委员会", code: "002" }, VillageCode { name: "喀孜干村委会", code: "003" }, VillageCode { name: "铁英村委会", code: "004" }, VillageCode { name: "果鲁克村委会", code: "005" }, VillageCode { name: "尤喀克阔库拉村委会", code: "006" }, VillageCode { name: "斯马甫其村委会", code: "007" }, VillageCode { name: "亚依拉克吐尔村委会", code: "008" }, VillageCode { name: "托万克阔库拉村委会", code: "009" }, VillageCode { name: "尤喀克库曲麦村委会", code: "010" }, VillageCode { name: "托万克库曲麦村委会", code: "011" }, VillageCode { name: "奥皮开村委会", code: "012" }, VillageCode { name: "塔尕尔其村委会", code: "013" }, VillageCode { name: "尤喀克阿合亚村委会", code: "014" }, VillageCode { name: "托万克阿合亚村委会", code: "015" }, VillageCode { name: "吐曼村委会", code: "016" }, VillageCode { name: "艾斯力克村委会", code: "017" }, VillageCode { name: "尤喀克荒地村委会", code: "018" }, VillageCode { name: "托万克荒地村委会", code: "019" }, VillageCode { name: "阿克布拉克村委会", code: "020" }, VillageCode { name: "吐孜别勒村委会", code: "021" }, VillageCode { name: "荒地农场村委会", code: "022" }] },
-    TownCode { name: "依麻木镇", code: "003", villages: &[VillageCode { name: "玉斯屯克和田社区居民委员会", code: "001" }, VillageCode { name: "库尔干社区居民委员会", code: "002" }, VillageCode { name: "汗都村委会", code: "003" }, VillageCode { name: "勒乌金村委会", code: "004" }, VillageCode { name: "亚巴希村委会", code: "005" }, VillageCode { name: "拜什铁热克村委会", code: "006" }, VillageCode { name: "托万克麦盖提村委会", code: "007" }, VillageCode { name: "马场村委会", code: "008" }, VillageCode { name: "汗代克吉然村委会", code: "009" }, VillageCode { name: "托甫浪吉然村委会", code: "010" }, VillageCode { name: "吉然村委会", code: "011" }, VillageCode { name: "尤喀克喀尕吐尔村委会", code: "012" }, VillageCode { name: "托万克喀尕吐尔村委会", code: "013" }, VillageCode { name: "库如克玉吉买村委会", code: "014" }, VillageCode { name: "铁提尔村委会", code: "015" }, VillageCode { name: "乌鲁克亚依拉克村委会", code: "016" }] },
-    TownCode { name: "阿克托海乡", code: "004", villages: &[VillageCode { name: "苏依提喀村委会", code: "001" }, VillageCode { name: "阿克托海村委会", code: "002" }, VillageCode { name: "阿克博孜村委会", code: "003" }, VillageCode { name: "喀塔玉吉买村委会", code: "004" }, VillageCode { name: "库木奇吾斯塘村委会", code: "005" }, VillageCode { name: "英苏盖特力克村委会", code: "006" }, VillageCode { name: "吉格代力克村委会", code: "007" }, VillageCode { name: "玉斯屯克亚巴格村委会", code: "008" }, VillageCode { name: "亚勒古孜玉瑞克村委会", code: "009" }, VillageCode { name: "博斯坦村委会", code: "010" }, VillageCode { name: "麦盖提村委会", code: "011" }, VillageCode { name: "希玛勒麦盖提村委会", code: "012" }, VillageCode { name: "托万克墩其格村委会", code: "013" }] },
-    TownCode { name: "亚科瑞克乡", code: "005", villages: &[VillageCode { name: "斯代村委会", code: "001" }, VillageCode { name: "亚巴格村委会", code: "002" }, VillageCode { name: "亚科瑞克村委会", code: "003" }, VillageCode { name: "多浪村委会", code: "004" }, VillageCode { name: "拜什克然木村委会", code: "005" }, VillageCode { name: "皮羌村委会", code: "006" }, VillageCode { name: "托库扎克村委会", code: "007" }, VillageCode { name: "依力克其墩村委会", code: "008" }, VillageCode { name: "托万克喀赞其村委会", code: "009" }, VillageCode { name: "尤喀克喀赞其村委会", code: "010" }] },
-    TownCode { name: "阿恰塔格乡", code: "006", villages: &[VillageCode { name: "托克逊亚贝希村委会", code: "001" }, VillageCode { name: "托克逊亚阔坦村委会", code: "002" }, VillageCode { name: "托克逊铁提尔村委会", code: "003" }, VillageCode { name: "洋海村委会", code: "004" }, VillageCode { name: "奥依吐尔吐尤克村委会", code: "005" }, VillageCode { name: "奥依吐尔村委会", code: "006" }, VillageCode { name: "加依塔格村委会", code: "007" }, VillageCode { name: "布干村委会", code: "008" }, VillageCode { name: "托克玛克和田村委会", code: "009" }, VillageCode { name: "托万克和田村委会", code: "010" }, VillageCode { name: "英萨村委会", code: "011" }, VillageCode { name: "布干斯玛甫其村委会", code: "012" }, VillageCode { name: "萨尔别勒村委会", code: "013" }] },
-    TownCode { name: "英阿瓦提乡", code: "007", villages: &[VillageCode { name: "苏尔滚村委会", code: "001" }, VillageCode { name: "英买里村委会", code: "002" }, VillageCode { name: "英阿瓦提村委会", code: "003" }, VillageCode { name: "库齐村委会", code: "004" }, VillageCode { name: "贡格拉提村委会", code: "005" }, VillageCode { name: "喀拉巴格村委会", code: "006" }, VillageCode { name: "亚喀艾日克村委会", code: "007" }, VillageCode { name: "特日木村委会", code: "008" }, VillageCode { name: "英阿特村委会", code: "009" }] },
-    TownCode { name: "亚曼苏柯尔克孜族乡", code: "008", villages: &[VillageCode { name: "尤喀克亚曼苏村委会", code: "001" }, VillageCode { name: "博孜村委会", code: "002" }, VillageCode { name: "喀拉苏村委会", code: "003" }, VillageCode { name: "尤勒吐孜布拉克村委会", code: "004" }, VillageCode { name: "托万克牙曼苏村委会", code: "005" }, VillageCode { name: "阿依丁村委会", code: "006" }] },
-    TownCode { name: "奥特贝希乡", code: "009", villages: &[VillageCode { name: "巴什阿克玛村委会", code: "001" }, VillageCode { name: "托斯玛村委会", code: "002" }, VillageCode { name: "尤喀克奥特贝希村委会", code: "003" }, VillageCode { name: "托万克奥特贝希村委会", code: "004" }, VillageCode { name: "库木布隆村委会", code: "005" }, VillageCode { name: "宫乡村委会", code: "006" }, VillageCode { name: "亚阔坦村委会", code: "007" }, VillageCode { name: "阿拉萨依村委会", code: "008" }, VillageCode { name: "苏盖特力克村委会", code: "009" }, VillageCode { name: "库西塔格村委会", code: "010" }, VillageCode { name: "墩其格村委会", code: "011" }, VillageCode { name: "尤喀克墩其格村委会", code: "012" }, VillageCode { name: "色日克阿热勒村委会", code: "013" }] },
+    TownCode {
+        name: "乌什镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "团结居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南关居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新华居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "燕山居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新城居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "虹桥居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "和谐社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "幸福社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "永安社区居民委员会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿合雅镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "兴业社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "丝路社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀孜干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁英村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "果鲁克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克阔库拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "斯马甫其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "亚依拉克吐尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克阔库拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克库曲麦村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托万克库曲麦村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "奥皮开村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "塔尕尔其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克阿合亚村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托万克阿合亚村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吐曼村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "艾斯力克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "尤喀克荒地村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "托万克荒地村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿克布拉克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "吐孜别勒村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "荒地农场村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "依麻木镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "玉斯屯克和田社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库尔干社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "汗都村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "勒乌金村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "亚巴希村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "拜什铁热克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克麦盖提村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "马场村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "汗代克吉然村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托甫浪吉然村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "吉然村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤喀克喀尕吐尔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托万克喀尕吐尔村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库如克玉吉买村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "铁提尔村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "乌鲁克亚依拉克村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克托海乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "苏依提喀村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克托海村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克博孜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀塔玉吉买村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木奇吾斯塘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英苏盖特力克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "吉格代力克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "玉斯屯克亚巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "亚勒古孜玉瑞克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "麦盖提村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "希玛勒麦盖提村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托万克墩其格村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚科瑞克乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "斯代村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "亚巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "亚科瑞克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "多浪村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "拜什克然木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "皮羌村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托库扎克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "依力克其墩村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克喀赞其村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克喀赞其村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿恰塔格乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "托克逊亚贝希村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托克逊亚阔坦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托克逊铁提尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "洋海村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "奥依吐尔吐尤克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "奥依吐尔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "加依塔格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "布干村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托克玛克和田村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万克和田村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英萨村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布干斯玛甫其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "萨尔别勒村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "英阿瓦提乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "苏尔滚村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库齐村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "贡格拉提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "亚喀艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "特日木村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英阿特村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚曼苏柯尔克孜族乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "尤喀克亚曼苏村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀拉苏村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤勒吐孜布拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克牙曼苏村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿依丁村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "奥特贝希乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "巴什阿克玛村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托斯玛村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克奥特贝希村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万克奥特贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木布隆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "宫乡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "亚阔坦村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿拉萨依村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "苏盖特力克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库西塔格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "墩其格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤喀克墩其格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "色日克阿热勒村委会",
+                code: "013",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_009: [TownCode; 10] = [
-    TownCode { name: "阿瓦提镇", code: "001", villages: &[VillageCode { name: "友好社区居委会", code: "001" }, VillageCode { name: "文化社区居委会", code: "002" }, VillageCode { name: "博斯坦社区居委会", code: "003" }, VillageCode { name: "胜利社区居委会", code: "004" }, VillageCode { name: "库木巴格社区居委会", code: "005" }, VillageCode { name: "锦绣社区", code: "006" }, VillageCode { name: "花园社区", code: "007" }, VillageCode { name: "阳光社区", code: "008" }, VillageCode { name: "河滨社区", code: "009" }, VillageCode { name: "团结社区居民委员会", code: "010" }, VillageCode { name: "幸福社区", code: "011" }, VillageCode { name: "玉斯屯克多浪村委会", code: "012" }, VillageCode { name: "托格拉克村委会", code: "013" }, VillageCode { name: "克其克拜什艾日克村委会", code: "014" }, VillageCode { name: "赛克孜奥塔克村委会", code: "015" }] },
-    TownCode { name: "乌鲁却勒镇", code: "002", villages: &[VillageCode { name: "英买力社区居委会", code: "001" }, VillageCode { name: "红星社区居委会", code: "002" }, VillageCode { name: "多浪社区居民委员会", code: "003" }, VillageCode { name: "拜什艾日克社区居民委员会", code: "004" }, VillageCode { name: "也台格热木社区居民委员会", code: "005" }, VillageCode { name: "克亚库都克社区居民委员会", code: "006" }, VillageCode { name: "阿依库勒社区居民委员会", code: "007" }, VillageCode { name: "阿热买里社区居民委员会", code: "008" }, VillageCode { name: "英拜什艾日克社区居民委员会", code: "009" }, VillageCode { name: "托万克克亚克库都克社区居民委员会", code: "010" }, VillageCode { name: "柯坪村委会", code: "011" }, VillageCode { name: "布苏格村委会", code: "012" }, VillageCode { name: "库木艾日克村委会", code: "013" }, VillageCode { name: "阿热格然木村委会", code: "014" }, VillageCode { name: "库木布拉克村委会", code: "015" }, VillageCode { name: "红旗村", code: "016" }, VillageCode { name: "拉依当村委会", code: "017" }, VillageCode { name: "克迪木阿依玛克村委会", code: "018" }, VillageCode { name: "玉斯屯克协海尔村委会", code: "019" }, VillageCode { name: "托万克协海尔村委会", code: "020" }] },
-    TownCode { name: "拜什艾日克镇", code: "003", villages: &[VillageCode { name: "昆其宋社区居民委员会", code: "001" }, VillageCode { name: "玉斯屯克拜什艾日克社区居民委员会", code: "002" }, VillageCode { name: "依提帕克社区居民委员会", code: "003" }, VillageCode { name: "恰特喀勒克社区居民委员会", code: "004" }, VillageCode { name: "托万克塔勒克社区居民委员会", code: "005" }, VillageCode { name: "托万克墩克什拉克社区居民委员会", code: "006" }, VillageCode { name: "托万克拜什艾日克社区居民委员会", code: "007" }, VillageCode { name: "喀什贝希社区居民委员会", code: "008" }, VillageCode { name: "烽台社区居民委员会", code: "009" }, VillageCode { name: "玉斯屯克库木艾日克村委会", code: "010" }, VillageCode { name: "索克满村委会", code: "011" }, VillageCode { name: "托万克库木艾日克村委会", code: "012" }, VillageCode { name: "库木奥依拉村委会", code: "013" }, VillageCode { name: "玉斯屯克墩克什拉克村委会", code: "014" }, VillageCode { name: "玉斯屯克塔勒克村委会", code: "015" }, VillageCode { name: "苏格其村委会", code: "016" }, VillageCode { name: "光明村", code: "017" }, VillageCode { name: "祥和村", code: "018" }, VillageCode { name: "依尔玛村委会", code: "019" }, VillageCode { name: "苏格其喀拉塔勒村委会", code: "020" }, VillageCode { name: "托万克墩博依村委会", code: "021" }, VillageCode { name: "喀勒台宋村委会", code: "022" }, VillageCode { name: "博斯坦村委会", code: "023" }, VillageCode { name: "仓村委会", code: "024" }, VillageCode { name: "其浪巴格村委会", code: "025" }, VillageCode { name: "代热亚博依村委会", code: "026" }, VillageCode { name: "阿布迪尔曼村委会", code: "027" }, VillageCode { name: "夏喀勒村委会", code: "028" }] },
-    TownCode { name: "塔木托格拉克镇", code: "004", villages: &[VillageCode { name: "塔木托格拉克社区居民委员会", code: "001" }, VillageCode { name: "托万克塔木托格拉克社区居民委员会", code: "002" }, VillageCode { name: "玉斯屯克塔木托格拉克社区居民委员会", code: "003" }, VillageCode { name: "托万克阿热勒社区居民委员会", code: "004" }, VillageCode { name: "玉斯屯克阿热勒社区居民委员会", code: "005" }, VillageCode { name: "阿克亚社区居民委员会", code: "006" }, VillageCode { name: "拉帕社区居民委员会", code: "007" }, VillageCode { name: "托万克赛克孜奥塔克社区居民委员会", code: "008" }, VillageCode { name: "托万克玉吉买社区居民委员会", code: "009" }, VillageCode { name: "阔维社区居民委员会", code: "010" }, VillageCode { name: "托格拉克勒克村委会", code: "011" }, VillageCode { name: "英买里村委会", code: "012" }, VillageCode { name: "诺其宋村委会", code: "013" }, VillageCode { name: "库吾尔尕村委会", code: "014" }, VillageCode { name: "吐格贝希村委会", code: "015" }, VillageCode { name: "玉斯屯克玉吉买村委会", code: "016" }, VillageCode { name: "巴格央塔克村委会", code: "017" }, VillageCode { name: "秋马克村委会", code: "018" }] },
-    TownCode { name: "英艾日克镇", code: "005", villages: &[VillageCode { name: "帕万拉社区居民委员会", code: "001" }, VillageCode { name: "苏盖提艾日克社区居民委员会", code: "002" }, VillageCode { name: "吐热社区居民委员会", code: "003" }, VillageCode { name: "巴依拉社区居民委员会", code: "004" }, VillageCode { name: "阿热阿依玛克社区居民委员会", code: "005" }, VillageCode { name: "也克力社区居民委员会", code: "006" }, VillageCode { name: "夏库尔社区居民委员会", code: "007" }, VillageCode { name: "玉斯屯克帕万拉社区居民委员会", code: "008" }, VillageCode { name: "恰其村委会", code: "009" }, VillageCode { name: "吐鲁瓦依村委会", code: "010" }, VillageCode { name: "吾斯塘阿热力格村委会", code: "011" }, VillageCode { name: "吐格曼贝希村委会", code: "012" }, VillageCode { name: "拉特勒克村委会", code: "013" }, VillageCode { name: "拜什甫塔克村委会", code: "014" }, VillageCode { name: "托玛村委会", code: "015" }, VillageCode { name: "玉斯屯克兰干村委会", code: "016" }, VillageCode { name: "托万克兰干村委会", code: "017" }, VillageCode { name: "开克日布亚村委会", code: "018" }, VillageCode { name: "阔什库都克村委会", code: "019" }, VillageCode { name: "库吾尔尕村委会", code: "020" }, VillageCode { name: "苏亚依迪村委会", code: "021" }, VillageCode { name: "八连村委会", code: "022" }, VillageCode { name: "玉斯屯克托格拉吾斯唐村委会", code: "023" }, VillageCode { name: "托万克托格拉吾斯唐村委会", code: "024" }, VillageCode { name: "玉斯屯克苏亚依迪村", code: "025" }, VillageCode { name: "喀热库木村", code: "026" }] },
-    TownCode { name: "阿依巴格镇", code: "006", villages: &[VillageCode { name: "托万克多浪村委会", code: "001" }, VillageCode { name: "玉斯屯克喀格木什村委会", code: "002" }, VillageCode { name: "托万克喀格木什村委会", code: "003" }, VillageCode { name: "玉斯屯克阿依库勒村委会", code: "004" }, VillageCode { name: "托万克阿依库勒村委会", code: "005" }, VillageCode { name: "玉斯屯克柯坪村委会", code: "006" }, VillageCode { name: "托万克柯坪村委会", code: "007" }, VillageCode { name: "幸福村", code: "008" }, VillageCode { name: "达康村", code: "009" }, VillageCode { name: "玉斯屯克库拉斯村委会", code: "010" }, VillageCode { name: "托万克库拉斯村委会", code: "011" }, VillageCode { name: "玉斯屯克伊来克村委会", code: "012" }, VillageCode { name: "托万克伊来克村委会", code: "013" }, VillageCode { name: "阔什科瑞克村委会", code: "014" }, VillageCode { name: "玉斯屯克库木巴什村委会", code: "015" }, VillageCode { name: "托万克库巴木什村委会", code: "016" }, VillageCode { name: "草原河新村", code: "017" }, VillageCode { name: "柯坪村", code: "018" }] },
-    TownCode { name: "三河镇", code: "007", villages: &[VillageCode { name: "鲁丰社区", code: "001" }, VillageCode { name: "多浪阔太米斯村", code: "002" }, VillageCode { name: "宏宇村", code: "003" }, VillageCode { name: "振兴村", code: "004" }, VillageCode { name: "库木巴什库勒村", code: "005" }, VillageCode { name: "吉格代艾格日村", code: "006" }, VillageCode { name: "巴什库勒村", code: "007" }, VillageCode { name: "琼库尔艾肯村", code: "008" }, VillageCode { name: "艾买秋克村", code: "009" }, VillageCode { name: "库木格然木村", code: "010" }, VillageCode { name: "库太克库勒村", code: "011" }, VillageCode { name: "团结新村", code: "012" }, VillageCode { name: "东萨依拉特村", code: "013" }, VillageCode { name: "西萨依拉特村", code: "014" }, VillageCode { name: "拜什喀特村", code: "015" }, VillageCode { name: "克依木塔拉村", code: "016" }, VillageCode { name: "塔拉库力村", code: "017" }, VillageCode { name: "托斯木库力村", code: "018" }] },
-    TownCode { name: "多浪乡", code: "008", villages: &[VillageCode { name: "黄宫村委会", code: "001" }, VillageCode { name: "喀垃塔勒村委会", code: "002" }, VillageCode { name: "玉斯屯克亚贝希村委会", code: "003" }, VillageCode { name: "托万克亚贝希村委会", code: "004" }, VillageCode { name: "木孜鲁克村委会", code: "005" }, VillageCode { name: "木孜鲁克牧业村委会", code: "006" }, VillageCode { name: "克孜勒墩村委会", code: "007" }, VillageCode { name: "玉斯屯克阿依赛克村委会", code: "008" }, VillageCode { name: "托万克阿依赛克村委会", code: "009" }, VillageCode { name: "喀尔达西村委会", code: "010" }, VillageCode { name: "博斯坦村", code: "011" }, VillageCode { name: "英买力村", code: "012" }, VillageCode { name: "耶克先拜巴扎村", code: "013" }, VillageCode { name: "玉斯屯克克迪木阿依玛克村", code: "014" }, VillageCode { name: "黄宫巴扎村", code: "015" }] },
-    TownCode { name: "巴格托格拉克乡", code: "009", villages: &[VillageCode { name: "阿克切克力社区居民委员会", code: "001" }, VillageCode { name: "玉斯屯克巴格托格拉克村委会", code: "002" }, VillageCode { name: "托万克巴格托格拉克村委会", code: "003" }, VillageCode { name: "喀拉库杰克村委会", code: "004" }, VillageCode { name: "墩买里村委会", code: "005" }, VillageCode { name: "英买力村", code: "006" }, VillageCode { name: "达克勒克村", code: "007" }, VillageCode { name: "古吉里尕尔村", code: "008" }, VillageCode { name: "托格拉克买力村", code: "009" }, VillageCode { name: "玉斯屯克墩买力村", code: "010" }, VillageCode { name: "草场村", code: "011" }] },
-    TownCode { name: "阿克苏监狱", code: "010", villages: &[VillageCode { name: "阿克苏监狱虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "阿瓦提镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "友好社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "文化社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "胜利社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木巴格社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "锦绣社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "花园社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "阳光社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "河滨社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "团结社区居民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "玉斯屯克多浪村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托格拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "克其克拜什艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "赛克孜奥塔克村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌鲁却勒镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "英买力社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红星社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "多浪社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "拜什艾日克社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "也台格热木社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "克亚库都克社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿依库勒社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿热买里社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英拜什艾日克社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万克克亚克库都克社区居民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "柯坪村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布苏格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿热格然木村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "库木布拉克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "红旗村",
+                code: "016",
+            },
+            VillageCode {
+                name: "拉依当村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "克迪木阿依玛克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "玉斯屯克协海尔村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "托万克协海尔村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "拜什艾日克镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "昆其宋社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "玉斯屯克拜什艾日克社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "依提帕克社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "恰特喀勒克社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克塔勒克社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万克墩克什拉克社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克拜什艾日克社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀什贝希社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "烽台社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "玉斯屯克库木艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "索克满村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万克库木艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木奥依拉村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "玉斯屯克墩克什拉克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "玉斯屯克塔勒克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "苏格其村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "光明村",
+                code: "017",
+            },
+            VillageCode {
+                name: "祥和村",
+                code: "018",
+            },
+            VillageCode {
+                name: "依尔玛村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "苏格其喀拉塔勒村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "托万克墩博依村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "喀勒台宋村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "仓村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "其浪巴格村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "代热亚博依村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "阿布迪尔曼村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "夏喀勒村委会",
+                code: "028",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔木托格拉克镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "塔木托格拉克社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克塔木托格拉克社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "玉斯屯克塔木托格拉克社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万克阿热勒社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉斯屯克阿热勒社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克亚社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "拉帕社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万克赛克孜奥塔克社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克玉吉买社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阔维社区居民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托格拉克勒克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "诺其宋村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库吾尔尕村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吐格贝希村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "玉斯屯克玉吉买村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "巴格央塔克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "秋马克村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "英艾日克镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "帕万拉社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏盖提艾日克社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐热社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴依拉社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿热阿依玛克社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "也克力社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "夏库尔社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "玉斯屯克帕万拉社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰其村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "吐鲁瓦依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "吾斯塘阿热力格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "拉特勒克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "拜什甫塔克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托玛村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "玉斯屯克兰干村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "托万克兰干村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "开克日布亚村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "阔什库都克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "库吾尔尕村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "苏亚依迪村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "八连村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "玉斯屯克托格拉吾斯唐村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "托万克托格拉吾斯唐村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "玉斯屯克苏亚依迪村",
+                code: "025",
+            },
+            VillageCode {
+                name: "喀热库木村",
+                code: "026",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿依巴格镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "托万克多浪村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "玉斯屯克喀格木什村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万克喀格木什村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "玉斯屯克阿依库勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万克阿依库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玉斯屯克柯坪村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克柯坪村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "幸福村",
+                code: "008",
+            },
+            VillageCode {
+                name: "达康村",
+                code: "009",
+            },
+            VillageCode {
+                name: "玉斯屯克库拉斯村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托万克库拉斯村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "玉斯屯克伊来克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托万克伊来克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阔什科瑞克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "玉斯屯克库木巴什村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托万克库巴木什村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "草原河新村",
+                code: "017",
+            },
+            VillageCode {
+                name: "柯坪村",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "三河镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "鲁丰社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "多浪阔太米斯村",
+                code: "002",
+            },
+            VillageCode {
+                name: "宏宇村",
+                code: "003",
+            },
+            VillageCode {
+                name: "振兴村",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木巴什库勒村",
+                code: "005",
+            },
+            VillageCode {
+                name: "吉格代艾格日村",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴什库勒村",
+                code: "007",
+            },
+            VillageCode {
+                name: "琼库尔艾肯村",
+                code: "008",
+            },
+            VillageCode {
+                name: "艾买秋克村",
+                code: "009",
+            },
+            VillageCode {
+                name: "库木格然木村",
+                code: "010",
+            },
+            VillageCode {
+                name: "库太克库勒村",
+                code: "011",
+            },
+            VillageCode {
+                name: "团结新村",
+                code: "012",
+            },
+            VillageCode {
+                name: "东萨依拉特村",
+                code: "013",
+            },
+            VillageCode {
+                name: "西萨依拉特村",
+                code: "014",
+            },
+            VillageCode {
+                name: "拜什喀特村",
+                code: "015",
+            },
+            VillageCode {
+                name: "克依木塔拉村",
+                code: "016",
+            },
+            VillageCode {
+                name: "塔拉库力村",
+                code: "017",
+            },
+            VillageCode {
+                name: "托斯木库力村",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "多浪乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "黄宫村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀垃塔勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "玉斯屯克亚贝希村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万克亚贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "木孜鲁克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "木孜鲁克牧业村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "克孜勒墩村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "玉斯屯克阿依赛克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克阿依赛克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀尔达西村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "011",
+            },
+            VillageCode {
+                name: "英买力村",
+                code: "012",
+            },
+            VillageCode {
+                name: "耶克先拜巴扎村",
+                code: "013",
+            },
+            VillageCode {
+                name: "玉斯屯克克迪木阿依玛克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "黄宫巴扎村",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴格托格拉克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "阿克切克力社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "玉斯屯克巴格托格拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万克巴格托格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉库杰克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英买力村",
+                code: "006",
+            },
+            VillageCode {
+                name: "达克勒克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "古吉里尕尔村",
+                code: "008",
+            },
+            VillageCode {
+                name: "托格拉克买力村",
+                code: "009",
+            },
+            VillageCode {
+                name: "玉斯屯克墩买力村",
+                code: "010",
+            },
+            VillageCode {
+                name: "草场村",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克苏监狱",
+        code: "010",
+        villages: &[VillageCode {
+            name: "阿克苏监狱虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_010: [TownCode; 5] = [
-    TownCode { name: "柯坪镇", code: "001", villages: &[VillageCode { name: "古鲁巴格社区", code: "001" }, VillageCode { name: "幸福社区", code: "002" }, VillageCode { name: "团结社区", code: "003" }, VillageCode { name: "杏园社区", code: "004" }, VillageCode { name: "喀拉库提村民委员会", code: "005" }] },
-    TownCode { name: "盖孜力克镇", code: "002", villages: &[VillageCode { name: "盖孜力克村民委员会", code: "001" }, VillageCode { name: "帕松村民委员会", code: "002" }, VillageCode { name: "库木鲁克村民委员会", code: "003" }, VillageCode { name: "喀拉玛村民委员会", code: "004" }, VillageCode { name: "玉斯屯喀什艾日克村民委员会", code: "005" }, VillageCode { name: "托万喀什艾日克村民委员会", code: "006" }, VillageCode { name: "托万巴格勒格村民委员会", code: "007" }, VillageCode { name: "苏贝希村民委员会", code: "008" }, VillageCode { name: "库木也尔村民委员会", code: "009" }, VillageCode { name: "色热克托格热克村民委员会", code: "010" }, VillageCode { name: "玉斯屯巴格勒格村民委员会", code: "011" }] },
-    TownCode { name: "阿恰勒镇", code: "003", villages: &[VillageCode { name: "金胡杨社区", code: "001" }, VillageCode { name: "吐拉村民委员会", code: "002" }, VillageCode { name: "库木鲁克村民委员会", code: "003" }, VillageCode { name: "盖孜力克村民委员会", code: "004" }, VillageCode { name: "喀拉玛村民委员会", code: "005" }, VillageCode { name: "团结村民委员会", code: "006" }, VillageCode { name: "库勒村民委员会", code: "007" }, VillageCode { name: "其兰村民委员会", code: "008" }, VillageCode { name: "幸福村民委员会", code: "009" }] },
-    TownCode { name: "玉尔其乡", code: "004", villages: &[VillageCode { name: "玉尔其村民委员会", code: "001" }, VillageCode { name: "尤库日斯村民委员会", code: "002" }, VillageCode { name: "阿热阿依玛克村民委员会", code: "003" }, VillageCode { name: "玉斯屯库木艾日克村民委员会", code: "004" }, VillageCode { name: "托万库木艾日克村民委员会", code: "005" }, VillageCode { name: "托玛艾日克村民委员会", code: "006" }, VillageCode { name: "杏花村民委员会", code: "007" }] },
-    TownCode { name: "启浪乡", code: "005", villages: &[VillageCode { name: "吾斯塘博依村民委员会", code: "001" }, VillageCode { name: "努尔巴格村民委员会", code: "002" }, VillageCode { name: "博斯坦村民委员会", code: "003" }, VillageCode { name: "托玛巴什村民委员会", code: "004" }, VillageCode { name: "科克托格拉克村民委员会", code: "005" }, VillageCode { name: "萨依巴格村民委员会", code: "006" }, VillageCode { name: "巴合恰村民委员会", code: "007" }, VillageCode { name: "布拉克村民委员会", code: "008" }, VillageCode { name: "其曼村民委员会", code: "009" }] },
+    TownCode {
+        name: "柯坪镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "古鲁巴格社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "杏园社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉库提村民委员会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "盖孜力克镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "盖孜力克村民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "帕松村民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木鲁克村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉玛村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉斯屯喀什艾日克村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万喀什艾日克村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万巴格勒格村民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "苏贝希村民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "库木也尔村民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "色热克托格热克村民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉斯屯巴格勒格村民委员会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿恰勒镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "金胡杨社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "吐拉村民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木鲁克村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "盖孜力克村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉玛村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "团结村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库勒村民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "其兰村民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "幸福村民委员会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "玉尔其乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "玉尔其村民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤库日斯村民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热阿依玛克村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "玉斯屯库木艾日克村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万库木艾日克村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托玛艾日克村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "杏花村民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "启浪乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "吾斯塘博依村民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "努尔巴格村民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托玛巴什村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "科克托格拉克村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "萨依巴格村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴合恰村民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "布拉克村民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "其曼村民委员会",
+                code: "009",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_011: [TownCode; 11] = [
-    TownCode { name: "幸福路街道", code: "001", villages: &[VillageCode { name: "帕米尔西路社区", code: "001" }, VillageCode { name: "天山路社区", code: "002" }, VillageCode { name: "吾斯塘路社区", code: "003" }, VillageCode { name: "环城南路社区", code: "004" }, VillageCode { name: "幸福路社区", code: "005" }, VillageCode { name: "松他克路社区", code: "006" }, VillageCode { name: "和谐社区", code: "007" }, VillageCode { name: "人民路社区", code: "008" }, VillageCode { name: "北山社区", code: "009" }, VillageCode { name: "环城北路社区", code: "010" }, VillageCode { name: "高峰社区", code: "011" }, VillageCode { name: "塔合提云居委会", code: "012" }] },
-    TownCode { name: "光明路街道", code: "002", villages: &[VillageCode { name: "光明路社区", code: "001" }, VillageCode { name: "建设路社区", code: "002" }, VillageCode { name: "文化路社区", code: "003" }, VillageCode { name: "团结路社区", code: "004" }, VillageCode { name: "友谊路社区", code: "005" }, VillageCode { name: "帕米尔东路社区", code: "006" }, VillageCode { name: "群众路社区", code: "007" }, VillageCode { name: "富民社区", code: "008" }, VillageCode { name: "玛纳斯社区", code: "009" }, VillageCode { name: "安居社区", code: "010" }, VillageCode { name: "健康社区", code: "011" }, VillageCode { name: "锦绣社区", code: "012" }, VillageCode { name: "东城社区", code: "013" }, VillageCode { name: "前进路社区", code: "014" }, VillageCode { name: "南湖社区", code: "015" }] },
-    TownCode { name: "新城街道", code: "003", villages: &[VillageCode { name: "阿扎克社区", code: "001" }, VillageCode { name: "昆援社区", code: "002" }, VillageCode { name: "励志社区", code: "003" }] },
-    TownCode { name: "上阿图什镇", code: "004", villages: &[VillageCode { name: "振兴社区", code: "001" }, VillageCode { name: "尧勒其村", code: "002" }, VillageCode { name: "喀尔果勒村", code: "003" }, VillageCode { name: "萨依村", code: "004" }, VillageCode { name: "博斯坦村", code: "005" }, VillageCode { name: "奥提亚克村", code: "006" }, VillageCode { name: "迪汗拉村", code: "007" }, VillageCode { name: "乌恰村", code: "008" }, VillageCode { name: "塔库提村", code: "009" }, VillageCode { name: "依克萨克村", code: "010" }, VillageCode { name: "亚维勒克村", code: "011" }, VillageCode { name: "拉依勒克村", code: "012" }, VillageCode { name: "喀依拉克村", code: "013" }, VillageCode { name: "博依萨克村", code: "014" }, VillageCode { name: "兰干村", code: "015" }, VillageCode { name: "铁提尔村", code: "016" }, VillageCode { name: "塔什普什喀村", code: "017" }, VillageCode { name: "下迪汗拉村", code: "018" }, VillageCode { name: "托卡其拉村", code: "019" }, VillageCode { name: "萨依巴格村", code: "020" }, VillageCode { name: "阿克买拉村", code: "021" }] },
-    TownCode { name: "松他克镇", code: "005", villages: &[VillageCode { name: "无花果社区", code: "001" }, VillageCode { name: "宜居社区", code: "002" }, VillageCode { name: "石榴社区", code: "003" }, VillageCode { name: "松他克村", code: "004" }, VillageCode { name: "阿孜汗村", code: "005" }, VillageCode { name: "买谢提村", code: "006" }, VillageCode { name: "托库勒村", code: "007" }, VillageCode { name: "瓦克瓦克村", code: "008" }, VillageCode { name: "克青孜村", code: "009" }, VillageCode { name: "巴格拉村", code: "010" }, VillageCode { name: "温吐萨克村", code: "011" }, VillageCode { name: "亚喀巴格村", code: "012" }, VillageCode { name: "肖鲁克村", code: "013" }, VillageCode { name: "园艺场村", code: "014" }, VillageCode { name: "库木巴格村", code: "015" }, VillageCode { name: "帕提阡村", code: "016" }, VillageCode { name: "铁日斯村", code: "017" }, VillageCode { name: "英阿瓦提村", code: "018" }] },
-    TownCode { name: "阿扎克镇", code: "006", villages: &[VillageCode { name: "朝阳社区", code: "001" }, VillageCode { name: "阿扎克村", code: "002" }, VillageCode { name: "布亚买提村", code: "003" }, VillageCode { name: "提坚村", code: "004" }, VillageCode { name: "尤库日伊什塔其村", code: "005" }, VillageCode { name: "托万伊什塔其村", code: "006" }, VillageCode { name: "铁提尔村", code: "007" }, VillageCode { name: "麦依村", code: "008" }, VillageCode { name: "兰干村", code: "009" }, VillageCode { name: "库兰其村", code: "010" }, VillageCode { name: "英巴格村", code: "011" }, VillageCode { name: "伯干村", code: "012" }, VillageCode { name: "翁艾日克村", code: "013" }, VillageCode { name: "库木萨克村", code: "014" }, VillageCode { name: "库库力村", code: "015" }, VillageCode { name: "伊特帕克村", code: "016" }] },
-    TownCode { name: "阿湖乡", code: "007", villages: &[VillageCode { name: "尤喀克买里村", code: "001" }, VillageCode { name: "托万买里村", code: "002" }, VillageCode { name: "阿热买里村", code: "003" }, VillageCode { name: "阿其克村", code: "004" }, VillageCode { name: "托格拉克村", code: "005" }, VillageCode { name: "兰干村", code: "006" }, VillageCode { name: "多斯鲁克村", code: "007" }, VillageCode { name: "光明村", code: "008" }, VillageCode { name: "前进村", code: "009" }] },
-    TownCode { name: "格达良乡", code: "008", villages: &[VillageCode { name: "库尔干村", code: "001" }, VillageCode { name: "曲许尔盖村", code: "002" }, VillageCode { name: "提坚村", code: "003" }, VillageCode { name: "库都克村", code: "004" }, VillageCode { name: "乔克其村", code: "005" }, VillageCode { name: "库也克村", code: "006" }, VillageCode { name: "阿尔帕勒克村", code: "007" }, VillageCode { name: "沙拉塔拉村", code: "008" }, VillageCode { name: "萨依村", code: "009" }] },
-    TownCode { name: "哈拉峻乡", code: "009", villages: &[VillageCode { name: "琼哈拉峻村", code: "001" }, VillageCode { name: "欧吐拉哈拉峻村", code: "002" }, VillageCode { name: "阿亚克苏洪村", code: "003" }, VillageCode { name: "谢依提村", code: "004" }, VillageCode { name: "克孜勒陶村", code: "005" }, VillageCode { name: "皮羌村", code: "006" }, VillageCode { name: "古尔库热村", code: "007" }, VillageCode { name: "库铁列克村", code: "008" }, VillageCode { name: "昂额孜村", code: "009" }, VillageCode { name: "西里比里村", code: "010" }, VillageCode { name: "坎阿热力村", code: "011" }, VillageCode { name: "亚孜鲁村", code: "012" }] },
-    TownCode { name: "吐古买提乡", code: "010", villages: &[VillageCode { name: "吐古买提村", code: "001" }, VillageCode { name: "巴什苏洪木村", code: "002" }, VillageCode { name: "库鲁木都克村", code: "003" }, VillageCode { name: "玛依丹村", code: "004" }, VillageCode { name: "科克塔木村", code: "005" }, VillageCode { name: "阿合塔拉村", code: "006" }, VillageCode { name: "结然布拉克村", code: "007" }] },
-    TownCode { name: "兵团农三师红旗农场", code: "011", villages: &[VillageCode { name: "八羌社区", code: "001" }, VillageCode { name: "一连生活区", code: "002" }, VillageCode { name: "二连生活区", code: "003" }, VillageCode { name: "三连生活区", code: "004" }, VillageCode { name: "五连生活区", code: "005" }] },
+    TownCode {
+        name: "幸福路街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "帕米尔西路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "天山路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "吾斯塘路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "环城南路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "幸福路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "松他克路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "和谐社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "人民路社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "北山社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "环城北路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "高峰社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔合提云居委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "光明路街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "光明路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "建设路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "团结路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "友谊路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "帕米尔东路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "群众路社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "富民社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "玛纳斯社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "安居社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "健康社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "锦绣社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "东城社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "前进路社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "南湖社区",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "新城街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "阿扎克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "昆援社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "励志社区",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "上阿图什镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "振兴社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "尧勒其村",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀尔果勒村",
+                code: "003",
+            },
+            VillageCode {
+                name: "萨依村",
+                code: "004",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "005",
+            },
+            VillageCode {
+                name: "奥提亚克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "迪汗拉村",
+                code: "007",
+            },
+            VillageCode {
+                name: "乌恰村",
+                code: "008",
+            },
+            VillageCode {
+                name: "塔库提村",
+                code: "009",
+            },
+            VillageCode {
+                name: "依克萨克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "亚维勒克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "拉依勒克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀依拉克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "博依萨克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "015",
+            },
+            VillageCode {
+                name: "铁提尔村",
+                code: "016",
+            },
+            VillageCode {
+                name: "塔什普什喀村",
+                code: "017",
+            },
+            VillageCode {
+                name: "下迪汗拉村",
+                code: "018",
+            },
+            VillageCode {
+                name: "托卡其拉村",
+                code: "019",
+            },
+            VillageCode {
+                name: "萨依巴格村",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿克买拉村",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "松他克镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "无花果社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "宜居社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "石榴社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "松他克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿孜汗村",
+                code: "005",
+            },
+            VillageCode {
+                name: "买谢提村",
+                code: "006",
+            },
+            VillageCode {
+                name: "托库勒村",
+                code: "007",
+            },
+            VillageCode {
+                name: "瓦克瓦克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "克青孜村",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴格拉村",
+                code: "010",
+            },
+            VillageCode {
+                name: "温吐萨克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚喀巴格村",
+                code: "012",
+            },
+            VillageCode {
+                name: "肖鲁克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "园艺场村",
+                code: "014",
+            },
+            VillageCode {
+                name: "库木巴格村",
+                code: "015",
+            },
+            VillageCode {
+                name: "帕提阡村",
+                code: "016",
+            },
+            VillageCode {
+                name: "铁日斯村",
+                code: "017",
+            },
+            VillageCode {
+                name: "英阿瓦提村",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿扎克镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "朝阳社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿扎克村",
+                code: "002",
+            },
+            VillageCode {
+                name: "布亚买提村",
+                code: "003",
+            },
+            VillageCode {
+                name: "提坚村",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤库日伊什塔其村",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万伊什塔其村",
+                code: "006",
+            },
+            VillageCode {
+                name: "铁提尔村",
+                code: "007",
+            },
+            VillageCode {
+                name: "麦依村",
+                code: "008",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "009",
+            },
+            VillageCode {
+                name: "库兰其村",
+                code: "010",
+            },
+            VillageCode {
+                name: "英巴格村",
+                code: "011",
+            },
+            VillageCode {
+                name: "伯干村",
+                code: "012",
+            },
+            VillageCode {
+                name: "翁艾日克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木萨克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "库库力村",
+                code: "015",
+            },
+            VillageCode {
+                name: "伊特帕克村",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿湖乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "尤喀克买里村",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万买里村",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热买里村",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿其克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "托格拉克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "006",
+            },
+            VillageCode {
+                name: "多斯鲁克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "光明村",
+                code: "008",
+            },
+            VillageCode {
+                name: "前进村",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "格达良乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "库尔干村",
+                code: "001",
+            },
+            VillageCode {
+                name: "曲许尔盖村",
+                code: "002",
+            },
+            VillageCode {
+                name: "提坚村",
+                code: "003",
+            },
+            VillageCode {
+                name: "库都克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "乔克其村",
+                code: "005",
+            },
+            VillageCode {
+                name: "库也克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿尔帕勒克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "沙拉塔拉村",
+                code: "008",
+            },
+            VillageCode {
+                name: "萨依村",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "哈拉峻乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "琼哈拉峻村",
+                code: "001",
+            },
+            VillageCode {
+                name: "欧吐拉哈拉峻村",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚克苏洪村",
+                code: "003",
+            },
+            VillageCode {
+                name: "谢依提村",
+                code: "004",
+            },
+            VillageCode {
+                name: "克孜勒陶村",
+                code: "005",
+            },
+            VillageCode {
+                name: "皮羌村",
+                code: "006",
+            },
+            VillageCode {
+                name: "古尔库热村",
+                code: "007",
+            },
+            VillageCode {
+                name: "库铁列克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "昂额孜村",
+                code: "009",
+            },
+            VillageCode {
+                name: "西里比里村",
+                code: "010",
+            },
+            VillageCode {
+                name: "坎阿热力村",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚孜鲁村",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "吐古买提乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "吐古买提村",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴什苏洪木村",
+                code: "002",
+            },
+            VillageCode {
+                name: "库鲁木都克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "玛依丹村",
+                code: "004",
+            },
+            VillageCode {
+                name: "科克塔木村",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿合塔拉村",
+                code: "006",
+            },
+            VillageCode {
+                name: "结然布拉克村",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "兵团农三师红旗农场",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "八羌社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "一连生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "二连生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "三连生活区",
+                code: "004",
+            },
+            VillageCode {
+                name: "五连生活区",
+                code: "005",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_012: [TownCode; 17] = [
-    TownCode { name: "阿克陶镇", code: "001", villages: &[VillageCode { name: "老城街社区居委会", code: "001" }, VillageCode { name: "团结路社区居委会", code: "002" }, VillageCode { name: "幸福路社区居委会", code: "003" }, VillageCode { name: "公格尔路社区居委会", code: "004" }, VillageCode { name: "友谊路社区居委会", code: "005" }, VillageCode { name: "人民路社区居委会", code: "006" }, VillageCode { name: "慕士塔格路社区居委会", code: "007" }, VillageCode { name: "光明路社区居委会", code: "008" }, VillageCode { name: "文化路社区居委会", code: "009" }, VillageCode { name: "乐陶苑社区居委会", code: "010" }, VillageCode { name: "昆仑路社区居委会", code: "011" }, VillageCode { name: "白山路社区居委会", code: "012" }, VillageCode { name: "和谐路社区居委会", code: "013" }, VillageCode { name: "帕米尔路社区居委会", code: "014" }, VillageCode { name: "湖滨东社区居委会", code: "015" }, VillageCode { name: "湖滨西社区居委会", code: "016" }, VillageCode { name: "北京北路社区居委会", code: "017" }, VillageCode { name: "北京南路社区居委会", code: "018" }, VillageCode { name: "幸福东路社区居委会", code: "019" }, VillageCode { name: "亚格恰克村委会", code: "020" }, VillageCode { name: "诺库其艾日克村委会", code: "021" }, VillageCode { name: "喀依恰艾日克村委会", code: "022" }, VillageCode { name: "奥达艾日克村委会", code: "023" }, VillageCode { name: "巴仁艾日克村委会", code: "024" }, VillageCode { name: "英其开艾日克村委会", code: "025" }, VillageCode { name: "央其买里村委会", code: "026" }, VillageCode { name: "拱拜提艾日克村委会", code: "027" }] },
-    TownCode { name: "奥依塔克镇", code: "002", villages: &[VillageCode { name: "皮拉勒村委会", code: "001" }, VillageCode { name: "阿特奥依纳克村委会", code: "002" }, VillageCode { name: "奥依塔克村委会", code: "003" }, VillageCode { name: "恰勒玛艾日克村委会", code: "004" }] },
-    TownCode { name: "克孜勒陶镇", code: "003", villages: &[VillageCode { name: "乌尔都隆窝孜村委会", code: "001" }, VillageCode { name: "喀尔乌勒村委会", code: "002" }, VillageCode { name: "红新村委会", code: "003" }, VillageCode { name: "艾杰克村委会", code: "004" }, VillageCode { name: "喀拉塔什村委会", code: "005" }, VillageCode { name: "喀拉塔什其木干村委会", code: "006" }, VillageCode { name: "托云都克村委会", code: "007" }, VillageCode { name: "塔木村委会", code: "008" }, VillageCode { name: "喀普喀村委会", code: "009" }, VillageCode { name: "其木干村委会", code: "010" }, VillageCode { name: "阿尔帕勒克村委会", code: "011" }, VillageCode { name: "别勒迪尔村委会", code: "012" }, VillageCode { name: "汗铁热克村委会", code: "013" }, VillageCode { name: "塔木柏孜村委会", code: "014" }, VillageCode { name: "江布拉克村委会", code: "015" }] },
-    TownCode { name: "恰尔隆镇", code: "004", villages: &[VillageCode { name: "麻扎窝孜村委会", code: "001" }, VillageCode { name: "吉郎德村委会", code: "002" }, VillageCode { name: "托依鲁布隆村委会", code: "003" }, VillageCode { name: "巴勒达灵窝孜村委会", code: "004" }, VillageCode { name: "喀依孜村委会", code: "005" }, VillageCode { name: "其克尔铁热克村委会", code: "006" }] },
-    TownCode { name: "玉麦镇", code: "005", villages: &[VillageCode { name: "恰格尔村委会", code: "001" }, VillageCode { name: "玉麦村委会", code: "002" }, VillageCode { name: "英阿依玛克村委会", code: "003" }, VillageCode { name: "阿勒吞其村委会", code: "004" }, VillageCode { name: "阿玛希村委会", code: "005" }, VillageCode { name: "尤喀克霍伊拉村委会", code: "006" }, VillageCode { name: "库尼萨克村委会", code: "007" }, VillageCode { name: "喀什艾日克村委会", code: "008" }, VillageCode { name: "加依铁热克村委会", code: "009" }, VillageCode { name: "库尔巴格村委会", code: "010" }, VillageCode { name: "兰干村委会", code: "011" }, VillageCode { name: "霍伊拉艾日克村委会", code: "012" }, VillageCode { name: "百合提村委会", code: "013" }, VillageCode { name: "比力克其村委会", code: "014" }, VillageCode { name: "江格里阿瓦提村委会", code: "015" }] },
-    TownCode { name: "皮拉勒乡", code: "006", villages: &[VillageCode { name: "阿克土村委会", code: "001" }, VillageCode { name: "依克其来村委会", code: "002" }, VillageCode { name: "塔孜勒克村委会", code: "003" }, VillageCode { name: "恰尔巴格村委会", code: "004" }, VillageCode { name: "帕拉其村委会", code: "005" }, VillageCode { name: "阔苏拉村委会", code: "006" }, VillageCode { name: "苏鲁克村委会", code: "007" }, VillageCode { name: "拜什铁热克村委会", code: "008" }, VillageCode { name: "墩都热村委会", code: "009" }, VillageCode { name: "皮拉勒村委会", code: "010" }, VillageCode { name: "琼巴什村委会", code: "011" }, VillageCode { name: "英阿尔帕村委会", code: "012" }, VillageCode { name: "阿克提其村委会", code: "013" }, VillageCode { name: "霍伊拉阿勒迪村委会", code: "014" }, VillageCode { name: "依也勒干村委会", code: "015" }, VillageCode { name: "团结村委会", code: "016" }, VillageCode { name: "乌尊拉村委会", code: "017" }, VillageCode { name: "喀拉苏村委会", code: "018" }, VillageCode { name: "托格其村委会", code: "019" }, VillageCode { name: "英巴格村委会", code: "020" }, VillageCode { name: "托格拉克村委会", code: "021" }, VillageCode { name: "依纳克村委会", code: "022" }] },
-    TownCode { name: "巴仁乡", code: "007", villages: &[VillageCode { name: "古勒巴格村委会", code: "001" }, VillageCode { name: "也勒干村委会", code: "002" }, VillageCode { name: "墩巴格村委会", code: "003" }, VillageCode { name: "克孜勒吾斯塘村委会", code: "004" }, VillageCode { name: "萨依巴格村委会", code: "005" }, VillageCode { name: "阿热买里村委会", code: "006" }, VillageCode { name: "库尔干村委会", code: "007" }, VillageCode { name: "巴仁村委会", code: "008" }, VillageCode { name: "且克村委会", code: "009" }, VillageCode { name: "加依村委会", code: "010" }, VillageCode { name: "库木村委会", code: "011" }, VillageCode { name: "吐尔村委会", code: "012" }, VillageCode { name: "阔洪其村委会", code: "013" }, VillageCode { name: "英买里村委会", code: "014" }, VillageCode { name: "努尔巴格村委会", code: "015" }, VillageCode { name: "克孜勒巴依拉克村委会", code: "016" }, VillageCode { name: "杏花源村委会", code: "017" }, VillageCode { name: "伊提帕克村委会", code: "018" }] },
-    TownCode { name: "喀热开其克乡", code: "008", villages: &[VillageCode { name: "托普热利克村委会", code: "001" }, VillageCode { name: "比纳木村委会", code: "002" }, VillageCode { name: "博斯坦村委会", code: "003" }, VillageCode { name: "阔什都维村委会", code: "004" }] },
-    TownCode { name: "加马铁热克乡", code: "009", villages: &[VillageCode { name: "赛克孜艾日克村委会", code: "001" }, VillageCode { name: "巴格拉村委会", code: "002" }, VillageCode { name: "阔什铁热克村委会", code: "003" }, VillageCode { name: "乌卡买里村委会", code: "004" }, VillageCode { name: "喀什博依村委会", code: "005" }, VillageCode { name: "阔纳霍依拉村委会", code: "006" }, VillageCode { name: "托尔塔依村委会", code: "007" }] },
-    TownCode { name: "木吉乡", code: "010", villages: &[VillageCode { name: "琼让村委会", code: "001" }, VillageCode { name: "布拉克村委会", code: "002" }, VillageCode { name: "木吉村委会", code: "003" }, VillageCode { name: "昆提别斯村委会", code: "004" }] },
-    TownCode { name: "布伦口乡", code: "011", villages: &[VillageCode { name: "苏巴什村委会", code: "001" }, VillageCode { name: "布伦口村委会", code: "002" }, VillageCode { name: "恰克尔艾格勒村委会", code: "003" }, VillageCode { name: "盖孜村委会", code: "004" }, VillageCode { name: "托喀依村委会", code: "005" }] },
-    TownCode { name: "塔尔塔吉克民族乡", code: "012", villages: &[VillageCode { name: "阿勒玛勒克村委会", code: "001" }, VillageCode { name: "巴格艾格孜村委会", code: "002" }, VillageCode { name: "巴格村委会", code: "003" }, VillageCode { name: "库祖村委会", code: "004" }, VillageCode { name: "霍西阿巴提村委会", code: "005" }, VillageCode { name: "塔尔阿巴提村委会", code: "006" }, VillageCode { name: "阿克库木村委会", code: "007" }] },
-    TownCode { name: "托尔塔依农场", code: "013", villages: &[VillageCode { name: "乌左拉队", code: "001" }, VillageCode { name: "库木克沙队", code: "002" }, VillageCode { name: "艾依然巴格队", code: "003" }, VillageCode { name: "喀拉墩队", code: "004" }, VillageCode { name: "喀拉库木队", code: "005" }, VillageCode { name: "布拉其队", code: "006" }, VillageCode { name: "布拉克队", code: "007" }, VillageCode { name: "林业队", code: "008" }] },
-    TownCode { name: "阿克达拉牧场", code: "014", villages: &[VillageCode { name: "阿克达拉村委会", code: "001" }, VillageCode { name: "阔克图窝孜村委会", code: "002" }, VillageCode { name: "塔木喀拉村委会", code: "003" }] },
-    TownCode { name: "原种场", code: "015", villages: &[VillageCode { name: "原种场虚拟生活区", code: "001" }] },
-    TownCode { name: "克孜勒苏柯尔克孜自治州林场", code: "016", villages: &[VillageCode { name: "奥依塔克林场虚拟生活区", code: "001" }] },
-    TownCode { name: "苗圃", code: "017", villages: &[VillageCode { name: "苗圃虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "阿克陶镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "老城街社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "团结路社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "幸福路社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "公格尔路社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "友谊路社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "人民路社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "慕士塔格路社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "光明路社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "文化路社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "乐陶苑社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "昆仑路社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "白山路社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "和谐路社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "帕米尔路社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "湖滨东社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "湖滨西社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "北京北路社区居委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "北京南路社区居委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "幸福东路社区居委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "亚格恰克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "诺库其艾日克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "喀依恰艾日克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "奥达艾日克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "巴仁艾日克村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "英其开艾日克村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "央其买里村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "拱拜提艾日克村委会",
+                code: "027",
+            },
+        ],
+    },
+    TownCode {
+        name: "奥依塔克镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "皮拉勒村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿特奥依纳克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "奥依塔克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "恰勒玛艾日克村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒陶镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "乌尔都隆窝孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀尔乌勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红新村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾杰克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉塔什村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉塔什其木干村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托云都克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔木村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀普喀村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "其木干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿尔帕勒克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "别勒迪尔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "汗铁热克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "塔木柏孜村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "江布拉克村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "恰尔隆镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "麻扎窝孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吉郎德村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托依鲁布隆村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴勒达灵窝孜村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀依孜村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "其克尔铁热克村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "玉麦镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "恰格尔村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "玉麦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英阿依玛克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿勒吞其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿玛希村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克霍伊拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库尼萨克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "加依铁热克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库尔巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "霍伊拉艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "百合提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "比力克其村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "江格里阿瓦提村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "皮拉勒乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "阿克土村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "依克其来村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔孜勒克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "帕拉其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔苏拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏鲁克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "拜什铁热克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩都热村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "皮拉勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "琼巴什村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英阿尔帕村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿克提其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "霍伊拉阿勒迪村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "依也勒干村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "乌尊拉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀拉苏村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "托格其村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "托格拉克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "依纳克村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴仁乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "也勒干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "墩巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "克孜勒吾斯塘村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库尔干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴仁村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "且克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "加依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吐尔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阔洪其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "克孜勒巴依拉克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "杏花源村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "伊提帕克村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "喀热开其克乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "托普热利克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "比纳木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阔什都维村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "加马铁热克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "赛克孜艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔什铁热克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌卡买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀什博依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔纳霍依拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托尔塔依村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "木吉乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "琼让村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "布拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "木吉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "昆提别斯村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "布伦口乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "苏巴什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "布伦口村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "恰克尔艾格勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "盖孜村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托喀依村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔尔塔吉克民族乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "阿勒玛勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格艾格孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库祖村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "霍西阿巴提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔尔阿巴提村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿克库木村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "托尔塔依农场",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "乌左拉队",
+                code: "001",
+            },
+            VillageCode {
+                name: "库木克沙队",
+                code: "002",
+            },
+            VillageCode {
+                name: "艾依然巴格队",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉墩队",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉库木队",
+                code: "005",
+            },
+            VillageCode {
+                name: "布拉其队",
+                code: "006",
+            },
+            VillageCode {
+                name: "布拉克队",
+                code: "007",
+            },
+            VillageCode {
+                name: "林业队",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克达拉牧场",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "阿克达拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阔克图窝孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔木喀拉村委会",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "原种场",
+        code: "015",
+        villages: &[VillageCode {
+            name: "原种场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "克孜勒苏柯尔克孜自治州林场",
+        code: "016",
+        villages: &[VillageCode {
+            name: "奥依塔克林场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "苗圃",
+        code: "017",
+        villages: &[VillageCode {
+            name: "苗圃虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_013: [TownCode; 6] = [
-    TownCode { name: "阿合奇镇", code: "001", villages: &[VillageCode { name: "和平路居委会", code: "001" }, VillageCode { name: "友谊路居委会", code: "002" }, VillageCode { name: "健康路居委会", code: "003" }, VillageCode { name: "吾曲村委会", code: "004" }, VillageCode { name: "佳郎奇村委会", code: "005" }, VillageCode { name: "皮羌村委会", code: "006" }] },
-    TownCode { name: "库兰萨日克乡", code: "002", villages: &[VillageCode { name: "别迭里村委会", code: "001" }, VillageCode { name: "吉勒得斯村委会", code: "002" }, VillageCode { name: "阿克特克提尔村委会", code: "003" }, VillageCode { name: "玉山古西村委会", code: "004" }, VillageCode { name: "阿依尼克喀克尔村委会", code: "005" }] },
-    TownCode { name: "色帕巴依乡", code: "003", villages: &[VillageCode { name: "喀拉布隆村委会", code: "001" }, VillageCode { name: "色帕巴依村委会", code: "002" }, VillageCode { name: "阿果依村委会", code: "003" }] },
-    TownCode { name: "苏木塔什乡", code: "004", villages: &[VillageCode { name: "克孜勒宫拜孜村委会", code: "001" }, VillageCode { name: "阿合塔拉村委会", code: "002" }, VillageCode { name: "孔吾拉奇村委会", code: "003" }, VillageCode { name: "苏木塔什村委会", code: "004" }] },
-    TownCode { name: "哈拉奇乡", code: "005", villages: &[VillageCode { name: "哈拉奇村委会", code: "001" }, VillageCode { name: "布隆村委会", code: "002" }, VillageCode { name: "阿合奇村委会", code: "003" }] },
-    TownCode { name: "哈拉布拉克乡", code: "006", villages: &[VillageCode { name: "麦尔开其村委会", code: "001" }, VillageCode { name: "哈拉布拉克村委会", code: "002" }, VillageCode { name: "阿克翁库尔村委会", code: "003" }, VillageCode { name: "阿克巴夏特村委会", code: "004" }, VillageCode { name: "凯利特别克村委会", code: "005" }, VillageCode { name: "博孜塔拉村委会", code: "006" }, VillageCode { name: "库尔萨依村委会", code: "007" }] },
+    TownCode {
+        name: "阿合奇镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "和平路居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "友谊路居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "健康路居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吾曲村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "佳郎奇村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "皮羌村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "库兰萨日克乡",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "别迭里村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吉勒得斯村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克特克提尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "玉山古西村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿依尼克喀克尔村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "色帕巴依乡",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "喀拉布隆村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "色帕巴依村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿果依村委会",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "苏木塔什乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "克孜勒宫拜孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿合塔拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "孔吾拉奇村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "苏木塔什村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "哈拉奇乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "哈拉奇村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "布隆村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿合奇村委会",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "哈拉布拉克乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "麦尔开其村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "哈拉布拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克翁库尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿克巴夏特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "凯利特别克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博孜塔拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库尔萨依村委会",
+                code: "007",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_014: [TownCode; 12] = [
-    TownCode { name: "乌恰镇", code: "001", villages: &[VillageCode { name: "波鲁什居委会", code: "001" }, VillageCode { name: "乌尔多居委会", code: "002" }, VillageCode { name: "多斯都克居委会", code: "003" }, VillageCode { name: "巴格恰居委会", code: "004" }, VillageCode { name: "坎久干居委会", code: "005" }] },
-    TownCode { name: "康苏镇", code: "002", villages: &[VillageCode { name: "哈巴居委会", code: "001" }, VillageCode { name: "英加依居委会", code: "002" }, VillageCode { name: "煤矿居委会", code: "003" }, VillageCode { name: "比尔列西米居委会", code: "004" }, VillageCode { name: "克孜勒苏村委会", code: "005" }, VillageCode { name: "阿依尕尔特村委会", code: "006" }] },
-    TownCode { name: "巴音库鲁提镇", code: "003", villages: &[VillageCode { name: "巴音库鲁提村委会", code: "001" }, VillageCode { name: "克孜勒阿根村委会", code: "002" }] },
-    TownCode { name: "乌鲁克恰提乡", code: "004", villages: &[VillageCode { name: "库尔干村委会", code: "001" }, VillageCode { name: "琼铁热克村委会", code: "002" }, VillageCode { name: "克孜勒库鲁克村委会", code: "003" }, VillageCode { name: "萨热克巴依村委会", code: "004" }] },
-    TownCode { name: "吾合沙鲁乡", code: "005", villages: &[VillageCode { name: "吾合沙鲁村委会", code: "001" }, VillageCode { name: "恰提村委会", code: "002" }] },
-    TownCode { name: "膘尔托阔依乡", code: "006", villages: &[VillageCode { name: "膘尔托阔依村委会", code: "001" }, VillageCode { name: "塔尔尕拉克村委会", code: "002" }, VillageCode { name: "萨孜村委会", code: "003" }, VillageCode { name: "阿合奇村委会", code: "004" }] },
-    TownCode { name: "黑孜苇乡", code: "007", villages: &[VillageCode { name: "阿依布拉克居委会", code: "001" }, VillageCode { name: "库勒阿日克村委会", code: "002" }, VillageCode { name: "也克铁热克村委会", code: "003" }, VillageCode { name: "阿热布拉克村委会", code: "004" }, VillageCode { name: "康什维尔村委会", code: "005" }, VillageCode { name: "江吉尔村委会", code: "006" }, VillageCode { name: "坎久干村委会", code: "007" }] },
-    TownCode { name: "托云乡", code: "008", villages: &[VillageCode { name: "托云村委会", code: "001" }, VillageCode { name: "苏约克村委会", code: "002" }, VillageCode { name: "库瓦特村委会", code: "003" }] },
-    TownCode { name: "铁列克乡", code: "009", villages: &[VillageCode { name: "哈拉铁克村委会", code: "001" }, VillageCode { name: "铁列克村委会", code: "002" }] },
-    TownCode { name: "波斯坦铁列克乡", code: "010", villages: &[VillageCode { name: "乔尔波村委会", code: "001" }, VillageCode { name: "依买克村委会", code: "002" }, VillageCode { name: "居鲁克巴什村委会", code: "003" }, VillageCode { name: "凯勒敦村委会", code: "004" }, VillageCode { name: "多来提布拉克村委会", code: "005" }, VillageCode { name: "马热加尼库木村委会", code: "006" }] },
-    TownCode { name: "吉根乡", code: "011", villages: &[VillageCode { name: "萨孜村委会", code: "001" }, VillageCode { name: "哈拉铁列克村委会", code: "002" }, VillageCode { name: "斯木哈纳村委会", code: "003" }, VillageCode { name: "萨哈勒村委会", code: "004" }] },
-    TownCode { name: "兵团托云牧场", code: "012", villages: &[VillageCode { name: "祥云社区居委会", code: "001" }, VillageCode { name: "一连生活区", code: "002" }, VillageCode { name: "二连生活区", code: "003" }, VillageCode { name: "三连生活区", code: "004" }] },
+    TownCode {
+        name: "乌恰镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "波鲁什居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乌尔多居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "多斯都克居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴格恰居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "坎久干居委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "康苏镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "哈巴居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英加依居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "煤矿居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "比尔列西米居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "克孜勒苏村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿依尕尔特村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴音库鲁提镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "巴音库鲁提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "克孜勒阿根村委会",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌鲁克恰提乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "库尔干村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "琼铁热克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "克孜勒库鲁克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "萨热克巴依村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "吾合沙鲁乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "吾合沙鲁村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰提村委会",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "膘尔托阔依乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "膘尔托阔依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "塔尔尕拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "萨孜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿合奇村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "黑孜苇乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "阿依布拉克居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库勒阿日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "也克铁热克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热布拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "康什维尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "江吉尔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "坎久干村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "托云乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "托云村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏约克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库瓦特村委会",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁列克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "哈拉铁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "铁列克村委会",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "波斯坦铁列克乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "乔尔波村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "依买克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "居鲁克巴什村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "凯勒敦村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "多来提布拉克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "马热加尼库木村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "吉根乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "萨孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "哈拉铁列克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "斯木哈纳村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "萨哈勒村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "兵团托云牧场",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "祥云社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "一连生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "二连生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "三连生活区",
+                code: "004",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_015: [TownCode; 15] = [
-    TownCode { name: "托克扎克镇", code: "001", villages: &[VillageCode { name: "新区社区居委会", code: "001" }, VillageCode { name: "阿瓦提社区居委会", code: "002" }, VillageCode { name: "温馨社区居委会", code: "003" }, VillageCode { name: "古力巴格社区居委会", code: "004" }, VillageCode { name: "萨依巴格社区居委会", code: "005" }, VillageCode { name: "迎宾社区", code: "006" }, VillageCode { name: "花园社区", code: "007" }, VillageCode { name: "文化路社区", code: "008" }, VillageCode { name: "幸福路社区", code: "009" }, VillageCode { name: "团结路社区", code: "010" }, VillageCode { name: "肖古孜村委会", code: "011" }, VillageCode { name: "伊什来木其村委会", code: "012" }, VillageCode { name: "阿亚格曼干村委会", code: "013" }, VillageCode { name: "阿亚格肖古孜村委会", code: "014" }, VillageCode { name: "尤喀尔克曼干村委会", code: "015" }, VillageCode { name: "皮拉勒村委会", code: "016" }] },
-    TownCode { name: "兰干镇", code: "002", villages: &[VillageCode { name: "阿克霍伊拉村委会", code: "001" }, VillageCode { name: "苏鲁克村委会", code: "002" }, VillageCode { name: "巴什阿瓦提村委会", code: "003" }, VillageCode { name: "萨依村委会", code: "004" }, VillageCode { name: "巴扎村委会", code: "005" }, VillageCode { name: "喀拉古勒萨依村委会", code: "006" }, VillageCode { name: "玉吉米里克村委会", code: "007" }, VillageCode { name: "康迪尔村委会", code: "008" }, VillageCode { name: "阔纳吾斯塘村委会", code: "009" }, VillageCode { name: "克孜勒古力村委会", code: "010" }, VillageCode { name: "林场村委会", code: "011" }] },
-    TownCode { name: "吾库萨克镇", code: "003", villages: &[VillageCode { name: "水榭花都社区", code: "001" }, VillageCode { name: "康欣社区", code: "002" }, VillageCode { name: "齐尼巴格村委会", code: "003" }, VillageCode { name: "帕其也尔村委会", code: "004" }, VillageCode { name: "喀库拉村委会", code: "005" }, VillageCode { name: "达恰村委会", code: "006" }, VillageCode { name: "奥依巴格村委会", code: "007" }, VillageCode { name: "尤喀日吾库萨克村委会", code: "008" }, VillageCode { name: "托万克吾库萨克村委会", code: "009" }, VillageCode { name: "谢哈尔巴格村委会", code: "010" }, VillageCode { name: "琼巴格村委会", code: "011" }] },
-    TownCode { name: "乌帕尔镇", code: "004", villages: &[VillageCode { name: "喀拉巴什村委会", code: "001" }, VillageCode { name: "拜什巴格村委会", code: "002" }, VillageCode { name: "亚果村委会", code: "003" }, VillageCode { name: "巴什亚果村委会", code: "004" }, VillageCode { name: "智慧村委会", code: "005" }, VillageCode { name: "科克其村委会", code: "006" }, VillageCode { name: "库木巴格村委会", code: "007" }, VillageCode { name: "多格拉提村委会", code: "008" }, VillageCode { name: "肖塔村委会", code: "009" }, VillageCode { name: "约勒吉格代村委会", code: "010" }, VillageCode { name: "喀拉吾斯塘村委会", code: "011" }, VillageCode { name: "阿恰村委会", code: "012" }, VillageCode { name: "光明村委会", code: "013" }, VillageCode { name: "阿依丁库勒村委会", code: "014" }, VillageCode { name: "阿克吾斯塘村委会", code: "015" }, VillageCode { name: "乌普拉特村委会", code: "016" }, VillageCode { name: "团结村委会", code: "017" }, VillageCode { name: "阿亚格喀拉巴什村委会", code: "018" }, VillageCode { name: "阿亚格科克其村委会", code: "019" }] },
-    TownCode { name: "塔什米里克乡", code: "005", villages: &[VillageCode { name: "尤喀克阿萨艾日克村委会", code: "001" }, VillageCode { name: "萨干村委会", code: "002" }, VillageCode { name: "喀什贝希村委会", code: "003" }, VillageCode { name: "艾斯开村委会", code: "004" }, VillageCode { name: "喀什吐维村委会", code: "005" }, VillageCode { name: "塔什艾日克村委会", code: "006" }, VillageCode { name: "格勒迪尔郎村委会", code: "007" }, VillageCode { name: "塔什巴格村委会", code: "008" }, VillageCode { name: "尤喀克铁提尔村委会", code: "009" }, VillageCode { name: "喀什噶尔也勒干村委会", code: "010" }, VillageCode { name: "阿亚克铁提尔村委会", code: "011" }, VillageCode { name: "尤喀克色日克阿塔村委会", code: "012" }, VillageCode { name: "阿亚克色日克阿塔村委会", code: "013" }, VillageCode { name: "阿亚克阿萨艾日克村委会", code: "014" }, VillageCode { name: "哈勒塔阔恰村委会", code: "015" }, VillageCode { name: "团结村委会", code: "016" }, VillageCode { name: "幸福村委会", code: "017" }, VillageCode { name: "和谐村委会", code: "018" }] },
-    TownCode { name: "铁日木乡", code: "006", villages: &[VillageCode { name: "尤勒滚布格拉村委会", code: "001" }, VillageCode { name: "托万克铁日木村委会", code: "002" }, VillageCode { name: "尤喀克铁日木村委会", code: "003" }, VillageCode { name: "托特库拉村委会", code: "004" }] },
-    TownCode { name: "布拉克苏乡", code: "007", villages: &[VillageCode { name: "比仁其英其开村委会", code: "001" }, VillageCode { name: "伊肯其英其开村委会", code: "002" }, VillageCode { name: "吐尔恰巴格村委会", code: "003" }, VillageCode { name: "克孜坎特村委会", code: "004" }, VillageCode { name: "阔纳霍伊拉村委会", code: "005" }, VillageCode { name: "托日巴格村委会", code: "006" }, VillageCode { name: "代苏村委会", code: "007" }, VillageCode { name: "英艾日克村委会", code: "008" }, VillageCode { name: "吾斯塘博依村委会", code: "009" }, VillageCode { name: "尤喀克兰干村委会", code: "010" }, VillageCode { name: "恰热克村委会", code: "011" }, VillageCode { name: "亚喀什村委会", code: "012" }, VillageCode { name: "乌润巴斯提村委会", code: "013" }, VillageCode { name: "喀拉巴格村委会", code: "014" }, VillageCode { name: "阿热勒村委会", code: "015" }, VillageCode { name: "托格拉克贝希村委会", code: "016" }, VillageCode { name: "拜西提热克村委会", code: "017" }] },
-    TownCode { name: "萨依巴格乡", code: "008", villages: &[VillageCode { name: "帕希希村委会", code: "001" }, VillageCode { name: "阿亚格喀帕村委会", code: "002" }, VillageCode { name: "尤喀克喀帕村委会", code: "003" }, VillageCode { name: "托盖萨克村委会", code: "004" }, VillageCode { name: "阔勒其村委会", code: "005" }, VillageCode { name: "库普色额村委会", code: "006" }, VillageCode { name: "肖尔村委会", code: "007" }, VillageCode { name: "阿恰勒村委会", code: "008" }, VillageCode { name: "尤喀克恰热克村委会", code: "009" }, VillageCode { name: "科克其村委会", code: "010" }, VillageCode { name: "阿克提其村委会", code: "011" }, VillageCode { name: "却云其村委会", code: "012" }, VillageCode { name: "古勒曲曼村委会", code: "013" }, VillageCode { name: "阿亚克恰热克村委会", code: "014" }, VillageCode { name: "托万克霍伊拉村委会", code: "015" }, VillageCode { name: "萨依巴格村委会", code: "016" }, VillageCode { name: "阿亚格库普色额村委会", code: "017" }, VillageCode { name: "阿亚格肖尔村委会", code: "018" }] },
-    TownCode { name: "站敏乡", code: "009", villages: &[VillageCode { name: "派史塔克村委会", code: "001" }, VillageCode { name: "奥米德村委会", code: "002" }, VillageCode { name: "艾日克贝西村委会", code: "003" }, VillageCode { name: "伊尼萨克村委会", code: "004" }, VillageCode { name: "团结村委会", code: "005" }, VillageCode { name: "亚玛希拉村委会", code: "006" }, VillageCode { name: "古勒巴格村委会", code: "007" }, VillageCode { name: "站敏村委会", code: "008" }, VillageCode { name: "其格曼村委会", code: "009" }, VillageCode { name: "库勒且克艾日克村委会", code: "010" }, VillageCode { name: "英勒克村委会", code: "011" }, VillageCode { name: "阿亚克克孜勒克村委会", code: "012" }, VillageCode { name: "博斯坦村委会", code: "013" }, VillageCode { name: "尤喀克克孜勒克村委会", code: "014" }, VillageCode { name: "库恰村委会", code: "015" }, VillageCode { name: "库若勒村委会", code: "016" }, VillageCode { name: "阿依丁村委会", code: "017" }, VillageCode { name: "吾斯塘博依村委会", code: "018" }, VillageCode { name: "尤喀克站敏村委会", code: "019" }, VillageCode { name: "库勒亚村委会", code: "020" }] },
-    TownCode { name: "木什乡", code: "010", villages: &[VillageCode { name: "谢热克萨依村委会", code: "001" }, VillageCode { name: "库勒买里斯村委会", code: "002" }, VillageCode { name: "博斯坦村委会", code: "003" }, VillageCode { name: "艾普拉特村委会", code: "004" }, VillageCode { name: "古勒巴格村委会", code: "005" }, VillageCode { name: "艾斯里木什村委会", code: "006" }, VillageCode { name: "吾斯塘博依村委会", code: "007" }, VillageCode { name: "明尧勒村委会", code: "008" }, VillageCode { name: "英吾斯塘博依村委会", code: "009" }] },
-    TownCode { name: "县种畜场", code: "011", villages: &[VillageCode { name: "种畜场虚拟生活区", code: "001" }] },
-    TownCode { name: "县园艺场", code: "012", villages: &[VillageCode { name: "园艺场虚拟生活区", code: "001" }] },
-    TownCode { name: "县林场", code: "013", villages: &[VillageCode { name: "林场虚拟生活区", code: "001" }] },
-    TownCode { name: "县良种场", code: "014", villages: &[VillageCode { name: "良种场虚拟生活区", code: "001" }] },
-    TownCode { name: "疏附广州工业城", code: "015", villages: &[VillageCode { name: "疏附广州工业城虚拟社区", code: "001" }] },
+    TownCode {
+        name: "托克扎克镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "新区社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿瓦提社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "温馨社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古力巴格社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨依巴格社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "迎宾社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "花园社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "幸福路社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "团结路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "肖古孜村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "伊什来木其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿亚格曼干村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚格肖古孜村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尤喀尔克曼干村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "皮拉勒村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "兰干镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "阿克霍伊拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏鲁克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴什阿瓦提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "萨依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉古勒萨依村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "玉吉米里克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "康迪尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔纳吾斯塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "克孜勒古力村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "林场村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "吾库萨克镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "水榭花都社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "康欣社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "齐尼巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "帕其也尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀库拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "达恰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "奥依巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "尤喀日吾库萨克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万克吾库萨克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "谢哈尔巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "琼巴格村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌帕尔镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "喀拉巴什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "拜什巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "亚果村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴什亚果村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "智慧村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "科克其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "多格拉提村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "肖塔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "约勒吉格代村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀拉吾斯塘村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿恰村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿依丁库勒村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿克吾斯塘村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "乌普拉特村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿亚格喀拉巴什村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "阿亚格科克其村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔什米里克乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "尤喀克阿萨艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "萨干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀什贝希村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾斯开村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀什吐维村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔什艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "格勒迪尔郎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔什巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤喀克铁提尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀什噶尔也勒干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿亚克铁提尔村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤喀克色日克阿塔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿亚克色日克阿塔村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚克阿萨艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "哈勒塔阔恰村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁日木乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "尤勒滚布格拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万克铁日木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克铁日木村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托特库拉村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "布拉克苏乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "比仁其英其开村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "伊肯其英其开村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐尔恰巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "克孜坎特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阔纳霍伊拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托日巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "代苏村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克兰干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "恰热克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚喀什村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乌润巴斯提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀拉巴格村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿热勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托格拉克贝希村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "拜西提热克村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "萨依巴格乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "帕希希村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚格喀帕村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克喀帕村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托盖萨克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阔勒其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库普色额村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "肖尔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤喀克恰热克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "科克其村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿克提其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "却云其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "古勒曲曼村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚克恰热克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托万克霍伊拉村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿亚格库普色额村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿亚格肖尔村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "站敏乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "派史塔克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "奥米德村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "艾日克贝西村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "伊尼萨克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "亚玛希拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "站敏村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "其格曼村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库勒且克艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英勒克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿亚克克孜勒克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克克孜勒克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "库恰村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "库若勒村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿依丁村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "尤喀克站敏村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "库勒亚村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "木什乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "谢热克萨依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库勒买里斯村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾普拉特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "艾斯里木什村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "明尧勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英吾斯塘博依村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "县种畜场",
+        code: "011",
+        villages: &[VillageCode {
+            name: "种畜场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "县园艺场",
+        code: "012",
+        villages: &[VillageCode {
+            name: "园艺场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "县林场",
+        code: "013",
+        villages: &[VillageCode {
+            name: "林场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "县良种场",
+        code: "014",
+        villages: &[VillageCode {
+            name: "良种场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "疏附广州工业城",
+        code: "015",
+        villages: &[VillageCode {
+            name: "疏附广州工业城虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_016: [TownCode; 16] = [
-    TownCode { name: "疏勒镇", code: "001", villages: &[VillageCode { name: "新市区社区", code: "001" }, VillageCode { name: "城关社区", code: "002" }, VillageCode { name: "阔纳巴扎社区", code: "003" }, VillageCode { name: "新世纪社区", code: "004" }, VillageCode { name: "纳丘克代尔瓦孜社区", code: "005" }, VillageCode { name: "克其其社区", code: "006" }, VillageCode { name: "昆仑社区", code: "007" }, VillageCode { name: "博望社区", code: "008" }, VillageCode { name: "时尚广场社区", code: "009" }, VillageCode { name: "香逸四季社区", code: "010" }, VillageCode { name: "天安名门社区", code: "011" }, VillageCode { name: "八盘水磨社区", code: "012" }, VillageCode { name: "城东新区社区", code: "013" }, VillageCode { name: "火车站社区", code: "014" }, VillageCode { name: "滨河路社区", code: "015" }, VillageCode { name: "胜利南路社区", code: "016" }, VillageCode { name: "鲁东社区", code: "017" }, VillageCode { name: "幸福路社区", code: "018" }, VillageCode { name: "阳光社区", code: "019" }, VillageCode { name: "张骞社区", code: "020" }, VillageCode { name: "平安社区", code: "021" }, VillageCode { name: "八盘水磨村", code: "022" }, VillageCode { name: "阔纳巴扎村", code: "023" }, VillageCode { name: "纳丘克代尔瓦孜村", code: "024" }, VillageCode { name: "坎土曼艾日克村", code: "025" }] },
-    TownCode { name: "罕南力克镇", code: "002", villages: &[VillageCode { name: "博热其村", code: "001" }, VillageCode { name: "塔坎村", code: "002" }, VillageCode { name: "明勒克村", code: "003" }, VillageCode { name: "明勒克霍伊拉村", code: "004" }, VillageCode { name: "喀木其瓦甫村", code: "005" }, VillageCode { name: "诺古特村", code: "006" }, VillageCode { name: "喀拉普拉特村", code: "007" }, VillageCode { name: "马加村", code: "008" }, VillageCode { name: "博亚克其格勒村", code: "009" }, VillageCode { name: "欧喀达村", code: "010" }, VillageCode { name: "玉奇喀拉村", code: "011" }, VillageCode { name: "塔瓦克其村", code: "012" }, VillageCode { name: "皮拉勒村", code: "013" }, VillageCode { name: "尤喀克帕依那普村", code: "014" }, VillageCode { name: "阿瓦提村", code: "015" }, VillageCode { name: "琼帕依那普村", code: "016" }, VillageCode { name: "卡赞其村", code: "017" }, VillageCode { name: "协热克村", code: "018" }, VillageCode { name: "马勒其村", code: "019" }, VillageCode { name: "恰恰甫村", code: "020" }, VillageCode { name: "英塔木村", code: "021" }, VillageCode { name: "达也克村", code: "022" }, VillageCode { name: "诺古特林场村", code: "023" }] },
-    TownCode { name: "牙甫泉镇", code: "003", villages: &[VillageCode { name: "库木克什拉克村", code: "001" }, VillageCode { name: "硝尔鲁克村", code: "002" }, VillageCode { name: "喀拉塔什村", code: "003" }, VillageCode { name: "塔勒库如克村", code: "004" }, VillageCode { name: "铁热克博斯坦村", code: "005" }, VillageCode { name: "巴扎村", code: "006" }, VillageCode { name: "加依托格拉克村", code: "007" }, VillageCode { name: "开依克艾日克村", code: "008" }, VillageCode { name: "色日克托格拉克村", code: "009" }, VillageCode { name: "尤喀克通鲁克村", code: "010" }, VillageCode { name: "通鲁克村民委员会", code: "011" }, VillageCode { name: "阿克提其村", code: "012" }, VillageCode { name: "欧吐拉通鲁克村", code: "013" }, VillageCode { name: "托万通鲁克村", code: "014" }, VillageCode { name: "苏努鲁克村", code: "015" }, VillageCode { name: "阿亚克苏努鲁克村", code: "016" }, VillageCode { name: "喀帕村", code: "017" }, VillageCode { name: "吐排艾日克村", code: "018" }, VillageCode { name: "都兰铁米村", code: "019" }, VillageCode { name: "库山博依村", code: "020" }, VillageCode { name: "琼库尔艾日克村", code: "021" }] },
-    TownCode { name: "巴仁乡", code: "004", villages: &[VillageCode { name: "阿热巴仁村", code: "001" }, VillageCode { name: "巴格艾日克村", code: "002" }, VillageCode { name: "尤喀克巴仁村", code: "003" }, VillageCode { name: "巴仁村", code: "004" }, VillageCode { name: "英艾日克村", code: "005" }, VillageCode { name: "托喀依村", code: "006" }, VillageCode { name: "阿热巴格村", code: "007" }, VillageCode { name: "喀勒塔兰干村", code: "008" }, VillageCode { name: "尤勒阿日希村", code: "009" }, VillageCode { name: "阿亚克纳丘克村", code: "010" }, VillageCode { name: "纳丘克村", code: "011" }, VillageCode { name: "尤库日纳丘克村", code: "012" }, VillageCode { name: "阿热克其其村", code: "013" }, VillageCode { name: "琼克其其村", code: "014" }, VillageCode { name: "欧吐拉克其其村", code: "015" }, VillageCode { name: "尤喀克克其其村", code: "016" }, VillageCode { name: "欧昌孜村", code: "017" }, VillageCode { name: "阿热硝村", code: "018" }, VillageCode { name: "艾格孜艾日克村", code: "019" }] },
-    TownCode { name: "洋大曼乡", code: "005", villages: &[VillageCode { name: "赛先拜巴扎村", code: "001" }, VillageCode { name: "阿克亚村", code: "002" }, VillageCode { name: "尤喀克色格孜鲁克村", code: "003" }, VillageCode { name: "贝迪哈纳村", code: "004" }, VillageCode { name: "喀塘勒克村", code: "005" }, VillageCode { name: "红星村", code: "006" }, VillageCode { name: "托万克亚依拉克村", code: "007" }, VillageCode { name: "墩村", code: "008" }, VillageCode { name: "尤喀克其盖图克村", code: "009" }, VillageCode { name: "尤喀克亚依拉克村", code: "010" }, VillageCode { name: "兰干村", code: "011" }, VillageCode { name: "乔克鲁克村", code: "012" }, VillageCode { name: "桑村", code: "013" }, VillageCode { name: "且克勒村", code: "014" }, VillageCode { name: "阿亚克其盖图克村", code: "015" }, VillageCode { name: "吐格曼贝希村", code: "016" }] },
-    TownCode { name: "亚曼牙乡", code: "006", villages: &[VillageCode { name: "色日克托格拉克村", code: "001" }, VillageCode { name: "阿亚克色格孜勒克村", code: "002" }, VillageCode { name: "协开尔巴格村", code: "003" }, VillageCode { name: "温塔什村", code: "004" }, VillageCode { name: "阿亚克盖米桑村", code: "005" }, VillageCode { name: "尤喀克盖米桑村", code: "006" }, VillageCode { name: "喀拉吉勒尕村", code: "007" }, VillageCode { name: "兰格尔村", code: "008" }, VillageCode { name: "皮拉勒村", code: "009" }, VillageCode { name: "哈达提克村", code: "010" }, VillageCode { name: "阿亚克科克其村", code: "011" }, VillageCode { name: "英麦拉村", code: "012" }, VillageCode { name: "尤喀克科克其村", code: "013" }, VillageCode { name: "克孜勒塔木村", code: "014" }, VillageCode { name: "巴依托喀依村", code: "015" }] },
-    TownCode { name: "巴合齐乡", code: "007", villages: &[VillageCode { name: "斯日勒玛村", code: "001" }, VillageCode { name: "尤喀克斯日勒玛村", code: "002" }, VillageCode { name: "吐格其村", code: "003" }, VillageCode { name: "罕库木村", code: "004" }, VillageCode { name: "巴合齐村", code: "005" }, VillageCode { name: "巴什布其村", code: "006" }, VillageCode { name: "亚尕其喀勒克村", code: "007" }, VillageCode { name: "吾斯塘博依村", code: "008" }, VillageCode { name: "托帕克拉村", code: "009" }, VillageCode { name: "阿亚克布其村", code: "010" }, VillageCode { name: "依格孜艾日克村", code: "011" }, VillageCode { name: "也扎巴格村", code: "012" }, VillageCode { name: "喀克其村", code: "013" }, VillageCode { name: "古丽巴格村", code: "014" }] },
-    TownCode { name: "塔孜洪乡", code: "008", villages: &[VillageCode { name: "索喀贝希村", code: "001" }, VillageCode { name: "库拉格拉村", code: "002" }, VillageCode { name: "托万库拉格拉村", code: "003" }, VillageCode { name: "尤喀克霍伊拉村", code: "004" }, VillageCode { name: "喀拉扎克村", code: "005" }, VillageCode { name: "巴格艾日克村", code: "006" }, VillageCode { name: "其曼巴格村", code: "007" }, VillageCode { name: "江铁木尔村", code: "008" }, VillageCode { name: "博斯坦村", code: "009" }, VillageCode { name: "铁热克博斯坦村", code: "010" }, VillageCode { name: "塔什其艾日克村", code: "011" }, VillageCode { name: "墩克什拉克村", code: "012" }, VillageCode { name: "司也克村", code: "013" }, VillageCode { name: "喀希库日村", code: "014" }, VillageCode { name: "依提帕克村", code: "015" }, VillageCode { name: "克孜力巴依热克村", code: "016" }, VillageCode { name: "吉格代艾日克村", code: "017" }, VillageCode { name: "喀孜玛村", code: "018" }, VillageCode { name: "台吐尔村", code: "019" }, VillageCode { name: "尤喀克其盖图克村", code: "020" }, VillageCode { name: "库木巴格村", code: "021" }, VillageCode { name: "苏盖提博斯坦村", code: "022" }] },
-    TownCode { name: "英尔力克乡", code: "009", villages: &[VillageCode { name: "伊勒克其霍伊拉村", code: "001" }, VillageCode { name: "艾其库其村", code: "002" }, VillageCode { name: "当尕勒其村", code: "003" }, VillageCode { name: "库木鲁克村", code: "004" }, VillageCode { name: "阿孜拉村", code: "005" }, VillageCode { name: "库尔干村", code: "006" }, VillageCode { name: "尤喀克英艾日克村", code: "007" }, VillageCode { name: "洛克托玛村", code: "008" }, VillageCode { name: "奥依喀普村", code: "009" }, VillageCode { name: "协海尔巴格村", code: "010" }, VillageCode { name: "古力巴格村", code: "011" }, VillageCode { name: "托万克霍伊拉村", code: "012" }, VillageCode { name: "欧格日艾日克村", code: "013" }, VillageCode { name: "巴格艾日克村", code: "014" }, VillageCode { name: "阿古提村", code: "015" }, VillageCode { name: "阿克霍伊拉村", code: "016" }, VillageCode { name: "托万英艾日克村", code: "017" }, VillageCode { name: "哈木拉村", code: "018" }, VillageCode { name: "尤喀克霍伊拉村", code: "019" }] },
-    TownCode { name: "库木西力克乡", code: "010", villages: &[VillageCode { name: "红旗村", code: "001" }, VillageCode { name: "再艾克日村", code: "002" }, VillageCode { name: "喀结克村", code: "003" }, VillageCode { name: "拍先拜巴扎村", code: "004" }, VillageCode { name: "喀拉墩村", code: "005" }, VillageCode { name: "贝希塔木村", code: "006" }, VillageCode { name: "阿亚克浪喀勒克村", code: "007" }, VillageCode { name: "尤喀克浪喀勒克村", code: "008" }, VillageCode { name: "吾其村", code: "009" }, VillageCode { name: "亚克什拉克村", code: "010" }, VillageCode { name: "拍昆霍伊拉村", code: "011" }, VillageCode { name: "托万昆村", code: "012" }, VillageCode { name: "麦盖提村", code: "013" }, VillageCode { name: "库尔干村", code: "014" }, VillageCode { name: "库木西力克村", code: "015" }, VillageCode { name: "克孜勒尤勒滚村", code: "016" }, VillageCode { name: "托万艾日克村", code: "017" }, VillageCode { name: "吉勒尕村", code: "018" }, VillageCode { name: "帕合特勒克村", code: "019" }, VillageCode { name: "明勒克村", code: "020" }, VillageCode { name: "莫达依村", code: "021" }] },
-    TownCode { name: "塔尕尔其乡", code: "011", villages: &[VillageCode { name: "喀勒特塔尕尔其村", code: "001" }, VillageCode { name: "阿克苏帕热奇村", code: "002" }, VillageCode { name: "台赛克村", code: "003" }, VillageCode { name: "喀尕霍伊拉村", code: "004" }, VillageCode { name: "恰克勒克村", code: "005" }, VillageCode { name: "托库孜欧塔克村", code: "006" }, VillageCode { name: "克孜勒苏帕热其村", code: "007" }, VillageCode { name: "塔尕尔其村", code: "008" }, VillageCode { name: "喀拉库木村", code: "009" }] },
-    TownCode { name: "艾尔木东乡", code: "012", villages: &[VillageCode { name: "阿亚克艾尔木东村村委会", code: "001" }, VillageCode { name: "尤喀克艾尔木东村", code: "002" }, VillageCode { name: "尤喀克英吾斯塘村", code: "003" }, VillageCode { name: "吾斯塘博依村", code: "004" }, VillageCode { name: "墩艾日克村", code: "005" }, VillageCode { name: "喀然丹村", code: "006" }, VillageCode { name: "索古鲁克村", code: "007" }, VillageCode { name: "博斯塘勒克村", code: "008" }, VillageCode { name: "努开村", code: "009" }, VillageCode { name: "阿亚克英吾斯塘村", code: "010" }, VillageCode { name: "柯尔克孜买里斯村", code: "011" }, VillageCode { name: "胡吉鲁克牧场生活区", code: "012" }] },
-    TownCode { name: "阿拉力乡", code: "013", villages: &[VillageCode { name: "马木克村", code: "001" }, VillageCode { name: "海尼且村", code: "002" }, VillageCode { name: "拉依旦艾日克村", code: "003" }, VillageCode { name: "阿恰勒村", code: "004" }, VillageCode { name: "库尔干村", code: "005" }, VillageCode { name: "英阿依玛克村", code: "006" }, VillageCode { name: "帕其乔喀村", code: "007" }, VillageCode { name: "塔尕尔其艾日克村", code: "008" }, VillageCode { name: "阔纳乔喀村", code: "009" }, VillageCode { name: "新时代村", code: "010" }] },
-    TownCode { name: "阿拉甫乡", code: "014", villages: &[VillageCode { name: "阿亚克吉勒尕村", code: "001" }, VillageCode { name: "尤库日吉勒尕村", code: "002" }, VillageCode { name: "依来克博依村", code: "003" }, VillageCode { name: "其兰巴格村", code: "004" }, VillageCode { name: "塔木古鲁克村", code: "005" }, VillageCode { name: "吾斯塘博依村", code: "006" }, VillageCode { name: "喀尔勒库木村", code: "007" }, VillageCode { name: "拜西托格拉克村", code: "008" }, VillageCode { name: "赞比力塔亚克村", code: "009" }, VillageCode { name: "巴格艾日克村", code: "010" }, VillageCode { name: "尤喀克库木巴格村", code: "011" }, VillageCode { name: "托木艾日克村", code: "012" }, VillageCode { name: "果吉力巴格村", code: "013" }, VillageCode { name: "阿亚克库木巴格村", code: "014" }] },
-    TownCode { name: "英阿瓦提乡", code: "015", villages: &[VillageCode { name: "英阿瓦提村", code: "001" }, VillageCode { name: "安居尔村", code: "002" }, VillageCode { name: "滚独鲁库木村", code: "003" }, VillageCode { name: "墩克什拉克村", code: "004" }, VillageCode { name: "喀帕村", code: "005" }, VillageCode { name: "喀什艾日克村", code: "006" }, VillageCode { name: "比纳木村", code: "007" }, VillageCode { name: "喀拉亚村", code: "008" }, VillageCode { name: "托万喀拉亚村", code: "009" }, VillageCode { name: "托普恰克村", code: "010" }] },
-    TownCode { name: "高新技术产业孵化园区管委会", code: "016", villages: &[VillageCode { name: "工业园区虚拟社区", code: "001" }] },
+    TownCode {
+        name: "疏勒镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "新市区社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "城关社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔纳巴扎社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "新世纪社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "纳丘克代尔瓦孜社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "克其其社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "昆仑社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "博望社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "时尚广场社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "香逸四季社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "天安名门社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "八盘水磨社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "城东新区社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "火车站社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "滨河路社区",
+                code: "015",
+            },
+            VillageCode {
+                name: "胜利南路社区",
+                code: "016",
+            },
+            VillageCode {
+                name: "鲁东社区",
+                code: "017",
+            },
+            VillageCode {
+                name: "幸福路社区",
+                code: "018",
+            },
+            VillageCode {
+                name: "阳光社区",
+                code: "019",
+            },
+            VillageCode {
+                name: "张骞社区",
+                code: "020",
+            },
+            VillageCode {
+                name: "平安社区",
+                code: "021",
+            },
+            VillageCode {
+                name: "八盘水磨村",
+                code: "022",
+            },
+            VillageCode {
+                name: "阔纳巴扎村",
+                code: "023",
+            },
+            VillageCode {
+                name: "纳丘克代尔瓦孜村",
+                code: "024",
+            },
+            VillageCode {
+                name: "坎土曼艾日克村",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "罕南力克镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "博热其村",
+                code: "001",
+            },
+            VillageCode {
+                name: "塔坎村",
+                code: "002",
+            },
+            VillageCode {
+                name: "明勒克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "明勒克霍伊拉村",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀木其瓦甫村",
+                code: "005",
+            },
+            VillageCode {
+                name: "诺古特村",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉普拉特村",
+                code: "007",
+            },
+            VillageCode {
+                name: "马加村",
+                code: "008",
+            },
+            VillageCode {
+                name: "博亚克其格勒村",
+                code: "009",
+            },
+            VillageCode {
+                name: "欧喀达村",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉奇喀拉村",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔瓦克其村",
+                code: "012",
+            },
+            VillageCode {
+                name: "皮拉勒村",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克帕依那普村",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿瓦提村",
+                code: "015",
+            },
+            VillageCode {
+                name: "琼帕依那普村",
+                code: "016",
+            },
+            VillageCode {
+                name: "卡赞其村",
+                code: "017",
+            },
+            VillageCode {
+                name: "协热克村",
+                code: "018",
+            },
+            VillageCode {
+                name: "马勒其村",
+                code: "019",
+            },
+            VillageCode {
+                name: "恰恰甫村",
+                code: "020",
+            },
+            VillageCode {
+                name: "英塔木村",
+                code: "021",
+            },
+            VillageCode {
+                name: "达也克村",
+                code: "022",
+            },
+            VillageCode {
+                name: "诺古特林场村",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "牙甫泉镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "库木克什拉克村",
+                code: "001",
+            },
+            VillageCode {
+                name: "硝尔鲁克村",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀拉塔什村",
+                code: "003",
+            },
+            VillageCode {
+                name: "塔勒库如克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "铁热克博斯坦村",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴扎村",
+                code: "006",
+            },
+            VillageCode {
+                name: "加依托格拉克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "开依克艾日克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "色日克托格拉克村",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克通鲁克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "通鲁克村民委员会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿克提其村",
+                code: "012",
+            },
+            VillageCode {
+                name: "欧吐拉通鲁克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "托万通鲁克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "苏努鲁克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "阿亚克苏努鲁克村",
+                code: "016",
+            },
+            VillageCode {
+                name: "喀帕村",
+                code: "017",
+            },
+            VillageCode {
+                name: "吐排艾日克村",
+                code: "018",
+            },
+            VillageCode {
+                name: "都兰铁米村",
+                code: "019",
+            },
+            VillageCode {
+                name: "库山博依村",
+                code: "020",
+            },
+            VillageCode {
+                name: "琼库尔艾日克村",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴仁乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "阿热巴仁村",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格艾日克村",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克巴仁村",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴仁村",
+                code: "004",
+            },
+            VillageCode {
+                name: "英艾日克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "托喀依村",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿热巴格村",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀勒塔兰干村",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤勒阿日希村",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚克纳丘克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "纳丘克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤库日纳丘克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿热克其其村",
+                code: "013",
+            },
+            VillageCode {
+                name: "琼克其其村",
+                code: "014",
+            },
+            VillageCode {
+                name: "欧吐拉克其其村",
+                code: "015",
+            },
+            VillageCode {
+                name: "尤喀克克其其村",
+                code: "016",
+            },
+            VillageCode {
+                name: "欧昌孜村",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿热硝村",
+                code: "018",
+            },
+            VillageCode {
+                name: "艾格孜艾日克村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "洋大曼乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "赛先拜巴扎村",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克亚村",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克色格孜鲁克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "贝迪哈纳村",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀塘勒克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "红星村",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万克亚依拉克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "墩村",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤喀克其盖图克村",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤喀克亚依拉克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰干村",
+                code: "011",
+            },
+            VillageCode {
+                name: "乔克鲁克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "桑村",
+                code: "013",
+            },
+            VillageCode {
+                name: "且克勒村",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿亚克其盖图克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "吐格曼贝希村",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚曼牙乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "色日克托格拉克村",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚克色格孜勒克村",
+                code: "002",
+            },
+            VillageCode {
+                name: "协开尔巴格村",
+                code: "003",
+            },
+            VillageCode {
+                name: "温塔什村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿亚克盖米桑村",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克盖米桑村",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉吉勒尕村",
+                code: "007",
+            },
+            VillageCode {
+                name: "兰格尔村",
+                code: "008",
+            },
+            VillageCode {
+                name: "皮拉勒村",
+                code: "009",
+            },
+            VillageCode {
+                name: "哈达提克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿亚克科克其村",
+                code: "011",
+            },
+            VillageCode {
+                name: "英麦拉村",
+                code: "012",
+            },
+            VillageCode {
+                name: "尤喀克科克其村",
+                code: "013",
+            },
+            VillageCode {
+                name: "克孜勒塔木村",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴依托喀依村",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴合齐乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "斯日勒玛村",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤喀克斯日勒玛村",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐格其村",
+                code: "003",
+            },
+            VillageCode {
+                name: "罕库木村",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴合齐村",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴什布其村",
+                code: "006",
+            },
+            VillageCode {
+                name: "亚尕其喀勒克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "吾斯塘博依村",
+                code: "008",
+            },
+            VillageCode {
+                name: "托帕克拉村",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚克布其村",
+                code: "010",
+            },
+            VillageCode {
+                name: "依格孜艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "也扎巴格村",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀克其村",
+                code: "013",
+            },
+            VillageCode {
+                name: "古丽巴格村",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔孜洪乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "索喀贝希村",
+                code: "001",
+            },
+            VillageCode {
+                name: "库拉格拉村",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万库拉格拉村",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤喀克霍伊拉村",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉扎克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格艾日克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "其曼巴格村",
+                code: "007",
+            },
+            VillageCode {
+                name: "江铁木尔村",
+                code: "008",
+            },
+            VillageCode {
+                name: "博斯坦村",
+                code: "009",
+            },
+            VillageCode {
+                name: "铁热克博斯坦村",
+                code: "010",
+            },
+            VillageCode {
+                name: "塔什其艾日克村",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩克什拉克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "司也克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀希库日村",
+                code: "014",
+            },
+            VillageCode {
+                name: "依提帕克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "克孜力巴依热克村",
+                code: "016",
+            },
+            VillageCode {
+                name: "吉格代艾日克村",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀孜玛村",
+                code: "018",
+            },
+            VillageCode {
+                name: "台吐尔村",
+                code: "019",
+            },
+            VillageCode {
+                name: "尤喀克其盖图克村",
+                code: "020",
+            },
+            VillageCode {
+                name: "库木巴格村",
+                code: "021",
+            },
+            VillageCode {
+                name: "苏盖提博斯坦村",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "英尔力克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "伊勒克其霍伊拉村",
+                code: "001",
+            },
+            VillageCode {
+                name: "艾其库其村",
+                code: "002",
+            },
+            VillageCode {
+                name: "当尕勒其村",
+                code: "003",
+            },
+            VillageCode {
+                name: "库木鲁克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿孜拉村",
+                code: "005",
+            },
+            VillageCode {
+                name: "库尔干村",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤喀克英艾日克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "洛克托玛村",
+                code: "008",
+            },
+            VillageCode {
+                name: "奥依喀普村",
+                code: "009",
+            },
+            VillageCode {
+                name: "协海尔巴格村",
+                code: "010",
+            },
+            VillageCode {
+                name: "古力巴格村",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万克霍伊拉村",
+                code: "012",
+            },
+            VillageCode {
+                name: "欧格日艾日克村",
+                code: "013",
+            },
+            VillageCode {
+                name: "巴格艾日克村",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿古提村",
+                code: "015",
+            },
+            VillageCode {
+                name: "阿克霍伊拉村",
+                code: "016",
+            },
+            VillageCode {
+                name: "托万英艾日克村",
+                code: "017",
+            },
+            VillageCode {
+                name: "哈木拉村",
+                code: "018",
+            },
+            VillageCode {
+                name: "尤喀克霍伊拉村",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "库木西力克乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "红旗村",
+                code: "001",
+            },
+            VillageCode {
+                name: "再艾克日村",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀结克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "拍先拜巴扎村",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉墩村",
+                code: "005",
+            },
+            VillageCode {
+                name: "贝希塔木村",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿亚克浪喀勒克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "尤喀克浪喀勒克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "吾其村",
+                code: "009",
+            },
+            VillageCode {
+                name: "亚克什拉克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "拍昆霍伊拉村",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万昆村",
+                code: "012",
+            },
+            VillageCode {
+                name: "麦盖提村",
+                code: "013",
+            },
+            VillageCode {
+                name: "库尔干村",
+                code: "014",
+            },
+            VillageCode {
+                name: "库木西力克村",
+                code: "015",
+            },
+            VillageCode {
+                name: "克孜勒尤勒滚村",
+                code: "016",
+            },
+            VillageCode {
+                name: "托万艾日克村",
+                code: "017",
+            },
+            VillageCode {
+                name: "吉勒尕村",
+                code: "018",
+            },
+            VillageCode {
+                name: "帕合特勒克村",
+                code: "019",
+            },
+            VillageCode {
+                name: "明勒克村",
+                code: "020",
+            },
+            VillageCode {
+                name: "莫达依村",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔尕尔其乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "喀勒特塔尕尔其村",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克苏帕热奇村",
+                code: "002",
+            },
+            VillageCode {
+                name: "台赛克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀尕霍伊拉村",
+                code: "004",
+            },
+            VillageCode {
+                name: "恰克勒克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "托库孜欧塔克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "克孜勒苏帕热其村",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔尕尔其村",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀拉库木村",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "艾尔木东乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "阿亚克艾尔木东村村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤喀克艾尔木东村",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克英吾斯塘村",
+                code: "003",
+            },
+            VillageCode {
+                name: "吾斯塘博依村",
+                code: "004",
+            },
+            VillageCode {
+                name: "墩艾日克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀然丹村",
+                code: "006",
+            },
+            VillageCode {
+                name: "索古鲁克村",
+                code: "007",
+            },
+            VillageCode {
+                name: "博斯塘勒克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "努开村",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚克英吾斯塘村",
+                code: "010",
+            },
+            VillageCode {
+                name: "柯尔克孜买里斯村",
+                code: "011",
+            },
+            VillageCode {
+                name: "胡吉鲁克牧场生活区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿拉力乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "马木克村",
+                code: "001",
+            },
+            VillageCode {
+                name: "海尼且村",
+                code: "002",
+            },
+            VillageCode {
+                name: "拉依旦艾日克村",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿恰勒村",
+                code: "004",
+            },
+            VillageCode {
+                name: "库尔干村",
+                code: "005",
+            },
+            VillageCode {
+                name: "英阿依玛克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "帕其乔喀村",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔尕尔其艾日克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔纳乔喀村",
+                code: "009",
+            },
+            VillageCode {
+                name: "新时代村",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿拉甫乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "阿亚克吉勒尕村",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤库日吉勒尕村",
+                code: "002",
+            },
+            VillageCode {
+                name: "依来克博依村",
+                code: "003",
+            },
+            VillageCode {
+                name: "其兰巴格村",
+                code: "004",
+            },
+            VillageCode {
+                name: "塔木古鲁克村",
+                code: "005",
+            },
+            VillageCode {
+                name: "吾斯塘博依村",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀尔勒库木村",
+                code: "007",
+            },
+            VillageCode {
+                name: "拜西托格拉克村",
+                code: "008",
+            },
+            VillageCode {
+                name: "赞比力塔亚克村",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴格艾日克村",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤喀克库木巴格村",
+                code: "011",
+            },
+            VillageCode {
+                name: "托木艾日克村",
+                code: "012",
+            },
+            VillageCode {
+                name: "果吉力巴格村",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚克库木巴格村",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "英阿瓦提乡",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "英阿瓦提村",
+                code: "001",
+            },
+            VillageCode {
+                name: "安居尔村",
+                code: "002",
+            },
+            VillageCode {
+                name: "滚独鲁库木村",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩克什拉克村",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀帕村",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀什艾日克村",
+                code: "006",
+            },
+            VillageCode {
+                name: "比纳木村",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉亚村",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万喀拉亚村",
+                code: "009",
+            },
+            VillageCode {
+                name: "托普恰克村",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "高新技术产业孵化园区管委会",
+        code: "016",
+        villages: &[VillageCode {
+            name: "工业园区虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_017: [TownCode; 15] = [
-    TownCode { name: "英吉沙镇", code: "001", villages: &[VillageCode { name: "其兰巴格社区", code: "001" }, VillageCode { name: "英巴格社区", code: "002" }, VillageCode { name: "吾尔也提社区", code: "003" }, VillageCode { name: "幸福社区", code: "004" }, VillageCode { name: "英协海尔社区", code: "005" }, VillageCode { name: "友谊社区", code: "006" }, VillageCode { name: "阿克巴格社区", code: "007" }, VillageCode { name: "南山社区", code: "008" }, VillageCode { name: "阿依丁库勒社区", code: "009" }, VillageCode { name: "新城社区", code: "010" }, VillageCode { name: "祥瑞社区", code: "011" }, VillageCode { name: "园区社区", code: "012" }, VillageCode { name: "绿水湾社区", code: "013" }, VillageCode { name: "田园社区", code: "014" }, VillageCode { name: "团结社区", code: "015" }, VillageCode { name: "朝阳社区", code: "016" }, VillageCode { name: "创业社区", code: "017" }, VillageCode { name: "和谐社区", code: "018" }, VillageCode { name: "古城社区", code: "019" }, VillageCode { name: "恰喀村委会", code: "020" }, VillageCode { name: "其兰村委会", code: "021" }, VillageCode { name: "巴扎博衣村委会", code: "022" }, VillageCode { name: "英巴扎村委会", code: "023" }, VillageCode { name: "古丽巴格村委会", code: "024" }, VillageCode { name: "西湖村委会", code: "025" }, VillageCode { name: "喀拉库孜村委会", code: "026" }] },
-    TownCode { name: "乌恰镇", code: "002", villages: &[VillageCode { name: "艾提木恰合热村委会", code: "001" }, VillageCode { name: "巴格艾日克村委会", code: "002" }, VillageCode { name: "其格勒克艾日克村委会", code: "003" }, VillageCode { name: "博斯唐村委会", code: "004" }, VillageCode { name: "依买里村委会", code: "005" }, VillageCode { name: "坡喀艾日克村委会", code: "006" }, VillageCode { name: "阿克巴格村委会", code: "007" }, VillageCode { name: "巴依买里斯村委会", code: "008" }, VillageCode { name: "尤喀克台赛克村委会", code: "009" }, VillageCode { name: "阿亚克台赛克村委会", code: "010" }, VillageCode { name: "库其喀其巴格村委会", code: "011" }, VillageCode { name: "乌恰艾日克村委会", code: "012" }, VillageCode { name: "乌恰村委会", code: "013" }, VillageCode { name: "包孜洪巴希买里村委会", code: "014" }, VillageCode { name: "包孜洪村委会", code: "015" }, VillageCode { name: "吾台希村委会", code: "016" }, VillageCode { name: "阔纳萨拉甫村委会", code: "017" }, VillageCode { name: "英萨拉甫村委会", code: "018" }, VillageCode { name: "新光村委会", code: "019" }, VillageCode { name: "尤喀克亚巴格村委会", code: "020" }, VillageCode { name: "色日克托格拉克村委会", code: "021" }, VillageCode { name: "托万亚巴格村委会", code: "022" }, VillageCode { name: "喀帕克铁热克村委会", code: "023" }, VillageCode { name: "亚尔霍依拉村委会", code: "024" }, VillageCode { name: "古丽力克霍依拉村委会", code: "025" }, VillageCode { name: "阿亚克包孜洪村委会", code: "026" }, VillageCode { name: "尤喀克包孜洪村委会", code: "027" }, VillageCode { name: "新包孜洪村委会", code: "028" }, VillageCode { name: "团结新村委会", code: "029" }] },
-    TownCode { name: "芒辛镇", code: "003", villages: &[VillageCode { name: "古勒巴格村委会", code: "001" }, VillageCode { name: "喀拉巴格村委会", code: "002" }, VillageCode { name: "托万阿热买里村委会", code: "003" }, VillageCode { name: "阿克库什村委会", code: "004" }, VillageCode { name: "托万艾日克村委会", code: "005" }, VillageCode { name: "尤喀克艾日克村委会", code: "006" }, VillageCode { name: "阿热买里村委会", code: "007" }, VillageCode { name: "恰克日库依村委会", code: "008" }, VillageCode { name: "喀拉巴什兰干村委会", code: "009" }, VillageCode { name: "喀拉巴什粮台村委会", code: "010" }, VillageCode { name: "亚吐格曼村委会", code: "011" }, VillageCode { name: "尤库日阔尕什村委会", code: "012" }, VillageCode { name: "托万阔尕什村委会", code: "013" }, VillageCode { name: "喀拉巴什村委会", code: "014" }, VillageCode { name: "巴哈尔村委会", code: "015" }, VillageCode { name: "喀帕克铁热克村委会", code: "016" }, VillageCode { name: "阿热亚贝西村委会", code: "017" }] },
-    TownCode { name: "萨罕镇", code: "004", villages: &[VillageCode { name: "尤库日塔格瓦孜村委会", code: "001" }, VillageCode { name: "托万塔格瓦孜村委会", code: "002" }, VillageCode { name: "尤库日兰干村委会", code: "003" }, VillageCode { name: "托万兰干村委会", code: "004" }, VillageCode { name: "吐格曼艾日克村委会", code: "005" }, VillageCode { name: "依坎库勒村委会", code: "006" }, VillageCode { name: "硝乎鲁克村委会", code: "007" }, VillageCode { name: "诺能阿依格村委会", code: "008" }, VillageCode { name: "阔坦村委会", code: "009" }, VillageCode { name: "阿恰勒村委会", code: "010" }, VillageCode { name: "赛喀甫村委会", code: "011" }, VillageCode { name: "喀合夏勒阔洪村委会", code: "012" }, VillageCode { name: "依提帕克村委会", code: "013" }, VillageCode { name: "铁热克阿勒迪村委会", code: "014" }, VillageCode { name: "巴扎贝希村委会", code: "015" }, VillageCode { name: "古丽巴格村委会", code: "016" }, VillageCode { name: "阿克巴格村委会", code: "017" }, VillageCode { name: "托格日艾日克村委会", code: "018" }, VillageCode { name: "坎特艾日克村委会", code: "019" }, VillageCode { name: "夏甫阔罕村委会", code: "020" }, VillageCode { name: "阿热兰干村委会", code: "021" }] },
-    TownCode { name: "城关乡", code: "005", villages: &[VillageCode { name: "杭格特勒克村委会", code: "001" }, VillageCode { name: "喀赞其艾日克村委会", code: "002" }, VillageCode { name: "兰干村委会", code: "003" }, VillageCode { name: "帕万艾日克村委会", code: "004" }, VillageCode { name: "矿却勒村委会", code: "005" }, VillageCode { name: "铁日克其克村委会", code: "006" }, VillageCode { name: "喀什艾日克村委会", code: "007" }] },
-    TownCode { name: "乔勒潘乡", code: "006", villages: &[VillageCode { name: "艾温村委会", code: "001" }, VillageCode { name: "尤喀克艾日克村委会", code: "002" }, VillageCode { name: "托万艾日克村委会", code: "003" }, VillageCode { name: "巴依艾日克村委会", code: "004" }, VillageCode { name: "尤喀克吾斯塘村委会", code: "005" }, VillageCode { name: "阔曲买艾日克村委会", code: "006" }, VillageCode { name: "阔什买霍伊拉村委会", code: "007" }, VillageCode { name: "萨伊拉克兰干村委会", code: "008" }, VillageCode { name: "英霍伊拉村委会", code: "009" }, VillageCode { name: "哈萨克拉艾日克村委会", code: "010" }, VillageCode { name: "巴格艾日克村委会", code: "011" }, VillageCode { name: "英艾日克村委会", code: "012" }, VillageCode { name: "江尕勒艾日克村委会", code: "013" }] },
-    TownCode { name: "龙甫乡", code: "007", villages: &[VillageCode { name: "托喀依村委会", code: "001" }, VillageCode { name: "龙甫村委会", code: "002" }, VillageCode { name: "托格拉克巴格村委会", code: "003" }, VillageCode { name: "铁提尔巴格村委会", code: "004" }, VillageCode { name: "莫尕勒艾日克村委会", code: "005" }, VillageCode { name: "艾日克拉村委会", code: "006" }, VillageCode { name: "阿图什巴格村委会", code: "007" }, VillageCode { name: "夏克巴格村委会", code: "008" }] },
-    TownCode { name: "色提力乡", code: "008", villages: &[VillageCode { name: "江尕勒霍伊拉村委会", code: "001" }, VillageCode { name: "莫木鲁克吾斯塘博依村委会", code: "002" }, VillageCode { name: "喀力加克村委会", code: "003" }, VillageCode { name: "帕其英也尔村委会", code: "004" }, VillageCode { name: "诺贝希比纳木村委会", code: "005" }, VillageCode { name: "阿依库勒村委会", code: "006" }, VillageCode { name: "吾斯塘博依村委会", code: "007" }, VillageCode { name: "坎特艾日克村委会", code: "008" }, VillageCode { name: "夏库勒都玛村委会", code: "009" }, VillageCode { name: "托万霍伊拉村委会", code: "010" }] },
-    TownCode { name: "英也尔乡", code: "009", villages: &[VillageCode { name: "坎居特村委会", code: "001" }, VillageCode { name: "幸福村委会", code: "002" }, VillageCode { name: "坎特艾日克村委会", code: "003" }, VillageCode { name: "和谐村委会", code: "004" }, VillageCode { name: "琼艾日克村委会", code: "005" }, VillageCode { name: "莫木鲁克阔坦村委会", code: "006" }, VillageCode { name: "塔勒克村委会", code: "007" }, VillageCode { name: "友谊村委会", code: "008" }, VillageCode { name: "墩克什拉克村委会", code: "009" }, VillageCode { name: "荒地村委会", code: "010" }] },
-    TownCode { name: "克孜勒乡", code: "010", villages: &[VillageCode { name: "团结村委会", code: "001" }, VillageCode { name: "塔米村委会", code: "002" }, VillageCode { name: "库都克村委会", code: "003" }, VillageCode { name: "兰干艾日克村委会", code: "004" }, VillageCode { name: "幸福村委会", code: "005" }, VillageCode { name: "平安村委会", code: "006" }, VillageCode { name: "吉勒果依村委会", code: "007" }, VillageCode { name: "库勒艾日克村委会", code: "008" }, VillageCode { name: "和谐村委会", code: "009" }, VillageCode { name: "喀拉萨依村委会", code: "010" }, VillageCode { name: "感恩村委会", code: "011" }, VillageCode { name: "阿热库勒村委会", code: "012" }, VillageCode { name: "库木艾吉克村委会", code: "013" }, VillageCode { name: "托奴其村委会", code: "014" }, VillageCode { name: "希望村委会", code: "015" }, VillageCode { name: "光明村委会", code: "016" }, VillageCode { name: "库木艾日克村委会", code: "017" }, VillageCode { name: "前进村委会", code: "018" }] },
-    TownCode { name: "托普鲁克乡", code: "011", villages: &[VillageCode { name: "克什拉克村委会", code: "001" }, VillageCode { name: "托普鲁克村委会", code: "002" }, VillageCode { name: "克力坪兰干村委会", code: "003" }, VillageCode { name: "乌堂村委会", code: "004" }, VillageCode { name: "克里皮群村委会", code: "005" }, VillageCode { name: "努尔鲁克村委会", code: "006" }, VillageCode { name: "穆孜鲁克村委会", code: "007" }, VillageCode { name: "托万霍依拉村委会", code: "008" }, VillageCode { name: "英阿亚提村委会", code: "009" }] },
-    TownCode { name: "苏盖提乡", code: "012", villages: &[VillageCode { name: "尤喀克铁提尔村委会", code: "001" }, VillageCode { name: "英也尔村委会", code: "002" }, VillageCode { name: "达莫顺村委会", code: "003" }, VillageCode { name: "拉依布拉克村委会", code: "004" }, VillageCode { name: "皮力孜村委会", code: "005" }, VillageCode { name: "阿其马艾日克村委会", code: "006" }, VillageCode { name: "比纳木村委会", code: "007" }, VillageCode { name: "尤喀克坎特艾日克村委会", code: "008" }, VillageCode { name: "坎特艾日克村委会", code: "009" }, VillageCode { name: "色日格拉村委会", code: "010" }, VillageCode { name: "吐尔库依村委会", code: "011" }, VillageCode { name: "提干村委会", code: "012" }, VillageCode { name: "团结村委会", code: "013" }, VillageCode { name: "托万铁提尔村委会", code: "014" }, VillageCode { name: "尤喀克阿其马艾日克村委会", code: "015" }, VillageCode { name: "托万提干村委会", code: "016" }, VillageCode { name: "英巴格村委会", code: "017" }] },
-    TownCode { name: "艾古斯乡", code: "013", villages: &[VillageCode { name: "康帕一村委会", code: "001" }, VillageCode { name: "康帕二村委会", code: "002" }, VillageCode { name: "先米来村委会", code: "003" }, VillageCode { name: "艾古斯村委会", code: "004" }, VillageCode { name: "托格日艾日克村委会", code: "005" }, VillageCode { name: "玉瑞克且克买里斯村委会", code: "006" }, VillageCode { name: "霍依拉买里斯村委会", code: "007" }, VillageCode { name: "英其开艾日克村委会", code: "008" }] },
-    TownCode { name: "依格孜也尔乡", code: "014", villages: &[VillageCode { name: "尤喀克霍伊拉村委会", code: "001" }, VillageCode { name: "托万霍依拉村委会", code: "002" }, VillageCode { name: "塔格艾日克村委会", code: "003" }, VillageCode { name: "艾日克博依村委会", code: "004" }] },
-    TownCode { name: "英吉沙工业园区", code: "015", villages: &[VillageCode { name: "工业园区虚拟社区", code: "001" }] },
+    TownCode {
+        name: "英吉沙镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "其兰巴格社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "英巴格社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "吾尔也提社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "英协海尔社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "友谊社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿克巴格社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "南山社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿依丁库勒社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "新城社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "祥瑞社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "园区社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "绿水湾社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "田园社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "015",
+            },
+            VillageCode {
+                name: "朝阳社区",
+                code: "016",
+            },
+            VillageCode {
+                name: "创业社区",
+                code: "017",
+            },
+            VillageCode {
+                name: "和谐社区",
+                code: "018",
+            },
+            VillageCode {
+                name: "古城社区",
+                code: "019",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "其兰村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "巴扎博衣村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "古丽巴格村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "西湖村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "喀拉库孜村委会",
+                code: "026",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌恰镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "艾提木恰合热村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "其格勒克艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "博斯唐村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "依买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "坡喀艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿克巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴依买里斯村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤喀克台赛克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚克台赛克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库其喀其巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "乌恰艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乌恰村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "包孜洪巴希买里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "包孜洪村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吾台希村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阔纳萨拉甫村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英萨拉甫村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "新光村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "尤喀克亚巴格村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "色日克托格拉克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "托万亚巴格村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "喀帕克铁热克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "亚尔霍依拉村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "古丽力克霍依拉村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "阿亚克包孜洪村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "尤喀克包孜洪村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "新包孜洪村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "团结新村委会",
+                code: "029",
+            },
+        ],
+    },
+    TownCode {
+        name: "芒辛镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀拉巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万阿热买里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿克库什村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤喀克艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "恰克日库依村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀拉巴什兰干村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀拉巴什粮台村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "亚吐格曼村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤库日阔尕什村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托万阔尕什村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀拉巴什村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴哈尔村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "喀帕克铁热克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿热亚贝西村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "萨罕镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "尤库日塔格瓦孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万塔格瓦孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤库日兰干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万兰干村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吐格曼艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "依坎库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "硝乎鲁克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "诺能阿依格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔坦村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "赛喀甫村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "喀合夏勒阔洪村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "依提帕克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "铁热克阿勒迪村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴扎贝希村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "古丽巴格村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿克巴格村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "托格日艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "坎特艾日克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "夏甫阔罕村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿热兰干村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "城关乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "杭格特勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀赞其艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "帕万艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "矿却勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "铁日克其克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "乔勒潘乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "艾温村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤喀克艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴依艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤喀克吾斯塘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔曲买艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔什买霍伊拉村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "萨伊拉克兰干村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英霍伊拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "哈萨克拉艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "江尕勒艾日克村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙甫乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "托喀依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "龙甫村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托格拉克巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁提尔巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "莫尕勒艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "艾日克拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿图什巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "夏克巴格村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "色提力乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "江尕勒霍伊拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "莫木鲁克吾斯塘博依村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀力加克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "帕其英也尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "诺贝希比纳木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿依库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "坎特艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "夏库勒都玛村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万霍伊拉村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "英也尔乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "坎居特村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "坎特艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "琼艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "莫木鲁克阔坦村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔勒克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "友谊村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩克什拉克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "荒地村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "团结村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "塔米村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库都克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "兰干艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "平安村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "吉勒果依村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库勒艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀拉萨依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "感恩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿热库勒村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木艾吉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托奴其村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "希望村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "托普鲁克乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "克什拉克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托普鲁克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "克力坪兰干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "克里皮群村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "努尔鲁克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "穆孜鲁克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万霍依拉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英阿亚提村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "苏盖提乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "尤喀克铁提尔村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英也尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "达莫顺村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "拉依布拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "皮力孜村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿其马艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "比纳木村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "尤喀克坎特艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "坎特艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "色日格拉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "吐尔库依村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "提干村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托万铁提尔村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尤喀克阿其马艾日克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托万提干村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "艾古斯乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "康帕一村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "康帕二村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "先米来村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾古斯村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托格日艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玉瑞克且克买里斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "霍依拉买里斯村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英其开艾日克村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "依格孜也尔乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "尤喀克霍伊拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万霍依拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔格艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾日克博依村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "英吉沙工业园区",
+        code: "015",
+        villages: &[VillageCode {
+            name: "工业园区虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_018: [TownCode; 15] = [
-    TownCode { name: "泽普镇", code: "001", villages: &[VillageCode { name: "库勒贝希社区", code: "001" }, VillageCode { name: "阿瓦提社区", code: "002" }, VillageCode { name: "喀拉萨社区", code: "003" }, VillageCode { name: "巴格其社区", code: "004" }, VillageCode { name: "赫尼社区", code: "005" }, VillageCode { name: "阿其克亚社区", code: "006" }, VillageCode { name: "梧桐公园社区", code: "007" }, VillageCode { name: "和谐社区", code: "008" }, VillageCode { name: "库其社区", code: "009" }, VillageCode { name: "阔什吉格代社区", code: "010" }, VillageCode { name: "幸福社区", code: "011" }, VillageCode { name: "百花园社区", code: "012" }, VillageCode { name: "明园社区", code: "013" }, VillageCode { name: "祥和社区", code: "014" }] },
-    TownCode { name: "奎依巴格镇", code: "002", villages: &[VillageCode { name: "吾斯塘博依社区", code: "001" }, VillageCode { name: "新城社区", code: "002" }, VillageCode { name: "建材园社区", code: "003" }, VillageCode { name: "新园社区", code: "004" }, VillageCode { name: "斯日木村委会", code: "005" }, VillageCode { name: "墩买里村委会", code: "006" }, VillageCode { name: "萨依吐格曼村委会", code: "007" }] },
-    TownCode { name: "波斯喀木乡", code: "003", villages: &[VillageCode { name: "喀拉萨村委会", code: "001" }, VillageCode { name: "巴格其村委会", code: "002" }, VillageCode { name: "阔什吉格代村委会", code: "003" }, VillageCode { name: "库其村委会", code: "004" }, VillageCode { name: "喀拉巴格村委会", code: "005" }, VillageCode { name: "玉吉买艾日克村委会", code: "006" }, VillageCode { name: "尤库日喀勒格热克村委会", code: "007" }, VillageCode { name: "阿热恰喀村委会", code: "008" }, VillageCode { name: "托万喀勒格热克村委会", code: "009" }, VillageCode { name: "代尔亚博依村委会", code: "010" }, VillageCode { name: "阔恰铁热克村委会", code: "011" }, VillageCode { name: "苏盖特艾日克村委会", code: "012" }, VillageCode { name: "幸福村委会", code: "013" }, VillageCode { name: "梧桐村委会", code: "014" }] },
-    TownCode { name: "泽普县依玛乡", code: "004", villages: &[VillageCode { name: "巴格艾日克村委会", code: "001" }, VillageCode { name: "博斯坦村委会", code: "002" }, VillageCode { name: "米尔皮格勒村委会", code: "003" }, VillageCode { name: "沃力恰喀村委会", code: "004" }, VillageCode { name: "阿勒吞其村委会", code: "005" }, VillageCode { name: "色日克乌依村委会", code: "006" }, VillageCode { name: "铁提尔巴格村委会", code: "007" }, VillageCode { name: "巴达木艾日克村委会", code: "008" }, VillageCode { name: "库木艾日克村委会", code: "009" }, VillageCode { name: "阿热艾日村委会", code: "010" }, VillageCode { name: "依玛村委会", code: "011" }, VillageCode { name: "红星村委会", code: "012" }, VillageCode { name: "奥依村委会", code: "013" }, VillageCode { name: "托格拉克村委会", code: "014" }, VillageCode { name: "恰喀村委会", code: "015" }, VillageCode { name: "托万喀拉尤勒滚村委会", code: "016" }, VillageCode { name: "托万古勒巴格村委会", code: "017" }, VillageCode { name: "巴格湾村委会", code: "018" }] },
-    TownCode { name: "古勒巴格乡", code: "005", villages: &[VillageCode { name: "阿其玛村委会", code: "001" }, VillageCode { name: "胜利村委会", code: "002" }, VillageCode { name: "阿热买里村委会", code: "003" }, VillageCode { name: "艾格日铁热克村委会", code: "004" }, VillageCode { name: "尤库日喀拉尤勒滚村委会", code: "005" }, VillageCode { name: "上阿热硝村委会", code: "006" }, VillageCode { name: "阿热硝巴扎村委会", code: "007" }, VillageCode { name: "中阿热硝村委会", code: "008" }, VillageCode { name: "下阿热硝村委会", code: "009" }, VillageCode { name: "阿尔帕墩村委会", code: "010" }, VillageCode { name: "上古勒巴格村委会", code: "011" }, VillageCode { name: "吐格曼贝希村委会", code: "012" }, VillageCode { name: "阿瓦提村委会", code: "013" }, VillageCode { name: "科克墩村委会", code: "014" }] },
-    TownCode { name: "赛力乡", code: "006", villages: &[VillageCode { name: "蒙鲁克村委会", code: "001" }, VillageCode { name: "阔孜玛勒村委会", code: "002" }, VillageCode { name: "希塔其村委会", code: "003" }, VillageCode { name: "塔勒巴格村委会", code: "004" }, VillageCode { name: "古勒巴格村委会", code: "005" }, VillageCode { name: "英巴格村委会", code: "006" }, VillageCode { name: "赛力村委会", code: "007" }, VillageCode { name: "恰木古其村委会", code: "008" }, VillageCode { name: "依玛村委会", code: "009" }, VillageCode { name: "色日克库拉克村委会", code: "010" }, VillageCode { name: "荒地村委会", code: "011" }, VillageCode { name: "乌鲁克艾日克村委会", code: "012" }, VillageCode { name: "巴扎村委会", code: "013" }, VillageCode { name: "赛力新村委会", code: "014" }] },
-    TownCode { name: "依肯苏乡", code: "007", villages: &[VillageCode { name: "亚尔布拉克村委会", code: "001" }, VillageCode { name: "喀拉墩村委会", code: "002" }, VillageCode { name: "托格拉克勒克村委会", code: "003" }, VillageCode { name: "英巴扎村委会", code: "004" }, VillageCode { name: "阔纳巴扎村委会", code: "005" }, VillageCode { name: "巴亚巴格村委会", code: "006" }, VillageCode { name: "塔尕尔其村委会", code: "007" }, VillageCode { name: "斯也克村委会", code: "008" }, VillageCode { name: "赫尼村委会", code: "009" }, VillageCode { name: "加依托格拉克村委会", code: "010" }, VillageCode { name: "兰干村委会", code: "011" }, VillageCode { name: "铁提尔村委会", code: "012" }, VillageCode { name: "托皮恰村委会", code: "013" }, VillageCode { name: "阿拉格尔荒地村委会", code: "014" }, VillageCode { name: "托万恰喀村委会", code: "015" }, VillageCode { name: "阿拉格尔村委会", code: "016" }, VillageCode { name: "库木萨村委会", code: "017" }, VillageCode { name: "硝尔吐格曼村委会", code: "018" }] },
-    TownCode { name: "图呼其乡", code: "008", villages: &[VillageCode { name: "墩恰喀村委会", code: "001" }, VillageCode { name: "荒地村委会", code: "002" }, VillageCode { name: "库木墩村委会", code: "003" }, VillageCode { name: "阿克塔木加依村委会", code: "004" }, VillageCode { name: "奥库尔塔木村委会", code: "005" }, VillageCode { name: "拉依丹村委会", code: "006" }, VillageCode { name: "桑村委会", code: "007" }, VillageCode { name: "巴什阿其玛村委会", code: "008" }, VillageCode { name: "阿亚格阿其玛村委会", code: "009" }, VillageCode { name: "塔格墩村委会", code: "010" }, VillageCode { name: "科克其艾日克村委会", code: "011" }, VillageCode { name: "塔合塔科瑞克村委会", code: "012" }, VillageCode { name: "古勒艾日克村委会", code: "013" }, VillageCode { name: "博热哈纳村委会", code: "014" }] },
-    TownCode { name: "奎依巴格乡", code: "009", villages: &[VillageCode { name: "玉吉米勒克村委会", code: "001" }, VillageCode { name: "萨依兰干村委会", code: "002" }, VillageCode { name: "吉格代加依村委会", code: "003" }, VillageCode { name: "亚勒古孜巴格村委会", code: "004" }, VillageCode { name: "铁提尔村委会", code: "005" }, VillageCode { name: "奎依巴格村委会", code: "006" }, VillageCode { name: "萨依艾日克村委会", code: "007" }, VillageCode { name: "阿拉恰其巴格村委会", code: "008" }, VillageCode { name: "硝尔村委会", code: "009" }, VillageCode { name: "皮亚村委会", code: "010" }, VillageCode { name: "墩艾日克村委会", code: "011" }, VillageCode { name: "光明村委会", code: "012" }, VillageCode { name: "奥依艾日克村委会", code: "013" }] },
-    TownCode { name: "阿克塔木乡", code: "010", villages: &[VillageCode { name: "巴格阿瓦提村", code: "001" }, VillageCode { name: "阔依其艾日克村", code: "002" }, VillageCode { name: "阔勒图克艾日克村委会", code: "003" }, VillageCode { name: "阿其克亚村委会", code: "004" }, VillageCode { name: "阿克塔木村委会", code: "005" }, VillageCode { name: "巴什托扎克其村委会", code: "006" }, VillageCode { name: "奥吐拉托扎克其村委会", code: "007" }, VillageCode { name: "阿亚格托扎克其村委会", code: "008" }, VillageCode { name: "恰喀村委会", code: "009" }] },
-    TownCode { name: "阿依库勒乡", code: "011", villages: &[VillageCode { name: "团结村委会", code: "001" }, VillageCode { name: "皮羌其村委会", code: "002" }, VillageCode { name: "小康村委会", code: "003" }, VillageCode { name: "帕合特其村委会", code: "004" }, VillageCode { name: "泽勒普善村委会", code: "005" }, VillageCode { name: "巴什吾斯塘村委会", code: "006" }, VillageCode { name: "新风村委会", code: "007" }, VillageCode { name: "塔勒克其村委会", code: "008" }, VillageCode { name: "先锋村委会", code: "009" }, VillageCode { name: "努尔巴格村委会", code: "010" }, VillageCode { name: "库依巴格村委会", code: "011" }, VillageCode { name: "其纳尔勒克村委会", code: "012" }, VillageCode { name: "阿依库勒村委会", code: "013" }, VillageCode { name: "阿依丁库勒村委会", code: "014" }] },
-    TownCode { name: "布依鲁克塔吉克族乡", code: "012", villages: &[VillageCode { name: "依斯其格村委会", code: "001" }, VillageCode { name: "布依鲁克村委会", code: "002" }, VillageCode { name: "图呼其村委会", code: "003" }, VillageCode { name: "翁库尔塔什村委会", code: "004" }] },
-    TownCode { name: "桐安乡", code: "013", villages: &[VillageCode { name: "英阿瓦提村委会", code: "001" }, VillageCode { name: "科克鲁克村委会", code: "002" }] },
-    TownCode { name: "泽普县良种场", code: "014", villages: &[VillageCode { name: "泽普县良种场虚拟生活区", code: "001" }] },
-    TownCode { name: "国营林场", code: "015", villages: &[VillageCode { name: "泽普县亚斯墩林场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "泽普镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "库勒贝希社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿瓦提社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀拉萨社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴格其社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "赫尼社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿其克亚社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "梧桐公园社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "和谐社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "库其社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "阔什吉格代社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "百花园社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "明园社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "祥和社区",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "奎依巴格镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "吾斯塘博依社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "新城社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "建材园社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "新园社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "斯日木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨依吐格曼村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "波斯喀木乡",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "喀拉萨村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔什吉格代村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玉吉买艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日喀勒格热克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿热恰喀村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万喀勒格热克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "代尔亚博依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阔恰铁热克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "苏盖特艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "梧桐村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "泽普县依玛乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "米尔皮格勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "沃力恰喀村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿勒吞其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "色日克乌依村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "铁提尔巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴达木艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿热艾日村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "依玛村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "红星村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "奥依村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托格拉克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托万喀拉尤勒滚村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "托万古勒巴格村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "巴格湾村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "古勒巴格乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "阿其玛村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "胜利村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "艾格日铁热克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤库日喀拉尤勒滚村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "上阿热硝村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿热硝巴扎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "中阿热硝村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "下阿热硝村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿尔帕墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "上古勒巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "科克墩村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "赛力乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "蒙鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阔孜玛勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "希塔其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "塔勒巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "赛力村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "恰木古其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依玛村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "色日克库拉克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "荒地村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "乌鲁克艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "赛力新村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "依肯苏乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "亚尔布拉克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托格拉克勒克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴亚巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔尕尔其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "赫尼村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "加依托格拉克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "铁提尔村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托皮恰村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿拉格尔荒地村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托万恰喀村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阿拉格尔村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "库木萨村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "硝尔吐格曼村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "图呼其乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "墩恰喀村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "荒地村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木墩村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿克塔木加依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "奥库尔塔木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "拉依丹村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "桑村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴什阿其玛村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿亚格阿其玛村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "塔格墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "科克其艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "古勒艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博热哈纳村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "奎依巴格乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "玉吉米勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "萨依兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吉格代加依村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚勒古孜巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "铁提尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "奎依巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨依艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿拉恰其巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "硝尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "皮亚村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "奥依艾日克村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克塔木乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "巴格阿瓦提村",
+                code: "001",
+            },
+            VillageCode {
+                name: "阔依其艾日克村",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔勒图克艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿其克亚村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿克塔木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴什托扎克其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "奥吐拉托扎克其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格托扎克其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿依库勒乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "团结村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "皮羌其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "小康村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "帕合特其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "泽勒普善村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴什吾斯塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新风村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔勒克其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "先锋村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "库依巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "其纳尔勒克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿依库勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿依丁库勒村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "布依鲁克塔吉克族乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "依斯其格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "布依鲁克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "图呼其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "翁库尔塔什村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "桐安乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "科克鲁克村委会",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "泽普县良种场",
+        code: "014",
+        villages: &[VillageCode {
+            name: "泽普县良种场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "国营林场",
+        code: "015",
+        villages: &[VillageCode {
+            name: "泽普县亚斯墩林场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_019: [TownCode; 45] = [
-    TownCode { name: "叶尓羌街道", code: "001", villages: &[VillageCode { name: "向阳社区", code: "001" }, VillageCode { name: "加依铁热克社区居民委员会", code: "002" }, VillageCode { name: "育才社区", code: "003" }, VillageCode { name: "迎宾路社区居民委员会", code: "004" }, VillageCode { name: "阿热木巴格社区居民委员会", code: "005" }, VillageCode { name: "巴格霍依拉社区居民委员会", code: "006" }, VillageCode { name: "沪新路社区", code: "007" }] },
-    TownCode { name: "城中街道", code: "002", villages: &[VillageCode { name: "安宁社区", code: "001" }, VillageCode { name: "其乃巴格社区", code: "002" }, VillageCode { name: "和平社区", code: "003" }, VillageCode { name: "巴格恰阿力迪社区", code: "004" }, VillageCode { name: "巴格麦力社区", code: "005" }, VillageCode { name: "东南社区", code: "006" }, VillageCode { name: "协海尔巴格社区", code: "007" }, VillageCode { name: "栏杆社区", code: "008" }] },
-    TownCode { name: "城东街道", code: "003", villages: &[VillageCode { name: "旅游路社区", code: "001" }, VillageCode { name: "友谊社区", code: "002" }, VillageCode { name: "团结社区", code: "003" }, VillageCode { name: "老成社区", code: "004" }, VillageCode { name: "昆其力克社区", code: "005" }, VillageCode { name: "古城社区", code: "006" }, VillageCode { name: "阿依丁库力社区", code: "007" }, VillageCode { name: "布拉克贝什社区", code: "008" }, VillageCode { name: "惠民社区", code: "009" }, VillageCode { name: "长安路社区", code: "010" }, VillageCode { name: "安泰路社区", code: "011" }, VillageCode { name: "永乐社区", code: "012" }, VillageCode { name: "疆南社区", code: "013" }, VillageCode { name: "昆其力克村委会", code: "014" }, VillageCode { name: "前进村委会", code: "015" }, VillageCode { name: "恰萨村委会", code: "016" }] },
-    TownCode { name: "城西街道", code: "004", villages: &[VillageCode { name: "新城社区", code: "001" }, VillageCode { name: "和谐社区", code: "002" }, VillageCode { name: "嘉和社区", code: "003" }, VillageCode { name: "建设路社区", code: "004" }, VillageCode { name: "古鲁巴格路社区", code: "005" }, VillageCode { name: "都市社区", code: "006" }, VillageCode { name: "明珠社区", code: "007" }, VillageCode { name: "改革社区", code: "008" }, VillageCode { name: "健康社区", code: "009" }, VillageCode { name: "前进路社区", code: "010" }, VillageCode { name: "光辉社区", code: "011" }] },
-    TownCode { name: "城北街道", code: "005", villages: &[VillageCode { name: "文化路社区", code: "001" }, VillageCode { name: "园丁社区", code: "002" }, VillageCode { name: "康宁社区", code: "003" }, VillageCode { name: "智慧路社区", code: "004" }, VillageCode { name: "开发区社区", code: "005" }, VillageCode { name: "英麦勒社区", code: "006" }, VillageCode { name: "希望社区", code: "007" }, VillageCode { name: "新风路社区", code: "008" }] },
-    TownCode { name: "莎车镇", code: "006", villages: &[VillageCode { name: "库木当社区", code: "001" }, VillageCode { name: "亚尔阔恰社区", code: "002" }, VillageCode { name: "萨热依库勒社区", code: "003" }, VillageCode { name: "丝绸社区", code: "004" }, VillageCode { name: "铁热克巴格社区", code: "005" }, VillageCode { name: "加罕巴格社区", code: "006" }, VillageCode { name: "福利社区", code: "007" }, VillageCode { name: "阿纳尔巴格社区居民委员会", code: "008" }, VillageCode { name: "人民路社区居民委员会", code: "009" }, VillageCode { name: "诚信社区", code: "010" }, VillageCode { name: "东关社区", code: "011" }, VillageCode { name: "铁热克巴格村委会", code: "012" }, VillageCode { name: "库木当村委会", code: "013" }] },
-    TownCode { name: "恰热克镇", code: "007", villages: &[VillageCode { name: "胡木丹贝希社区居民委员会", code: "001" }, VillageCode { name: "乃则尔巴格村委会", code: "002" }, VillageCode { name: "萨依巴格村委会", code: "003" }, VillageCode { name: "库什萨依村委会", code: "004" }, VillageCode { name: "喀拉加什村委会", code: "005" }, VillageCode { name: "萨依吐格曼村委会", code: "006" }, VillageCode { name: "其维格勒克村委会", code: "007" }, VillageCode { name: "托格拉克勒克村委会", code: "008" }, VillageCode { name: "铁提尔村委会", code: "009" }, VillageCode { name: "恰热克村委会", code: "010" }, VillageCode { name: "吾斯塘贝希村委会", code: "011" }, VillageCode { name: "库木阿格孜村委会", code: "012" }, VillageCode { name: "恰热克巴扎村委会", code: "013" }, VillageCode { name: "协海尔买里村委会", code: "014" }, VillageCode { name: "库尔干村委会", code: "015" }, VillageCode { name: "拉依旦村委会", code: "016" }, VillageCode { name: "丘古其村委会", code: "017" }, VillageCode { name: "阿热阿瓦提村委会", code: "018" }, VillageCode { name: "阿瓦提村委会", code: "019" }, VillageCode { name: "萨依兰干村委会", code: "020" }, VillageCode { name: "拜什托格拉克村委会", code: "021" }, VillageCode { name: "库热瓦特村委会", code: "022" }] },
-    TownCode { name: "艾力西湖镇", code: "008", villages: &[VillageCode { name: "阳光社区居民委员会", code: "001" }, VillageCode { name: "库木阔勒村委会", code: "002" }, VillageCode { name: "托格拉克兰干村委会", code: "003" }, VillageCode { name: "吐格曼贝希村委会", code: "004" }, VillageCode { name: "库尔干村委会", code: "005" }, VillageCode { name: "乌堂村委会", code: "006" }, VillageCode { name: "喀拉巴格村委会", code: "007" }, VillageCode { name: "墩艾日克村委会", code: "008" }, VillageCode { name: "奥依巴格村委会", code: "009" }, VillageCode { name: "其兰格日村委会", code: "010" }, VillageCode { name: "艾力西湖巴扎村委会", code: "011" }, VillageCode { name: "喀木尕克勒克村委会", code: "012" }, VillageCode { name: "拜什库都克村委会", code: "013" }, VillageCode { name: "尧鲁其兰干村委会", code: "014" }, VillageCode { name: "亚勒古孜塔勒村委会", code: "015" }, VillageCode { name: "亚喀塔木村委会", code: "016" }, VillageCode { name: "铁热克兰干村委会", code: "017" }, VillageCode { name: "其格勒克艾日克村委会", code: "018" }, VillageCode { name: "诺库特勒克吐格曼村委会", code: "019" }, VillageCode { name: "库木鲁克村委会", code: "020" }, VillageCode { name: "恰尔巴格村委会", code: "021" }, VillageCode { name: "百合提村委会", code: "022" }, VillageCode { name: "前进村委会", code: "023" }, VillageCode { name: "其格勒克布隆村委会", code: "024" }, VillageCode { name: "苏盖特艾日克村委会", code: "025" }] },
-    TownCode { name: "荒地镇", code: "009", villages: &[VillageCode { name: "胜利社区居民委员会", code: "001" }, VillageCode { name: "尤库日塔尕其村委会", code: "002" }, VillageCode { name: "托万塔尕其村委会", code: "003" }, VillageCode { name: "布瓦库木村委会", code: "004" }, VillageCode { name: "尤库日恰克马克库勒村委会", code: "005" }, VillageCode { name: "托万木尕勒村委会", code: "006" }, VillageCode { name: "尤库日木尕勒村委会", code: "007" }, VillageCode { name: "托万库依拉村委会", code: "008" }, VillageCode { name: "尤库日库依拉村委会", code: "009" }, VillageCode { name: "托万诺库特鲁克村委会", code: "010" }, VillageCode { name: "尤库日诺库特鲁克村委会", code: "011" }, VillageCode { name: "托万恰克马克库勒村委会", code: "012" }, VillageCode { name: "帕合特勒克艾日克村委会", code: "013" }, VillageCode { name: "尤勒滚布拉克村委会", code: "014" }, VillageCode { name: "昂巴尔村委会", code: "015" }, VillageCode { name: "阔纳巴扎村委会", code: "016" }, VillageCode { name: "幸福村委会", code: "017" }, VillageCode { name: "硝尔库勒村委会", code: "018" }, VillageCode { name: "尤库日墩吾斯塘村委会", code: "019" }, VillageCode { name: "托万墩吾斯塘村委会", code: "020" }, VillageCode { name: "库台克科瑞克村委会", code: "021" }, VillageCode { name: "马场村委会", code: "022" }, VillageCode { name: "依纳克村委会", code: "023" }, VillageCode { name: "恰希勒克村委会", code: "024" }, VillageCode { name: "古再勒巴格村委会", code: "025" }, VillageCode { name: "努尔巴格村委会", code: "026" }, VillageCode { name: "英巴格村委会", code: "027" }, VillageCode { name: "巴扎村委会", code: "028" }] },
-    TownCode { name: "阿瓦提镇", code: "010", villages: &[VillageCode { name: "民主社区居民委员会", code: "001" }, VillageCode { name: "诺其村委会", code: "002" }, VillageCode { name: "博斯坦村委会", code: "003" }, VillageCode { name: "兰干村委会", code: "004" }, VillageCode { name: "古勒巴格买里村委会", code: "005" }, VillageCode { name: "墩买里村委会", code: "006" }, VillageCode { name: "萨格达克库木村委会", code: "007" }, VillageCode { name: "协海尔巴格村委会", code: "008" }, VillageCode { name: "阔纳阿日希村委会", code: "009" }, VillageCode { name: "阿日希村委会", code: "010" }, VillageCode { name: "提干库木村委会", code: "011" }, VillageCode { name: "喀勒塔吾斯塘村委会", code: "012" }, VillageCode { name: "阿瓦提巴扎村委会", code: "013" }, VillageCode { name: "库木库勒村委会", code: "014" }, VillageCode { name: "铁提尔库勒村委会", code: "015" }, VillageCode { name: "江尕勒艾日克村委会", code: "016" }, VillageCode { name: "英阿日希村委会", code: "017" }, VillageCode { name: "诺代村委会", code: "018" }, VillageCode { name: "塔斯克玛村委会", code: "019" }, VillageCode { name: "兴盛村委会", code: "020" }] },
-    TownCode { name: "白什坎特镇", code: "011", villages: &[VillageCode { name: "红旗社区居民委员会", code: "001" }, VillageCode { name: "托万巴格托格拉克村委会", code: "002" }, VillageCode { name: "尤库日巴格托格拉克村委会", code: "003" }, VillageCode { name: "奥依巴格村委会", code: "004" }, VillageCode { name: "英买里村委会", code: "005" }, VillageCode { name: "托万巴格艾日克村委会", code: "006" }, VillageCode { name: "尤库日巴格艾日克村委会", code: "007" }, VillageCode { name: "英巴格村委会", code: "008" }, VillageCode { name: "托万托喀木艾日克村委会", code: "009" }, VillageCode { name: "仓巴扎村委会", code: "010" }, VillageCode { name: "帕勒塔艾日克村委会", code: "011" }, VillageCode { name: "托喀木艾日克村委会", code: "012" }, VillageCode { name: "科克加依村委会", code: "013" }, VillageCode { name: "库玛村委会", code: "014" }, VillageCode { name: "阿力米力克村委会", code: "015" }, VillageCode { name: "喀拉玉吉买村委会", code: "016" }, VillageCode { name: "塔合塔科瑞克村委会", code: "017" }, VillageCode { name: "英吾斯塘村委会", code: "018" }, VillageCode { name: "铁热克阿恰勒村委会", code: "019" }, VillageCode { name: "英阿瓦特村委会", code: "020" }, VillageCode { name: "塔塔尔仓村委会", code: "021" }, VillageCode { name: "塔塔尔村委会", code: "022" }, VillageCode { name: "塔斯克玛村委会", code: "023" }, VillageCode { name: "明园村委会", code: "024" }, VillageCode { name: "古勒巴格村委会", code: "025" }, VillageCode { name: "团结村委会", code: "026" }, VillageCode { name: "阿瓦提村委会", code: "027" }, VillageCode { name: "前进村委会", code: "028" }] },
-    TownCode { name: "依盖尔其镇", code: "012", villages: &[VillageCode { name: "光明社区居民委员会", code: "001" }, VillageCode { name: "依乃克帕塔村委会", code: "002" }, VillageCode { name: "喀拉亚尕其村委会", code: "003" }, VillageCode { name: "喀尕恰克热村委会", code: "004" }, VillageCode { name: "库木巴格村委会", code: "005" }, VillageCode { name: "依盖尔其村委会", code: "006" }, VillageCode { name: "托万恰喀村委会", code: "007" }, VillageCode { name: "阿克也尔村委会", code: "008" }, VillageCode { name: "阔纳先拜巴扎村委会", code: "009" }, VillageCode { name: "推墩村委会", code: "010" }, VillageCode { name: "都维萨热依村委会", code: "011" }, VillageCode { name: "再依力克兰干村委会", code: "012" }, VillageCode { name: "再依力克村委会", code: "013" }, VillageCode { name: "古勒巴格村委会", code: "014" }, VillageCode { name: "依盖尔其加里村委会", code: "015" }, VillageCode { name: "和谐村委会", code: "016" }, VillageCode { name: "博斯坦村委会", code: "017" }, VillageCode { name: "提孜纳甫博依村委会", code: "018" }, VillageCode { name: "玉吉米力克村委会", code: "019" }, VillageCode { name: "其格勒克霍依拉村", code: "020" }, VillageCode { name: "阿热勒克村委会", code: "021" }, VillageCode { name: "亚勒古孜托格拉克村委会", code: "022" }] },
-    TownCode { name: "古勒巴格镇", code: "013", villages: &[VillageCode { name: "工业路社区", code: "001" }, VillageCode { name: "其格万社区", code: "002" }, VillageCode { name: "兴业社区", code: "003" }, VillageCode { name: "墩艾日克社区居民委员会", code: "004" }, VillageCode { name: "巴达木社区", code: "005" }, VillageCode { name: "振兴社区", code: "006" }, VillageCode { name: "帕米尔社区", code: "007" }, VillageCode { name: "奥依巴格村委会", code: "008" }, VillageCode { name: "阳光村委会", code: "009" }, VillageCode { name: "巴格提坎村委会", code: "010" }, VillageCode { name: "恰依哈纳村委会", code: "011" }] },
-    TownCode { name: "米夏镇", code: "014", villages: &[VillageCode { name: "塔瓦克齐拉社区居民委员会", code: "001" }, VillageCode { name: "英其开艾日克社区居民委员会", code: "002" }, VillageCode { name: "阿热勒库勒干村委会", code: "003" }, VillageCode { name: "夏马勒巴格村委会", code: "004" }, VillageCode { name: "托尕其村委会", code: "005" }, VillageCode { name: "阿克也尔库勒干村委会", code: "006" }, VillageCode { name: "幸福村委会", code: "007" }, VillageCode { name: "墩吾斯塘村委会", code: "008" }, VillageCode { name: "恰热克村委会", code: "009" }, VillageCode { name: "喀依玛克其村委会", code: "010" }, VillageCode { name: "克帕哈纳村委会", code: "011" }, VillageCode { name: "托库勒拉村委会", code: "012" }, VillageCode { name: "喀拉扎克村委会", code: "013" }, VillageCode { name: "阔古西艾日克村委会", code: "014" }, VillageCode { name: "吾斯塘博依村委会", code: "015" }, VillageCode { name: "依什兰木其村委会", code: "016" }, VillageCode { name: "亚勒古孜巴格村委会", code: "017" }, VillageCode { name: "吉格代艾日克村委会", code: "018" }, VillageCode { name: "克斯木其村委会", code: "019" }, VillageCode { name: "亚尕其拉村委会", code: "020" }, VillageCode { name: "英其克艾日克村委会", code: "021" }, VillageCode { name: "铁提尔巴格村委会", code: "022" }, VillageCode { name: "琼库尔克什拉克村委会", code: "023" }, VillageCode { name: "斯日格拉村委会", code: "024" }, VillageCode { name: "阔滚其拉村委会", code: "025" }, VillageCode { name: "阿日希村委会", code: "026" }] },
-    TownCode { name: "托木吾斯塘镇", code: "015", villages: &[VillageCode { name: "友好村委会", code: "001" }, VillageCode { name: "依希来木其村委会", code: "002" }, VillageCode { name: "吐古其村委会", code: "003" }, VillageCode { name: "墩吾斯塘村委会", code: "004" }, VillageCode { name: "祥和村委会", code: "005" }, VillageCode { name: "吉格代艾日克村委会", code: "006" }, VillageCode { name: "托木吾斯塘村委会", code: "007" }, VillageCode { name: "墩巴格村委会", code: "008" }, VillageCode { name: "博斯坦村委会", code: "009" }, VillageCode { name: "尕孜兰干村委会", code: "010" }, VillageCode { name: "阿克迪勒村委会", code: "011" }, VillageCode { name: "拜什托格拉克村委会", code: "012" }] },
-    TownCode { name: "塔尕尔其镇", code: "016", villages: &[VillageCode { name: "古再村委会", code: "001" }, VillageCode { name: "斯也克村委会", code: "002" }, VillageCode { name: "夏甫其村委会", code: "003" }, VillageCode { name: "切勒巴格村委会", code: "004" }, VillageCode { name: "光华村委会", code: "005" }, VillageCode { name: "托万博依拉村委会", code: "006" }, VillageCode { name: "尤库日博依拉村委会", code: "007" }, VillageCode { name: "托万阿克塔村委会", code: "008" }, VillageCode { name: "库木艾热克村委会", code: "009" }, VillageCode { name: "阿克塔村委会", code: "010" }, VillageCode { name: "木尕垃村委会", code: "011" }, VillageCode { name: "英巴格村委会", code: "012" }, VillageCode { name: "巴格麦勒村委会", code: "013" }, VillageCode { name: "塔尕尔其古勒巴格村委会", code: "014" }, VillageCode { name: "塔合塔科瑞克村委会", code: "015" }, VillageCode { name: "库木奇巴格村委会", code: "016" }, VillageCode { name: "阔什吾斯塘村委会", code: "017" }, VillageCode { name: "托万巴格村委会", code: "018" }, VillageCode { name: "喀什艾日克村委会", code: "019" }, VillageCode { name: "拜什盖买村委会", code: "020" }, VillageCode { name: "库吾其村委会", code: "021" }, VillageCode { name: "夏依勒克村委会", code: "022" }, VillageCode { name: "和谐村委会", code: "023" }, VillageCode { name: "且克且克兰干村委会", code: "024" }, VillageCode { name: "塔孜拉村委会", code: "025" }, VillageCode { name: "曲许尔盖村委会", code: "026" }, VillageCode { name: "奥依塔格村委会", code: "027" }, VillageCode { name: "扎滚艾日克村委会", code: "028" }, VillageCode { name: "兰干村委会", code: "029" }, VillageCode { name: "却勒兰干村委会", code: "030" }] },
-    TownCode { name: "乌达力克镇", code: "017", villages: &[VillageCode { name: "尤勒滚巴格村委会", code: "001" }, VillageCode { name: "延都玛村委会", code: "002" }, VillageCode { name: "伊提帕克村委会", code: "003" }, VillageCode { name: "墩霍依拉村委会", code: "004" }, VillageCode { name: "英艾日克村委会", code: "005" }, VillageCode { name: "前进村委会", code: "006" }, VillageCode { name: "阔什吾斯塘村委会", code: "007" }, VillageCode { name: "博斯坦村委会", code: "008" }, VillageCode { name: "博依拉村委会", code: "009" }, VillageCode { name: "帕依那普村委会", code: "010" }, VillageCode { name: "红旗村委会", code: "011" }, VillageCode { name: "乌希拉克村委会", code: "012" }, VillageCode { name: "幸福村委会", code: "013" }, VillageCode { name: "巴格艾日克村委会", code: "014" }, VillageCode { name: "排孜阿瓦提村委会", code: "015" }, VillageCode { name: "热瓦特吾斯塘村委会", code: "016" }, VillageCode { name: "英霍伊拉村委会", code: "017" }, VillageCode { name: "塔库吐库村委会", code: "018" }, VillageCode { name: "巴格买里村委会", code: "019" }, VillageCode { name: "阔什阿瓦提村委会", code: "020" }, VillageCode { name: "布拉克村委会", code: "021" }, VillageCode { name: "博斯坦霍伊拉村委会", code: "022" }, VillageCode { name: "帕万巴格村委会", code: "023" }, VillageCode { name: "琼艾日克村委会", code: "024" }, VillageCode { name: "英买里村委会", code: "025" }, VillageCode { name: "喀什艾日克村委会", code: "026" }, VillageCode { name: "红光村委会", code: "027" }, VillageCode { name: "团结村委会", code: "028" }] },
-    TownCode { name: "阿拉买提镇", code: "018", villages: &[VillageCode { name: "阔什阿瓦提村委会", code: "001" }, VillageCode { name: "乃则尔巴格村委会", code: "002" }, VillageCode { name: "青格力克村委会", code: "003" }, VillageCode { name: "苏盖提力克村委会", code: "004" }, VillageCode { name: "诺代村委会", code: "005" }, VillageCode { name: "塔尕其吾斯塘村委会", code: "006" }, VillageCode { name: "英阿拉买提巴扎村委会", code: "007" }, VillageCode { name: "托哈斯台村委会", code: "008" }, VillageCode { name: "墩吾斯塘村委会", code: "009" }, VillageCode { name: "索拉克玛村委会", code: "010" }, VillageCode { name: "阿孜拉村委会", code: "011" }, VillageCode { name: "阔纳巴扎村委会", code: "012" }, VillageCode { name: "阔纳阿拉买提村委会", code: "013" }, VillageCode { name: "克其克依盖尔其村委会", code: "014" }, VillageCode { name: "阿恰勒村委会", code: "015" }, VillageCode { name: "扎满库木村委会", code: "016" }, VillageCode { name: "安泰村委会", code: "017" }] },
-    TownCode { name: "阿扎特巴格镇", code: "019", villages: &[VillageCode { name: "塔尕尔其吾斯塘村委会", code: "001" }, VillageCode { name: "英巴格村委会", code: "002" }, VillageCode { name: "喀塔库勒村委会", code: "003" }, VillageCode { name: "喀什噶尔买里斯村委会", code: "004" }, VillageCode { name: "喀勒帕克墩村委会", code: "005" }, VillageCode { name: "墩吾斯塘村委会", code: "006" }, VillageCode { name: "兰干村委会", code: "007" }, VillageCode { name: "库木博勒买村委会", code: "008" }, VillageCode { name: "喀秋尕喀什村委会", code: "009" }, VillageCode { name: "其迪尔托格拉克村委会", code: "010" }, VillageCode { name: "亚普玛村委会", code: "011" }, VillageCode { name: "阿扎特巴格村委会", code: "012" }, VillageCode { name: "央阿格勒克村委会", code: "013" }] },
-    TownCode { name: "阿热勒乡", code: "020", villages: &[VillageCode { name: "布力买村委会", code: "001" }, VillageCode { name: "恰吐克村委会", code: "002" }, VillageCode { name: "苏盖提力克村委会", code: "003" }, VillageCode { name: "托盖塔塔尔村委会", code: "004" }, VillageCode { name: "喀拉铁热克村委会", code: "005" }, VillageCode { name: "吐格曼贝希村委会", code: "006" }, VillageCode { name: "喀拉扎克村委会", code: "007" }, VillageCode { name: "色日克都维村委会", code: "008" }, VillageCode { name: "塔热木博依村委会", code: "009" }, VillageCode { name: "琼吾斯塘村委会", code: "010" }, VillageCode { name: "萨万拉村委会", code: "011" }, VillageCode { name: "巴依都维村委会", code: "012" }, VillageCode { name: "阿热恰吐克村委会", code: "013" }, VillageCode { name: "阿孜干巴格村委会", code: "014" }, VillageCode { name: "桑霍伊拉村委会", code: "015" }] },
-    TownCode { name: "恰尔巴格乡", code: "021", villages: &[VillageCode { name: "古勒巴格村委会", code: "001" }, VillageCode { name: "苏鲁克艾日克村委会", code: "002" }, VillageCode { name: "阿依库勒村委会", code: "003" }, VillageCode { name: "安居来村委会", code: "004" }, VillageCode { name: "恰尔巴格村委会", code: "005" }, VillageCode { name: "古扎托格拉克村委会", code: "006" }, VillageCode { name: "古扎村委会", code: "007" }, VillageCode { name: "诺开特村委会", code: "008" }, VillageCode { name: "英巴格村委会", code: "009" }, VillageCode { name: "央阿克勒克村委会", code: "010" }, VillageCode { name: "乌塔克其村委会", code: "011" }, VillageCode { name: "库特其村委会", code: "012" }, VillageCode { name: "米韦果勒村委会", code: "013" }, VillageCode { name: "尤库日库特其村委会", code: "014" }, VillageCode { name: "代斯台霍伊拉村委会", code: "015" }] },
-    TownCode { name: "英吾斯塘乡", code: "022", villages: &[VillageCode { name: "喀库拉村委会", code: "001" }, VillageCode { name: "诺开提村委会", code: "002" }, VillageCode { name: "阔什吾斯塘村委会", code: "003" }, VillageCode { name: "英吾斯塘村委会", code: "004" }, VillageCode { name: "托万吉格代巴格村委会", code: "005" }, VillageCode { name: "吉格代巴格村委会", code: "006" }, VillageCode { name: "尤库日吉格代巴格村委会", code: "007" }, VillageCode { name: "百合提村委会", code: "008" }, VillageCode { name: "兰干村委会", code: "009" }, VillageCode { name: "喀让古托格拉克村委会", code: "010" }] },
-    TownCode { name: "阿尔斯兰巴格乡", code: "023", villages: &[VillageCode { name: "帕特曼喀什村委会", code: "001" }, VillageCode { name: "艾力什贝希村委会", code: "002" }, VillageCode { name: "萨万拉村委会", code: "003" }, VillageCode { name: "博斯坦村委会", code: "004" }, VillageCode { name: "阿格其艾日克村委会", code: "005" }, VillageCode { name: "喀拉墩村委会", code: "006" }, VillageCode { name: "丘隆村委会", code: "007" }, VillageCode { name: "古扎村委会", code: "008" }, VillageCode { name: "阿热勒买力村委会", code: "009" }, VillageCode { name: "库木霍依拉村委会", code: "010" }, VillageCode { name: "英巴格村委会", code: "011" }, VillageCode { name: "墩霍依拉村委会", code: "012" }, VillageCode { name: "塔特勒克艾日克村委会", code: "013" }, VillageCode { name: "库木艾日克村委会", code: "014" }, VillageCode { name: "阿力米力克村委会", code: "015" }, VillageCode { name: "胡杨村委会", code: "016" }, VillageCode { name: "苏其拉村委会", code: "017" }, VillageCode { name: "红旗村委会", code: "018" }, VillageCode { name: "佰什吾斯塘村委会", code: "019" }, VillageCode { name: "霍什拉甫阿瓦提村委会", code: "020" }] },
-    TownCode { name: "孜热甫夏提塔吉克族乡", code: "024", villages: &[VillageCode { name: "巴什库孜玛勒村委会", code: "001" }, VillageCode { name: "库孜玛勒村委会", code: "002" }, VillageCode { name: "孜热甫夏提村委会", code: "003" }, VillageCode { name: "团结村委会", code: "004" }, VillageCode { name: "库木巴格村委会", code: "005" }, VillageCode { name: "阔什铁热克村委会", code: "006" }, VillageCode { name: "兰干村委会", code: "007" }, VillageCode { name: "萨依巴格村委会", code: "008" }, VillageCode { name: "喀勒提拉村委会", code: "009" }, VillageCode { name: "幸福村委会", code: "010" }, VillageCode { name: "夏普吐鲁克村委会", code: "011" }, VillageCode { name: "英迈里村委会", code: "012" }, VillageCode { name: "希望村委会", code: "013" }] },
-    TownCode { name: "亚喀艾日克乡", code: "025", villages: &[VillageCode { name: "吐木休克沙热依村委会", code: "001" }, VillageCode { name: "前进村委会", code: "002" }, VillageCode { name: "乌扎克萨依村委会", code: "003" }, VillageCode { name: "色日克托格拉克村委会", code: "004" }, VillageCode { name: "萨依吾斯塘村委会", code: "005" }, VillageCode { name: "阔什吐格曼村委会", code: "006" }, VillageCode { name: "阔纳吾斯塘村委会", code: "007" }, VillageCode { name: "亚喀艾日克村委会", code: "008" }, VillageCode { name: "阔若勒村委会", code: "009" }, VillageCode { name: "团结村委会", code: "010" }, VillageCode { name: "兰干村委会", code: "011" }] },
-    TownCode { name: "喀群乡", code: "026", villages: &[VillageCode { name: "其木都村委会", code: "001" }, VillageCode { name: "坎其木都村委会", code: "002" }, VillageCode { name: "尤库日恰木萨勒村委会", code: "003" }, VillageCode { name: "恰木萨勒村委会", code: "004" }, VillageCode { name: "库尔巴格村委会", code: "005" }, VillageCode { name: "塔合塔科瑞克村委会", code: "006" }, VillageCode { name: "琼霍伊拉村委会", code: "007" }, VillageCode { name: "阿克霍伊拉村委会", code: "008" }, VillageCode { name: "巴格恰村委会", code: "009" }, VillageCode { name: "巴扎村委会", code: "010" }, VillageCode { name: "铁热克巴格村委会", code: "011" }, VillageCode { name: "阔什巴格村委会", code: "012" }, VillageCode { name: "喀拉央塔克村委会", code: "013" }, VillageCode { name: "托万喀拉央塔克村委会", code: "014" }] },
-    TownCode { name: "霍什拉甫乡", code: "027", villages: &[VillageCode { name: "友谊村委会", code: "001" }, VillageCode { name: "加依巴格村委会", code: "002" }, VillageCode { name: "克孜拉孜村委会", code: "003" }, VillageCode { name: "阿热塔什村委会", code: "004" }, VillageCode { name: "努尔巴格村委会", code: "005" }, VillageCode { name: "亚尔巴格村委会", code: "006" }, VillageCode { name: "多来提巴格村委会", code: "007" }, VillageCode { name: "塔克拉村委会", code: "008" }, VillageCode { name: "古勒巴格村委会", code: "009" }, VillageCode { name: "艾赛勒巴格村委会", code: "010" }, VillageCode { name: "萨依巴格村委会", code: "011" }, VillageCode { name: "托力坎村委会", code: "012" }, VillageCode { name: "巴扎村委会", code: "013" }, VillageCode { name: "兰干村委会", code: "014" }, VillageCode { name: "尧玛村委会", code: "015" }] },
-    TownCode { name: "达木斯乡", code: "028", villages: &[VillageCode { name: "依其拜勒提村委会", code: "001" }, VillageCode { name: "克孜勒克尔村委会", code: "002" }, VillageCode { name: "阔什塔格村委会", code: "003" }, VillageCode { name: "英巴格村委会", code: "004" }, VillageCode { name: "坎迪尔力克村委会", code: "005" }, VillageCode { name: "阔什库里村委会", code: "006" }, VillageCode { name: "双泉村委会", code: "007" }, VillageCode { name: "塔什纳村委会", code: "008" }] },
-    TownCode { name: "伊什库力乡", code: "029", villages: &[VillageCode { name: "喀拉库木村委会", code: "001" }, VillageCode { name: "博斯坦村委会", code: "002" }, VillageCode { name: "兴旺村委会", code: "003" }, VillageCode { name: "克什拉克村委会", code: "004" }, VillageCode { name: "前进村委会", code: "005" }, VillageCode { name: "亚贝希村委会", code: "006" }, VillageCode { name: "墩吕克村委会", code: "007" }, VillageCode { name: "琼库勒贝希村委会", code: "008" }, VillageCode { name: "托格热吾斯塘村委会", code: "009" }, VillageCode { name: "阔坦墩村委会", code: "010" }, VillageCode { name: "古勒其村委会", code: "011" }, VillageCode { name: "尤库日加力村委会", code: "012" }, VillageCode { name: "阿克库木贝希村委会", code: "013" }, VillageCode { name: "伊什库力村委会", code: "014" }, VillageCode { name: "吾格兰村委会", code: "015" }, VillageCode { name: "乌克提其村委会", code: "016" }, VillageCode { name: "阔依其村委会", code: "017" }, VillageCode { name: "阿克提其村委会", code: "018" }, VillageCode { name: "科克其村委会", code: "019" }, VillageCode { name: "英额孜艾日克村委会", code: "020" }, VillageCode { name: "吐格曼贝希村委会", code: "021" }, VillageCode { name: "团结村委会", code: "022" }, VillageCode { name: "巴格万村委会", code: "023" }, VillageCode { name: "幸福村委会", code: "024" }] },
-    TownCode { name: "拍克其乡", code: "030", villages: &[VillageCode { name: "依玛村委会", code: "001" }, VillageCode { name: "巴达木勒克村委会", code: "002" }, VillageCode { name: "斯也克村委会", code: "003" }, VillageCode { name: "阿热坎特村委会", code: "004" }, VillageCode { name: "玉奇科瑞克村委会", code: "005" }, VillageCode { name: "幸福村委会", code: "006" }, VillageCode { name: "拍克其村委会", code: "007" }, VillageCode { name: "阿亚克拍克其村委会", code: "008" }, VillageCode { name: "阿其克村委会", code: "009" }, VillageCode { name: "库木艾日克村委会", code: "010" }, VillageCode { name: "色日克托格拉克村委会", code: "011" }, VillageCode { name: "墩吾斯塘村委会", code: "012" }, VillageCode { name: "托普恰村委会", code: "013" }, VillageCode { name: "萨特马库木村委会", code: "014" }, VillageCode { name: "玛江库木村委会", code: "015" }, VillageCode { name: "喀乃托格拉克村委会", code: "016" }] },
-    TownCode { name: "阔什艾日克乡", code: "031", villages: &[VillageCode { name: "尼皮其村委会", code: "001" }, VillageCode { name: "托万尼皮其村委会", code: "002" }, VillageCode { name: "托格热艾日克村委会", code: "003" }, VillageCode { name: "库木巴格村委会", code: "004" }, VillageCode { name: "阿克巴什村委会", code: "005" }, VillageCode { name: "前进村委会", code: "006" }, VillageCode { name: "巴扎村委会", code: "007" }, VillageCode { name: "坎麦盖提村委会", code: "008" }, VillageCode { name: "阔依其村委会", code: "009" }, VillageCode { name: "阔什艾日克村委会", code: "010" }, VillageCode { name: "博孜艾日克村委会", code: "011" }, VillageCode { name: "色日克布亚村委会", code: "012" }, VillageCode { name: "和谐村委会", code: "013" }, VillageCode { name: "团结村委会", code: "014" }] },
-    TownCode { name: "墩巴格乡", code: "032", villages: &[VillageCode { name: "恰尔巴格村委会", code: "001" }, VillageCode { name: "托万阿依库勒村委会", code: "002" }, VillageCode { name: "尤库日阿依库勒村委会", code: "003" }, VillageCode { name: "盖买库勒村委会", code: "004" }, VillageCode { name: "牌坊村委会", code: "005" }, VillageCode { name: "墩巴格村委会", code: "006" }, VillageCode { name: "阔依其村委会", code: "007" }, VillageCode { name: "托格热艾日克村委会", code: "008" }, VillageCode { name: "尤库日曲许盖村委会", code: "009" }, VillageCode { name: "托万曲许盖村委会", code: "010" }, VillageCode { name: "拜勒墩村委会", code: "011" }, VillageCode { name: "其乃巴格村委会", code: "012" }] },
-    TownCode { name: "巴格阿瓦提乡", code: "033", villages: &[VillageCode { name: "巴格吉格代村委会", code: "001" }, VillageCode { name: "巴格霍伊拉村委会", code: "002" }, VillageCode { name: "巴格阿瓦提村委会", code: "003" }, VillageCode { name: "拜什艾日克村委会", code: "004" }, VillageCode { name: "阿克切克勒村委会", code: "005" }, VillageCode { name: "吐格贝希村委会", code: "006" }, VillageCode { name: "团结村委会", code: "007" }, VillageCode { name: "喀拉坡塔村委会", code: "008" }, VillageCode { name: "喀拉墩村委会", code: "009" }, VillageCode { name: "阿恰艾日克村委会", code: "010" }, VillageCode { name: "曙光村委会", code: "011" }] },
-    TownCode { name: "喀拉苏乡", code: "034", villages: &[VillageCode { name: "夏甫吐鲁克村委会", code: "001" }, VillageCode { name: "库勒阿格孜村委会", code: "002" }, VillageCode { name: "央都玛村委会", code: "003" }, VillageCode { name: "阿恰贝希村委会", code: "004" }, VillageCode { name: "永和村委会", code: "005" }, VillageCode { name: "英霍依拉村委会", code: "006" }, VillageCode { name: "托万吾斯塘村委会", code: "007" }, VillageCode { name: "吐格曼贝希村委会", code: "008" }, VillageCode { name: "阔什阿瓦提村委会", code: "009" }, VillageCode { name: "英阿瓦提村委会", code: "010" }, VillageCode { name: "阿帕铁热木村委会", code: "011" }, VillageCode { name: "博瓦希村委会", code: "012" }] },
-    TownCode { name: "喀什监狱", code: "035", villages: &[VillageCode { name: "监区虚拟生活区", code: "001" }] },
-    TownCode { name: "莎车县良种繁育场", code: "036", villages: &[VillageCode { name: "良种生产大队队", code: "001" }, VillageCode { name: "铁热巴格生产大队", code: "002" }, VillageCode { name: "米夏生产大队队", code: "003" }] },
-    TownCode { name: "莎车县第一林场（国营苗圃）", code: "037", villages: &[VillageCode { name: "一林场虚拟生活区", code: "001" }] },
-    TownCode { name: "莎车县国营二林场", code: "038", villages: &[VillageCode { name: "二林场虚拟生活区", code: "001" }] },
-    TownCode { name: "莎车县园艺场", code: "039", villages: &[VillageCode { name: "园艺场虚拟生活区", code: "001" }] },
-    TownCode { name: "莎车县蚕种场", code: "040", villages: &[VillageCode { name: "蚕种场虚拟生活区", code: "001" }] },
-    TownCode { name: "莎车县鱼苗场", code: "041", villages: &[VillageCode { name: "育苗场虚拟生活区", code: "001" }] },
-    TownCode { name: "农科院莎车农业试验站", code: "042", villages: &[VillageCode { name: "农业试验站虚拟生活区", code: "001" }] },
-    TownCode { name: "工业园区管委会", code: "043", villages: &[VillageCode { name: "阿尔斯兰巴格社区", code: "001" }, VillageCode { name: "喀拉库木社区", code: "002" }, VillageCode { name: "火车西站社区", code: "003" }] },
-    TownCode { name: "英阿瓦提管理委员会", code: "044", villages: &[VillageCode { name: "英巴扎村委会", code: "001" }, VillageCode { name: "比纳木村委会", code: "002" }, VillageCode { name: "库太克勒克村委会", code: "003" }, VillageCode { name: "英阿瓦提村委会", code: "004" }, VillageCode { name: "买旦村委会", code: "005" }, VillageCode { name: "阔纳阿瓦提村委会", code: "006" }] },
-    TownCode { name: "永安管理委员会", code: "045", villages: &[VillageCode { name: "克孜勒塔木村委会", code: "001" }, VillageCode { name: "阿克兰干村委会", code: "002" }, VillageCode { name: "胡杨村委会", code: "003" }, VillageCode { name: "康乐村委会", code: "004" }, VillageCode { name: "永平村委会", code: "005" }, VillageCode { name: "团结村委会", code: "006" }, VillageCode { name: "和谐村委会", code: "007" }, VillageCode { name: "安康村委会", code: "008" }] },
+    TownCode {
+        name: "叶尓羌街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "向阳社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "加依铁热克社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "育才社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "迎宾路社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿热木巴格社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格霍依拉社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "沪新路社区",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "城中街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "安宁社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "其乃巴格社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "和平社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴格恰阿力迪社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴格麦力社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "东南社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "协海尔巴格社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "栏杆社区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "城东街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "旅游路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "友谊社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "老成社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "昆其力克社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "古城社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿依丁库力社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "布拉克贝什社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "惠民社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "长安路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "安泰路社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "永乐社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "疆南社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "昆其力克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "恰萨村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "城西街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "新城社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "和谐社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "嘉和社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "建设路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "古鲁巴格路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "都市社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "明珠社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "改革社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "健康社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "前进路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "光辉社区",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "城北街道",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "文化路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "园丁社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "康宁社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "智慧路社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "开发区社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "英麦勒社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "希望社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "新风路社区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "莎车镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "库木当社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "亚尔阔恰社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "萨热依库勒社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "丝绸社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "铁热克巴格社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "加罕巴格社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "福利社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿纳尔巴格社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "人民路社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "诚信社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "东关社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "铁热克巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木当村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "恰热克镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "胡木丹贝希社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乃则尔巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库什萨依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉加什村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "萨依吐格曼村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "其维格勒克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托格拉克勒克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "铁提尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "恰热克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "吾斯塘贝希村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库木阿格孜村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "恰热克巴扎村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "协海尔买里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "库尔干村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "拉依旦村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "丘古其村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿热阿瓦提村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "萨依兰干村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "拜什托格拉克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "库热瓦特村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "艾力西湖镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "阳光社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库木阔勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托格拉克兰干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库尔干村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "奥依巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "其兰格日村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "艾力西湖巴扎村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "喀木尕克勒克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "拜什库都克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尧鲁其兰干村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "亚勒古孜塔勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "亚喀塔木村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "铁热克兰干村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "其格勒克艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "诺库特勒克吐格曼村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "库木鲁克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "百合提村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "其格勒克布隆村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "苏盖特艾日克村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "荒地镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "胜利社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤库日塔尕其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托万塔尕其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "布瓦库木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤库日恰克马克库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万木尕勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日木尕勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万库依拉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤库日库依拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万诺库特鲁克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤库日诺库特鲁克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万恰克马克库勒村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "帕合特勒克艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤勒滚布拉克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "昂巴尔村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "硝尔库勒村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "尤库日墩吾斯塘村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "托万墩吾斯塘村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "库台克科瑞克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "马场村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "依纳克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "恰希勒克村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "古再勒巴格村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "028",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿瓦提镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "民主社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "诺其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古勒巴格买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨格达克库木村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "协海尔巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔纳阿日希村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿日希村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "提干库木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "喀勒塔吾斯塘村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿瓦提巴扎村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木库勒村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "铁提尔库勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "江尕勒艾日克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "英阿日希村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "诺代村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "塔斯克玛村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "兴盛村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "白什坎特镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "红旗社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万巴格托格拉克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤库日巴格托格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "奥依巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万巴格艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日巴格艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万托喀木艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "仓巴扎村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "帕勒塔艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托喀木艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "科克加依村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库玛村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿力米力克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "喀拉玉吉买村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "铁热克阿恰勒村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "英阿瓦特村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "塔塔尔仓村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "塔塔尔村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "塔斯克玛村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "明园村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "028",
+            },
+        ],
+    },
+    TownCode {
+        name: "依盖尔其镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "光明社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "依乃克帕塔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀拉亚尕其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀尕恰克热村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "依盖尔其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万恰喀村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿克也尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔纳先拜巴扎村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "推墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "都维萨热依村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "再依力克兰干村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "再依力克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "依盖尔其加里村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "提孜纳甫博依村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "玉吉米力克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "其格勒克霍依拉村",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿热勒克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "亚勒古孜托格拉克村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "古勒巴格镇",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "工业路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "其格万社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "兴业社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩艾日克社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴达木社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "振兴社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "帕米尔社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "奥依巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阳光村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴格提坎村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "恰依哈纳村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "米夏镇",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "塔瓦克齐拉社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英其开艾日克社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热勒库勒干村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "夏马勒巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托尕其村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克也尔库勒干村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "墩吾斯塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰热克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀依玛克其村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "克帕哈纳村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托库勒拉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀拉扎克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阔古西艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "依什兰木其村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "亚勒古孜巴格村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "吉格代艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "克斯木其村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "亚尕其拉村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "英其克艾日克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "铁提尔巴格村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "琼库尔克什拉克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "斯日格拉村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "阔滚其拉村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "阿日希村委会",
+                code: "026",
+            },
+        ],
+    },
+    TownCode {
+        name: "托木吾斯塘镇",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "友好村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "依希来木其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐古其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩吾斯塘村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "祥和村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吉格代艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托木吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "墩巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尕孜兰干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿克迪勒村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "拜什托格拉克村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔尕尔其镇",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "古再村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "夏甫其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "切勒巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "光华村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万博依拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日博依拉村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万阿克塔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "库木艾热克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿克塔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "木尕垃村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴格麦勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "塔尕尔其古勒巴格村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "库木奇巴格村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阔什吾斯塘村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "托万巴格村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "拜什盖买村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "库吾其村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "夏依勒克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "且克且克兰干村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "塔孜拉村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "曲许尔盖村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "奥依塔格村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "扎滚艾日克村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "却勒兰干村委会",
+                code: "030",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌达力克镇",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "尤勒滚巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "延都玛村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "伊提帕克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩霍依拉村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔什吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "博依拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "帕依那普村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "乌希拉克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "排孜阿瓦提村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "热瓦特吾斯塘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "英霍伊拉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "塔库吐库村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "巴格买里村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阔什阿瓦提村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "布拉克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "博斯坦霍伊拉村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "帕万巴格村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "琼艾日克村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "喀什艾日克村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "红光村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "028",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿拉买提镇",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "阔什阿瓦提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乃则尔巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "青格力克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "苏盖提力克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "诺代村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔尕其吾斯塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英阿拉买提巴扎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托哈斯台村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩吾斯塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "索拉克玛村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿孜拉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阔纳阿拉买提村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "克其克依盖尔其村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "扎满库木村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "安泰村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿扎特巴格镇",
+        code: "019",
+        villages: &[
+            VillageCode {
+                name: "塔尕尔其吾斯塘村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀塔库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀什噶尔买里斯村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀勒帕克墩村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩吾斯塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库木博勒买村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀秋尕喀什村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "其迪尔托格拉克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "亚普玛村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿扎特巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "央阿格勒克村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿热勒乡",
+        code: "020",
+        villages: &[
+            VillageCode {
+                name: "布力买村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰吐克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "苏盖提力克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托盖塔塔尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀拉铁热克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉扎克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "色日克都维村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "塔热木博依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "琼吾斯塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨万拉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴依都维村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿热恰吐克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿孜干巴格村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "桑霍伊拉村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "恰尔巴格乡",
+        code: "021",
+        villages: &[
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏鲁克艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿依库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "安居来村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "古扎托格拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古扎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "诺开特村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "央阿克勒克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "乌塔克其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库特其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "米韦果勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤库日库特其村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "代斯台霍伊拉村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "英吾斯塘乡",
+        code: "022",
+        villages: &[
+            VillageCode {
+                name: "喀库拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "诺开提村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔什吾斯塘村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万吉格代巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吉格代巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日吉格代巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "百合提村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀让古托格拉克村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿尔斯兰巴格乡",
+        code: "023",
+        villages: &[
+            VillageCode {
+                name: "帕特曼喀什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "艾力什贝希村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "萨万拉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿格其艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "丘隆村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "古扎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿热勒买力村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库木霍依拉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩霍依拉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "塔特勒克艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿力米力克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "胡杨村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "苏其拉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "佰什吾斯塘村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "霍什拉甫阿瓦提村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "孜热甫夏提塔吉克族乡",
+        code: "024",
+        villages: &[
+            VillageCode {
+                name: "巴什库孜玛勒村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库孜玛勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "孜热甫夏提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔什铁热克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀勒提拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "夏普吐鲁克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英迈里村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "希望村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "亚喀艾日克乡",
+        code: "025",
+        villages: &[
+            VillageCode {
+                name: "吐木休克沙热依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "乌扎克萨依村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "色日克托格拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨依吾斯塘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔什吐格曼村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔纳吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "亚喀艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔若勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "喀群乡",
+        code: "026",
+        villages: &[
+            VillageCode {
+                name: "其木都村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "坎其木都村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤库日恰木萨勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "恰木萨勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库尔巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "琼霍伊拉村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿克霍伊拉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴格恰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "铁热克巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阔什巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀拉央塔克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托万喀拉央塔克村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "霍什拉甫乡",
+        code: "027",
+        villages: &[
+            VillageCode {
+                name: "友谊村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "加依巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "克孜拉孜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热塔什村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "亚尔巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "多来提巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔克拉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "艾赛勒巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托力坎村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尧玛村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "达木斯乡",
+        code: "028",
+        villages: &[
+            VillageCode {
+                name: "依其拜勒提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "克孜勒克尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔什塔格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "坎迪尔力克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔什库里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "双泉村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔什纳村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "伊什库力乡",
+        code: "029",
+        villages: &[
+            VillageCode {
+                name: "喀拉库木村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "兴旺村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "克什拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "亚贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "墩吕克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "琼库勒贝希村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托格热吾斯塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阔坦墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "古勒其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤库日加力村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿克库木贝希村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "伊什库力村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吾格兰村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "乌克提其村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阔依其村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿克提其村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "科克其村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "英额孜艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "巴格万村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "拍克其乡",
+        code: "030",
+        villages: &[
+            VillageCode {
+                name: "依玛村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴达木勒克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热坎特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉奇科瑞克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "拍克其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚克拍克其村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿其克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "色日克托格拉克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩吾斯塘村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托普恰村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "萨特马库木村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "玛江库木村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "喀乃托格拉克村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "阔什艾日克乡",
+        code: "031",
+        villages: &[
+            VillageCode {
+                name: "尼皮其村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万尼皮其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托格热艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿克巴什村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "坎麦盖提村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔依其村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阔什艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "博孜艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "色日克布亚村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "墩巴格乡",
+        code: "032",
+        villages: &[
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万阿依库勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤库日阿依库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "盖买库勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "牌坊村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔依其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托格热艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤库日曲许盖村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托万曲许盖村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "拜勒墩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "其乃巴格村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴格阿瓦提乡",
+        code: "033",
+        villages: &[
+            VillageCode {
+                name: "巴格吉格代村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格霍伊拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴格阿瓦提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "拜什艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿克切克勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉坡塔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿恰艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "曙光村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "喀拉苏乡",
+        code: "034",
+        villages: &[
+            VillageCode {
+                name: "夏甫吐鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库勒阿格孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "央都玛村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿恰贝希村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "永和村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英霍依拉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阔什阿瓦提村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿帕铁热木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博瓦希村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "喀什监狱",
+        code: "035",
+        villages: &[VillageCode {
+            name: "监区虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "莎车县良种繁育场",
+        code: "036",
+        villages: &[
+            VillageCode {
+                name: "良种生产大队队",
+                code: "001",
+            },
+            VillageCode {
+                name: "铁热巴格生产大队",
+                code: "002",
+            },
+            VillageCode {
+                name: "米夏生产大队队",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "莎车县第一林场（国营苗圃）",
+        code: "037",
+        villages: &[VillageCode {
+            name: "一林场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "莎车县国营二林场",
+        code: "038",
+        villages: &[VillageCode {
+            name: "二林场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "莎车县园艺场",
+        code: "039",
+        villages: &[VillageCode {
+            name: "园艺场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "莎车县蚕种场",
+        code: "040",
+        villages: &[VillageCode {
+            name: "蚕种场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "莎车县鱼苗场",
+        code: "041",
+        villages: &[VillageCode {
+            name: "育苗场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "农科院莎车农业试验站",
+        code: "042",
+        villages: &[VillageCode {
+            name: "农业试验站虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "工业园区管委会",
+        code: "043",
+        villages: &[
+            VillageCode {
+                name: "阿尔斯兰巴格社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀拉库木社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "火车西站社区",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "英阿瓦提管理委员会",
+        code: "044",
+        villages: &[
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "比纳木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库太克勒克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "买旦村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔纳阿瓦提村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "永安管理委员会",
+        code: "045",
+        villages: &[
+            VillageCode {
+                name: "克孜勒塔木村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "胡杨村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "康乐村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "永平村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "安康村委会",
+                code: "008",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_020: [TownCode; 25] = [
-    TownCode { name: "喀格勒克镇", code: "001", villages: &[VillageCode { name: "阿格孜康博依社区", code: "001" }, VillageCode { name: "伯西热克阔恰社区", code: "002" }, VillageCode { name: "巴格艾日克博依社区", code: "003" }, VillageCode { name: "安江买里社区", code: "004" }, VillageCode { name: "棋盘代尔瓦扎社区", code: "005" }, VillageCode { name: "西城社区", code: "006" }, VillageCode { name: "巴格买里社区", code: "007" }, VillageCode { name: "蓝桥社区", code: "008" }, VillageCode { name: "零公里社区", code: "009" }, VillageCode { name: "新城社区", code: "010" }, VillageCode { name: "幸福南路社区", code: "011" }, VillageCode { name: "亚瓦格社区", code: "012" }, VillageCode { name: "虹桥社区", code: "013" }, VillageCode { name: "新世纪社区", code: "014" }, VillageCode { name: "解放北路社区", code: "015" }, VillageCode { name: "幸福苑社区", code: "016" }, VillageCode { name: "栏杆社区", code: "017" }, VillageCode { name: "东方红社区", code: "018" }, VillageCode { name: "火车站社区", code: "019" }, VillageCode { name: "育才路社区", code: "020" }, VillageCode { name: "尤里滚加依社区", code: "021" }, VillageCode { name: "吐格曼艾热克博依社区", code: "022" }, VillageCode { name: "卡斯克艾热克社区", code: "023" }, VillageCode { name: "亚比西社区", code: "024" }, VillageCode { name: "吐古其阔恰社区", code: "025" }, VillageCode { name: "公园社区", code: "026" }, VillageCode { name: "乌斯塘博依社区", code: "027" }, VillageCode { name: "红旗社区", code: "028" }, VillageCode { name: "田园社区", code: "029" }, VillageCode { name: "金果社区", code: "030" }, VillageCode { name: "团结社区", code: "031" }, VillageCode { name: "阿那阔恰社区", code: "032" }, VillageCode { name: "奇曼社区", code: "033" }, VillageCode { name: "公路花苑社区", code: "034" }, VillageCode { name: "茶花社区", code: "035" }, VillageCode { name: "棋盘东路社区", code: "036" }, VillageCode { name: "五号闸社区", code: "037" }, VillageCode { name: "越程社区", code: "038" }, VillageCode { name: "昆仑社区", code: "039" }, VillageCode { name: "青年路社区", code: "040" }, VillageCode { name: "友谊路社区", code: "041" }, VillageCode { name: "双拥路社区", code: "042" }, VillageCode { name: "阿里路社区", code: "043" }, VillageCode { name: "爱民社区", code: "044" }, VillageCode { name: "玉赛斯社区", code: "045" }, VillageCode { name: "东环路社区", code: "046" }, VillageCode { name: "雪域社区", code: "047" }, VillageCode { name: "园林社区", code: "048" }, VillageCode { name: "南环路社区", code: "049" }, VillageCode { name: "惠民社区", code: "050" }, VillageCode { name: "昌和社区", code: "051" }, VillageCode { name: "景观社区", code: "052" }] },
-    TownCode { name: "恰尔巴格镇", code: "002", villages: &[VillageCode { name: "赛先拜巴扎村委会", code: "001" }, VillageCode { name: "恰尔巴格村委会", code: "002" }, VillageCode { name: "阿亚格依提木玉瑞克村委会", code: "003" }, VillageCode { name: "欧吐拉依提木玉瑞克村委会", code: "004" }, VillageCode { name: "巴什依提木玉瑞克村委会", code: "005" }, VillageCode { name: "喀热巴格村委会", code: "006" }, VillageCode { name: "阔什巴什村委会", code: "007" }, VillageCode { name: "先拜巴扎村委会", code: "008" }, VillageCode { name: "拜合提代尔亚村委会", code: "009" }, VillageCode { name: "阿热买里村委会", code: "010" }, VillageCode { name: "和谐村委会", code: "011" }, VillageCode { name: "墩恰喀村委会", code: "012" }, VillageCode { name: "其兰勒克村委会", code: "013" }, VillageCode { name: "黑尼村委会", code: "014" }, VillageCode { name: "锦绣园艺村委会", code: "015" }] },
-    TownCode { name: "乌夏巴什镇", code: "003", villages: &[VillageCode { name: "布那克村委会", code: "001" }, VillageCode { name: "喀克夏勒村委会", code: "002" }, VillageCode { name: "硝尔买里村委会", code: "003" }, VillageCode { name: "喀帕村委会", code: "004" }, VillageCode { name: "玉勒艾日克村委会", code: "005" }, VillageCode { name: "阿克其格村委会", code: "006" }, VillageCode { name: "萨依也尔村委会", code: "007" }, VillageCode { name: "阿尔帕英依孜村委会", code: "008" }, VillageCode { name: "尤吾斯村委会", code: "009" }, VillageCode { name: "依孜村委会", code: "010" }, VillageCode { name: "喀什吐维村委会", code: "011" }, VillageCode { name: "托扎克其艾日克村委会", code: "012" }, VillageCode { name: "布柬托皮斯村委会", code: "013" }, VillageCode { name: "亚贝希村委会", code: "014" }, VillageCode { name: "尤克日恰喀村委会", code: "015" }, VillageCode { name: "铁斯村委会", code: "016" }, VillageCode { name: "尤克日买里村委会", code: "017" }, VillageCode { name: "琼库尔艾格勒村委会", code: "018" }, VillageCode { name: "喀堂村委会", code: "019" }, VillageCode { name: "塔木勒克村委会", code: "020" }] },
-    TownCode { name: "阿克塔什镇", code: "004", villages: &[VillageCode { name: "喀拉硝尔村委会", code: "001" }, VillageCode { name: "瓦勒瓦村委会", code: "002" }, VillageCode { name: "恰热克来村委会", code: "003" }, VillageCode { name: "玉斯吕什村委会", code: "004" }, VillageCode { name: "阿瓦提巴格村委会", code: "005" }, VillageCode { name: "颜布克村委会", code: "006" }, VillageCode { name: "白玉村委会", code: "007" }] },
-    TownCode { name: "金果镇", code: "005", villages: &[VillageCode { name: "巴什亚巴格村委会", code: "001" }, VillageCode { name: "欧吐拉亚巴格村委会", code: "002" }, VillageCode { name: "阿亚格亚巴格村委会", code: "003" }, VillageCode { name: "古丽巴格村委会", code: "004" }, VillageCode { name: "栏杆村委会", code: "005" }, VillageCode { name: "努尔巴格村委会", code: "006" }, VillageCode { name: "喀尕贝格村委会", code: "007" }, VillageCode { name: "斯代吐维村委会", code: "008" }, VillageCode { name: "和谐村委会", code: "009" }, VillageCode { name: "杨提赛村委会", code: "010" }, VillageCode { name: "阿其玛村委会", code: "011" }, VillageCode { name: "团结村委会", code: "012" }, VillageCode { name: "阿克塔什村委会", code: "013" }] },
-    TownCode { name: "依提木孔镇", code: "006", villages: &[VillageCode { name: "塔勒勒克村委会", code: "001" }, VillageCode { name: "斯也克村委会", code: "002" }, VillageCode { name: "博斯坦村委会", code: "003" }, VillageCode { name: "阿勒米勒克村委会", code: "004" }, VillageCode { name: "恰斯木克村委会", code: "005" }, VillageCode { name: "塔木勒克村委会", code: "006" }, VillageCode { name: "亚勒古孜巴格村委会", code: "007" }, VillageCode { name: "伊来克博依村委会", code: "008" }, VillageCode { name: "阿日希村委会", code: "009" }, VillageCode { name: "喀拉尤勒滚村委会", code: "010" }, VillageCode { name: "斯代村委会", code: "011" }, VillageCode { name: "巴什亚尕其村委会", code: "012" }, VillageCode { name: "阿亚格亚尕其村委会", code: "013" }, VillageCode { name: "库木艾日克村委会", code: "014" }, VillageCode { name: "坎特艾日克村委会", code: "015" }, VillageCode { name: "依提木孔村委会", code: "016" }, VillageCode { name: "拉依巴格村委会", code: "017" }, VillageCode { name: "喀斯克艾日克村委会", code: "018" }, VillageCode { name: "博孜滚艾日克村委会", code: "019" }, VillageCode { name: "其木盖尔里克村委会", code: "020" }, VillageCode { name: "阔滚其艾日克村委会", code: "021" }, VillageCode { name: "阿依丁库勒村委会", code: "022" }, VillageCode { name: "代米村委会", code: "023" }, VillageCode { name: "古勒巴格村委会", code: "024" }, VillageCode { name: "代普桑村委会", code: "025" }, VillageCode { name: "托万库其村委会", code: "026" }, VillageCode { name: "巴什库其村委会", code: "027" }, VillageCode { name: "萨依栏杆村委会", code: "028" }, VillageCode { name: "拜合提村委会", code: "029" }] },
-    TownCode { name: "白杨镇", code: "007", villages: &[VillageCode { name: "巴什通塔什村委会", code: "001" }, VillageCode { name: "通塔什村委会", code: "002" }, VillageCode { name: "欧克阿哈德艾日克村委会", code: "003" }, VillageCode { name: "贝勒克其村委会", code: "004" }, VillageCode { name: "尤喀克霍伊拉村委会", code: "005" }, VillageCode { name: "托万加依铁热克村委会", code: "006" }, VillageCode { name: "布吕买吾斯搪村委会", code: "007" }, VillageCode { name: "库木什墩村委会", code: "008" }, VillageCode { name: "哈拉斯坦村委会", code: "009" }, VillageCode { name: "托玛贝希村委会", code: "010" }, VillageCode { name: "托格拉克勒克村委会", code: "011" }, VillageCode { name: "尤喀克加依铁热克村委会", code: "012" }, VillageCode { name: "库木墩村委会", code: "013" }, VillageCode { name: "巴格艾日克村委会", code: "014" }, VillageCode { name: "郎喀巴格村委会", code: "015" }, VillageCode { name: "兰帕墩村委会", code: "016" }, VillageCode { name: "兰干村委会", code: "017" }, VillageCode { name: "博斯坦艾日克村委会", code: "018" }, VillageCode { name: "库木巴博依村委会", code: "019" }, VillageCode { name: "库兰其艾日克村委会", code: "020" }, VillageCode { name: "多斯鲁克村委会", code: "021" }, VillageCode { name: "亚汗艾日克村委会", code: "022" }, VillageCode { name: "阿拉萨依干村委会", code: "023" }, VillageCode { name: "巴格阿瓦提村委会", code: "024" }, VillageCode { name: "古鲁巴格村委会", code: "025" }] },
-    TownCode { name: "伯西热克镇", code: "008", villages: &[VillageCode { name: "布克松博依村委会", code: "001" }, VillageCode { name: "塔热木巴格村委会", code: "002" }, VillageCode { name: "坎特伊其村委会", code: "003" }, VillageCode { name: "亚博依村委会", code: "004" }, VillageCode { name: "斯也克村委会", code: "005" }, VillageCode { name: "巴什欧壤村委会", code: "006" }, VillageCode { name: "阿娜尔村委会", code: "007" }, VillageCode { name: "巴什喀拉巴格村委会", code: "008" }, VillageCode { name: "阿亚格喀拉巴格村委会", code: "009" }, VillageCode { name: "欧壤村委会", code: "010" }, VillageCode { name: "巴格艾日克村委会", code: "011" }, VillageCode { name: "色格孜勒克博依村委会", code: "012" }, VillageCode { name: "塔木巴格村委会", code: "013" }, VillageCode { name: "博亚克恰喀村委会", code: "014" }, VillageCode { name: "托万欧壤村委会", code: "015" }, VillageCode { name: "巴什也依克村委会", code: "016" }, VillageCode { name: "也依克村委会", code: "017" }, VillageCode { name: "阿亚格也依克村委会", code: "018" }, VillageCode { name: "米外村委会", code: "019" }] },
-    TownCode { name: "洛克乡", code: "009", villages: &[VillageCode { name: "江尕勒吐格曼村委会", code: "001" }, VillageCode { name: "斯也克村委会", code: "002" }, VillageCode { name: "阿克提什村委会", code: "003" }, VillageCode { name: "洛克村委会", code: "004" }, VillageCode { name: "阿热买里村委会", code: "005" }, VillageCode { name: "乌堂村委会", code: "006" }, VillageCode { name: "玉吉米力克村委会", code: "007" }, VillageCode { name: "康开其克村委会", code: "008" }, VillageCode { name: "英艾日克村委会", code: "009" }, VillageCode { name: "兰干村委会", code: "010" }, VillageCode { name: "博热村委会", code: "011" }, VillageCode { name: "吾斯塘博依村委会", code: "012" }] },
-    TownCode { name: "铁提乡", code: "010", villages: &[VillageCode { name: "阿亚格拜什铁热克村委会", code: "001" }, VillageCode { name: "巴什托普贝格村委会", code: "002" }, VillageCode { name: "阿亚格托普贝格村委会", code: "003" }, VillageCode { name: "新城村委会", code: "004" }, VillageCode { name: "恰其巴格村委会", code: "005" }, VillageCode { name: "托万恰喀村委会", code: "006" }, VillageCode { name: "铁提村委会", code: "007" }, VillageCode { name: "尤勒滚加依村委会", code: "008" }, VillageCode { name: "色日克吾斯塘村委会", code: "009" }, VillageCode { name: "英艾日克村委会", code: "010" }, VillageCode { name: "拉依旦村委会", code: "011" }, VillageCode { name: "和谐村委会", code: "012" }] },
-    TownCode { name: "吐古其乡", code: "011", villages: &[VillageCode { name: "巴什吐古其村委会", code: "001" }, VillageCode { name: "吐古其村委会", code: "002" }, VillageCode { name: "阿亚格吐古其村委会", code: "003" }, VillageCode { name: "阔纳托喀依艾格勒村委会", code: "004" }, VillageCode { name: "英托喀依艾格勒村委会", code: "005" }, VillageCode { name: "阿克塔什村委会", code: "006" }, VillageCode { name: "阿亚格苏盖特艾日克村委会", code: "007" }, VillageCode { name: "苏盖特艾日克村委会", code: "008" }, VillageCode { name: "欧吐拉苏盖特艾日克村委会", code: "009" }, VillageCode { name: "巴什苏盖特艾日克村委会", code: "010" }, VillageCode { name: "尤喀克苏盖特艾日克村委会", code: "011" }, VillageCode { name: "库木巴村委会", code: "012" }, VillageCode { name: "巴什库木巴村委会", code: "013" }, VillageCode { name: "欧吐拉库木巴村委会", code: "014" }, VillageCode { name: "阿亚格库木巴村委会", code: "015" }, VillageCode { name: "拜什盖买村委会", code: "016" }, VillageCode { name: "销尔鲁克亚村委会", code: "017" }] },
-    TownCode { name: "江格勒斯乡", code: "012", villages: &[VillageCode { name: "阿勒玛勒克村委会", code: "001" }, VillageCode { name: "恰其库木村委会", code: "002" }, VillageCode { name: "英协海尔村委会", code: "003" }, VillageCode { name: "喀拉墩村委会", code: "004" }, VillageCode { name: "萨依开其克村委会", code: "005" }, VillageCode { name: "夏合勒克村委会", code: "006" }, VillageCode { name: "阿依坎尼特村委会", code: "007" }, VillageCode { name: "巴格艾日克村委会", code: "008" }, VillageCode { name: "塔合塔科瑞克村委会", code: "009" }, VillageCode { name: "托格拉克恰喀村委会", code: "010" }, VillageCode { name: "代尔瓦扎库木村委会", code: "011" }, VillageCode { name: "吐格曼恰喀村委会", code: "012" }, VillageCode { name: "博斯坦村委会", code: "013" }, VillageCode { name: "黑尼恰喀村委会", code: "014" }, VillageCode { name: "兰干村委会", code: "015" }, VillageCode { name: "古勒巴格村委会", code: "016" }, VillageCode { name: "盖米力克村委会", code: "017" }, VillageCode { name: "夏勒迪壤村委会", code: "018" }, VillageCode { name: "巴什古勒巴格村委会", code: "019" }, VillageCode { name: "柯克吉格迪村委会", code: "020" }, VillageCode { name: "阿瓦提村委会", code: "021" }] },
-    TownCode { name: "巴仁乡", code: "013", villages: &[VillageCode { name: "巴什塔尕其艾日克村委会", code: "001" }, VillageCode { name: "吐格曼贝希村委会", code: "002" }, VillageCode { name: "阿亚格塔尕其艾日克村委会", code: "003" }, VillageCode { name: "代普台尔村委会", code: "004" }, VillageCode { name: "库勒艾日克村委会", code: "005" }, VillageCode { name: "其来克亚村委会", code: "006" }, VillageCode { name: "巴什巴仁村委会", code: "007" }, VillageCode { name: "阿亚格巴仁村委会", code: "008" }, VillageCode { name: "阿恰艾日克村委会", code: "009" }, VillageCode { name: "阿拉萨依干村委会", code: "010" }, VillageCode { name: "幸福村委会", code: "011" }, VillageCode { name: "英阿瓦提村委会", code: "012" }] },
-    TownCode { name: "乌吉热克乡", code: "014", villages: &[VillageCode { name: "阿亚格古勒巴格村委会", code: "001" }, VillageCode { name: "巴什古勒巴格村委会", code: "002" }, VillageCode { name: "巴什硝尔艾日克村委会", code: "003" }, VillageCode { name: "欧吐拉硝尔艾日克村委会", code: "004" }, VillageCode { name: "阿亚格硝尔艾日克村委会", code: "005" }, VillageCode { name: "巴格艾日克村委会", code: "006" }, VillageCode { name: "巴什阿瓦提村委会", code: "007" }, VillageCode { name: "阿亚格阿瓦提村委会", code: "008" }, VillageCode { name: "喀斯克吐格村委会", code: "009" }, VillageCode { name: "萨依阿瓦提村委会", code: "010" }, VillageCode { name: "阿亚格喀其村委会", code: "011" }, VillageCode { name: "欧吐拉喀其村委会", code: "012" }, VillageCode { name: "巴什喀其村委会", code: "013" }, VillageCode { name: "吐格曼贝希村委会", code: "014" }, VillageCode { name: "艾利热克村委会", code: "015" }, VillageCode { name: "和田买里村委会", code: "016" }, VillageCode { name: "墩霍依拉村委会", code: "017" }, VillageCode { name: "喀萨普买里村委会", code: "018" }] },
-    TownCode { name: "夏合甫乡", code: "015", villages: &[VillageCode { name: "园艺社区", code: "001" }, VillageCode { name: "夏合甫村委会", code: "002" }, VillageCode { name: "吐格曼贝希村委会", code: "003" }, VillageCode { name: "英巴格村委会", code: "004" }, VillageCode { name: "英亚村委会", code: "005" }, VillageCode { name: "达吾干村委会", code: "006" }, VillageCode { name: "博斯坦库木什村委会", code: "007" }, VillageCode { name: "托盖来斯村委会", code: "008" }, VillageCode { name: "兰干巴格村委会", code: "009" }, VillageCode { name: "幸福村委会", code: "010" }, VillageCode { name: "干其村委会", code: "011" }, VillageCode { name: "托万托喀依村委会", code: "012" }, VillageCode { name: "托格拉克村委会", code: "013" }, VillageCode { name: "尤喀克托喀依村委会", code: "014" }, VillageCode { name: "其瓦村委会", code: "015" }, VillageCode { name: "阿热勒巴格村委会", code: "016" }, VillageCode { name: "欧塔克其村委会", code: "017" }, VillageCode { name: "英阿瓦提村委会", code: "018" }, VillageCode { name: "喀拉墩村委会", code: "019" }] },
-    TownCode { name: "依力克其乡", code: "016", villages: &[VillageCode { name: "巴什兰干村委会", code: "001" }, VillageCode { name: "阿亚格兰干村委会", code: "002" }, VillageCode { name: "萨依吾斯村委会", code: "003" }, VillageCode { name: "阿孜干村委会", code: "004" }, VillageCode { name: "艾肯博依村委会", code: "005" }, VillageCode { name: "喀帕村委会", code: "006" }, VillageCode { name: "巴什拉依喀村委会", code: "007" }, VillageCode { name: "阿亚格拉依喀村委会", code: "008" }, VillageCode { name: "琼艾日克村委会", code: "009" }, VillageCode { name: "铁木尔巴格村委会", code: "010" }, VillageCode { name: "依力克其村委会", code: "011" }, VillageCode { name: "夏玛勒巴格村委会", code: "012" }, VillageCode { name: "古勒巴格村委会", code: "013" }, VillageCode { name: "团结村委会", code: "014" }, VillageCode { name: "台吐尔库勒村委会", code: "015" }, VillageCode { name: "却普吕克村委会", code: "016" }, VillageCode { name: "阿拉库姆力克村委会", code: "017" }] },
-    TownCode { name: "宗朗乡", code: "017", villages: &[VillageCode { name: "清泉村委会", code: "001" }, VillageCode { name: "阿亚格宗朗村委会", code: "002" }, VillageCode { name: "巴什宗朗村委会", code: "003" }, VillageCode { name: "阿依坎特村委会", code: "004" }, VillageCode { name: "阿亚格康萨依村委会", code: "005" }, VillageCode { name: "巴什康萨依村委会", code: "006" }] },
-    TownCode { name: "柯克亚乡", code: "018", villages: &[VillageCode { name: "英阿瓦提村委会", code: "001" }, VillageCode { name: "柯克亚村委会", code: "002" }, VillageCode { name: "欧吞苏村委会", code: "003" }, VillageCode { name: "普萨村委会", code: "004" }, VillageCode { name: "努尔阿巴提村委会", code: "005" }, VillageCode { name: "玉赛斯村委会", code: "006" }, VillageCode { name: "塔尔阿格孜村委会", code: "007" }, VillageCode { name: "果萨斯村委会", code: "008" }, VillageCode { name: "阿其克拜勒都尔村委会", code: "009" }, VillageCode { name: "喀拉尤勒滚村委会", code: "010" }, VillageCode { name: "莫木克村委会", code: "011" }, VillageCode { name: "墩孜拉村委会", code: "012" }, VillageCode { name: "哈拉斯坦村委会", code: "013" }, VillageCode { name: "依格孜亚村委会", code: "014" }, VillageCode { name: "牧场村委会", code: "015" }] },
-    TownCode { name: "西合休乡", code: "019", villages: &[VillageCode { name: "帕合甫村委会", code: "001" }, VillageCode { name: "西合休村委会", code: "002" }, VillageCode { name: "博隆村委会", code: "003" }, VillageCode { name: "尤隆村委会", code: "004" }, VillageCode { name: "巴什却普村委会", code: "005" }, VillageCode { name: "阿亚格却普村委会", code: "006" }, VillageCode { name: "亚尔阿格孜村委会", code: "007" }, VillageCode { name: "库兰阿古村委会", code: "008" }, VillageCode { name: "热斯喀木村委会", code: "009" }] },
-    TownCode { name: "棋盘乡", code: "020", villages: &[VillageCode { name: "伊勒尼什村委会", code: "001" }, VillageCode { name: "欧壤村委会", code: "002" }, VillageCode { name: "尤喀克欧壤村委会", code: "003" }, VillageCode { name: "塔日斯村委会", code: "004" }, VillageCode { name: "棋盘尤力村委会", code: "005" }, VillageCode { name: "和善村委会", code: "006" }, VillageCode { name: "塔尔阿格孜村委会", code: "007" }, VillageCode { name: "许许村委会", code: "008" }, VillageCode { name: "阿孜干萨勒村委会", code: "009" }, VillageCode { name: "萨木其村委会", code: "010" }, VillageCode { name: "博斯坦勒克村委会", code: "011" }] },
-    TownCode { name: "萨依巴格乡", code: "021", villages: &[VillageCode { name: "玉祖木吕克村委会", code: "001" }, VillageCode { name: "喀赞其村委会", code: "002" }, VillageCode { name: "英巴格村委会", code: "003" }, VillageCode { name: "古勒巴格村委会", code: "004" }, VillageCode { name: "督村委会", code: "005" }, VillageCode { name: "喀勒塔恰斯木克村委会", code: "006" }, VillageCode { name: "霍依拉坎特村委会", code: "007" }, VillageCode { name: "阿热坎特村委会", code: "008" }, VillageCode { name: "英阿瓦提村委会", code: "009" }, VillageCode { name: "阿亚格库其村委会", code: "010" }, VillageCode { name: "萨依恰喀村委会", code: "011" }, VillageCode { name: "巴什库其村委会", code: "012" }, VillageCode { name: "托格拉勒村委会", code: "013" }, VillageCode { name: "阿亚格托格拉勒村委会", code: "014" }, VillageCode { name: "巴什托格拉勒村委会", code: "015" }, VillageCode { name: "喀拉塔什村委会", code: "016" }, VillageCode { name: "萨依巴格村委会", code: "017" }, VillageCode { name: "萨亚特村委会", code: "018" }, VillageCode { name: "库普其村委会", code: "019" }, VillageCode { name: "亚喀萨依村委会", code: "020" }, VillageCode { name: "巴什代尔村委会", code: "021" }] },
-    TownCode { name: "阿克塔什农场", code: "022", villages: &[VillageCode { name: "一队虚拟生活区", code: "001" }] },
-    TownCode { name: "良种场", code: "023", villages: &[VillageCode { name: "一队虚拟生活区", code: "001" }] },
-    TownCode { name: "林场", code: "024", villages: &[VillageCode { name: "一队", code: "001" }, VillageCode { name: "五队", code: "002" }] },
-    TownCode { name: "叶城工业园区", code: "025", villages: &[VillageCode { name: "叶城工业园区虚拟社区", code: "001" }] },
+    TownCode {
+        name: "喀格勒克镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "阿格孜康博依社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "伯西热克阔恰社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴格艾日克博依社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "安江买里社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "棋盘代尔瓦扎社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "西城社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴格买里社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "蓝桥社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "零公里社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "新城社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "幸福南路社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚瓦格社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "虹桥社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "新世纪社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "解放北路社区",
+                code: "015",
+            },
+            VillageCode {
+                name: "幸福苑社区",
+                code: "016",
+            },
+            VillageCode {
+                name: "栏杆社区",
+                code: "017",
+            },
+            VillageCode {
+                name: "东方红社区",
+                code: "018",
+            },
+            VillageCode {
+                name: "火车站社区",
+                code: "019",
+            },
+            VillageCode {
+                name: "育才路社区",
+                code: "020",
+            },
+            VillageCode {
+                name: "尤里滚加依社区",
+                code: "021",
+            },
+            VillageCode {
+                name: "吐格曼艾热克博依社区",
+                code: "022",
+            },
+            VillageCode {
+                name: "卡斯克艾热克社区",
+                code: "023",
+            },
+            VillageCode {
+                name: "亚比西社区",
+                code: "024",
+            },
+            VillageCode {
+                name: "吐古其阔恰社区",
+                code: "025",
+            },
+            VillageCode {
+                name: "公园社区",
+                code: "026",
+            },
+            VillageCode {
+                name: "乌斯塘博依社区",
+                code: "027",
+            },
+            VillageCode {
+                name: "红旗社区",
+                code: "028",
+            },
+            VillageCode {
+                name: "田园社区",
+                code: "029",
+            },
+            VillageCode {
+                name: "金果社区",
+                code: "030",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "031",
+            },
+            VillageCode {
+                name: "阿那阔恰社区",
+                code: "032",
+            },
+            VillageCode {
+                name: "奇曼社区",
+                code: "033",
+            },
+            VillageCode {
+                name: "公路花苑社区",
+                code: "034",
+            },
+            VillageCode {
+                name: "茶花社区",
+                code: "035",
+            },
+            VillageCode {
+                name: "棋盘东路社区",
+                code: "036",
+            },
+            VillageCode {
+                name: "五号闸社区",
+                code: "037",
+            },
+            VillageCode {
+                name: "越程社区",
+                code: "038",
+            },
+            VillageCode {
+                name: "昆仑社区",
+                code: "039",
+            },
+            VillageCode {
+                name: "青年路社区",
+                code: "040",
+            },
+            VillageCode {
+                name: "友谊路社区",
+                code: "041",
+            },
+            VillageCode {
+                name: "双拥路社区",
+                code: "042",
+            },
+            VillageCode {
+                name: "阿里路社区",
+                code: "043",
+            },
+            VillageCode {
+                name: "爱民社区",
+                code: "044",
+            },
+            VillageCode {
+                name: "玉赛斯社区",
+                code: "045",
+            },
+            VillageCode {
+                name: "东环路社区",
+                code: "046",
+            },
+            VillageCode {
+                name: "雪域社区",
+                code: "047",
+            },
+            VillageCode {
+                name: "园林社区",
+                code: "048",
+            },
+            VillageCode {
+                name: "南环路社区",
+                code: "049",
+            },
+            VillageCode {
+                name: "惠民社区",
+                code: "050",
+            },
+            VillageCode {
+                name: "昌和社区",
+                code: "051",
+            },
+            VillageCode {
+                name: "景观社区",
+                code: "052",
+            },
+        ],
+    },
+    TownCode {
+        name: "恰尔巴格镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "赛先拜巴扎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚格依提木玉瑞克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "欧吐拉依提木玉瑞克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴什依提木玉瑞克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀热巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔什巴什村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "先拜巴扎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "拜合提代尔亚村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩恰喀村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "其兰勒克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "黑尼村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "锦绣园艺村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌夏巴什镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "布那克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀克夏勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "硝尔买里村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀帕村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "玉勒艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克其格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨依也尔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿尔帕英依孜村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤吾斯村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "依孜村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀什吐维村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托扎克其艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "布柬托皮斯村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "亚贝希村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尤克日恰喀村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "铁斯村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "尤克日买里村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "琼库尔艾格勒村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "喀堂村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "塔木勒克村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克塔什镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "喀拉硝尔村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "瓦勒瓦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "恰热克来村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "玉斯吕什村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿瓦提巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "颜布克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "白玉村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "金果镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "巴什亚巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "欧吐拉亚巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚格亚巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古丽巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "栏杆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "努尔巴格村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀尕贝格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "斯代吐维村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "杨提赛村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿其玛村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿克塔什村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "依提木孔镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "塔勒勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿勒米勒克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "恰斯木克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔木勒克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "亚勒古孜巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "伊来克博依村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿日希村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀拉尤勒滚村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "斯代村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴什亚尕其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿亚格亚尕其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "坎特艾日克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "依提木孔村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "拉依巴格村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀斯克艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "博孜滚艾日克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "其木盖尔里克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阔滚其艾日克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "阿依丁库勒村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "代米村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "代普桑村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "托万库其村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "巴什库其村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "萨依栏杆村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "拜合提村委会",
+                code: "029",
+            },
+        ],
+    },
+    TownCode {
+        name: "白杨镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "巴什通塔什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "通塔什村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "欧克阿哈德艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "贝勒克其村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤喀克霍伊拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万加依铁热克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "布吕买吾斯搪村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库木什墩村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "哈拉斯坦村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托玛贝希村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托格拉克勒克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤喀克加依铁热克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "库木墩村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "郎喀巴格村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "兰帕墩村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "博斯坦艾日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "库木巴博依村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "库兰其艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "多斯鲁克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "亚汗艾日克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "阿拉萨依干村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "巴格阿瓦提村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "古鲁巴格村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "伯西热克镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "布克松博依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "塔热木巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "坎特伊其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚博依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴什欧壤村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿娜尔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴什喀拉巴格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿亚格喀拉巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "欧壤村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "色格孜勒克博依村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "塔木巴格村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博亚克恰喀村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托万欧壤村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "巴什也依克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "也依克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿亚格也依克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "米外村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "洛克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "江尕勒吐格曼村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "斯也克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿克提什村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "洛克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "玉吉米力克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "康开其克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "博热村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁提乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "阿亚格拜什铁热克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴什托普贝格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚格托普贝格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新城村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "恰其巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万恰喀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "铁提村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "尤勒滚加依村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "色日克吾斯塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "拉依旦村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "吐古其乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "巴什吐古其村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吐古其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚格吐古其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阔纳托喀依艾格勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英托喀依艾格勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克塔什村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿亚格苏盖特艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "苏盖特艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "欧吐拉苏盖特艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴什苏盖特艾日克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤喀克苏盖特艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库木巴村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴什库木巴村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "欧吐拉库木巴村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿亚格库木巴村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "拜什盖买村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "销尔鲁克亚村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "江格勒斯乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "阿勒玛勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰其库木村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英协海尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨依开其克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "夏合勒克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿依坎尼特村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "塔合塔科瑞克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托格拉克恰喀村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "代尔瓦扎库木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吐格曼恰喀村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "黑尼恰喀村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "盖米力克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "夏勒迪壤村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "巴什古勒巴格村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "柯克吉格迪村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴仁乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "巴什塔尕其艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿亚格塔尕其艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "代普台尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "库勒艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "其来克亚村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴什巴仁村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格巴仁村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿恰艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿拉萨依干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌吉热克乡",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "阿亚格古勒巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴什古勒巴格村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴什硝尔艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "欧吐拉硝尔艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿亚格硝尔艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴什阿瓦提村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格阿瓦提村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀斯克吐格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "萨依阿瓦提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿亚格喀其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "欧吐拉喀其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴什喀其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "艾利热克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "和田买里村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "墩霍依拉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀萨普买里村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "夏合甫乡",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "园艺社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "夏合甫村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英亚村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "达吾干村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "博斯坦库木什村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托盖来斯村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "兰干巴格村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "干其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "托万托喀依村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托格拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤喀克托喀依村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "其瓦村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阿热勒巴格村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "欧塔克其村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "依力克其乡",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "巴什兰干村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚格兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "萨依吾斯村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿孜干村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "艾肯博依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀帕村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "巴什拉依喀村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格拉依喀村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "琼艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "铁木尔巴格村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "依力克其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "夏玛勒巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "台吐尔库勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "却普吕克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿拉库姆力克村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "宗朗乡",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "清泉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚格宗朗村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "巴什宗朗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿依坎特村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿亚格康萨依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴什康萨依村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "柯克亚乡",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "柯克亚村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "欧吞苏村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "普萨村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "努尔阿巴提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玉赛斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔尔阿格孜村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "果萨斯村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿其克拜勒都尔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀拉尤勒滚村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "莫木克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩孜拉村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "哈拉斯坦村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "依格孜亚村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "牧场村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "西合休乡",
+        code: "019",
+        villages: &[
+            VillageCode {
+                name: "帕合甫村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "西合休村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博隆村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "尤隆村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴什却普村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿亚格却普村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "亚尔阿格孜村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库兰阿古村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "热斯喀木村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "棋盘乡",
+        code: "020",
+        villages: &[
+            VillageCode {
+                name: "伊勒尼什村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "欧壤村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尤喀克欧壤村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "塔日斯村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "棋盘尤力村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "和善村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔尔阿格孜村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "许许村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿孜干萨勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "萨木其村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "博斯坦勒克村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "萨依巴格乡",
+        code: "021",
+        villages: &[
+            VillageCode {
+                name: "玉祖木吕克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀赞其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "督村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "喀勒塔恰斯木克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "霍依拉坎特村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿热坎特村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚格库其村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "萨依恰喀村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴什库其村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托格拉勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚格托格拉勒村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴什托格拉勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "喀拉塔什村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "萨依巴格村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "萨亚特村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "库普其村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "亚喀萨依村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "巴什代尔村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克塔什农场",
+        code: "022",
+        villages: &[VillageCode {
+            name: "一队虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "良种场",
+        code: "023",
+        villages: &[VillageCode {
+            name: "一队虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "林场",
+        code: "024",
+        villages: &[
+            VillageCode {
+                name: "一队",
+                code: "001",
+            },
+            VillageCode {
+                name: "五队",
+                code: "002",
+            },
+        ],
+    },
+    TownCode {
+        name: "叶城工业园区",
+        code: "025",
+        villages: &[VillageCode {
+            name: "叶城工业园区虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_021: [TownCode; 13] = [
-    TownCode { name: "麦盖提镇", code: "001", villages: &[VillageCode { name: "吾依库勒社区", code: "001" }, VillageCode { name: "古再尔社区", code: "002" }, VillageCode { name: "帕合塔巴扎社区", code: "003" }, VillageCode { name: "巴扎结米社区", code: "004" }, VillageCode { name: "博勒喀吾斯塘博依社区", code: "005" }, VillageCode { name: "英巴扎社区", code: "006" }, VillageCode { name: "英买里社区", code: "007" }, VillageCode { name: "新城社区", code: "008" }, VillageCode { name: "工业园社区", code: "009" }, VillageCode { name: "刀郎社区", code: "010" }, VillageCode { name: "南网社区", code: "011" }, VillageCode { name: "城南社区", code: "012" }, VillageCode { name: "团结社区", code: "013" }, VillageCode { name: "民生社区", code: "014" }, VillageCode { name: "和平社区", code: "015" }, VillageCode { name: "文化路社区", code: "016" }, VillageCode { name: "友好社区", code: "017" }, VillageCode { name: "人民路社区", code: "018" }, VillageCode { name: "幸福社区", code: "019" }, VillageCode { name: "阳光社区", code: "020" }, VillageCode { name: "新时代社区", code: "021" }] },
-    TownCode { name: "巴扎结米镇", code: "002", villages: &[VillageCode { name: "巴扎结米村民委员会", code: "001" }, VillageCode { name: "巴格万村民委员会", code: "002" }, VillageCode { name: "吾尔曼村民委员会", code: "003" }, VillageCode { name: "亚胡木丹村民委员会", code: "004" }, VillageCode { name: "恰木古鲁克村民委员会", code: "005" }, VillageCode { name: "阔什艾肯村民委员会", code: "006" }, VillageCode { name: "古勒巴格村民委员会", code: "007" }, VillageCode { name: "库台克勒克村民委员会", code: "008" }, VillageCode { name: "尤勒滚勒克村民委员会", code: "009" }, VillageCode { name: "波斯喀木村民委员会", code: "010" }, VillageCode { name: "乌喀村民委员会", code: "011" }, VillageCode { name: "贝勒克其村民委员会", code: "012" }, VillageCode { name: "博孜村民委员会", code: "013" }, VillageCode { name: "苏怕墩村民委员会", code: "014" }, VillageCode { name: "尤汉巴什墩村民委员会", code: "015" }, VillageCode { name: "吾斯塘博依村民委员会", code: "016" }] },
-    TownCode { name: "希依提墩乡", code: "003", villages: &[VillageCode { name: "英也尔村委会", code: "001" }, VillageCode { name: "英吾斯塘村委会", code: "002" }, VillageCode { name: "月塘村委会", code: "003" }, VillageCode { name: "琼库尔买里村委会", code: "004" }, VillageCode { name: "英买里村委会", code: "005" }, VillageCode { name: "英阿瓦提村委会", code: "006" }, VillageCode { name: "英格孜艾日克村委会", code: "007" }, VillageCode { name: "喀克夏勒村委会", code: "008" }, VillageCode { name: "托万喀帕克阿斯提村委会", code: "009" }, VillageCode { name: "尤库日喀帕克阿斯提村委会", code: "010" }, VillageCode { name: "苏帕墩村委会", code: "011" }, VillageCode { name: "艾力克坎土曼村委会", code: "012" }, VillageCode { name: "东风村委会", code: "013" }, VillageCode { name: "博斯坦勒克村委会", code: "014" }, VillageCode { name: "英巴扎村委会", code: "015" }] },
-    TownCode { name: "央塔克乡", code: "004", villages: &[VillageCode { name: "奥依布格达依村委会", code: "001" }, VillageCode { name: "阿克艾额孜村委会", code: "002" }, VillageCode { name: "央塔克村委会", code: "003" }, VillageCode { name: "乌依鲁克村委会", code: "004" }, VillageCode { name: "结然墩村委会", code: "005" }, VillageCode { name: "明光村委会", code: "006" }, VillageCode { name: "玉奇于孜莫村委会", code: "007" }, VillageCode { name: "阿恰墩村委会", code: "008" }, VillageCode { name: "克亚克勒克乌依村委会", code: "009" }, VillageCode { name: "包勒喀村委会", code: "010" }, VillageCode { name: "齐拉尼村委会", code: "011" }, VillageCode { name: "布隆浪喀村委会", code: "012" }, VillageCode { name: "乌尊买里村委会", code: "013" }, VillageCode { name: "尤库日阿克提坎村委会", code: "014" }, VillageCode { name: "阿克提坎村委会", code: "015" }, VillageCode { name: "开蒙村委会", code: "016" }, VillageCode { name: "阿尔浪喀村委会", code: "017" }, VillageCode { name: "哈曼阔依地村委会", code: "018" }, VillageCode { name: "科克提坎村委会", code: "019" }, VillageCode { name: "代尔瓦扎托格拉克村委会", code: "020" }, VillageCode { name: "阔克阔勒村委会", code: "021" }, VillageCode { name: "塔立克村委会", code: "022" }, VillageCode { name: "东伟立克村委会", code: "023" }, VillageCode { name: "刀郎家园村委会", code: "024" }, VillageCode { name: "阿克库纳克村委会", code: "025" }] },
-    TownCode { name: "吐曼塔勒乡", code: "005", villages: &[VillageCode { name: "库如克鲁克村委会", code: "001" }, VillageCode { name: "温乌塔克村委会", code: "002" }, VillageCode { name: "吐曼塔勒村委会", code: "003" }, VillageCode { name: "皮力特库木希勒克村委会", code: "004" }, VillageCode { name: "阿亚克塔木村委会", code: "005" }, VillageCode { name: "敏乃克村委会", code: "006" }, VillageCode { name: "其盖勒克村委会", code: "007" }, VillageCode { name: "巴格热克村委会", code: "008" }, VillageCode { name: "奇热木旦勒克村委会", code: "009" }, VillageCode { name: "托盖墩村委会", code: "010" }, VillageCode { name: "英阿瓦提村委会", code: "011" }, VillageCode { name: "亚库勒村委会", code: "012" }, VillageCode { name: "阿其克塔勒克村委会", code: "013" }, VillageCode { name: "开外孜力克村委会", code: "014" }, VillageCode { name: "巴扎村委会", code: "015" }] },
-    TownCode { name: "尕孜库勒乡", code: "006", villages: &[VillageCode { name: "喀什博依村委会", code: "001" }, VillageCode { name: "也克先拜巴扎村委会", code: "002" }, VillageCode { name: "尕孜库勒村委会", code: "003" }, VillageCode { name: "喀玛库勒村委会", code: "004" }, VillageCode { name: "吐普硝村委会", code: "005" }, VillageCode { name: "英巴扎村委会", code: "006" }, VillageCode { name: "麦迪尼帕合特勒克村委会", code: "007" }, VillageCode { name: "拉依勒克帕合特勒克村委会", code: "008" }, VillageCode { name: "墩买里村委会", code: "009" }, VillageCode { name: "麦盖提帕合特勒克村委会", code: "010" }, VillageCode { name: "古再勒库勒村委会", code: "011" }, VillageCode { name: "博孜库木村委会", code: "012" }, VillageCode { name: "塔拉买里村委会", code: "013" }, VillageCode { name: "库木希买里村委会", code: "014" }, VillageCode { name: "先拜巴扎村委会", code: "015" }, VillageCode { name: "巴格艾日克村委会", code: "016" }, VillageCode { name: "巴格阿瓦提村委会", code: "017" }, VillageCode { name: "喀赞库勒村委会", code: "018" }, VillageCode { name: "亚恰克迪村委会", code: "019" }, VillageCode { name: "青格勒奥依玛提克村委会", code: "020" }, VillageCode { name: "英阿瓦提村委会", code: "021" }] },
-    TownCode { name: "克孜勒阿瓦提乡", code: "007", villages: &[VillageCode { name: "阔纳巴扎村委会", code: "001" }, VillageCode { name: "巴格沃依拉村委会", code: "002" }, VillageCode { name: "英巴扎村委会", code: "003" }, VillageCode { name: "奥依巴格村委会", code: "004" }, VillageCode { name: "代尔瓦孜库木村委会", code: "005" }, VillageCode { name: "其格勒克阔坦村委会", code: "006" }, VillageCode { name: "阿都克阿勒迪村委会", code: "007" }, VillageCode { name: "喀赞库勒村委会", code: "008" }, VillageCode { name: "拉依当村委会", code: "009" }, VillageCode { name: "色日克库勒村委会", code: "010" }, VillageCode { name: "喀拉墩村委会", code: "011" }, VillageCode { name: "亚塔库木村委会", code: "012" }, VillageCode { name: "乌库什墩村委会", code: "013" }, VillageCode { name: "塔勒克村委会", code: "014" }, VillageCode { name: "阔什吾斯塘村委会", code: "015" }, VillageCode { name: "塔塔尔吾斯塘村委会", code: "016" }, VillageCode { name: "阿特库都克村委会", code: "017" }, VillageCode { name: "英阿瓦提村委会", code: "018" }, VillageCode { name: "古麻托卡依村委会", code: "019" }, VillageCode { name: "团结村委会", code: "020" }, VillageCode { name: "古再勒巴格村委会", code: "021" }, VillageCode { name: "古再勒阿瓦提村委会", code: "022" }, VillageCode { name: "苏盖提库勒村委会", code: "023" }] },
-    TownCode { name: "库木库萨尔乡", code: "008", villages: &[VillageCode { name: "夏普鲁克村委会", code: "001" }, VillageCode { name: "库木库都克村委会", code: "002" }, VillageCode { name: "铁木热克村委会", code: "003" }, VillageCode { name: "托万塔瓦尔克斯克村委会", code: "004" }, VillageCode { name: "尤库日塔瓦尔克斯克村委会", code: "005" }, VillageCode { name: "库木库萨尔村委会", code: "006" }, VillageCode { name: "尤库日哈迪勒克村委会", code: "007" }, VillageCode { name: "托万库木库萨尔村委会", code: "008" }, VillageCode { name: "胡木丹买里村委会", code: "009" }, VillageCode { name: "库木博斯坦村委会", code: "010" }, VillageCode { name: "托万哈迪勒克村委会", code: "011" }, VillageCode { name: "吐孜鲁克喀什村委会", code: "012" }] },
-    TownCode { name: "昂格特勒克乡", code: "009", villages: &[VillageCode { name: "阿克布鲁买村委会", code: "001" }, VillageCode { name: "昂格特勒克村委会", code: "002" }, VillageCode { name: "喀什博依村委会", code: "003" }, VillageCode { name: "托万昂格特勒克村委会", code: "004" }] },
-    TownCode { name: "库尔玛乡", code: "010", villages: &[VillageCode { name: "萨其喀克村委会", code: "001" }, VillageCode { name: "博斯坦村委会", code: "002" }, VillageCode { name: "比尔艾格孜村委会", code: "003" }, VillageCode { name: "布喀帕塔村委会", code: "004" }, VillageCode { name: "塔木墩村委会", code: "005" }, VillageCode { name: "铁热木买里斯村委会", code: "006" }, VillageCode { name: "恰斯村委会", code: "007" }, VillageCode { name: "红光村委会", code: "008" }, VillageCode { name: "巴扎村委会", code: "009" }] },
-    TownCode { name: "胡杨林场", code: "011", villages: &[VillageCode { name: "胡杨林场虚拟生活区", code: "001" }] },
-    TownCode { name: "园艺场", code: "012", villages: &[VillageCode { name: "园艺场虚拟生活区", code: "001" }] },
-    TownCode { name: "五一林场", code: "013", villages: &[VillageCode { name: "五一林场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "麦盖提镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "吾依库勒社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "古再尔社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "帕合塔巴扎社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴扎结米社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "博勒喀吾斯塘博依社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "英巴扎社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "英买里社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "新城社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "工业园社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "刀郎社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "南网社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "城南社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "团结社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "民生社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "和平社区",
+                code: "015",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "016",
+            },
+            VillageCode {
+                name: "友好社区",
+                code: "017",
+            },
+            VillageCode {
+                name: "人民路社区",
+                code: "018",
+            },
+            VillageCode {
+                name: "幸福社区",
+                code: "019",
+            },
+            VillageCode {
+                name: "阳光社区",
+                code: "020",
+            },
+            VillageCode {
+                name: "新时代社区",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴扎结米镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "巴扎结米村民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格万村民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吾尔曼村民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚胡木丹村民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "恰木古鲁克村民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阔什艾肯村民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古勒巴格村民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "库台克勒克村民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尤勒滚勒克村民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "波斯喀木村民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "乌喀村民委员会",
+                code: "011",
+            },
+            VillageCode {
+                name: "贝勒克其村民委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博孜村民委员会",
+                code: "013",
+            },
+            VillageCode {
+                name: "苏怕墩村民委员会",
+                code: "014",
+            },
+            VillageCode {
+                name: "尤汉巴什墩村民委员会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吾斯塘博依村民委员会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "希依提墩乡",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "英也尔村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "月塘村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "琼库尔买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英格孜艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀克夏勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托万喀帕克阿斯提村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤库日喀帕克阿斯提村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "苏帕墩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "艾力克坎土曼村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "东风村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博斯坦勒克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "央塔克乡",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "奥依布格达依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克艾额孜村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "央塔克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌依鲁克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "结然墩村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "明光村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "玉奇于孜莫村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿恰墩村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "克亚克勒克乌依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "包勒喀村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "齐拉尼村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "布隆浪喀村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乌尊买里村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤库日阿克提坎村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阿克提坎村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "开蒙村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿尔浪喀村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "哈曼阔依地村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "科克提坎村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "代尔瓦扎托格拉克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阔克阔勒村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "塔立克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "东伟立克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "刀郎家园村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "阿克库纳克村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "吐曼塔勒乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "库如克鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "温乌塔克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吐曼塔勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "皮力特库木希勒克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿亚克塔木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "敏乃克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "其盖勒克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴格热克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "奇热木旦勒克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托盖墩村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚库勒村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿其克塔勒克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "开外孜力克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "尕孜库勒乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "喀什博依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "也克先拜巴扎村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尕孜库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀玛库勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吐普硝村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "麦迪尼帕合特勒克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "拉依勒克帕合特勒克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "麦盖提帕合特勒克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "古再勒库勒村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博孜库木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "塔拉买里村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木希买里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "先拜巴扎村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "巴格阿瓦提村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "喀赞库勒村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "亚恰克迪村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "青格勒奥依玛提克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒阿瓦提乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格沃依拉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "奥依巴格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "代尔瓦孜库木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "其格勒克阔坦村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿都克阿勒迪村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀赞库勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "拉依当村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "色日克库勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀拉墩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚塔库木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乌库什墩村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "塔勒克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阔什吾斯塘村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "塔塔尔吾斯塘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿特库都克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "古麻托卡依村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "古再勒巴格村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "古再勒阿瓦提村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "苏盖提库勒村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "库木库萨尔乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "夏普鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库木库都克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "铁木热克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万塔瓦尔克斯克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "尤库日塔瓦尔克斯克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库木库萨尔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日哈迪勒克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "托万库木库萨尔村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "胡木丹买里村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "库木博斯坦村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托万哈迪勒克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吐孜鲁克喀什村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "昂格特勒克乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "阿克布鲁买村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昂格特勒克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀什博依村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万昂格特勒克村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "库尔玛乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "萨其喀克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "比尔艾格孜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "布喀帕塔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "塔木墩村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "铁热木买里斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "恰斯村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红光村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "胡杨林场",
+        code: "011",
+        villages: &[VillageCode {
+            name: "胡杨林场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "园艺场",
+        code: "012",
+        villages: &[VillageCode {
+            name: "园艺场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "五一林场",
+        code: "013",
+        villages: &[VillageCode {
+            name: "五一林场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_CL_022: [TownCode; 9] = [
-    TownCode { name: "岳普湖镇", code: "001", villages: &[VillageCode { name: "幸福路社区", code: "001" }, VillageCode { name: "文化路社区", code: "002" }, VillageCode { name: "库木萨热依路社区", code: "003" }, VillageCode { name: "阳光社区", code: "004" }, VillageCode { name: "开发区社区", code: "005" }, VillageCode { name: "建设路社区", code: "006" }, VillageCode { name: "花园路社区", code: "007" }, VillageCode { name: "喀拉玉吉买路社区", code: "008" }, VillageCode { name: "新城社区", code: "009" }, VillageCode { name: "团结路社区", code: "010" }, VillageCode { name: "加格达村委会", code: "011" }, VillageCode { name: "艾吾再力库木村委会", code: "012" }, VillageCode { name: "托格拉吾斯塘村委会", code: "013" }] },
-    TownCode { name: "艾西曼镇", code: "002", villages: &[VillageCode { name: "尤库日艾西曼村委会", code: "001" }, VillageCode { name: "托万艾西曼村委会", code: "002" }, VillageCode { name: "加依托格拉克村委会", code: "003" }, VillageCode { name: "依玛村委会", code: "004" }, VillageCode { name: "加格达村委会", code: "005" }, VillageCode { name: "托万科克其村委会", code: "006" }, VillageCode { name: "尤库日科克其村委会", code: "007" }, VillageCode { name: "恰喀村委会", code: "008" }, VillageCode { name: "团结村委会", code: "009" }, VillageCode { name: "和谐村委会", code: "010" }] },
-    TownCode { name: "铁热木镇", code: "003", villages: &[VillageCode { name: "良种场社区", code: "001" }, VillageCode { name: "种畜场社区", code: "002" }, VillageCode { name: "库勒都买里斯村委会", code: "003" }, VillageCode { name: "喀拉托格拉克村委会", code: "004" }, VillageCode { name: "协开尔村委会", code: "005" }, VillageCode { name: "库台克力克村委会", code: "006" }, VillageCode { name: "阔纳吾斯塘村委会", code: "007" }, VillageCode { name: "山格力齐村委会", code: "008" }, VillageCode { name: "吐孜央塔克村委会", code: "009" }, VillageCode { name: "赛福科瑞克村委会", code: "010" }, VillageCode { name: "玛什英恩孜村委会", code: "011" }, VillageCode { name: "英吾斯坦村委会", code: "012" }, VillageCode { name: "莫尕勒村委会", code: "013" }, VillageCode { name: "博斯坦村委会", code: "014" }, VillageCode { name: "依勒提孜力克村委会", code: "015" }, VillageCode { name: "盖买村委会", code: "016" }] },
-    TownCode { name: "也克先拜巴扎镇", code: "004", villages: &[VillageCode { name: "墩艾日克村委会", code: "001" }, VillageCode { name: "恰克勒克村委会", code: "002" }, VillageCode { name: "喀尕萨奇提村委会", code: "003" }, VillageCode { name: "辉煌村委会", code: "004" }, VillageCode { name: "塔勒博依村委会", code: "005" }, VillageCode { name: "吐格曼艾日克村委会", code: "006" }, VillageCode { name: "莫尕勒艾日克村委会", code: "007" }, VillageCode { name: "曲如奇村委会", code: "008" }, VillageCode { name: "尕勒艾日克村委会", code: "009" }, VillageCode { name: "其盖里克村委会", code: "010" }, VillageCode { name: "当拉村委会", code: "011" }, VillageCode { name: "开来依马克村委会", code: "012" }, VillageCode { name: "乌苏特村委会", code: "013" }, VillageCode { name: "钢花村委会", code: "014" }] },
-    TownCode { name: "岳普湖乡", code: "005", villages: &[VillageCode { name: "门加克勒克村委会", code: "001" }, VillageCode { name: "加依村委会", code: "002" }, VillageCode { name: "库热村委会", code: "003" }, VillageCode { name: "托万提埂村委会", code: "004" }, VillageCode { name: "欧吐拉提埂村委会", code: "005" }, VillageCode { name: "尤库日提埂村委会", code: "006" }, VillageCode { name: "喀依古勒村委会", code: "007" }, VillageCode { name: "喀拉玉吉买村委会", code: "008" }, VillageCode { name: "英买力村委会", code: "009" }] },
-    TownCode { name: "阿其克乡", code: "006", villages: &[VillageCode { name: "红星村委会", code: "001" }, VillageCode { name: "阿热买里村委会", code: "002" }, VillageCode { name: "其色日克村委会", code: "003" }, VillageCode { name: "巴扎村委会", code: "004" }, VillageCode { name: "吾斯塘博依村委会", code: "005" }, VillageCode { name: "玛江库木村委会", code: "006" }, VillageCode { name: "努开勒村委会", code: "007" }, VillageCode { name: "纳格热恰勒迪村委会", code: "008" }, VillageCode { name: "亚博依村委会", code: "009" }, VillageCode { name: "阿亚克帕万村委会", code: "010" }, VillageCode { name: "欧吐拉帕万村委会", code: "011" }, VillageCode { name: "尤库日帕万村委会", code: "012" }, VillageCode { name: "贝勒克其村委会", code: "013" }, VillageCode { name: "昆都孜村委会", code: "014" }, VillageCode { name: "艾肯博依村委会", code: "015" }, VillageCode { name: "托玛村委会", code: "016" }] },
-    TownCode { name: "色也克乡", code: "007", villages: &[VillageCode { name: "农场社区", code: "001" }, VillageCode { name: "林场社区", code: "002" }, VillageCode { name: "喀勒塔亚依拉克村委会", code: "003" }, VillageCode { name: "库木什艾日克村委会", code: "004" }, VillageCode { name: "阿克提坎村委会", code: "005" }, VillageCode { name: "色也克村委会", code: "006" }, VillageCode { name: "尤库日色也克村委会", code: "007" }, VillageCode { name: "英阿瓦提村委会", code: "008" }, VillageCode { name: "塔特勒克布拉克村委会", code: "009" }, VillageCode { name: "尤库日布里曼村委会", code: "010" }, VillageCode { name: "布里曼村委会", code: "011" }, VillageCode { name: "新古力巴格村委会", code: "012" }, VillageCode { name: "央塔克勒克村委会", code: "013" }, VillageCode { name: "尤库日艾曼里克村委会", code: "014" }, VillageCode { name: "艾曼里克村委会", code: "015" }, VillageCode { name: "库木艾肯村委会", code: "016" }] },
-    TownCode { name: "巴依阿瓦提乡", code: "008", villages: &[VillageCode { name: "乔喀村委会", code: "001" }, VillageCode { name: "库孜吕克村委会", code: "002" }, VillageCode { name: "阿热盖买村委会", code: "003" }, VillageCode { name: "喀力玛村委会", code: "004" }, VillageCode { name: "古勒巴格村委会", code: "005" }, VillageCode { name: "巴依阿瓦提村委会", code: "006" }, VillageCode { name: "尤库日喀力马村委会", code: "007" }, VillageCode { name: "新巴扎村委员", code: "008" }, VillageCode { name: "柳树王村委会", code: "009" }] },
-    TownCode { name: "阿洪鲁库木乡", code: "009", villages: &[VillageCode { name: "胡杨村委会", code: "001" }, VillageCode { name: "拜合提亚尔村委会", code: "002" }, VillageCode { name: "喀力尕其村委会", code: "003" }, VillageCode { name: "依甫吐迪库木村委会", code: "004" }] },
+    TownCode {
+        name: "岳普湖镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "幸福路社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木萨热依路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "阳光社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "开发区社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "建设路社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "花园路社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉玉吉买路社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "新城社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "团结路社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "加格达村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "艾吾再力库木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "托格拉吾斯塘村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "艾西曼镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "尤库日艾西曼村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "托万艾西曼村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "加依托格拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "依玛村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加格达村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "托万科克其村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日科克其村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁热木镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "良种场社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "种畜场社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "库勒都买里斯村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀拉托格拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "协开尔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库台克力克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔纳吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "山格力齐村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "吐孜央塔克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "赛福科瑞克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玛什英恩孜村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英吾斯坦村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "莫尕勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博斯坦村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "依勒提孜力克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "盖买村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "也克先拜巴扎镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰克勒克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀尕萨奇提村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "辉煌村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "塔勒博依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格曼艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "莫尕勒艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "曲如奇村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "尕勒艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "其盖里克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "当拉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "开来依马克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乌苏特村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "钢花村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "岳普湖乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "门加克勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "加依村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库热村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托万提埂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "欧吐拉提埂村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "尤库日提埂村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀依古勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀拉玉吉买村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英买力村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿其克乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "红星村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "其色日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玛江库木村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "努开勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "纳格热恰勒迪村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "亚博依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚克帕万村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "欧吐拉帕万村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "尤库日帕万村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "贝勒克其村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "昆都孜村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "艾肯博依村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托玛村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "色也克乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "农场社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "林场社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀勒塔亚依拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "库木什艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿克提坎村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "色也克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日色也克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "塔特勒克布拉克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "尤库日布里曼村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "布里曼村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "新古力巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "央塔克勒克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "尤库日艾曼里克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "艾曼里克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "库木艾肯村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "巴依阿瓦提乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "乔喀村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "库孜吕克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿热盖买村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀力玛村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "巴依阿瓦提村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尤库日喀力马村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新巴扎村委员",
+                code: "008",
+            },
+            VillageCode {
+                name: "柳树王村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿洪鲁库木乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "胡杨村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "拜合提亚尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀力尕其村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "依甫吐迪库木村委会",
+                code: "004",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_023: [TownCode; 13] = [
-    TownCode { name: "巴仁镇", code: "001", villages: &[VillageCode { name: "迎宾路社区居委会", code: "001" }, VillageCode { name: "团结路社区居委会", code: "002" }, VillageCode { name: "胜利路社区居委会", code: "003" }, VillageCode { name: "古宰尔路社区居委会", code: "004" }, VillageCode { name: "平安路社区居委会", code: "005" }, VillageCode { name: "商贸中心社区居委会", code: "006" }, VillageCode { name: "民俗风情街社区居委会", code: "007" }, VillageCode { name: "工贸园社区居委会", code: "008" }, VillageCode { name: "青年路社区居委会", code: "009" }, VillageCode { name: "创业路社区居委会", code: "010" }, VillageCode { name: "瓜乡路社区居委会", code: "011" }, VillageCode { name: "光明路社区居委会", code: "012" }, VillageCode { name: "北京路社区居委会", code: "013" }, VillageCode { name: "园区路社区居委会", code: "014" }, VillageCode { name: "健康路社区居委会", code: "015" }, VillageCode { name: "巴仁村委会", code: "016" }, VillageCode { name: "阔什科瑞克村委会", code: "017" }, VillageCode { name: "叶勒坎科其克村委会", code: "018" }, VillageCode { name: "琼巴格村委会", code: "019" }, VillageCode { name: "阿热买里村委会", code: "020" }, VillageCode { name: "英吾斯塘博依村委会", code: "021" }, VillageCode { name: "赛依哈纳村委会", code: "022" }, VillageCode { name: "巴合其村委会", code: "023" }, VillageCode { name: "托万巴仁村委会", code: "024" }] },
-    TownCode { name: "西克尔库勒镇", code: "002", villages: &[VillageCode { name: "西克尔村委会", code: "001" }] },
-    TownCode { name: "夏普吐勒镇", code: "003", villages: &[VillageCode { name: "央艾日克村委会", code: "001" }, VillageCode { name: "喀玛铁热克村委会", code: "002" }, VillageCode { name: "扎滚拉村委会", code: "003" }, VillageCode { name: "加依艾日克村委会", code: "004" }, VillageCode { name: "托万加依艾日克村委会", code: "005" }, VillageCode { name: "墩艾日克村委会", code: "006" }, VillageCode { name: "阿热夏普吐勒村委会", code: "007" }, VillageCode { name: "提木村委会", code: "008" }, VillageCode { name: "米里克村委会", code: "009" }, VillageCode { name: "依肯苏村委会", code: "010" }, VillageCode { name: "克买村委会", code: "011" }, VillageCode { name: "兰干村委会", code: "012" }, VillageCode { name: "巴依艾日克村委会", code: "013" }, VillageCode { name: "喀赞库勒村委会", code: "014" }, VillageCode { name: "安江艾日克村委会", code: "015" }, VillageCode { name: "其纳艾日克村委会", code: "016" }, VillageCode { name: "托什坎拉村委会", code: "017" }, VillageCode { name: "巴依托喀依村委会", code: "018" }, VillageCode { name: "恰依拉村委会", code: "019" }, VillageCode { name: "琼阿克艾日克村委会", code: "020" }, VillageCode { name: "克其克阿克艾日克村委会", code: "021" }, VillageCode { name: "库木墩村委会", code: "022" }, VillageCode { name: "巴扎村委会", code: "023" }, VillageCode { name: "红旗村委会", code: "024" }] },
-    TownCode { name: "卧里托格拉克镇", code: "004", villages: &[VillageCode { name: "塔格艾日克村委会", code: "001" }, VillageCode { name: "尤库日阔什库勒村委会", code: "002" }, VillageCode { name: "乌吐拉阔什库勒村委会", code: "003" }, VillageCode { name: "托格热克斯木村委会", code: "004" }, VillageCode { name: "喀塔尔墩村委会", code: "005" }, VillageCode { name: "色日克托格拉克村委会", code: "006" }, VillageCode { name: "恰拉欧萨村委会", code: "007" }, VillageCode { name: "阿吉勒格里克村村委会", code: "008" }, VillageCode { name: "托库勒村委会", code: "009" }, VillageCode { name: "喀热古鲁克村委会", code: "010" }, VillageCode { name: "尤库日买里村委会", code: "011" }, VillageCode { name: "夏普吐勒买里斯村委会", code: "012" }, VillageCode { name: "苏坎阿斯特村委会", code: "013" }, VillageCode { name: "亚帕勒托格勒克村委会", code: "014" }, VillageCode { name: "帕尔其托格勒克村委会", code: "015" }, VillageCode { name: "龙口村委会", code: "016" }, VillageCode { name: "拜什托普村委会", code: "017" }, VillageCode { name: "销尔介乃克村委会", code: "018" }, VillageCode { name: "盖孜乃库木村委会", code: "019" }, VillageCode { name: "乌堂村委会", code: "020" }, VillageCode { name: "喀赞库勒村委会", code: "021" }, VillageCode { name: "巴什阿克代尔亚村委会", code: "022" }, VillageCode { name: "喀尕买里斯村委会", code: "023" }, VillageCode { name: "阿亚格阿克达里亚村委会", code: "024" }, VillageCode { name: "喀热尤勒滚村委会", code: "025" }, VillageCode { name: "托盖欧勒迪村委会", code: "026" }, VillageCode { name: "尤汗托格拉克村委会", code: "027" }, VillageCode { name: "巴扎村委会", code: "028" }, VillageCode { name: "卧里托格拉克村委会", code: "029" }, VillageCode { name: "阿克乌斯堂村委会", code: "030" }, VillageCode { name: "阿亚格阔什库勒村委会", code: "031" }, VillageCode { name: "英巴格村委会", code: "032" }, VillageCode { name: "阔曲买贝希村委会", code: "033" }, VillageCode { name: "托格拉勒克村委会", code: "034" }, VillageCode { name: "强孜村委会", code: "035" }, VillageCode { name: "英阔什库勒村委会", code: "036" }, VillageCode { name: "巴希硝尔介乃克村委会", code: "037" }, VillageCode { name: "阿亚格喀尕买里斯村委会", code: "038" }] },
-    TownCode { name: "克孜勒博依镇", code: "005", villages: &[VillageCode { name: "先拜巴扎村委会", code: "001" }, VillageCode { name: "居维其村委会", code: "002" }, VillageCode { name: "库木买里斯村委会", code: "003" }, VillageCode { name: "阿热买里村委会", code: "004" }, VillageCode { name: "阿娜尔库勒村委会", code: "005" }, VillageCode { name: "克孜勒坎特村委会", code: "006" }, VillageCode { name: "阔什艾日克村委会", code: "007" }, VillageCode { name: "英艾日克村委会", code: "008" }, VillageCode { name: "巴格艾日克村委会", code: "009" }, VillageCode { name: "巴什英阿依马克村委会", code: "010" }, VillageCode { name: "英阿依马克村委会", code: "011" }, VillageCode { name: "吾斯塘博依村委会", code: "012" }, VillageCode { name: "却勒库勒村委会", code: "013" }, VillageCode { name: "克孜勒巴依拉克村委会", code: "014" }, VillageCode { name: "依提帕克村委会", code: "015" }, VillageCode { name: "英买里村委会", code: "016" }, VillageCode { name: "阿亚格乔拉克村委会", code: "017" }, VillageCode { name: "巴什乔拉克村委会", code: "018" }, VillageCode { name: "坎迪尔勒克村委会", code: "019" }, VillageCode { name: "托万阿热克什拉克村委会", code: "020" }, VillageCode { name: "阿热克什拉克村委会", code: "021" }, VillageCode { name: "古力巴格村委会", code: "022" }, VillageCode { name: "色满村委会", code: "023" }, VillageCode { name: "浩罕村委会", code: "024" }, VillageCode { name: "木努尔村委会", code: "025" }, VillageCode { name: "阿依丁村委会", code: "026" }, VillageCode { name: "恰瓦拉村委会", code: "027" }, VillageCode { name: "铁热克博斯坦村委会", code: "028" }, VillageCode { name: "阿容村委会", code: "029" }, VillageCode { name: "博迪马勒村委会", code: "030" }, VillageCode { name: "喀拉央塔克村委会", code: "031" }, VillageCode { name: "喀力克村委会", code: "032" }, VillageCode { name: "曲如其村委会", code: "033" }, VillageCode { name: "科克通鲁克村委会", code: "034" }] },
-    TownCode { name: "英买里镇", code: "006", villages: &[VillageCode { name: "库木艾日克村委会", code: "001" }, VillageCode { name: "阿亚克库木艾日克村委会", code: "002" }, VillageCode { name: "墩艾日克村委会", code: "003" }, VillageCode { name: "墩迪瓦依村委会", code: "004" }, VillageCode { name: "巴格托格拉克村委会", code: "005" }, VillageCode { name: "克皮乃克村委会", code: "006" }, VillageCode { name: "阿亚格克皮乃克村委会", code: "007" }, VillageCode { name: "阿迪拉村委会", code: "008" }, VillageCode { name: "吐孜鲁克村委会", code: "009" }, VillageCode { name: "英买里村委会", code: "010" }, VillageCode { name: "阿亚格英买里村委会", code: "011" }, VillageCode { name: "卡吾力村委会", code: "012" }, VillageCode { name: "巴什兰干村委会", code: "013" }, VillageCode { name: "阿亚克兰干村委会", code: "014" }, VillageCode { name: "克孜勒巴依拉克村委会", code: "015" }, VillageCode { name: "兰帕村委会", code: "016" }, VillageCode { name: "英阿瓦提村委会", code: "017" }, VillageCode { name: "古再村委会", code: "018" }, VillageCode { name: "卡日央塔克村委会", code: "019" }, VillageCode { name: "拉依力克村委会", code: "020" }] },
-    TownCode { name: "和夏阿瓦提镇", code: "007", villages: &[VillageCode { name: "吾斯塘博依村委会", code: "001" }, VillageCode { name: "阿木巴尔其村委会", code: "002" }, VillageCode { name: "塞克孜阿代木村委会", code: "003" }, VillageCode { name: "喀热墩村委会", code: "004" }, VillageCode { name: "帕合塔买里斯村委会", code: "005" }, VillageCode { name: "阿瓦提买里斯村委会", code: "006" }, VillageCode { name: "英艾日克村委会", code: "007" }, VillageCode { name: "伊那克克买村委会", code: "008" }, VillageCode { name: "巴依托喀依村委会", code: "009" }, VillageCode { name: "巴什英买里村委会", code: "010" }, VillageCode { name: "欧吐拉英买里村委会", code: "011" }, VillageCode { name: "墩艾日克村委会", code: "012" }, VillageCode { name: "阿亚克英买里村委会", code: "013" }, VillageCode { name: "夏合亚迪村委会", code: "014" }, VillageCode { name: "夏勒克村委会", code: "015" }, VillageCode { name: "托玛贝希村委会", code: "016" }, VillageCode { name: "墩吕克村委会", code: "017" }, VillageCode { name: "其日克村委会", code: "018" }, VillageCode { name: "尕藏托格拉克村委会", code: "019" }, VillageCode { name: "巴什巴格恰村委会", code: "020" }, VillageCode { name: "阿亚克巴格恰村委会", code: "021" }, VillageCode { name: "色满村委会", code: "022" }, VillageCode { name: "喀热都维村委会", code: "023" }, VillageCode { name: "依然村委会", code: "024" }, VillageCode { name: "兰帕村委会", code: "025" }, VillageCode { name: "阔什托玛村委会", code: "026" }, VillageCode { name: "克亚克勒克村委会", code: "027" }, VillageCode { name: "萨尔吾斯村委会", code: "028" }, VillageCode { name: "尤古买希勒克村委会", code: "029" }, VillageCode { name: "莫玛墩村委会", code: "030" }, VillageCode { name: "比纳木村委会", code: "031" }, VillageCode { name: "亚帕勒托格拉克村委会", code: "032" }, VillageCode { name: "库木科勒村委会", code: "033" }, VillageCode { name: "柯尔克孜吐格村委会", code: "034" }, VillageCode { name: "达西村委会", code: "035" }, VillageCode { name: "代里亚博依村委会", code: "036" }, VillageCode { name: "欧吐拉巴格恰村委会", code: "037" }, VillageCode { name: "巴格托格拉克村委会", code: "038" }, VillageCode { name: "排孜瓦提艾日克村委会", code: "039" }, VillageCode { name: "亚格其阿依万村委会", code: "040" }, VillageCode { name: "喀热萨村委会", code: "041" }, VillageCode { name: "光明村委会", code: "042" }, VillageCode { name: "幸福村委会", code: "043" }, VillageCode { name: "和谐村委会", code: "044" }] },
-    TownCode { name: "铁日木乡", code: "008", villages: &[VillageCode { name: "铁格艾日克村委会", code: "001" }, VillageCode { name: "霍加艾日克村委会", code: "002" }, VillageCode { name: "托哈艾热克村委会", code: "003" }, VillageCode { name: "巴什铁日木村委会", code: "004" }, VillageCode { name: "阿亚格铁日木村委会", code: "005" }, VillageCode { name: "明克什拉克村委会", code: "006" }, VillageCode { name: "兰干村委会", code: "007" }, VillageCode { name: "仓村委会", code: "008" }, VillageCode { name: "恰央恰克提村委会", code: "009" }, VillageCode { name: "阿亚格兰干村委会", code: "010" }, VillageCode { name: "幸福村委会", code: "011" }, VillageCode { name: "铁日木村委会", code: "012" }] },
-    TownCode { name: "江巴孜乡", code: "009", villages: &[VillageCode { name: "江巴孜村委会", code: "001" }, VillageCode { name: "阿克吐尔村委会", code: "002" }, VillageCode { name: "色日克托克拉克村委会", code: "003" }, VillageCode { name: "栏杆村委会", code: "004" }, VillageCode { name: "萨热依塔木村委会", code: "005" }, VillageCode { name: "科克库木村委会", code: "006" }, VillageCode { name: "开普台巴格村委会", code: "007" }, VillageCode { name: "艾格铁热克村委会", code: "008" }, VillageCode { name: "恰喀村委会", code: "009" }, VillageCode { name: "开旦木加依村委会", code: "010" }, VillageCode { name: "依排克其村委会", code: "011" }, VillageCode { name: "克孜勒吉依木村委会", code: "012" }, VillageCode { name: "英兰干村委会", code: "013" }, VillageCode { name: "其维克村委会", code: "014" }, VillageCode { name: "布鲁胡其村委会", code: "015" }, VillageCode { name: "墩恰喀尔村委会", code: "016" }, VillageCode { name: "吐格曼贝西村委会", code: "017" }, VillageCode { name: "尤库日吐格曼贝西村委会", code: "018" }, VillageCode { name: "拍什塔克村委会", code: "019" }, VillageCode { name: "尕勒村委会", code: "020" }, VillageCode { name: "克其克江巴孜村委会", code: "021" }, VillageCode { name: "托万尕勒村委会", code: "022" }, VillageCode { name: "克其克布鲁胡其村委会", code: "023" }, VillageCode { name: "琼江巴孜村委会", code: "024" }, VillageCode { name: "喀热喀什村委会", code: "025" }, VillageCode { name: "仓村委会", code: "026" }, VillageCode { name: "阿亚克仓村委会", code: "027" }] },
-    TownCode { name: "米夏乡", code: "010", villages: &[VillageCode { name: "江尕勒霍依拉村委会", code: "001" }, VillageCode { name: "恰喀村委会", code: "002" }, VillageCode { name: "琼库尔克什拉克村委会", code: "003" }, VillageCode { name: "喀孜艾日克村委会", code: "004" }, VillageCode { name: "琼霍伊拉村委会", code: "005" }, VillageCode { name: "米夏村委会", code: "006" }, VillageCode { name: "托万塔尔夏村委会", code: "007" }, VillageCode { name: "其兰力克村委会", code: "008" }, VillageCode { name: "伊勒提孜霍依拉村委会", code: "009" }, VillageCode { name: "英塔木村委会", code: "010" }, VillageCode { name: "尤库日塔尔夏村委会", code: "011" }, VillageCode { name: "英巴格村委会", code: "012" }, VillageCode { name: "其拉克村委会", code: "013" }, VillageCode { name: "英买里村委会", code: "014" }, VillageCode { name: "托格日苏村委会", code: "015" }, VillageCode { name: "吐格巴斯特村委会", code: "016" }, VillageCode { name: "夏合亚迪村委会", code: "017" }, VillageCode { name: "巴什英温村委会", code: "018" }, VillageCode { name: "阿亚格英温村委会", code: "019" }, VillageCode { name: "阿亚格欧依托格拉克村委会", code: "020" }, VillageCode { name: "巴什欧依托格拉克村委会", code: "021" }] },
-    TownCode { name: "克孜勒苏乡", code: "011", villages: &[VillageCode { name: "巴什栏杆村委会", code: "001" }, VillageCode { name: "阿亚克兰干村委会", code: "002" }, VillageCode { name: "库木巴格村委会", code: "003" }, VillageCode { name: "托喀依村委会", code: "004" }, VillageCode { name: "巴什勒格勒德玛村委会", code: "005" }, VillageCode { name: "勒格勒德玛村委会", code: "006" }, VillageCode { name: "勒格里地玛央艾日克村委会", code: "007" }, VillageCode { name: "阿亚格勒格勒德玛村委会", code: "008" }, VillageCode { name: "英兰干村委会", code: "009" }, VillageCode { name: "兰干买里斯村委会", code: "010" }, VillageCode { name: "巴什央艾日克村委会", code: "011" }, VillageCode { name: "央艾日克村委会", code: "012" }, VillageCode { name: "阔什托格拉克村委会", code: "013" }, VillageCode { name: "库台买村委会", code: "014" }, VillageCode { name: "巴格托格拉克村委会", code: "015" }, VillageCode { name: "约勒其村委会", code: "016" }, VillageCode { name: "塔格艾日克村委会", code: "017" }, VillageCode { name: "古里巴什村委会", code: "018" }, VillageCode { name: "翁艾日克村委会", code: "019" }, VillageCode { name: "琼艾日克村委会", code: "020" }, VillageCode { name: "夏勒艾热克村委会", code: "021" }, VillageCode { name: "巴格艾日克村委会", code: "022" }, VillageCode { name: "阿克艾日克村委会", code: "023" }, VillageCode { name: "温塔木村委会", code: "024" }, VillageCode { name: "巴什温塔木村委会", code: "025" }, VillageCode { name: "拜什塔木村委会", code: "026" }, VillageCode { name: "多来提巴格村委会", code: "027" }, VillageCode { name: "库木库坦村委会", code: "028" }, VillageCode { name: "克日克塔木村委会", code: "029" }, VillageCode { name: "阿克托喀依村委会", code: "030" }, VillageCode { name: "古力巴格村委会", code: "031" }, VillageCode { name: "其兰巴格村委会", code: "032" }, VillageCode { name: "英巴格村委会", code: "033" }, VillageCode { name: "吾斯塘博依村委会", code: "034" }, VillageCode { name: "阿克墩村委会", code: "035" }, VillageCode { name: "托库勒村委会", code: "036" }, VillageCode { name: "阿亚格奥依塔格村委会", code: "037" }, VillageCode { name: "吾依塔格村委会", code: "038" }, VillageCode { name: "巴什奥塔格村委会", code: "039" }, VillageCode { name: "托格拉克勒克村委会", code: "040" }] },
-    TownCode { name: "古勒鲁克乡", code: "012", villages: &[VillageCode { name: "巴什古勒鲁克村委会", code: "001" }, VillageCode { name: "兰干村委会", code: "002" }, VillageCode { name: "古勒鲁克村委会", code: "003" }, VillageCode { name: "亚勒古孜塔勒村委会", code: "004" }, VillageCode { name: "英巴格村委会", code: "005" }, VillageCode { name: "欧吐拉古勒鲁克村委会", code: "006" }, VillageCode { name: "阿亚克古勒鲁克村委会", code: "007" }, VillageCode { name: "阿克提坎村委会", code: "008" }, VillageCode { name: "巴什阿勒克库勒村委会", code: "009" }, VillageCode { name: "阿勒克库勒村委会", code: "010" }, VillageCode { name: "喀日木库木村委会", code: "011" }, VillageCode { name: "拜什塔木村委会", code: "012" }, VillageCode { name: "尤库日拜什塔木村委会", code: "013" }, VillageCode { name: "托万拜什塔木村委会", code: "014" }, VillageCode { name: "喀让古鲁克村委会", code: "015" }, VillageCode { name: "阔若克村委会", code: "016" }, VillageCode { name: "阿恰勒村委会", code: "017" }, VillageCode { name: "堂力其村委会", code: "018" }, VillageCode { name: "科克塔勒村委会", code: "019" }, VillageCode { name: "阿克托卡依村委会", code: "020" }, VillageCode { name: "苏巴斯提村委会", code: "021" }, VillageCode { name: "塔然其村委会", code: "022" }, VillageCode { name: "英买里村委会", code: "023" }, VillageCode { name: "欧吐拉拜什塔木村委会", code: "024" }, VillageCode { name: "阿亚格科克塔勒村委会", code: "025" }, VillageCode { name: "巴什阿恰勒村委会", code: "026" }, VillageCode { name: "克孜力库木村委会", code: "027" }, VillageCode { name: "库其买拜什村委会", code: "028" }] },
-    TownCode { name: "玉代克力克乡", code: "013", villages: &[VillageCode { name: "堂来恰普提村委会", code: "001" }, VillageCode { name: "百合提村委会", code: "002" }, VillageCode { name: "阿娜尔村委会", code: "003" }, VillageCode { name: "阿力囤托格拉克村委会", code: "004" }, VillageCode { name: "巴扎村委会", code: "005" }, VillageCode { name: "多兰买里斯村委会", code: "006" }, VillageCode { name: "买代尼亚提买里斯村委会", code: "007" }, VillageCode { name: "拜什喀帕村委会", code: "008" }, VillageCode { name: "依提帕克村委会", code: "009" }, VillageCode { name: "乔拉克村委会", code: "010" }, VillageCode { name: "英买里村委会", code: "011" }, VillageCode { name: "英艾日克村委会", code: "012" }] },
+    TownCode {
+        name: "巴仁镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "迎宾路社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "团结路社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "胜利路社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "古宰尔路社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "平安路社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "商贸中心社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "民俗风情街社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "工贸园社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "青年路社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "创业路社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "瓜乡路社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "光明路社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "北京路社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "园区路社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "健康路社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "巴仁村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阔什科瑞克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "叶勒坎科其克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "琼巴格村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "英吾斯塘博依村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "赛依哈纳村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "巴合其村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "托万巴仁村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "西克尔库勒镇",
+        code: "002",
+        villages: &[VillageCode {
+            name: "西克尔村委会",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "夏普吐勒镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "央艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "喀玛铁热克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "扎滚拉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "加依艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "托万加依艾日克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿热夏普吐勒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "提木村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "米里克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "依肯苏村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "克买村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴依艾日克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "喀赞库勒村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "安江艾日克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "其纳艾日克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "托什坎拉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "巴依托喀依村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "恰依拉村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "琼阿克艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "克其克阿克艾日克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "库木墩村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "卧里托格拉克镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "塔格艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "尤库日阔什库勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "乌吐拉阔什库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托格热克斯木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "喀塔尔墩村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "色日克托格拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "恰拉欧萨村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿吉勒格里克村村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "托库勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "喀热古鲁克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤库日买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "夏普吐勒买里斯村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "苏坎阿斯特村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "亚帕勒托格勒克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "帕尔其托格勒克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "龙口村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "拜什托普村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "销尔介乃克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "盖孜乃库木村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "喀赞库勒村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "巴什阿克代尔亚村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "喀尕买里斯村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "阿亚格阿克达里亚村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "喀热尤勒滚村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "托盖欧勒迪村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "尤汗托格拉克村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "卧里托格拉克村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "阿克乌斯堂村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "阿亚格阔什库勒村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "阔曲买贝希村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "托格拉勒克村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "强孜村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "英阔什库勒村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "巴希硝尔介乃克村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "阿亚格喀尕买里斯村委会",
+                code: "038",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒博依镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "先拜巴扎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "居维其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木买里斯村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿娜尔库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "克孜勒坎特村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阔什艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴什英阿依马克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英阿依马克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "却勒库勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "克孜勒巴依拉克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "依提帕克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿亚格乔拉克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "巴什乔拉克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "坎迪尔勒克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "托万阿热克什拉克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿热克什拉克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "古力巴格村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "色满村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "浩罕村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "木努尔村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "阿依丁村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "恰瓦拉村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "铁热克博斯坦村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "阿容村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "博迪马勒村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "喀拉央塔克村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "喀力克村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "曲如其村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "科克通鲁克村委会",
+                code: "034",
+            },
+        ],
+    },
+    TownCode {
+        name: "英买里镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "库木艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚克库木艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "墩迪瓦依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴格托格拉克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "克皮乃克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿亚格克皮乃克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿迪拉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "吐孜鲁克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阿亚格英买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "卡吾力村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "巴什兰干村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿亚克兰干村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "克孜勒巴依拉克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "兰帕村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "古再村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "卡日央塔克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "拉依力克村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "和夏阿瓦提镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿木巴尔其村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塞克孜阿代木村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀热墩村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "帕合塔买里斯村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿瓦提买里斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "伊那克克买村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴依托喀依村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "巴什英买里村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "欧吐拉英买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "墩艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿亚克英买里村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "夏合亚迪村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "夏勒克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "托玛贝希村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "墩吕克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "其日克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "尕藏托格拉克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "巴什巴格恰村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿亚克巴格恰村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "色满村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "喀热都维村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "依然村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "兰帕村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "阔什托玛村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "克亚克勒克村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "萨尔吾斯村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "尤古买希勒克村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "莫玛墩村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "比纳木村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "亚帕勒托格拉克村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "库木科勒村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "柯尔克孜吐格村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "达西村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "代里亚博依村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "欧吐拉巴格恰村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "巴格托格拉克村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "排孜瓦提艾日克村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "亚格其阿依万村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "喀热萨村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "043",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "044",
+            },
+        ],
+    },
+    TownCode {
+        name: "铁日木乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "铁格艾日克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "霍加艾日克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "托哈艾热克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "巴什铁日木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿亚格铁日木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "明克什拉克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "仓村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰央恰克提村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿亚格兰干村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "幸福村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "铁日木村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "江巴孜乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "江巴孜村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿克吐尔村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "色日克托克拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "栏杆村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "萨热依塔木村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "科克库木村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "开普台巴格村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "艾格铁热克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "开旦木加依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "依排克其村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "克孜勒吉依木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英兰干村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "其维克村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "布鲁胡其村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "墩恰喀尔村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "吐格曼贝西村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "尤库日吐格曼贝西村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "拍什塔克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "尕勒村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "克其克江巴孜村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "托万尕勒村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "克其克布鲁胡其村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "琼江巴孜村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "喀热喀什村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "仓村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "阿亚克仓村委会",
+                code: "027",
+            },
+        ],
+    },
+    TownCode {
+        name: "米夏乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "江尕勒霍依拉村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "恰喀村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "琼库尔克什拉克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "喀孜艾日克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "琼霍伊拉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "米夏村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "托万塔尔夏村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "其兰力克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "伊勒提孜霍依拉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英塔木村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "尤库日塔尔夏村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "其拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "托格日苏村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "吐格巴斯特村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "夏合亚迪村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "巴什英温村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "阿亚格英温村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿亚格欧依托格拉克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "巴什欧依托格拉克村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "克孜勒苏乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "巴什栏杆村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿亚克兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "托喀依村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴什勒格勒德玛村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "勒格勒德玛村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "勒格里地玛央艾日克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿亚格勒格勒德玛村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "英兰干村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "兰干买里斯村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "巴什央艾日克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "央艾日克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阔什托格拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库台买村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "巴格托格拉克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "约勒其村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "塔格艾日克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "古里巴什村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "翁艾日克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "琼艾日克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "夏勒艾热克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "巴格艾日克村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "阿克艾日克村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "温塔木村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "巴什温塔木村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "拜什塔木村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "多来提巴格村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "库木库坦村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "克日克塔木村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "阿克托喀依村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "古力巴格村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "其兰巴格村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "阿克墩村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "托库勒村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "阿亚格奥依塔格村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "吾依塔格村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "巴什奥塔格村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "托格拉克勒克村委会",
+                code: "040",
+            },
+        ],
+    },
+    TownCode {
+        name: "古勒鲁克乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "巴什古勒鲁克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "兰干村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "古勒鲁克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "亚勒古孜塔勒村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "英巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "欧吐拉古勒鲁克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "阿亚克古勒鲁克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿克提坎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "巴什阿勒克库勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿勒克库勒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "喀日木库木村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "拜什塔木村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "尤库日拜什塔木村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "托万拜什塔木村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "喀让古鲁克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阔若克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "堂力其村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "科克塔勒村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阿克托卡依村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "苏巴斯提村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "塔然其村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "欧吐拉拜什塔木村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "阿亚格科克塔勒村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "巴什阿恰勒村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "克孜力库木村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "库其买拜什村委会",
+                code: "028",
+            },
+        ],
+    },
+    TownCode {
+        name: "玉代克力克乡",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "堂来恰普提村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "百合提村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阿娜尔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿力囤托格拉克村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "巴扎村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "多兰买里斯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "买代尼亚提买里斯村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "拜什喀帕村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "依提帕克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "乔拉克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英艾日克村委会",
+                code: "012",
+            },
+        ],
+    },
 ];
 
 static TOWNS_CL_024: [TownCode; 12] = [
-    TownCode { name: "巴楚镇", code: "001", villages: &[VillageCode { name: "代尔瓦扎阿勒迪社区", code: "001" }, VillageCode { name: "布拉克贝希社区", code: "002" }, VillageCode { name: "篮桥社区", code: "003" }, VillageCode { name: "飞机场社区", code: "004" }, VillageCode { name: "胜利路社区", code: "005" }, VillageCode { name: "托帕吾斯塘社区", code: "006" }, VillageCode { name: "赛克散村居委会", code: "007" }, VillageCode { name: "工业园区社区", code: "008" }, VillageCode { name: "文化路社区", code: "009" }, VillageCode { name: "虹桥社区", code: "010" }, VillageCode { name: "人民路社区", code: "011" }, VillageCode { name: "幸福路社区", code: "012" }, VillageCode { name: "友谊路社区", code: "013" }, VillageCode { name: "银花路社区", code: "014" }, VillageCode { name: "城北路社区", code: "015" }, VillageCode { name: "滨河路社区", code: "016" }, VillageCode { name: "迎宾路社区", code: "017" }, VillageCode { name: "银泰路社区", code: "018" }, VillageCode { name: "团结路社区", code: "019" }, VillageCode { name: "幸福园社区", code: "020" }, VillageCode { name: "纺织园社区", code: "021" }] },
-    TownCode { name: "色力布亚镇", code: "002", villages: &[VillageCode { name: "库勒贝希社区", code: "001" }, VillageCode { name: "英巴扎社区", code: "002" }, VillageCode { name: "科瑞克贝希社区", code: "003" }, VillageCode { name: "吾斯塘博依社区", code: "004" }, VillageCode { name: "阿依库勒社区", code: "005" }, VillageCode { name: "英巴格社区", code: "006" }, VillageCode { name: "达恰库勒社区", code: "007" }, VillageCode { name: "胡木丹贝希社区", code: "008" }, VillageCode { name: "墩买里社区", code: "009" }, VillageCode { name: "夏勒力克社区", code: "010" }, VillageCode { name: "诺尔贝希村委会", code: "011" }, VillageCode { name: "喀拉艾肯博依村委会", code: "012" }, VillageCode { name: "英买里村委会", code: "013" }, VillageCode { name: "阿克吾斯塘村委会", code: "014" }, VillageCode { name: "科克力干塔勒村委会", code: "015" }, VillageCode { name: "夏喀勒阿瓦提村委会", code: "016" }, VillageCode { name: "托格拉克村委会", code: "017" }, VillageCode { name: "昆其布隆村委会", code: "018" }, VillageCode { name: "库木萨热依村委会", code: "019" }, VillageCode { name: "帕合米勒克村委会", code: "020" }, VillageCode { name: "阿勒台开斯克村委会", code: "021" }, VillageCode { name: "阿克墩结米村委会", code: "022" }, VillageCode { name: "拜什吐普村委会", code: "023" }, VillageCode { name: "赛克散塔勒村委会", code: "024" }, VillageCode { name: "博孜艾日克村委会", code: "025" }, VillageCode { name: "英阿瓦提村委会", code: "026" }, VillageCode { name: "克亚克力克村委会", code: "027" }, VillageCode { name: "库热木托格拉克村委会", code: "028" }, VillageCode { name: "尧勒瓦斯阔坦村委会", code: "029" }, VillageCode { name: "科台克力克村委会", code: "030" }] },
-    TownCode { name: "阿瓦提镇", code: "003", villages: &[VillageCode { name: "古勒买里社区", code: "001" }, VillageCode { name: "巴格齐社区", code: "002" }, VillageCode { name: "喀合夏勒村委会", code: "003" }, VillageCode { name: "克尔克尧勒库木村委会", code: "004" }, VillageCode { name: "塔勒克村委会", code: "005" }, VillageCode { name: "温艾日克村委会", code: "006" }, VillageCode { name: "跃进吾斯塘博依村委会", code: "007" }, VillageCode { name: "巴格齐村委会", code: "008" }, VillageCode { name: "艾里克坎土墁村委会", code: "009" }, VillageCode { name: "达其博依村委会", code: "010" }, VillageCode { name: "墩巴格村委会", code: "011" }, VillageCode { name: "阔什吾斯塘村委会", code: "012" }, VillageCode { name: "夏普勒克村委会", code: "013" }, VillageCode { name: "康萨罕村委会", code: "014" }, VillageCode { name: "亚喀艾日克村委会", code: "015" }, VillageCode { name: "博孜村委会", code: "016" }, VillageCode { name: "木尼伯提村委会", code: "017" }, VillageCode { name: "库勒博依村委会", code: "018" }, VillageCode { name: "英吾斯塘村委会", code: "019" }, VillageCode { name: "阔齐喀尔村委会", code: "020" }, VillageCode { name: "达瓦孜库木村委会", code: "021" }, VillageCode { name: "古勒买里村委会", code: "022" }] },
-    TownCode { name: "三岔口镇", code: "004", villages: &[VillageCode { name: "振兴路虚拟社区", code: "001" }] },
-    TownCode { name: "恰尔巴格乡", code: "005", villages: &[VillageCode { name: "恰尔巴格村委会", code: "001" }, VillageCode { name: "达里亚博依村委会", code: "002" }, VillageCode { name: "店阿勒迪村委会", code: "003" }, VillageCode { name: "阿勒台买里村委会", code: "004" }, VillageCode { name: "阿热买里村委会", code: "005" }, VillageCode { name: "阿拉格尔买里村委会", code: "006" }, VillageCode { name: "塔格阿勒迪村委会", code: "007" }, VillageCode { name: "吐格曼买里村委会", code: "008" }, VillageCode { name: "苏祖克村委会", code: "009" }, VillageCode { name: "拍斯吾斯塘村委会", code: "010" }, VillageCode { name: "奥依阔坦村委会", code: "011" }, VillageCode { name: "其盖里克村委会", code: "012" }, VillageCode { name: "科克却勒村委会", code: "013" }, VillageCode { name: "且迪塔格村委会", code: "014" }, VillageCode { name: "协依坦库勒村委会", code: "015" }, VillageCode { name: "炮台村委会", code: "016" }, VillageCode { name: "库木加依村委会", code: "017" }, VillageCode { name: "郎喀勒克村委会", code: "018" }, VillageCode { name: "墩买里村委会", code: "019" }] },
-    TownCode { name: "多来提巴格乡", code: "006", villages: &[VillageCode { name: "和谐社区", code: "001" }, VillageCode { name: "库木且克勒村委会", code: "002" }, VillageCode { name: "开外孜力克村委会", code: "003" }, VillageCode { name: "恰江村委会", code: "004" }, VillageCode { name: "吉格代力克巴格村委会", code: "005" }, VillageCode { name: "库如克铁热克村委会", code: "006" }, VillageCode { name: "喀拉库勒诺村委会", code: "007" }, VillageCode { name: "夏普吐勒村委会", code: "008" }, VillageCode { name: "阿亚克喀拉库勒村委会", code: "009" }, VillageCode { name: "托帕村委会", code: "010" }, VillageCode { name: "克其克托帕村委会", code: "011" }, VillageCode { name: "阿亚克诺村委会", code: "012" }, VillageCode { name: "硝迪盖托格拉克村委会", code: "013" }, VillageCode { name: "欧吐拉吾斯塘村委会", code: "014" }, VillageCode { name: "叶坎买里斯村委会", code: "015" }, VillageCode { name: "塔格吾斯塘村委会", code: "016" }, VillageCode { name: "玛依仓村委会", code: "017" }, VillageCode { name: "阿曼托格拉克村委会", code: "018" }, VillageCode { name: "色尔古奴什村委会", code: "019" }, VillageCode { name: "欧格拉克其村委会", code: "020" }, VillageCode { name: "卡扎尼塔皮提村委会", code: "021" }, VillageCode { name: "吾塘买里村委会", code: "022" }, VillageCode { name: "牧场村委会", code: "023" }] },
-    TownCode { name: "阿纳库勒乡", code: "007", villages: &[VillageCode { name: "其浪里克社区", code: "001" }, VillageCode { name: "阿纳尔巴格社区", code: "002" }, VillageCode { name: "红海路社区", code: "003" }, VillageCode { name: "建业社区", code: "004" }, VillageCode { name: "锦绣社区", code: "005" }, VillageCode { name: "阿拉格尔且克村委会", code: "006" }, VillageCode { name: "墩买里村委会", code: "007" }, VillageCode { name: "阿恰勒村委会", code: "008" }, VillageCode { name: "库木博古孜村委会", code: "009" }, VillageCode { name: "曲许尔盖村委会", code: "010" }, VillageCode { name: "结然塔拉村委会", code: "011" }, VillageCode { name: "博孜买里村委会", code: "012" }, VillageCode { name: "诺尔贝希村委会", code: "013" }, VillageCode { name: "拜什吐普村委会", code: "014" }, VillageCode { name: "果勒买里村委会", code: "015" }, VillageCode { name: "昆其买里村委会", code: "016" }, VillageCode { name: "开勒坪博孜村委会", code: "017" }, VillageCode { name: "胡木旦贝希村委会", code: "018" }, VillageCode { name: "塔拉硝尔村委会", code: "019" }, VillageCode { name: "园艺村委会", code: "020" }] },
-    TownCode { name: "夏马勒乡", code: "008", villages: &[VillageCode { name: "喀什噶尔胡杨村委会", code: "001" }, VillageCode { name: "夏马勒村委会", code: "002" }, VillageCode { name: "古勒巴格村委会", code: "003" }, VillageCode { name: "英吾斯塘村委会", code: "004" }, VillageCode { name: "吾斯塘贝希村委会", code: "005" }, VillageCode { name: "阿克库勒村委会", code: "006" }, VillageCode { name: "铁热克村委会", code: "007" }, VillageCode { name: "其汗宰村委会", code: "008" }, VillageCode { name: "盖买村委会", code: "009" }, VillageCode { name: "夏玛勒牧场村委会", code: "010" }, VillageCode { name: "奇特村委会", code: "011" }, VillageCode { name: "巴河湾村委会", code: "012" }] },
-    TownCode { name: "阿克萨克马热勒乡", code: "009", villages: &[VillageCode { name: "喀玛勒克村委会", code: "001" }, VillageCode { name: "陈老七村委会", code: "002" }, VillageCode { name: "塘巴扎村委会", code: "003" }, VillageCode { name: "阿克库木村委会", code: "004" }, VillageCode { name: "其乃库勒村委会", code: "005" }, VillageCode { name: "吉格代库勒村委会", code: "006" }, VillageCode { name: "古再村委会", code: "007" }, VillageCode { name: "喀塔尔墩村委会", code: "008" }, VillageCode { name: "亚松迪村委会", code: "009" }, VillageCode { name: "恰尔阿勒迪村委会", code: "010" }, VillageCode { name: "乌堂村委会", code: "011" }, VillageCode { name: "博尔其墩村委会", code: "012" }, VillageCode { name: "阿克萨克马热勒村委会", code: "013" }, VillageCode { name: "库木库勒村委会", code: "014" }, VillageCode { name: "吐孜鲁克喀什村委会", code: "015" }, VillageCode { name: "苏盖提勒克村委会", code: "016" }, VillageCode { name: "库曲买贝希村委会", code: "017" }, VillageCode { name: "团结村委会", code: "018" }, VillageCode { name: "克其勒克村委会", code: "019" }, VillageCode { name: "艾孜克松迪村委会", code: "020" }, VillageCode { name: "英也尔村委会", code: "021" }] },
-    TownCode { name: "阿拉格尔乡", code: "010", villages: &[VillageCode { name: "阿克库勒村委会", code: "001" }, VillageCode { name: "温尧勒村委会", code: "002" }, VillageCode { name: "阔纳色日克布亚村委会", code: "003" }, VillageCode { name: "荒地村委会", code: "004" }, VillageCode { name: "阿瓦提村委会", code: "005" }, VillageCode { name: "阿克央塔克村委会", code: "006" }, VillageCode { name: "萨干吾斯塘村委会", code: "007" }, VillageCode { name: "其干布拉克村委会", code: "008" }, VillageCode { name: "喀拉艾肯村委会", code: "009" }, VillageCode { name: "阿克阔纳克勒克村委会", code: "010" }, VillageCode { name: "托什坎却勒村委会", code: "011" }, VillageCode { name: "博孜吐格村委会", code: "012" }, VillageCode { name: "喀勒塔亚依拉克村委会", code: "013" }, VillageCode { name: "依其央村委会", code: "014" }, VillageCode { name: "阔纳买里村委会", code: "015" }, VillageCode { name: "阔太格勒克村委会", code: "016" }, VillageCode { name: "墩阔坦村委会", code: "017" }, VillageCode { name: "翁阔坦村委会", code: "018" }, VillageCode { name: "孜瓦塔勒村委会", code: "019" }, VillageCode { name: "阔纳乌堂村委会", code: "020" }] },
-    TownCode { name: "琼库尔恰克乡", code: "011", villages: &[VillageCode { name: "玉祖木吕克巴格村委会", code: "001" }, VillageCode { name: "苏外提其买里村委会", code: "002" }, VillageCode { name: "阔纳琼库尔恰克村委会", code: "003" }, VillageCode { name: "琼库尔恰克巴扎村", code: "004" }, VillageCode { name: "格什勒克村委会", code: "005" }, VillageCode { name: "吐格曼贝希村委会", code: "006" }, VillageCode { name: "英巴扎村委会", code: "007" }, VillageCode { name: "塔勒克村委会", code: "008" }, VillageCode { name: "明哈达村委会", code: "009" }, VillageCode { name: "结然帕塔村委会", code: "010" }, VillageCode { name: "赛克散库足克村委会", code: "011" }, VillageCode { name: "巴格托格拉克村委会", code: "012" }, VillageCode { name: "阿克托格拉克村委会", code: "013" }, VillageCode { name: "克孜勒库木村委会", code: "014" }, VillageCode { name: "吾斯塘博依村委会", code: "015" }, VillageCode { name: "且克且克村委会", code: "016" }, VillageCode { name: "玉吉米力克村委会", code: "017" }, VillageCode { name: "塔什郎托格拉克村委会", code: "018" }, VillageCode { name: "希庞村委会", code: "019" }, VillageCode { name: "元宝勒克村委会", code: "020" }, VillageCode { name: "木尕勒村委会", code: "021" }, VillageCode { name: "古勒巴格村委会", code: "022" }, VillageCode { name: "拱拜孜村委会", code: "023" }, VillageCode { name: "温阿勒台库什村委会", code: "024" }, VillageCode { name: "铁日木村委会", code: "025" }, VillageCode { name: "其乃巴格村委会", code: "026" }] },
-    TownCode { name: "英吾斯塘乡", code: "012", villages: &[VillageCode { name: "加格达村委会", code: "001" }, VillageCode { name: "其盖库都克村委会", code: "002" }, VillageCode { name: "库木奇库勒村委会", code: "003" }, VillageCode { name: "且迪尔村委会", code: "004" }, VillageCode { name: "协开尔巴格村委会", code: "005" }, VillageCode { name: "再库勒村委会", code: "006" }, VillageCode { name: "拜什塔木村委会", code: "007" }, VillageCode { name: "阔纳巴扎村委会", code: "008" }, VillageCode { name: "奥尔曼村委会", code: "009" }, VillageCode { name: "阿特恰帕尔村委会", code: "010" }, VillageCode { name: "和谐村委会", code: "011" }, VillageCode { name: "库木库勒村委会", code: "012" }, VillageCode { name: "英吾斯塘村委会", code: "013" }, VillageCode { name: "格什勒克吾斯塘村委会", code: "014" }, VillageCode { name: "铁热克力克村委会", code: "015" }, VillageCode { name: "尤木拉克却勒村委会", code: "016" }, VillageCode { name: "喀拉玉吉买村委会", code: "017" }, VillageCode { name: "阿克墩村委会", code: "018" }, VillageCode { name: "也台买里村委会", code: "019" }, VillageCode { name: "巴什乌堂村委会", code: "020" }] },
+    TownCode {
+        name: "巴楚镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "代尔瓦扎阿勒迪社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "布拉克贝希社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "篮桥社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "飞机场社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "胜利路社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "托帕吾斯塘社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "赛克散村居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "工业园区社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "文化路社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "虹桥社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "人民路社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "幸福路社区",
+                code: "012",
+            },
+            VillageCode {
+                name: "友谊路社区",
+                code: "013",
+            },
+            VillageCode {
+                name: "银花路社区",
+                code: "014",
+            },
+            VillageCode {
+                name: "城北路社区",
+                code: "015",
+            },
+            VillageCode {
+                name: "滨河路社区",
+                code: "016",
+            },
+            VillageCode {
+                name: "迎宾路社区",
+                code: "017",
+            },
+            VillageCode {
+                name: "银泰路社区",
+                code: "018",
+            },
+            VillageCode {
+                name: "团结路社区",
+                code: "019",
+            },
+            VillageCode {
+                name: "幸福园社区",
+                code: "020",
+            },
+            VillageCode {
+                name: "纺织园社区",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "色力布亚镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "库勒贝希社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "英巴扎社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "科瑞克贝希社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "吾斯塘博依社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿依库勒社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "英巴格社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "达恰库勒社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "胡木丹贝希社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩买里社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "夏勒力克社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "诺尔贝希村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "喀拉艾肯博依村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英买里村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "阿克吾斯塘村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "科克力干塔勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "夏喀勒阿瓦提村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "托格拉克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "昆其布隆村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "库木萨热依村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "帕合米勒克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "阿勒台开斯克村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "阿克墩结米村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "拜什吐普村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "赛克散塔勒村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "博孜艾日克村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "英阿瓦提村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "克亚克力克村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "库热木托格拉克村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "尧勒瓦斯阔坦村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "科台克力克村委会",
+                code: "030",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿瓦提镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "古勒买里社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "巴格齐社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "喀合夏勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "克尔克尧勒库木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "塔勒克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "温艾日克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "跃进吾斯塘博依村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巴格齐村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "艾里克坎土墁村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "达其博依村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "墩巴格村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阔什吾斯塘村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "夏普勒克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "康萨罕村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "亚喀艾日克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "博孜村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "木尼伯提村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "库勒博依村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阔齐喀尔村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "达瓦孜库木村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "古勒买里村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "三岔口镇",
+        code: "004",
+        villages: &[VillageCode {
+            name: "振兴路虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "恰尔巴格乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "恰尔巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "达里亚博依村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "店阿勒迪村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿勒台买里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿热买里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿拉格尔买里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "塔格阿勒迪村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "吐格曼买里村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "苏祖克村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "拍斯吾斯塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "奥依阔坦村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "其盖里克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "科克却勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "且迪塔格村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "协依坦库勒村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "炮台村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "库木加依村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "郎喀勒克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "多来提巴格乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "和谐社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "库木且克勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "开外孜力克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "恰江村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吉格代力克巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "库如克铁热克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "喀拉库勒诺村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "夏普吐勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "阿亚克喀拉库勒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "托帕村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "克其克托帕村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阿亚克诺村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "硝迪盖托格拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "欧吐拉吾斯塘村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "叶坎买里斯村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "塔格吾斯塘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "玛依仓村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿曼托格拉克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "色尔古奴什村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "欧格拉克其村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "卡扎尼塔皮提村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "吾塘买里村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "牧场村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿纳库勒乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "其浪里克社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "阿纳尔巴格社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "红海路社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "建业社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "锦绣社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿拉格尔且克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "墩买里村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阿恰勒村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "库木博古孜村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "曲许尔盖村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "结然塔拉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博孜买里村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "诺尔贝希村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "拜什吐普村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "果勒买里村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "昆其买里村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "开勒坪博孜村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "胡木旦贝希村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "塔拉硝尔村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "园艺村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "夏马勒乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "喀什噶尔胡杨村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "夏马勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "吾斯塘贝希村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "铁热克村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "其汗宰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "盖买村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "夏玛勒牧场村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "奇特村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴河湾村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿克萨克马热勒乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "喀玛勒克村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "陈老七村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塘巴扎村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "阿克库木村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "其乃库勒村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吉格代库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古再村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "喀塔尔墩村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "亚松迪村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "恰尔阿勒迪村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "乌堂村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博尔其墩村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿克萨克马热勒村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "库木库勒村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吐孜鲁克喀什村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "苏盖提勒克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "库曲买贝希村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "团结村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "克其勒克村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "艾孜克松迪村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "英也尔村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "阿拉格尔乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "阿克库勒村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "温尧勒村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔纳色日克布亚村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "荒地村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "阿瓦提村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "阿克央塔克村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "萨干吾斯塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "其干布拉克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "喀拉艾肯村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿克阔纳克勒克村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "托什坎却勒村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "博孜吐格村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "喀勒塔亚依拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "依其央村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "阔纳买里村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "阔太格勒克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "墩阔坦村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "翁阔坦村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "孜瓦塔勒村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "阔纳乌堂村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "琼库尔恰克乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "玉祖木吕克巴格村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "苏外提其买里村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "阔纳琼库尔恰克村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "琼库尔恰克巴扎村",
+                code: "004",
+            },
+            VillageCode {
+                name: "格什勒克村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "吐格曼贝希村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英巴扎村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "塔勒克村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "明哈达村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "结然帕塔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "赛克散库足克村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "巴格托格拉克村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "阿克托格拉克村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "克孜勒库木村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "吾斯塘博依村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "且克且克村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "玉吉米力克村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "塔什郎托格拉克村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "希庞村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "元宝勒克村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "木尕勒村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "古勒巴格村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "拱拜孜村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "温阿勒台库什村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "铁日木村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "其乃巴格村委会",
+                code: "026",
+            },
+        ],
+    },
+    TownCode {
+        name: "英吾斯塘乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "加格达村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "其盖库都克村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "库木奇库勒村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "且迪尔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "协开尔巴格村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "再库勒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "拜什塔木村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阔纳巴扎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "奥尔曼村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "阿特恰帕尔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "和谐村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "库木库勒村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "英吾斯塘村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "格什勒克吾斯塘村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "铁热克力克村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "尤木拉克却勒村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "喀拉玉吉买村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "阿克墩村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "也台买里村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "巴什乌堂村委会",
+                code: "020",
+            },
+        ],
+    },
 ];
 
-static TOWNS_CL_025: [TownCode; 1] = [
-    TownCode { name: "塔什库尔干镇", code: "001", villages: &[VillageCode { name: "喀什尕勒社区居委会", code: "001" }, VillageCode { name: "布拉克尕勒社区居委会", code: "002" }, VillageCode { name: "旭东社区居委会", code: "003" }, VillageCode { name: "幸福社区居民委员会", code: "004" }, VillageCode { name: "塔什库尔干镇红旗社区居民委员会", code: "005" }, VillageCode { name: "沙棘林社区居民委员会", code: "006" }] },
-];
+static TOWNS_CL_025: [TownCode; 1] = [TownCode {
+    name: "塔什库尔干镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "喀什尕勒社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "布拉克尕勒社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "旭东社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "幸福社区居民委员会",
+            code: "004",
+        },
+        VillageCode {
+            name: "塔什库尔干镇红旗社区居民委员会",
+            code: "005",
+        },
+        VillageCode {
+            name: "沙棘林社区居民委员会",
+            code: "006",
+        },
+    ],
+}];
 
 pub const CITIES_CL: [CityCode; 26] = [
-    CityCode { name: "省辖市", code: "000", towns: &[] },
-    CityCode { name: "喀什市", code: "001", towns: &TOWNS_CL_001 },
-    CityCode { name: "阿克苏市", code: "002", towns: &TOWNS_CL_002 },
-    CityCode { name: "库车市", code: "003", towns: &TOWNS_CL_003 },
-    CityCode { name: "温宿市", code: "004", towns: &TOWNS_CL_004 },
-    CityCode { name: "沙雅市", code: "005", towns: &TOWNS_CL_005 },
-    CityCode { name: "新和市", code: "006", towns: &TOWNS_CL_006 },
-    CityCode { name: "拜城市", code: "007", towns: &TOWNS_CL_007 },
-    CityCode { name: "乌什市", code: "008", towns: &TOWNS_CL_008 },
-    CityCode { name: "阿瓦提市", code: "009", towns: &TOWNS_CL_009 },
-    CityCode { name: "柯坪市", code: "010", towns: &TOWNS_CL_010 },
-    CityCode { name: "阿图什市", code: "011", towns: &TOWNS_CL_011 },
-    CityCode { name: "阿克陶市", code: "012", towns: &TOWNS_CL_012 },
-    CityCode { name: "阿合奇市", code: "013", towns: &TOWNS_CL_013 },
-    CityCode { name: "乌恰市", code: "014", towns: &TOWNS_CL_014 },
-    CityCode { name: "疏附市", code: "015", towns: &TOWNS_CL_015 },
-    CityCode { name: "疏勒市", code: "016", towns: &TOWNS_CL_016 },
-    CityCode { name: "英吉沙市", code: "017", towns: &TOWNS_CL_017 },
-    CityCode { name: "泽普市", code: "018", towns: &TOWNS_CL_018 },
-    CityCode { name: "莎车市", code: "019", towns: &TOWNS_CL_019 },
-    CityCode { name: "叶城市", code: "020", towns: &TOWNS_CL_020 },
-    CityCode { name: "麦盖提市", code: "021", towns: &TOWNS_CL_021 },
-    CityCode { name: "岳普湖市", code: "022", towns: &TOWNS_CL_022 },
-    CityCode { name: "伽师市", code: "023", towns: &TOWNS_CL_023 },
-    CityCode { name: "巴楚市", code: "024", towns: &TOWNS_CL_024 },
-    CityCode { name: "塔什库尔干市", code: "025", towns: &TOWNS_CL_025 },
+    CityCode {
+        name: "省辖市",
+        code: "000",
+        towns: &[],
+    },
+    CityCode {
+        name: "喀什市",
+        code: "001",
+        towns: &TOWNS_CL_001,
+    },
+    CityCode {
+        name: "阿克苏市",
+        code: "002",
+        towns: &TOWNS_CL_002,
+    },
+    CityCode {
+        name: "库车市",
+        code: "003",
+        towns: &TOWNS_CL_003,
+    },
+    CityCode {
+        name: "温宿市",
+        code: "004",
+        towns: &TOWNS_CL_004,
+    },
+    CityCode {
+        name: "沙雅市",
+        code: "005",
+        towns: &TOWNS_CL_005,
+    },
+    CityCode {
+        name: "新和市",
+        code: "006",
+        towns: &TOWNS_CL_006,
+    },
+    CityCode {
+        name: "拜城市",
+        code: "007",
+        towns: &TOWNS_CL_007,
+    },
+    CityCode {
+        name: "乌什市",
+        code: "008",
+        towns: &TOWNS_CL_008,
+    },
+    CityCode {
+        name: "阿瓦提市",
+        code: "009",
+        towns: &TOWNS_CL_009,
+    },
+    CityCode {
+        name: "柯坪市",
+        code: "010",
+        towns: &TOWNS_CL_010,
+    },
+    CityCode {
+        name: "阿图什市",
+        code: "011",
+        towns: &TOWNS_CL_011,
+    },
+    CityCode {
+        name: "阿克陶市",
+        code: "012",
+        towns: &TOWNS_CL_012,
+    },
+    CityCode {
+        name: "阿合奇市",
+        code: "013",
+        towns: &TOWNS_CL_013,
+    },
+    CityCode {
+        name: "乌恰市",
+        code: "014",
+        towns: &TOWNS_CL_014,
+    },
+    CityCode {
+        name: "疏附市",
+        code: "015",
+        towns: &TOWNS_CL_015,
+    },
+    CityCode {
+        name: "疏勒市",
+        code: "016",
+        towns: &TOWNS_CL_016,
+    },
+    CityCode {
+        name: "英吉沙市",
+        code: "017",
+        towns: &TOWNS_CL_017,
+    },
+    CityCode {
+        name: "泽普市",
+        code: "018",
+        towns: &TOWNS_CL_018,
+    },
+    CityCode {
+        name: "莎车市",
+        code: "019",
+        towns: &TOWNS_CL_019,
+    },
+    CityCode {
+        name: "叶城市",
+        code: "020",
+        towns: &TOWNS_CL_020,
+    },
+    CityCode {
+        name: "麦盖提市",
+        code: "021",
+        towns: &TOWNS_CL_021,
+    },
+    CityCode {
+        name: "岳普湖市",
+        code: "022",
+        towns: &TOWNS_CL_022,
+    },
+    CityCode {
+        name: "伽师市",
+        code: "023",
+        towns: &TOWNS_CL_023,
+    },
+    CityCode {
+        name: "巴楚市",
+        code: "024",
+        towns: &TOWNS_CL_024,
+    },
+    CityCode {
+        name: "塔什库尔干市",
+        code: "025",
+        towns: &TOWNS_CL_025,
+    },
 ];

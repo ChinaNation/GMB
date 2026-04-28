@@ -98,15 +98,21 @@ pub(crate) async fn public_identity_search(
             Err(resp) => return resp,
         };
         if !account_pubkey.is_empty() {
-            store.citizen_id_by_pubkey.get(account_pubkey)
+            store
+                .citizen_id_by_pubkey
+                .get(account_pubkey)
                 .and_then(|cid| store.citizen_records.get(cid))
                 .cloned()
         } else if !archive_no.is_empty() {
-            store.citizen_id_by_archive_no.get(archive_no)
+            store
+                .citizen_id_by_archive_no
+                .get(archive_no)
                 .and_then(|cid| store.citizen_records.get(cid))
                 .cloned()
         } else {
-            store.citizen_records.values()
+            store
+                .citizen_records
+                .values()
                 .find(|r| r.sfid_code.as_deref() == Some(identity_code))
                 .cloned()
         }

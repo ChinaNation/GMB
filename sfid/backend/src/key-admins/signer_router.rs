@@ -27,9 +27,10 @@ pub(crate) fn resolve_business_signer(
                 "密钥管理员不能直接推送业务交易".to_string(),
             ));
         }
-        AdminRole::ShengAdmin | AdminRole::ShiAdmin => ctx.admin_province.as_deref().ok_or_else(
-            || (StatusCode::BAD_REQUEST, "管理员缺少省份信息".to_string()),
-        )?,
+        AdminRole::ShengAdmin | AdminRole::ShiAdmin => ctx
+            .admin_province
+            .as_deref()
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, "管理员缺少省份信息".to_string()))?,
     };
     match state.sheng_signer_cache.get(province) {
         Some(s) => Ok((s, province.to_string())),

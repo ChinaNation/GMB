@@ -158,3 +158,9 @@
    - `SfidCodeAuth::SfidBackupAccount2`
 4. `sfid` 必须把链上三把公钥同步到本地 `chain_keyring_state` 镜像，再做签名服务启动。
 5. 若本地主私钥派生公钥不等于链上 `SfidMainAccount`，服务必须拒绝启动，不能继续提供绑定凭证、投票凭证、人口快照签名。
+
+## 12. ClearingBankNodes watcher 启动约束
+1. `chain::clearing_bank_watcher::ClearingBankNodeCache` 必须先在同步启动阶段构造并放入 `AppState`。
+2. `chain::clearing_bank_watcher::start_watcher()` 只允许在 `tokio::runtime::Runtime::block_on(...)` 已进入的上下文里调用。
+3. 禁止在同步 `main()` 初始化阶段直接调用 `tokio::spawn` 启动 `ClearingBankNodes watcher`，否则会因 Tokio reactor 尚未建立导致后端启动 panic。
+4. `SFID_CHAIN_WS_URL` 缺失时允许跳过 watcher，仅保留空 cache，不得阻塞 `sfid` 主服务启动。

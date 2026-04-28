@@ -13,7 +13,6 @@ use crate::StoreBackend;
 use super::db;
 use super::event_parser;
 
-
 /// Indexer 后台任务入口。在 main.rs 中通过 `tokio::spawn` 启动。
 pub(crate) async fn indexer_worker(backend: StoreBackend) {
     let ws_url = match crate::chain::url::chain_ws_url() {

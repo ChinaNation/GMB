@@ -1,468 +1,17559 @@
 use super::{CityCode, TownCode, VillageCode};
 
 static TOWNS_HN_001: [TownCode; 46] = [
-    TownCode { name: "秀英街道", code: "001", villages: &[VillageCode { name: "秀华社区居民委员会", code: "001" }, VillageCode { name: "秀海社区居民委员会", code: "002" }, VillageCode { name: "秀中社区居民委员会", code: "003" }, VillageCode { name: "秀新社区居民委员会", code: "004" }, VillageCode { name: "高新居委会", code: "005" }, VillageCode { name: "向荣村委会", code: "006" }, VillageCode { name: "书场村委会", code: "007" }] },
-    TownCode { name: "海秀街道", code: "002", villages: &[VillageCode { name: "海港社区居民委员会", code: "001" }, VillageCode { name: "东方洋社区居民委员会", code: "002" }, VillageCode { name: "长秀社区居民委员会", code: "003" }, VillageCode { name: "金鼎社区居民委员会", code: "004" }, VillageCode { name: "十一支队家属社区居民委员会", code: "005" }, VillageCode { name: "爱华社区居委会", code: "006" }, VillageCode { name: "天海社区居委会", code: "007" }] },
-    TownCode { name: "长流镇", code: "003", villages: &[VillageCode { name: "长流墟社区居民委员会", code: "001" }, VillageCode { name: "镇海社区居委会", code: "002" }, VillageCode { name: "长信社区居委会", code: "003" }, VillageCode { name: "长彤社区居委会", code: "004" }, VillageCode { name: "长东村委会", code: "005" }, VillageCode { name: "康安村委会", code: "006" }, VillageCode { name: "会南村委会", code: "007" }, VillageCode { name: "长丰村委会", code: "008" }, VillageCode { name: "美德村委会", code: "009" }, VillageCode { name: "博新村委会", code: "010" }, VillageCode { name: "长南村委会", code: "011" }, VillageCode { name: "棠善村委员会", code: "012" }, VillageCode { name: "长流村委会", code: "013" }, VillageCode { name: "堂昌村委会", code: "014" }, VillageCode { name: "长北村委会", code: "015" }, VillageCode { name: "美李村委会", code: "016" }] },
-    TownCode { name: "西秀镇", code: "004", villages: &[VillageCode { name: "长滨社区居委会", code: "001" }, VillageCode { name: "南港社区居委会", code: "002" }, VillageCode { name: "博养村委会", code: "003" }, VillageCode { name: "长德村委会", code: "004" }, VillageCode { name: "龙头村委会", code: "005" }, VillageCode { name: "祥堂村委会", code: "006" }, VillageCode { name: "荣山村委会", code: "007" }, VillageCode { name: "新和村委会", code: "008" }, VillageCode { name: "丰盈村委会", code: "009" }, VillageCode { name: "拔南村委员会", code: "010" }, VillageCode { name: "新海村委会", code: "011" }, VillageCode { name: "荣山寮村委会", code: "012" }] },
-    TownCode { name: "海秀镇", code: "005", villages: &[VillageCode { name: "海榆西社区居委会", code: "001" }, VillageCode { name: "海榆东社区居委会", code: "002" }, VillageCode { name: "新村村委会", code: "003" }, VillageCode { name: "水头村委会", code: "004" }, VillageCode { name: "业里村委会", code: "005" }, VillageCode { name: "儒益村委会", code: "006" }, VillageCode { name: "周仁村委会", code: "007" }, VillageCode { name: "永庄村委会", code: "008" }] },
-    TownCode { name: "石山镇", code: "006", villages: &[VillageCode { name: "石山墟社区居委会", code: "001" }, VillageCode { name: "和平村委会", code: "002" }, VillageCode { name: "扬佳村委会", code: "003" }, VillageCode { name: "道堂村委会", code: "004" }, VillageCode { name: "北铺村委会", code: "005" }, VillageCode { name: "岭西村委会", code: "006" }, VillageCode { name: "施茶村委会", code: "007" }, VillageCode { name: "安仁村委会", code: "008" }, VillageCode { name: "福安村委会", code: "009" }, VillageCode { name: "建新村委会", code: "010" }, VillageCode { name: "美岭村委会", code: "011" }, VillageCode { name: "道育村委会", code: "012" }] },
-    TownCode { name: "永兴镇", code: "007", villages: &[VillageCode { name: "永兴社区居委会", code: "001" }, VillageCode { name: "永秀村委会", code: "002" }, VillageCode { name: "永德村委会", code: "003" }, VillageCode { name: "美东村委会", code: "004" }, VillageCode { name: "建中村委会", code: "005" }, VillageCode { name: "雷虎村委会", code: "006" }, VillageCode { name: "建群村委会", code: "007" }, VillageCode { name: "罗经村委会", code: "008" }, VillageCode { name: "博强村委会", code: "009" }] },
-    TownCode { name: "东山镇", code: "008", villages: &[VillageCode { name: "镇南社区居委会", code: "001" }, VillageCode { name: "镇北社区居委会", code: "002" }, VillageCode { name: "镇中居委会", code: "003" }, VillageCode { name: "东星村委会", code: "004" }, VillageCode { name: "儒万村委会", code: "005" }, VillageCode { name: "永华村委会", code: "006" }, VillageCode { name: "东山村委会", code: "007" }, VillageCode { name: "东溪村委会", code: "008" }, VillageCode { name: "光明村委会", code: "009" }, VillageCode { name: "溪头村委会", code: "010" }, VillageCode { name: "马坡村委会", code: "011" }, VillageCode { name: "东苍村委会", code: "012" }, VillageCode { name: "玉下村委会", code: "013" }, VillageCode { name: "雅德村委会", code: "014" }, VillageCode { name: "建丰村委会", code: "015" }, VillageCode { name: "文塘村委会", code: "016" }, VillageCode { name: "紫罗村委会", code: "017" }, VillageCode { name: "前进村委会", code: "018" }, VillageCode { name: "环湖村委会", code: "019" }, VillageCode { name: "东升村委会", code: "020" }, VillageCode { name: "溪南村委会", code: "021" }, VillageCode { name: "射钗村委会", code: "022" }, VillageCode { name: "东城村委会", code: "023" }, VillageCode { name: "城西村委会", code: "024" }, VillageCode { name: "东山热作场生活区", code: "025" }] },
-    TownCode { name: "中山街道", code: "009", villages: &[VillageCode { name: "人和坊社区居民委员会", code: "001" }, VillageCode { name: "居仁坊社区居民委员会", code: "002" }, VillageCode { name: "园内里社区居民委员会", code: "003" }, VillageCode { name: "竹林社区居民委员会", code: "004" }, VillageCode { name: "得胜沙社区居民委员会", code: "005" }, VillageCode { name: "富兴社区居民委员会", code: "006" }, VillageCode { name: "义兴社区居民委员会", code: "007" }, VillageCode { name: "西湖社区居民委员会", code: "008" }, VillageCode { name: "西门外社区居民委员会", code: "009" }] },
-    TownCode { name: "滨海街道", code: "010", villages: &[VillageCode { name: "八灶社区居民委员会", code: "001" }, VillageCode { name: "滨海新村社区居民委员会", code: "002" }, VillageCode { name: "滨海社区居民委员会", code: "003" }, VillageCode { name: "盐灶一社区居民委员会", code: "004" }, VillageCode { name: "盐灶二社区居民委员会", code: "005" }, VillageCode { name: "盐灶三社区居民委员会", code: "006" }, VillageCode { name: "龙华中社区居民委员会", code: "007" }, VillageCode { name: "滨港社区居民委员会", code: "008" }, VillageCode { name: "泰华社区居民委员会", code: "009" }, VillageCode { name: "玉河社区居民委员会", code: "010" }] },
-    TownCode { name: "金贸街道", code: "011", villages: &[VillageCode { name: "龙华南社区居民委员会", code: "001" }, VillageCode { name: "珠江社区居民委员会", code: "002" }, VillageCode { name: "世贸社区居民委员会", code: "003" }, VillageCode { name: "国贸社区居民委员会", code: "004" }, VillageCode { name: "万绿园社区居民委员会", code: "005" }, VillageCode { name: "金海社区居民委员会", code: "006" }, VillageCode { name: "玉沙社区居民委员会", code: "007" }, VillageCode { name: "电力社区居民委员会", code: "008" }, VillageCode { name: "嘉华社区居委会", code: "009" }] },
-    TownCode { name: "大同街道", code: "012", villages: &[VillageCode { name: "友谊社区居民委员会", code: "001" }, VillageCode { name: "大同里社区居民委员会", code: "002" }, VillageCode { name: "华海社区居民委员会", code: "003" }, VillageCode { name: "龙昆上社区居民委员会", code: "004" }, VillageCode { name: "龙昆下社区居民委员会", code: "005" }, VillageCode { name: "正义社区居民委员会", code: "006" }, VillageCode { name: "侨中社区居民委员会", code: "007" }, VillageCode { name: "彩虹社区居民委员会", code: "008" }, VillageCode { name: "义龙东社区居民委员会", code: "009" }, VillageCode { name: "义龙西社区居民委员会", code: "010" }] },
-    TownCode { name: "海垦街道", code: "013", villages: &[VillageCode { name: "华垦社区居民委员会", code: "001" }, VillageCode { name: "垦中社区居民委员会", code: "002" }, VillageCode { name: "海秀社区居民委员会", code: "003" }, VillageCode { name: "金山社区居民委员会", code: "004" }, VillageCode { name: "顺发社区居民委员会", code: "005" }, VillageCode { name: "疏港社区居民委员会", code: "006" }, VillageCode { name: "金牛岭社区居民委员会", code: "007" }, VillageCode { name: "滨涯社区居民委员会", code: "008" }, VillageCode { name: "金垦社区居民委员会", code: "009" }, VillageCode { name: "秀英村社区居民委员会", code: "010" }, VillageCode { name: "滨秀社区居民委员会", code: "011" }, VillageCode { name: "滨濂南社区居民委员会", code: "012" }, VillageCode { name: "滨濂北社区居民委员会", code: "013" }, VillageCode { name: "西岭社区居民委员会", code: "014" }] },
-    TownCode { name: "金宇街道", code: "014", villages: &[VillageCode { name: "银湖社区居民委员会", code: "001" }, VillageCode { name: "昌茂社区居民委员会", code: "002" }, VillageCode { name: "面前坡社区居民委员会", code: "003" }, VillageCode { name: "坡巷社区居民委员会", code: "004" }, VillageCode { name: "坡博东社区居民委员会", code: "005" }, VillageCode { name: "坡博西社区居民委员会", code: "006" }, VillageCode { name: "金坡社区居民委员会", code: "007" }, VillageCode { name: "南沙社区居民委员会", code: "008" }, VillageCode { name: "海德社区居民委员会", code: "009" }, VillageCode { name: "坡博南社区居民委员会", code: "010" }] },
-    TownCode { name: "城西镇", code: "015", villages: &[VillageCode { name: "府西社区居民委员会", code: "001" }, VillageCode { name: "金盘社区居民委员会", code: "002" }, VillageCode { name: "仁里南社区居民委员会", code: "003" }, VillageCode { name: "仁里北社区居民委员会", code: "004" }, VillageCode { name: "四季华庭社区居民委员会", code: "005" }, VillageCode { name: "金沙社区居民委员会", code: "006" }, VillageCode { name: "金星社区居民委员会", code: "007" }, VillageCode { name: "丁村南社区居委会", code: "008" }, VillageCode { name: "丁村北社区居委会", code: "009" }, VillageCode { name: "山高东社区居委会", code: "010" }, VillageCode { name: "山高西社区居委会", code: "011" }, VillageCode { name: "椰海社区居委会", code: "012" }, VillageCode { name: "头铺东社区居委会", code: "013" }, VillageCode { name: "头铺西社区居委会", code: "014" }, VillageCode { name: "高坡村委会", code: "015" }, VillageCode { name: "沙坡村委会", code: "016" }, VillageCode { name: "苍西村委会", code: "017" }, VillageCode { name: "苍东村委会", code: "018" }, VillageCode { name: "大样村委会", code: "019" }, VillageCode { name: "薛村村委会", code: "020" }] },
-    TownCode { name: "龙桥镇", code: "016", villages: &[VillageCode { name: "观澜湖社区居委会", code: "001" }, VillageCode { name: "挺丰村委会", code: "002" }, VillageCode { name: "玉符村委会", code: "003" }, VillageCode { name: "道贡村委会", code: "004" }, VillageCode { name: "龙桥村委会", code: "005" }, VillageCode { name: "龙洪村委会", code: "006" }, VillageCode { name: "玉荣村委会", code: "007" }, VillageCode { name: "永东村委会", code: "008" }, VillageCode { name: "三角园村委会", code: "009" }] },
-    TownCode { name: "新坡镇", code: "017", villages: &[VillageCode { name: "文山村委会", code: "001" }, VillageCode { name: "文丰村委会", code: "002" }, VillageCode { name: "新村村委会", code: "003" }, VillageCode { name: "雄丰村委会", code: "004" }, VillageCode { name: "农丰村委会", code: "005" }, VillageCode { name: "新彩村委会", code: "006" }, VillageCode { name: "群益村委会", code: "007" }, VillageCode { name: "群丰村委会", code: "008" }, VillageCode { name: "民丰村委会", code: "009" }, VillageCode { name: "新坡村委会", code: "010" }, VillageCode { name: "光荣村委会", code: "011" }, VillageCode { name: "仁南村委会", code: "012" }, VillageCode { name: "仁里村委会", code: "013" }] },
-    TownCode { name: "遵谭镇", code: "018", villages: &[VillageCode { name: "新谭村委会", code: "001" }, VillageCode { name: "群力村委会", code: "002" }, VillageCode { name: "咸谅村委会", code: "003" }, VillageCode { name: "龙合村委会", code: "004" }, VillageCode { name: "咸东村委会", code: "005" }, VillageCode { name: "东谭村委会", code: "006" }, VillageCode { name: "遵谭村委会", code: "007" }] },
-    TownCode { name: "龙泉镇", code: "019", villages: &[VillageCode { name: "东占社区居民委员会", code: "001" }, VillageCode { name: "汉香村委会", code: "002" }, VillageCode { name: "扬亭村委会", code: "003" }, VillageCode { name: "新江村委会", code: "004" }, VillageCode { name: "五一村委会", code: "005" }, VillageCode { name: "仁新村委会", code: "006" }, VillageCode { name: "雅咏村委会", code: "007" }, VillageCode { name: "大叠村委会", code: "008" }, VillageCode { name: "椰子头村委会", code: "009" }, VillageCode { name: "美仁坡村委会", code: "010" }, VillageCode { name: "新联村委会", code: "011" }, VillageCode { name: "元平村委会", code: "012" }, VillageCode { name: "市井村委会", code: "013" }, VillageCode { name: "富伟村委会", code: "014" }, VillageCode { name: "永昌村委会", code: "015" }, VillageCode { name: "美定村委会", code: "016" }, VillageCode { name: "占符村委会", code: "017" }, VillageCode { name: "国扬村委会", code: "018" }] },
-    TownCode { name: "国兴街道", code: "020", villages: &[VillageCode { name: "巴伦社区居委会", code: "001" }, VillageCode { name: "攀丹社区居委会", code: "002" }, VillageCode { name: "米铺社区居委会", code: "003" }, VillageCode { name: "道客社区居委会", code: "004" }, VillageCode { name: "文政社区居民委员会", code: "005" }, VillageCode { name: "文坛社区居民委员会", code: "006" }, VillageCode { name: "八一社区居民委员会", code: "007" }] },
-    TownCode { name: "府城街道", code: "021", villages: &[VillageCode { name: "府城社区居委会", code: "001" }, VillageCode { name: "北官社区居委会", code: "002" }, VillageCode { name: "忠介社区居委会", code: "003" }, VillageCode { name: "文庄社区居委会", code: "004" }, VillageCode { name: "云露社区居委会", code: "005" }, VillageCode { name: "甘蔗园社区居委会", code: "006" }, VillageCode { name: "龙昆南社区居民委员会", code: "007" }, VillageCode { name: "北胜社区居民委员会", code: "008" }, VillageCode { name: "鼓楼社区居委会", code: "009" }] },
-    TownCode { name: "滨江街道", code: "022", villages: &[VillageCode { name: "东门社区居委会", code: "001" }, VillageCode { name: "城东社区居委会", code: "002" }, VillageCode { name: "下坎社区居委会", code: "003" }, VillageCode { name: "铁桥社区居委会", code: "004" }, VillageCode { name: "博桂社区居民委员会", code: "005" }, VillageCode { name: "北冲溪社区居委会", code: "006" }] },
-    TownCode { name: "凤翔街道", code: "023", villages: &[VillageCode { name: "大园社区居委会", code: "001" }, VillageCode { name: "三峰社区居委会", code: "002" }, VillageCode { name: "高登社区居委会", code: "003" }, VillageCode { name: "桂林社区居委会", code: "004" }, VillageCode { name: "凤翔社区居委会", code: "005" }, VillageCode { name: "洗马桥社区居民委员会", code: "006" }, VillageCode { name: "迈瀛社区居委会", code: "007" }, VillageCode { name: "那央村委会", code: "008" }, VillageCode { name: "五岳村委会", code: "009" }, VillageCode { name: "儒逢村委会", code: "010" }, VillageCode { name: "红星村委会", code: "011" }, VillageCode { name: "石塔村委会", code: "012" }] },
-    TownCode { name: "龙塘镇", code: "024", villages: &[VillageCode { name: "龙塘社区居委会", code: "001" }, VillageCode { name: "三桥村委会", code: "002" }, VillageCode { name: "龙富村委会", code: "003" }, VillageCode { name: "仁三村委会", code: "004" }, VillageCode { name: "潭口村委会", code: "005" }, VillageCode { name: "龙光村委会", code: "006" }, VillageCode { name: "新民村委会", code: "007" }, VillageCode { name: "龙新村委会", code: "008" }, VillageCode { name: "文道村委会", code: "009" }, VillageCode { name: "三联村委会", code: "010" }, VillageCode { name: "仁庄村委会", code: "011" }] },
-    TownCode { name: "云龙镇", code: "025", villages: &[VillageCode { name: "南区社区居委会", code: "001" }, VillageCode { name: "儒林村委会", code: "002" }, VillageCode { name: "云龙村委会", code: "003" }, VillageCode { name: "长泰村委会", code: "004" }, VillageCode { name: "云阁村委会", code: "005" }, VillageCode { name: "云蛟村委会", code: "006" }, VillageCode { name: "云裕村委会", code: "007" }, VillageCode { name: "云岭村委会", code: "008" }] },
-    TownCode { name: "红旗镇", code: "026", villages: &[VillageCode { name: "土桥社区居委会", code: "001" }, VillageCode { name: "昌文村委会", code: "002" }, VillageCode { name: "大山村委会", code: "003" }, VillageCode { name: "龙榜村委会", code: "004" }, VillageCode { name: "合群村委会", code: "005" }, VillageCode { name: "道崇村委会", code: "006" }, VillageCode { name: "苏寻三村委会", code: "007" }, VillageCode { name: "龙源村委会", code: "008" }, VillageCode { name: "龙发村委会", code: "009" }, VillageCode { name: "墨桥村委会", code: "010" }, VillageCode { name: "红旗村委会", code: "011" }, VillageCode { name: "福坡村委会", code: "012" }] },
-    TownCode { name: "三门坡镇", code: "027", villages: &[VillageCode { name: "庆丰社区居委会", code: "001" }, VillageCode { name: "谭新社区居民委员会", code: "002" }, VillageCode { name: "红明居居民委员会", code: "003" }, VillageCode { name: "新德村委会", code: "004" }, VillageCode { name: "文岭村委会", code: "005" }, VillageCode { name: "美城村委会", code: "006" }, VillageCode { name: "龙马村委会", code: "007" }, VillageCode { name: "谭文村委会", code: "008" }, VillageCode { name: "谷桥村委会", code: "009" }, VillageCode { name: "文蛟村委会", code: "010" }, VillageCode { name: "清泉村委会", code: "011" }, VillageCode { name: "友爱村委会", code: "012" }, VillageCode { name: "乐来村委会", code: "013" }, VillageCode { name: "龙盘村委员", code: "014" }, VillageCode { name: "晨光村委员", code: "015" }] },
-    TownCode { name: "大坡镇", code: "028", villages: &[VillageCode { name: "博坡社区居民委员会", code: "001" }, VillageCode { name: "大坡村委会", code: "002" }, VillageCode { name: "新瑞村委会", code: "003" }, VillageCode { name: "中税村委会", code: "004" }, VillageCode { name: "福昌村委会", code: "005" }, VillageCode { name: "树德村委会", code: "006" }, VillageCode { name: "中税农场生活区", code: "007" }, VillageCode { name: "大坡镇东昌居生活区", code: "008" }] },
-    TownCode { name: "甲子镇", code: "029", villages: &[VillageCode { name: "甲新社区居民委员会", code: "001" }, VillageCode { name: "甲子村委会", code: "002" }, VillageCode { name: "红岭村委会", code: "003" }, VillageCode { name: "群星村委会", code: "004" }, VillageCode { name: "昌西村委会", code: "005" }, VillageCode { name: "青云村委会", code: "006" }, VillageCode { name: "民昌村委会", code: "007" }, VillageCode { name: "琼新村委会", code: "008" }, VillageCode { name: "琼星村委会", code: "009" }, VillageCode { name: "益民村委会", code: "010" }, VillageCode { name: "仙民村委会", code: "011" }, VillageCode { name: "益新村委会", code: "012" }, VillageCode { name: "大同村委会", code: "013" }, VillageCode { name: "民兴村委会", code: "014" }, VillageCode { name: "新昌村委会", code: "015" }, VillageCode { name: "海丰村委会", code: "016" }, VillageCode { name: "长昌村委会", code: "017" }, VillageCode { name: "新民林场生活区", code: "018" }] },
-    TownCode { name: "旧州镇", code: "030", villages: &[VillageCode { name: "双拥社区居民委员会", code: "001" }, VillageCode { name: "旧州村委会", code: "002" }, VillageCode { name: "岭南村委会", code: "003" }, VillageCode { name: "红卫村委会", code: "004" }, VillageCode { name: "文新村委会", code: "005" }, VillageCode { name: "雅秀村委会", code: "006" }, VillageCode { name: "道美村委会", code: "007" }, VillageCode { name: "联丰村委会", code: "008" }, VillageCode { name: "联星村委会", code: "009" }, VillageCode { name: "池连村委会", code: "010" }, VillageCode { name: "光明村委会", code: "011" }] },
-    TownCode { name: "省岭脚热带作物场", code: "031", villages: &[VillageCode { name: "省岭脚热带作物场虚拟生活区", code: "001" }] },
-    TownCode { name: "海府街道", code: "032", villages: &[VillageCode { name: "东湖里社区居民委员会", code: "001" }, VillageCode { name: "白坡里社区居民委员会", code: "002" }, VillageCode { name: "龙峰社区居民委员会", code: "003" }, VillageCode { name: "龙舌坡社区居民委员会", code: "004" }, VillageCode { name: "大英社区居民委员会", code: "005" }, VillageCode { name: "南宝社区居民委员会", code: "006" }] },
-    TownCode { name: "蓝天街道", code: "033", villages: &[VillageCode { name: "龙岐社区居民委员会", code: "001" }, VillageCode { name: "万华社区居民委员会", code: "002" }, VillageCode { name: "塔光社区居民委员会", code: "003" }, VillageCode { name: "下洋社区居民委员会", code: "004" }] },
-    TownCode { name: "博爱街道", code: "034", villages: &[VillageCode { name: "新风里社区居民委员会", code: "001" }, VillageCode { name: "振龙社区居民委员会", code: "002" }, VillageCode { name: "龙文坊社区居民委员会", code: "003" }, VillageCode { name: "三亚社区居民委员会", code: "004" }, VillageCode { name: "南联社区居民委员会", code: "005" }, VillageCode { name: "联桂坊社区居民委员会", code: "006" }, VillageCode { name: "红坎坡社区居民委员会", code: "007" }] },
-    TownCode { name: "海甸街道", code: "035", villages: &[VillageCode { name: "新安社区居民委员会", code: "001" }, VillageCode { name: "沿江社区居民委员会", code: "002" }, VillageCode { name: "金甸社区居民委员会", code: "003" }, VillageCode { name: "海达社区居民委员会", code: "004" }, VillageCode { name: "白沙门社区居民委员会", code: "005" }, VillageCode { name: "福安社区居民委员会", code: "006" }] },
-    TownCode { name: "人民街道", code: "036", villages: &[VillageCode { name: "银甸社区居民委员会", code: "001" }, VillageCode { name: "捕捞社区居民委员会", code: "002" }, VillageCode { name: "邦墩社区居民委员会", code: "003" }, VillageCode { name: "拦海社区居民委员会", code: "004" }, VillageCode { name: "新利社区居民委员会", code: "005" }, VillageCode { name: "万福社区居民委员会", code: "006" }, VillageCode { name: "美丽沙社区居民委员会", code: "007" }] },
-    TownCode { name: "白龙街道", code: "037", villages: &[VillageCode { name: "美舍社区居民委员会", code: "001" }, VillageCode { name: "振兴社区居民委员会", code: "002" }, VillageCode { name: "五贤社区居民委员会", code: "003" }, VillageCode { name: "千家社区居民委员会", code: "004" }, VillageCode { name: "流水坡社区居民委员会", code: "005" }, VillageCode { name: "群上社区居民委员会", code: "006" }] },
-    TownCode { name: "和平南街道", code: "038", villages: &[VillageCode { name: "文明社区居民委员会", code: "001" }, VillageCode { name: "君尧社区居民委员会", code: "002" }, VillageCode { name: "上坡社区居民委员会", code: "003" }, VillageCode { name: "琼苑社区居民委员会", code: "004" }, VillageCode { name: "光阳社区居民委员会", code: "005" }] },
-    TownCode { name: "白沙街道", code: "039", villages: &[VillageCode { name: "锦山里社区居民委员会", code: "001" }, VillageCode { name: "白沙坊社区居民委员会", code: "002" }, VillageCode { name: "白龙社区居民委员会", code: "003" }, VillageCode { name: "岭下社区居民委员会", code: "004" }] },
-    TownCode { name: "新埠街道", code: "040", villages: &[VillageCode { name: "新埠社区居民委员会", code: "001" }, VillageCode { name: "新东社区居民委员会", code: "002" }, VillageCode { name: "三联社区居民委员会", code: "003" }, VillageCode { name: "土尾社区居民委员会", code: "004" }] },
-    TownCode { name: "灵山镇", code: "041", villages: &[VillageCode { name: "晋美社区居委会", code: "001" }, VillageCode { name: "仙云社区居委会", code: "002" }, VillageCode { name: "东头村委会", code: "003" }, VillageCode { name: "东湖村委会", code: "004" }, VillageCode { name: "新琼村委会", code: "005" }, VillageCode { name: "林昌村委会", code: "006" }, VillageCode { name: "新管村委会", code: "007" }, VillageCode { name: "新市村委会", code: "008" }, VillageCode { name: "锦丰村委会", code: "009" }, VillageCode { name: "福玉村委会", code: "010" }, VillageCode { name: "东营村委会", code: "011" }, VillageCode { name: "仲恺村委会", code: "012" }, VillageCode { name: "爱群村委会", code: "013" }, VillageCode { name: "灵山村委会", code: "014" }, VillageCode { name: "群山村委会", code: "015" }, VillageCode { name: "晋文村委会", code: "016" }, VillageCode { name: "桥东村委会", code: "017" }, VillageCode { name: "大林村委会", code: "018" }, VillageCode { name: "红丰村委会", code: "019" }, VillageCode { name: "大昌村委会", code: "020" }, VillageCode { name: "新岛村委会", code: "021" }, VillageCode { name: "东平村委会", code: "022" }, VillageCode { name: "美庄村委会", code: "023" }, VillageCode { name: "东和村委会", code: "024" }] },
-    TownCode { name: "演丰镇", code: "042", villages: &[VillageCode { name: "演丰社区居委会", code: "001" }, VillageCode { name: "演海村委会", code: "002" }, VillageCode { name: "边海村委会", code: "003" }, VillageCode { name: "北港村委会", code: "004" }, VillageCode { name: "演中村委会", code: "005" }, VillageCode { name: "美兰村委会", code: "006" }, VillageCode { name: "演东村委会", code: "007" }, VillageCode { name: "苏民村委会", code: "008" }, VillageCode { name: "演南村委会", code: "009" }, VillageCode { name: "昌城村委会", code: "010" }, VillageCode { name: "群庄村委会", code: "011" }, VillageCode { name: "塔市村委会", code: "012" }, VillageCode { name: "演西村委会", code: "013" }, VillageCode { name: "山尾村委会", code: "014" }] },
-    TownCode { name: "三江镇", code: "043", villages: &[VillageCode { name: "三江社区居委会", code: "001" }, VillageCode { name: "三江居居民委员会", code: "002" }, VillageCode { name: "三江村委会", code: "003" }, VillageCode { name: "茄南村委会", code: "004" }, VillageCode { name: "道学村委会", code: "005" }, VillageCode { name: "茄芮村委会", code: "006" }, VillageCode { name: "苏寻三村委会", code: "007" }, VillageCode { name: "上云村委会", code: "008" }, VillageCode { name: "眼镜塘村委会", code: "009" }, VillageCode { name: "江源村委会", code: "010" }, VillageCode { name: "冲坡岭农场生活区", code: "011" }] },
-    TownCode { name: "大致坡镇", code: "044", villages: &[VillageCode { name: "民乐社区居委会", code: "001" }, VillageCode { name: "椰林社区居委会", code: "002" }, VillageCode { name: "咸来社区居委会", code: "003" }, VillageCode { name: "昌福村委会", code: "004" }, VillageCode { name: "金堆村委会", code: "005" }, VillageCode { name: "大东村委会", code: "006" }, VillageCode { name: "永群村委会", code: "007" }, VillageCode { name: "栽群村委会", code: "008" }, VillageCode { name: "咸来村委会", code: "009" }, VillageCode { name: "崇德村委会", code: "010" }, VillageCode { name: "美桐村委会", code: "011" }, VillageCode { name: "大榕村委会", code: "012" }, VillageCode { name: "美良村委会", code: "013" }] },
-    TownCode { name: "海口桂林洋经济开发区（农场）", code: "045", villages: &[VillageCode { name: "场部社区", code: "001" }, VillageCode { name: "美莲社区", code: "002" }, VillageCode { name: "昌炳社区", code: "003" }, VillageCode { name: "青合社区", code: "004" }, VillageCode { name: "五一社区", code: "005" }, VillageCode { name: "迈进社区", code: "006" }, VillageCode { name: "新群社区", code: "007" }, VillageCode { name: "振家社区", code: "008" }, VillageCode { name: "高山社区", code: "009" }, VillageCode { name: "丰兴社区", code: "010" }, VillageCode { name: "永卫社区", code: "011" }, VillageCode { name: "传忠社区", code: "012" }] },
-    TownCode { name: "罗牛山农场", code: "046", villages: &[VillageCode { name: "罗牛山农场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "秀英街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "秀华社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "秀海社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "秀中社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "秀新社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "高新居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "向荣村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "书场村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "海秀街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "海港社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东方洋社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长秀社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "金鼎社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "十一支队家属社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "爱华社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "天海社区居委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "长流镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "长流墟社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "镇海社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长信社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长彤社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "长东村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "康安村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "会南村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "长丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "美德村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "博新村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "长南村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "棠善村委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "长流村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "堂昌村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "长北村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "美李村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "西秀镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "长滨社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南港社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博养村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长德村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙头村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "祥堂村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "荣山村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新和村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "丰盈村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "拔南村委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新海村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "荣山寮村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "海秀镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "海榆西社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "海榆东社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "水头村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "业里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "儒益村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "周仁村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "永庄村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "石山镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "石山墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和平村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "扬佳村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "道堂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "北铺村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "岭西村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "施茶村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "安仁村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "福安村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "建新村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "美岭村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "道育村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "永兴镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "永兴社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "永秀村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "永德村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "美东村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "建中村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "雷虎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "建群村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "罗经村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "博强村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "东山镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "镇南社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "镇北社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "镇中居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "儒万村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "永华村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东山村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "东溪村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "溪头村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "马坡村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "东苍村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "玉下村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "雅德村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "建丰村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "文塘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "紫罗村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "环湖村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "东升村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "溪南村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "射钗村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "东城村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "城西村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "东山热作场生活区",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "中山街道",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "人和坊社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "居仁坊社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "园内里社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "竹林社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "得胜沙社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "富兴社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "义兴社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "西湖社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "西门外社区居民委员会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "滨海街道",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "八灶社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "滨海新村社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "滨海社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "盐灶一社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "盐灶二社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "盐灶三社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙华中社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "滨港社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "泰华社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "玉河社区居民委员会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "金贸街道",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "龙华南社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "珠江社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "世贸社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "国贸社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "万绿园社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "金海社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "玉沙社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "电力社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "嘉华社区居委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "大同街道",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "友谊社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大同里社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "华海社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙昆上社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙昆下社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "正义社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "侨中社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "彩虹社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "义龙东社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "义龙西社区居民委员会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "海垦街道",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "华垦社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "垦中社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "海秀社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "金山社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "顺发社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "疏港社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "金牛岭社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "滨涯社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "金垦社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "秀英村社区居民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "滨秀社区居民委员会",
+                code: "011",
+            },
+            VillageCode {
+                name: "滨濂南社区居民委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "滨濂北社区居民委员会",
+                code: "013",
+            },
+            VillageCode {
+                name: "西岭社区居民委员会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "金宇街道",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "银湖社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昌茂社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "面前坡社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "坡巷社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "坡博东社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "坡博西社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "金坡社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "南沙社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "海德社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "坡博南社区居民委员会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "城西镇",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "府西社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "金盘社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "仁里南社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "仁里北社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "四季华庭社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "金沙社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "金星社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "丁村南社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "丁村北社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "山高东社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "山高西社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "椰海社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "头铺东社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "头铺西社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "高坡村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "沙坡村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "苍西村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "苍东村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "大样村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "薛村村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙桥镇",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "观澜湖社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "挺丰村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "玉符村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "道贡村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙桥村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "龙洪村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "玉荣村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "永东村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "三角园村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "新坡镇",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "文山村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "文丰村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "雄丰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "农丰村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "新彩村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "群益村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "群丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "民丰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "光荣村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "仁南村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "仁里村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "遵谭镇",
+        code: "018",
+        villages: &[
+            VillageCode {
+                name: "新谭村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "群力村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "咸谅村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙合村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "咸东村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "东谭村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "遵谭村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙泉镇",
+        code: "019",
+        villages: &[
+            VillageCode {
+                name: "东占社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "汉香村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "扬亭村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新江村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "五一村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "仁新村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "雅咏村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大叠村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "椰子头村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "美仁坡村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新联村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "元平村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "市井村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "富伟村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "永昌村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "美定村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "占符村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "国扬村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "国兴街道",
+        code: "020",
+        villages: &[
+            VillageCode {
+                name: "巴伦社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "攀丹社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "米铺社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "道客社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文政社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "文坛社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "八一社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "府城街道",
+        code: "021",
+        villages: &[
+            VillageCode {
+                name: "府城社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "北官社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "忠介社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文庄社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "云露社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "甘蔗园社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙昆南社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "北胜社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "鼓楼社区居委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "滨江街道",
+        code: "022",
+        villages: &[
+            VillageCode {
+                name: "东门社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "城东社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "下坎社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁桥社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "博桂社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "北冲溪社区居委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "凤翔街道",
+        code: "023",
+        villages: &[
+            VillageCode {
+                name: "大园社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三峰社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "高登社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "桂林社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "凤翔社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "洗马桥社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "迈瀛社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "那央村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "五岳村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "儒逢村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "红星村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "石塔村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙塘镇",
+        code: "024",
+        villages: &[
+            VillageCode {
+                name: "龙塘社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三桥村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙富村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "仁三村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "潭口村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "龙光村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新民村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "龙新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "文道村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "三联村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "仁庄村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "云龙镇",
+        code: "025",
+        villages: &[
+            VillageCode {
+                name: "南区社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "儒林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "云龙村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长泰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "云阁村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "云蛟村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "云裕村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "云岭村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "红旗镇",
+        code: "026",
+        villages: &[
+            VillageCode {
+                name: "土桥社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昌文村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大山村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙榜村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "合群村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "道崇村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏寻三村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "龙源村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙发村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "墨桥村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "福坡村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "三门坡镇",
+        code: "027",
+        villages: &[
+            VillageCode {
+                name: "庆丰社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "谭新社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红明居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新德村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文岭村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美城村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙马村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "谭文村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "谷桥村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "文蛟村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "清泉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "友爱村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乐来村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "龙盘村委员",
+                code: "014",
+            },
+            VillageCode {
+                name: "晨光村委员",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "大坡镇",
+        code: "028",
+        villages: &[
+            VillageCode {
+                name: "博坡社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新瑞村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "中税村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "福昌村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "树德村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "中税农场生活区",
+                code: "007",
+            },
+            VillageCode {
+                name: "大坡镇东昌居生活区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "甲子镇",
+        code: "029",
+        villages: &[
+            VillageCode {
+                name: "甲新社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "甲子村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红岭村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "群星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "昌西村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "青云村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "民昌村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "琼新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "琼星村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "益民村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "仙民村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "益新村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大同村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "民兴村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "新昌村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "海丰村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "长昌村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "新民林场生活区",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "旧州镇",
+        code: "030",
+        villages: &[
+            VillageCode {
+                name: "双拥社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "旧州村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "岭南村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "红卫村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文新村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "雅秀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "道美村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "联丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "联星村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "池连村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "省岭脚热带作物场",
+        code: "031",
+        villages: &[VillageCode {
+            name: "省岭脚热带作物场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "海府街道",
+        code: "032",
+        villages: &[
+            VillageCode {
+                name: "东湖里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白坡里社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙峰社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙舌坡社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大英社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南宝社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "蓝天街道",
+        code: "033",
+        villages: &[
+            VillageCode {
+                name: "龙岐社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "万华社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔光社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "下洋社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "博爱街道",
+        code: "034",
+        villages: &[
+            VillageCode {
+                name: "新风里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "振龙社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙文坊社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "三亚社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南联社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "联桂坊社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "红坎坡社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "海甸街道",
+        code: "035",
+        villages: &[
+            VillageCode {
+                name: "新安社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "沿江社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "金甸社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海达社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "白沙门社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "福安社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "人民街道",
+        code: "036",
+        villages: &[
+            VillageCode {
+                name: "银甸社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "捕捞社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "邦墩社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "拦海社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新利社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "万福社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "美丽沙社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "白龙街道",
+        code: "037",
+        villages: &[
+            VillageCode {
+                name: "美舍社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "振兴社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "五贤社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "千家社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "流水坡社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "群上社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "和平南街道",
+        code: "038",
+        villages: &[
+            VillageCode {
+                name: "文明社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "君尧社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "上坡社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "琼苑社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "光阳社区居民委员会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "白沙街道",
+        code: "039",
+        villages: &[
+            VillageCode {
+                name: "锦山里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白沙坊社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "白龙社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岭下社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "新埠街道",
+        code: "040",
+        villages: &[
+            VillageCode {
+                name: "新埠社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新东社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "三联社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "土尾社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "灵山镇",
+        code: "041",
+        villages: &[
+            VillageCode {
+                name: "晋美社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "仙云社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东头村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东湖村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新琼村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "林昌村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新管村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新市村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "锦丰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "福玉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "东营村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "仲恺村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "爱群村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "灵山村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "群山村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "晋文村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "桥东村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "大林村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "红丰村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "大昌村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "新岛村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "东平村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "美庄村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "东和村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "演丰镇",
+        code: "042",
+        villages: &[
+            VillageCode {
+                name: "演丰社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "演海村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "边海村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "北港村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "演中村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美兰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "演东村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "苏民村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "演南村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "昌城村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "群庄村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔市村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "演西村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "山尾村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "三江镇",
+        code: "043",
+        villages: &[
+            VillageCode {
+                name: "三江社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三江居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "三江村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "茄南村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "道学村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "茄芮村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏寻三村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "上云村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "眼镜塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "江源村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "冲坡岭农场生活区",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "大致坡镇",
+        code: "044",
+        villages: &[
+            VillageCode {
+                name: "民乐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "椰林社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "咸来社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "昌福村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "金堆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大东村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "永群村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "栽群村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "咸来村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "崇德村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "美桐村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大榕村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "美良村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "海口桂林洋经济开发区（农场）",
+        code: "045",
+        villages: &[
+            VillageCode {
+                name: "场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "美莲社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "昌炳社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "青合社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "五一社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "迈进社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "新群社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "振家社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "高山社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "丰兴社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "永卫社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "传忠社区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "罗牛山农场",
+        code: "046",
+        villages: &[VillageCode {
+            name: "罗牛山农场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_HN_002: [TownCode; 8] = [
-    TownCode { name: "秀英街道", code: "001", villages: &[VillageCode { name: "秀华社区居民委员会", code: "001" }, VillageCode { name: "秀海社区居民委员会", code: "002" }, VillageCode { name: "秀中社区居民委员会", code: "003" }, VillageCode { name: "秀新社区居民委员会", code: "004" }, VillageCode { name: "高新居委会", code: "005" }, VillageCode { name: "向荣村委会", code: "006" }, VillageCode { name: "书场村委会", code: "007" }] },
-    TownCode { name: "海秀街道", code: "002", villages: &[VillageCode { name: "海港社区居民委员会", code: "001" }, VillageCode { name: "东方洋社区居民委员会", code: "002" }, VillageCode { name: "长秀社区居民委员会", code: "003" }, VillageCode { name: "金鼎社区居民委员会", code: "004" }, VillageCode { name: "十一支队家属社区居民委员会", code: "005" }, VillageCode { name: "爱华社区居委会", code: "006" }, VillageCode { name: "天海社区居委会", code: "007" }] },
-    TownCode { name: "长流镇", code: "003", villages: &[VillageCode { name: "长流墟社区居民委员会", code: "001" }, VillageCode { name: "镇海社区居委会", code: "002" }, VillageCode { name: "长信社区居委会", code: "003" }, VillageCode { name: "长彤社区居委会", code: "004" }, VillageCode { name: "长东村委会", code: "005" }, VillageCode { name: "康安村委会", code: "006" }, VillageCode { name: "会南村委会", code: "007" }, VillageCode { name: "长丰村委会", code: "008" }, VillageCode { name: "美德村委会", code: "009" }, VillageCode { name: "博新村委会", code: "010" }, VillageCode { name: "长南村委会", code: "011" }, VillageCode { name: "棠善村委员会", code: "012" }, VillageCode { name: "长流村委会", code: "013" }, VillageCode { name: "堂昌村委会", code: "014" }, VillageCode { name: "长北村委会", code: "015" }, VillageCode { name: "美李村委会", code: "016" }] },
-    TownCode { name: "西秀镇", code: "004", villages: &[VillageCode { name: "长滨社区居委会", code: "001" }, VillageCode { name: "南港社区居委会", code: "002" }, VillageCode { name: "博养村委会", code: "003" }, VillageCode { name: "长德村委会", code: "004" }, VillageCode { name: "龙头村委会", code: "005" }, VillageCode { name: "祥堂村委会", code: "006" }, VillageCode { name: "荣山村委会", code: "007" }, VillageCode { name: "新和村委会", code: "008" }, VillageCode { name: "丰盈村委会", code: "009" }, VillageCode { name: "拔南村委员会", code: "010" }, VillageCode { name: "新海村委会", code: "011" }, VillageCode { name: "荣山寮村委会", code: "012" }] },
-    TownCode { name: "海秀镇", code: "005", villages: &[VillageCode { name: "海榆西社区居委会", code: "001" }, VillageCode { name: "海榆东社区居委会", code: "002" }, VillageCode { name: "新村村委会", code: "003" }, VillageCode { name: "水头村委会", code: "004" }, VillageCode { name: "业里村委会", code: "005" }, VillageCode { name: "儒益村委会", code: "006" }, VillageCode { name: "周仁村委会", code: "007" }, VillageCode { name: "永庄村委会", code: "008" }] },
-    TownCode { name: "石山镇", code: "006", villages: &[VillageCode { name: "石山墟社区居委会", code: "001" }, VillageCode { name: "和平村委会", code: "002" }, VillageCode { name: "扬佳村委会", code: "003" }, VillageCode { name: "道堂村委会", code: "004" }, VillageCode { name: "北铺村委会", code: "005" }, VillageCode { name: "岭西村委会", code: "006" }, VillageCode { name: "施茶村委会", code: "007" }, VillageCode { name: "安仁村委会", code: "008" }, VillageCode { name: "福安村委会", code: "009" }, VillageCode { name: "建新村委会", code: "010" }, VillageCode { name: "美岭村委会", code: "011" }, VillageCode { name: "道育村委会", code: "012" }] },
-    TownCode { name: "永兴镇", code: "007", villages: &[VillageCode { name: "永兴社区居委会", code: "001" }, VillageCode { name: "永秀村委会", code: "002" }, VillageCode { name: "永德村委会", code: "003" }, VillageCode { name: "美东村委会", code: "004" }, VillageCode { name: "建中村委会", code: "005" }, VillageCode { name: "雷虎村委会", code: "006" }, VillageCode { name: "建群村委会", code: "007" }, VillageCode { name: "罗经村委会", code: "008" }, VillageCode { name: "博强村委会", code: "009" }] },
-    TownCode { name: "东山镇", code: "008", villages: &[VillageCode { name: "镇南社区居委会", code: "001" }, VillageCode { name: "镇北社区居委会", code: "002" }, VillageCode { name: "镇中居委会", code: "003" }, VillageCode { name: "东星村委会", code: "004" }, VillageCode { name: "儒万村委会", code: "005" }, VillageCode { name: "永华村委会", code: "006" }, VillageCode { name: "东山村委会", code: "007" }, VillageCode { name: "东溪村委会", code: "008" }, VillageCode { name: "光明村委会", code: "009" }, VillageCode { name: "溪头村委会", code: "010" }, VillageCode { name: "马坡村委会", code: "011" }, VillageCode { name: "东苍村委会", code: "012" }, VillageCode { name: "玉下村委会", code: "013" }, VillageCode { name: "雅德村委会", code: "014" }, VillageCode { name: "建丰村委会", code: "015" }, VillageCode { name: "文塘村委会", code: "016" }, VillageCode { name: "紫罗村委会", code: "017" }, VillageCode { name: "前进村委会", code: "018" }, VillageCode { name: "环湖村委会", code: "019" }, VillageCode { name: "东升村委会", code: "020" }, VillageCode { name: "溪南村委会", code: "021" }, VillageCode { name: "射钗村委会", code: "022" }, VillageCode { name: "东城村委会", code: "023" }, VillageCode { name: "城西村委会", code: "024" }, VillageCode { name: "东山热作场生活区", code: "025" }] },
+    TownCode {
+        name: "秀英街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "秀华社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "秀海社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "秀中社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "秀新社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "高新居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "向荣村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "书场村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "海秀街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "海港社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东方洋社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长秀社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "金鼎社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "十一支队家属社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "爱华社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "天海社区居委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "长流镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "长流墟社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "镇海社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长信社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长彤社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "长东村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "康安村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "会南村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "长丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "美德村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "博新村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "长南村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "棠善村委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "长流村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "堂昌村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "长北村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "美李村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "西秀镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "长滨社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南港社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博养村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长德村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙头村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "祥堂村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "荣山村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新和村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "丰盈村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "拔南村委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新海村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "荣山寮村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "海秀镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "海榆西社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "海榆东社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "水头村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "业里村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "儒益村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "周仁村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "永庄村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "石山镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "石山墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和平村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "扬佳村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "道堂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "北铺村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "岭西村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "施茶村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "安仁村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "福安村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "建新村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "美岭村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "道育村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "永兴镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "永兴社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "永秀村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "永德村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "美东村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "建中村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "雷虎村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "建群村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "罗经村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "博强村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "东山镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "镇南社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "镇北社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "镇中居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "儒万村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "永华村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东山村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "东溪村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "溪头村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "马坡村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "东苍村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "玉下村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "雅德村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "建丰村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "文塘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "紫罗村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "环湖村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "东升村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "溪南村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "射钗村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "东城村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "城西村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "东山热作场生活区",
+                code: "025",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_003: [TownCode; 6] = [
-    TownCode { name: "观湖街道", code: "001", villages: &[VillageCode { name: "大和社区居委会", code: "001" }, VillageCode { name: "马坜社区居委会", code: "002" }, VillageCode { name: "横坑社区居委会", code: "003" }, VillageCode { name: "岗头社区居委会", code: "004" }, VillageCode { name: "南大富社区居委会", code: "005" }, VillageCode { name: "福兴围社区居委会", code: "006" }, VillageCode { name: "松元厦社区居委会", code: "007" }, VillageCode { name: "老村社区居委会", code: "008" }, VillageCode { name: "金龙湖社区居委会", code: "009" }, VillageCode { name: "新田社区居委会", code: "010" }, VillageCode { name: "上坑社区居委会", code: "011" }, VillageCode { name: "下湖社区居委会", code: "012" }, VillageCode { name: "大航社区居委会", code: "013" }, VillageCode { name: "中航格澜郡社区居委会", code: "014" }, VillageCode { name: "招商澜园社区居委会", code: "015" }, VillageCode { name: "鹭湖社区居委会", code: "016" }, VillageCode { name: "高新园社区居委会", code: "017" }] },
-    TownCode { name: "民治街道", code: "002", villages: &[VillageCode { name: "沙吓社区居委会", code: "001" }, VillageCode { name: "民康社区居委会", code: "002" }, VillageCode { name: "恒穗社区居委会", code: "003" }, VillageCode { name: "华城社区居委会", code: "004" }, VillageCode { name: "华民社区居委会", code: "005" }, VillageCode { name: "樟坑社区居委会", code: "006" }, VillageCode { name: "白石龙社区居委会", code: "007" }, VillageCode { name: "横岭社区居委会", code: "008" }, VillageCode { name: "民泰社区居委会", code: "009" }, VillageCode { name: "民富社区居委会", code: "010" }, VillageCode { name: "民安社区居委会", code: "011" }, VillageCode { name: "民丰社区居委会", code: "012" }, VillageCode { name: "东头社区居委会", code: "013" }, VillageCode { name: "上龙社区居委会", code: "014" }, VillageCode { name: "银华社区居委会", code: "015" }, VillageCode { name: "新塘社区居委会", code: "016" }, VillageCode { name: "大岭社区居委会", code: "017" }, VillageCode { name: "锦绣社区居委会", code: "018" }, VillageCode { name: "丰润社区居委会", code: "019" }, VillageCode { name: "牛栏前社区居委会", code: "020" }, VillageCode { name: "北站社区居委会", code: "021" }, VillageCode { name: "红山社区居委会", code: "022" }] },
-    TownCode { name: "龙华街道", code: "003", villages: &[VillageCode { name: "荔园社区居委会", code: "001" }, VillageCode { name: "景华社区居委会", code: "002" }, VillageCode { name: "弓村社区居委会", code: "003" }, VillageCode { name: "山咀头社区居委会", code: "004" }, VillageCode { name: "狮头岭社区居委会", code: "005" }, VillageCode { name: "墩背社区居委会", code: "006" }, VillageCode { name: "河背社区居委会", code: "007" }, VillageCode { name: "老围社区居委会", code: "008" }, VillageCode { name: "牛地埔社区居委会", code: "009" }, VillageCode { name: "郭吓社区居委会", code: "010" }, VillageCode { name: "玉翠社区居委会", code: "011" }, VillageCode { name: "共和社区居委会", code: "012" }, VillageCode { name: "下油松社区居委会", code: "013" }, VillageCode { name: "伍屋社区居委会", code: "014" }, VillageCode { name: "瓦窑排社区居委会", code: "015" }, VillageCode { name: "富康社区居委会", code: "016" }, VillageCode { name: "恒泰社区居委会", code: "017" }, VillageCode { name: "上油松社区居委会", code: "018" }, VillageCode { name: "水斗老围社区居委会", code: "019" }, VillageCode { name: "水斗新围社区居委会", code: "020" }, VillageCode { name: "清湖社区居委会", code: "021" }, VillageCode { name: "清华社区居委会", code: "022" }, VillageCode { name: "景新社区居委会", code: "023" }] },
-    TownCode { name: "大浪街道", code: "004", villages: &[VillageCode { name: "上岭排社区居委会", code: "001" }, VillageCode { name: "下岭排社区居委会", code: "002" }, VillageCode { name: "黄麻埔社区居委会", code: "003" }, VillageCode { name: "罗屋围社区居委会", code: "004" }, VillageCode { name: "浪口社区居委会", code: "005" }, VillageCode { name: "水围社区居委会", code: "006" }, VillageCode { name: "赤岭头社区居委会", code: "007" }, VillageCode { name: "鹊山社区居委会", code: "008" }, VillageCode { name: "上早社区居委会", code: "009" }, VillageCode { name: "陶吓社区居委会", code: "010" }, VillageCode { name: "下早社区居委会", code: "011" }, VillageCode { name: "元芬社区居委会", code: "012" }, VillageCode { name: "上横朗社区居委会", code: "013" }, VillageCode { name: "下横朗社区居委会", code: "014" }, VillageCode { name: "赖屋山社区居委会", code: "015" }, VillageCode { name: "谭罗社区居委会", code: "016" }, VillageCode { name: "三合社区居委会", code: "017" }, VillageCode { name: "龙胜社区居委会", code: "018" }, VillageCode { name: "新围社区居委会", code: "019" }, VillageCode { name: "石凹社区居委会", code: "020" }, VillageCode { name: "龙平社区居委会", code: "021" }] },
-    TownCode { name: "福城街道", code: "005", villages: &[VillageCode { name: "狮径社区居委会", code: "001" }, VillageCode { name: "悦兴围社区居委会", code: "002" }, VillageCode { name: "丹湖社区居委会", code: "003" }, VillageCode { name: "福安社区居委会", code: "004" }, VillageCode { name: "四和社区居委会", code: "005" }, VillageCode { name: "新城社区居委会", code: "006" }, VillageCode { name: "茜坑社区居委会", code: "007" }, VillageCode { name: "大兴社区居委会", code: "008" }, VillageCode { name: "大三社区居委会", code: "009" }, VillageCode { name: "桔塘社区居委会", code: "010" }, VillageCode { name: "章阁社区居委会", code: "011" }, VillageCode { name: "兴富社区居委会", code: "012" }, VillageCode { name: "九龙山社区居委会", code: "013" }] },
-    TownCode { name: "观澜街道", code: "006", villages: &[VillageCode { name: "大布巷社区居委会", code: "001" }, VillageCode { name: "翠澜社区居委会", code: "002" }, VillageCode { name: "桂澜社区居委会", code: "003" }, VillageCode { name: "桂花社区居委会", code: "004" }, VillageCode { name: "星花社区居委会", code: "005" }, VillageCode { name: "大坪社区居委会", code: "006" }, VillageCode { name: "君龙社区居委会", code: "007" }, VillageCode { name: "君新社区居委会", code: "008" }, VillageCode { name: "启明社区居委会", code: "009" }, VillageCode { name: "石马径社区居委会", code: "010" }, VillageCode { name: "广培社区居委会", code: "011" }, VillageCode { name: "大水田社区居委会", code: "012" }, VillageCode { name: "富坑社区居委会", code: "013" }, VillageCode { name: "凹背社区居委会", code: "014" }, VillageCode { name: "陂头吓社区居委会", code: "015" }, VillageCode { name: "黎光社区居委会", code: "016" }, VillageCode { name: "陂新社区居委会", code: "017" }] },
+    TownCode {
+        name: "观湖街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "大和社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "马坜社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "横坑社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岗头社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南大富社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "福兴围社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "松元厦社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "老村社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "金龙湖社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "新田社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "上坑社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "下湖社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大航社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "中航格澜郡社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "招商澜园社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "鹭湖社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "高新园社区居委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "民治街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "沙吓社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "民康社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "恒穗社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "华城社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "华民社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "樟坑社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "白石龙社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "横岭社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "民泰社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "民富社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "民安社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "民丰社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "东头社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "上龙社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "银华社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新塘社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "大岭社区居委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "锦绣社区居委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "丰润社区居委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "牛栏前社区居委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "北站社区居委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "红山社区居委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙华街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "荔园社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "景华社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "弓村社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "山咀头社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "狮头岭社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墩背社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "河背社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "老围社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "牛地埔社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "郭吓社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉翠社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "共和社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "下油松社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "伍屋社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "瓦窑排社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "富康社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "恒泰社区居委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "上油松社区居委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "水斗老围社区居委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "水斗新围社区居委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "清湖社区居委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "清华社区居委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "景新社区居委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "大浪街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "上岭排社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "下岭排社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "黄麻埔社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "罗屋围社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "浪口社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "水围社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "赤岭头社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "鹊山社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "上早社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "陶吓社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "下早社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "元芬社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "上横朗社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "下横朗社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "赖屋山社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "谭罗社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "三合社区居委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "龙胜社区居委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "新围社区居委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "石凹社区居委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "龙平社区居委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "福城街道",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "狮径社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "悦兴围社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "丹湖社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "福安社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "四和社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "新城社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "茜坑社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大兴社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "大三社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "桔塘社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "章阁社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "兴富社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "九龙山社区居委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "观澜街道",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "大布巷社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "翠澜社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "桂澜社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "桂花社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "星花社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大坪社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "君龙社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "君新社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "启明社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "石马径社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "广培社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大水田社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "富坑社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "凹背社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "陂头吓社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "黎光社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "陂新社区居委会",
+                code: "017",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_004: [TownCode; 12] = [
-    TownCode { name: "国兴街道", code: "001", villages: &[VillageCode { name: "巴伦社区居委会", code: "001" }, VillageCode { name: "攀丹社区居委会", code: "002" }, VillageCode { name: "米铺社区居委会", code: "003" }, VillageCode { name: "道客社区居委会", code: "004" }, VillageCode { name: "文政社区居民委员会", code: "005" }, VillageCode { name: "文坛社区居民委员会", code: "006" }, VillageCode { name: "八一社区居民委员会", code: "007" }] },
-    TownCode { name: "府城街道", code: "002", villages: &[VillageCode { name: "府城社区居委会", code: "001" }, VillageCode { name: "北官社区居委会", code: "002" }, VillageCode { name: "忠介社区居委会", code: "003" }, VillageCode { name: "文庄社区居委会", code: "004" }, VillageCode { name: "云露社区居委会", code: "005" }, VillageCode { name: "甘蔗园社区居委会", code: "006" }, VillageCode { name: "龙昆南社区居民委员会", code: "007" }, VillageCode { name: "北胜社区居民委员会", code: "008" }, VillageCode { name: "鼓楼社区居委会", code: "009" }] },
-    TownCode { name: "滨江街道", code: "003", villages: &[VillageCode { name: "东门社区居委会", code: "001" }, VillageCode { name: "城东社区居委会", code: "002" }, VillageCode { name: "下坎社区居委会", code: "003" }, VillageCode { name: "铁桥社区居委会", code: "004" }, VillageCode { name: "博桂社区居民委员会", code: "005" }, VillageCode { name: "北冲溪社区居委会", code: "006" }] },
-    TownCode { name: "凤翔街道", code: "004", villages: &[VillageCode { name: "大园社区居委会", code: "001" }, VillageCode { name: "三峰社区居委会", code: "002" }, VillageCode { name: "高登社区居委会", code: "003" }, VillageCode { name: "桂林社区居委会", code: "004" }, VillageCode { name: "凤翔社区居委会", code: "005" }, VillageCode { name: "洗马桥社区居民委员会", code: "006" }, VillageCode { name: "迈瀛社区居委会", code: "007" }, VillageCode { name: "那央村委会", code: "008" }, VillageCode { name: "五岳村委会", code: "009" }, VillageCode { name: "儒逢村委会", code: "010" }, VillageCode { name: "红星村委会", code: "011" }, VillageCode { name: "石塔村委会", code: "012" }] },
-    TownCode { name: "龙塘镇", code: "005", villages: &[VillageCode { name: "龙塘社区居委会", code: "001" }, VillageCode { name: "三桥村委会", code: "002" }, VillageCode { name: "龙富村委会", code: "003" }, VillageCode { name: "仁三村委会", code: "004" }, VillageCode { name: "潭口村委会", code: "005" }, VillageCode { name: "龙光村委会", code: "006" }, VillageCode { name: "新民村委会", code: "007" }, VillageCode { name: "龙新村委会", code: "008" }, VillageCode { name: "文道村委会", code: "009" }, VillageCode { name: "三联村委会", code: "010" }, VillageCode { name: "仁庄村委会", code: "011" }] },
-    TownCode { name: "云龙镇", code: "006", villages: &[VillageCode { name: "南区社区居委会", code: "001" }, VillageCode { name: "儒林村委会", code: "002" }, VillageCode { name: "云龙村委会", code: "003" }, VillageCode { name: "长泰村委会", code: "004" }, VillageCode { name: "云阁村委会", code: "005" }, VillageCode { name: "云蛟村委会", code: "006" }, VillageCode { name: "云裕村委会", code: "007" }, VillageCode { name: "云岭村委会", code: "008" }] },
-    TownCode { name: "红旗镇", code: "007", villages: &[VillageCode { name: "土桥社区居委会", code: "001" }, VillageCode { name: "昌文村委会", code: "002" }, VillageCode { name: "大山村委会", code: "003" }, VillageCode { name: "龙榜村委会", code: "004" }, VillageCode { name: "合群村委会", code: "005" }, VillageCode { name: "道崇村委会", code: "006" }, VillageCode { name: "苏寻三村委会", code: "007" }, VillageCode { name: "龙源村委会", code: "008" }, VillageCode { name: "龙发村委会", code: "009" }, VillageCode { name: "墨桥村委会", code: "010" }, VillageCode { name: "红旗村委会", code: "011" }, VillageCode { name: "福坡村委会", code: "012" }] },
-    TownCode { name: "三门坡镇", code: "008", villages: &[VillageCode { name: "庆丰社区居委会", code: "001" }, VillageCode { name: "谭新社区居民委员会", code: "002" }, VillageCode { name: "红明居居民委员会", code: "003" }, VillageCode { name: "新德村委会", code: "004" }, VillageCode { name: "文岭村委会", code: "005" }, VillageCode { name: "美城村委会", code: "006" }, VillageCode { name: "龙马村委会", code: "007" }, VillageCode { name: "谭文村委会", code: "008" }, VillageCode { name: "谷桥村委会", code: "009" }, VillageCode { name: "文蛟村委会", code: "010" }, VillageCode { name: "清泉村委会", code: "011" }, VillageCode { name: "友爱村委会", code: "012" }, VillageCode { name: "乐来村委会", code: "013" }, VillageCode { name: "龙盘村委员", code: "014" }, VillageCode { name: "晨光村委员", code: "015" }] },
-    TownCode { name: "大坡镇", code: "009", villages: &[VillageCode { name: "博坡社区居民委员会", code: "001" }, VillageCode { name: "大坡村委会", code: "002" }, VillageCode { name: "新瑞村委会", code: "003" }, VillageCode { name: "中税村委会", code: "004" }, VillageCode { name: "福昌村委会", code: "005" }, VillageCode { name: "树德村委会", code: "006" }, VillageCode { name: "中税农场生活区", code: "007" }, VillageCode { name: "大坡镇东昌居生活区", code: "008" }] },
-    TownCode { name: "甲子镇", code: "010", villages: &[VillageCode { name: "甲新社区居民委员会", code: "001" }, VillageCode { name: "甲子村委会", code: "002" }, VillageCode { name: "红岭村委会", code: "003" }, VillageCode { name: "群星村委会", code: "004" }, VillageCode { name: "昌西村委会", code: "005" }, VillageCode { name: "青云村委会", code: "006" }, VillageCode { name: "民昌村委会", code: "007" }, VillageCode { name: "琼新村委会", code: "008" }, VillageCode { name: "琼星村委会", code: "009" }, VillageCode { name: "益民村委会", code: "010" }, VillageCode { name: "仙民村委会", code: "011" }, VillageCode { name: "益新村委会", code: "012" }, VillageCode { name: "大同村委会", code: "013" }, VillageCode { name: "民兴村委会", code: "014" }, VillageCode { name: "新昌村委会", code: "015" }, VillageCode { name: "海丰村委会", code: "016" }, VillageCode { name: "长昌村委会", code: "017" }, VillageCode { name: "新民林场生活区", code: "018" }] },
-    TownCode { name: "旧州镇", code: "011", villages: &[VillageCode { name: "双拥社区居民委员会", code: "001" }, VillageCode { name: "旧州村委会", code: "002" }, VillageCode { name: "岭南村委会", code: "003" }, VillageCode { name: "红卫村委会", code: "004" }, VillageCode { name: "文新村委会", code: "005" }, VillageCode { name: "雅秀村委会", code: "006" }, VillageCode { name: "道美村委会", code: "007" }, VillageCode { name: "联丰村委会", code: "008" }, VillageCode { name: "联星村委会", code: "009" }, VillageCode { name: "池连村委会", code: "010" }, VillageCode { name: "光明村委会", code: "011" }] },
-    TownCode { name: "省岭脚热带作物场", code: "012", villages: &[VillageCode { name: "省岭脚热带作物场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "国兴街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "巴伦社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "攀丹社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "米铺社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "道客社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文政社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "文坛社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "八一社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "府城街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "府城社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "北官社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "忠介社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文庄社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "云露社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "甘蔗园社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙昆南社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "北胜社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "鼓楼社区居委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "滨江街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "东门社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "城东社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "下坎社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "铁桥社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "博桂社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "北冲溪社区居委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "凤翔街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "大园社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三峰社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "高登社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "桂林社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "凤翔社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "洗马桥社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "迈瀛社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "那央村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "五岳村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "儒逢村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "红星村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "石塔村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙塘镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "龙塘社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三桥村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙富村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "仁三村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "潭口村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "龙光村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新民村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "龙新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "文道村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "三联村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "仁庄村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "云龙镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "南区社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "儒林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "云龙村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长泰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "云阁村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "云蛟村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "云裕村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "云岭村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "红旗镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "土桥社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昌文村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大山村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙榜村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "合群村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "道崇村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏寻三村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "龙源村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙发村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "墨桥村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "福坡村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "三门坡镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "庆丰社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "谭新社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红明居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新德村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文岭村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美城村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙马村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "谭文村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "谷桥村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "文蛟村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "清泉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "友爱村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "乐来村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "龙盘村委员",
+                code: "014",
+            },
+            VillageCode {
+                name: "晨光村委员",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "大坡镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "博坡社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新瑞村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "中税村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "福昌村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "树德村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "中税农场生活区",
+                code: "007",
+            },
+            VillageCode {
+                name: "大坡镇东昌居生活区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "甲子镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "甲新社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "甲子村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红岭村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "群星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "昌西村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "青云村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "民昌村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "琼新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "琼星村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "益民村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "仙民村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "益新村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大同村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "民兴村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "新昌村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "海丰村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "长昌村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "新民林场生活区",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "旧州镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "双拥社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "旧州村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "岭南村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "红卫村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文新村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "雅秀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "道美村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "联丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "联星村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "池连村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "省岭脚热带作物场",
+        code: "012",
+        villages: &[VillageCode {
+            name: "省岭脚热带作物场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_HN_005: [TownCode; 15] = [
-    TownCode { name: "海府街道", code: "001", villages: &[VillageCode { name: "东湖里社区居民委员会", code: "001" }, VillageCode { name: "白坡里社区居民委员会", code: "002" }, VillageCode { name: "龙峰社区居民委员会", code: "003" }, VillageCode { name: "龙舌坡社区居民委员会", code: "004" }, VillageCode { name: "大英社区居民委员会", code: "005" }, VillageCode { name: "南宝社区居民委员会", code: "006" }] },
-    TownCode { name: "蓝天街道", code: "002", villages: &[VillageCode { name: "龙岐社区居民委员会", code: "001" }, VillageCode { name: "万华社区居民委员会", code: "002" }, VillageCode { name: "塔光社区居民委员会", code: "003" }, VillageCode { name: "下洋社区居民委员会", code: "004" }] },
-    TownCode { name: "博爱街道", code: "003", villages: &[VillageCode { name: "新风里社区居民委员会", code: "001" }, VillageCode { name: "振龙社区居民委员会", code: "002" }, VillageCode { name: "龙文坊社区居民委员会", code: "003" }, VillageCode { name: "三亚社区居民委员会", code: "004" }, VillageCode { name: "南联社区居民委员会", code: "005" }, VillageCode { name: "联桂坊社区居民委员会", code: "006" }, VillageCode { name: "红坎坡社区居民委员会", code: "007" }] },
-    TownCode { name: "海甸街道", code: "004", villages: &[VillageCode { name: "新安社区居民委员会", code: "001" }, VillageCode { name: "沿江社区居民委员会", code: "002" }, VillageCode { name: "金甸社区居民委员会", code: "003" }, VillageCode { name: "海达社区居民委员会", code: "004" }, VillageCode { name: "白沙门社区居民委员会", code: "005" }, VillageCode { name: "福安社区居民委员会", code: "006" }] },
-    TownCode { name: "人民街道", code: "005", villages: &[VillageCode { name: "银甸社区居民委员会", code: "001" }, VillageCode { name: "捕捞社区居民委员会", code: "002" }, VillageCode { name: "邦墩社区居民委员会", code: "003" }, VillageCode { name: "拦海社区居民委员会", code: "004" }, VillageCode { name: "新利社区居民委员会", code: "005" }, VillageCode { name: "万福社区居民委员会", code: "006" }, VillageCode { name: "美丽沙社区居民委员会", code: "007" }] },
-    TownCode { name: "白龙街道", code: "006", villages: &[VillageCode { name: "美舍社区居民委员会", code: "001" }, VillageCode { name: "振兴社区居民委员会", code: "002" }, VillageCode { name: "五贤社区居民委员会", code: "003" }, VillageCode { name: "千家社区居民委员会", code: "004" }, VillageCode { name: "流水坡社区居民委员会", code: "005" }, VillageCode { name: "群上社区居民委员会", code: "006" }] },
-    TownCode { name: "和平南街道", code: "007", villages: &[VillageCode { name: "文明社区居民委员会", code: "001" }, VillageCode { name: "君尧社区居民委员会", code: "002" }, VillageCode { name: "上坡社区居民委员会", code: "003" }, VillageCode { name: "琼苑社区居民委员会", code: "004" }, VillageCode { name: "光阳社区居民委员会", code: "005" }] },
-    TownCode { name: "白沙街道", code: "008", villages: &[VillageCode { name: "锦山里社区居民委员会", code: "001" }, VillageCode { name: "白沙坊社区居民委员会", code: "002" }, VillageCode { name: "白龙社区居民委员会", code: "003" }, VillageCode { name: "岭下社区居民委员会", code: "004" }] },
-    TownCode { name: "新埠街道", code: "009", villages: &[VillageCode { name: "新埠社区居民委员会", code: "001" }, VillageCode { name: "新东社区居民委员会", code: "002" }, VillageCode { name: "三联社区居民委员会", code: "003" }, VillageCode { name: "土尾社区居民委员会", code: "004" }] },
-    TownCode { name: "灵山镇", code: "010", villages: &[VillageCode { name: "晋美社区居委会", code: "001" }, VillageCode { name: "仙云社区居委会", code: "002" }, VillageCode { name: "东头村委会", code: "003" }, VillageCode { name: "东湖村委会", code: "004" }, VillageCode { name: "新琼村委会", code: "005" }, VillageCode { name: "林昌村委会", code: "006" }, VillageCode { name: "新管村委会", code: "007" }, VillageCode { name: "新市村委会", code: "008" }, VillageCode { name: "锦丰村委会", code: "009" }, VillageCode { name: "福玉村委会", code: "010" }, VillageCode { name: "东营村委会", code: "011" }, VillageCode { name: "仲恺村委会", code: "012" }, VillageCode { name: "爱群村委会", code: "013" }, VillageCode { name: "灵山村委会", code: "014" }, VillageCode { name: "群山村委会", code: "015" }, VillageCode { name: "晋文村委会", code: "016" }, VillageCode { name: "桥东村委会", code: "017" }, VillageCode { name: "大林村委会", code: "018" }, VillageCode { name: "红丰村委会", code: "019" }, VillageCode { name: "大昌村委会", code: "020" }, VillageCode { name: "新岛村委会", code: "021" }, VillageCode { name: "东平村委会", code: "022" }, VillageCode { name: "美庄村委会", code: "023" }, VillageCode { name: "东和村委会", code: "024" }] },
-    TownCode { name: "演丰镇", code: "011", villages: &[VillageCode { name: "演丰社区居委会", code: "001" }, VillageCode { name: "演海村委会", code: "002" }, VillageCode { name: "边海村委会", code: "003" }, VillageCode { name: "北港村委会", code: "004" }, VillageCode { name: "演中村委会", code: "005" }, VillageCode { name: "美兰村委会", code: "006" }, VillageCode { name: "演东村委会", code: "007" }, VillageCode { name: "苏民村委会", code: "008" }, VillageCode { name: "演南村委会", code: "009" }, VillageCode { name: "昌城村委会", code: "010" }, VillageCode { name: "群庄村委会", code: "011" }, VillageCode { name: "塔市村委会", code: "012" }, VillageCode { name: "演西村委会", code: "013" }, VillageCode { name: "山尾村委会", code: "014" }] },
-    TownCode { name: "三江镇", code: "012", villages: &[VillageCode { name: "三江社区居委会", code: "001" }, VillageCode { name: "三江居居民委员会", code: "002" }, VillageCode { name: "三江村委会", code: "003" }, VillageCode { name: "茄南村委会", code: "004" }, VillageCode { name: "道学村委会", code: "005" }, VillageCode { name: "茄芮村委会", code: "006" }, VillageCode { name: "苏寻三村委会", code: "007" }, VillageCode { name: "上云村委会", code: "008" }, VillageCode { name: "眼镜塘村委会", code: "009" }, VillageCode { name: "江源村委会", code: "010" }, VillageCode { name: "冲坡岭农场生活区", code: "011" }] },
-    TownCode { name: "大致坡镇", code: "013", villages: &[VillageCode { name: "民乐社区居委会", code: "001" }, VillageCode { name: "椰林社区居委会", code: "002" }, VillageCode { name: "咸来社区居委会", code: "003" }, VillageCode { name: "昌福村委会", code: "004" }, VillageCode { name: "金堆村委会", code: "005" }, VillageCode { name: "大东村委会", code: "006" }, VillageCode { name: "永群村委会", code: "007" }, VillageCode { name: "栽群村委会", code: "008" }, VillageCode { name: "咸来村委会", code: "009" }, VillageCode { name: "崇德村委会", code: "010" }, VillageCode { name: "美桐村委会", code: "011" }, VillageCode { name: "大榕村委会", code: "012" }, VillageCode { name: "美良村委会", code: "013" }] },
-    TownCode { name: "海口桂林洋经济开发区（农场）", code: "014", villages: &[VillageCode { name: "场部社区", code: "001" }, VillageCode { name: "美莲社区", code: "002" }, VillageCode { name: "昌炳社区", code: "003" }, VillageCode { name: "青合社区", code: "004" }, VillageCode { name: "五一社区", code: "005" }, VillageCode { name: "迈进社区", code: "006" }, VillageCode { name: "新群社区", code: "007" }, VillageCode { name: "振家社区", code: "008" }, VillageCode { name: "高山社区", code: "009" }, VillageCode { name: "丰兴社区", code: "010" }, VillageCode { name: "永卫社区", code: "011" }, VillageCode { name: "传忠社区", code: "012" }] },
-    TownCode { name: "罗牛山农场", code: "015", villages: &[VillageCode { name: "罗牛山农场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "海府街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "东湖里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白坡里社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙峰社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙舌坡社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大英社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南宝社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "蓝天街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "龙岐社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "万华社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "塔光社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "下洋社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "博爱街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "新风里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "振龙社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙文坊社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "三亚社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南联社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "联桂坊社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "红坎坡社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "海甸街道",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "新安社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "沿江社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "金甸社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海达社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "白沙门社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "福安社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "人民街道",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "银甸社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "捕捞社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "邦墩社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "拦海社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新利社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "万福社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "美丽沙社区居民委员会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "白龙街道",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "美舍社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "振兴社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "五贤社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "千家社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "流水坡社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "群上社区居民委员会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "和平南街道",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "文明社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "君尧社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "上坡社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "琼苑社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "光阳社区居民委员会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "白沙街道",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "锦山里社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白沙坊社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "白龙社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岭下社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "新埠街道",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "新埠社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新东社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "三联社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "土尾社区居民委员会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "灵山镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "晋美社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "仙云社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东头村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东湖村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新琼村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "林昌村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新管村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新市村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "锦丰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "福玉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "东营村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "仲恺村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "爱群村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "灵山村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "群山村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "晋文村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "桥东村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "大林村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "红丰村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "大昌村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "新岛村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "东平村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "美庄村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "东和村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "演丰镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "演丰社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "演海村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "边海村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "北港村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "演中村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美兰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "演东村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "苏民村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "演南村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "昌城村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "群庄村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "塔市村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "演西村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "山尾村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "三江镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "三江社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三江居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "三江村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "茄南村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "道学村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "茄芮村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "苏寻三村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "上云村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "眼镜塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "江源村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "冲坡岭农场生活区",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "大致坡镇",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "民乐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "椰林社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "咸来社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "昌福村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "金堆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大东村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "永群村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "栽群村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "咸来村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "崇德村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "美桐村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大榕村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "美良村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "海口桂林洋经济开发区（农场）",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "美莲社区",
+                code: "002",
+            },
+            VillageCode {
+                name: "昌炳社区",
+                code: "003",
+            },
+            VillageCode {
+                name: "青合社区",
+                code: "004",
+            },
+            VillageCode {
+                name: "五一社区",
+                code: "005",
+            },
+            VillageCode {
+                name: "迈进社区",
+                code: "006",
+            },
+            VillageCode {
+                name: "新群社区",
+                code: "007",
+            },
+            VillageCode {
+                name: "振家社区",
+                code: "008",
+            },
+            VillageCode {
+                name: "高山社区",
+                code: "009",
+            },
+            VillageCode {
+                name: "丰兴社区",
+                code: "010",
+            },
+            VillageCode {
+                name: "永卫社区",
+                code: "011",
+            },
+            VillageCode {
+                name: "传忠社区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "罗牛山农场",
+        code: "015",
+        villages: &[VillageCode {
+            name: "罗牛山农场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
-static TOWNS_HN_006: [TownCode; 1] = [
-    TownCode { name: "海棠区直辖村级区划", code: "001", villages: &[VillageCode { name: "永宁社区居委会", code: "001" }, VillageCode { name: "林旺社区居委会", code: "002" }, VillageCode { name: "藤海社区居委会", code: "003" }, VillageCode { name: "南田居居委会", code: "004" }, VillageCode { name: "藤桥村委会", code: "005" }, VillageCode { name: "龙楼村委会", code: "006" }, VillageCode { name: "营头村委会", code: "007" }, VillageCode { name: "龙海村委会", code: "008" }, VillageCode { name: "椰林村委会", code: "009" }, VillageCode { name: "东溪村委会", code: "010" }, VillageCode { name: "海丰村委会", code: "011" }, VillageCode { name: "升昌村委会", code: "012" }, VillageCode { name: "青田村委会", code: "013" }, VillageCode { name: "江林村委会", code: "014" }, VillageCode { name: "龙江村委会", code: "015" }, VillageCode { name: "庄大村委会", code: "016" }, VillageCode { name: "林新村委会", code: "017" }, VillageCode { name: "风塘村委会", code: "018" }, VillageCode { name: "洪李村委会", code: "019" }, VillageCode { name: "北山村委会", code: "020" }, VillageCode { name: "三灶村委会", code: "021" }, VillageCode { name: "湾坡村委会", code: "022" }, VillageCode { name: "铁炉村委会", code: "023" }] },
-];
+static TOWNS_HN_006: [TownCode; 1] = [TownCode {
+    name: "海棠区直辖村级区划",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "永宁社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "林旺社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "藤海社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "南田居居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "藤桥村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "龙楼村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "营头村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "龙海村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "椰林村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "东溪村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "海丰村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "升昌村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "青田村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "江林村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "龙江村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "庄大村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "林新村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "风塘村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "洪李村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "北山村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "三灶村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "湾坡村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "铁炉村委会",
+            code: "023",
+        },
+    ],
+}];
 
-static TOWNS_HN_007: [TownCode; 1] = [
-    TownCode { name: "吉阳区直辖村级区划", code: "001", villages: &[VillageCode { name: "月川社区居委会", code: "001" }, VillageCode { name: "临春社区居委会", code: "002" }, VillageCode { name: "榕根社区居委会", code: "003" }, VillageCode { name: "鹿回头社区居委会", code: "004" }, VillageCode { name: "港门村社区居委会", code: "005" }, VillageCode { name: "商品街社区居委会", code: "006" }, VillageCode { name: "下洋田社区居委会", code: "007" }, VillageCode { name: "红郊社区居委会", code: "008" }, VillageCode { name: "红沙社区居委会", code: "009" }, VillageCode { name: "丹州社区居委会", code: "010" }, VillageCode { name: "大东海社区居委会", code: "011" }, VillageCode { name: "春光社区居委会", code: "012" }, VillageCode { name: "卓达社区居委会", code: "013" }, VillageCode { name: "新月社区居委会", code: "014" }, VillageCode { name: "荔枝沟社区居委会", code: "015" }, VillageCode { name: "新村社区居委会", code: "016" }, VillageCode { name: "月河社区居委会", code: "017" }, VillageCode { name: "南新居居委会", code: "018" }, VillageCode { name: "海澜社区居委会", code: "019" }, VillageCode { name: "六道社区居委会", code: "020" }, VillageCode { name: "红土坎社区居委会", code: "021" }, VillageCode { name: "龙坡社区居委会", code: "022" }, VillageCode { name: "海罗村委会", code: "023" }, VillageCode { name: "东岸村委会", code: "024" }, VillageCode { name: "田独村委会", code: "025" }, VillageCode { name: "中廖村委会", code: "026" }, VillageCode { name: "大茅村委会", code: "027" }, VillageCode { name: "安罗村委会", code: "028" }, VillageCode { name: "博后村委会", code: "029" }, VillageCode { name: "六盘村委会", code: "030" }, VillageCode { name: "干沟村委会", code: "031" }, VillageCode { name: "榆红村委会", code: "032" }, VillageCode { name: "新红村委会", code: "033" }, VillageCode { name: "罗蓬村委会", code: "034" }, VillageCode { name: "红花村委会", code: "035" }, VillageCode { name: "抱坡村委会", code: "036" }, VillageCode { name: "落笔村委会", code: "037" }, VillageCode { name: "南丁村委会", code: "038" }] },
-];
+static TOWNS_HN_007: [TownCode; 1] = [TownCode {
+    name: "吉阳区直辖村级区划",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "月川社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "临春社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "榕根社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "鹿回头社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "港门村社区居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "商品街社区居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "下洋田社区居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "红郊社区居委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "红沙社区居委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "丹州社区居委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "大东海社区居委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "春光社区居委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "卓达社区居委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "新月社区居委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "荔枝沟社区居委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "新村社区居委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "月河社区居委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "南新居居委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "海澜社区居委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "六道社区居委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "红土坎社区居委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "龙坡社区居委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "海罗村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "东岸村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "田独村委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "中廖村委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "大茅村委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "安罗村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "博后村委会",
+            code: "029",
+        },
+        VillageCode {
+            name: "六盘村委会",
+            code: "030",
+        },
+        VillageCode {
+            name: "干沟村委会",
+            code: "031",
+        },
+        VillageCode {
+            name: "榆红村委会",
+            code: "032",
+        },
+        VillageCode {
+            name: "新红村委会",
+            code: "033",
+        },
+        VillageCode {
+            name: "罗蓬村委会",
+            code: "034",
+        },
+        VillageCode {
+            name: "红花村委会",
+            code: "035",
+        },
+        VillageCode {
+            name: "抱坡村委会",
+            code: "036",
+        },
+        VillageCode {
+            name: "落笔村委会",
+            code: "037",
+        },
+        VillageCode {
+            name: "南丁村委会",
+            code: "038",
+        },
+    ],
+}];
 
-static TOWNS_HN_008: [TownCode; 1] = [
-    TownCode { name: "天涯区直辖村级区划", code: "001", villages: &[VillageCode { name: "红旗街社区居委会", code: "001" }, VillageCode { name: "朝阳社区居委会", code: "002" }, VillageCode { name: "友谊路社区居委会", code: "003" }, VillageCode { name: "机场路社区居委会", code: "004" }, VillageCode { name: "金鸡岭社区居委会", code: "005" }, VillageCode { name: "西岛社区居委会", code: "006" }, VillageCode { name: "榆港社区居委会", code: "007" }, VillageCode { name: "南海社区居委会", code: "008" }, VillageCode { name: "新建社区居委会", code: "009" }, VillageCode { name: "和平社区居委会", code: "010" }, VillageCode { name: "光明社区居委会", code: "011" }, VillageCode { name: "春园社区居委会", code: "012" }, VillageCode { name: "场站社区居委会", code: "013" }, VillageCode { name: "岭北社区居委会", code: "014" }, VillageCode { name: "鸭仔塘社区居委会", code: "015" }, VillageCode { name: "回新社区居委会", code: "016" }, VillageCode { name: "回辉社区居委会", code: "017" }, VillageCode { name: "羊新社区居委会", code: "018" }, VillageCode { name: "马岭社区居委会", code: "019" }, VillageCode { name: "儋州村社区居委会", code: "020" }, VillageCode { name: "群众街社区居委会", code: "021" }, VillageCode { name: "建设街社区居委会", code: "022" }, VillageCode { name: "育春路社区居委会", code: "023" }, VillageCode { name: "立才居居委会", code: "024" }, VillageCode { name: "南岛居居委会", code: "025" }, VillageCode { name: "三亚湾社区居委会", code: "026" }, VillageCode { name: "海坡社区居委会", code: "027" }, VillageCode { name: "抱龙村委会", code: "028" }, VillageCode { name: "立新村委会", code: "029" }, VillageCode { name: "扎南村委会", code: "030" }, VillageCode { name: "槟榔村委会", code: "031" }, VillageCode { name: "妙林村委会", code: "032" }, VillageCode { name: "新联村委会", code: "033" }, VillageCode { name: "羊栏村委会", code: "034" }, VillageCode { name: "水蛟村委会", code: "035" }, VillageCode { name: "梅村村委会", code: "036" }, VillageCode { name: "桶井村委会", code: "037" }, VillageCode { name: "台楼村委会", code: "038" }, VillageCode { name: "抱前村委会", code: "039" }, VillageCode { name: "黑土村委会", code: "040" }, VillageCode { name: "布甫村委会", code: "041" }, VillageCode { name: "红塘村委会", code: "042" }, VillageCode { name: "塔岭村委会", code: "043" }, VillageCode { name: "文门村委会", code: "044" }, VillageCode { name: "过岭村委会", code: "045" }, VillageCode { name: "华丽村委会", code: "046" }, VillageCode { name: "马亮村委会", code: "047" }, VillageCode { name: "那受村委会", code: "048" }, VillageCode { name: "那会村委会", code: "049" }, VillageCode { name: "龙密村委会", code: "050" }, VillageCode { name: "马脚村委会", code: "051" }, VillageCode { name: "明善村委会", code: "052" }, VillageCode { name: "雅林村委会", code: "053" }, VillageCode { name: "雅亮村委会", code: "054" }, VillageCode { name: "青法村委会", code: "055" }, VillageCode { name: "抱安村委会", code: "056" }] },
-];
+static TOWNS_HN_008: [TownCode; 1] = [TownCode {
+    name: "天涯区直辖村级区划",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "红旗街社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "朝阳社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "友谊路社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "机场路社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "金鸡岭社区居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "西岛社区居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "榆港社区居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "南海社区居委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "新建社区居委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "和平社区居委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "光明社区居委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "春园社区居委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "场站社区居委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "岭北社区居委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "鸭仔塘社区居委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "回新社区居委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "回辉社区居委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "羊新社区居委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "马岭社区居委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "儋州村社区居委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "群众街社区居委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "建设街社区居委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "育春路社区居委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "立才居居委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "南岛居居委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "三亚湾社区居委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "海坡社区居委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "抱龙村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "立新村委会",
+            code: "029",
+        },
+        VillageCode {
+            name: "扎南村委会",
+            code: "030",
+        },
+        VillageCode {
+            name: "槟榔村委会",
+            code: "031",
+        },
+        VillageCode {
+            name: "妙林村委会",
+            code: "032",
+        },
+        VillageCode {
+            name: "新联村委会",
+            code: "033",
+        },
+        VillageCode {
+            name: "羊栏村委会",
+            code: "034",
+        },
+        VillageCode {
+            name: "水蛟村委会",
+            code: "035",
+        },
+        VillageCode {
+            name: "梅村村委会",
+            code: "036",
+        },
+        VillageCode {
+            name: "桶井村委会",
+            code: "037",
+        },
+        VillageCode {
+            name: "台楼村委会",
+            code: "038",
+        },
+        VillageCode {
+            name: "抱前村委会",
+            code: "039",
+        },
+        VillageCode {
+            name: "黑土村委会",
+            code: "040",
+        },
+        VillageCode {
+            name: "布甫村委会",
+            code: "041",
+        },
+        VillageCode {
+            name: "红塘村委会",
+            code: "042",
+        },
+        VillageCode {
+            name: "塔岭村委会",
+            code: "043",
+        },
+        VillageCode {
+            name: "文门村委会",
+            code: "044",
+        },
+        VillageCode {
+            name: "过岭村委会",
+            code: "045",
+        },
+        VillageCode {
+            name: "华丽村委会",
+            code: "046",
+        },
+        VillageCode {
+            name: "马亮村委会",
+            code: "047",
+        },
+        VillageCode {
+            name: "那受村委会",
+            code: "048",
+        },
+        VillageCode {
+            name: "那会村委会",
+            code: "049",
+        },
+        VillageCode {
+            name: "龙密村委会",
+            code: "050",
+        },
+        VillageCode {
+            name: "马脚村委会",
+            code: "051",
+        },
+        VillageCode {
+            name: "明善村委会",
+            code: "052",
+        },
+        VillageCode {
+            name: "雅林村委会",
+            code: "053",
+        },
+        VillageCode {
+            name: "雅亮村委会",
+            code: "054",
+        },
+        VillageCode {
+            name: "青法村委会",
+            code: "055",
+        },
+        VillageCode {
+            name: "抱安村委会",
+            code: "056",
+        },
+    ],
+}];
 
-static TOWNS_HN_009: [TownCode; 1] = [
-    TownCode { name: "崖州区直辖村级区划", code: "001", villages: &[VillageCode { name: "东关社区居委会", code: "001" }, VillageCode { name: "雀信社区居委会", code: "002" }, VillageCode { name: "东京社区居委会", code: "003" }, VillageCode { name: "中和社区居委会", code: "004" }, VillageCode { name: "龙港社区居委会", code: "005" }, VillageCode { name: "文明社区居委会", code: "006" }, VillageCode { name: "梅联社区居委会", code: "007" }, VillageCode { name: "南滨居居委会", code: "008" }, VillageCode { name: "深海科技城社区居委会", code: "009" }, VillageCode { name: "城东村委会", code: "010" }, VillageCode { name: "拱北村委会", code: "011" }, VillageCode { name: "崖城村委会", code: "012" }, VillageCode { name: "城西村委会", code: "013" }, VillageCode { name: "水南村委会", code: "014" }, VillageCode { name: "大蛋村委会", code: "015" }, VillageCode { name: "南山村委会", code: "016" }, VillageCode { name: "抱古村委会", code: "017" }, VillageCode { name: "北岭村委会", code: "018" }, VillageCode { name: "赤草村委会", code: "019" }, VillageCode { name: "港门村委会", code: "020" }, VillageCode { name: "乾隆村委会", code: "021" }, VillageCode { name: "临高村委会", code: "022" }, VillageCode { name: "保平村委会", code: "023" }, VillageCode { name: "盐灶村委会", code: "024" }, VillageCode { name: "海棠村委会", code: "025" }, VillageCode { name: "梅东村委会", code: "026" }, VillageCode { name: "长山村委会", code: "027" }, VillageCode { name: "凤岭村委会", code: "028" }, VillageCode { name: "三公里村委会", code: "029" }, VillageCode { name: "梅西村委会", code: "030" }, VillageCode { name: "三更村委会", code: "031" }, VillageCode { name: "镇海村委会", code: "032" }, VillageCode { name: "雅安村委会", code: "033" }] },
-];
+static TOWNS_HN_009: [TownCode; 1] = [TownCode {
+    name: "崖州区直辖村级区划",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "东关社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "雀信社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "东京社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "中和社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "龙港社区居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "文明社区居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "梅联社区居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "南滨居居委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "深海科技城社区居委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "城东村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "拱北村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "崖城村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "城西村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "水南村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "大蛋村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "南山村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "抱古村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "北岭村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "赤草村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "港门村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "乾隆村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "临高村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "保平村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "盐灶村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "海棠村委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "梅东村委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "长山村委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "凤岭村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "三公里村委会",
+            code: "029",
+        },
+        VillageCode {
+            name: "梅西村委会",
+            code: "030",
+        },
+        VillageCode {
+            name: "三更村委会",
+            code: "031",
+        },
+        VillageCode {
+            name: "镇海村委会",
+            code: "032",
+        },
+        VillageCode {
+            name: "雅安村委会",
+            code: "033",
+        },
+    ],
+}];
 
 static TOWNS_HN_010: [TownCode; 3] = [
-    TownCode { name: "永兴", code: "001", villages: &[VillageCode { name: "永兴社区居委会", code: "001" }] },
-    TownCode { name: "永乐", code: "002", villages: &[VillageCode { name: "晋卿社区居委会", code: "001" }, VillageCode { name: "鸭公社区居委会", code: "002" }, VillageCode { name: "羚羊社区居委会", code: "003" }, VillageCode { name: "银屿社区居委会", code: "004" }, VillageCode { name: "甘泉社区居委会", code: "005" }] },
-    TownCode { name: "七连屿", code: "003", villages: &[VillageCode { name: "赵述社区居委会", code: "001" }, VillageCode { name: "北岛社区居委会", code: "002" }] },
+    TownCode {
+        name: "永兴",
+        code: "001",
+        villages: &[VillageCode {
+            name: "永兴社区居委会",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "永乐",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "晋卿社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "鸭公社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "羚羊社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "银屿社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "甘泉社区居委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "七连屿",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "赵述社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "北岛社区居委会",
+                code: "002",
+            },
+        ],
+    },
 ];
 
-static TOWNS_HN_011: [TownCode; 1] = [
-    TownCode { name: "永暑岛", code: "001", villages: &[VillageCode { name: "永暑岛虚拟社区", code: "001" }] },
-];
+static TOWNS_HN_011: [TownCode; 1] = [TownCode {
+    name: "永暑岛",
+    code: "001",
+    villages: &[VillageCode {
+        name: "永暑岛虚拟社区",
+        code: "001",
+    }],
+}];
 
-static TOWNS_HN_012: [TownCode; 1] = [
-    TownCode { name: "那大镇", code: "001", villages: &[VillageCode { name: "西干社区居委会", code: "001" }, VillageCode { name: "大同社区居委会", code: "002" }, VillageCode { name: "铺仔社区居委会", code: "003" }, VillageCode { name: "解放社区居委会", code: "004" }, VillageCode { name: "东风社区居委会", code: "005" }, VillageCode { name: "胜利社区居委会", code: "006" }, VillageCode { name: "先锋社区居委会", code: "007" }, VillageCode { name: "群英社区居委会", code: "008" }, VillageCode { name: "东干社区居委会", code: "009" }, VillageCode { name: "东兴社区居委会", code: "010" }, VillageCode { name: "城北社区居委会", code: "011" }, VillageCode { name: "西联居居委会", code: "012" }, VillageCode { name: "石屋村委会", code: "013" }, VillageCode { name: "侨南村委会", code: "014" }, VillageCode { name: "白南村委会", code: "015" }, VillageCode { name: "红旗村委会", code: "016" }, VillageCode { name: "茶山村委会", code: "017" }, VillageCode { name: "王桐村委会", code: "018" }, VillageCode { name: "横岭村委会", code: "019" }, VillageCode { name: "头潭村委会", code: "020" }, VillageCode { name: "蔬菜村委会", code: "021" }, VillageCode { name: "清平村委会", code: "022" }, VillageCode { name: "那恁村委会", code: "023" }, VillageCode { name: "军屯村委会", code: "024" }, VillageCode { name: "槟榔村委会", code: "025" }, VillageCode { name: "洛南村委会", code: "026" }, VillageCode { name: "抱龙村委会", code: "027" }, VillageCode { name: "力崖村委会", code: "028" }, VillageCode { name: "屋基村委会", code: "029" }, VillageCode { name: "番真村委会", code: "030" }, VillageCode { name: "加平村委会", code: "031" }, VillageCode { name: "美扶村委会", code: "032" }, VillageCode { name: "洛基村委会", code: "033" }, VillageCode { name: "前进农场生活区", code: "034" }, VillageCode { name: "牙拉农场生活区", code: "035" }, VillageCode { name: "合罗农场生活区", code: "036" }, VillageCode { name: "尖岭农场生活区", code: "037" }, VillageCode { name: "先锋农场生活区", code: "038" }, VillageCode { name: "侨锋农场生活区", code: "039" }, VillageCode { name: "侨值农场生活区", code: "040" }, VillageCode { name: "南辰农场生活区", code: "041" }] },
-];
+static TOWNS_HN_012: [TownCode; 1] = [TownCode {
+    name: "那大镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "西干社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "大同社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "铺仔社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "解放社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "东风社区居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "胜利社区居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "先锋社区居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "群英社区居委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "东干社区居委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "东兴社区居委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "城北社区居委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "西联居居委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "石屋村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "侨南村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "白南村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "红旗村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "茶山村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "王桐村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "横岭村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "头潭村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "蔬菜村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "清平村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "那恁村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "军屯村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "槟榔村委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "洛南村委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "抱龙村委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "力崖村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "屋基村委会",
+            code: "029",
+        },
+        VillageCode {
+            name: "番真村委会",
+            code: "030",
+        },
+        VillageCode {
+            name: "加平村委会",
+            code: "031",
+        },
+        VillageCode {
+            name: "美扶村委会",
+            code: "032",
+        },
+        VillageCode {
+            name: "洛基村委会",
+            code: "033",
+        },
+        VillageCode {
+            name: "前进农场生活区",
+            code: "034",
+        },
+        VillageCode {
+            name: "牙拉农场生活区",
+            code: "035",
+        },
+        VillageCode {
+            name: "合罗农场生活区",
+            code: "036",
+        },
+        VillageCode {
+            name: "尖岭农场生活区",
+            code: "037",
+        },
+        VillageCode {
+            name: "先锋农场生活区",
+            code: "038",
+        },
+        VillageCode {
+            name: "侨锋农场生活区",
+            code: "039",
+        },
+        VillageCode {
+            name: "侨值农场生活区",
+            code: "040",
+        },
+        VillageCode {
+            name: "南辰农场生活区",
+            code: "041",
+        },
+    ],
+}];
 
-static TOWNS_HN_013: [TownCode; 1] = [
-    TownCode { name: "和庆镇", code: "001", villages: &[VillageCode { name: "和庆社区居委会", code: "001" }, VillageCode { name: "西流居居委会", code: "002" }, VillageCode { name: "美万村委会", code: "003" }, VillageCode { name: "美灵村委会", code: "004" }, VillageCode { name: "和祥村委会", code: "005" }, VillageCode { name: "新村村委会", code: "006" }, VillageCode { name: "拱教村委会", code: "007" }, VillageCode { name: "文卷村委会", code: "008" }, VillageCode { name: "木排村委会", code: "009" }, VillageCode { name: "美敖村委会", code: "010" }, VillageCode { name: "罗便村委会", code: "011" }, VillageCode { name: "美万新村委会", code: "012" }, VillageCode { name: "和庆农场生活区", code: "013" }, VillageCode { name: "木排热作场生活区", code: "014" }] },
-];
+static TOWNS_HN_013: [TownCode; 1] = [TownCode {
+    name: "和庆镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "和庆社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "西流居居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "美万村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "美灵村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "和祥村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "新村村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "拱教村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "文卷村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "木排村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "美敖村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "罗便村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "美万新村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "和庆农场生活区",
+            code: "013",
+        },
+        VillageCode {
+            name: "木排热作场生活区",
+            code: "014",
+        },
+    ],
+}];
 
 static TOWNS_HN_014: [TownCode; 14] = [
-    TownCode { name: "琴城镇", code: "001", villages: &[VillageCode { name: "人民路居委会", code: "001" }, VillageCode { name: "解放路居委会", code: "002" }, VillageCode { name: "建设路居委会", code: "003" }, VillageCode { name: "新建路居委会", code: "004" }, VillageCode { name: "仓山路居委会", code: "005" }, VillageCode { name: "桔都东路社区居委会", code: "006" }, VillageCode { name: "桔都西路社区居委会", code: "007" }, VillageCode { name: "琴湖路居委会", code: "008" }, VillageCode { name: "国安路居委会", code: "009" }, VillageCode { name: "琴台路居委会", code: "010" }, VillageCode { name: "沿江路居委会", code: "011" }, VillageCode { name: "大堡村委会", code: "012" }, VillageCode { name: "下坊村委会", code: "013" }, VillageCode { name: "水北村委会", code: "014" }, VillageCode { name: "桥背村委会", code: "015" }, VillageCode { name: "徐家边村委会", code: "016" }, VillageCode { name: "茅店村委会", code: "017" }, VillageCode { name: "富溪村委会", code: "018" }, VillageCode { name: "游军村委会", code: "019" }, VillageCode { name: "艾源村委会", code: "020" }, VillageCode { name: "瑶浦村委会", code: "021" }, VillageCode { name: "水南村委会", code: "022" }, VillageCode { name: "杨梅村委会", code: "023" }, VillageCode { name: "果园村委会", code: "024" }, VillageCode { name: "朝先村委会", code: "025" }] },
-    TownCode { name: "太和镇", code: "002", villages: &[VillageCode { name: "太和居委会", code: "001" }, VillageCode { name: "太和村委会", code: "002" }, VillageCode { name: "店前村委会", code: "003" }, VillageCode { name: "下洋村委会", code: "004" }, VillageCode { name: "丹阳村委会", code: "005" }, VillageCode { name: "康都村委会", code: "006" }, VillageCode { name: "樟坊村委会", code: "007" }, VillageCode { name: "下桐村委会", code: "008" }, VillageCode { name: "司前村委会", code: "009" }, VillageCode { name: "杭山村委会", code: "010" }, VillageCode { name: "前坊村委会", code: "011" }] },
-    TownCode { name: "白舍镇", code: "003", villages: &[VillageCode { name: "白舍居委会", code: "001" }, VillageCode { name: "白舍村委会", code: "002" }, VillageCode { name: "丰江村委会", code: "003" }, VillageCode { name: "晗头村委会", code: "004" }, VillageCode { name: "茶亭村委会", code: "005" }, VillageCode { name: "望天村委会", code: "006" }, VillageCode { name: "三坑村委会", code: "007" }, VillageCode { name: "下陂村委会", code: "008" }, VillageCode { name: "瑶陂村委会", code: "009" }, VillageCode { name: "张家村委会", code: "010" }, VillageCode { name: "池渡村委会", code: "011" }, VillageCode { name: "下甘村委会", code: "012" }, VillageCode { name: "上甘村委会", code: "013" }, VillageCode { name: "陈坊村委会", code: "014" }, VillageCode { name: "田东村委会", code: "015" }, VillageCode { name: "坊坑村委会", code: "016" }, VillageCode { name: "鄱阳村委会", code: "017" }, VillageCode { name: "罗坊村委会", code: "018" }, VillageCode { name: "罗家村委会", code: "019" }, VillageCode { name: "小石村委会", code: "020" }, VillageCode { name: "际民村委会", code: "021" }, VillageCode { name: "珠湖村委会", code: "022" }, VillageCode { name: "姜源村委会", code: "023" }, VillageCode { name: "河东村委会", code: "024" }, VillageCode { name: "周源村委会", code: "025" }, VillageCode { name: "石源村委会", code: "026" }, VillageCode { name: "古竹村委会", code: "027" }, VillageCode { name: "邹坊村委会", code: "028" }, VillageCode { name: "中和村委会", code: "029" }, VillageCode { name: "桥口村委会", code: "030" }, VillageCode { name: "杨林村委会", code: "031" }, VillageCode { name: "磜下村委会", code: "032" }, VillageCode { name: "桥头村委会", code: "033" }] },
-    TownCode { name: "市山镇", code: "004", villages: &[VillageCode { name: "市山村委会", code: "001" }, VillageCode { name: "西村村委会", code: "002" }, VillageCode { name: "梅溪村委会", code: "003" }, VillageCode { name: "考坑村委会", code: "004" }, VillageCode { name: "官庄村委会", code: "005" }, VillageCode { name: "官塘村委会", code: "006" }, VillageCode { name: "坪埠村委会", code: "007" }, VillageCode { name: "贯巢村委会", code: "008" }, VillageCode { name: "竹源村委会", code: "009" }, VillageCode { name: "丹坛村委会", code: "010" }, VillageCode { name: "耀里村委会", code: "011" }, VillageCode { name: "石谦村委会", code: "012" }, VillageCode { name: "前山村委会", code: "013" }, VillageCode { name: "罗溪村委会", code: "014" }, VillageCode { name: "梓和村委会", code: "015" }, VillageCode { name: "翠云村委会", code: "016" }, VillageCode { name: "包坊村委会", code: "017" }, VillageCode { name: "沙岗村委会", code: "018" }, VillageCode { name: "陶田村委会", code: "019" }, VillageCode { name: "胡坑村委会", code: "020" }, VillageCode { name: "进贤村委会", code: "021" }, VillageCode { name: "操坊村委会", code: "022" }, VillageCode { name: "新建村委会", code: "023" }, VillageCode { name: "熊坊村委会", code: "024" }] },
-    TownCode { name: "洽湾镇", code: "005", villages: &[VillageCode { name: "洽湾村委会", code: "001" }, VillageCode { name: "上店村委会", code: "002" }, VillageCode { name: "黄家村委会", code: "003" }, VillageCode { name: "浆坑村委会", code: "004" }, VillageCode { name: "上游村委会", code: "005" }, VillageCode { name: "黄坊村委会", code: "006" }, VillageCode { name: "西坪村委会", code: "007" }, VillageCode { name: "石磜村委会", code: "008" }, VillageCode { name: "长岭村委会", code: "009" }, VillageCode { name: "桃源村委会", code: "010" }, VillageCode { name: "加津村委会", code: "011" }] },
-    TownCode { name: "桑田镇", code: "006", villages: &[VillageCode { name: "肖坊村委会", code: "001" }, VillageCode { name: "古城村委会", code: "002" }, VillageCode { name: "竹山下村委会", code: "003" }, VillageCode { name: "根竹村委会", code: "004" }, VillageCode { name: "荷田岗村委会", code: "005" }, VillageCode { name: "桑田村委会", code: "006" }, VillageCode { name: "新圩上村委会", code: "007" }, VillageCode { name: "曾家丰村委会", code: "008" }, VillageCode { name: "樟坑村委会", code: "009" }, VillageCode { name: "水口村委会", code: "010" }, VillageCode { name: "西源村委会", code: "011" }] },
-    TownCode { name: "紫霄镇", code: "007", villages: &[VillageCode { name: "上古村委会", code: "001" }, VillageCode { name: "东村村委会", code: "002" }, VillageCode { name: "尧家村委会", code: "003" }, VillageCode { name: "洽村村委会", code: "004" }, VillageCode { name: "溪东村委会", code: "005" }, VillageCode { name: "大岭背村委会", code: "006" }, VillageCode { name: "明阳村委会", code: "007" }, VillageCode { name: "黄龙坑村委会", code: "008" }, VillageCode { name: "新田村委会", code: "009" }, VillageCode { name: "瞿村村委会", code: "010" }, VillageCode { name: "周坊村委会", code: "011" }, VillageCode { name: "黄砂村委会", code: "012" }, VillageCode { name: "西坑村委会", code: "013" }, VillageCode { name: "宝石村委会", code: "014" }, VillageCode { name: "罗坊村委会", code: "015" }, VillageCode { name: "禾溪村委会", code: "016" }, VillageCode { name: "朱坊村委会", code: "017" }, VillageCode { name: "西溪村委会", code: "018" }, VillageCode { name: "藕塘村委会", code: "019" }] },
-    TownCode { name: "三溪乡", code: "008", villages: &[VillageCode { name: "三溪村委会", code: "001" }, VillageCode { name: "石邮村委会", code: "002" }, VillageCode { name: "柏苍村委会", code: "003" }, VillageCode { name: "池丰村委会", code: "004" }, VillageCode { name: "庙前村委会", code: "005" }, VillageCode { name: "南堡村委会", code: "006" }, VillageCode { name: "保丰村委会", code: "007" }, VillageCode { name: "黄连山村委会", code: "008" }, VillageCode { name: "坪上村委会", code: "009" }, VillageCode { name: "军峰村委会", code: "010" }, VillageCode { name: "云山村委会", code: "011" }, VillageCode { name: "上晒村委会", code: "012" }] },
-    TownCode { name: "东坪乡", code: "009", villages: &[VillageCode { name: "东坪村委会", code: "001" }, VillageCode { name: "下堡村委会", code: "002" }, VillageCode { name: "朱源村委会", code: "003" }, VillageCode { name: "田溪村委会", code: "004" }, VillageCode { name: "甘泉村委会", code: "005" }, VillageCode { name: "王田村委会", code: "006" }, VillageCode { name: "南洲村委会", code: "007" }, VillageCode { name: "邱坊村委会", code: "008" }] },
-    TownCode { name: "莱溪乡", code: "010", villages: &[VillageCode { name: "西山村委会", code: "001" }, VillageCode { name: "杨梅坑村委会", code: "002" }, VillageCode { name: "莱溪村委会", code: "003" }, VillageCode { name: "上井村委会", code: "004" }, VillageCode { name: "九联村委会", code: "005" }, VillageCode { name: "后举村委会", code: "006" }, VillageCode { name: "东方村委会", code: "007" }, VillageCode { name: "上潺村委会", code: "008" }, VillageCode { name: "石渠村委会", code: "009" }, VillageCode { name: "黄满村委会", code: "010" }] },
-    TownCode { name: "太源乡", code: "011", villages: &[VillageCode { name: "路头村委会", code: "001" }, VillageCode { name: "塅背村委会", code: "002" }, VillageCode { name: "黄家村委会", code: "003" }, VillageCode { name: "寨里村委会", code: "004" }, VillageCode { name: "陆家村委会", code: "005" }, VillageCode { name: "东堡湾村委会", code: "006" }, VillageCode { name: "墩里上村委会", code: "007" }, VillageCode { name: "太源村委会", code: "008" }, VillageCode { name: "高家村委会", code: "009" }] },
-    TownCode { name: "傅坊乡", code: "012", villages: &[VillageCode { name: "傅坊村委会", code: "001" }, VillageCode { name: "立新村委会", code: "002" }, VillageCode { name: "前村村委会", code: "003" }, VillageCode { name: "梅林村委会", code: "004" }, VillageCode { name: "杨家村委会", code: "005" }, VillageCode { name: "董溪村委会", code: "006" }, VillageCode { name: "田陀村委会", code: "007" }, VillageCode { name: "港下村委会", code: "008" }, VillageCode { name: "林前村委会", code: "009" }, VillageCode { name: "石咀村委会", code: "010" }, VillageCode { name: "田南村委会", code: "011" }, VillageCode { name: "荷塘村委会", code: "012" }] },
-    TownCode { name: "南丰县长红垦殖场", code: "013", villages: &[VillageCode { name: "南丰县长红垦殖场虚拟生活区", code: "001" }] },
-    TownCode { name: "南丰工业园区", code: "014", villages: &[VillageCode { name: "南丰工业园区虚拟社区", code: "001" }] },
+    TownCode {
+        name: "琴城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "人民路居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "解放路居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "建设路居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新建路居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "仓山路居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "桔都东路社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "桔都西路社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "琴湖路居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "国安路居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "琴台路居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "沿江路居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大堡村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "下坊村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "水北村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "桥背村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "徐家边村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "茅店村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "富溪村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "游军村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "艾源村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "瑶浦村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "水南村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "杨梅村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "果园村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "朝先村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "太和镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "太和居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "太和村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "店前村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "下洋村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "丹阳村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "康都村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "樟坊村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "下桐村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "司前村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "杭山村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "前坊村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "白舍镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "白舍居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白舍村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "丰江村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "晗头村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "茶亭村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "望天村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "三坑村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "下陂村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "瑶陂村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "张家村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "池渡村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "下甘村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "上甘村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "陈坊村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "田东村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "坊坑村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "鄱阳村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "罗坊村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "罗家村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "小石村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "际民村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "珠湖村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "姜源村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "河东村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "周源村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "石源村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "古竹村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "邹坊村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "中和村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "桥口村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "杨林村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "磜下村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "桥头村委会",
+                code: "033",
+            },
+        ],
+    },
+    TownCode {
+        name: "市山镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "市山村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "西村村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "梅溪村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "考坑村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "官庄村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "官塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "坪埠村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "贯巢村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "竹源村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "丹坛村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "耀里村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "石谦村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "前山村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "罗溪村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "梓和村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "翠云村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "包坊村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "沙岗村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "陶田村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "胡坑村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "进贤村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "操坊村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "新建村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "熊坊村委会",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "洽湾镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "洽湾村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "上店村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "黄家村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "浆坑村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "上游村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "黄坊村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "西坪村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "石磜村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "长岭村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "桃源村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "加津村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "桑田镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "肖坊村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "古城村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "竹山下村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "根竹村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "荷田岗村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "桑田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新圩上村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "曾家丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "樟坑村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "水口村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "西源村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "紫霄镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "上古村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东村村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "尧家村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "洽村村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "溪东村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大岭背村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "明阳村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "黄龙坑村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "新田村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "瞿村村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "周坊村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "黄砂村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "西坑村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "宝石村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "罗坊村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "禾溪村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "朱坊村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "西溪村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "藕塘村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "三溪乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "三溪村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "石邮村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "柏苍村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "池丰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "庙前村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南堡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "保丰村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "黄连山村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "坪上村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "军峰村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "云山村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "上晒村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "东坪乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "东坪村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "下堡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "朱源村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "田溪村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "甘泉村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "王田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "南洲村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "邱坊村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "莱溪乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "西山村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "杨梅坑村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "莱溪村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "上井村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "九联村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "后举村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东方村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "上潺村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "石渠村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "黄满村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "太源乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "路头村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "塅背村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "黄家村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "寨里村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "陆家村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "东堡湾村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "墩里上村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "太源村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "高家村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "傅坊乡",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "傅坊村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "立新村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "前村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "梅林村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "杨家村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "董溪村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "田陀村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "港下村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "林前村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "石咀村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "田南村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "荷塘村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "南丰县长红垦殖场",
+        code: "013",
+        villages: &[VillageCode {
+            name: "南丰县长红垦殖场虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "南丰工业园区",
+        code: "014",
+        villages: &[VillageCode {
+            name: "南丰工业园区虚拟社区",
+            code: "001",
+        }],
+    },
 ];
 
-static TOWNS_HN_015: [TownCode; 1] = [
-    TownCode { name: "大成街道", code: "001", villages: &[VillageCode { name: "宽桥社区居委会", code: "001" }, VillageCode { name: "新吉社区居委会", code: "002" }, VillageCode { name: "锦秀社区居委会", code: "003" }, VillageCode { name: "建工社区居委会", code: "004" }, VillageCode { name: "中和社区居委会", code: "005" }] },
-];
+static TOWNS_HN_015: [TownCode; 1] = [TownCode {
+    name: "大成街道",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "宽桥社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "新吉社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "锦秀社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "建工社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "中和社区居委会",
+            code: "005",
+        },
+    ],
+}];
 
-static TOWNS_HN_016: [TownCode; 1] = [
-    TownCode { name: "雅星镇", code: "001", villages: &[VillageCode { name: "雅星社区居委会", code: "001" }, VillageCode { name: "富街社区居委会", code: "002" }, VillageCode { name: "八一居居委会", code: "003" }, VillageCode { name: "金川居居委会", code: "004" }, VillageCode { name: "英岛居居委会", code: "005" }, VillageCode { name: "东山居居委会", code: "006" }, VillageCode { name: "长岭居居委会", code: "007" }, VillageCode { name: "春江居居委会", code: "008" }, VillageCode { name: "工矿居居委会", code: "009" }, VillageCode { name: "红岭居居委会", code: "010" }, VillageCode { name: "飞巴村委会", code: "011" }, VillageCode { name: "文丰村委会", code: "012" }, VillageCode { name: "新让黎族村委会", code: "013" }, VillageCode { name: "雅星黎族村委会", code: "014" }, VillageCode { name: "庙陀村委会", code: "015" }, VillageCode { name: "新隆村委会", code: "016" }, VillageCode { name: "白鱼塘村委会", code: "017" }, VillageCode { name: "富仍村委会", code: "018" }, VillageCode { name: "乐贺村委会", code: "019" }, VillageCode { name: "乐满村委会", code: "020" }, VillageCode { name: "富克村委会", code: "021" }, VillageCode { name: "大讲村委会", code: "022" }, VillageCode { name: "大沟村委会", code: "023" }, VillageCode { name: "调打村委会", code: "024" }, VillageCode { name: "合罗村委会", code: "025" }, VillageCode { name: "和盛村委会", code: "026" }, VillageCode { name: "栖榕村委会", code: "027" }, VillageCode { name: "田头村委会", code: "028" }, VillageCode { name: "文山村委会", code: "029" }, VillageCode { name: "东光农场生活区", code: "030" }, VillageCode { name: "东方农场生活区", code: "031" }, VillageCode { name: "茶山农场生活区", code: "032" }, VillageCode { name: "陀骂村委会", code: "033" }] },
-];
+static TOWNS_HN_016: [TownCode; 1] = [TownCode {
+    name: "雅星镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "雅星社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "富街社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "八一居居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "金川居居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "英岛居居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "东山居居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "长岭居居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "春江居居委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "工矿居居委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "红岭居居委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "飞巴村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "文丰村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "新让黎族村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "雅星黎族村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "庙陀村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "新隆村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "白鱼塘村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "富仍村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "乐贺村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "乐满村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "富克村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "大讲村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "大沟村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "调打村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "合罗村委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "和盛村委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "栖榕村委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "田头村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "文山村委会",
+            code: "029",
+        },
+        VillageCode {
+            name: "东光农场生活区",
+            code: "030",
+        },
+        VillageCode {
+            name: "东方农场生活区",
+            code: "031",
+        },
+        VillageCode {
+            name: "茶山农场生活区",
+            code: "032",
+        },
+        VillageCode {
+            name: "陀骂村委会",
+            code: "033",
+        },
+    ],
+}];
 
-static TOWNS_HN_017: [TownCode; 1] = [
-    TownCode { name: "兰洋镇", code: "001", villages: &[VillageCode { name: "兰泉社区居委会", code: "001" }, VillageCode { name: "蓝洋居居委会", code: "002" }, VillageCode { name: "兰洋村委会", code: "003" }, VillageCode { name: "水南村委会", code: "004" }, VillageCode { name: "大塘村委会", code: "005" }, VillageCode { name: "番开村委会", code: "006" }, VillageCode { name: "南报村委会", code: "007" }, VillageCode { name: "头竹村委会", code: "008" }, VillageCode { name: "南罗村委会", code: "009" }, VillageCode { name: "加老村委会", code: "010" }, VillageCode { name: "海孔村委会", code: "011" }, VillageCode { name: "番加村委会", code: "012" }, VillageCode { name: "番新村委会", code: "013" }, VillageCode { name: "番打村委会", code: "014" }, VillageCode { name: "番雅村委会", code: "015" }, VillageCode { name: "三雅村委会", code: "016" }, VillageCode { name: "兰兴农场生活区", code: "017" }, VillageCode { name: "鹿母湾林场生活区", code: "018" }, VillageCode { name: "番加农场生活区", code: "019" }] },
-];
+static TOWNS_HN_017: [TownCode; 1] = [TownCode {
+    name: "兰洋镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "兰泉社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "蓝洋居居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "兰洋村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "水南村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "大塘村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "番开村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "南报村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "头竹村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "南罗村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "加老村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "海孔村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "番加村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "番新村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "番打村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "番雅村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "三雅村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "兰兴农场生活区",
+            code: "017",
+        },
+        VillageCode {
+            name: "鹿母湾林场生活区",
+            code: "018",
+        },
+        VillageCode {
+            name: "番加农场生活区",
+            code: "019",
+        },
+    ],
+}];
 
-static TOWNS_HN_018: [TownCode; 1] = [
-    TownCode { name: "光村镇", code: "001", villages: &[VillageCode { name: "永昌社区居委会", code: "001" }, VillageCode { name: "泊潮社区居委会", code: "002" }, VillageCode { name: "新盈居居委会", code: "003" }, VillageCode { name: "新隆村委会", code: "004" }, VillageCode { name: "光红村委会", code: "005" }, VillageCode { name: "屯积村委会", code: "006" }, VillageCode { name: "巨雄村委会", code: "007" }, VillageCode { name: "挺进村委会", code: "008" }, VillageCode { name: "新地村委会", code: "009" }, VillageCode { name: "扁墩村委会", code: "010" }, VillageCode { name: "欧宅村委会", code: "011" }, VillageCode { name: "大老村委会", code: "012" }, VillageCode { name: "沙井村委会", code: "013" }] },
-];
+static TOWNS_HN_018: [TownCode; 1] = [TownCode {
+    name: "光村镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "永昌社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "泊潮社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "新盈居居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "新隆村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "光红村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "屯积村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "巨雄村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "挺进村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "新地村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "扁墩村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "欧宅村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "大老村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "沙井村委会",
+            code: "013",
+        },
+    ],
+}];
 
-static TOWNS_HN_019: [TownCode; 1] = [
-    TownCode { name: "木棠镇", code: "001", villages: &[VillageCode { name: "李坊村委会", code: "001" }, VillageCode { name: "梁宅村委会", code: "002" }, VillageCode { name: "薛屋村委会", code: "003" }, VillageCode { name: "荣谋村委会", code: "004" }, VillageCode { name: "苏宅村委会", code: "005" }, VillageCode { name: "大文村委会", code: "006" }, VillageCode { name: "陈坊村委会", code: "007" }, VillageCode { name: "铁匠村委会", code: "008" }, VillageCode { name: "春坡村委会", code: "009" }, VillageCode { name: "木棠村委会", code: "010" }, VillageCode { name: "王坊村委会", code: "011" }, VillageCode { name: "积万村委会", code: "012" }, VillageCode { name: "蒌根村委会", code: "013" }, VillageCode { name: "高堂村委会", code: "014" }, VillageCode { name: "谭乐村委会", code: "015" }, VillageCode { name: "神冲村委会", code: "016" }, VillageCode { name: "长老村委会", code: "017" }, VillageCode { name: "周坊村委会", code: "018" }, VillageCode { name: "东方村委会", code: "019" }, VillageCode { name: "大域村委会", code: "020" }, VillageCode { name: "二图村委会", code: "021" }, VillageCode { name: "美龙村委会", code: "022" }, VillageCode { name: "塘坎村委会", code: "023" }, VillageCode { name: "兰训村委会", code: "024" }, VillageCode { name: "道南村委会", code: "025" }] },
-];
+static TOWNS_HN_019: [TownCode; 1] = [TownCode {
+    name: "木棠镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "李坊村委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "梁宅村委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "薛屋村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "荣谋村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "苏宅村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "大文村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "陈坊村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "铁匠村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "春坡村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "木棠村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "王坊村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "积万村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "蒌根村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "高堂村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "谭乐村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "神冲村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "长老村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "周坊村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "东方村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "大域村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "二图村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "美龙村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "塘坎村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "兰训村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "道南村委会",
+            code: "025",
+        },
+    ],
+}];
 
-static TOWNS_HN_020: [TownCode; 1] = [
-    TownCode { name: "海头镇", code: "001", villages: &[VillageCode { name: "海前村委会", code: "001" }, VillageCode { name: "海后村委会", code: "002" }, VillageCode { name: "马庄村委会", code: "003" }, VillageCode { name: "李巷村委会", code: "004" }, VillageCode { name: "大兴庄村委会", code: "005" }, VillageCode { name: "小口村委会", code: "006" }, VillageCode { name: "北朱皋村委会", code: "007" }, VillageCode { name: "南朱皋村委会", code: "008" }, VillageCode { name: "匡口村委会", code: "009" }, VillageCode { name: "梁沙村委会", code: "010" }, VillageCode { name: "海脐村委会", code: "011" }, VillageCode { name: "龙河村委会", code: "012" }, VillageCode { name: "王村村委会", code: "013" }, VillageCode { name: "城西村委会", code: "014" }, VillageCode { name: "盐仓城村委会", code: "015" }, VillageCode { name: "胡村村委会", code: "016" }, VillageCode { name: "龙北村委会", code: "017" }, VillageCode { name: "朱尹村委会", code: "018" }, VillageCode { name: "义合村委会", code: "019" }, VillageCode { name: "大岗村委会", code: "020" }, VillageCode { name: "龙南村委会", code: "021" }, VillageCode { name: "大官庄村委会", code: "022" }, VillageCode { name: "王朱尹村委会", code: "023" }, VillageCode { name: "垤上村委会", code: "024" }, VillageCode { name: "垒堆村委会", code: "025" }, VillageCode { name: "宅基村委会", code: "026" }, VillageCode { name: "龙王庙村委会", code: "027" }, VillageCode { name: "吴家村委会", code: "028" }, VillageCode { name: "小白石头村委会", code: "029" }] },
-];
+static TOWNS_HN_020: [TownCode; 1] = [TownCode {
+    name: "海头镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "海前村委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "海后村委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "马庄村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "李巷村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "大兴庄村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "小口村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "北朱皋村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "南朱皋村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "匡口村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "梁沙村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "海脐村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "龙河村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "王村村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "城西村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "盐仓城村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "胡村村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "龙北村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "朱尹村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "义合村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "大岗村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "龙南村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "大官庄村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "王朱尹村委会",
+            code: "023",
+        },
+        VillageCode {
+            name: "垤上村委会",
+            code: "024",
+        },
+        VillageCode {
+            name: "垒堆村委会",
+            code: "025",
+        },
+        VillageCode {
+            name: "宅基村委会",
+            code: "026",
+        },
+        VillageCode {
+            name: "龙王庙村委会",
+            code: "027",
+        },
+        VillageCode {
+            name: "吴家村委会",
+            code: "028",
+        },
+        VillageCode {
+            name: "小白石头村委会",
+            code: "029",
+        },
+    ],
+}];
 
-static TOWNS_HN_021: [TownCode; 1] = [
-    TownCode { name: "峨蔓镇", code: "001", villages: &[VillageCode { name: "峨蔓村委会", code: "001" }, VillageCode { name: "盐丁村委会", code: "002" }, VillageCode { name: "王坡村委会", code: "003" }, VillageCode { name: "长荣村委会", code: "004" }, VillageCode { name: "田井村委会", code: "005" }, VillageCode { name: "多业村委会", code: "006" }, VillageCode { name: "多美村委会", code: "007" }, VillageCode { name: "片石村委会", code: "008" }, VillageCode { name: "茅园村委会", code: "009" }, VillageCode { name: "黄沙村委会", code: "010" }, VillageCode { name: "龙门村委会", code: "011" }, VillageCode { name: "高根村委会", code: "012" }, VillageCode { name: "笔架村委会", code: "013" }] },
-];
+static TOWNS_HN_021: [TownCode; 1] = [TownCode {
+    name: "峨蔓镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "峨蔓村委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "盐丁村委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "王坡村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "长荣村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "田井村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "多业村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "多美村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "片石村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "茅园村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "黄沙村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "龙门村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "高根村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "笔架村委会",
+            code: "013",
+        },
+    ],
+}];
 
-static TOWNS_HN_022: [TownCode; 1] = [
-    TownCode { name: "王五镇", code: "001", villages: &[VillageCode { name: "王五社区居委会", code: "001" }, VillageCode { name: "山营村委会", code: "002" }, VillageCode { name: "徐浦村委会", code: "003" }, VillageCode { name: "小千村委会", code: "004" }, VillageCode { name: "流方村委会", code: "005" }, VillageCode { name: "新坊村委会", code: "006" }, VillageCode { name: "东光村委会", code: "007" }, VillageCode { name: "光村村委会", code: "008" }, VillageCode { name: "新地村委会", code: "009" }] },
-];
+static TOWNS_HN_022: [TownCode; 1] = [TownCode {
+    name: "王五镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "王五社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "山营村委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "徐浦村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "小千村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "流方村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "新坊村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "东光村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "光村村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "新地村委会",
+            code: "009",
+        },
+    ],
+}];
 
-static TOWNS_HN_023: [TownCode; 1] = [
-    TownCode { name: "白马井镇", code: "001", villages: &[VillageCode { name: "胜利社区居委会", code: "001" }, VillageCode { name: "解放社区居委会", code: "002" }, VillageCode { name: "海滨社区居委会", code: "003" }, VillageCode { name: "东方社区居委会", code: "004" }, VillageCode { name: "新街社区居委会", code: "005" }, VillageCode { name: "新马社区居委会", code: "006" }, VillageCode { name: "南司居委会", code: "007" }, VillageCode { name: "福村村委会", code: "008" }, VillageCode { name: "藤根村委会", code: "009" }, VillageCode { name: "禾囊村委会", code: "010" }, VillageCode { name: "马口井村委会", code: "011" }, VillageCode { name: "钱地村委会", code: "012" }, VillageCode { name: "竹古村委会", code: "013" }, VillageCode { name: "山花村委会", code: "014" }, VillageCode { name: "寨基村委会", code: "015" }, VillageCode { name: "南庄村委会", code: "016" }, VillageCode { name: "松鸣村委会", code: "017" }, VillageCode { name: "英丰村委会", code: "018" }, VillageCode { name: "旧地村委会", code: "019" }, VillageCode { name: "兰城村委会", code: "020" }, VillageCode { name: "学兰村委会", code: "021" }, VillageCode { name: "东山村委会", code: "022" }] },
-];
+static TOWNS_HN_023: [TownCode; 1] = [TownCode {
+    name: "白马井镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "胜利社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "解放社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "海滨社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "东方社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "新街社区居委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "新马社区居委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "南司居委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "福村村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "藤根村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "禾囊村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "马口井村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "钱地村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "竹古村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "山花村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "寨基村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "南庄村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "松鸣村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "英丰村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "旧地村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "兰城村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "学兰村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "东山村委会",
+            code: "022",
+        },
+    ],
+}];
 
-static TOWNS_HN_024: [TownCode; 1] = [
-    TownCode { name: "中和镇", code: "001", villages: &[VillageCode { name: "振兴居委会", code: "001" }, VillageCode { name: "新华居委会", code: "002" }, VillageCode { name: "新河居委会", code: "003" }, VillageCode { name: "头道沟村村委会", code: "004" }, VillageCode { name: "前进村村委会", code: "005" }, VillageCode { name: "兴隆村村委会", code: "006" }, VillageCode { name: "福兴村村委会", code: "007" }, VillageCode { name: "光荣村村委会", code: "008" }, VillageCode { name: "红星村村委会", code: "009" }, VillageCode { name: "福泉村村委会", code: "010" }, VillageCode { name: "龙头村村委会", code: "011" }, VillageCode { name: "库堤河村村委会", code: "012" }, VillageCode { name: "新林村村委会", code: "013" }, VillageCode { name: "幸福村村委会", code: "014" }, VillageCode { name: "架子山村村委会", code: "015" }, VillageCode { name: "五道沟村村委会", code: "016" }, VillageCode { name: "集体村村委会", code: "017" }, VillageCode { name: "黎明村村委会", code: "018" }, VillageCode { name: "明星村村委会", code: "019" }, VillageCode { name: "三道沟村村委会", code: "020" }, VillageCode { name: "新建村村委会", code: "021" }, VillageCode { name: "水甸沟村村委会", code: "022" }, VillageCode { name: "四道沟村村委会", code: "023" }] },
-];
+static TOWNS_HN_024: [TownCode; 1] = [TownCode {
+    name: "中和镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "振兴居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "新华居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "新河居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "头道沟村村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "前进村村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "兴隆村村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "福兴村村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "光荣村村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "红星村村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "福泉村村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "龙头村村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "库堤河村村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "新林村村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "幸福村村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "架子山村村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "五道沟村村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "集体村村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "黎明村村委会",
+            code: "018",
+        },
+        VillageCode {
+            name: "明星村村委会",
+            code: "019",
+        },
+        VillageCode {
+            name: "三道沟村村委会",
+            code: "020",
+        },
+        VillageCode {
+            name: "新建村村委会",
+            code: "021",
+        },
+        VillageCode {
+            name: "水甸沟村村委会",
+            code: "022",
+        },
+        VillageCode {
+            name: "四道沟村村委会",
+            code: "023",
+        },
+    ],
+}];
 
-static TOWNS_HN_025: [TownCode; 1] = [
-    TownCode { name: "排浦镇", code: "001", villages: &[VillageCode { name: "排浦社区居委会", code: "001" }, VillageCode { name: "龙山居居委会", code: "002" }, VillageCode { name: "禾丰村委会", code: "003" }, VillageCode { name: "沙沟村委会", code: "004" }, VillageCode { name: "南华村委会", code: "005" }, VillageCode { name: "昌王村委会", code: "006" }, VillageCode { name: "瓜兰村委会", code: "007" }, VillageCode { name: "黑石村委会", code: "008" }, VillageCode { name: "春花村委会", code: "009" }] },
-];
+static TOWNS_HN_025: [TownCode; 1] = [TownCode {
+    name: "排浦镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "排浦社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "龙山居居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "禾丰村委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "沙沟村委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "南华村委会",
+            code: "005",
+        },
+        VillageCode {
+            name: "昌王村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "瓜兰村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "黑石村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "春花村委会",
+            code: "009",
+        },
+    ],
+}];
 
-static TOWNS_HN_026: [TownCode; 1] = [
-    TownCode { name: "东成镇", code: "001", villages: &[VillageCode { name: "圩镇社区居民委员会", code: "001" }, VillageCode { name: "锦江社区居民委员会", code: "002" }, VillageCode { name: "上绵湖村民委员会", code: "003" }, VillageCode { name: "下绵湖村民委员会", code: "004" }, VillageCode { name: "石岗村民委员会", code: "005" }, VillageCode { name: "鹿颈村民委员会", code: "006" }, VillageCode { name: "石桥头村民委员会", code: "007" }, VillageCode { name: "牛皮塘村民委员会", code: "008" }, VillageCode { name: "横岗头村民委员会", code: "009" }, VillageCode { name: "石路村民委员会", code: "010" }, VillageCode { name: "四联村民委员会", code: "011" }, VillageCode { name: "东新村民委员会", code: "012" }, VillageCode { name: "金坑村民委员会", code: "013" }, VillageCode { name: "祝荷村民委员会", code: "014" }, VillageCode { name: "顺槎村民委员会", code: "015" }, VillageCode { name: "横槎村民委员会", code: "016" }, VillageCode { name: "塘洲村民委员会", code: "017" }] },
-];
+static TOWNS_HN_026: [TownCode; 1] = [TownCode {
+    name: "东成镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "圩镇社区居民委员会",
+            code: "001",
+        },
+        VillageCode {
+            name: "锦江社区居民委员会",
+            code: "002",
+        },
+        VillageCode {
+            name: "上绵湖村民委员会",
+            code: "003",
+        },
+        VillageCode {
+            name: "下绵湖村民委员会",
+            code: "004",
+        },
+        VillageCode {
+            name: "石岗村民委员会",
+            code: "005",
+        },
+        VillageCode {
+            name: "鹿颈村民委员会",
+            code: "006",
+        },
+        VillageCode {
+            name: "石桥头村民委员会",
+            code: "007",
+        },
+        VillageCode {
+            name: "牛皮塘村民委员会",
+            code: "008",
+        },
+        VillageCode {
+            name: "横岗头村民委员会",
+            code: "009",
+        },
+        VillageCode {
+            name: "石路村民委员会",
+            code: "010",
+        },
+        VillageCode {
+            name: "四联村民委员会",
+            code: "011",
+        },
+        VillageCode {
+            name: "东新村民委员会",
+            code: "012",
+        },
+        VillageCode {
+            name: "金坑村民委员会",
+            code: "013",
+        },
+        VillageCode {
+            name: "祝荷村民委员会",
+            code: "014",
+        },
+        VillageCode {
+            name: "顺槎村民委员会",
+            code: "015",
+        },
+        VillageCode {
+            name: "横槎村民委员会",
+            code: "016",
+        },
+        VillageCode {
+            name: "塘洲村民委员会",
+            code: "017",
+        },
+    ],
+}];
 
-static TOWNS_HN_027: [TownCode; 1] = [
-    TownCode { name: "新州镇", code: "001", villages: &[VillageCode { name: "民权社区居委会", code: "001" }, VillageCode { name: "民族社区居委会", code: "002" }, VillageCode { name: "民生社区居委会", code: "003" }, VillageCode { name: "新兴社区居委会", code: "004" }, VillageCode { name: "鹤城新区社区居民委员会", code: "005" }, VillageCode { name: "含山村委会", code: "006" }, VillageCode { name: "民福村委会", code: "007" }, VillageCode { name: "民德村委会", code: "008" }, VillageCode { name: "那烘村委会", code: "009" }, VillageCode { name: "那管村委会", code: "010" }, VillageCode { name: "民强村委会", code: "011" }, VillageCode { name: "弄桑村委会", code: "012" }, VillageCode { name: "那么村委会", code: "013" }, VillageCode { name: "者隘村委会", code: "014" }, VillageCode { name: "水洞村委会", code: "015" }, VillageCode { name: "岩楼村委会", code: "016" }, VillageCode { name: "马雄村委会", code: "017" }, VillageCode { name: "坡岩村委会", code: "018" }] },
-];
+static TOWNS_HN_027: [TownCode; 1] = [TownCode {
+    name: "新州镇",
+    code: "001",
+    villages: &[
+        VillageCode {
+            name: "民权社区居委会",
+            code: "001",
+        },
+        VillageCode {
+            name: "民族社区居委会",
+            code: "002",
+        },
+        VillageCode {
+            name: "民生社区居委会",
+            code: "003",
+        },
+        VillageCode {
+            name: "新兴社区居委会",
+            code: "004",
+        },
+        VillageCode {
+            name: "鹤城新区社区居民委员会",
+            code: "005",
+        },
+        VillageCode {
+            name: "含山村委会",
+            code: "006",
+        },
+        VillageCode {
+            name: "民福村委会",
+            code: "007",
+        },
+        VillageCode {
+            name: "民德村委会",
+            code: "008",
+        },
+        VillageCode {
+            name: "那烘村委会",
+            code: "009",
+        },
+        VillageCode {
+            name: "那管村委会",
+            code: "010",
+        },
+        VillageCode {
+            name: "民强村委会",
+            code: "011",
+        },
+        VillageCode {
+            name: "弄桑村委会",
+            code: "012",
+        },
+        VillageCode {
+            name: "那么村委会",
+            code: "013",
+        },
+        VillageCode {
+            name: "者隘村委会",
+            code: "014",
+        },
+        VillageCode {
+            name: "水洞村委会",
+            code: "015",
+        },
+        VillageCode {
+            name: "岩楼村委会",
+            code: "016",
+        },
+        VillageCode {
+            name: "马雄村委会",
+            code: "017",
+        },
+        VillageCode {
+            name: "坡岩村委会",
+            code: "018",
+        },
+    ],
+}];
 
 static TOWNS_HN_028: [TownCode; 8] = [
-    TownCode { name: "通什镇", code: "001", villages: &[VillageCode { name: "河北东区居委会", code: "001" }, VillageCode { name: "河北西区居委会", code: "002" }, VillageCode { name: "河南东区居委会", code: "003" }, VillageCode { name: "河南西区居委会", code: "004" }, VillageCode { name: "番茅村委会", code: "005" }, VillageCode { name: "什保村委会", code: "006" }, VillageCode { name: "福关村委会", code: "007" }, VillageCode { name: "红雅村委会", code: "008" }, VillageCode { name: "福利村委会", code: "009" }, VillageCode { name: "牙日村委会", code: "010" }, VillageCode { name: "应示村委会", code: "011" }, VillageCode { name: "番慢村委会", code: "012" }, VillageCode { name: "福安村委会", code: "013" }, VillageCode { name: "番香村委会", code: "014" }, VillageCode { name: "牙畜村委会", code: "015" }, VillageCode { name: "太平村委会", code: "016" }, VillageCode { name: "什会村委会", code: "017" }, VillageCode { name: "番赛村委会", code: "018" }, VillageCode { name: "南定村委会", code: "019" }, VillageCode { name: "龙庆新村民委员会", code: "020" }] },
-    TownCode { name: "南圣镇", code: "002", villages: &[VillageCode { name: "南圣村委会", code: "001" }, VillageCode { name: "红合村委会", code: "002" }, VillageCode { name: "什兰村委会", code: "003" }, VillageCode { name: "牙南村委会", code: "004" }, VillageCode { name: "同甲村委会", code: "005" }, VillageCode { name: "毛祥村委会", code: "006" }] },
-    TownCode { name: "毛阳镇", code: "003", villages: &[VillageCode { name: "牙合村委会", code: "001" }, VillageCode { name: "毛旦村委会", code: "002" }, VillageCode { name: "毛辉村委会", code: "003" }, VillageCode { name: "什稿村委会", code: "004" }, VillageCode { name: "毛阳村委会", code: "005" }, VillageCode { name: "牙力村委会", code: "006" }, VillageCode { name: "毛栈村委会", code: "007" }, VillageCode { name: "牙胡村委会", code: "008" }, VillageCode { name: "空联村委会", code: "009" }, VillageCode { name: "什益村委会", code: "010" }, VillageCode { name: "毛兴村委会", code: "011" }, VillageCode { name: "毛贵村委会", code: "012" }, VillageCode { name: "毛路村委会", code: "013" }] },
-    TownCode { name: "番阳镇", code: "004", villages: &[VillageCode { name: "番阳村委会", code: "001" }, VillageCode { name: "孔首村委会", code: "002" }, VillageCode { name: "毛组村委会", code: "003" }, VillageCode { name: "布伦村委会", code: "004" }, VillageCode { name: "加艾村委会", code: "005" }] },
-    TownCode { name: "县直辖村级区划", code: "005", villages: &[VillageCode { name: "畅好居居民委员会", code: "001" }] },
-    TownCode { name: "畅好乡", code: "006", villages: &[VillageCode { name: "草办村委会", code: "001" }, VillageCode { name: "畅好村委会", code: "002" }, VillageCode { name: "番贺村委会", code: "003" }, VillageCode { name: "番通村委会", code: "004" }, VillageCode { name: "什哈村委会", code: "005" }, VillageCode { name: "什奋村委会", code: "006" }, VillageCode { name: "毛招村委会", code: "007" }, VillageCode { name: "什冲村委会", code: "008" }, VillageCode { name: "保国村委会", code: "009" }, VillageCode { name: "番好村委会", code: "010" }] },
-    TownCode { name: "毛道乡", code: "007", villages: &[VillageCode { name: "毛道村委会", code: "001" }, VillageCode { name: "毛枝村委会", code: "002" }, VillageCode { name: "毛卓村委会", code: "003" }, VillageCode { name: "红运村委会", code: "004" }] },
-    TownCode { name: "水满乡", code: "008", villages: &[VillageCode { name: "方龙村委会", code: "001" }, VillageCode { name: "新村村委会", code: "002" }, VillageCode { name: "水满村委会", code: "003" }, VillageCode { name: "毛纳村委会", code: "004" }, VillageCode { name: "牙排村委会", code: "005" }] },
+    TownCode {
+        name: "通什镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "河北东区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "河北西区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "河南东区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "河南西区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "番茅村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "什保村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "福关村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红雅村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "福利村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "牙日村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "应示村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "番慢村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "福安村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "番香村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "牙畜村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "太平村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "什会村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "番赛村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "南定村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "龙庆新村民委员会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "南圣镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "南圣村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红合村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "什兰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "牙南村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "同甲村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "毛祥村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "毛阳镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "牙合村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "毛旦村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "毛辉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "什稿村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "毛阳村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "牙力村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "毛栈村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "牙胡村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "空联村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "什益村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "毛兴村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "毛贵村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "毛路村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "番阳镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "番阳村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "孔首村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "毛组村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "布伦村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加艾村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "县直辖村级区划",
+        code: "005",
+        villages: &[VillageCode {
+            name: "畅好居居民委员会",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "畅好乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "草办村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "畅好村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "番贺村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "番通村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "什哈村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "什奋村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "毛招村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "什冲村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "保国村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "番好村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "毛道乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "毛道村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "毛枝村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "毛卓村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "红运村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "水满乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "方龙村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "水满村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "毛纳村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "牙排村委会",
+                code: "005",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_029: [TownCode; 13] = [
-    TownCode { name: "嘉积镇", code: "001", villages: &[VillageCode { name: "美景社区居委会", code: "001" }, VillageCode { name: "嘉祥社区居委会", code: "002" }, VillageCode { name: "新民社区居委会", code: "003" }, VillageCode { name: "纪纲社区居委会", code: "004" }, VillageCode { name: "朝标社区居委会", code: "005" }, VillageCode { name: "东区社区居委会", code: "006" }, VillageCode { name: "嘉囊社区居委会", code: "007" }, VillageCode { name: "登仙岭社区居委会", code: "008" }, VillageCode { name: "龙利坡社区居委会", code: "009" }, VillageCode { name: "蔗园社区居委会", code: "010" }, VillageCode { name: "先锋社区居委会", code: "011" }, VillageCode { name: "山叶社区居委会", code: "012" }, VillageCode { name: "文坡社区居委会", code: "013" }, VillageCode { name: "红星社区居委会", code: "014" }, VillageCode { name: "勇敢村委会", code: "015" }, VillageCode { name: "不偏村委会", code: "016" }, VillageCode { name: "龙池村委会", code: "017" }, VillageCode { name: "南堀村委会", code: "018" }, VillageCode { name: "南中村委会", code: "019" }, VillageCode { name: "棉寨村委会", code: "020" }, VillageCode { name: "桥头村委会", code: "021" }, VillageCode { name: "雅洞村委会", code: "022" }, VillageCode { name: "益群村委会", code: "023" }, VillageCode { name: "军屯村委会", code: "024" }, VillageCode { name: "逢龙村委会", code: "025" }, VillageCode { name: "坡头村委会", code: "026" }, VillageCode { name: "万石村委会", code: "027" }, VillageCode { name: "官塘村委会", code: "028" }, VillageCode { name: "椰子寨村委会", code: "029" }, VillageCode { name: "温泉村委会", code: "030" }, VillageCode { name: "下寨冬村委会", code: "031" }, VillageCode { name: "参古村委会", code: "032" }, VillageCode { name: "上埇村委会", code: "033" }, VillageCode { name: "龙寿村委会", code: "034" }, VillageCode { name: "礼都村委会", code: "035" }, VillageCode { name: "山辉村委会", code: "036" }, VillageCode { name: "黄崖村委会", code: "037" }, VillageCode { name: "田头村委会", code: "038" }, VillageCode { name: "乌石村委会", code: "039" }, VillageCode { name: "大礼村委会", code: "040" }, VillageCode { name: "里邦村委会", code: "041" }, VillageCode { name: "龙阁村委会", code: "042" }, VillageCode { name: "泮水村委会", code: "043" }, VillageCode { name: "大坡村委会", code: "044" }, VillageCode { name: "俸田村委会", code: "045" }, VillageCode { name: "新朝村委会", code: "046" }, VillageCode { name: "东山村委会", code: "047" }] },
-    TownCode { name: "万泉镇", code: "002", villages: &[VillageCode { name: "文曲社区居委会", code: "001" }, VillageCode { name: "东升居居民委员会", code: "002" }, VillageCode { name: "西河村委会", code: "003" }, VillageCode { name: "丹村村委会", code: "004" }, VillageCode { name: "文台村委会", code: "005" }, VillageCode { name: "夏坡村委会", code: "006" }, VillageCode { name: "龙头村委会", code: "007" }, VillageCode { name: "博山村委会", code: "008" }, VillageCode { name: "文南村委会", code: "009" }, VillageCode { name: "大雅村委会", code: "010" }, VillageCode { name: "沐皇村委会", code: "011" }, VillageCode { name: "加城村委会", code: "012" }, VillageCode { name: "光耀村委会", code: "013" }, VillageCode { name: "罗凌村委会", code: "014" }, VillageCode { name: "新市村委会", code: "015" }, VillageCode { name: "加文村委会", code: "016" }, VillageCode { name: "枫树坡村委会", code: "017" }, VillageCode { name: "南轩村委会", code: "018" }] },
-    TownCode { name: "石壁镇", code: "003", villages: &[VillageCode { name: "南俸居居民委员会", code: "001" }, VillageCode { name: "下朗村委会", code: "002" }, VillageCode { name: "石壁村委会", code: "003" }, VillageCode { name: "南星村委会", code: "004" }, VillageCode { name: "赤坡村委会", code: "005" }, VillageCode { name: "岸田村委会", code: "006" }, VillageCode { name: "水口仔村委会", code: "007" }, VillageCode { name: "南通村委会", code: "008" }] },
-    TownCode { name: "中原镇", code: "004", villages: &[VillageCode { name: "中原村委会", code: "001" }, VillageCode { name: "大锡村委会", code: "002" }, VillageCode { name: "锦武村委会", code: "003" }, VillageCode { name: "仙寨村委会", code: "004" }, VillageCode { name: "迈汤村委会", code: "005" }, VillageCode { name: "逢来村委会", code: "006" }, VillageCode { name: "山仙村委会", code: "007" }, VillageCode { name: "三更村委会", code: "008" }, VillageCode { name: "水口村委会", code: "009" }, VillageCode { name: "黄思村委会", code: "010" }, VillageCode { name: "黄竹村委会", code: "011" }, VillageCode { name: "排塘村委会", code: "012" }, VillageCode { name: "书斋村委会", code: "013" }, VillageCode { name: "沙坡村委会", code: "014" }, VillageCode { name: "新华村委会", code: "015" }, VillageCode { name: "联光村委会", code: "016" }, VillageCode { name: "乌皮村委会", code: "017" }, VillageCode { name: "乐群村委会", code: "018" }, VillageCode { name: "排沟村委会", code: "019" }, VillageCode { name: "长仙村委会", code: "020" }, VillageCode { name: "星池村委会", code: "021" }, VillageCode { name: "仙村村委会", code: "022" }] },
-    TownCode { name: "博鳌镇", code: "005", villages: &[VillageCode { name: "东海村委会", code: "001" }, VillageCode { name: "东屿村委会", code: "002" }, VillageCode { name: "朝烈村委会", code: "003" }, VillageCode { name: "珠联村委会", code: "004" }, VillageCode { name: "田埇村委会", code: "005" }, VillageCode { name: "博鳌村委会", code: "006" }, VillageCode { name: "古调村委会", code: "007" }, VillageCode { name: "指母村委会", code: "008" }, VillageCode { name: "海燕村委会", code: "009" }, VillageCode { name: "中南村委会", code: "010" }, VillageCode { name: "仰大村委会", code: "011" }, VillageCode { name: "乐城村委会", code: "012" }, VillageCode { name: "莫村村委会", code: "013" }, VillageCode { name: "培兰村委会", code: "014" }, VillageCode { name: "沙美村委会", code: "015" }, VillageCode { name: "北山村委会", code: "016" }, VillageCode { name: "北岸村委会", code: "017" }] },
-    TownCode { name: "阳江镇", code: "006", villages: &[VillageCode { name: "阳江村委会", code: "001" }, VillageCode { name: "岭下村委会", code: "002" }, VillageCode { name: "题榜村委会", code: "003" }, VillageCode { name: "益良村委会", code: "004" }, VillageCode { name: "上科村委会", code: "005" }, VillageCode { name: "江南村委会", code: "006" }, VillageCode { name: "东兴村委会", code: "007" }, VillageCode { name: "红色村委会", code: "008" }, VillageCode { name: "龙山村委会", code: "009" }, VillageCode { name: "老区村委会", code: "010" }, VillageCode { name: "桥园村委会", code: "011" }, VillageCode { name: "群联村委会", code: "012" }, VillageCode { name: "文市村委会", code: "013" }, VillageCode { name: "利试考村委会", code: "014" }, VillageCode { name: "棉坡村委会", code: "015" }] },
-    TownCode { name: "龙江镇", code: "007", villages: &[VillageCode { name: "蓝山村委会", code: "001" }, VillageCode { name: "南正村委会", code: "002" }, VillageCode { name: "龙江村委会", code: "003" }, VillageCode { name: "滨滩村委会", code: "004" }, VillageCode { name: "中洞村委会", code: "005" }, VillageCode { name: "博文村委会", code: "006" }, VillageCode { name: "蒙养村委会", code: "007" }, VillageCode { name: "深造村委会", code: "008" }, VillageCode { name: "南面村委会", code: "009" }] },
-    TownCode { name: "潭门镇", code: "008", villages: &[VillageCode { name: "日新村委会", code: "001" }, VillageCode { name: "潭门村委会", code: "002" }, VillageCode { name: "旧县村委会", code: "003" }, VillageCode { name: "林桐村委会", code: "004" }, VillageCode { name: "草塘村委会", code: "005" }, VillageCode { name: "墨香村委会", code: "006" }, VillageCode { name: "金鸡村委会", code: "007" }, VillageCode { name: "北埇村委会", code: "008" }, VillageCode { name: "凤头村委会", code: "009" }, VillageCode { name: "苏区村委会", code: "010" }, VillageCode { name: "社昌村委会", code: "011" }, VillageCode { name: "多亩村委会", code: "012" }, VillageCode { name: "西村村委会", code: "013" }, VillageCode { name: "福田村委会", code: "014" }] },
-    TownCode { name: "塔洋镇", code: "009", villages: &[VillageCode { name: "先亮村委会", code: "001" }, VillageCode { name: "珍寨村委会", code: "002" }, VillageCode { name: "福寨村委会", code: "003" }, VillageCode { name: "联丰村委会", code: "004" }, VillageCode { name: "加贤村委会", code: "005" }, VillageCode { name: "红庄村委会", code: "006" }, VillageCode { name: "群良村委会", code: "007" }, VillageCode { name: "联先村委会", code: "008" }, VillageCode { name: "红花村委会", code: "009" }, VillageCode { name: "裕山村委会", code: "010" }, VillageCode { name: "里文村委会", code: "011" }, VillageCode { name: "千秋村委会", code: "012" }, VillageCode { name: "诗书村委会", code: "013" }, VillageCode { name: "孟里村委会", code: "014" }, VillageCode { name: "鱼良村委会", code: "015" }] },
-    TownCode { name: "长坡镇", code: "010", villages: &[VillageCode { name: "文子村委会", code: "001" }, VillageCode { name: "椰林村委会", code: "002" }, VillageCode { name: "欧村村委会", code: "003" }, VillageCode { name: "青葛村委会", code: "004" }, VillageCode { name: "长坡村委会", code: "005" }, VillageCode { name: "社学村委会", code: "006" }, VillageCode { name: "福头村委会", code: "007" }, VillageCode { name: "孟文村委会", code: "008" }, VillageCode { name: "牛角村委会", code: "009" }, VillageCode { name: "良玖村委会", code: "010" }, VillageCode { name: "东塘村委会", code: "011" }, VillageCode { name: "多异村委会", code: "012" }, VillageCode { name: "渔业村委会", code: "013" }, VillageCode { name: "伍园村委会", code: "014" }, VillageCode { name: "礼昌村委会", code: "015" }, VillageCode { name: "福石岭村委会", code: "016" }, VillageCode { name: "陈村村委会", code: "017" }, VillageCode { name: "黄号村委会", code: "018" }, VillageCode { name: "大头坡村委会", code: "019" }, VillageCode { name: "长山园村委会", code: "020" }, VillageCode { name: "烟塘村委会", code: "021" }] },
-    TownCode { name: "大路镇", code: "011", villages: &[VillageCode { name: "东红居居民委员会", code: "001" }, VillageCode { name: "大路村委会", code: "002" }, VillageCode { name: "礼合村委会", code: "003" }, VillageCode { name: "美容村委会", code: "004" }, VillageCode { name: "安竹村委会", code: "005" }, VillageCode { name: "新村村委会", code: "006" }, VillageCode { name: "岭脚村委会", code: "007" }, VillageCode { name: "青天村委会", code: "008" }, VillageCode { name: "湖仔村委会", code: "009" }, VillageCode { name: "马寨村委会", code: "010" }, VillageCode { name: "江湖村委会", code: "011" }, VillageCode { name: "蔗园坡村委会", code: "012" }, VillageCode { name: "石桥村委会", code: "013" }, VillageCode { name: "清廊村委会", code: "014" }, VillageCode { name: "堆头村委会", code: "015" }, VillageCode { name: "云满村委会", code: "016" }] },
-    TownCode { name: "会山镇", code: "012", villages: &[VillageCode { name: "东太居居民委员会", code: "001" }, VillageCode { name: "东平居居民委员会", code: "002" }, VillageCode { name: "大火村委会", code: "003" }, VillageCode { name: "沐塘村委会", code: "004" }, VillageCode { name: "三洲村委会", code: "005" }, VillageCode { name: "溪仔村委会", code: "006" }, VillageCode { name: "加略村委会", code: "007" }] },
-    TownCode { name: "彬村山华侨农场", code: "013", villages: &[VillageCode { name: "彬村山华侨场部社区", code: "001" }, VillageCode { name: "彬村山华侨农场南片一生活区", code: "002" }, VillageCode { name: "彬村山华侨农场南片二生活区", code: "003" }, VillageCode { name: "彬村山华侨农场西南片生活区", code: "004" }, VillageCode { name: "彬村山华侨农场东南片生活区", code: "005" }, VillageCode { name: "彬村山华侨农场北片生活区", code: "006" }] },
+    TownCode {
+        name: "嘉积镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "美景社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "嘉祥社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新民社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "纪纲社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "朝标社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "东区社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "嘉囊社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "登仙岭社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙利坡社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "蔗园社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "先锋社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "山叶社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "文坡社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "红星社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "勇敢村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "不偏村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "龙池村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "南堀村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "南中村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "棉寨村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "桥头村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "雅洞村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "益群村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "军屯村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "逢龙村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "坡头村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "万石村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "官塘村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "椰子寨村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "温泉村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "下寨冬村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "参古村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "上埇村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "龙寿村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "礼都村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "山辉村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "黄崖村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "田头村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "乌石村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "大礼村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "里邦村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "龙阁村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "泮水村委会",
+                code: "043",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "044",
+            },
+            VillageCode {
+                name: "俸田村委会",
+                code: "045",
+            },
+            VillageCode {
+                name: "新朝村委会",
+                code: "046",
+            },
+            VillageCode {
+                name: "东山村委会",
+                code: "047",
+            },
+        ],
+    },
+    TownCode {
+        name: "万泉镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "文曲社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东升居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "西河村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "丹村村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文台村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "夏坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙头村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "博山村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "文南村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "大雅村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "沐皇村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "加城村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "光耀村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "罗凌村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "新市村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "加文村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "枫树坡村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "南轩村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "石壁镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "南俸居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "下朗村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "石壁村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "南星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "赤坡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "岸田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "水口仔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "南通村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "中原镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "中原村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大锡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "锦武村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "仙寨村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "迈汤村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "逢来村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "山仙村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "三更村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "水口村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "黄思村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "黄竹村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "排塘村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "书斋村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "沙坡村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "新华村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "联光村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "乌皮村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "乐群村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "排沟村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "长仙村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "星池村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "仙村村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "博鳌镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "东海村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东屿村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "朝烈村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "珠联村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "田埇村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博鳌村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古调村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "指母村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "海燕村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "中南村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "仰大村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "乐城村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "莫村村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "培兰村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "沙美村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "北山村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "北岸村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "阳江镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "阳江村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "岭下村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "题榜村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "益良村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "上科村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "江南村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东兴村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红色村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙山村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "老区村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "桥园村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "群联村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "文市村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "利试考村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "棉坡村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙江镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "蓝山村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南正村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙江村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "滨滩村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "中洞村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博文村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "蒙养村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "深造村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "南面村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "潭门镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "日新村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "潭门村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "旧县村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "林桐村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "草塘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "墨香村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "金鸡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "北埇村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "凤头村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "苏区村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "社昌村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "多亩村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "西村村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "福田村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "塔洋镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "先亮村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "珍寨村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "福寨村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "联丰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加贤村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "红庄村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "群良村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "联先村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "红花村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "裕山村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "里文村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "千秋村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "诗书村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "孟里村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "鱼良村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "长坡镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "文子村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "椰林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "欧村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "青葛村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "长坡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "社学村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "福头村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "孟文村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "牛角村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "良玖村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "东塘村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "多异村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "渔业村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "伍园村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "礼昌村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "福石岭村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "陈村村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "黄号村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "大头坡村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "长山园村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "烟塘村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "大路镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "东红居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大路村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "礼合村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "美容村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "安竹村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "岭脚村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "青天村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "湖仔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "马寨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "江湖村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "蔗园坡村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "石桥村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "清廊村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "堆头村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "云满村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "会山镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "东太居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东平居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大火村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "沐塘村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "三洲村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "溪仔村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "加略村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "彬村山华侨农场",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "彬村山华侨场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "彬村山华侨农场南片一生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "彬村山华侨农场南片二生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "彬村山华侨农场西南片生活区",
+                code: "004",
+            },
+            VillageCode {
+                name: "彬村山华侨农场东南片生活区",
+                code: "005",
+            },
+            VillageCode {
+                name: "彬村山华侨农场北片生活区",
+                code: "006",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_030: [TownCode; 17] = [
-    TownCode { name: "文城镇", code: "001", villages: &[VillageCode { name: "文岭社区居委会", code: "001" }, VillageCode { name: "和平社区居委会", code: "002" }, VillageCode { name: "文建东社区居委会", code: "003" }, VillageCode { name: "文建西社区居委会", code: "004" }, VillageCode { name: "东风社区居委会", code: "005" }, VillageCode { name: "南新社区居委会", code: "006" }, VillageCode { name: "沿江社区居委会", code: "007" }, VillageCode { name: "城东社区居委会", code: "008" }, VillageCode { name: "新风社区居委会", code: "009" }, VillageCode { name: "英城社区居委会", code: "010" }, VillageCode { name: "清澜墟社区居委会", code: "011" }, VillageCode { name: "迈号墟社区居委会", code: "012" }, VillageCode { name: "新合墟社区居委会", code: "013" }, VillageCode { name: "新苑社区居委会", code: "014" }, VillageCode { name: "高隆湾社区居民委员会", code: "015" }, VillageCode { name: "南阳居居民委员会", code: "016" }, VillageCode { name: "德田村委会", code: "017" }, VillageCode { name: "坑美村委会", code: "018" }, VillageCode { name: "堂福村委会", code: "019" }, VillageCode { name: "霞洞村委会", code: "020" }, VillageCode { name: "后坑村委会", code: "021" }, VillageCode { name: "大潭村委会", code: "022" }, VillageCode { name: "城南村委会", code: "023" }, VillageCode { name: "湖园村委会", code: "024" }, VillageCode { name: "南海村委会", code: "025" }, VillageCode { name: "新井村委会", code: "026" }, VillageCode { name: "清群村委会", code: "027" }, VillageCode { name: "星火村委会", code: "028" }, VillageCode { name: "凌村村委会", code: "029" }, VillageCode { name: "红庄村委会", code: "030" }, VillageCode { name: "新园村委会", code: "031" }, VillageCode { name: "燎原村委会", code: "032" }, VillageCode { name: "坡口村委会", code: "033" }, VillageCode { name: "龙山村委会", code: "034" }, VillageCode { name: "陶坡村委会", code: "035" }, VillageCode { name: "迈众村委会", code: "036" }, VillageCode { name: "下山村委会", code: "037" }, VillageCode { name: "迈南村委会", code: "038" }, VillageCode { name: "迈号村委会", code: "039" }, VillageCode { name: "排城村委会", code: "040" }, VillageCode { name: "名门村委会", code: "041" }, VillageCode { name: "南联村委会", code: "042" }, VillageCode { name: "南阳村委会", code: "043" }, VillageCode { name: "南群村委会", code: "044" }, VillageCode { name: "高隆村委会", code: "045" }, VillageCode { name: "新合村委会", code: "046" }, VillageCode { name: "横山村委会", code: "047" }, VillageCode { name: "青山村委会", code: "048" }, VillageCode { name: "头苑村委会", code: "049" }, VillageCode { name: "玉山村委会", code: "050" }, VillageCode { name: "造福村委会", code: "051" }, VillageCode { name: "蓝田村委会", code: "052" }, VillageCode { name: "后港村委会", code: "053" }, VillageCode { name: "英群村民委员会", code: "054" }] },
-    TownCode { name: "重兴镇", code: "002", villages: &[VillageCode { name: "重兴墟社区居委会", code: "001" }, VillageCode { name: "三角庭圩社区居委会", code: "002" }, VillageCode { name: "加昌村委会", code: "003" }, VillageCode { name: "群先村委会", code: "004" }, VillageCode { name: "重建村委会", code: "005" }, VillageCode { name: "重兴村委会", code: "006" }, VillageCode { name: "东风村委会", code: "007" }, VillageCode { name: "新风村委会", code: "008" }, VillageCode { name: "新寨村委会", code: "009" }, VillageCode { name: "联星村委会", code: "010" }, VillageCode { name: "光大村委会", code: "011" }, VillageCode { name: "甘村村委会", code: "012" }, VillageCode { name: "养成村委会", code: "013" }, VillageCode { name: "跃进村委会", code: "014" }, VillageCode { name: "育英村委会", code: "015" }] },
-    TownCode { name: "蓬莱镇", code: "003", villages: &[VillageCode { name: "蓬莱墟社区居委会", code: "001" }, VillageCode { name: "蓬莱村委会", code: "002" }, VillageCode { name: "桃仁村委会", code: "003" }, VillageCode { name: "群合村委会", code: "004" }, VillageCode { name: "大杨村委会", code: "005" }, VillageCode { name: "高金村委会", code: "006" }, VillageCode { name: "干塘村委会", code: "007" }, VillageCode { name: "罗宝村委会", code: "008" }, VillageCode { name: "石壁村委会", code: "009" }, VillageCode { name: "典昌村委会", code: "010" }] },
-    TownCode { name: "会文镇", code: "004", villages: &[VillageCode { name: "会文社区居委会", code: "001" }, VillageCode { name: "冠南村委会", code: "002" }, VillageCode { name: "龙家村委会", code: "003" }, VillageCode { name: "会文村委会", code: "004" }, VillageCode { name: "文林村委会", code: "005" }, VillageCode { name: "官公铺村委会", code: "006" }, VillageCode { name: "官新村委会", code: "007" }, VillageCode { name: "白延村委会", code: "008" }, VillageCode { name: "湖丰村委会", code: "009" }, VillageCode { name: "凤会村委会", code: "010" }, VillageCode { name: "烟堆村委会", code: "011" }, VillageCode { name: "阳光村委会", code: "012" }, VillageCode { name: "边海村委会", code: "013" }, VillageCode { name: "沙港村委会", code: "014" }, VillageCode { name: "会英村委会", code: "015" }] },
-    TownCode { name: "东路镇", code: "005", villages: &[VillageCode { name: "约亭社区居委会", code: "001" }, VillageCode { name: "东路墟社区居委会", code: "002" }, VillageCode { name: "东路居居民委员会", code: "003" }, VillageCode { name: "东路村委会", code: "004" }, VillageCode { name: "永丰村委会", code: "005" }, VillageCode { name: "美德村委会", code: "006" }, VillageCode { name: "红光村委会", code: "007" }, VillageCode { name: "大宝村委会", code: "008" }, VillageCode { name: "长征村委会", code: "009" }, VillageCode { name: "蛟塘村委会", code: "010" }, VillageCode { name: "葫芦村委会", code: "011" }, VillageCode { name: "大坡村委会", code: "012" }, VillageCode { name: "下洋村委会", code: "013" }] },
-    TownCode { name: "潭牛镇", code: "006", villages: &[VillageCode { name: "潭牛墟社区居委会", code: "001" }, VillageCode { name: "新桥墟社区居委会", code: "002" }, VillageCode { name: "美文居居民委员会", code: "003" }, VillageCode { name: "二公堆村委会", code: "004" }, VillageCode { name: "大庙村委会", code: "005" }, VillageCode { name: "潭北村委会", code: "006" }, VillageCode { name: "潭牛村委会", code: "007" }, VillageCode { name: "企堆村委会", code: "008" }, VillageCode { name: "中心村委会", code: "009" }, VillageCode { name: "昌美村委会", code: "010" }, VillageCode { name: "大昌村委会", code: "011" }, VillageCode { name: "大顶村委会", code: "012" }, VillageCode { name: "孔雀村委会", code: "013" }, VillageCode { name: "新民村委会", code: "014" }, VillageCode { name: "新桥村委会", code: "015" }, VillageCode { name: "新昌村委会", code: "016" }, VillageCode { name: "文昌华侨农场生活区", code: "017" }] },
-    TownCode { name: "东阁镇", code: "007", villages: &[VillageCode { name: "东阁社区居委会", code: "001" }, VillageCode { name: "宝芳墟社区居委会", code: "002" }, VillageCode { name: "东阁村委会", code: "003" }, VillageCode { name: "侠夫村委会", code: "004" }, VillageCode { name: "地绿洋村委会", code: "005" }, VillageCode { name: "群建村委会", code: "006" }, VillageCode { name: "良丰村委会", code: "007" }, VillageCode { name: "红旗村委会", code: "008" }, VillageCode { name: "大宝园村委会", code: "009" }, VillageCode { name: "东海村委会", code: "010" }, VillageCode { name: "天伦村委会", code: "011" }, VillageCode { name: "宝芳村委会", code: "012" }, VillageCode { name: "美柳村委会", code: "013" }, VillageCode { name: "新林村委会", code: "014" }, VillageCode { name: "群星村委会", code: "015" }, VillageCode { name: "凤山村委会", code: "016" }] },
-    TownCode { name: "文教镇", code: "008", villages: &[VillageCode { name: "文教社区居委会", code: "001" }, VillageCode { name: "宝典村委会", code: "002" }, VillageCode { name: "光辉村委会", code: "003" }, VillageCode { name: "红峰村委会", code: "004" }, VillageCode { name: "后田村委会", code: "005" }, VillageCode { name: "加美村委会", code: "006" }, VillageCode { name: "立新村委会", code: "007" }, VillageCode { name: "培龙村委会", code: "008" }, VillageCode { name: "坡柳村委会", code: "009" }, VillageCode { name: "熔炉村委会", code: "010" }, VillageCode { name: "宋六村委会", code: "011" }, VillageCode { name: "同源村委会", code: "012" }, VillageCode { name: "文南村委会", code: "013" }, VillageCode { name: "联新村委会", code: "014" }] },
-    TownCode { name: "东郊镇", code: "009", villages: &[VillageCode { name: "东郊墟社区居委会", code: "001" }, VillageCode { name: "宝玉村委会", code: "002" }, VillageCode { name: "豹山村委会", code: "003" }, VillageCode { name: "东郊村委会", code: "004" }, VillageCode { name: "良梅村委会", code: "005" }, VillageCode { name: "码头村委会", code: "006" }, VillageCode { name: "前进村委会", code: "007" }, VillageCode { name: "清港村委会", code: "008" }, VillageCode { name: "上坡村委会", code: "009" }, VillageCode { name: "泰山村委会", code: "010" }, VillageCode { name: "中南村委会", code: "011" }, VillageCode { name: "中山村委会", code: "012" }, VillageCode { name: "良田村委会", code: "013" }, VillageCode { name: "椰海村委会", code: "014" }, VillageCode { name: "建华山村委会", code: "015" }, VillageCode { name: "椰林村委会", code: "016" }] },
-    TownCode { name: "龙楼镇", code: "010", villages: &[VillageCode { name: "龙楼墟社区居委会", code: "001" }, VillageCode { name: "航天社区居委会", code: "002" }, VillageCode { name: "吉水村委会", code: "003" }, VillageCode { name: "龙新村委会", code: "004" }, VillageCode { name: "宝陵村委会", code: "005" }, VillageCode { name: "金星村委会", code: "006" }, VillageCode { name: "山海村委会", code: "007" }, VillageCode { name: "红海村委会", code: "008" }, VillageCode { name: "龙楼村委会", code: "009" }, VillageCode { name: "全美村委会", code: "010" }, VillageCode { name: "春桃村委会", code: "011" }] },
-    TownCode { name: "昌洒镇", code: "011", villages: &[VillageCode { name: "昌洒墟社区居委会", code: "001" }, VillageCode { name: "昌发村委会", code: "002" }, VillageCode { name: "昌茂村委会", code: "003" }, VillageCode { name: "昌兴村委会", code: "004" }, VillageCode { name: "东群村委会", code: "005" }, VillageCode { name: "更新村委会", code: "006" }, VillageCode { name: "庆龄村委会", code: "007" }, VillageCode { name: "凤元村委会", code: "008" }, VillageCode { name: "昌洒村委会", code: "009" }, VillageCode { name: "联成村委会", code: "010" }, VillageCode { name: "宝华村委会", code: "011" }] },
-    TownCode { name: "翁田镇", code: "012", villages: &[VillageCode { name: "翁田墟社区居委会", code: "001" }, VillageCode { name: "龙马墟社区居委会", code: "002" }, VillageCode { name: "博文村委会", code: "003" }, VillageCode { name: "大福村委会", code: "004" }, VillageCode { name: "堆头村委会", code: "005" }, VillageCode { name: "茂山村委会", code: "006" }, VillageCode { name: "明月村委会", code: "007" }, VillageCode { name: "排山良村委会", code: "008" }, VillageCode { name: "汪洋村委会", code: "009" }, VillageCode { name: "翁田村委会", code: "010" }, VillageCode { name: "玉竹村委会", code: "011" }, VillageCode { name: "龙马村委会", code: "012" }, VillageCode { name: "龙南村委会", code: "013" }, VillageCode { name: "新村村委会", code: "014" }, VillageCode { name: "龙北村委会", code: "015" }, VillageCode { name: "西村村委会", code: "016" }] },
-    TownCode { name: "抱罗镇", code: "013", villages: &[VillageCode { name: "抱罗墟社区居委会", code: "001" }, VillageCode { name: "红旗村委会", code: "002" }, VillageCode { name: "抱功村委会", code: "003" }, VillageCode { name: "抱农村委会", code: "004" }, VillageCode { name: "先锋村委会", code: "005" }, VillageCode { name: "山梅村委会", code: "006" }, VillageCode { name: "振联村委会", code: "007" }, VillageCode { name: "抱罗村委会", code: "008" }, VillageCode { name: "抱民村委会", code: "009" }, VillageCode { name: "东宛村委会", code: "010" }, VillageCode { name: "抱锦村委会", code: "011" }] },
-    TownCode { name: "冯坡镇", code: "014", villages: &[VillageCode { name: "冯坡墟社区居委会", code: "001" }, VillageCode { name: "合坡村委会", code: "002" }, VillageCode { name: "白茅村委会", code: "003" }, VillageCode { name: "下宅村委会", code: "004" }, VillageCode { name: "里美村委会", code: "005" }, VillageCode { name: "贝山村委会", code: "006" }, VillageCode { name: "蛟龙村委会", code: "007" }, VillageCode { name: "昌里村委会", code: "008" }, VillageCode { name: "白沙村委会", code: "009" }, VillageCode { name: "凤尾村委会", code: "010" }] },
-    TownCode { name: "锦山镇", code: "015", villages: &[VillageCode { name: "锦山墟社区居委会", code: "001" }, VillageCode { name: "罗豆居居民委员会", code: "002" }, VillageCode { name: "坑口村委会", code: "003" }, VillageCode { name: "录家村委会", code: "004" }, VillageCode { name: "罗民村委会", code: "005" }, VillageCode { name: "南山村委会", code: "006" }, VillageCode { name: "排港村委会", code: "007" }, VillageCode { name: "桥坡村委会", code: "008" }, VillageCode { name: "山雅村委会", code: "009" }, VillageCode { name: "上洪村委会", code: "010" }, VillageCode { name: "下园村委会", code: "011" }, VillageCode { name: "园堆村委会", code: "012" }, VillageCode { name: "下溪坡村委会", code: "013" }, VillageCode { name: "良家庄村委会", code: "014" }, VillageCode { name: "福坡村委会", code: "015" }, VillageCode { name: "茶园村委会", code: "016" }, VillageCode { name: "湖山村委会", code: "017" }, VillageCode { name: "湖心村委会", code: "018" }, VillageCode { name: "溪尾村委会", code: "019" }, VillageCode { name: "花园村委会", code: "020" }, VillageCode { name: "南埠村委会", code: "021" }, VillageCode { name: "锦华村委会", code: "022" }, VillageCode { name: "鑑山村委会", code: "023" }] },
-    TownCode { name: "铺前镇", code: "016", villages: &[VillageCode { name: "铺前墟社区居委会", code: "001" }, VillageCode { name: "地太村委会", code: "002" }, VillageCode { name: "东坡村委会", code: "003" }, VillageCode { name: "林梧村委会", code: "004" }, VillageCode { name: "隆丰村委会", code: "005" }, VillageCode { name: "美港村委会", code: "006" }, VillageCode { name: "铺港村委会", code: "007" }, VillageCode { name: "铺龙村委会", code: "008" }, VillageCode { name: "铺前村委会", code: "009" }, VillageCode { name: "铺渔村委会", code: "010" }, VillageCode { name: "七岭村委会", code: "011" }, VillageCode { name: "仕后村委会", code: "012" }] },
-    TownCode { name: "公坡镇", code: "017", villages: &[VillageCode { name: "公坡墟社区居委会", code: "001" }, VillageCode { name: "公坡村委会", code: "002" }, VillageCode { name: "力群村委会", code: "003" }, VillageCode { name: "五一村委会", code: "004" }, VillageCode { name: "新华村委会", code: "005" }, VillageCode { name: "锦东村委会", code: "006" }, VillageCode { name: "水北村委会", code: "007" }] },
+    TownCode {
+        name: "文城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "文岭社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和平社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "文建东社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文建西社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "东风社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南新社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "沿江社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "城东社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "新风社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "英城社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "清澜墟社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "迈号墟社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新合墟社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新苑社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "高隆湾社区居民委员会",
+                code: "015",
+            },
+            VillageCode {
+                name: "南阳居居民委员会",
+                code: "016",
+            },
+            VillageCode {
+                name: "德田村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "坑美村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "堂福村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "霞洞村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "后坑村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "大潭村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "城南村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "湖园村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "南海村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "新井村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "清群村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "星火村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "凌村村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "红庄村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "新园村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "燎原村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "坡口村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "龙山村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "陶坡村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "迈众村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "下山村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "迈南村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "迈号村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "排城村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "名门村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "南联村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "南阳村委会",
+                code: "043",
+            },
+            VillageCode {
+                name: "南群村委会",
+                code: "044",
+            },
+            VillageCode {
+                name: "高隆村委会",
+                code: "045",
+            },
+            VillageCode {
+                name: "新合村委会",
+                code: "046",
+            },
+            VillageCode {
+                name: "横山村委会",
+                code: "047",
+            },
+            VillageCode {
+                name: "青山村委会",
+                code: "048",
+            },
+            VillageCode {
+                name: "头苑村委会",
+                code: "049",
+            },
+            VillageCode {
+                name: "玉山村委会",
+                code: "050",
+            },
+            VillageCode {
+                name: "造福村委会",
+                code: "051",
+            },
+            VillageCode {
+                name: "蓝田村委会",
+                code: "052",
+            },
+            VillageCode {
+                name: "后港村委会",
+                code: "053",
+            },
+            VillageCode {
+                name: "英群村民委员会",
+                code: "054",
+            },
+        ],
+    },
+    TownCode {
+        name: "重兴镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "重兴墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三角庭圩社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "加昌村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "群先村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "重建村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "重兴村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东风村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新风村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "新寨村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "联星村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "光大村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "甘村村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "养成村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "跃进村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "育英村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "蓬莱镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "蓬莱墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "蓬莱村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "桃仁村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "群合村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大杨村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "高金村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "干塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "罗宝村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "石壁村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "典昌村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "会文镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "会文社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "冠南村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙家村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "会文村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文林村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "官公铺村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "官新村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "白延村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "湖丰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "凤会村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "烟堆村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "阳光村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "边海村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "沙港村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "会英村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "东路镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "约亭社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东路墟社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东路居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东路村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "永丰村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美德村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "红光村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大宝村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "长征村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "蛟塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "葫芦村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "下洋村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "潭牛镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "潭牛墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新桥墟社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "美文居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "二公堆村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大庙村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "潭北村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "潭牛村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "企堆村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "中心村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "昌美村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大昌村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大顶村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "孔雀村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新民村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "新桥村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新昌村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "文昌华侨农场生活区",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "东阁镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "东阁社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "宝芳墟社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东阁村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "侠夫村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "地绿洋村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "群建村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "良丰村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "大宝园村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "东海村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "天伦村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "宝芳村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "美柳村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新林村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "群星村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "凤山村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "文教镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "文教社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "宝典村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "光辉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "红峰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "后田村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "加美村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "立新村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "培龙村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "坡柳村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "熔炉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "宋六村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "同源村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "文南村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "联新村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "东郊镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "东郊墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "宝玉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "豹山村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东郊村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "良梅村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "码头村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "前进村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "清港村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "上坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "泰山村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "中南村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "中山村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "良田村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "椰海村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "建华山村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "椰林村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙楼镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "龙楼墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "航天社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吉水村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "宝陵村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "金星村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "山海村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红海村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙楼村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "全美村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "春桃村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "昌洒镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "昌洒墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昌发村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "昌茂村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "昌兴村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "东群村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "更新村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "庆龄村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "凤元村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "昌洒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "联成村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "宝华村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "翁田镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "翁田墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "龙马墟社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "博文村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "大福村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "堆头村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "茂山村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "明月村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "排山良村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "汪洋村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "翁田村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉竹村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "龙马村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "龙南村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "龙北村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "西村村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "抱罗镇",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "抱罗墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "抱功村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "抱农村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "先锋村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "山梅村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "振联村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "抱罗村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "抱民村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "东宛村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "抱锦村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "冯坡镇",
+        code: "014",
+        villages: &[
+            VillageCode {
+                name: "冯坡墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "合坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "白茅村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "下宅村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "里美村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "贝山村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "蛟龙村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "昌里村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "白沙村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "凤尾村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "锦山镇",
+        code: "015",
+        villages: &[
+            VillageCode {
+                name: "锦山墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "罗豆居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "坑口村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "录家村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "罗民村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南山村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "排港村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "桥坡村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "山雅村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "上洪村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "下园村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "园堆村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "下溪坡村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "良家庄村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "福坡村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "茶园村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "湖山村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "湖心村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "溪尾村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "花园村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "南埠村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "锦华村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "鑑山村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "铺前镇",
+        code: "016",
+        villages: &[
+            VillageCode {
+                name: "铺前墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "地太村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东坡村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "林梧村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "隆丰村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美港村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "铺港村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "铺龙村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "铺前村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "铺渔村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "七岭村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "仕后村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "公坡镇",
+        code: "017",
+        villages: &[
+            VillageCode {
+                name: "公坡墟社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "公坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "力群村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "五一村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新华村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "锦东村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "水北村委会",
+                code: "007",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_031: [TownCode; 14] = [
-    TownCode { name: "万城镇", code: "001", villages: &[VillageCode { name: "镇南社区居民委员会", code: "001" }, VillageCode { name: "朝阳社区居民委员会", code: "002" }, VillageCode { name: "裕光社区居民委员会", code: "003" }, VillageCode { name: "西门社区居民委员会", code: "004" }, VillageCode { name: "仁里社区居民委员会", code: "005" }, VillageCode { name: "新海社区居民委员会", code: "006" }, VillageCode { name: "万隆社区居民委员会", code: "007" }, VillageCode { name: "光明社区居民委员会", code: "008" }, VillageCode { name: "番村社区居民委员会", code: "009" }, VillageCode { name: "丰园社区居民委员会", code: "010" }, VillageCode { name: "永范社区居民委员会", code: "011" }, VillageCode { name: "长星社区居民委员会", code: "012" }, VillageCode { name: "东星社区居民委员会", code: "013" }, VillageCode { name: "南山社区居民委员会", code: "014" }, VillageCode { name: "裕民社区居民委员会", code: "015" }, VillageCode { name: "滨湖社区居民委员会", code: "016" }, VillageCode { name: "周家庄社区居民委员会", code: "017" }, VillageCode { name: "东方社区居民委员会", code: "018" }, VillageCode { name: "联山村委会", code: "019" }, VillageCode { name: "新兴村委会", code: "020" }, VillageCode { name: "车头村委会", code: "021" }, VillageCode { name: "益民村委会", code: "022" }, VillageCode { name: "乐山村委会", code: "023" }, VillageCode { name: "月塘村委会", code: "024" }, VillageCode { name: "三联村委会", code: "025" }, VillageCode { name: "红荣村委会", code: "026" }, VillageCode { name: "宾王村委会", code: "027" }, VillageCode { name: "水边村委会", code: "028" }, VillageCode { name: "红光村委会", code: "029" }, VillageCode { name: "红山村委会", code: "030" }, VillageCode { name: "联星村委会", code: "031" }, VillageCode { name: "大芒村委会", code: "032" }, VillageCode { name: "流溪村委会", code: "033" }, VillageCode { name: "保定村委会", code: "034" }, VillageCode { name: "乌场村委会", code: "035" }, VillageCode { name: "春园村委会", code: "036" }, VillageCode { name: "集庄村委会", code: "037" }, VillageCode { name: "南岛村委会", code: "038" }, VillageCode { name: "南星村委会", code: "039" }, VillageCode { name: "北坡村委会", code: "040" }, VillageCode { name: "新庄村委会", code: "041" }, VillageCode { name: "群庄村委会", code: "042" }, VillageCode { name: "万城镇农场生活区", code: "043" }, VillageCode { name: "中央坡农场生活区", code: "044" }] },
-    TownCode { name: "龙滚镇", code: "002", villages: &[VillageCode { name: "新市村委会", code: "001" }, VillageCode { name: "凤园村委会", code: "002" }, VillageCode { name: "福塘村委会", code: "003" }, VillageCode { name: "文曲村委会", code: "004" }, VillageCode { name: "治坡村委会", code: "005" }, VillageCode { name: "端熙村委会", code: "006" }, VillageCode { name: "文渊村委会", code: "007" }, VillageCode { name: "多格村委会", code: "008" }, VillageCode { name: "坡罗村委会", code: "009" }, VillageCode { name: "和顺村委会", code: "010" }, VillageCode { name: "龙楼村委会", code: "011" }, VillageCode { name: "乐内村委会", code: "012" }, VillageCode { name: "排园村委会", code: "013" }, VillageCode { name: "河头村委会", code: "014" }, VillageCode { name: "水坡村委会", code: "015" }, VillageCode { name: "上城村委会", code: "016" }, VillageCode { name: "田头村委会", code: "017" }, VillageCode { name: "龙滚镇农场生活区", code: "018" }] },
-    TownCode { name: "和乐镇", code: "003", villages: &[VillageCode { name: "港上社区居民委员会", code: "001" }, VillageCode { name: "港下社区居民委员会", code: "002" }, VillageCode { name: "和乐村委会", code: "003" }, VillageCode { name: "乐群村委会", code: "004" }, VillageCode { name: "发兴村委会", code: "005" }, VillageCode { name: "泗水村委会", code: "006" }, VillageCode { name: "封浩村委会", code: "007" }, VillageCode { name: "红旗村委会", code: "008" }, VillageCode { name: "勤赛村委会", code: "009" }, VillageCode { name: "大山村委会", code: "010" }, VillageCode { name: "六连村委会", code: "011" }, VillageCode { name: "罗万村委会", code: "012" }, VillageCode { name: "新田村委会", code: "013" }, VillageCode { name: "西坡村委会", code: "014" }, VillageCode { name: "琉川村委会", code: "015" }, VillageCode { name: "芳市村委会", code: "016" }, VillageCode { name: "水椰村委会", code: "017" }, VillageCode { name: "联丰村委会", code: "018" }, VillageCode { name: "英文村委会", code: "019" }, VillageCode { name: "英豪村委会", code: "020" }, VillageCode { name: "盐墩村委会", code: "021" }, VillageCode { name: "五星村委会", code: "022" }, VillageCode { name: "和乐镇农场生活区", code: "023" }] },
-    TownCode { name: "后安镇", code: "004", villages: &[VillageCode { name: "吴村村委会", code: "001" }, VillageCode { name: "曲冲村委会", code: "002" }, VillageCode { name: "坡仔村委会", code: "003" }, VillageCode { name: "潮港村委会", code: "004" }, VillageCode { name: "曙光村委会", code: "005" }, VillageCode { name: "安坡村委会", code: "006" }, VillageCode { name: "白石村委会", code: "007" }, VillageCode { name: "龙田村委会", code: "008" }, VillageCode { name: "金星村委会", code: "009" }, VillageCode { name: "坝头村委会", code: "010" }, VillageCode { name: "六合村委会", code: "011" }, VillageCode { name: "多荫村委会", code: "012" }, VillageCode { name: "群兴村委会", code: "013" }, VillageCode { name: "乐来村委会", code: "014" }, VillageCode { name: "雨坛村委会", code: "015" }, VillageCode { name: "七星村委会", code: "016" }, VillageCode { name: "龙唇村委会", code: "017" }, VillageCode { name: "六底村委会", code: "018" }, VillageCode { name: "桥头村委会", code: "019" }, VillageCode { name: "坡头村委会", code: "020" }, VillageCode { name: "红联村委会", code: "021" }, VillageCode { name: "茶山村委会", code: "022" }, VillageCode { name: "后安村委会", code: "023" }, VillageCode { name: "后安镇农场生活区", code: "024" }, VillageCode { name: "乐来农场生活区", code: "025" }] },
-    TownCode { name: "大茂镇", code: "005", villages: &[VillageCode { name: "联益村委会", code: "001" }, VillageCode { name: "袁水村委会", code: "002" }, VillageCode { name: "联民村委会", code: "003" }, VillageCode { name: "龙尾村委会", code: "004" }, VillageCode { name: "群星村委会", code: "005" }, VillageCode { name: "群乐村委会", code: "006" }, VillageCode { name: "大联村委会", code: "007" }, VillageCode { name: "红石村委会", code: "008" }, VillageCode { name: "群爱村委会", code: "009" }, VillageCode { name: "红庄村委会", code: "010" }, VillageCode { name: "联光村委会", code: "011" }, VillageCode { name: "大茂镇农场生活区", code: "012" }] },
-    TownCode { name: "东澳镇", code: "006", villages: &[VillageCode { name: "东澳社区居民委员会", code: "001" }, VillageCode { name: "新华社区居民委员会", code: "002" }, VillageCode { name: "凤岭社区居民委员会", code: "003" }, VillageCode { name: "岛光村委会", code: "004" }, VillageCode { name: "龙保村委会", code: "005" }, VillageCode { name: "分洪村委会", code: "006" }, VillageCode { name: "四维村委会", code: "007" }, VillageCode { name: "新村村委会", code: "008" }, VillageCode { name: "集丰村委会", code: "009" }, VillageCode { name: "新群村委会", code: "010" }, VillageCode { name: "蓝田村委会", code: "011" }, VillageCode { name: "明丰村委会", code: "012" }, VillageCode { name: "大造村委会", code: "013" }, VillageCode { name: "裕后村委会", code: "014" }, VillageCode { name: "明灯村委会", code: "015" }, VillageCode { name: "龙山村委会", code: "016" }, VillageCode { name: "乐南村委会", code: "017" }, VillageCode { name: "明星村委会", code: "018" }, VillageCode { name: "镜门村委会", code: "019" }, VillageCode { name: "东澳镇农场生活区", code: "020" }] },
-    TownCode { name: "礼纪镇", code: "007", villages: &[VillageCode { name: "红群村委会", code: "001" }, VillageCode { name: "合兴村委会", code: "002" }, VillageCode { name: "合丰村委会", code: "003" }, VillageCode { name: "太阳村委会", code: "004" }, VillageCode { name: "农联村委会", code: "005" }, VillageCode { name: "群坡村委会", code: "006" }, VillageCode { name: "礼明村委会", code: "007" }, VillageCode { name: "三星村委会", code: "008" }, VillageCode { name: "贡举村委会", code: "009" }, VillageCode { name: "桥海村委会", code: "010" }, VillageCode { name: "莲花村委会", code: "011" }, VillageCode { name: "竹林村委会", code: "012" }, VillageCode { name: "石梅村委会", code: "013" }, VillageCode { name: "田新村委会", code: "014" }, VillageCode { name: "茄新村委会", code: "015" }, VillageCode { name: "前进农场生活区", code: "016" }, VillageCode { name: "先进农场生活区", code: "017" }] },
-    TownCode { name: "长丰镇", code: "008", villages: &[VillageCode { name: "东和居居委会", code: "001" }, VillageCode { name: "长丰村委会", code: "002" }, VillageCode { name: "长安村委会", code: "003" }, VillageCode { name: "福田村委会", code: "004" }, VillageCode { name: "黄山村委会", code: "005" }, VillageCode { name: "南联村委会", code: "006" }, VillageCode { name: "七甲村委会", code: "007" }, VillageCode { name: "大洲村委会", code: "008" }, VillageCode { name: "边肚村委会", code: "009" }, VillageCode { name: "牛漏村委会", code: "010" }, VillageCode { name: "黄加村委会", code: "011" }, VillageCode { name: "山架村委会", code: "012" }, VillageCode { name: "马坡村委会", code: "013" }, VillageCode { name: "长丰镇农场生活区", code: "014" }] },
-    TownCode { name: "山根镇", code: "009", villages: &[VillageCode { name: "立岭村委会", code: "001" }, VillageCode { name: "扶堤村委会", code: "002" }, VillageCode { name: "多扶村委会", code: "003" }, VillageCode { name: "华明村委会", code: "004" }, VillageCode { name: "排溪村委会", code: "005" }, VillageCode { name: "水央堀村委会", code: "006" }, VillageCode { name: "大石岭村委会", code: "007" }, VillageCode { name: "山根村委会", code: "008" }, VillageCode { name: "横山村委会", code: "009" }, VillageCode { name: "山根镇农场生活区", code: "010" }] },
-    TownCode { name: "北大镇", code: "010", villages: &[VillageCode { name: "东兴居居委会", code: "001" }, VillageCode { name: "东岭居居委会", code: "002" }, VillageCode { name: "中兴村委会", code: "003" }, VillageCode { name: "文才竹村委会", code: "004" }, VillageCode { name: "下三村委会", code: "005" }, VillageCode { name: "映田村委会", code: "006" }, VillageCode { name: "尖岭村委会", code: "007" }, VillageCode { name: "北大村委会", code: "008" }, VillageCode { name: "六角岭村委会", code: "009" }, VillageCode { name: "大发村委会", code: "010" }, VillageCode { name: "大堀村委会", code: "011" }, VillageCode { name: "民丰村委会", code: "012" }, VillageCode { name: "联群村委会", code: "013" }, VillageCode { name: "军田村委会", code: "014" }, VillageCode { name: "坚西村委会", code: "015" }, VillageCode { name: "军山村委会", code: "016" }, VillageCode { name: "山牛田村委会", code: "017" }, VillageCode { name: "丰丹村委会", code: "018" }, VillageCode { name: "红星村委会", code: "019" }, VillageCode { name: "内罗村委会", code: "020" }, VillageCode { name: "坚东村委会", code: "021" }, VillageCode { name: "北大镇农场生活区", code: "022" }] },
-    TownCode { name: "南桥镇", code: "011", villages: &[VillageCode { name: "南林居居委会", code: "001" }, VillageCode { name: "小管村委会", code: "002" }, VillageCode { name: "桥南村委会", code: "003" }, VillageCode { name: "南桥村委会", code: "004" }, VillageCode { name: "桥中村委会", code: "005" }, VillageCode { name: "桥北村委会", code: "006" }, VillageCode { name: "高龙村委会", code: "007" }, VillageCode { name: "新坡村委会", code: "008" }] },
-    TownCode { name: "三更罗镇", code: "012", villages: &[VillageCode { name: "新中居居委会", code: "001" }, VillageCode { name: "内岭村委会", code: "002" }, VillageCode { name: "头村村委会", code: "003" }, VillageCode { name: "二村村委会", code: "004" }, VillageCode { name: "上溪村委会", code: "005" }, VillageCode { name: "加润村委会", code: "006" }, VillageCode { name: "加苗村委会", code: "007" }, VillageCode { name: "加朝村委会", code: "008" }, VillageCode { name: "石盘村委会", code: "009" }, VillageCode { name: "南平村委会", code: "010" }, VillageCode { name: "石福村委会", code: "011" }, VillageCode { name: "田堆村委会", code: "012" }, VillageCode { name: "大坡农场生活区", code: "013" }] },
-    TownCode { name: "兴隆华侨农场", code: "013", villages: &[VillageCode { name: "兴隆华侨场部社区", code: "001" }, VillageCode { name: "兴隆华侨农场农场一生活区", code: "002" }, VillageCode { name: "兴隆华侨农场农场二生活区", code: "003" }, VillageCode { name: "兴隆华侨农场农场三生活区", code: "004" }, VillageCode { name: "兴隆华侨农场农场四生活区", code: "005" }, VillageCode { name: "兴隆华侨农场农场五生活区", code: "006" }, VillageCode { name: "兴隆华侨农场农场六生活区", code: "007" }, VillageCode { name: "兴隆华侨农场农场七生活区", code: "008" }, VillageCode { name: "兴隆华侨农场农场八生活区", code: "009" }] },
-    TownCode { name: "地方国营六连林场", code: "014", villages: &[VillageCode { name: "地方国营六连林场虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "万城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "镇南社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "朝阳社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "裕光社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "西门社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "仁里社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "新海社区居民委员会",
+                code: "006",
+            },
+            VillageCode {
+                name: "万隆社区居民委员会",
+                code: "007",
+            },
+            VillageCode {
+                name: "光明社区居民委员会",
+                code: "008",
+            },
+            VillageCode {
+                name: "番村社区居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "丰园社区居民委员会",
+                code: "010",
+            },
+            VillageCode {
+                name: "永范社区居民委员会",
+                code: "011",
+            },
+            VillageCode {
+                name: "长星社区居民委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "东星社区居民委员会",
+                code: "013",
+            },
+            VillageCode {
+                name: "南山社区居民委员会",
+                code: "014",
+            },
+            VillageCode {
+                name: "裕民社区居民委员会",
+                code: "015",
+            },
+            VillageCode {
+                name: "滨湖社区居民委员会",
+                code: "016",
+            },
+            VillageCode {
+                name: "周家庄社区居民委员会",
+                code: "017",
+            },
+            VillageCode {
+                name: "东方社区居民委员会",
+                code: "018",
+            },
+            VillageCode {
+                name: "联山村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "新兴村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "车头村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "益民村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "乐山村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "月塘村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "三联村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "红荣村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "宾王村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "水边村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "红光村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "红山村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "联星村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "大芒村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "流溪村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "保定村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "乌场村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "春园村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "集庄村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "南岛村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "南星村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "北坡村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "新庄村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "群庄村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "万城镇农场生活区",
+                code: "043",
+            },
+            VillageCode {
+                name: "中央坡农场生活区",
+                code: "044",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙滚镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "新市村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "凤园村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "福塘村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文曲村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "治坡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "端熙村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "文渊村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "多格村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "坡罗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "和顺村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "龙楼村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "乐内村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "排园村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "河头村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "水坡村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "上城村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "田头村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "龙滚镇农场生活区",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "和乐镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "港上社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "港下社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "和乐村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乐群村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "发兴村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "泗水村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "封浩村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "勤赛村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "大山村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "六连村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "罗万村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新田村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "西坡村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "琉川村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "芳市村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "水椰村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "联丰村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "英文村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "英豪村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "盐墩村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "五星村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "和乐镇农场生活区",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "后安镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "吴村村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "曲冲村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "坡仔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "潮港村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "曙光村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "安坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "白石村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "龙田村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "金星村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "坝头村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "六合村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "多荫村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "群兴村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "乐来村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "雨坛村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "七星村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "龙唇村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "六底村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "桥头村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "坡头村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "红联村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "茶山村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "后安村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "后安镇农场生活区",
+                code: "024",
+            },
+            VillageCode {
+                name: "乐来农场生活区",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "大茂镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "联益村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "袁水村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "联民村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙尾村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "群星村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "群乐村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "大联村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红石村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "群爱村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "红庄村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "联光村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大茂镇农场生活区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "东澳镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "东澳社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新华社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "凤岭社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岛光村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙保村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "分洪村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "四维村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "集丰村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "新群村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "蓝田村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "明丰村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大造村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "裕后村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "明灯村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "龙山村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "乐南村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "明星村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "镜门村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "东澳镇农场生活区",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "礼纪镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "红群村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "合兴村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "合丰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "太阳村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "农联村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "群坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "礼明村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "三星村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "贡举村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "桥海村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "莲花村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "竹林村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "石梅村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "田新村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "茄新村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "前进农场生活区",
+                code: "016",
+            },
+            VillageCode {
+                name: "先进农场生活区",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "长丰镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "东和居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "长丰村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "长安村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "福田村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "黄山村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南联村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "七甲村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大洲村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "边肚村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "牛漏村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "黄加村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "山架村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "马坡村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "长丰镇农场生活区",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "山根镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "立岭村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "扶堤村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "多扶村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "华明村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "排溪村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "水央堀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "大石岭村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "山根村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "横山村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "山根镇农场生活区",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "北大镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "东兴居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东岭居居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "中兴村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文才竹村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "下三村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "映田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "尖岭村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "北大村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "六角岭村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "大发村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大堀村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "民丰村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "联群村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "军田村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "坚西村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "军山村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "山牛田村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "丰丹村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "红星村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "内罗村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "坚东村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "北大镇农场生活区",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "南桥镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "南林居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "小管村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "桥南村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "南桥村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "桥中村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "桥北村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "高龙村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "三更罗镇",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "新中居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "内岭村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "头村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "二村村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "上溪村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "加润村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "加苗村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "加朝村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "石盘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "南平村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "石福村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "田堆村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大坡农场生活区",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "兴隆华侨农场",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "兴隆华侨场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场一生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场二生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场三生活区",
+                code: "004",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场四生活区",
+                code: "005",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场五生活区",
+                code: "006",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场六生活区",
+                code: "007",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场七生活区",
+                code: "008",
+            },
+            VillageCode {
+                name: "兴隆华侨农场农场八生活区",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "地方国营六连林场",
+        code: "014",
+        villages: &[VillageCode {
+            name: "地方国营六连林场虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_HN_032: [TownCode; 11] = [
-    TownCode { name: "八所镇", code: "001", villages: &[VillageCode { name: "解放社区居委会", code: "001" }, VillageCode { name: "东海社区居委会", code: "002" }, VillageCode { name: "琼西社区居委会", code: "003" }, VillageCode { name: "友谊社区居委会", code: "004" }, VillageCode { name: "滨海社区居委会", code: "005" }, VillageCode { name: "福民社区居委会", code: "006" }, VillageCode { name: "永安社区居委会", code: "007" }, VillageCode { name: "新街居委会", code: "008" }, VillageCode { name: "墩头居委会", code: "009" }, VillageCode { name: "港门居委会", code: "010" }, VillageCode { name: "新北居委会", code: "011" }, VillageCode { name: "伴圆海社区居民委员会", code: "012" }, VillageCode { name: "大占坡社区居民委员会", code: "013" }, VillageCode { name: "北黎社区居民委员会", code: "014" }, VillageCode { name: "皇宁村委会", code: "015" }, VillageCode { name: "蒲草村委会", code: "016" }, VillageCode { name: "居龙村委会", code: "017" }, VillageCode { name: "八所村委会", code: "018" }, VillageCode { name: "福耀村委会", code: "019" }, VillageCode { name: "报坡村委会", code: "020" }, VillageCode { name: "田庄村委会", code: "021" }, VillageCode { name: "文通村委会", code: "022" }, VillageCode { name: "斯文村委会", code: "023" }, VillageCode { name: "玉章村委会", code: "024" }, VillageCode { name: "老官村委会", code: "025" }, VillageCode { name: "塘马园村委会", code: "026" }, VillageCode { name: "那等村委会", code: "027" }, VillageCode { name: "新农村委会", code: "028" }, VillageCode { name: "益兴村委会", code: "029" }, VillageCode { name: "平岭村委会", code: "030" }, VillageCode { name: "昌义村委会", code: "031" }, VillageCode { name: "罗带村委会", code: "032" }, VillageCode { name: "大坡田村委会", code: "033" }, VillageCode { name: "下红兴村委会", code: "034" }, VillageCode { name: "上红兴村委会", code: "035" }, VillageCode { name: "青山村委会", code: "036" }, VillageCode { name: "老欧村委会", code: "037" }, VillageCode { name: "上名山村委会", code: "038" }, VillageCode { name: "下名山村委会", code: "039" }, VillageCode { name: "月村村委会", code: "040" }, VillageCode { name: "福久村委会", code: "041" }, VillageCode { name: "那悦村委会", code: "042" }, VillageCode { name: "高排村委会", code: "043" }, VillageCode { name: "十所村委会", code: "044" }, VillageCode { name: "小岭村委会", code: "045" }] },
-    TownCode { name: "东河镇", code: "002", villages: &[VillageCode { name: "广坝居居民委员会", code: "001" }, VillageCode { name: "东方村委会", code: "002" }, VillageCode { name: "冲南村委会", code: "003" }, VillageCode { name: "土新村委会", code: "004" }, VillageCode { name: "土蛮村委会", code: "005" }, VillageCode { name: "旧村村委会", code: "006" }, VillageCode { name: "东新村委会", code: "007" }, VillageCode { name: "东风村委会", code: "008" }, VillageCode { name: "西方村委会", code: "009" }, VillageCode { name: "中方村委会", code: "010" }, VillageCode { name: "佳西村委会", code: "011" }, VillageCode { name: "亚要村委会", code: "012" }, VillageCode { name: "玉龙村委会", code: "013" }, VillageCode { name: "万丁村委会", code: "014" }, VillageCode { name: "佳头村委会", code: "015" }, VillageCode { name: "广坝村委会", code: "016" }, VillageCode { name: "南浪村委会", code: "017" }, VillageCode { name: "俄贤村委会", code: "018" }, VillageCode { name: "金炳村委会", code: "019" }, VillageCode { name: "苗村村委会", code: "020" }] },
-    TownCode { name: "大田镇", code: "003", villages: &[VillageCode { name: "红泉居居民委员会", code: "001" }, VillageCode { name: "抱板村委会", code: "002" }, VillageCode { name: "居便村委会", code: "003" }, VillageCode { name: "长安村委会", code: "004" }, VillageCode { name: "戈枕村委会", code: "005" }, VillageCode { name: "牙炮村委会", code: "006" }, VillageCode { name: "老马村委会", code: "007" }, VillageCode { name: "月大村委会", code: "008" }, VillageCode { name: "马龙村委会", code: "009" }, VillageCode { name: "俄乐村委会", code: "010" }, VillageCode { name: "玉道村委会", code: "011" }, VillageCode { name: "新宁坡村委会", code: "012" }, VillageCode { name: "二甲村委会", code: "013" }, VillageCode { name: "那都村委会", code: "014" }, VillageCode { name: "短草村委会", code: "015" }, VillageCode { name: "万达村委会", code: "016" }, VillageCode { name: "冲报村委会", code: "017" }, VillageCode { name: "南尧村委会", code: "018" }, VillageCode { name: "俄龙村委会", code: "019" }, VillageCode { name: "罗旺村委会", code: "020" }, VillageCode { name: "大田村委会", code: "021" }, VillageCode { name: "乐妹村委会", code: "022" }, VillageCode { name: "报白村委会", code: "023" }, VillageCode { name: "保丁村委会", code: "024" }, VillageCode { name: "报英村委会", code: "025" }, VillageCode { name: "零公里居委会", code: "026" }] },
-    TownCode { name: "感城镇", code: "004", villages: &[VillageCode { name: "公爱居居民委员会", code: "001" }, VillageCode { name: "感城社区居民委员会", code: "002" }, VillageCode { name: "感南社区居民委员会", code: "003" }, VillageCode { name: "感北社区居民委员会", code: "004" }, VillageCode { name: "扶室社区居民委员会", code: "005" }, VillageCode { name: "陀头村委会", code: "006" }, VillageCode { name: "陀烈村委会", code: "007" }, VillageCode { name: "生旺村委会", code: "008" }, VillageCode { name: "民兴村委会", code: "009" }, VillageCode { name: "不磨村委会", code: "010" }, VillageCode { name: "尧文村委会", code: "011" }, VillageCode { name: "宝西村委会", code: "012" }, VillageCode { name: "宝东村委会", code: "013" }, VillageCode { name: "入学村委会", code: "014" }, VillageCode { name: "加富村委会", code: "015" }, VillageCode { name: "凤亭村委会", code: "016" }] },
-    TownCode { name: "板桥镇", code: "005", villages: &[VillageCode { name: "桥北村委会", code: "001" }, VillageCode { name: "桥南村委会", code: "002" }, VillageCode { name: "好瑞村委会", code: "003" }, VillageCode { name: "本廉村委会", code: "004" }, VillageCode { name: "文质村委会", code: "005" }, VillageCode { name: "老方村委会", code: "006" }, VillageCode { name: "元兴村委会", code: "007" }, VillageCode { name: "利章村委会", code: "008" }, VillageCode { name: "白穴村委会", code: "009" }, VillageCode { name: "抱利村委会", code: "010" }, VillageCode { name: "下园村委会", code: "011" }, VillageCode { name: "板桥村委会", code: "012" }, VillageCode { name: "南港村委会", code: "013" }, VillageCode { name: "中沙村委会", code: "014" }, VillageCode { name: "田头村委会", code: "015" }, VillageCode { name: "田中村委会", code: "016" }, VillageCode { name: "后壁村委会", code: "017" }, VillageCode { name: "加力村委会", code: "018" }, VillageCode { name: "三间村委会", code: "019" }, VillageCode { name: "高园村委会", code: "020" }, VillageCode { name: "新园村委会", code: "021" }] },
-    TownCode { name: "三家镇", code: "006", villages: &[VillageCode { name: "三家村委会", code: "001" }, VillageCode { name: "老乡村委会", code: "002" }, VillageCode { name: "玉雄村委会", code: "003" }, VillageCode { name: "官田村委会", code: "004" }, VillageCode { name: "小酸梅村委会", code: "005" }, VillageCode { name: "乐安村委会", code: "006" }, VillageCode { name: "旺老村委会", code: "007" }, VillageCode { name: "红草村委会", code: "008" }, VillageCode { name: "代鸠村委会", code: "009" }, VillageCode { name: "居候村委会", code: "010" }, VillageCode { name: "岭村村委会", code: "011" }, VillageCode { name: "窑上村委会", code: "012" }, VillageCode { name: "酸梅村委会", code: "013" }, VillageCode { name: "水东村委会", code: "014" }] },
-    TownCode { name: "四更镇", code: "007", villages: &[VillageCode { name: "四更村委会", code: "001" }, VillageCode { name: "土地村委会", code: "002" }, VillageCode { name: "付马村委会", code: "003" }, VillageCode { name: "赤坎村委会", code: "004" }, VillageCode { name: "四北村委会", code: "005" }, VillageCode { name: "来南村委会", code: "006" }, VillageCode { name: "沙村村委会", code: "007" }, VillageCode { name: "日新村委会", code: "008" }, VillageCode { name: "四中村委会", code: "009" }, VillageCode { name: "旦场园村委会", code: "010" }, VillageCode { name: "四而村委会", code: "011" }, VillageCode { name: "英显村委会", code: "012" }, VillageCode { name: "大新村委会", code: "013" }, VillageCode { name: "旦场村委会", code: "014" }, VillageCode { name: "下荣村委会", code: "015" }, VillageCode { name: "长山村委会", code: "016" }, VillageCode { name: "居多村委会", code: "017" }, VillageCode { name: "四南村委会", code: "018" }, VillageCode { name: "上荣村委会", code: "019" }, VillageCode { name: "四必村委会", code: "020" }] },
-    TownCode { name: "新龙镇", code: "008", villages: &[VillageCode { name: "新村村委会", code: "001" }, VillageCode { name: "下通天村委会", code: "002" }, VillageCode { name: "那斗村委会", code: "003" }, VillageCode { name: "龙北村委会", code: "004" }, VillageCode { name: "道达村委会", code: "005" }, VillageCode { name: "龙佑村委会", code: "006" }, VillageCode { name: "龙卧村委会", code: "007" }, VillageCode { name: "部道村委会", code: "008" }, VillageCode { name: "上通天村委会", code: "009" }] },
-    TownCode { name: "天安乡", code: "009", villages: &[VillageCode { name: "安都村委会", code: "001" }, VillageCode { name: "长田村委会", code: "002" }, VillageCode { name: "赤好村委会", code: "003" }, VillageCode { name: "陈龙村委会", code: "004" }, VillageCode { name: "抱由村委会", code: "005" }, VillageCode { name: "天村村委会", code: "006" }, VillageCode { name: "布套村委会", code: "007" }, VillageCode { name: "芭蕉村委会", code: "008" }, VillageCode { name: "公爱村委会", code: "009" }, VillageCode { name: "光益村委会", code: "010" }, VillageCode { name: "陀牙村委会", code: "011" }, VillageCode { name: "温村村委会", code: "012" }, VillageCode { name: "益公村委会", code: "013" }, VillageCode { name: "陀类村委会", code: "014" }, VillageCode { name: "王沟村委会", code: "015" }] },
-    TownCode { name: "江边乡", code: "010", villages: &[VillageCode { name: "江边营村委会", code: "001" }, VillageCode { name: "新明村委会", code: "002" }, VillageCode { name: "土眉村委会", code: "003" }, VillageCode { name: "俄查村委会", code: "004" }, VillageCode { name: "布温村委会", code: "005" }, VillageCode { name: "老村村委会", code: "006" }, VillageCode { name: "白查村委会", code: "007" }, VillageCode { name: "冲俄村委会", code: "008" }, VillageCode { name: "那文村委会", code: "009" }, VillageCode { name: "江边村委会", code: "010" }] },
-    TownCode { name: "东方华侨农场", code: "011", villages: &[VillageCode { name: "东方市华侨场部社区", code: "001" }, VillageCode { name: "东方市华侨农场长坡村委会", code: "002" }, VillageCode { name: "东方市华侨农场柴头村委会", code: "003" }, VillageCode { name: "东方市华侨农场王外村委会", code: "004" }, VillageCode { name: "东方市华侨农场大坡村委会", code: "005" }, VillageCode { name: "东方市华侨农场河边村委会", code: "006" }, VillageCode { name: "东方市华侨农场第一作业生活区", code: "007" }, VillageCode { name: "东方市华侨农场第二作业生活区", code: "008" }, VillageCode { name: "东方市华侨农场第三作业生活区", code: "009" }] },
+    TownCode {
+        name: "八所镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "解放社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东海社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "琼西社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "友谊社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "滨海社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "福民社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "永安社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新街居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "墩头居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "港门居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新北居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "伴圆海社区居民委员会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大占坡社区居民委员会",
+                code: "013",
+            },
+            VillageCode {
+                name: "北黎社区居民委员会",
+                code: "014",
+            },
+            VillageCode {
+                name: "皇宁村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "蒲草村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "居龙村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "八所村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "福耀村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "报坡村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "田庄村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "文通村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "斯文村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "玉章村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "老官村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "塘马园村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "那等村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "新农村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "益兴村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "平岭村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "昌义村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "罗带村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "大坡田村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "下红兴村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "上红兴村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "青山村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "老欧村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "上名山村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "下名山村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "月村村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "福久村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "那悦村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "高排村委会",
+                code: "043",
+            },
+            VillageCode {
+                name: "十所村委会",
+                code: "044",
+            },
+            VillageCode {
+                name: "小岭村委会",
+                code: "045",
+            },
+        ],
+    },
+    TownCode {
+        name: "东河镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "广坝居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "东方村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "冲南村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "土新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "土蛮村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "旧村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东新村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "东风村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "西方村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "中方村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "佳西村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "亚要村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "玉龙村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "万丁村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "佳头村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "广坝村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "南浪村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "俄贤村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "金炳村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "苗村村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "大田镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "红泉居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "抱板村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "居便村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长安村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "戈枕村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "牙炮村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "老马村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "月大村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "马龙村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "俄乐村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "玉道村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "新宁坡村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "二甲村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "那都村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "短草村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "万达村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "冲报村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "南尧村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "俄龙村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "罗旺村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "大田村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "乐妹村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "报白村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "保丁村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "报英村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "零公里居委会",
+                code: "026",
+            },
+        ],
+    },
+    TownCode {
+        name: "感城镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "公爱居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "感城社区居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "感南社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "感北社区居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "扶室社区居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "陀头村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "陀烈村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "生旺村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "民兴村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "不磨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "尧文村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "宝西村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "宝东村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "入学村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "加富村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "凤亭村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "板桥镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "桥北村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "桥南村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "好瑞村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "本廉村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文质村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "老方村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "元兴村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "利章村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "白穴村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "抱利村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "下园村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "板桥村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "南港村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "中沙村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "田头村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "田中村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "后壁村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "加力村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "三间村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "高园村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "新园村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "三家镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "三家村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "老乡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "玉雄村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "官田村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "小酸梅村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "乐安村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "旺老村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "红草村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "代鸠村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "居候村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "岭村村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "窑上村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "酸梅村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "水东村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "四更镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "四更村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "土地村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "付马村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "赤坎村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "四北村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "来南村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "沙村村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "日新村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "四中村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "旦场园村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "四而村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "英显村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大新村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "旦场村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "下荣村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "长山村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "居多村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "四南村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "上荣村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "四必村委会",
+                code: "020",
+            },
+        ],
+    },
+    TownCode {
+        name: "新龙镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "新村村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "下通天村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "那斗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙北村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "道达村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "龙佑村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙卧村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "部道村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "上通天村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "天安乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "安都村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "长田村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "赤好村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "陈龙村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "抱由村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "天村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "布套村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "芭蕉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "公爱村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "光益村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "陀牙村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "温村村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "益公村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "陀类村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "王沟村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "江边乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "江边营村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新明村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "土眉村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "俄查村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "布温村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "老村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "白查村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "冲俄村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "那文村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "江边村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "东方华侨农场",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "东方市华侨场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "东方市华侨农场长坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东方市华侨农场柴头村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东方市华侨农场王外村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "东方市华侨农场大坡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "东方市华侨农场河边村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "东方市华侨农场第一作业生活区",
+                code: "007",
+            },
+            VillageCode {
+                name: "东方市华侨农场第二作业生活区",
+                code: "008",
+            },
+            VillageCode {
+                name: "东方市华侨农场第三作业生活区",
+                code: "009",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_033: [TownCode; 10] = [
-    TownCode { name: "定城镇", code: "001", villages: &[VillageCode { name: "东北门社区居委会", code: "001" }, VillageCode { name: "西门社区居委会", code: "002" }, VillageCode { name: "中南街社区居委会", code: "003" }, VillageCode { name: "江南社区居委会", code: "004" }, VillageCode { name: "沿江社区居委会", code: "005" }, VillageCode { name: "大众社区居委会", code: "006" }, VillageCode { name: "南珠社区居委会", code: "007" }, VillageCode { name: "后山社区居委会", code: "008" }, VillageCode { name: "山椒社区居委会", code: "009" }, VillageCode { name: "莫村社区居委会", code: "010" }, VillageCode { name: "见龙社区居委会", code: "011" }, VillageCode { name: "美钗坡社区居委会", code: "012" }, VillageCode { name: "仙沟社区居委会", code: "013" }, VillageCode { name: "春内村委会", code: "014" }, VillageCode { name: "田洋村委会", code: "015" }, VillageCode { name: "深田村委会", code: "016" }, VillageCode { name: "下寨村委会", code: "017" }, VillageCode { name: "高良村委会", code: "018" }, VillageCode { name: "迎科村委会", code: "019" }, VillageCode { name: "仙屯村委会", code: "020" }, VillageCode { name: "美南村委会", code: "021" }, VillageCode { name: "龙岭村委会", code: "022" }, VillageCode { name: "水冲坡村委会", code: "023" }, VillageCode { name: "桐卷村委会", code: "024" }, VillageCode { name: "平和村委会", code: "025" }, VillageCode { name: "洁秀村委会", code: "026" }, VillageCode { name: "巡崖村委会", code: "027" }, VillageCode { name: "潭黎村委会", code: "028" }, VillageCode { name: "龙州村委会", code: "029" }, VillageCode { name: "西岸村委会", code: "030" }, VillageCode { name: "美太村委会", code: "031" }, VillageCode { name: "茅坡仔村委会", code: "032" }, VillageCode { name: "秀龙坑村委会", code: "033" }, VillageCode { name: "罗温村委会", code: "034" }] },
-    TownCode { name: "新竹镇", code: "002", villages: &[VillageCode { name: "禄地村委会", code: "001" }, VillageCode { name: "新竹村委会", code: "002" }, VillageCode { name: "大株村委会", code: "003" }, VillageCode { name: "祖坡村委会", code: "004" }, VillageCode { name: "卜效村委会", code: "005" }, VillageCode { name: "白墩村委会", code: "006" }, VillageCode { name: "卜优村委会", code: "007" }] },
-    TownCode { name: "龙湖镇", code: "003", villages: &[VillageCode { name: "龙湖居委会", code: "001" }, VillageCode { name: "陈村村委会", code: "002" }, VillageCode { name: "正统村委会", code: "003" }, VillageCode { name: "桐树村委会", code: "004" }, VillageCode { name: "坡村村委会", code: "005" }, VillageCode { name: "居丁村委会", code: "006" }, VillageCode { name: "安仁村委会", code: "007" }, VillageCode { name: "石井村委会", code: "008" }, VillageCode { name: "佳龙村委会", code: "009" }, VillageCode { name: "东埇村委会", code: "010" }, VillageCode { name: "永丰村委会", code: "011" }, VillageCode { name: "里变村委会", code: "012" }] },
-    TownCode { name: "黄竹镇", code: "004", villages: &[VillageCode { name: "南海居居民委员会", code: "001" }, VillageCode { name: "河头村委会", code: "002" }, VillageCode { name: "南保村委会", code: "003" }, VillageCode { name: "大统村委会", code: "004" }, VillageCode { name: "莲堆村委会", code: "005" }, VillageCode { name: "周公村委会", code: "006" }, VillageCode { name: "大坡村委会", code: "007" }, VillageCode { name: "白塘村委会", code: "008" }, VillageCode { name: "黄竹村委会", code: "009" }] },
-    TownCode { name: "雷鸣镇", code: "005", villages: &[VillageCode { name: "昌源村委会", code: "001" }, VillageCode { name: "同仁村委会", code: "002" }, VillageCode { name: "北斗村委会", code: "003" }, VillageCode { name: "后埇村委会", code: "004" }, VillageCode { name: "雷鸣村委会", code: "005" }, VillageCode { name: "石锦村委会", code: "006" }, VillageCode { name: "龙梅村委会", code: "007" }, VillageCode { name: "南九村委会", code: "008" }, VillageCode { name: "南安村委会", code: "009" }, VillageCode { name: "山地村委会", code: "010" }, VillageCode { name: "石盘坡村委会", code: "011" }, VillageCode { name: "南丽湖风景区社区", code: "012" }] },
-    TownCode { name: "龙门镇", code: "006", villages: &[VillageCode { name: "英湖村委会", code: "001" }, VillageCode { name: "龙门村委会", code: "002" }, VillageCode { name: "先锋村委会", code: "003" }, VillageCode { name: "红丰村委会", code: "004" }, VillageCode { name: "里沙塘村委会", code: "005" }, VillageCode { name: "石坡村委会", code: "006" }, VillageCode { name: "龙拔塘村委会", code: "007" }, VillageCode { name: "久温塘村委会", code: "008" }, VillageCode { name: "大效村委会", code: "009" }, VillageCode { name: "双塘村委会", code: "010" }, VillageCode { name: "大山村委会", code: "011" }, VillageCode { name: "红花岭村委会", code: "012" }, VillageCode { name: "定安县红卫农场生活区", code: "013" }] },
-    TownCode { name: "龙河镇", code: "007", villages: &[VillageCode { name: "龙塘社区居委会", code: "001" }, VillageCode { name: "岭寨村委会", code: "002" }, VillageCode { name: "南勋村委会", code: "003" }, VillageCode { name: "西坡村委会", code: "004" }, VillageCode { name: "茶根村委会", code: "005" }, VillageCode { name: "旧村村委会", code: "006" }, VillageCode { name: "平塘村委会", code: "007" }, VillageCode { name: "石塘村委会", code: "008" }, VillageCode { name: "鸭塘村委会", code: "009" }, VillageCode { name: "安良村委会", code: "010" }, VillageCode { name: "龙介村委会", code: "011" }, VillageCode { name: "菉林村委会", code: "012" }, VillageCode { name: "天池村委会", code: "013" }, VillageCode { name: "水竹村委会", code: "014" }, VillageCode { name: "龙河镇石八农场生活区", code: "015" }] },
-    TownCode { name: "岭口镇", code: "008", villages: &[VillageCode { name: "岭腰村委会", code: "001" }, VillageCode { name: "封浩村委会", code: "002" }, VillageCode { name: "群山村委会", code: "003" }, VillageCode { name: "岭口村委会", code: "004" }, VillageCode { name: "佳巷村委会", code: "005" }, VillageCode { name: "田堆村委会", code: "006" }, VillageCode { name: "鲁古井村委会", code: "007" }, VillageCode { name: "大塘村委会", code: "008" }, VillageCode { name: "儒沐塘村委会", code: "009" }] },
-    TownCode { name: "翰林镇", code: "009", villages: &[VillageCode { name: "中瑞居居民委员会", code: "001" }, VillageCode { name: "翰林村委会", code: "002" }, VillageCode { name: "沐塘村委会", code: "003" }, VillageCode { name: "良星村委会", code: "004" }, VillageCode { name: "火星村委会", code: "005" }, VillageCode { name: "章塘村委会", code: "006" }, VillageCode { name: "深水村委会", code: "007" }, VillageCode { name: "定安县东方红农场生活区", code: "008" }] },
-    TownCode { name: "富文镇", code: "010", villages: &[VillageCode { name: "金鸡岭居居民委员会", code: "001" }, VillageCode { name: "石门村委会", code: "002" }, VillageCode { name: "新联村委会", code: "003" }, VillageCode { name: "九所村委会", code: "004" }, VillageCode { name: "潭陆村委会", code: "005" }, VillageCode { name: "大里村委会", code: "006" }, VillageCode { name: "南埠村委会", code: "007" }, VillageCode { name: "田头村委会", code: "008" }, VillageCode { name: "大坡村委会", code: "009" }, VillageCode { name: "高塘村委会", code: "010" }, VillageCode { name: "白鹤村委会", code: "011" }] },
+    TownCode {
+        name: "定城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "东北门社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "西门社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "中南街社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "江南社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "沿江社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大众社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "南珠社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "后山社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "山椒社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "莫村社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "见龙社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "美钗坡社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "仙沟社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "春内村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "田洋村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "深田村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "下寨村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "高良村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "迎科村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "仙屯村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "美南村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "龙岭村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "水冲坡村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "桐卷村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "平和村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "洁秀村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "巡崖村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "潭黎村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "龙州村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "西岸村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "美太村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "茅坡仔村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "秀龙坑村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "罗温村委会",
+                code: "034",
+            },
+        ],
+    },
+    TownCode {
+        name: "新竹镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "禄地村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新竹村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大株村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "祖坡村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "卜效村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "白墩村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "卜优村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙湖镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "龙湖居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "陈村村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "正统村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "桐树村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "坡村村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "居丁村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "安仁村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "石井村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "佳龙村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "东埇村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "永丰村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "里变村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "黄竹镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "南海居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "河头村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南保村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "大统村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "莲堆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "周公村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "白塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "黄竹村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "雷鸣镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "昌源村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "同仁村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "北斗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "后埇村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "雷鸣村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "石锦村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙梅村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "南九村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "南安村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "山地村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "石盘坡村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "南丽湖风景区社区",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙门镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "英湖村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "龙门村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "先锋村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "红丰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "里沙塘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "石坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙拔塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "久温塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "大效村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "双塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大山村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "红花岭村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "定安县红卫农场生活区",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "龙河镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "龙塘社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "岭寨村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南勋村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "西坡村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "茶根村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "旧村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "平塘村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "石塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "鸭塘村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "安良村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "龙介村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "菉林村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "天池村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "水竹村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "龙河镇石八农场生活区",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "岭口镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "岭腰村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "封浩村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "群山村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岭口村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "佳巷村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "田堆村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "鲁古井村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "儒沐塘村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "翰林镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "中瑞居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "翰林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "沐塘村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "良星村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "火星村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "章塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "深水村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "定安县东方红农场生活区",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "富文镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "金鸡岭居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "石门村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新联村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "九所村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "潭陆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大里村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "南埠村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "田头村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "高塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "白鹤村委会",
+                code: "011",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_034: [TownCode; 8] = [
-    TownCode { name: "屯城镇", code: "001", villages: &[VillageCode { name: "文安社区居委会", code: "001" }, VillageCode { name: "新建社区居委会", code: "002" }, VillageCode { name: "东风社区居委会", code: "003" }, VillageCode { name: "海中社区居委会", code: "004" }, VillageCode { name: "新南社区居委会", code: "005" }, VillageCode { name: "文中社区居委会", code: "006" }, VillageCode { name: "文新社区居委会", code: "007" }, VillageCode { name: "城北社区居委会", code: "008" }, VillageCode { name: "屯城镇广青居居民委员会", code: "009" }, VillageCode { name: "屯昌村委会", code: "010" }, VillageCode { name: "屯新村委会", code: "011" }, VillageCode { name: "岳寨村委会", code: "012" }, VillageCode { name: "良史村委会", code: "013" }, VillageCode { name: "光明村委会", code: "014" }, VillageCode { name: "水口村委会", code: "015" }, VillageCode { name: "文旦村委会", code: "016" }, VillageCode { name: "加宝村委会", code: "017" }, VillageCode { name: "大东村委会", code: "018" }, VillageCode { name: "大长坡村委会", code: "019" }, VillageCode { name: "大石村委会", code: "020" }, VillageCode { name: "平坡村委会", code: "021" }, VillageCode { name: "三发村委会", code: "022" }, VillageCode { name: "新昌村委会", code: "023" }, VillageCode { name: "大同村委会", code: "024" }, VillageCode { name: "大洞村委会", code: "025" }, VillageCode { name: "大陆坡村委会", code: "026" }, VillageCode { name: "龙水村委会", code: "027" }, VillageCode { name: "海军村委会", code: "028" }, VillageCode { name: "海新村委会", code: "029" }] },
-    TownCode { name: "新兴镇", code: "002", villages: &[VillageCode { name: "新兴社区居委会", code: "001" }, VillageCode { name: "下屯村委会", code: "002" }, VillageCode { name: "蕴沃村委会", code: "003" }, VillageCode { name: "新雄村委会", code: "004" }, VillageCode { name: "土锡村委会", code: "005" }, VillageCode { name: "南歧村委会", code: "006" }, VillageCode { name: "博文村委会", code: "007" }, VillageCode { name: "洁坡村委会", code: "008" }, VillageCode { name: "兴诗村委会", code: "009" }, VillageCode { name: "沙田村委会", code: "010" }, VillageCode { name: "百家村委会", code: "011" }, VillageCode { name: "下园村委会", code: "012" }, VillageCode { name: "新北村委会", code: "013" }] },
-    TownCode { name: "枫木镇", code: "003", villages: &[VillageCode { name: "枫木社区居委会", code: "001" }, VillageCode { name: "枫木镇南吕居居民委员会", code: "002" }, VillageCode { name: "南挽村委会", code: "003" }, VillageCode { name: "岭仔村委会", code: "004" }, VillageCode { name: "石岭坡村委会", code: "005" }, VillageCode { name: "市坡村委会", code: "006" }, VillageCode { name: "大葵村委会", code: "007" }, VillageCode { name: "山头村委会", code: "008" }, VillageCode { name: "罗案村委会", code: "009" }, VillageCode { name: "双生岭村委会", code: "010" }, VillageCode { name: "琼凯村委会", code: "011" }] },
-    TownCode { name: "乌坡镇", code: "004", villages: &[VillageCode { name: "乌坡社区居委会", code: "001" }, VillageCode { name: "白毛坡村委会", code: "002" }, VillageCode { name: "村仔村委会", code: "003" }, VillageCode { name: "从良村委会", code: "004" }, VillageCode { name: "南东村委会", code: "005" }, VillageCode { name: "青梯村委会", code: "006" }, VillageCode { name: "美华村委会", code: "007" }, VillageCode { name: "坡心村委会", code: "008" }, VillageCode { name: "乌石坡村委会", code: "009" }, VillageCode { name: "鸭塘村委会", code: "010" }, VillageCode { name: "岭头村委会", code: "011" }, VillageCode { name: "玖耐村委会", code: "012" }] },
-    TownCode { name: "南吕镇", code: "005", villages: &[VillageCode { name: "南吕社区居委会", code: "001" }, VillageCode { name: "田寮村委会", code: "002" }, VillageCode { name: "里佳村委会", code: "003" }, VillageCode { name: "大城村委会", code: "004" }, VillageCode { name: "三岭村委会", code: "005" }, VillageCode { name: "鹿寨村委会", code: "006" }, VillageCode { name: "五星村委会", code: "007" }, VillageCode { name: "佳塘村委会", code: "008" }, VillageCode { name: "落根村委会", code: "009" }, VillageCode { name: "东岭村委会", code: "010" }, VillageCode { name: "大罗村委会", code: "011" }, VillageCode { name: "咸陆村委会", code: "012" }, VillageCode { name: "龙楼村委会", code: "013" }, VillageCode { name: "郭石村委会", code: "014" }, VillageCode { name: "大路村委会", code: "015" }] },
-    TownCode { name: "南坤镇", code: "006", villages: &[VillageCode { name: "南坤社区居委会", code: "001" }, VillageCode { name: "南坤镇中坤居居民委员会", code: "002" }, VillageCode { name: "南老村委会", code: "003" }, VillageCode { name: "加总村委会", code: "004" }, VillageCode { name: "石雷村委会", code: "005" }, VillageCode { name: "山塘村委会", code: "006" }, VillageCode { name: "坡寮村委会", code: "007" }, VillageCode { name: "石岭村委会", code: "008" }, VillageCode { name: "大朗村委会", code: "009" }, VillageCode { name: "太安村委会", code: "010" }, VillageCode { name: "藤寨村委会", code: "011" }, VillageCode { name: "新风村委会", code: "012" }, VillageCode { name: "新村村委会", code: "013" }, VillageCode { name: "松坡村委会", code: "014" }, VillageCode { name: "岭坡村委会", code: "015" }, VillageCode { name: "岭肚村委会", code: "016" }, VillageCode { name: "周朝村委会", code: "017" }, VillageCode { name: "曙光村委会", code: "018" }, VillageCode { name: "坡林村委会", code: "019" }, VillageCode { name: "黄岭村委会", code: "020" }, VillageCode { name: "炉村村委会", code: "021" }, VillageCode { name: "榕仔村委会", code: "022" }, VillageCode { name: "石坡村委会", code: "023" }, VillageCode { name: "吕狗村委会", code: "024" }, VillageCode { name: "长圮村委会", code: "025" }, VillageCode { name: "古寨村委会", code: "026" }, VillageCode { name: "南电村委会", code: "027" }] },
-    TownCode { name: "坡心镇", code: "007", villages: &[VillageCode { name: "加买社区居委会", code: "001" }, VillageCode { name: "坡心镇中建居居民委员会", code: "002" }, VillageCode { name: "高朗村委会", code: "003" }, VillageCode { name: "关朗村委会", code: "004" }, VillageCode { name: "马朗村委会", code: "005" }, VillageCode { name: "高坡村委会", code: "006" }, VillageCode { name: "新坡村委会", code: "007" }, VillageCode { name: "海株村委会", code: "008" }, VillageCode { name: "南台村委会", code: "009" }, VillageCode { name: "白石村委会", code: "010" }] },
-    TownCode { name: "西昌镇", code: "008", villages: &[VillageCode { name: "西群社区居委会", code: "001" }, VillageCode { name: "西昌镇晨星居居民委员会", code: "002" }, VillageCode { name: "仁教村委会", code: "003" }, VillageCode { name: "合格村委会", code: "004" }, VillageCode { name: "群星村委会", code: "005" }, VillageCode { name: "更丰村委会", code: "006" }, VillageCode { name: "土龙村委会", code: "007" }] },
+    TownCode {
+        name: "屯城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "文安社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新建社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东风社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海中社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新南社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "文中社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "文新社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "城北社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "屯城镇广青居居民委员会",
+                code: "009",
+            },
+            VillageCode {
+                name: "屯昌村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "屯新村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "岳寨村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "良史村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "水口村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "文旦村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "加宝村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "大东村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "大长坡村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "大石村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "平坡村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "三发村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "新昌村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "大同村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "大洞村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "大陆坡村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "龙水村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "海军村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "海新村委会",
+                code: "029",
+            },
+        ],
+    },
+    TownCode {
+        name: "新兴镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "新兴社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "下屯村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "蕴沃村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新雄村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "土锡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南歧村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "博文村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "洁坡村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "兴诗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "沙田村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "百家村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "下园村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新北村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "枫木镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "枫木社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "枫木镇南吕居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南挽村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岭仔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "石岭坡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "市坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "大葵村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "山头村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "罗案村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "双生岭村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "琼凯村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "乌坡镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "乌坡社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白毛坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "村仔村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "从良村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南东村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "青梯村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "美华村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "坡心村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "乌石坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "鸭塘村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "岭头村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "玖耐村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "南吕镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "南吕社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "田寮村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "里佳村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "大城村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "三岭村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "鹿寨村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "五星村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "佳塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "落根村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "东岭村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大罗村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "咸陆村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "龙楼村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "郭石村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "大路村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "南坤镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "南坤社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南坤镇中坤居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南老村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "加总村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "石雷村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "山塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "坡寮村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "石岭村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "大朗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "太安村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "藤寨村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "新风村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "松坡村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "岭坡村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "岭肚村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "周朝村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "曙光村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "坡林村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "黄岭村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "炉村村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "榕仔村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "石坡村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "吕狗村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "长圮村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "古寨村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "南电村委会",
+                code: "027",
+            },
+        ],
+    },
+    TownCode {
+        name: "坡心镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "加买社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "坡心镇中建居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "高朗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "关朗村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "马朗村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "高坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "海株村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "南台村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "白石村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "西昌镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "西群社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "西昌镇晨星居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "仁教村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "合格村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "群星村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "更丰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "土龙村委会",
+                code: "007",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_035: [TownCode; 12] = [
-    TownCode { name: "金江镇", code: "001", villages: &[VillageCode { name: "建国社区居委会", code: "001" }, VillageCode { name: "中山社区居委会", code: "002" }, VillageCode { name: "文化中社区居委会", code: "003" }, VillageCode { name: "文化北社区居委会", code: "004" }, VillageCode { name: "城东社区居委会", code: "005" }, VillageCode { name: "向阳社区居委会", code: "006" }, VillageCode { name: "钟寨社区居委会", code: "007" }, VillageCode { name: "光明社区居委会", code: "008" }, VillageCode { name: "城西社区居委会", code: "009" }, VillageCode { name: "江南社区居委会", code: "010" }, VillageCode { name: "长安社区居委会", code: "011" }, VillageCode { name: "城中社区居委会", code: "012" }, VillageCode { name: "金山社区居委会", code: "013" }, VillageCode { name: "金马东社区居委会", code: "014" }, VillageCode { name: "立新社区居委会", code: "015" }, VillageCode { name: "华成社区居委会", code: "016" }, VillageCode { name: "千秋社区居委会", code: "017" }, VillageCode { name: "金马西社区居委会", code: "018" }, VillageCode { name: "大塘村委会", code: "019" }, VillageCode { name: "村头村委会", code: "020" }, VillageCode { name: "大催村委会", code: "021" }, VillageCode { name: "塘口村委会", code: "022" }, VillageCode { name: "博潭村委会", code: "023" }, VillageCode { name: "京岭村委会", code: "024" }, VillageCode { name: "大坡村委会", code: "025" }, VillageCode { name: "天山村委会", code: "026" }, VillageCode { name: "大拉村委会", code: "027" }, VillageCode { name: "新云村委会", code: "028" }, VillageCode { name: "长坡村委会", code: "029" }, VillageCode { name: "长村村委会", code: "030" }, VillageCode { name: "合福村委会", code: "031" }, VillageCode { name: "军口村委会", code: "032" }, VillageCode { name: "南墩村委会", code: "033" }, VillageCode { name: "东联村委会", code: "034" }, VillageCode { name: "北河村委会", code: "035" }, VillageCode { name: "五联村委会", code: "036" }, VillageCode { name: "六角塘村委会", code: "037" }, VillageCode { name: "茂坡村委会", code: "038" }, VillageCode { name: "福龙村委会", code: "039" }, VillageCode { name: "潘村村委会", code: "040" }, VillageCode { name: "美亭村委会", code: "041" }, VillageCode { name: "黄竹村委会", code: "042" }, VillageCode { name: "龙坡村委会", code: "043" }, VillageCode { name: "名山村委会", code: "044" }, VillageCode { name: "好让村委会", code: "045" }, VillageCode { name: "大美村委会", code: "046" }, VillageCode { name: "扬坤村委会", code: "047" }, VillageCode { name: "雅新村委会", code: "048" }, VillageCode { name: "塘北村委会", code: "049" }, VillageCode { name: "兴加村委会", code: "050" }, VillageCode { name: "太平村委会", code: "051" }, VillageCode { name: "夏富村委会", code: "052" }, VillageCode { name: "六山村委会", code: "053" }, VillageCode { name: "北方村委会", code: "054" }, VillageCode { name: "木棉村委会", code: "055" }, VillageCode { name: "春芳村委会", code: "056" }, VillageCode { name: "海仔村委会", code: "057" }, VillageCode { name: "山口村委会", code: "058" }, VillageCode { name: "善井村委会", code: "059" }, VillageCode { name: "高山朗村委会", code: "060" }, VillageCode { name: "道南村委会", code: "061" }, VillageCode { name: "仁丁村委会", code: "062" }] },
-    TownCode { name: "老城镇", code: "002", villages: &[VillageCode { name: "老城社区居委会", code: "001" }, VillageCode { name: "白莲社区居委会", code: "002" }, VillageCode { name: "马村社区居委会", code: "003" }, VillageCode { name: "昌盛社区居委会", code: "004" }, VillageCode { name: "龙吉社区居委会", code: "005" }, VillageCode { name: "盈滨南社区居委会", code: "006" }, VillageCode { name: "盈滨北社区居委会", code: "007" }, VillageCode { name: "永庆社区居委会", code: "008" }, VillageCode { name: "美儒村委会", code: "009" }, VillageCode { name: "大道村委会", code: "010" }, VillageCode { name: "才吉村委会", code: "011" }, VillageCode { name: "玉堂村委会", code: "012" }, VillageCode { name: "大亭村委会", code: "013" }, VillageCode { name: "石联村委会", code: "014" }, VillageCode { name: "罗驿村委会", code: "015" }, VillageCode { name: "潭池村委会", code: "016" }, VillageCode { name: "玉楼村委会", code: "017" }, VillageCode { name: "富豪村委会", code: "018" }, VillageCode { name: "那板村委会", code: "019" }, VillageCode { name: "文玉村委会", code: "020" }, VillageCode { name: "坡脑村委会", code: "021" }, VillageCode { name: "文大村委会", code: "022" }, VillageCode { name: "东水港村委会", code: "023" }] },
-    TownCode { name: "瑞溪镇", code: "003", villages: &[VillageCode { name: "瑞溪第一社区居委会", code: "001" }, VillageCode { name: "瑞溪第二社区居委会", code: "002" }, VillageCode { name: "瑞联村委会", code: "003" }, VillageCode { name: "北桥村委会", code: "004" }, VillageCode { name: "群庄村委会", code: "005" }, VillageCode { name: "仙儒村委会", code: "006" }, VillageCode { name: "村内村委会", code: "007" }, VillageCode { name: "加巨村委会", code: "008" }, VillageCode { name: "南尖村委会", code: "009" }, VillageCode { name: "山琼村委会", code: "010" }, VillageCode { name: "罗浮村委会", code: "011" }, VillageCode { name: "山尾村委会", code: "012" }, VillageCode { name: "北洋村委会", code: "013" }, VillageCode { name: "三多村委会", code: "014" }, VillageCode { name: "番丁村委会", code: "015" }, VillageCode { name: "里加村委会", code: "016" }] },
-    TownCode { name: "永发镇", code: "004", villages: &[VillageCode { name: "永发社区居委会", code: "001" }, VillageCode { name: "永跃社区居委会", code: "002" }, VillageCode { name: "永灵村委会", code: "003" }, VillageCode { name: "排坡村委会", code: "004" }, VillageCode { name: "卜罗村委会", code: "005" }, VillageCode { name: "长福村委会", code: "006" }, VillageCode { name: "后坡村委会", code: "007" }, VillageCode { name: "侍郎村委会", code: "008" }, VillageCode { name: "卜岸村委会", code: "009" }, VillageCode { name: "儒林村委会", code: "010" }, VillageCode { name: "卜厚村委会", code: "011" }, VillageCode { name: "东兴村委会", code: "012" }, VillageCode { name: "永丰村委会", code: "013" }, VillageCode { name: "新吴村委会", code: "014" }, VillageCode { name: "参军村委会", code: "015" }, VillageCode { name: "大山村委会", code: "016" }, VillageCode { name: "赛玉村委会", code: "017" }, VillageCode { name: "龙楼村委会", code: "018" }, VillageCode { name: "南昌村委会", code: "019" }] },
-    TownCode { name: "加乐镇", code: "005", villages: &[VillageCode { name: "加乐社区居委会", code: "001" }, VillageCode { name: "加乐村委会", code: "002" }, VillageCode { name: "德润村委会", code: "003" }, VillageCode { name: "北统村委会", code: "004" }, VillageCode { name: "加茂村委会", code: "005" }, VillageCode { name: "产坡村委会", code: "006" }, VillageCode { name: "茅坡村委会", code: "007" }, VillageCode { name: "常树村委会", code: "008" }, VillageCode { name: "加朗村委会", code: "009" }, VillageCode { name: "加桐村委会", code: "010" }, VillageCode { name: "长岭村委会", code: "011" }] },
-    TownCode { name: "文儒镇", code: "006", villages: &[VillageCode { name: "红岗居居民委员会", code: "001" }, VillageCode { name: "山心村委会", code: "002" }, VillageCode { name: "村头村委会", code: "003" }, VillageCode { name: "文丰村委会", code: "004" }, VillageCode { name: "坡尾村委会", code: "005" }, VillageCode { name: "土腰村委会", code: "006" }, VillageCode { name: "文儒村委会", code: "007" }, VillageCode { name: "石浮村委会", code: "008" }, VillageCode { name: "桂根村委会", code: "009" }, VillageCode { name: "槟榔根村委会", code: "010" }, VillageCode { name: "大边村委会", code: "011" }, VillageCode { name: "珠宝岭村委会", code: "012" }, VillageCode { name: "加月村委会", code: "013" }, VillageCode { name: "昌文村委会", code: "014" }] },
-    TownCode { name: "中兴镇", code: "007", villages: &[VillageCode { name: "中兴社区居委会", code: "001" }, VillageCode { name: "和岭居居民委员会", code: "002" }, VillageCode { name: "好保村委会", code: "003" }, VillageCode { name: "福来村委会", code: "004" }, VillageCode { name: "东岭村委会", code: "005" }, VillageCode { name: "仁洞村委会", code: "006" }, VillageCode { name: "加龙村委会", code: "007" }, VillageCode { name: "孔水村委会", code: "008" }, VillageCode { name: "旺商村委会", code: "009" }, VillageCode { name: "大云村委会", code: "010" }, VillageCode { name: "福安村委会", code: "011" }, VillageCode { name: "横滩村委会", code: "012" }, VillageCode { name: "南茂村委会", code: "013" }] },
-    TownCode { name: "仁兴镇", code: "008", villages: &[VillageCode { name: "西达居居民委员会", code: "001" }, VillageCode { name: "昆仑居居民委员会", code: "002" }, VillageCode { name: "仁兴社区居民委员会", code: "003" }, VillageCode { name: "吴案村委会", code: "004" }, VillageCode { name: "岭仑村委会", code: "005" }, VillageCode { name: "拾村村委会", code: "006" }, VillageCode { name: "松运村委会", code: "007" }, VillageCode { name: "四联村委会", code: "008" }, VillageCode { name: "美厚村委会", code: "009" }] },
-    TownCode { name: "福山镇", code: "009", villages: &[VillageCode { name: "福山社区居委会", code: "001" }, VillageCode { name: "红光居居民委员会", code: "002" }, VillageCode { name: "文社村委会", code: "003" }, VillageCode { name: "迈岭村委会", code: "004" }, VillageCode { name: "敦茶村委会", code: "005" }, VillageCode { name: "博才村委会", code: "006" }, VillageCode { name: "官族村委会", code: "007" }, VillageCode { name: "仁里村委会", code: "008" }, VillageCode { name: "花场村委会", code: "009" }] },
-    TownCode { name: "桥头镇", code: "010", villages: &[VillageCode { name: "桥头社区居委会", code: "001" }, VillageCode { name: "桥东村委会", code: "002" }, VillageCode { name: "沙土村委会", code: "003" }, VillageCode { name: "西岸村委会", code: "004" }, VillageCode { name: "元隆村委会", code: "005" }, VillageCode { name: "玉包村委会", code: "006" }, VillageCode { name: "善丰村委会", code: "007" }, VillageCode { name: "荣兴村委会", code: "008" }] },
-    TownCode { name: "大丰镇", code: "011", villages: &[VillageCode { name: "红岭居委会", code: "001" }, VillageCode { name: "肖阳居委会", code: "002" }, VillageCode { name: "才存居委会", code: "003" }, VillageCode { name: "美玉居委会", code: "004" }, VillageCode { name: "美桃居委会", code: "005" }, VillageCode { name: "荣友居委会", code: "006" }, VillageCode { name: "大丰居委会", code: "007" }, VillageCode { name: "文音居委会", code: "008" }, VillageCode { name: "五村居委会", code: "009" }, VillageCode { name: "盐丁居委会", code: "010" }, VillageCode { name: "安丰居委会", code: "011" }, VillageCode { name: "侨东社区居委会", code: "012" }] },
-    TownCode { name: "国营金安农场", code: "012", villages: &[VillageCode { name: "国营金安场部社区", code: "001" }, VillageCode { name: "国营金安农场金安作业生活区", code: "002" }, VillageCode { name: "国营金安农场潭烈作业生活区", code: "003" }, VillageCode { name: "国营金安农场新田作业生活区", code: "004" }, VillageCode { name: "国营金安农场吾录作业生活区", code: "005" }, VillageCode { name: "国营金安农场书富作业生活区", code: "006" }] },
+    TownCode {
+        name: "金江镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "建国社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "中山社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "文化中社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文化北社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "城东社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "向阳社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "钟寨社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "光明社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "城西社区居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "江南社区居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "长安社区居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "城中社区居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "金山社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "金马东社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "立新社区居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "华成社区居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "千秋社区居委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "金马西社区居委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "大塘村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "村头村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "大催村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "塘口村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "博潭村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "京岭村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "天山村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "大拉村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "新云村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "长坡村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "长村村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "合福村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "军口村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "南墩村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "东联村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "北河村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "五联村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "六角塘村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "茂坡村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "福龙村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "潘村村委会",
+                code: "040",
+            },
+            VillageCode {
+                name: "美亭村委会",
+                code: "041",
+            },
+            VillageCode {
+                name: "黄竹村委会",
+                code: "042",
+            },
+            VillageCode {
+                name: "龙坡村委会",
+                code: "043",
+            },
+            VillageCode {
+                name: "名山村委会",
+                code: "044",
+            },
+            VillageCode {
+                name: "好让村委会",
+                code: "045",
+            },
+            VillageCode {
+                name: "大美村委会",
+                code: "046",
+            },
+            VillageCode {
+                name: "扬坤村委会",
+                code: "047",
+            },
+            VillageCode {
+                name: "雅新村委会",
+                code: "048",
+            },
+            VillageCode {
+                name: "塘北村委会",
+                code: "049",
+            },
+            VillageCode {
+                name: "兴加村委会",
+                code: "050",
+            },
+            VillageCode {
+                name: "太平村委会",
+                code: "051",
+            },
+            VillageCode {
+                name: "夏富村委会",
+                code: "052",
+            },
+            VillageCode {
+                name: "六山村委会",
+                code: "053",
+            },
+            VillageCode {
+                name: "北方村委会",
+                code: "054",
+            },
+            VillageCode {
+                name: "木棉村委会",
+                code: "055",
+            },
+            VillageCode {
+                name: "春芳村委会",
+                code: "056",
+            },
+            VillageCode {
+                name: "海仔村委会",
+                code: "057",
+            },
+            VillageCode {
+                name: "山口村委会",
+                code: "058",
+            },
+            VillageCode {
+                name: "善井村委会",
+                code: "059",
+            },
+            VillageCode {
+                name: "高山朗村委会",
+                code: "060",
+            },
+            VillageCode {
+                name: "道南村委会",
+                code: "061",
+            },
+            VillageCode {
+                name: "仁丁村委会",
+                code: "062",
+            },
+        ],
+    },
+    TownCode {
+        name: "老城镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "老城社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "白莲社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "马村社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "昌盛社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "龙吉社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "盈滨南社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "盈滨北社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "永庆社区居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "美儒村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "大道村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "才吉村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "玉堂村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大亭村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "石联村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "罗驿村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "潭池村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "玉楼村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "富豪村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "那板村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "文玉村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "坡脑村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "文大村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "东水港村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "瑞溪镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "瑞溪第一社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "瑞溪第二社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "瑞联村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "北桥村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "群庄村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "仙儒村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "村内村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "加巨村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "南尖村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "山琼村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "罗浮村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "山尾村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "北洋村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "三多村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "番丁村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "里加村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "永发镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "永发社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "永跃社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "永灵村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "排坡村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "卜罗村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "长福村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "后坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "侍郎村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "卜岸村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "儒林村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "卜厚村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "东兴村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "永丰村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新吴村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "参军村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "大山村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "赛玉村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "龙楼村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "南昌村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "加乐镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "加乐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "加乐村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "德润村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "北统村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加茂村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "产坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "茅坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "常树村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "加朗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "加桐村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "长岭村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "文儒镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "红岗居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "山心村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "村头村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "文丰村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "坡尾村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "土腰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "文儒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "石浮村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "桂根村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "槟榔根村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大边村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "珠宝岭村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "加月村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "昌文村委会",
+                code: "014",
+            },
+        ],
+    },
+    TownCode {
+        name: "中兴镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "中兴社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和岭居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "好保村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "福来村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "东岭村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "仁洞村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "加龙村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "孔水村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "旺商村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "大云村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "福安村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "横滩村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "南茂村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "仁兴镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "西达居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "昆仑居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "仁兴社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吴案村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "岭仑村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "拾村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "松运村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "四联村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "美厚村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "福山镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "福山社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红光居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "文社村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "迈岭村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "敦茶村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博才村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "官族村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "仁里村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "花场村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "桥头镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "桥头社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "桥东村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "沙土村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "西岸村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "元隆村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "玉包村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "善丰村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "荣兴村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "大丰镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "红岭居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "肖阳居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "才存居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "美玉居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "美桃居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "荣友居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "大丰居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "文音居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "五村居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "盐丁居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "安丰居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "侨东社区居委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "国营金安农场",
+        code: "012",
+        villages: &[
+            VillageCode {
+                name: "国营金安场部社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "国营金安农场金安作业生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "国营金安农场潭烈作业生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "国营金安农场新田作业生活区",
+                code: "004",
+            },
+            VillageCode {
+                name: "国营金安农场吾录作业生活区",
+                code: "005",
+            },
+            VillageCode {
+                name: "国营金安农场书富作业生活区",
+                code: "006",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_036: [TownCode; 11] = [
-    TownCode { name: "临城镇", code: "001", villages: &[VillageCode { name: "跃进社区居委会", code: "001" }, VillageCode { name: "城内社区居委会", code: "002" }, VillageCode { name: "东风社区居委会", code: "003" }, VillageCode { name: "胜利社区居委会", code: "004" }, VillageCode { name: "临山社区居委会", code: "005" }, VillageCode { name: "美台社区居委会", code: "006" }, VillageCode { name: "干部新村社区居委会", code: "007" }, VillageCode { name: "多琏村委会", code: "008" }, VillageCode { name: "美当村委会", code: "009" }, VillageCode { name: "兰秦村委会", code: "010" }, VillageCode { name: "学田村委会", code: "011" }, VillageCode { name: "兰河村委会", code: "012" }, VillageCode { name: "金龙村委会", code: "013" }, VillageCode { name: "大波村委会", code: "014" }, VillageCode { name: "宫花村委会", code: "015" }, VillageCode { name: "南江村委会", code: "016" }, VillageCode { name: "楼台村委会", code: "017" }, VillageCode { name: "仙还村委会", code: "018" }, VillageCode { name: "发豪村委会", code: "019" }, VillageCode { name: "龙贯村委会", code: "020" }, VillageCode { name: "禄道村委会", code: "021" }, VillageCode { name: "美梅村委会", code: "022" }, VillageCode { name: "罗万村委会", code: "023" }, VillageCode { name: "头星村委会", code: "024" }, VillageCode { name: "兰罗村委会", code: "025" }, VillageCode { name: "文新村委会", code: "026" }, VillageCode { name: "调俗村委会", code: "027" }, VillageCode { name: "吾鲁村委会", code: "028" }, VillageCode { name: "杨梅村委会", code: "029" }, VillageCode { name: "抱瑞村委会", code: "030" }, VillageCode { name: "群玉村委会", code: "031" }, VillageCode { name: "文潭村委会", code: "032" }, VillageCode { name: "邦浪村委会", code: "033" }, VillageCode { name: "奇地村委会", code: "034" }, VillageCode { name: "昌拱村委会", code: "035" }, VillageCode { name: "德老村委会", code: "036" }, VillageCode { name: "西田村委会", code: "037" }, VillageCode { name: "洋甘村委会", code: "038" }, VillageCode { name: "龙跃村委会", code: "039" }, VillageCode { name: "文书村委会", code: "040" }] },
-    TownCode { name: "波莲镇", code: "002", villages: &[VillageCode { name: "波莲社区居委会", code: "001" }, VillageCode { name: "和棉村委会", code: "002" }, VillageCode { name: "抱美村委会", code: "003" }, VillageCode { name: "乾彩村委会", code: "004" }, VillageCode { name: "古柳村委会", code: "005" }, VillageCode { name: "冰廉村委会", code: "006" }, VillageCode { name: "武来村委会", code: "007" }, VillageCode { name: "古柏村委会", code: "008" }, VillageCode { name: "太坡村委会", code: "009" }, VillageCode { name: "美珠村委会", code: "010" }, VillageCode { name: "多贤村委会", code: "011" }, VillageCode { name: "带昆村委会", code: "012" }, VillageCode { name: "红星村委会", code: "013" }] },
-    TownCode { name: "东英镇", code: "003", villages: &[VillageCode { name: "东英社区居委会", code: "001" }, VillageCode { name: "灵山村委会", code: "002" }, VillageCode { name: "文连村委会", code: "003" }, VillageCode { name: "和新村委会", code: "004" }, VillageCode { name: "兰刘村委会", code: "005" }, VillageCode { name: "高秀村委会", code: "006" }, VillageCode { name: "高定村委会", code: "007" }, VillageCode { name: "伴康村委会", code: "008" }, VillageCode { name: "居留村委会", code: "009" }, VillageCode { name: "美鳌村委会", code: "010" }, VillageCode { name: "波浪村委会", code: "011" }, VillageCode { name: "美夏村委会", code: "012" }, VillageCode { name: "博纵村委会", code: "013" }] },
-    TownCode { name: "博厚镇", code: "004", villages: &[VillageCode { name: "博厚社区居委会", code: "001" }, VillageCode { name: "马袅社区居委会", code: "002" }, VillageCode { name: "抱珍村委会", code: "003" }, VillageCode { name: "武新村委会", code: "004" }, VillageCode { name: "美所村委会", code: "005" }, VillageCode { name: "南贤村委会", code: "006" }, VillageCode { name: "博西村委会", code: "007" }, VillageCode { name: "博北村委会", code: "008" }, VillageCode { name: "龙干村委会", code: "009" }, VillageCode { name: "头国村委会", code: "010" }, VillageCode { name: "加六村委会", code: "011" }, VillageCode { name: "红牌村委会", code: "012" }, VillageCode { name: "得六村委会", code: "013" }, VillageCode { name: "五尧村委会", code: "014" }, VillageCode { name: "头稍村委会", code: "015" }, VillageCode { name: "和丰村委会", code: "016" }, VillageCode { name: "道灶村委会", code: "017" }, VillageCode { name: "昌富村委会", code: "018" }, VillageCode { name: "亲贤村委会", code: "019" }, VillageCode { name: "洋大村委会", code: "020" }, VillageCode { name: "乐豪村委会", code: "021" }, VillageCode { name: "大雅村委会", code: "022" }, VillageCode { name: "林场村委会", code: "023" }] },
-    TownCode { name: "皇桐镇", code: "005", villages: &[VillageCode { name: "皇桐社区居委会", code: "001" }, VillageCode { name: "龙波社区居委会", code: "002" }, VillageCode { name: "红专居居民委员会", code: "003" }, VillageCode { name: "洋黄村委会", code: "004" }, VillageCode { name: "头文村委会", code: "005" }, VillageCode { name: "中林村委会", code: "006" }, VillageCode { name: "龙波村委会", code: "007" }, VillageCode { name: "和正村委会", code: "008" }, VillageCode { name: "群城村委会", code: "009" }, VillageCode { name: "潭楼村委会", code: "010" }, VillageCode { name: "文贤村委会", code: "011" }, VillageCode { name: "和伍村委会", code: "012" }, VillageCode { name: "金波村委会", code: "013" }, VillageCode { name: "古风村委会", code: "014" }, VillageCode { name: "美香村委会", code: "015" }, VillageCode { name: "武维村委会", code: "016" }, VillageCode { name: "富雄村委会", code: "017" }, VillageCode { name: "居仁村委会", code: "018" }, VillageCode { name: "美本村委会", code: "019" }] },
-    TownCode { name: "多文镇", code: "006", villages: &[VillageCode { name: "多文社区居委会", code: "001" }, VillageCode { name: "红华居居民委员会", code: "002" }, VillageCode { name: "红旗居居民委员会", code: "003" }, VillageCode { name: "多郎村委会", code: "004" }, VillageCode { name: "兰合村委会", code: "005" }, VillageCode { name: "头神村委会", code: "006" }, VillageCode { name: "美巢村委会", code: "007" }, VillageCode { name: "抱利村委会", code: "008" }, VillageCode { name: "风雅村委会", code: "009" }, VillageCode { name: "和舍村委会", code: "010" }, VillageCode { name: "头龙村委会", code: "011" }, VillageCode { name: "东江村委会", code: "012" }, VillageCode { name: "美文村委会", code: "013" }, VillageCode { name: "博郎村委会", code: "014" }, VillageCode { name: "美山村委会", code: "015" }, VillageCode { name: "新兴村委会", code: "016" }] },
-    TownCode { name: "和舍镇", code: "007", villages: &[VillageCode { name: "和舍社区居委会", code: "001" }, VillageCode { name: "布大村委会", code: "002" }, VillageCode { name: "抱堂村委会", code: "003" }, VillageCode { name: "新风村委会", code: "004" }, VillageCode { name: "茶胡村委会", code: "005" }, VillageCode { name: "先光村委会", code: "006" }, VillageCode { name: "布佛村委会", code: "007" }, VillageCode { name: "罗爷村委会", code: "008" }, VillageCode { name: "铺仔村委会", code: "009" }, VillageCode { name: "群儒村委会", code: "010" }, VillageCode { name: "罗忱村委会", code: "011" }] },
-    TownCode { name: "南宝镇", code: "008", villages: &[VillageCode { name: "武郎村委会", code: "001" }, VillageCode { name: "南宝村委会", code: "002" }, VillageCode { name: "郎基村委会", code: "003" }, VillageCode { name: "松明村委会", code: "004" }, VillageCode { name: "松梅村委会", code: "005" }, VillageCode { name: "博廉村委会", code: "006" }, VillageCode { name: "古道村委会", code: "007" }, VillageCode { name: "好贤村委会", code: "008" }, VillageCode { name: "光吉村委会", code: "009" }] },
-    TownCode { name: "新盈镇", code: "009", villages: &[VillageCode { name: "新兴社区居委会", code: "001" }, VillageCode { name: "头咀村委会", code: "002" }, VillageCode { name: "龙兰村委会", code: "003" }, VillageCode { name: "洋所村委会", code: "004" }, VillageCode { name: "良爱村委会", code: "005" }, VillageCode { name: "彩桥村委会", code: "006" }, VillageCode { name: "仓米村委会", code: "007" }, VillageCode { name: "南堂村委会", code: "008" }, VillageCode { name: "抱蛟村委会", code: "009" }, VillageCode { name: "朗英村委会", code: "010" }, VillageCode { name: "和贵村委会", code: "011" }, VillageCode { name: "昆社村委会", code: "012" }, VillageCode { name: "安全村委会", code: "013" }, VillageCode { name: "新盈村委会", code: "014" }, VillageCode { name: "龙昆村委会", code: "015" }, VillageCode { name: "东光村委会", code: "016" }] },
-    TownCode { name: "调楼镇", code: "010", villages: &[VillageCode { name: "调楼社区居委会", code: "001" }, VillageCode { name: "青龙社区居委会", code: "002" }, VillageCode { name: "龙楼社区居委会", code: "003" }, VillageCode { name: "武莲村委会", code: "004" }, VillageCode { name: "抱才村委会", code: "005" }, VillageCode { name: "黄龙村委会", code: "006" }, VillageCode { name: "黄龙上村委会", code: "007" }, VillageCode { name: "美良村委会", code: "008" }, VillageCode { name: "罗堂村委会", code: "009" }, VillageCode { name: "沙潭村委会", code: "010" }, VillageCode { name: "武闹村委会", code: "011" }, VillageCode { name: "群道村委会", code: "012" }, VillageCode { name: "博贤村委会", code: "013" }, VillageCode { name: "东春村委会", code: "014" }, VillageCode { name: "拔色村委会", code: "015" }, VillageCode { name: "抱社村委会", code: "016" }, VillageCode { name: "东里村委会", code: "017" }, VillageCode { name: "隆道村委会", code: "018" }, VillageCode { name: "龙田村委会", code: "019" }] },
-    TownCode { name: "加来镇", code: "011", villages: &[VillageCode { name: "加来社区居委会", code: "001" }, VillageCode { name: "大尧居居民委员会", code: "002" }, VillageCode { name: "古里居居民委员会", code: "003" }, VillageCode { name: "美积居居民委员会", code: "004" }, VillageCode { name: "美龙村委会", code: "005" }, VillageCode { name: "贤龙村委会", code: "006" }, VillageCode { name: "向前村委会", code: "007" }] },
+    TownCode {
+        name: "临城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "跃进社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "城内社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "东风社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "胜利社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "临山社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "美台社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "干部新村社区居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "多琏村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "美当村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "兰秦村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "学田村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "兰河村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "金龙村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "大波村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "宫花村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "南江村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "楼台村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "仙还村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "发豪村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "龙贯村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "禄道村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "美梅村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "罗万村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "头星村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "兰罗村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "文新村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "调俗村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "吾鲁村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "杨梅村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "抱瑞村委会",
+                code: "030",
+            },
+            VillageCode {
+                name: "群玉村委会",
+                code: "031",
+            },
+            VillageCode {
+                name: "文潭村委会",
+                code: "032",
+            },
+            VillageCode {
+                name: "邦浪村委会",
+                code: "033",
+            },
+            VillageCode {
+                name: "奇地村委会",
+                code: "034",
+            },
+            VillageCode {
+                name: "昌拱村委会",
+                code: "035",
+            },
+            VillageCode {
+                name: "德老村委会",
+                code: "036",
+            },
+            VillageCode {
+                name: "西田村委会",
+                code: "037",
+            },
+            VillageCode {
+                name: "洋甘村委会",
+                code: "038",
+            },
+            VillageCode {
+                name: "龙跃村委会",
+                code: "039",
+            },
+            VillageCode {
+                name: "文书村委会",
+                code: "040",
+            },
+        ],
+    },
+    TownCode {
+        name: "波莲镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "波莲社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "和棉村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "抱美村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乾彩村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古柳村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "冰廉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "武来村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "古柏村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "太坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "美珠村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "多贤村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "带昆村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "红星村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "东英镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "东英社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "灵山村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "文连村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "和新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "兰刘村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "高秀村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "高定村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "伴康村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "居留村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "美鳌村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "波浪村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "美夏村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博纵村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "博厚镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "博厚社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "马袅社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "抱珍村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "武新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "美所村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南贤村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "博西村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "博北村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙干村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "头国村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "加六村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "红牌村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "得六村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "五尧村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "头稍村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "和丰村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "道灶村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "昌富村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "亲贤村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "洋大村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "乐豪村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "大雅村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "林场村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "皇桐镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "皇桐社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "龙波社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红专居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "洋黄村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "头文村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "中林村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "龙波村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "和正村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "群城村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "潭楼村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "文贤村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "和伍村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "金波村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "古风村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "美香村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "武维村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "富雄村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "居仁村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "美本村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "多文镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "多文社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "红华居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红旗居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "多郎村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "兰合村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "头神村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "美巢村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "抱利村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "风雅村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "和舍村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "头龙村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "东江村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "美文村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "博郎村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "美山村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新兴村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "和舍镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "和舍社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "布大村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "抱堂村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新风村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "茶胡村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "先光村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "布佛村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "罗爷村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "铺仔村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "群儒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "罗忱村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "南宝镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "武郎村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南宝村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "郎基村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "松明村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "松梅村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "博廉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古道村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "好贤村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "光吉村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "新盈镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "新兴社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "头咀村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙兰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "洋所村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "良爱村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "彩桥村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "仓米村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "南堂村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "抱蛟村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "朗英村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "和贵村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "昆社村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "安全村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新盈村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "龙昆村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "东光村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "调楼镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "调楼社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "青龙社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙楼社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "武莲村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "抱才村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "黄龙村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "黄龙上村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "美良村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "罗堂村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "沙潭村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "武闹村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "群道村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "博贤村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "东春村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "拔色村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "抱社村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "东里村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "隆道村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "龙田村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "加来镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "加来社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大尧居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "古里居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "美积居居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "美龙村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "贤龙村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "向前村委会",
+                code: "007",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_037: [TownCode; 11] = [
-    TownCode { name: "牙叉镇", code: "001", villages: &[VillageCode { name: "桥南社区居委会", code: "001" }, VillageCode { name: "城东社区居委会", code: "002" }, VillageCode { name: "城西社区居委会", code: "003" }, VillageCode { name: "白沙居居民委员会", code: "004" }, VillageCode { name: "牙叉居居民委员会", code: "005" }, VillageCode { name: "南仲村委会", code: "006" }, VillageCode { name: "对俄村委会", code: "007" }, VillageCode { name: "牙炳村委会", code: "008" }, VillageCode { name: "探扭村委会", code: "009" }, VillageCode { name: "牙港村委会", code: "010" }, VillageCode { name: "志针村委会", code: "011" }, VillageCode { name: "九架村委会", code: "012" }, VillageCode { name: "白沙村委会", code: "013" }, VillageCode { name: "道阜村委会", code: "014" }, VillageCode { name: "方香村委会", code: "015" }, VillageCode { name: "营盘村委会", code: "016" }, VillageCode { name: "方平村委会", code: "017" }, VillageCode { name: "志道村委会", code: "018" }, VillageCode { name: "新高峰村委会", code: "019" }] },
-    TownCode { name: "七坊镇", code: "002", villages: &[VillageCode { name: "查苗居委会", code: "001" }, VillageCode { name: "光雅居委会", code: "002" }, VillageCode { name: "龙江居居民委员会", code: "003" }, VillageCode { name: "珠碧江居居民委员会", code: "004" }, VillageCode { name: "高石村委会", code: "005" }, VillageCode { name: "木棉村委会", code: "006" }, VillageCode { name: "英歌村委会", code: "007" }, VillageCode { name: "高地村委会", code: "008" }, VillageCode { name: "打金村委会", code: "009" }, VillageCode { name: "长龙村委会", code: "010" }, VillageCode { name: "阜途村委会", code: "011" }, VillageCode { name: "南洋村委会", code: "012" }, VillageCode { name: "查英村委会", code: "013" }, VillageCode { name: "可好村委会", code: "014" }, VillageCode { name: "照明村委会", code: "015" }, VillageCode { name: "牙旺村委会", code: "016" }, VillageCode { name: "拥阜村委会", code: "017" }, VillageCode { name: "那来村委会", code: "018" }] },
-    TownCode { name: "邦溪镇", code: "003", villages: &[VillageCode { name: "中心社区居委会", code: "001" }, VillageCode { name: "邦溪居居民委员会", code: "002" }, VillageCode { name: "孟果村委会", code: "003" }, VillageCode { name: "邦新村委会", code: "004" }, VillageCode { name: "邦溪村委会", code: "005" }, VillageCode { name: "南班村委会", code: "006" }, VillageCode { name: "地质村委会", code: "007" }, VillageCode { name: "大米村委会", code: "008" }] },
-    TownCode { name: "打安镇", code: "004", villages: &[VillageCode { name: "狮球社区居委会", code: "001" }, VillageCode { name: "卫星居居民委员会", code: "002" }, VillageCode { name: "福安社区居民委员会", code: "003" }, VillageCode { name: "打安村委会", code: "004" }, VillageCode { name: "南达村委会", code: "005" }, VillageCode { name: "合水村委会", code: "006" }, VillageCode { name: "可程村委会", code: "007" }, VillageCode { name: "福妥村委会", code: "008" }, VillageCode { name: "子雅村委会", code: "009" }, VillageCode { name: "田表村委会", code: "010" }, VillageCode { name: "朝安村委会", code: "011" }] },
-    TownCode { name: "细水乡", code: "005", villages: &[VillageCode { name: "细水乡南湾社区居民委员会", code: "001" }, VillageCode { name: "合口村委会", code: "002" }, VillageCode { name: "福门村委会", code: "003" }, VillageCode { name: "罗任村委会", code: "004" }, VillageCode { name: "白水港村委会", code: "005" }] },
-    TownCode { name: "元门乡", code: "006", villages: &[VillageCode { name: "白翔社区居委会", code: "001" }, VillageCode { name: "南训村委会", code: "002" }, VillageCode { name: "红旗村委会", code: "003" }, VillageCode { name: "向民村委会", code: "004" }, VillageCode { name: "翁村村委会", code: "005" }, VillageCode { name: "元门村委会", code: "006" }, VillageCode { name: "红茂村委会", code: "007" }] },
-    TownCode { name: "南开乡", code: "007", villages: &[VillageCode { name: "牙佬村委会", code: "001" }, VillageCode { name: "南开村委会", code: "002" }, VillageCode { name: "牙和村委会", code: "003" }, VillageCode { name: "革新村委会", code: "004" }] },
-    TownCode { name: "阜龙乡", code: "008", villages: &[VillageCode { name: "可任村委会", code: "001" }, VillageCode { name: "那查村委会", code: "002" }, VillageCode { name: "新村村委会", code: "003" }, VillageCode { name: "天堂村委会", code: "004" }] },
-    TownCode { name: "青松乡", code: "009", villages: &[VillageCode { name: "益条村委会", code: "001" }, VillageCode { name: "打炳村委会", code: "002" }, VillageCode { name: "牙扩村委会", code: "003" }, VillageCode { name: "打松村委会", code: "004" }, VillageCode { name: "青松村委会", code: "005" }, VillageCode { name: "拥处村委会", code: "006" }] },
-    TownCode { name: "金波乡", code: "010", villages: &[VillageCode { name: "金波居居民委员会", code: "001" }, VillageCode { name: "金波村委会", code: "002" }, VillageCode { name: "牙加村委会", code: "003" }, VillageCode { name: "白打村委会", code: "004" }] },
-    TownCode { name: "荣邦乡", code: "011", villages: &[VillageCode { name: "大岭居居民委员会", code: "001" }, VillageCode { name: "芙蓉田居居民委员会", code: "002" }, VillageCode { name: "高峰村委会", code: "003" }, VillageCode { name: "俄朗村委会", code: "004" }, VillageCode { name: "福英村委会", code: "005" }, VillageCode { name: "岭尾村委会", code: "006" }, VillageCode { name: "光村村委会", code: "007" }, VillageCode { name: "芙蓉村委会", code: "008" }] },
+    TownCode {
+        name: "牙叉镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "桥南社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "城东社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "城西社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "白沙居居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "牙叉居居民委员会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南仲村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "对俄村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "牙炳村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "探扭村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "牙港村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "志针村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "九架村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "白沙村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "道阜村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "方香村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "营盘村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "方平村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "志道村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "新高峰村委会",
+                code: "019",
+            },
+        ],
+    },
+    TownCode {
+        name: "七坊镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "查苗居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "光雅居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "龙江居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "珠碧江居居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "高石村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "木棉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "英歌村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "高地村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "打金村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "长龙村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "阜途村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "南洋村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "查英村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "可好村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "照明村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "牙旺村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "拥阜村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "那来村委会",
+                code: "018",
+            },
+        ],
+    },
+    TownCode {
+        name: "邦溪镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "中心社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "邦溪居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "孟果村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "邦新村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "邦溪村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南班村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "地质村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大米村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "打安镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "狮球社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "卫星居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "福安社区居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "打安村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南达村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "合水村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "可程村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "福妥村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "子雅村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "田表村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "朝安村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "细水乡",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "细水乡南湾社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "合口村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "福门村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "罗任村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "白水港村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "元门乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "白翔社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南训村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "向民村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "翁村村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "元门村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "红茂村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "南开乡",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "牙佬村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南开村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "牙和村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "革新村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "阜龙乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "可任村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "那查村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "天堂村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "青松乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "益条村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "打炳村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "牙扩村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "打松村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "青松村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "拥处村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "金波乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "金波居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "金波村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "牙加村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "白打村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "荣邦乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "大岭居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "芙蓉田居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "高峰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "俄朗村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "福英村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "岭尾村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "光村村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "芙蓉村委会",
+                code: "008",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_038: [TownCode; 10] = [
-    TownCode { name: "西郊街道", code: "001", villages: &[VillageCode { name: "森林居委会", code: "001" }, VillageCode { name: "公园路居委会", code: "002" }, VillageCode { name: "淘金岭居委会", code: "003" }, VillageCode { name: "东风坦居委会", code: "004" }, VillageCode { name: "汪王庙居委会", code: "005" }, VillageCode { name: "蟠龙岗居委会", code: "006" }, VillageCode { name: "一心桥居委会", code: "007" }, VillageCode { name: "金鱼山居委会", code: "008" }, VillageCode { name: "昌明居委会", code: "009" }, VillageCode { name: "胜利居委会", code: "010" }, VillageCode { name: "华风居委会", code: "011" }, VillageCode { name: "景航居委会", code: "012" }, VillageCode { name: "昌南湖社区居委会", code: "013" }, VillageCode { name: "金岸名都社区居委会", code: "014" }, VillageCode { name: "枫树山居委会", code: "015" }, VillageCode { name: "新城居委会", code: "016" }, VillageCode { name: "如意湖居委会", code: "017" }] },
-    TownCode { name: "新枫街道", code: "002", villages: &[VillageCode { name: "十八渡居委会", code: "001" }, VillageCode { name: "新风路居委会", code: "002" }, VillageCode { name: "汽车站居委会", code: "003" }, VillageCode { name: "韭菜园居委会", code: "004" }, VillageCode { name: "青花居委会", code: "005" }, VillageCode { name: "哪咤庙居委会", code: "006" }, VillageCode { name: "太阳船居委会", code: "007" }, VillageCode { name: "阳府滩居委会", code: "008" }, VillageCode { name: "园林居委会", code: "009" }, VillageCode { name: "谭家山居委会", code: "010" }, VillageCode { name: "嘉和居委会", code: "011" }, VillageCode { name: "油榨套居委会", code: "012" }, VillageCode { name: "凤凰山居委会", code: "013" }, VillageCode { name: "三河村委会", code: "014" }, VillageCode { name: "河西村委会", code: "015" }] },
-    TownCode { name: "吕蒙街道", code: "003", villages: &[VillageCode { name: "官庄居委会", code: "001" }, VillageCode { name: "黎明居委会", code: "002" }, VillageCode { name: "吕蒙居委会", code: "003" }, VillageCode { name: "历尧居委会", code: "004" }, VillageCode { name: "豪德居委会", code: "005" }, VillageCode { name: "官庄村委会", code: "006" }, VillageCode { name: "古城村委会", code: "007" }, VillageCode { name: "二亭村委会", code: "008" }, VillageCode { name: "石岭村委会", code: "009" }, VillageCode { name: "历尧村委会", code: "010" }] },
-    TownCode { name: "鲇鱼山镇", code: "004", villages: &[VillageCode { name: "鱼山居委会", code: "001" }, VillageCode { name: "鱼山村委会", code: "002" }, VillageCode { name: "凤岗村委会", code: "003" }, VillageCode { name: "吕蒙村委会", code: "004" }, VillageCode { name: "礼城村委会", code: "005" }, VillageCode { name: "徐坊村委会", code: "006" }, VillageCode { name: "留阳村委会", code: "007" }, VillageCode { name: "上徐村委会", code: "008" }, VillageCode { name: "金桥村委会", code: "009" }, VillageCode { name: "徐湾村委会", code: "010" }, VillageCode { name: "慈义村委会", code: "011" }, VillageCode { name: "新桥村委会", code: "012" }, VillageCode { name: "新柳村委会", code: "013" }, VillageCode { name: "关山村委会", code: "014" }, VillageCode { name: "良港村委会", code: "015" }, VillageCode { name: "鱼山镇农科所社区", code: "016" }] },
-    TownCode { name: "丽阳镇", code: "005", villages: &[VillageCode { name: "丽阳居委会", code: "001" }, VillageCode { name: "余家村委会", code: "002" }, VillageCode { name: "丰田村委会", code: "003" }, VillageCode { name: "江联村委会", code: "004" }, VillageCode { name: "芦源村委会", code: "005" }, VillageCode { name: "枫林村委会", code: "006" }, VillageCode { name: "港南村委会", code: "007" }, VillageCode { name: "洪家村委会", code: "008" }, VillageCode { name: "丽阳村委会", code: "009" }, VillageCode { name: "山田村委会", code: "010" }, VillageCode { name: "联村村委会", code: "011" }] },
-    TownCode { name: "荷塘乡", code: "006", villages: &[VillageCode { name: "童坊村委会", code: "001" }, VillageCode { name: "仓下村委会", code: "002" }, VillageCode { name: "山门村委会", code: "003" }, VillageCode { name: "杨湾村委会", code: "004" }] },
-    TownCode { name: "昌江化工园区", code: "007", villages: &[VillageCode { name: "昌江化工园区虚拟社区", code: "001" }] },
-    TownCode { name: "六零二所高科技园", code: "008", villages: &[VillageCode { name: "六零二所高科技园虚拟社区", code: "001" }] },
-    TownCode { name: "昌江开发区", code: "009", villages: &[VillageCode { name: "昌江开发区虚拟社区", code: "001" }] },
-    TownCode { name: "枫树山总场", code: "010", villages: &[VillageCode { name: "森林公园社区", code: "001" }, VillageCode { name: "浮东分场生活区", code: "002" }, VillageCode { name: "柏树下分场生活区", code: "003" }, VillageCode { name: "浮南分场生活区", code: "004" }, VillageCode { name: "浮西分场生活区", code: "005" }, VillageCode { name: "南山分场生活区", code: "006" }, VillageCode { name: "三宝分场生活区", code: "007" }, VillageCode { name: "黄岭分场生活区", code: "008" }, VillageCode { name: "塘坞分场生活区", code: "009" }, VillageCode { name: "樟树坑分场生活区", code: "010" }, VillageCode { name: "磨刀港分场生活区", code: "011" }, VillageCode { name: "双桥分场生活区", code: "012" }] },
+    TownCode {
+        name: "西郊街道",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "森林居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "公园路居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "淘金岭居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "东风坦居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "汪王庙居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "蟠龙岗居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "一心桥居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "金鱼山居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "昌明居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "胜利居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "华风居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "景航居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "昌南湖社区居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "金岸名都社区居委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "枫树山居委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新城居委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "如意湖居委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "新枫街道",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "十八渡居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新风路居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "汽车站居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "韭菜园居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "青花居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "哪咤庙居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "太阳船居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "阳府滩居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "园林居委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "谭家山居委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "嘉和居委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "油榨套居委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "凤凰山居委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "三河村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "河西村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "吕蒙街道",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "官庄居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "黎明居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "吕蒙居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "历尧居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "豪德居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "官庄村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "古城村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "二亭村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "石岭村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "历尧村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "鲇鱼山镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "鱼山居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "鱼山村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "凤岗村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "吕蒙村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "礼城村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "徐坊村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "留阳村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "上徐村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "金桥村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "徐湾村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "慈义村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "新桥村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新柳村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "关山村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "良港村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "鱼山镇农科所社区",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "丽阳镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "丽阳居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "余家村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "丰田村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "江联村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "芦源村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "枫林村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "港南村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "洪家村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "丽阳村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "山田村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "联村村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "荷塘乡",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "童坊村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "仓下村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "山门村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "杨湾村委会",
+                code: "004",
+            },
+        ],
+    },
+    TownCode {
+        name: "昌江化工园区",
+        code: "007",
+        villages: &[VillageCode {
+            name: "昌江化工园区虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "六零二所高科技园",
+        code: "008",
+        villages: &[VillageCode {
+            name: "六零二所高科技园虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "昌江开发区",
+        code: "009",
+        villages: &[VillageCode {
+            name: "昌江开发区虚拟社区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "枫树山总场",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "森林公园社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "浮东分场生活区",
+                code: "002",
+            },
+            VillageCode {
+                name: "柏树下分场生活区",
+                code: "003",
+            },
+            VillageCode {
+                name: "浮南分场生活区",
+                code: "004",
+            },
+            VillageCode {
+                name: "浮西分场生活区",
+                code: "005",
+            },
+            VillageCode {
+                name: "南山分场生活区",
+                code: "006",
+            },
+            VillageCode {
+                name: "三宝分场生活区",
+                code: "007",
+            },
+            VillageCode {
+                name: "黄岭分场生活区",
+                code: "008",
+            },
+            VillageCode {
+                name: "塘坞分场生活区",
+                code: "009",
+            },
+            VillageCode {
+                name: "樟树坑分场生活区",
+                code: "010",
+            },
+            VillageCode {
+                name: "磨刀港分场生活区",
+                code: "011",
+            },
+            VillageCode {
+                name: "双桥分场生活区",
+                code: "012",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_039: [TownCode; 13] = [
-    TownCode { name: "抱由镇", code: "001", villages: &[VillageCode { name: "乐富社区居委会", code: "001" }, VillageCode { name: "乐安社区居委会", code: "002" }, VillageCode { name: "江南社区居委会", code: "003" }, VillageCode { name: "山荣居居委会", code: "004" }, VillageCode { name: "抱由村委会", code: "005" }, VillageCode { name: "保定村委会", code: "006" }, VillageCode { name: "多建村委会", code: "007" }, VillageCode { name: "番豆村委会", code: "008" }, VillageCode { name: "向阳村委会", code: "009" }, VillageCode { name: "延红村委会", code: "010" }, VillageCode { name: "抱北村委会", code: "011" }, VillageCode { name: "永明村委会", code: "012" }, VillageCode { name: "红水村委会", code: "013" }, VillageCode { name: "道介村委会", code: "014" }, VillageCode { name: "坡拉村委会", code: "015" }, VillageCode { name: "抱邱村委会", code: "016" }, VillageCode { name: "德霞村委会", code: "017" }, VillageCode { name: "佳西村委会", code: "018" }, VillageCode { name: "抱湾村委会", code: "019" }, VillageCode { name: "只九村委会", code: "020" }, VillageCode { name: "抱界村委会", code: "021" }, VillageCode { name: "只微村委会", code: "022" }, VillageCode { name: "志高村委会", code: "023" }, VillageCode { name: "光明村委会", code: "024" }, VillageCode { name: "排齐村委会", code: "025" }, VillageCode { name: "山荣村委会", code: "026" }, VillageCode { name: "南美村委会", code: "027" }, VillageCode { name: "杨力村委会", code: "028" }, VillageCode { name: "三平村委会", code: "029" }, VillageCode { name: "头塘村委会", code: "030" }] },
-    TownCode { name: "万冲镇", code: "002", villages: &[VillageCode { name: "乐中居居委会", code: "001" }, VillageCode { name: "南流村委会", code: "002" }, VillageCode { name: "洋老村委会", code: "003" }, VillageCode { name: "万冲村委会", code: "004" }, VillageCode { name: "南班村委会", code: "005" }, VillageCode { name: "山明村委会", code: "006" }, VillageCode { name: "友谊村委会", code: "007" }, VillageCode { name: "三柏村委会", code: "008" }, VillageCode { name: "三人村委会", code: "009" }, VillageCode { name: "国强村委会", code: "010" }, VillageCode { name: "排慎村委会", code: "011" }, VillageCode { name: "抱隆村委会", code: "012" }, VillageCode { name: "卡法村委会", code: "013" }, VillageCode { name: "抱班村委会", code: "014" }, VillageCode { name: "保派村委会", code: "015" }, VillageCode { name: "德崖村委会", code: "016" }] },
-    TownCode { name: "大安镇", code: "003", villages: &[VillageCode { name: "礼乐村委会", code: "001" }, VillageCode { name: "大安村委会", code: "002" }, VillageCode { name: "陈考村委会", code: "003" }, VillageCode { name: "大炮村委会", code: "004" }, VillageCode { name: "后物村委会", code: "005" }, VillageCode { name: "昂外村委会", code: "006" }, VillageCode { name: "南仇村委会", code: "007" }, VillageCode { name: "万车村委会", code: "008" }, VillageCode { name: "木棉村委会", code: "009" }, VillageCode { name: "西黎村委会", code: "010" }, VillageCode { name: "丘文村委会", code: "011" }, VillageCode { name: "只纳村委会", code: "012" }, VillageCode { name: "加巴村委会", code: "013" }, VillageCode { name: "南木村委会", code: "014" }, VillageCode { name: "只朝村委会", code: "015" }] },
-    TownCode { name: "志仲镇", code: "004", villages: &[VillageCode { name: "保国居居委会", code: "001" }, VillageCode { name: "志仲村委会", code: "002" }, VillageCode { name: "志强村委会", code: "003" }, VillageCode { name: "成栋村委会", code: "004" }, VillageCode { name: "谭培村委会", code: "005" }, VillageCode { name: "塔丰村委会", code: "006" }, VillageCode { name: "保国村委会", code: "007" }, VillageCode { name: "保脱村委会", code: "008" }, VillageCode { name: "龙林村委会", code: "009" }, VillageCode { name: "望老村委会", code: "010" }, VillageCode { name: "首村村委会", code: "011" }, VillageCode { name: "奋赛村委会", code: "012" }, VillageCode { name: "多元村委会", code: "013" }] },
-    TownCode { name: "千家镇", code: "005", villages: &[VillageCode { name: "乐光居居委会", code: "001" }, VillageCode { name: "抱伦居居委会", code: "002" }, VillageCode { name: "千家村委会", code: "003" }, VillageCode { name: "抱用村委会", code: "004" }, VillageCode { name: "汉小村委会", code: "005" }, VillageCode { name: "青岭村委会", code: "006" }, VillageCode { name: "前号村委会", code: "007" }, VillageCode { name: "抱平村委会", code: "008" }, VillageCode { name: "抱郎村委会", code: "009" }, VillageCode { name: "永益村委会", code: "010" }, VillageCode { name: "郎益村委会", code: "011" }, VillageCode { name: "抱善村委会", code: "012" }, VillageCode { name: "抱伦村委会", code: "013" }, VillageCode { name: "抱梅村委会", code: "014" }, VillageCode { name: "温仁村委会", code: "015" }, VillageCode { name: "只峨村委会", code: "016" }, VillageCode { name: "福报村委会", code: "017" }, VillageCode { name: "只文村委会", code: "018" }, VillageCode { name: "奋跃村委会", code: "019" }, VillageCode { name: "抱串村委会", code: "020" }, VillageCode { name: "扎灶村委会", code: "021" }] },
-    TownCode { name: "九所镇", code: "006", villages: &[VillageCode { name: "龙栖湾社区居委会", code: "001" }, VillageCode { name: "抱荀村委会", code: "002" }, VillageCode { name: "九所村委会", code: "003" }, VillageCode { name: "中灶村委会", code: "004" }, VillageCode { name: "十所村委会", code: "005" }, VillageCode { name: "罗马村委会", code: "006" }, VillageCode { name: "四所村委会", code: "007" }, VillageCode { name: "赤公村委会", code: "008" }, VillageCode { name: "海坡村委会", code: "009" }, VillageCode { name: "抱浅村委会", code: "010" }, VillageCode { name: "新庄村委会", code: "011" }, VillageCode { name: "山脚村委会", code: "012" }, VillageCode { name: "抱旺村委会", code: "013" }, VillageCode { name: "新贵村委会", code: "014" }, VillageCode { name: "镜湖村委会", code: "015" }, VillageCode { name: "老坡村委会", code: "016" }, VillageCode { name: "海南省乐东监狱居委会", code: "017" }] },
-    TownCode { name: "利国镇", code: "007", villages: &[VillageCode { name: "利国社区居委会", code: "001" }, VillageCode { name: "望楼港社区居委会", code: "002" }, VillageCode { name: "河东社区居委会", code: "003" }, VillageCode { name: "秦标村委会", code: "004" }, VillageCode { name: "佛丰村委会", code: "005" }, VillageCode { name: "官村村委会", code: "006" }, VillageCode { name: "荷口村委会", code: "007" }, VillageCode { name: "抱岁村委会", code: "008" }, VillageCode { name: "新联村委会", code: "009" }, VillageCode { name: "新民村委会", code: "010" }, VillageCode { name: "抱新村委会", code: "011" }, VillageCode { name: "红五村委会", code: "012" }, VillageCode { name: "文且村委会", code: "013" }, VillageCode { name: "抱告村委会", code: "014" }, VillageCode { name: "茅坡村委会", code: "015" }, VillageCode { name: "球港村委会", code: "016" }, VillageCode { name: "羊上村委会", code: "017" }, VillageCode { name: "望楼村委会", code: "018" }, VillageCode { name: "乐一村委会", code: "019" }, VillageCode { name: "乐二村委会", code: "020" }, VillageCode { name: "乐三村委会", code: "021" }, VillageCode { name: "乐四村委会", code: "022" }, VillageCode { name: "冲坡村委会", code: "023" }, VillageCode { name: "塘丰村委会", code: "024" }, VillageCode { name: "赤塘村委会", code: "025" }] },
-    TownCode { name: "黄流镇", code: "008", villages: &[VillageCode { name: "黄流社区居委会", code: "001" }, VillageCode { name: "新民村委会", code: "002" }, VillageCode { name: "抱二村委会", code: "003" }, VillageCode { name: "孔汶村委会", code: "004" }, VillageCode { name: "黄西村委会", code: "005" }, VillageCode { name: "佛老村委会", code: "006" }, VillageCode { name: "铺村村委会", code: "007" }, VillageCode { name: "赖元村委会", code: "008" }, VillageCode { name: "水内村委会", code: "009" }, VillageCode { name: "赤命村委会", code: "010" }, VillageCode { name: "镇远村委会", code: "011" }, VillageCode { name: "黄中村委会", code: "012" }, VillageCode { name: "怀卷村委会", code: "013" }, VillageCode { name: "新荣村委会", code: "014" }, VillageCode { name: "高道村委会", code: "015" }, VillageCode { name: "东孔村委会", code: "016" }, VillageCode { name: "黄东村委会", code: "017" }, VillageCode { name: "多二村委会", code: "018" }, VillageCode { name: "多一村委会", code: "019" }, VillageCode { name: "赤龙村委会", code: "020" }, VillageCode { name: "尖界村委会", code: "021" }, VillageCode { name: "抱一村委会", code: "022" }, VillageCode { name: "新建村委会", code: "023" }] },
-    TownCode { name: "佛罗镇", code: "009", villages: &[VillageCode { name: "佛罗社区居委会", code: "001" }, VillageCode { name: "佛南村委会", code: "002" }, VillageCode { name: "白井村委会", code: "003" }, VillageCode { name: "新坡村委会", code: "004" }, VillageCode { name: "长青村委会", code: "005" }, VillageCode { name: "丰塘村委会", code: "006" }, VillageCode { name: "老孔村委会", code: "007" }, VillageCode { name: "福塘村委会", code: "008" }, VillageCode { name: "昌厚村委会", code: "009" }, VillageCode { name: "求雨村委会", code: "010" }, VillageCode { name: "响地村委会", code: "011" }, VillageCode { name: "青山村委会", code: "012" }, VillageCode { name: "新安村委会", code: "013" }, VillageCode { name: "丹村村委会", code: "014" }, VillageCode { name: "田头村委会", code: "015" }, VillageCode { name: "佛中村委会", code: "016" }, VillageCode { name: "佛北村委会", code: "017" }] },
-    TownCode { name: "尖峰镇", code: "010", villages: &[VillageCode { name: "尖峰村委会", code: "001" }, VillageCode { name: "翁毛村委会", code: "002" }, VillageCode { name: "凤田村委会", code: "003" }, VillageCode { name: "山道村委会", code: "004" }, VillageCode { name: "红湖村委会", code: "005" }, VillageCode { name: "长安村委会", code: "006" }, VillageCode { name: "白沙村委会", code: "007" }, VillageCode { name: "岭头村委会", code: "008" }, VillageCode { name: "海滨村委会", code: "009" }, VillageCode { name: "黑眉村委会", code: "010" }, VillageCode { name: "抱罗村委会", code: "011" }] },
-    TownCode { name: "莺歌海镇", code: "011", villages: &[VillageCode { name: "莺一社区居委会", code: "001" }, VillageCode { name: "莺二社区居委会", code: "002" }, VillageCode { name: "莺三社区居委会", code: "003" }, VillageCode { name: "新兴社区居委会", code: "004" }, VillageCode { name: "新二社区居委会", code: "005" }, VillageCode { name: "新一社区居委会", code: "006" }] },
-    TownCode { name: "国营尖峰岭林业公司", code: "012", villages: &[VillageCode { name: "国营尖峰岭林业局虚拟生活区", code: "001" }] },
-    TownCode { name: "国营莺歌海盐场", code: "013", villages: &[VillageCode { name: "金鸡岭社区", code: "001" }, VillageCode { name: "制盐社区", code: "002" }] },
+    TownCode {
+        name: "抱由镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "乐富社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乐安社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "江南社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "山荣居居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "抱由村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "保定村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "多建村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "番豆村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "向阳村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "延红村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "抱北村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "永明村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "红水村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "道介村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "坡拉村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "抱邱村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "德霞村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "佳西村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "抱湾村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "只九村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "抱界村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "只微村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "志高村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "光明村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "排齐村委会",
+                code: "025",
+            },
+            VillageCode {
+                name: "山荣村委会",
+                code: "026",
+            },
+            VillageCode {
+                name: "南美村委会",
+                code: "027",
+            },
+            VillageCode {
+                name: "杨力村委会",
+                code: "028",
+            },
+            VillageCode {
+                name: "三平村委会",
+                code: "029",
+            },
+            VillageCode {
+                name: "头塘村委会",
+                code: "030",
+            },
+        ],
+    },
+    TownCode {
+        name: "万冲镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "乐中居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南流村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "洋老村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "万冲村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南班村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "山明村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "友谊村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "三柏村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "三人村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "国强村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "排慎村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "抱隆村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "卡法村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "抱班村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "保派村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "德崖村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "大安镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "礼乐村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "大安村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "陈考村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "大炮村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "后物村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "昂外村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "南仇村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "万车村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "木棉村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "西黎村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "丘文村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "只纳村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "加巴村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "南木村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "只朝村委会",
+                code: "015",
+            },
+        ],
+    },
+    TownCode {
+        name: "志仲镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "保国居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "志仲村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "志强村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "成栋村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "谭培村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "塔丰村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "保国村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "保脱村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "龙林村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "望老村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "首村村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "奋赛村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "多元村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "千家镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "乐光居居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "抱伦居居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "千家村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "抱用村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "汉小村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "青岭村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "前号村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "抱平村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "抱郎村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "永益村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "郎益村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "抱善村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "抱伦村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "抱梅村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "温仁村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "只峨村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "福报村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "只文村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "奋跃村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "抱串村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "扎灶村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "九所镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "龙栖湾社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "抱荀村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "九所村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "中灶村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "十所村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "罗马村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "四所村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "赤公村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "海坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "抱浅村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新庄村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "山脚村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "抱旺村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新贵村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "镜湖村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "老坡村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "海南省乐东监狱居委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "利国镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "利国社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "望楼港社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "河东社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "秦标村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "佛丰村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "官村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "荷口村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "抱岁村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "新联村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "新民村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "抱新村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "红五村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "文且村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "抱告村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "茅坡村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "球港村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "羊上村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "望楼村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "乐一村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "乐二村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "乐三村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "乐四村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "冲坡村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "塘丰村委会",
+                code: "024",
+            },
+            VillageCode {
+                name: "赤塘村委会",
+                code: "025",
+            },
+        ],
+    },
+    TownCode {
+        name: "黄流镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "黄流社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新民村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "抱二村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "孔汶村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "黄西村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "佛老村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "铺村村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "赖元村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "水内村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "赤命村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "镇远村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "黄中村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "怀卷村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新荣村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "高道村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "东孔村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "黄东村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "多二村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "多一村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "赤龙村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "尖界村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "抱一村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "新建村委会",
+                code: "023",
+            },
+        ],
+    },
+    TownCode {
+        name: "佛罗镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "佛罗社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "佛南村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "白井村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "长青村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "丰塘村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "老孔村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "福塘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "昌厚村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "求雨村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "响地村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "青山村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新安村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "丹村村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "田头村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "佛中村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "佛北村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "尖峰镇",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "尖峰村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "翁毛村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "凤田村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "山道村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "红湖村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "长安村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "白沙村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "岭头村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "海滨村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "黑眉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "抱罗村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "莺歌海镇",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "莺一社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "莺二社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "莺三社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新兴社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新二社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "新一社区居委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "国营尖峰岭林业公司",
+        code: "012",
+        villages: &[VillageCode {
+            name: "国营尖峰岭林业局虚拟生活区",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "国营莺歌海盐场",
+        code: "013",
+        villages: &[
+            VillageCode {
+                name: "金鸡岭社区",
+                code: "001",
+            },
+            VillageCode {
+                name: "制盐社区",
+                code: "002",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_040: [TownCode; 12] = [
-    TownCode { name: "椰林镇", code: "001", villages: &[VillageCode { name: "和平社区居委会", code: "001" }, VillageCode { name: "解放社区居委会", code: "002" }, VillageCode { name: "北斗社区居委会", code: "003" }, VillageCode { name: "城中社区居委会", code: "004" }, VillageCode { name: "沿河社区居委会", code: "005" }, VillageCode { name: "中山社区居委会", code: "006" }, VillageCode { name: "新丰居委会", code: "007" }, VillageCode { name: "文化居委会", code: "008" }, VillageCode { name: "城内村委会", code: "009" }, VillageCode { name: "桃园村委会", code: "010" }, VillageCode { name: "桃源村委会", code: "011" }, VillageCode { name: "坡留村委会", code: "012" }, VillageCode { name: "文官村委会", code: "013" }, VillageCode { name: "雷丰村委会", code: "014" }, VillageCode { name: "华北村委会", code: "015" }, VillageCode { name: "城南村委会", code: "016" }, VillageCode { name: "桃万村委会", code: "017" }, VillageCode { name: "联丰村委会", code: "018" }, VillageCode { name: "华东村委会", code: "019" }, VillageCode { name: "勤丰村委会", code: "020" }, VillageCode { name: "里村村委会", code: "021" }, VillageCode { name: "城东村委会", code: "022" }, VillageCode { name: "卓杰村委会", code: "023" }, VillageCode { name: "沟仔农场生活区", code: "024" }] },
-    TownCode { name: "光坡镇", code: "002", villages: &[VillageCode { name: "岭门居居民委员会", code: "001" }, VillageCode { name: "米甬村委会", code: "002" }, VillageCode { name: "武山村委会", code: "003" }, VillageCode { name: "妙景村委会", code: "004" }, VillageCode { name: "章宪村委会", code: "005" }, VillageCode { name: "坡尾村委会", code: "006" }, VillageCode { name: "港坡村委会", code: "007" }, VillageCode { name: "新岭村委会", code: "008" }] },
-    TownCode { name: "三才镇", code: "003", villages: &[VillageCode { name: "大园村委会", code: "001" }, VillageCode { name: "乐安村委会", code: "002" }, VillageCode { name: "牛堆村委会", code: "003" }, VillageCode { name: "花石村委会", code: "004" }, VillageCode { name: "朝美村委会", code: "005" }, VillageCode { name: "港演村委会", code: "006" }] },
-    TownCode { name: "英州镇", code: "004", villages: &[VillageCode { name: "英州村委会", code: "001" }, VillageCode { name: "天堂村委会", code: "002" }, VillageCode { name: "大坡村委会", code: "003" }, VillageCode { name: "鹅仔村委会", code: "004" }, VillageCode { name: "古楼村委会", code: "005" }, VillageCode { name: "五合村委会", code: "006" }, VillageCode { name: "军田村委会", code: "007" }, VillageCode { name: "万安村委会", code: "008" }, VillageCode { name: "红鞋村委会", code: "009" }, VillageCode { name: "岗山村委会", code: "010" }, VillageCode { name: "新坡村委会", code: "011" }, VillageCode { name: "大石村委会", code: "012" }, VillageCode { name: "田仔村委会", code: "013" }, VillageCode { name: "母爸村委会", code: "014" }, VillageCode { name: "疗次村委会", code: "015" }, VillageCode { name: "高土村委会", code: "016" }, VillageCode { name: "赤岭村委会", code: "017" }] },
-    TownCode { name: "隆广镇", code: "005", villages: &[VillageCode { name: "广新村委会", code: "001" }, VillageCode { name: "万岭村委会", code: "002" }, VillageCode { name: "广坡村委会", code: "003" }, VillageCode { name: "石关村委会", code: "004" }, VillageCode { name: "新光村委会", code: "005" }, VillageCode { name: "红旗村委会", code: "006" }, VillageCode { name: "五一村委会", code: "007" }, VillageCode { name: "万星村委会", code: "008" }, VillageCode { name: "丹录村委会", code: "009" }] },
-    TownCode { name: "文罗镇", code: "006", villages: &[VillageCode { name: "新华村委会", code: "001" }, VillageCode { name: "文英村委会", code: "002" }, VillageCode { name: "五星村委会", code: "003" }, VillageCode { name: "龙马村委会", code: "004" }, VillageCode { name: "文新村委会", code: "005" }, VillageCode { name: "坡村村委会", code: "006" }] },
-    TownCode { name: "本号镇", code: "007", villages: &[VillageCode { name: "中央村委会", code: "001" }, VillageCode { name: "军昌村委会", code: "002" }, VillageCode { name: "本号村委会", code: "003" }, VillageCode { name: "白毛村委会", code: "004" }, VillageCode { name: "格择村委会", code: "005" }, VillageCode { name: "芭蕉村委会", code: "006" }, VillageCode { name: "乐利村委会", code: "007" }, VillageCode { name: "黎跃村委会", code: "008" }, VillageCode { name: "黎盆村委会", code: "009" }, VillageCode { name: "长甬村委会", code: "010" }, VillageCode { name: "田心村委会", code: "011" }, VillageCode { name: "军普村委会", code: "012" }, VillageCode { name: "新兴村委会", code: "013" }, VillageCode { name: "祖关村委会", code: "014" }, VillageCode { name: "祖合村委会", code: "015" }, VillageCode { name: "白石村委会", code: "016" }, VillageCode { name: "大坡村委会", code: "017" }, VillageCode { name: "亚欠村委会", code: "018" }, VillageCode { name: "亚上村委会", code: "019" }, VillageCode { name: "什巴村委会", code: "020" }, VillageCode { name: "小妹村委会", code: "021" }, VillageCode { name: "什坡村委会", code: "022" }] },
-    TownCode { name: "新村镇", code: "008", villages: &[VillageCode { name: "新村居委会", code: "001" }, VillageCode { name: "海鹰村委会", code: "002" }, VillageCode { name: "海鸥村委会", code: "003" }, VillageCode { name: "海燕村委会", code: "004" }, VillageCode { name: "南湾村委会", code: "005" }, VillageCode { name: "九所村委会", code: "006" }, VillageCode { name: "长坡村委会", code: "007" }, VillageCode { name: "盐尽村委会", code: "008" }, VillageCode { name: "桐海村委会", code: "009" }, VillageCode { name: "城坡村委会", code: "010" }] },
-    TownCode { name: "黎安镇", code: "009", villages: &[VillageCode { name: "黎安村委会", code: "001" }, VillageCode { name: "黎明村委会", code: "002" }, VillageCode { name: "黎丰村委会", code: "003" }, VillageCode { name: "后岭村委会", code: "004" }, VillageCode { name: "岭仔村委会", code: "005" }, VillageCode { name: "大墩村委会", code: "006" }] },
-    TownCode { name: "提蒙乡", code: "010", villages: &[VillageCode { name: "提蒙村委会", code: "001" }, VillageCode { name: "曾山村委会", code: "002" }, VillageCode { name: "远景村委会", code: "003" }, VillageCode { name: "礼亭村委会", code: "004" }, VillageCode { name: "老长村委会", code: "005" }, VillageCode { name: "沟尾村委会", code: "006" }] },
-    TownCode { name: "群英乡", code: "011", villages: &[VillageCode { name: "南平居居民委员会", code: "001" }, VillageCode { name: "芬坡村委会", code: "002" }, VillageCode { name: "光国村委会", code: "003" }, VillageCode { name: "群英村委会", code: "004" }, VillageCode { name: "祖空村委会", code: "005" }] },
-    TownCode { name: "国营吊罗山林业公司", code: "012", villages: &[VillageCode { name: "国营吊罗山林业公司虚拟生活区", code: "001" }] },
+    TownCode {
+        name: "椰林镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "和平社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "解放社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "北斗社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "城中社区居委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "沿河社区居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "中山社区居委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "新丰居委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "文化居委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "城内村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "桃园村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "桃源村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "坡留村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "文官村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "雷丰村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "华北村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "城南村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "桃万村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "联丰村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "华东村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "勤丰村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "里村村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "城东村委会",
+                code: "022",
+            },
+            VillageCode {
+                name: "卓杰村委会",
+                code: "023",
+            },
+            VillageCode {
+                name: "沟仔农场生活区",
+                code: "024",
+            },
+        ],
+    },
+    TownCode {
+        name: "光坡镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "岭门居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "米甬村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "武山村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "妙景村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "章宪村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "坡尾村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "港坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新岭村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "三才镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "大园村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乐安村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "牛堆村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "花石村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "朝美村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "港演村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "英州镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "英州村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "天堂村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "鹅仔村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "古楼村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "五合村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "军田村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "万安村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "红鞋村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "岗山村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "大石村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "田仔村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "母爸村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "疗次村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "高土村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "赤岭村委会",
+                code: "017",
+            },
+        ],
+    },
+    TownCode {
+        name: "隆广镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "广新村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "万岭村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "广坡村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "石关村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新光村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "红旗村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "五一村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "万星村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "丹录村委会",
+                code: "009",
+            },
+        ],
+    },
+    TownCode {
+        name: "文罗镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "新华村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "文英村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "五星村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "龙马村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "文新村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "坡村村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "本号镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "中央村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "军昌村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "本号村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "白毛村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "格择村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "芭蕉村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "乐利村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "黎跃村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "黎盆村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "长甬村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "田心村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "军普村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "新兴村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "祖关村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "祖合村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "白石村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "亚欠村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "亚上村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "什巴村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "小妹村委会",
+                code: "021",
+            },
+            VillageCode {
+                name: "什坡村委会",
+                code: "022",
+            },
+        ],
+    },
+    TownCode {
+        name: "新村镇",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "新村居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "海鹰村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "海鸥村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "海燕村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "南湾村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "九所村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "长坡村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "盐尽村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "桐海村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "城坡村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "黎安镇",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "黎安村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "黎明村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "黎丰村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "后岭村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "岭仔村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大墩村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "提蒙乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "提蒙村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "曾山村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "远景村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "礼亭村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "老长村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "沟尾村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "群英乡",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "南平居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "芬坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "光国村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "群英村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "祖空村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "国营吊罗山林业公司",
+        code: "012",
+        villages: &[VillageCode {
+            name: "国营吊罗山林业公司虚拟生活区",
+            code: "001",
+        }],
+    },
 ];
 
 static TOWNS_HN_041: [TownCode; 10] = [
-    TownCode { name: "保城镇", code: "001", villages: &[VillageCode { name: "城北社区居委会", code: "001" }, VillageCode { name: "城南社区居委会", code: "002" }, VillageCode { name: "热作居居民委员会", code: "003" }, VillageCode { name: "抄抗村委会", code: "004" }, VillageCode { name: "番文村委会", code: "005" }, VillageCode { name: "什好村委会", code: "006" }, VillageCode { name: "毛介村委会", code: "007" }, VillageCode { name: "什聘村委会", code: "008" }, VillageCode { name: "西坡村委会", code: "009" }, VillageCode { name: "春天村委会", code: "010" }, VillageCode { name: "石峒村委会", code: "011" }] },
-    TownCode { name: "什玲镇", code: "002", villages: &[VillageCode { name: "什玲村委会", code: "001" }, VillageCode { name: "椰村村委会", code: "002" }, VillageCode { name: "界村村委会", code: "003" }, VillageCode { name: "坚固村委会", code: "004" }, VillageCode { name: "水尾村委会", code: "005" }, VillageCode { name: "大田村委会", code: "006" }, VillageCode { name: "排寮村委会", code: "007" }, VillageCode { name: "巡亲村委会", code: "008" }, VillageCode { name: "毛定村委会", code: "009" }, VillageCode { name: "毛天村委会", code: "010" }, VillageCode { name: "八村村委会", code: "011" }, VillageCode { name: "抄寨村委会", code: "012" }] },
-    TownCode { name: "加茂镇", code: "003", villages: &[VillageCode { name: "南茂居居民委员会", code: "001" }, VillageCode { name: "加茂村委会", code: "002" }, VillageCode { name: "加答村委会", code: "003" }, VillageCode { name: "石建村委会", code: "004" }, VillageCode { name: "半弓村委会", code: "005" }, VillageCode { name: "共村村委会", code: "006" }, VillageCode { name: "界水村委会", code: "007" }] },
-    TownCode { name: "响水镇", code: "004", villages: &[VillageCode { name: "金江居居民委员会", code: "001" }, VillageCode { name: "茶场居居民委员会", code: "002" }, VillageCode { name: "大本村委会", code: "003" }, VillageCode { name: "什龙村委会", code: "004" }, VillageCode { name: "什月村委会", code: "005" }, VillageCode { name: "响水村委会", code: "006" }, VillageCode { name: "合口村委会", code: "007" }, VillageCode { name: "什邱村委会", code: "008" }, VillageCode { name: "毛岸村委会", code: "009" }, VillageCode { name: "陡水河村委会", code: "010" }] },
-    TownCode { name: "新政镇", code: "005", villages: &[VillageCode { name: "石让村委会", code: "001" }, VillageCode { name: "毛文村委会", code: "002" }, VillageCode { name: "新政村委会", code: "003" }, VillageCode { name: "报导村委会", code: "004" }, VillageCode { name: "毛朋村委会", code: "005" }, VillageCode { name: "南改村委会", code: "006" }, VillageCode { name: "什那村委会", code: "007" }, VillageCode { name: "报什村委会", code: "008" }, VillageCode { name: "什奋村委会", code: "009" }, VillageCode { name: "新建村委会", code: "010" }] },
-    TownCode { name: "三道镇", code: "006", villages: &[VillageCode { name: "三道居居民委员会", code: "001" }, VillageCode { name: "三弓村委会", code: "002" }, VillageCode { name: "田滚村委会", code: "003" }, VillageCode { name: "甘什村委会", code: "004" }, VillageCode { name: "首弓村委会", code: "005" }] },
-    TownCode { name: "县直辖村级区划", code: "007", villages: &[VillageCode { name: "新星居居民委员会", code: "001" }] },
-    TownCode { name: "六弓乡", code: "008", villages: &[VillageCode { name: "田岸村委会", code: "001" }, VillageCode { name: "田圮村委会", code: "002" }, VillageCode { name: "奋发村委会", code: "003" }, VillageCode { name: "大妹村委会", code: "004" }, VillageCode { name: "石艾村委会", code: "005" }] },
-    TownCode { name: "南林乡", code: "009", villages: &[VillageCode { name: "东方村委会", code: "001" }, VillageCode { name: "南林村委会", code: "002" }, VillageCode { name: "罗葵村委会", code: "003" }] },
-    TownCode { name: "毛感乡", code: "010", villages: &[VillageCode { name: "毛感村委会", code: "001" }, VillageCode { name: "毛位村委会", code: "002" }, VillageCode { name: "南好村委会", code: "003" }, VillageCode { name: "南春村委会", code: "004" }] },
+    TownCode {
+        name: "保城镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "城北社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "城南社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "热作居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "抄抗村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "番文村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "什好村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "毛介村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "什聘村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "西坡村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "春天村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "石峒村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "什玲镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "什玲村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "椰村村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "界村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "坚固村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "水尾村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "大田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "排寮村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "巡亲村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "毛定村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "毛天村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "八村村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "抄寨村委会",
+                code: "012",
+            },
+        ],
+    },
+    TownCode {
+        name: "加茂镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "南茂居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "加茂村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "加答村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "石建村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "半弓村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "共村村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "界水村委会",
+                code: "007",
+            },
+        ],
+    },
+    TownCode {
+        name: "响水镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "金江居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "茶场居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大本村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "什龙村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "什月村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "响水村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "合口村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "什邱村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "毛岸村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "陡水河村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "新政镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "石让村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "毛文村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "新政村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "报导村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "毛朋村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南改村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "什那村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "报什村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "什奋村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "新建村委会",
+                code: "010",
+            },
+        ],
+    },
+    TownCode {
+        name: "三道镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "三道居居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "三弓村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "田滚村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "甘什村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "首弓村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "县直辖村级区划",
+        code: "007",
+        villages: &[VillageCode {
+            name: "新星居居民委员会",
+            code: "001",
+        }],
+    },
+    TownCode {
+        name: "六弓乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "田岸村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "田圮村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "奋发村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "大妹村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "石艾村委会",
+                code: "005",
+            },
+        ],
+    },
+    TownCode {
+        name: "南林乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "东方村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南林村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "罗葵村委会",
+                code: "003",
+            },
+        ],
+    },
+    TownCode {
+        name: "毛感乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "毛感村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "毛位村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南好村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "南春村委会",
+                code: "004",
+            },
+        ],
+    },
 ];
 
 static TOWNS_HN_042: [TownCode; 11] = [
-    TownCode { name: "营根镇", code: "001", villages: &[VillageCode { name: "营东社区居委会", code: "001" }, VillageCode { name: "营南社区居委会", code: "002" }, VillageCode { name: "营北社区居委会", code: "003" }, VillageCode { name: "岭头居居民委员会", code: "004" }, VillageCode { name: "加钗居居委会", code: "005" }, VillageCode { name: "升坡村委会", code: "006" }, VillageCode { name: "百花村委会", code: "007" }, VillageCode { name: "南丰村委会", code: "008" }, VillageCode { name: "高田村委会", code: "009" }, VillageCode { name: "加钗村委会", code: "010" }, VillageCode { name: "那柏村委会", code: "011" }, VillageCode { name: "朝参村委会", code: "012" }, VillageCode { name: "朝根村委会", code: "013" }, VillageCode { name: "新市村委会", code: "014" }, VillageCode { name: "湴湾村委会", code: "015" }, VillageCode { name: "新朗村委会", code: "016" }, VillageCode { name: "岭头村委会", code: "017" }, VillageCode { name: "红岭村委会", code: "018" }, VillageCode { name: "番沟村委会", code: "019" }, VillageCode { name: "大朗村委会", code: "020" }, VillageCode { name: "营根村委会", code: "021" }] },
-    TownCode { name: "湾岭镇", code: "002", villages: &[VillageCode { name: "湾岭社区居委会", code: "001" }, VillageCode { name: "乌石社区居委会", code: "002" }, VillageCode { name: "湾岭居居民委员会", code: "003" }, VillageCode { name: "乌石村委会", code: "004" }, VillageCode { name: "大平村委会", code: "005" }, VillageCode { name: "水央村委会", code: "006" }, VillageCode { name: "来浩村委会", code: "007" }, VillageCode { name: "录南村委会", code: "008" }, VillageCode { name: "中朗村委会", code: "009" }, VillageCode { name: "北排村委会", code: "010" }, VillageCode { name: "大墩村委会", code: "011" }, VillageCode { name: "高坡村委会", code: "012" }, VillageCode { name: "南久村委会", code: "013" }, VillageCode { name: "加章村委会", code: "014" }, VillageCode { name: "坡寨村委会", code: "015" }, VillageCode { name: "孟田坡村委会", code: "016" }, VillageCode { name: "新仔村委会", code: "017" }, VillageCode { name: "鸭坡村委会", code: "018" }, VillageCode { name: "湾岭村委会", code: "019" }, VillageCode { name: "岭门村委会", code: "020" }, VillageCode { name: "新坡村委会", code: "021" }] },
-    TownCode { name: "黎母山镇", code: "003", villages: &[VillageCode { name: "腰子社区居委会", code: "001" }, VillageCode { name: "阳江居居民委员会", code: "002" }, VillageCode { name: "大丰居居民委员会", code: "003" }, VillageCode { name: "新进居居民委员会", code: "004" }, VillageCode { name: "新林村委会", code: "005" }, VillageCode { name: "腰子村委会", code: "006" }, VillageCode { name: "榕木村委会", code: "007" }, VillageCode { name: "大保村委会", code: "008" }, VillageCode { name: "干埇村委会", code: "009" }, VillageCode { name: "南吉村委会", code: "010" }, VillageCode { name: "南利村委会", code: "011" }, VillageCode { name: "握岱村委会", code: "012" }, VillageCode { name: "大木村委会", code: "013" }, VillageCode { name: "合究村委会", code: "014" }, VillageCode { name: "松涛村委会", code: "015" }, VillageCode { name: "新村村委会", code: "016" }] },
-    TownCode { name: "和平镇", code: "004", villages: &[VillageCode { name: "和平社区居委会", code: "001" }, VillageCode { name: "乘坡居居民委员会", code: "002" }, VillageCode { name: "林田村委会", code: "003" }, VillageCode { name: "新兴村委会", code: "004" }, VillageCode { name: "什介村委会", code: "005" }, VillageCode { name: "贝湾村委会", code: "006" }, VillageCode { name: "加峒村委会", code: "007" }, VillageCode { name: "干磉村委会", code: "008" }, VillageCode { name: "长兴村委会", code: "009" }, VillageCode { name: "长沙村委会", code: "010" }, VillageCode { name: "堑队村委会", code: "011" }] },
-    TownCode { name: "长征镇", code: "005", villages: &[VillageCode { name: "营盘社区居委会", code: "001" }, VillageCode { name: "长征居居民委员会", code: "002" }, VillageCode { name: "潮村村委会", code: "003" }, VillageCode { name: "新平村委会", code: "004" }, VillageCode { name: "深联村委会", code: "005" }, VillageCode { name: "罗反村委会", code: "006" }, VillageCode { name: "烟园村委会", code: "007" }, VillageCode { name: "新寨村委会", code: "008" }, VillageCode { name: "万众村委会", code: "009" }, VillageCode { name: "南什村委会", code: "010" }, VillageCode { name: "什仍村委会", code: "011" }] },
-    TownCode { name: "红毛镇", code: "006", villages: &[VillageCode { name: "新伟南居委会", code: "001" }, VillageCode { name: "新伟北居委会", code: "002" }, VillageCode { name: "毛西村委会", code: "003" }, VillageCode { name: "金屏村委会", code: "004" }, VillageCode { name: "草南村委会", code: "005" }, VillageCode { name: "番响村委会", code: "006" }, VillageCode { name: "罗担村委会", code: "007" }, VillageCode { name: "坎茂村委会", code: "008" }, VillageCode { name: "什卓村委会", code: "009" }, VillageCode { name: "什寒村委会", code: "010" }, VillageCode { name: "牙挽村委会", code: "011" }, VillageCode { name: "罗解村委会", code: "012" }, VillageCode { name: "罗坎村委会", code: "013" }] },
-    TownCode { name: "中平镇", code: "007", villages: &[VillageCode { name: "新堂社区居委会", code: "001" }, VillageCode { name: "南方居居民委员会", code: "002" }, VillageCode { name: "思河村委会", code: "003" }, VillageCode { name: "南茂村委会", code: "004" }, VillageCode { name: "中平村委会", code: "005" }, VillageCode { name: "南坵村委会", code: "006" }, VillageCode { name: "黎明村委会", code: "007" }, VillageCode { name: "大坡村委会", code: "008" }] },
-    TownCode { name: "吊罗山乡", code: "008", villages: &[VillageCode { name: "太平社区居民委员会", code: "001" }, VillageCode { name: "太平居居民委员会", code: "002" }, VillageCode { name: "太平村委会", code: "003" }, VillageCode { name: "新安村委会", code: "004" }, VillageCode { name: "大美村委会", code: "005" }, VillageCode { name: "长田村委会", code: "006" }, VillageCode { name: "什插村委会", code: "007" }, VillageCode { name: "响土村委会", code: "008" }] },
-    TownCode { name: "上安乡", code: "009", villages: &[VillageCode { name: "上安社区居委会", code: "001" }, VillageCode { name: "什坡村委会", code: "002" }, VillageCode { name: "南万村委会", code: "003" }, VillageCode { name: "长安村委会", code: "004" }, VillageCode { name: "什育村委会", code: "005" }, VillageCode { name: "抄方村委会", code: "006" }, VillageCode { name: "行干村委会", code: "007" }, VillageCode { name: "中兴村委会", code: "008" }] },
-    TownCode { name: "什运乡", code: "010", villages: &[VillageCode { name: "便文村委会", code: "001" }, VillageCode { name: "什统村委会", code: "002" }, VillageCode { name: "南平村委会", code: "003" }, VillageCode { name: "南流村委会", code: "004" }, VillageCode { name: "什运村委会", code: "005" }, VillageCode { name: "三联村委会", code: "006" }] },
-    TownCode { name: "海南热带雨林国家公园管理局黎母山分局", code: "011", villages: &[VillageCode { name: "黎母山管理站机关居委会", code: "001" }, VillageCode { name: "黎母山管理站分场村委会", code: "002" }] },
+    TownCode {
+        name: "营根镇",
+        code: "001",
+        villages: &[
+            VillageCode {
+                name: "营东社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "营南社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "营北社区居委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "岭头居居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "加钗居居委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "升坡村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "百花村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "南丰村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "高田村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "加钗村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "那柏村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "朝参村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "朝根村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "新市村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "湴湾村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新朗村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "岭头村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "红岭村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "番沟村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "大朗村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "营根村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "湾岭镇",
+        code: "002",
+        villages: &[
+            VillageCode {
+                name: "湾岭社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乌石社区居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "湾岭居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "乌石村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大平村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "水央村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "来浩村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "录南村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "中朗村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "北排村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "大墩村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "高坡村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "南久村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "加章村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "坡寨村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "孟田坡村委会",
+                code: "016",
+            },
+            VillageCode {
+                name: "新仔村委会",
+                code: "017",
+            },
+            VillageCode {
+                name: "鸭坡村委会",
+                code: "018",
+            },
+            VillageCode {
+                name: "湾岭村委会",
+                code: "019",
+            },
+            VillageCode {
+                name: "岭门村委会",
+                code: "020",
+            },
+            VillageCode {
+                name: "新坡村委会",
+                code: "021",
+            },
+        ],
+    },
+    TownCode {
+        name: "黎母山镇",
+        code: "003",
+        villages: &[
+            VillageCode {
+                name: "腰子社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "阳江居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "大丰居居民委员会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新进居居民委员会",
+                code: "004",
+            },
+            VillageCode {
+                name: "新林村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "腰子村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "榕木村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大保村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "干埇村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "南吉村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "南利村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "握岱村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "大木村委会",
+                code: "013",
+            },
+            VillageCode {
+                name: "合究村委会",
+                code: "014",
+            },
+            VillageCode {
+                name: "松涛村委会",
+                code: "015",
+            },
+            VillageCode {
+                name: "新村村委会",
+                code: "016",
+            },
+        ],
+    },
+    TownCode {
+        name: "和平镇",
+        code: "004",
+        villages: &[
+            VillageCode {
+                name: "和平社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "乘坡居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "林田村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新兴村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "什介村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "贝湾村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "加峒村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "干磉村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "长兴村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "长沙村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "堑队村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "长征镇",
+        code: "005",
+        villages: &[
+            VillageCode {
+                name: "营盘社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "长征居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "潮村村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新平村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "深联村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "罗反村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "烟园村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "新寨村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "万众村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "南什村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "什仍村委会",
+                code: "011",
+            },
+        ],
+    },
+    TownCode {
+        name: "红毛镇",
+        code: "006",
+        villages: &[
+            VillageCode {
+                name: "新伟南居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "新伟北居委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "毛西村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "金屏村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "草南村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "番响村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "罗担村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "坎茂村委会",
+                code: "008",
+            },
+            VillageCode {
+                name: "什卓村委会",
+                code: "009",
+            },
+            VillageCode {
+                name: "什寒村委会",
+                code: "010",
+            },
+            VillageCode {
+                name: "牙挽村委会",
+                code: "011",
+            },
+            VillageCode {
+                name: "罗解村委会",
+                code: "012",
+            },
+            VillageCode {
+                name: "罗坎村委会",
+                code: "013",
+            },
+        ],
+    },
+    TownCode {
+        name: "中平镇",
+        code: "007",
+        villages: &[
+            VillageCode {
+                name: "新堂社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "南方居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "思河村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "南茂村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "中平村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "南坵村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "黎明村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "大坡村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "吊罗山乡",
+        code: "008",
+        villages: &[
+            VillageCode {
+                name: "太平社区居民委员会",
+                code: "001",
+            },
+            VillageCode {
+                name: "太平居居民委员会",
+                code: "002",
+            },
+            VillageCode {
+                name: "太平村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "新安村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "大美村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "长田村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "什插村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "响土村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "上安乡",
+        code: "009",
+        villages: &[
+            VillageCode {
+                name: "上安社区居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "什坡村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南万村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "长安村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "什育村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "抄方村委会",
+                code: "006",
+            },
+            VillageCode {
+                name: "行干村委会",
+                code: "007",
+            },
+            VillageCode {
+                name: "中兴村委会",
+                code: "008",
+            },
+        ],
+    },
+    TownCode {
+        name: "什运乡",
+        code: "010",
+        villages: &[
+            VillageCode {
+                name: "便文村委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "什统村委会",
+                code: "002",
+            },
+            VillageCode {
+                name: "南平村委会",
+                code: "003",
+            },
+            VillageCode {
+                name: "南流村委会",
+                code: "004",
+            },
+            VillageCode {
+                name: "什运村委会",
+                code: "005",
+            },
+            VillageCode {
+                name: "三联村委会",
+                code: "006",
+            },
+        ],
+    },
+    TownCode {
+        name: "海南热带雨林国家公园管理局黎母山分局",
+        code: "011",
+        villages: &[
+            VillageCode {
+                name: "黎母山管理站机关居委会",
+                code: "001",
+            },
+            VillageCode {
+                name: "黎母山管理站分场村委会",
+                code: "002",
+            },
+        ],
+    },
 ];
 
 pub const CITIES_HN: [CityCode; 43] = [
-    CityCode { name: "省辖市", code: "000", towns: &[] },
-    CityCode { name: "海口市", code: "001", towns: &TOWNS_HN_001 },
-    CityCode { name: "秀英市", code: "002", towns: &TOWNS_HN_002 },
-    CityCode { name: "龙华市", code: "003", towns: &TOWNS_HN_003 },
-    CityCode { name: "琼山市", code: "004", towns: &TOWNS_HN_004 },
-    CityCode { name: "美兰市", code: "005", towns: &TOWNS_HN_005 },
-    CityCode { name: "海棠市", code: "006", towns: &TOWNS_HN_006 },
-    CityCode { name: "吉阳市", code: "007", towns: &TOWNS_HN_007 },
-    CityCode { name: "天涯市", code: "008", towns: &TOWNS_HN_008 },
-    CityCode { name: "崖州市", code: "009", towns: &TOWNS_HN_009 },
-    CityCode { name: "西沙群岛市", code: "010", towns: &TOWNS_HN_010 },
-    CityCode { name: "南沙群岛市", code: "011", towns: &TOWNS_HN_011 },
-    CityCode { name: "那大市", code: "012", towns: &TOWNS_HN_012 },
-    CityCode { name: "和庆市", code: "013", towns: &TOWNS_HN_013 },
-    CityCode { name: "南丰市", code: "014", towns: &TOWNS_HN_014 },
-    CityCode { name: "大成市", code: "015", towns: &TOWNS_HN_015 },
-    CityCode { name: "雅星市", code: "016", towns: &TOWNS_HN_016 },
-    CityCode { name: "兰洋市", code: "017", towns: &TOWNS_HN_017 },
-    CityCode { name: "光村市", code: "018", towns: &TOWNS_HN_018 },
-    CityCode { name: "木棠市", code: "019", towns: &TOWNS_HN_019 },
-    CityCode { name: "海头市", code: "020", towns: &TOWNS_HN_020 },
-    CityCode { name: "峨蔓市", code: "021", towns: &TOWNS_HN_021 },
-    CityCode { name: "王五市", code: "022", towns: &TOWNS_HN_022 },
-    CityCode { name: "白马井市", code: "023", towns: &TOWNS_HN_023 },
-    CityCode { name: "中和市", code: "024", towns: &TOWNS_HN_024 },
-    CityCode { name: "排浦市", code: "025", towns: &TOWNS_HN_025 },
-    CityCode { name: "东成市", code: "026", towns: &TOWNS_HN_026 },
-    CityCode { name: "新州市", code: "027", towns: &TOWNS_HN_027 },
-    CityCode { name: "五指山市", code: "028", towns: &TOWNS_HN_028 },
-    CityCode { name: "琼海市", code: "029", towns: &TOWNS_HN_029 },
-    CityCode { name: "文昌市", code: "030", towns: &TOWNS_HN_030 },
-    CityCode { name: "万宁市", code: "031", towns: &TOWNS_HN_031 },
-    CityCode { name: "东方市", code: "032", towns: &TOWNS_HN_032 },
-    CityCode { name: "定安市", code: "033", towns: &TOWNS_HN_033 },
-    CityCode { name: "屯昌市", code: "034", towns: &TOWNS_HN_034 },
-    CityCode { name: "澄迈市", code: "035", towns: &TOWNS_HN_035 },
-    CityCode { name: "临高市", code: "036", towns: &TOWNS_HN_036 },
-    CityCode { name: "白沙市", code: "037", towns: &TOWNS_HN_037 },
-    CityCode { name: "昌江市", code: "038", towns: &TOWNS_HN_038 },
-    CityCode { name: "乐东市", code: "039", towns: &TOWNS_HN_039 },
-    CityCode { name: "陵水市", code: "040", towns: &TOWNS_HN_040 },
-    CityCode { name: "保亭市", code: "041", towns: &TOWNS_HN_041 },
-    CityCode { name: "琼中市", code: "042", towns: &TOWNS_HN_042 },
+    CityCode {
+        name: "省辖市",
+        code: "000",
+        towns: &[],
+    },
+    CityCode {
+        name: "海口市",
+        code: "001",
+        towns: &TOWNS_HN_001,
+    },
+    CityCode {
+        name: "秀英市",
+        code: "002",
+        towns: &TOWNS_HN_002,
+    },
+    CityCode {
+        name: "龙华市",
+        code: "003",
+        towns: &TOWNS_HN_003,
+    },
+    CityCode {
+        name: "琼山市",
+        code: "004",
+        towns: &TOWNS_HN_004,
+    },
+    CityCode {
+        name: "美兰市",
+        code: "005",
+        towns: &TOWNS_HN_005,
+    },
+    CityCode {
+        name: "海棠市",
+        code: "006",
+        towns: &TOWNS_HN_006,
+    },
+    CityCode {
+        name: "吉阳市",
+        code: "007",
+        towns: &TOWNS_HN_007,
+    },
+    CityCode {
+        name: "天涯市",
+        code: "008",
+        towns: &TOWNS_HN_008,
+    },
+    CityCode {
+        name: "崖州市",
+        code: "009",
+        towns: &TOWNS_HN_009,
+    },
+    CityCode {
+        name: "西沙群岛市",
+        code: "010",
+        towns: &TOWNS_HN_010,
+    },
+    CityCode {
+        name: "南沙群岛市",
+        code: "011",
+        towns: &TOWNS_HN_011,
+    },
+    CityCode {
+        name: "那大市",
+        code: "012",
+        towns: &TOWNS_HN_012,
+    },
+    CityCode {
+        name: "和庆市",
+        code: "013",
+        towns: &TOWNS_HN_013,
+    },
+    CityCode {
+        name: "南丰市",
+        code: "014",
+        towns: &TOWNS_HN_014,
+    },
+    CityCode {
+        name: "大成市",
+        code: "015",
+        towns: &TOWNS_HN_015,
+    },
+    CityCode {
+        name: "雅星市",
+        code: "016",
+        towns: &TOWNS_HN_016,
+    },
+    CityCode {
+        name: "兰洋市",
+        code: "017",
+        towns: &TOWNS_HN_017,
+    },
+    CityCode {
+        name: "光村市",
+        code: "018",
+        towns: &TOWNS_HN_018,
+    },
+    CityCode {
+        name: "木棠市",
+        code: "019",
+        towns: &TOWNS_HN_019,
+    },
+    CityCode {
+        name: "海头市",
+        code: "020",
+        towns: &TOWNS_HN_020,
+    },
+    CityCode {
+        name: "峨蔓市",
+        code: "021",
+        towns: &TOWNS_HN_021,
+    },
+    CityCode {
+        name: "王五市",
+        code: "022",
+        towns: &TOWNS_HN_022,
+    },
+    CityCode {
+        name: "白马井市",
+        code: "023",
+        towns: &TOWNS_HN_023,
+    },
+    CityCode {
+        name: "中和市",
+        code: "024",
+        towns: &TOWNS_HN_024,
+    },
+    CityCode {
+        name: "排浦市",
+        code: "025",
+        towns: &TOWNS_HN_025,
+    },
+    CityCode {
+        name: "东成市",
+        code: "026",
+        towns: &TOWNS_HN_026,
+    },
+    CityCode {
+        name: "新州市",
+        code: "027",
+        towns: &TOWNS_HN_027,
+    },
+    CityCode {
+        name: "五指山市",
+        code: "028",
+        towns: &TOWNS_HN_028,
+    },
+    CityCode {
+        name: "琼海市",
+        code: "029",
+        towns: &TOWNS_HN_029,
+    },
+    CityCode {
+        name: "文昌市",
+        code: "030",
+        towns: &TOWNS_HN_030,
+    },
+    CityCode {
+        name: "万宁市",
+        code: "031",
+        towns: &TOWNS_HN_031,
+    },
+    CityCode {
+        name: "东方市",
+        code: "032",
+        towns: &TOWNS_HN_032,
+    },
+    CityCode {
+        name: "定安市",
+        code: "033",
+        towns: &TOWNS_HN_033,
+    },
+    CityCode {
+        name: "屯昌市",
+        code: "034",
+        towns: &TOWNS_HN_034,
+    },
+    CityCode {
+        name: "澄迈市",
+        code: "035",
+        towns: &TOWNS_HN_035,
+    },
+    CityCode {
+        name: "临高市",
+        code: "036",
+        towns: &TOWNS_HN_036,
+    },
+    CityCode {
+        name: "白沙市",
+        code: "037",
+        towns: &TOWNS_HN_037,
+    },
+    CityCode {
+        name: "昌江市",
+        code: "038",
+        towns: &TOWNS_HN_038,
+    },
+    CityCode {
+        name: "乐东市",
+        code: "039",
+        towns: &TOWNS_HN_039,
+    },
+    CityCode {
+        name: "陵水市",
+        code: "040",
+        towns: &TOWNS_HN_040,
+    },
+    CityCode {
+        name: "保亭市",
+        code: "041",
+        towns: &TOWNS_HN_041,
+    },
+    CityCode {
+        name: "琼中市",
+        code: "042",
+        towns: &TOWNS_HN_042,
+    },
 ];

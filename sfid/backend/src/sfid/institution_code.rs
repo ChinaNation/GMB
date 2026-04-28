@@ -96,7 +96,10 @@ mod tests {
     fn parse_english_and_chinese() {
         assert_eq!(InstitutionCode::from_str("ZF"), Some(InstitutionCode::ZF));
         assert_eq!(InstitutionCode::from_str("政府"), Some(InstitutionCode::ZF));
-        assert_eq!(InstitutionCode::from_str("公民储备委员会"), Some(InstitutionCode::CB));
+        assert_eq!(
+            InstitutionCode::from_str("公民储备委员会"),
+            Some(InstitutionCode::CB)
+        );
         assert_eq!(InstitutionCode::from_str("xyz"), None);
     }
 }

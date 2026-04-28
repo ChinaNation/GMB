@@ -112,7 +112,10 @@ impl ShardedStore {
     where
         F: FnOnce(&GlobalShard) -> R,
     {
-        let guard = self.global.read().map_err(|_| "global poisoned".to_string())?;
+        let guard = self
+            .global
+            .read()
+            .map_err(|_| "global poisoned".to_string())?;
         Ok(f(&*guard))
     }
 
@@ -180,10 +183,7 @@ impl ShardedStore {
     ///   3. 不管加载结果有没有,最后 `entry().or_insert_with(...)`
     ///      给一个默认值(province 字段填好);
     ///   4. 如果 backend 里有数据,把它 overwrite 进 RwLock。
-    async fn get_or_load_shard(
-        &self,
-        province: &str,
-    ) -> Result<Arc<RwLock<StoreShard>>, String> {
+    async fn get_or_load_shard(&self, province: &str) -> Result<Arc<RwLock<StoreShard>>, String> {
         if let Some(entry) = self.shards.get(province) {
             return Ok(entry.value().clone());
         }
@@ -349,11 +349,17 @@ mod tests {
         a.await.unwrap();
         b.await.unwrap();
         assert_eq!(
-            store.read_province("A省", |s| s.next_citizen_id).await.unwrap(),
+            store
+                .read_province("A省", |s| s.next_citizen_id)
+                .await
+                .unwrap(),
             1
         );
         assert_eq!(
-            store.read_province("B省", |s| s.next_citizen_id).await.unwrap(),
+            store
+                .read_province("B省", |s| s.next_citizen_id)
+                .await
+                .unwrap(),
             2
         );
     }
@@ -364,10 +370,7 @@ mod tests {
         store.write_province("云南省", |_| {}).await.unwrap();
         store.write_province("云南省", |_| {}).await.unwrap();
         store.write_province("云南省", |_| {}).await.unwrap();
-        let v = store
-            .read_province("云南省", |s| s.version)
-            .await
-            .unwrap();
+        let v = store.read_province("云南省", |s| s.version).await.unwrap();
         assert_eq!(v, 3);
 
         store.write_global(|_| {}).await.unwrap();
@@ -379,8 +382,14 @@ mod tests {
     #[tokio::test]
     async fn test_for_each_province() {
         let store = new_store();
-        store.write_province("甲省", |s| s.next_citizen_id = 1).await.unwrap();
-        store.write_province("乙省", |s| s.next_citizen_id = 2).await.unwrap();
+        store
+            .write_province("甲省", |s| s.next_citizen_id = 1)
+            .await
+            .unwrap();
+        store
+            .write_province("乙省", |s| s.next_citizen_id = 2)
+            .await
+            .unwrap();
 
         let mut seen: Vec<(String, u64)> = Vec::new();
         store

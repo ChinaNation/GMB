@@ -169,7 +169,10 @@ pub fn city_code_by_name(province_name: &str, city_name: &str) -> Option<&'stati
 }
 
 pub fn province_name_by_code(code: &str) -> Option<&'static str> {
-    PROVINCES.iter().find(|p| p.code.eq_ignore_ascii_case(code)).map(|p| p.name)
+    PROVINCES
+        .iter()
+        .find(|p| p.code.eq_ignore_ascii_case(code))
+        .map(|p| p.name)
 }
 
 pub fn provinces() -> &'static [ProvinceCode] {

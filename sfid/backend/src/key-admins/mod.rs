@@ -1,8 +1,8 @@
 pub(crate) mod chain_keyring;
 pub(crate) mod chain_proof;
+pub(crate) mod chain_sheng_signing;
 pub(crate) mod rsa_blind;
 pub(crate) mod sheng_signer_cache;
-pub(crate) mod chain_sheng_signing;
 pub(crate) mod signer_router;
 
 use self::chain_keyring::{
@@ -734,9 +734,15 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
         store.chain_keyring_state = Some(rotate_result.state.clone());
         sync_key_admin_users(&mut store);
         // 设置新备用管理员的姓名
-        if let Some(name) = input.new_backup_name.as_deref().filter(|s| !s.trim().is_empty()) {
+        if let Some(name) = input
+            .new_backup_name
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
             let normalized_backup = normalize_pubkey_for_signing(input.new_backup_pubkey.as_str());
-            if let Some(user) = store.admin_users_by_pubkey.iter_mut()
+            if let Some(user) = store
+                .admin_users_by_pubkey
+                .iter_mut()
                 .find(|(k, _)| k.eq_ignore_ascii_case(normalized_backup.as_str()))
                 .map(|(_, v)| v)
             {
@@ -1061,8 +1067,8 @@ fn set_active_main_signer(
         .trim()
         .trim_start_matches("0x")
         .trim_start_matches("0X");
-    let new_seed_bytes = hex::decode(hex_trim)
-        .map_err(|e| format!("new main seed hex decode failed: {e}"))?;
+    let new_seed_bytes =
+        hex::decode(hex_trim).map_err(|e| format!("new main seed hex decode failed: {e}"))?;
     if new_seed_bytes.len() != 32 {
         return Err("new main seed must decode to 32 bytes".to_string());
     }
@@ -1094,9 +1100,7 @@ fn set_active_main_signer(
                 Ok(v) => v,
                 Err(e) => {
                     new_seed_arr.zeroize();
-                    return Err(format!(
-                        "decrypt sheng signer for {pubkey} failed: {e}"
-                    ));
+                    return Err(format!("decrypt sheng signer for {pubkey} failed: {e}"));
                 }
             };
             let new_ct = match sheng_signer_cache::encrypt_with_wrap(&new_wrap, &plain) {
@@ -1104,9 +1108,7 @@ fn set_active_main_signer(
                 Err(e) => {
                     plain.zeroize();
                     new_seed_arr.zeroize();
-                    return Err(format!(
-                        "re-encrypt sheng signer for {pubkey} failed: {e}"
-                    ));
+                    return Err(format!("re-encrypt sheng signer for {pubkey} failed: {e}"));
                 }
             };
             plain.zeroize();
@@ -1151,7 +1153,6 @@ fn set_active_main_signer(
     new_seed_arr.zeroize();
     Ok(())
 }
-
 
 /// 暴露给其他模块（如 chain::balance）按需调用 state_getStorage。
 pub(crate) async fn call_chain_state_get_storage(
@@ -1238,7 +1239,6 @@ struct ChainRotateReceipt {
     block_number: u64,
 }
 
-
 fn parse_account_id32(pubkey: &str) -> Result<[u8; 32], String> {
     parse_sr25519_pubkey_bytes(pubkey).ok_or_else(|| "invalid sr25519 account pubkey".to_string())
 }
@@ -1252,8 +1252,8 @@ async fn submit_rotate_sfid_keys_extrinsic(
     // PoW 链下 subxt 0.43 默认行为(从 finalized 读 nonce/取 era birth/等 finalize)全部踩坑，
     // 必须做三件事：① legacy RPC 取 best+pool 视图 nonce ② immortal era ③ 只等 InBestBlock。
     // 详见 ADR `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
-    let ws_url =
-        crate::chain::url::chain_ws_url().map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
+    let ws_url = crate::chain::url::chain_ws_url()
+        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     let client = OnlineClient::<PolkadotConfig>::from_url(ws_url.clone())
         .await
         .map_err(|e| {
@@ -1263,8 +1263,7 @@ async fn submit_rotate_sfid_keys_extrinsic(
     let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
         .await
         .map_err(|e| format!("rotate_sfid_keys submit failed: legacy rpc connect failed: {e}"))?;
-    let legacy_rpc =
-        subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
+    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
 
     let signer_account = AccountId32(
         parse_account_id32(initiator_pubkey)
@@ -1321,7 +1320,9 @@ async fn submit_rotate_sfid_keys_extrinsic(
         }
     })
     .await
-    .map_err(|_| "rotate_sfid_keys submit failed: timed out waiting for in-block inclusion".to_string())?
+    .map_err(|_| {
+        "rotate_sfid_keys submit failed: timed out waiting for in-block inclusion".to_string()
+    })?
     .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     in_block
         .wait_for_success()
@@ -1373,10 +1374,7 @@ pub(crate) async fn bootstrap_sheng_signer(
     // 清掉),在推链消耗 nonce 之前就退出,避免"链上已写新 pubkey 但本地 Store
     // 找不到 admin 落盘"的不可恢复窗口。
     let existing_encrypted: Option<String> = {
-        let store = state
-            .store
-            .read()
-            .map_err(|e| format!("store read: {e}"))?;
+        let store = state.store.read().map_err(|e| format!("store read: {e}"))?;
         let user = store
             .admin_users_by_pubkey
             .get(admin_pubkey)
@@ -1417,8 +1415,8 @@ pub(crate) async fn bootstrap_sheng_signer(
         .map_err(|e| format!("encrypt new sheng signer failed: {e}"))?;
 
     // 3. 推链 set_sheng_signing_pubkey(province, Some(new_pubkey))。
-    let ws_url = crate::chain::url::chain_ws_url()
-        .map_err(|e| format!("resolve ws url failed: {e}"))?;
+    let ws_url =
+        crate::chain::url::chain_ws_url().map_err(|e| format!("resolve ws url failed: {e}"))?;
     let client = OnlineClient::<PolkadotConfig>::from_insecure_url(ws_url.clone())
         .await
         .map_err(|e| format!("chain connect failed: {e}"))?;

@@ -170,11 +170,8 @@ pub(crate) async fn create_operator(
     if city_input.is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "city is required");
     }
-    let scope_province = province_scope_for_role(
-        &store,
-        created_by_pubkey.as_str(),
-        &AdminRole::ShengAdmin,
-    );
+    let scope_province =
+        province_scope_for_role(&store, created_by_pubkey.as_str(), &AdminRole::ShengAdmin);
     let province_name = match scope_province {
         Some(v) => v,
         None => {
@@ -187,13 +184,7 @@ pub(crate) async fn create_operator(
     };
     let city_code = match city_code_by_name(province_name.as_str(), city_input.as_str()) {
         Some(c) => c,
-        None => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "city not found in province",
-            )
-        }
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "city not found in province"),
     };
     if city_code == "000" {
         return api_error(
@@ -378,11 +369,8 @@ pub(crate) async fn update_operator(
     let mut city_changed = false;
     if let Some(city) = next_city_input {
         // 校验：必须属于该 operator 所属机构管理员的省份，且不可为省辖市
-        let scope_province = province_scope_for_role(
-            &store,
-            operator.created_by.as_str(),
-            &AdminRole::ShengAdmin,
-        );
+        let scope_province =
+            province_scope_for_role(&store, operator.created_by.as_str(), &AdminRole::ShengAdmin);
         let province_name = match scope_province {
             Some(v) => v,
             None => {
@@ -395,13 +383,7 @@ pub(crate) async fn update_operator(
         };
         let city_code = match city_code_by_name(province_name.as_str(), city.as_str()) {
             Some(c) => c,
-            None => {
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "city not found in province",
-                )
-            }
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "city not found in province"),
         };
         if city_code == "000" {
             return api_error(

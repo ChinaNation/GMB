@@ -78,7 +78,9 @@ fn build_test_state() -> AppState {
             }
         },
         // 测试态:不启动 watcher,只塞个空 cache(scan_ok=false → 不参与过滤,降级老语义)。
-        clearing_bank_node_cache: Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new()),
+        clearing_bank_node_cache: Arc::new(
+            chain::clearing_bank_watcher::ClearingBankNodeCache::new(),
+        ),
     };
     seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
@@ -186,8 +188,7 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
         state
             .sharded_store
             .write_global_sync(|g| {
-                g.admin_sessions
-                    .insert("tok-rotate".to_string(), session);
+                g.admin_sessions.insert("tok-rotate".to_string(), session);
             })
             .expect("write_global_sync");
     }
@@ -225,8 +226,7 @@ async fn keyring_rotate_challenge_rejects_main_initiator() {
         state
             .sharded_store
             .write_global_sync(|g| {
-                g.admin_sessions
-                    .insert("tok-rotate".to_string(), updated);
+                g.admin_sessions.insert("tok-rotate".to_string(), updated);
             })
             .expect("write_global_sync");
     }
@@ -791,7 +791,11 @@ async fn require_admin_any_should_allow_all_three_roles() {
             },
         );
         let sessions = [
-            ("tok-institution", institution_pubkey.clone(), AdminRole::ShengAdmin),
+            (
+                "tok-institution",
+                institution_pubkey.clone(),
+                AdminRole::ShengAdmin,
+            ),
             ("tok-system", system_pubkey.clone(), AdminRole::ShiAdmin),
             ("tok-key", key_pubkey.clone(), AdminRole::KeyAdmin),
         ];
@@ -803,7 +807,9 @@ async fn require_admin_any_should_allow_all_three_roles() {
                 expire_at: Utc::now() + Duration::hours(1),
                 last_active_at: Utc::now(),
             };
-            store.admin_sessions.insert(tok.to_string(), session.clone());
+            store
+                .admin_sessions
+                .insert(tok.to_string(), session.clone());
             state
                 .sharded_store
                 .write_global_sync(|g| {

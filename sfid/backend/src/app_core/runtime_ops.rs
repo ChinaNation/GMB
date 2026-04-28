@@ -136,7 +136,6 @@ pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) 
     });
 }
 
-
 pub(crate) fn vote_cache_key(account_pubkey: &str, proposal_id: Option<u64>) -> String {
     match proposal_id {
         Some(id) => format!("{account_pubkey}:{id}"),
@@ -212,7 +211,6 @@ where
     }
     map.insert(key, value);
 }
-
 
 pub(crate) fn default_bind_callback_auth_token() -> Option<String> {
     normalize_optional(std::env::var("SFID_BIND_CALLBACK_AUTH_TOKEN").ok())
@@ -488,7 +486,6 @@ pub(crate) fn append_audit_log_with_meta(
     });
 }
 
-
 /// 任务卡 6:后端启动时 backfill + 对 43 省全量对账公安局机构。
 ///
 /// 中文注释:
@@ -504,11 +501,17 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
 
     let mut store = match state.store.write() {
         Ok(v) => v,
-        Err(e) => { tracing::error!(error = %e, "store RwLock poisoned"); return; },
+        Err(e) => {
+            tracing::error!(error = %e, "store RwLock poisoned");
+            return;
+        }
     };
     let fixed = backfill_public_security_city_codes(&mut store);
     if fixed > 0 {
-        tracing::info!(count = fixed, "backfilled city_code for legacy public security institutions");
+        tracing::info!(
+            count = fixed,
+            "backfilled city_code for legacy public security institutions"
+        );
     }
 
     let mut total_inserted = 0usize;
@@ -581,7 +584,10 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     let mut by_province: HashMap<String, Vec<(MultisigInstitution, Vec<MultisigAccount>)>> =
         HashMap::new();
     for (inst, accs) in snapshot {
-        by_province.entry(inst.province.clone()).or_default().push((inst, accs));
+        by_province
+            .entry(inst.province.clone())
+            .or_default()
+            .push((inst, accs));
     }
     for (province, group) in by_province {
         let group_len = group.len();
@@ -646,16 +652,17 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
             }
         }
         // 同步到 sharded
-        let missing_by_prov: HashMap<String, Vec<String>> = missing.into_iter().fold(
-            HashMap::new(),
-            |mut acc, (prov, sfid)| {
-                acc.entry(prov).or_default().push(sfid);
-                acc
-            },
-        );
+        let missing_by_prov: HashMap<String, Vec<String>> =
+            missing
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (prov, sfid)| {
+                    acc.entry(prov).or_default().push(sfid);
+                    acc
+                });
         for (province, sfids) in missing_by_prov {
             let sfids_clone = sfids.clone();
-            let backfilled = sfids.len() * crate::institutions::service::DEFAULT_ACCOUNT_NAMES.len();
+            let backfilled =
+                sfids.len() * crate::institutions::service::DEFAULT_ACCOUNT_NAMES.len();
             let write_result = state
                 .sharded_store
                 .write_province(&province, move |shard| {
@@ -663,11 +670,12 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                     for sfid in &sfids_clone {
                         for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
                             let key = account_key_to_string(sfid, name);
-                            let addr = crate::institutions::derive::derive_duoqian_address(
-                                sfid, name,
-                            );
-                            shard.multisig_accounts.entry(key).or_insert_with(|| {
-                                MultisigAccount {
+                            let addr =
+                                crate::institutions::derive::derive_duoqian_address(sfid, name);
+                            shard
+                                .multisig_accounts
+                                .entry(key)
+                                .or_insert_with(|| MultisigAccount {
                                     sfid_id: sfid.clone(),
                                     account_name: (*name).to_string(),
                                     duoqian_address: addr,
@@ -676,8 +684,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                                     chain_block_number: None,
                                     created_by: "SYSTEM".to_string(),
                                     created_at: now,
-                                }
-                            });
+                                });
                         }
                     }
                 })
@@ -719,7 +726,10 @@ pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
                 )
             })
             .collect(),
-        Err(e) => { tracing::error!(error = %e, "store RwLock poisoned"); return; },
+        Err(e) => {
+            tracing::error!(error = %e, "store RwLock poisoned");
+            return;
+        }
     };
     // 遍历所有省分片，收集孤儿 site_sfid 及其所在省
     let mut orphans_by_province: std::collections::HashMap<String, Vec<String>> =
@@ -801,14 +811,24 @@ pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
 /// 让管理员用新逻辑重新生成 QR1。
 pub(crate) async fn cleanup_stale_cpms_sites(state: &AppState) {
     // 收集 sfid_finalized=false 的机构的 (province, city, institution_code)
-    let unfinalized: std::collections::HashSet<(String, String, String)> = match state.store.read() {
+    let unfinalized: std::collections::HashSet<(String, String, String)> = match state.store.read()
+    {
         Ok(store) => store
             .multisig_institutions
             .values()
             .filter(|i| !i.sfid_finalized)
-            .map(|i| (i.province.clone(), i.city.clone(), i.institution_code.clone()))
+            .map(|i| {
+                (
+                    i.province.clone(),
+                    i.city.clone(),
+                    i.institution_code.clone(),
+                )
+            })
             .collect(),
-        Err(e) => { tracing::error!(error = %e, "store read failed"); return; },
+        Err(e) => {
+            tracing::error!(error = %e, "store read failed");
+            return;
+        }
     };
     if unfinalized.is_empty() {
         return;

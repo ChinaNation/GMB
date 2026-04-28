@@ -75,8 +75,9 @@ impl ShardBackend for MockShardBackend {
     async fn load_global(&self) -> Result<GlobalShard, String> {
         let guard = self.inner.lock().map_err(|_| "mock poisoned".to_string())?;
         match guard.get("global") {
-            Some(v) => serde_json::from_value(v.clone())
-                .map_err(|e| format!("mock load_global json: {e}")),
+            Some(v) => {
+                serde_json::from_value(v.clone()).map_err(|e| format!("mock load_global json: {e}"))
+            }
             None => Ok(GlobalShard::default()),
         }
     }

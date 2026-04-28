@@ -85,8 +85,7 @@ impl ShardBackend for PostgresShardBackend {
     }
 
     async fn save_shard(&self, province: &str, shard: &StoreShard) -> Result<(), String> {
-        let payload =
-            serde_json::to_value(shard).map_err(|e| format!("save_shard json: {e}"))?;
+        let payload = serde_json::to_value(shard).map_err(|e| format!("save_shard json: {e}"))?;
         let key = province.to_string();
         self.run_blocking(move |conn| {
             conn.execute(
@@ -126,8 +125,7 @@ impl ShardBackend for PostgresShardBackend {
     }
 
     async fn save_global(&self, global: &GlobalShard) -> Result<(), String> {
-        let payload =
-            serde_json::to_value(global).map_err(|e| format!("save_global json: {e}"))?;
+        let payload = serde_json::to_value(global).map_err(|e| format!("save_global json: {e}"))?;
         self.run_blocking(move |conn| {
             conn.execute(
                 "INSERT INTO store_shards (shard_key, payload, updated_at, version)
@@ -147,10 +145,7 @@ impl ShardBackend for PostgresShardBackend {
     async fn list_shard_keys(&self) -> Result<Vec<String>, String> {
         self.run_blocking(|conn| {
             let rows = conn
-                .query(
-                    "SELECT shard_key FROM store_shards ORDER BY shard_key",
-                    &[],
-                )
+                .query("SELECT shard_key FROM store_shards ORDER BY shard_key", &[])
                 .map_err(|e| format!("list_shard_keys sql: {e}"))?;
             Ok(rows.into_iter().map(|r| r.get::<_, String>(0)).collect())
         })

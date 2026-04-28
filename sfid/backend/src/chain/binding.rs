@@ -55,7 +55,11 @@ pub(crate) async fn chain_binding_validate(
         .filter(|r| r.archive_no.as_deref() == Some(input.archive_no.as_str()));
 
     let is_bound = matched.is_some();
-    let citizen_status = if is_bound { Some(CitizenStatus::Normal) } else { None };
+    let citizen_status = if is_bound {
+        Some(CitizenStatus::Normal)
+    } else {
+        None
+    };
     let is_voting_eligible = is_bound;
     append_audit_log_with_meta(
         &mut store,

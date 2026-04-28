@@ -91,9 +91,10 @@ pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
     match ctx.role {
         AdminRole::KeyAdmin => VisibleScope::key_admin(),
         AdminRole::ShengAdmin => {
-            let province = ctx.admin_province.clone().unwrap_or_else(|| {
-                "__SHENG_ADMIN_MISSING_PROVINCE__".to_string()
-            });
+            let province = ctx
+                .admin_province
+                .clone()
+                .unwrap_or_else(|| "__SHENG_ADMIN_MISSING_PROVINCE__".to_string());
             VisibleScope::sheng_admin(province)
         }
         AdminRole::ShiAdmin => {

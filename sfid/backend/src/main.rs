@@ -727,15 +727,10 @@ fn main() {
             .unwrap_or(true);
         Arc::new(store_shards::ShardedStore::new(backend, double_write))
     };
-    // ADR-007 Step 2 阶段 D:启动 ClearingBankNodes watcher,内存缓存链上已声明清算行 sfid_id 集合。
-    // 链 URL 不可达时 watcher 内部指数退避重试,不阻塞 backend 启动。
-    let clearing_bank_node_cache = match chain::url::chain_http_url() {
-        Ok(http_url) => chain::clearing_bank_watcher::spawn_watcher(http_url),
-        Err(e) => {
-            tracing::warn!(error = %e, "SFID_CHAIN_WS_URL 未配置,ClearingBankNodes watcher 跳过启动");
-            std::sync::Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new())
-        }
-    };
+    // ADR-007 Step 2 阶段 D:先构造空 cache 放进 AppState。
+    // watcher 的 tokio task 必须等 runtime 建好后再启动,否则会在同步 main() 阶段 panic。
+    let clearing_bank_node_cache =
+        std::sync::Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new());
 
     let state = AppState {
         store,
@@ -784,6 +779,21 @@ fn main() {
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
+        // ADR-007 Step 2 阶段 D:进入 Tokio runtime 后再启动 ClearingBankNodes watcher。
+        // 链 URL 不可达时跳过 watcher,仅保留空 cache,不阻塞 backend 启动。
+        match chain::url::chain_http_url() {
+            Ok(http_url) => chain::clearing_bank_watcher::start_watcher(
+                http_url,
+                Arc::clone(&state.clearing_bank_node_cache),
+            ),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "SFID_CHAIN_WS_URL 未配置,ClearingBankNodes watcher 跳过启动"
+                );
+            }
+        }
+
         // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
         if key_admins::rsa_blind::get_public_key_pem().is_err() {
             info!("generating RSA anon cert keypair...");

@@ -8,10 +8,7 @@
 //! 而标准盲签名同样满足协议需求——province_code 由 SFID 在签名前确定并拼入消息，
 //! CPMS 无法篡改。
 
-use blind_rsa_signatures::{
-    BlindMessage, KeyPair, Signature, DefaultRng,
-    PSS, Randomized, Sha384,
-};
+use blind_rsa_signatures::{BlindMessage, DefaultRng, KeyPair, Randomized, Sha384, Signature, PSS};
 use std::sync::RwLock;
 
 /// 标准盲签名密钥对类型
