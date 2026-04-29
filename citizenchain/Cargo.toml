@@ -11,19 +11,19 @@ members = [
     "runtime/governance/runtime-upgrade",    # 治理-运行时状态升级与超级管理员模块 pallet
     "runtime/governance/voting-engine",    # 治理-投票引擎模块 pallet
 
-    "runtime/issuance/citizen-lightnode-issuance", # 发行-公民轻节点发行模块 pallet
-    "runtime/issuance/fullnode-pow-reward",        # 发行-全节点发行模块 pallet
+    "runtime/issuance/citizen-issuance", # 发行-公民发行模块 pallet
+    "runtime/issuance/fullnode-issuance",        # 发行-全节点发行模块 pallet
     "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
-    "runtime/issuance/shengbank-stake-interest",   # 发行-省储行质押利息模块 pallet
-    "runtime/otherpallet/sfid-code-auth",          # 其他-SFID 绑定与资格校验模块 pallet
-    "runtime/otherpallet/pow-difficulty-module",   # 其他-PoW 动态难度调整模块 pallet
+    "runtime/issuance/shengbank-interest",   # 发行-省储行利息模块 pallet
+    "runtime/otherpallet/sfid-system",          # 其他-SFID 绑定与资格校验模块 pallet
+    "runtime/otherpallet/pow-difficulty",   # 其他-PoW 动态难度调整模块 pallet
     "runtime/genesis",                           # 创世模块 pallet
 
-    "runtime/transaction/offchain-transaction-pos", # 交易-链下交易手续费模块 pallet
-    "runtime/transaction/onchain-transaction-pow",  # 交易-链上交易手续费模块 pallet
-    "runtime/transaction/duoqian-manage-pow",  # 交易-多签交易模块 pallet
-    "runtime/transaction/duoqian-transfer-pow",     # 交易-机构多签名地址转账模块 pallet
-    "runtime/transaction/institution-asset-guard",  # 交易-机构账户资金白名单公共模块
+    "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
+    "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
+    "runtime/transaction/duoqian-manage",  # 交易-多签交易模块 pallet
+    "runtime/transaction/duoqian-transfer",     # 交易-机构多签名地址转账模块 pallet
+    "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 
 ]
 resolver = "2"

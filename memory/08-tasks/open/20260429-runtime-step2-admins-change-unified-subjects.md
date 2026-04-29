@@ -6,15 +6,15 @@
 
 ## 背景
 
-第1步已在 `duoqian-manage-pow` 内新增机构级创建模型，但管理员与阈值仍在多签模块内保留旧语义。根据最新确认，`admins-change` 应作为所有机构/多签主体的管理员真源，覆盖内置机构、SFID 注册机构多签和个人多签。
+第1步已在 `duoqian-manage` 内新增机构级创建模型，但管理员与阈值仍在多签模块内保留旧语义。根据最新确认，`admins-change` 应作为所有机构/多签主体的管理员真源，覆盖内置机构、SFID 注册机构多签和个人多签。
 
 ## 目标
 
 - 将管理员主体统一收口到 `admins-change`。
 - 支持内置机构、SFID 机构多签、个人多签三类主体。
 - `voting-engine` 的 runtime provider 统一从 `admins-change` 读取管理员、阈值、人数。
-- `duoqian-manage-pow` 只负责账户、资金、生命周期，不再作为管理员长期真源。
-- 修正 `duoqian-transfer-pow` 与 `offchain-transaction-pos` 的旧 `DuoqianAccounts` 管理员/激活读取残留。
+- `duoqian-manage` 只负责账户、资金、生命周期，不再作为管理员长期真源。
+- 修正 `duoqian-transfer` 与 `offchain-transaction` 的旧 `DuoqianAccounts` 管理员/激活读取残留。
 - 更新文档、完善中文注释、清理残留。
 
 ## 不在本步范围
@@ -27,9 +27,9 @@
 ## 涉及模块
 
 - `citizenchain/runtime/governance/admins-change`
-- `citizenchain/runtime/transaction/duoqian-manage-pow`
-- `citizenchain/runtime/transaction/duoqian-transfer-pow`
-- `citizenchain/runtime/transaction/offchain-transaction-pos`
+- `citizenchain/runtime/transaction/duoqian-manage`
+- `citizenchain/runtime/transaction/duoqian-transfer`
+- `citizenchain/runtime/transaction/offchain-transaction`
 - `citizenchain/runtime/src/configs/mod.rs`
 
 ## 验收标准

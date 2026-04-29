@@ -1,4 +1,4 @@
-//! 中文注释：链上 `sfid_code_auth::set_sheng_signing_pubkey` 提交 helper。
+//! 中文注释：链上 `sfid_system::set_sheng_signing_pubkey` 提交 helper。
 //!
 //! 对齐本仓 PoW 链推链三件套(feedback_sfid_pow_chain_recipe)：
 //!   ① 显式 nonce(legacy RPC system_accountNextIndex)
@@ -16,7 +16,7 @@ use subxt::{
 
 use crate::key_admins::sheng_signer_cache::ProvinceSigner;
 
-/// 提交 `SfidCodeAuth::set_sheng_signing_pubkey(province, new_pubkey)`。
+/// 提交 `SfidSystem::set_sheng_signing_pubkey(province, new_pubkey)`。
 ///
 /// `new_pubkey = None` → 清除该省；`Some` → 写入。
 ///
@@ -38,7 +38,7 @@ pub(crate) async fn submit_set_sheng_signing_pubkey_with_client(
         None => Value::unnamed_variant("None", Vec::<Value>::new()),
     };
     let payload = tx(
-        "SfidCodeAuth",
+        "SfidSystem",
         "set_sheng_signing_pubkey",
         vec![province_val, pubkey_val],
     );

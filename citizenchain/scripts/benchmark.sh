@@ -4,7 +4,7 @@
 #
 # 用法：
 #   ./scripts/benchmark.sh          # 跑所有 pallet
-#   ./scripts/benchmark.sh pow_difficulty_module   # 只跑指定 pallet
+#   ./scripts/benchmark.sh pow_difficulty   # 只跑指定 pallet
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -37,17 +37,17 @@ echo "    编译完成"
 
 # ── 4. 跑 benchmark ──
 PALLETS=(
-    "shengbank_stake_interest:runtime/issuance/shengbank-stake-interest/src/weights.rs"
-    "fullnode_pow_reward:runtime/issuance/fullnode-pow-reward/src/weights.rs"
-    "citizen_lightnode_issuance:runtime/issuance/citizen-lightnode-issuance/src/weights.rs"
+    "shengbank_interest:runtime/issuance/shengbank-interest/src/weights.rs"
+    "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"
+    "citizen_issuance:runtime/issuance/citizen-issuance/src/weights.rs"
     "resolution_issuance:runtime/issuance/resolution-issuance/src/weights.rs"
-    "sfid_code_auth:runtime/otherpallet/sfid-code-auth/src/weights.rs"
-    "pow_difficulty_module:runtime/otherpallet/pow-difficulty-module/src/weights.rs"
+    "sfid_system:runtime/otherpallet/sfid-system/src/weights.rs"
+    "pow_difficulty:runtime/otherpallet/pow-difficulty/src/weights.rs"
     "admins_change:runtime/governance/admins-change/src/weights.rs"
     "resolution_destro:runtime/governance/resolution-destro/src/weights.rs"
     "grandpakey_change:runtime/governance/grandpakey-change/src/weights.rs"
-    "duoqian_manage_pow:runtime/transaction/duoqian-manage-pow/src/weights.rs"
-    "duoqian_transfer_pow:runtime/transaction/duoqian-transfer-pow/src/weights.rs"
+    "duoqian_manage:runtime/transaction/duoqian-manage/src/weights.rs"
+    "duoqian_transfer:runtime/transaction/duoqian-transfer/src/weights.rs"
     "voting_engine:runtime/governance/voting-engine/src/weights.rs"
     "runtime_upgrade:runtime/governance/runtime-upgrade/src/weights.rs"
 )

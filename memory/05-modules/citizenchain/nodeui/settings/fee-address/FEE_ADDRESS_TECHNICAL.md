@@ -22,7 +22,7 @@
 
 - 管理桌面节点 UI 的“手续费收款地址”本地配置。
 - 管理全节点挖矿签名密钥（`POWR_MINER_SURI`）本地持久化。
-- 将地址变更同步为链上 `FullnodePowReward.bind_reward_wallet/rebind_reward_wallet` 交易。
+- 将地址变更同步为链上 `FullnodeIssuance.bind_reward_wallet/rebind_reward_wallet` 交易。
 - 确保本地节点启动时使用同一 `powr` 矿工签名账户，保证奖励与手续费分成可路由到绑定地址。
 - 启动前同步 `powr` keystore（并清理旧 `powr` key 文件），避免通过环境变量传递明文密钥。
 

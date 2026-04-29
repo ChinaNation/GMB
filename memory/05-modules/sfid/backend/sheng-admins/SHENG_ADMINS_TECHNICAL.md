@@ -62,7 +62,7 @@
    - `sfid_id` 规范：长度、字符集、大小写规则由 SFID 与链侧双端校验（同一规则集）。
 3. `POST /api/v1/admin/cpms-keys/register-scan`
    - 权限：`SHENG_ADMIN | KEY_ADMIN`
-   - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，生成 proof 字段 `genesis_hash + sfid_id + register_nonce + signature`，并调用链上 `DuoqianManagePow.register_sfid_institution(sfid_id, register_nonce, signature)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
+   - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，生成 proof 字段 `genesis_hash + sfid_id + register_nonce + signature`，并调用链上 `DuoqianManage.register_sfid_institution(sfid_id, register_nonce, signature)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
    - 主公钥约束：初始化二维码验签与功能 4 proof 签名统一只认当前 SFID `MAIN`；备用公钥不能代替功能 4 出具 proof。
    - 并发控制：同一登记二维码 `replay_token` 在链上提交阶段采用进程内 in-flight 占位，重复并发请求直接拒绝（`register qr is being processed`），避免双重链上提交。
    - 链上等待：`submit_and_watch -> wait_for_finalized` 设置 120 秒超时，防止 HTTP 请求长期挂起。

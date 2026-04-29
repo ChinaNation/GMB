@@ -53,7 +53,7 @@
 | `execute_replace_grandpa_key` | 1 | `execute_replace_grandpa_key` | `proposal_id` | node_ui |
 | `cancel_failed_replace_grandpa_key` | 2 | `cancel_failed_replace_grandpa_key` | `proposal_id` | node_ui |
 
-### 1.7 DuoqianManagePow(pallet_index = 17)
+### 1.7 DuoqianManage(pallet_index = 17)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@
 
 `register_sfid_institution`(call_index=2)由 sfid 后端 ShengSigningPubkey 直签,不走冷钱包 ⇒ **不在本表范围**。
 
-### 1.8 DuoqianTransferPow(pallet_index = 19)
+### 1.8 DuoqianTransfer(pallet_index = 19)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|

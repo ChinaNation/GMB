@@ -180,6 +180,6 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 
 ## 引用
 
-- 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs)
+- 现有清算 pallet：[citizenchain/runtime/transaction/offchain-transaction/src/lib.rs](../../citizenchain/runtime/transaction/offchain-transaction/src/lib.rs)
 - 现有 SFID 公开 API：[sfid/backend/src/institutions/handler.rs:1605](../../sfid/backend/src/institutions/handler.rs)（app_search_clearing_banks）
 - ParentInstitutionRow 已含 sub_type 字段：[sfid/backend/src/institutions/model.rs:228-230](../../sfid/backend/src/institutions/model.rs)

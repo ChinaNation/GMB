@@ -2,7 +2,7 @@
 
 ## 0. 区块链端方案对齐（冻结，优先级最高）
 1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
-2. 功能 5 轮换以链上标准 extrinsic 为准（如 `sfid-code-auth::rotate_sfid_keys`），不依赖私有 RPC 方法。
+2. 功能 5 轮换以链上标准 extrinsic 为准（如 `sfid-system::rotate_sfid_keys`），不依赖私有 RPC 方法。
 3. 链上三把公钥是唯一权威来源；`sfid` 本地不得用数据库恢复活动主签名人覆盖链上状态。
 4. 全流程必须记录并回写 `chain_tx_hash`、`block_number`，并记录审计事件与版本号。
 5. 若本文件其余章节与本节冲突，以本节为准。
@@ -79,7 +79,7 @@
 
 ## 6. 上链一致性要求
 - 区块链验证公钥仅使用 `MAIN`。
-- 轮换上链以 `sfid-code-auth` pallet 标准入口为准（如 `rotate_sfid_keys`），不依赖私有 RPC 方法。
+- 轮换上链以 `sfid-system` pallet 标准入口为准（如 `rotate_sfid_keys`），不依赖私有 RPC 方法。
 - 轮换策略固定：先写链上 `backup`，再提升为 `main`，再补位新 `backup`。
 - 上链回执要求：
 1. 轮换提交必须记录 `chain_tx_hash`。

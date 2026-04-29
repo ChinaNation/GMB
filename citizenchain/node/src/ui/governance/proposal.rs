@@ -514,11 +514,7 @@ pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
 // ──── 内部查询 ────
 
 fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String> {
-    let key = storage_keys::map_key(
-        "VotingEngine",
-        "Proposals",
-        &proposal_id.to_le_bytes(),
-    );
+    let key = storage_keys::map_key("VotingEngine", "Proposals", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
@@ -531,11 +527,7 @@ fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String>
 }
 
 fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> {
-    let key = storage_keys::map_key(
-        "VotingEngine",
-        "ProposalData",
-        &proposal_id.to_le_bytes(),
-    );
+    let key = storage_keys::map_key("VotingEngine", "ProposalData", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(None),
@@ -551,8 +543,8 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
 ///
 /// 查找顺序(命中即返回,不重复查询):
 /// 1. `VotingEngine::ProposalData`(转账/升级/发行/销毁 4 种,按 kind 分流)
-/// 2. `DuoqianTransferPow::SafetyFundProposalActions`
-/// 3. `DuoqianTransferPow::SweepProposalActions`
+/// 2. `DuoqianTransfer::SafetyFundProposalActions`
+/// 3. `DuoqianTransfer::SweepProposalActions`
 /// 4. 全部未命中 → [`ProposalAction::Unknown`]
 ///
 /// 常见提案(转账/升级/销毁/发行)1 次 RPC 即可命中;安全基金/手续费划转
@@ -637,11 +629,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
 }
 
 fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
-    let key = storage_keys::map_key(
-        "VotingEngine",
-        "JointTallies",
-        &proposal_id.to_le_bytes(),
-    );
+    let key = storage_keys::map_key("VotingEngine", "JointTallies", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(JointVoteTally { yes: 0, no: 0 }),
@@ -667,11 +655,7 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
 }
 
 fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
-    let key = storage_keys::map_key(
-        "VotingEngine",
-        "CitizenTallies",
-        &proposal_id.to_le_bytes(),
-    );
+    let key = storage_keys::map_key("VotingEngine", "CitizenTallies", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(CitizenVoteTally { yes: 0, no: 0 }),
@@ -1281,7 +1265,7 @@ fn fetch_safety_fund_proposal_action(
     proposal_id: u64,
 ) -> Result<Option<SafetyFundProposalDetail>, String> {
     let key = storage_keys::map_key(
-        "DuoqianTransferPow",
+        "DuoqianTransfer",
         "SafetyFundProposalActions",
         &proposal_id.to_le_bytes(),
     );
@@ -1321,10 +1305,10 @@ fn fetch_safety_fund_proposal_action(
     }
 }
 
-/// 从链上 DuoqianTransferPow::SweepProposalActions 存储查询手续费划转提案数据。
+/// 从链上 DuoqianTransfer::SweepProposalActions 存储查询手续费划转提案数据。
 fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalDetail>, String> {
     let key = storage_keys::map_key(
-        "DuoqianTransferPow",
+        "DuoqianTransfer",
         "SweepProposalActions",
         &proposal_id.to_le_bytes(),
     );

@@ -115,10 +115,10 @@ wuminapp(Dart)                   清算行节点(Rust,本步)
 
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
-(中间需要先把 offchain-transaction-pos 的 OffchainBatchItemV2 加 DecodeWithMemTracking 派生,本步已修)
+(中间需要先把 offchain-transaction 的 OffchainBatchItemV2 加 DecodeWithMemTracking 派生,本步已修)
 ```
 
-- `offchain-transaction-pos`:**零 warning / 零 error**
+- `offchain-transaction`:**零 warning / 零 error**
 - `node` 的 `offchain/` 子树:**零 warning / 零 error**(grep offchain 0 命中)
 - 链接阶段在 `ui/mod.rs:91` tauri proc macro(frontend/dist 缺失)受 CI 门禁拦截,与本步无关
 
@@ -138,7 +138,7 @@ Step 2b-ii 要做:
 3. `packer::pack_and_submit` 实现:
    - `ledger.take_pending_for_batch(MaxBatchSize)` → 构造 `OffchainBatchItemV2` 列表
    - 清算行管理员私钥(从 `offchain::keystore::SigningKey`)对 batch 签名
-   - 构造 `offchain_transaction_pos::Call::submit_offchain_batch_v2` extrinsic
+   - 构造 `offchain_transaction::Call::submit_offchain_batch_v2` extrinsic
    - 通过 `TransactionPool` 提交
    - 成功 → ledger 删除已上链 tx;失败 → ledger.reject_pending
 

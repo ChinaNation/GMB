@@ -113,10 +113,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── DuoqianTransferPow(19) ──
+      // ── DuoqianTransfer(19) ──
       // Phase 3：投票入口统一到 VotingEngine::internal_vote,
       // 本 pallet 保留 3 条 propose_X + 3 条 execute_X 兜底执行。
-      if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
+      if (palletIndex == PalletRegistry.duoqianTransferPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
           return _decodeProposeTransfer(bytes);
         }
@@ -159,18 +159,21 @@ class PayloadDecoder {
         }
       }
 
-      // ── DuoqianManagePow(17) ──
+      // ── DuoqianManage(17) ──
       // Phase 3：投票入口统一到 VotingEngine::internal_vote。本 pallet
       // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_sfid_institution 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
-      if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
-        if (callIndex == PalletRegistry.proposeCreateCall)
+      if (palletIndex == PalletRegistry.duoqianManagePallet) {
+        if (callIndex == PalletRegistry.proposeCreateCall) {
           return _decodeProposeCreate(bytes);
-        if (callIndex == PalletRegistry.proposeCloseCall)
+        }
+        if (callIndex == PalletRegistry.proposeCloseCall) {
           return _decodeProposeClose(bytes);
-        if (callIndex == PalletRegistry.proposeCreatePersonalCall)
+        }
+        if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
           return _decodeProposeCreatePersonal(bytes);
+        }
         if (callIndex == PalletRegistry.cleanupRejectedProposalCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -182,8 +185,9 @@ class PayloadDecoder {
 
       // ── ResolutionDestro(14) ──
       if (palletIndex == PalletRegistry.resolutionDestroPallet) {
-        if (callIndex == PalletRegistry.proposeDestroyCall)
+        if (callIndex == PalletRegistry.proposeDestroyCall) {
           return _decodeProposeDestroy(bytes);
+        }
         if (callIndex == PalletRegistry.executeDestroyCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -195,8 +199,9 @@ class PayloadDecoder {
 
       // ── AdminsChange(12) ──
       if (palletIndex == PalletRegistry.adminsChangePallet) {
-        if (callIndex == PalletRegistry.proposeAdminReplacementCall)
+        if (callIndex == PalletRegistry.proposeAdminReplacementCall) {
           return _decodeProposeAdminReplacement(bytes);
+        }
         if (callIndex == PalletRegistry.executeAdminReplacementCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -208,8 +213,9 @@ class PayloadDecoder {
 
       // ── GrandpaKeyChange(16) ──
       if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
-        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall)
+        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) {
           return _decodeProposeKeyChange(bytes);
+        }
         if (callIndex == PalletRegistry.executeReplaceGrandpaKeyCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -269,7 +275,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransferPow(19) / propose_transfer(0)
+  // DuoqianTransfer(19) / propose_transfer(0)
   // 格式：[0x13][0x00][org:u8][institution:48][beneficiary:32][amount:u128_le][Vec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeTransfer(Uint8List bytes) {
@@ -559,7 +565,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManagePow(17) / propose_create(0)
+  // DuoqianManage(17) / propose_create(0)
   // 格式：[17][0][BoundedVec sfid_id][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreate(Uint8List bytes) {
@@ -624,7 +630,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManagePow(17) / propose_create_personal(4)
+  // DuoqianManage(17) / propose_create_personal(4)
   // 格式：[17][4][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
@@ -680,7 +686,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManagePow(17) / propose_close(1)
+  // DuoqianManage(17) / propose_close(1)
   // 格式：[17][1][duoqian_address:32][beneficiary:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeClose(Uint8List bytes) {
@@ -701,7 +707,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransferPow(19) / propose_safety_fund(3)
+  // DuoqianTransfer(19) / propose_safety_fund(3)
   // 格式：[19][3][beneficiary:32][amount:u128][BoundedVec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
@@ -733,7 +739,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransferPow(19) / propose_sweep(5)
+  // DuoqianTransfer(19) / propose_sweep(5)
   // 格式：[19][5][institution:48][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {

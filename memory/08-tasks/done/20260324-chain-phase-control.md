@@ -36,7 +36,7 @@
 | 3 | `runtime-upgrade/src/lib.rs` | 新增 `developer_direct_upgrade` extrinsic + 开关控制 |
 | 4 | `configs/mod.rs` | 新增 `DeveloperUpgradeOrigin`；phase-control pallet Config |
 | 5 | `pow_const.rs` | 去掉 `dev-chain` 编译特性，目标时间改为从链上读取 |
-| 6 | `pow-difficulty-module/src/lib.rs` | 难度目标窗口从链上 `TargetBlockTimeMs` 读取 |
+| 6 | `pow-difficulty/src/lib.rs` | 难度目标窗口从链上 `TargetBlockTimeMs` 读取 |
 | 7 | `node/src/service.rs` | 矿工提交门控通过 Runtime API 读当前目标时间 |
 
 ### 不需要改

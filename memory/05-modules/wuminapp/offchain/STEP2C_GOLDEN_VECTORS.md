@@ -51,7 +51,7 @@ revert,用户 L3 付款看似成功实则全挂。
 
 ### 4.1 Rust 端
 
-`citizenchain/runtime/transaction/offchain-transaction-pos/src/batch_item.rs`
+`citizenchain/runtime/transaction/offchain-transaction/src/batch_item.rs`
 内部 `tests` 模块追加 3 个单测 + 2 个工具(`hex_lower` / `assert_hex_eq`):
 - `golden_fixture1_simple_same_bank`
 - `golden_fixture2_cross_bank_big_values`
@@ -88,7 +88,7 @@ mock 修好后暴露出 3 个之前因编译失败而根本无法运行的业务
 ## 6. 验证
 
 ```
-$ cd citizenchain && cargo test --package offchain-transaction-pos --lib 'batch_item::tests'
+$ cd citizenchain && cargo test --package offchain-transaction --lib 'batch_item::tests'
 test result: ok. 5 passed; 0 failed  # 3 个 golden + 2 个旧 signing_hash 基础测试
 
 $ cd wuminapp && flutter test test/trade/payment_intent_golden_test.dart

@@ -46,7 +46,7 @@
    - `chain_getBlock`
    - `fee_blockFees`
    - `state_getStorage(Timestamp.Now)`
-   - 若区块作者是当前本节点矿工，再查询 `state_getStorage(FullnodePowReward::RewardWalletByMiner, block_hash)`
+   - 若区块作者是当前本节点矿工，再查询 `state_getStorage(FullnodeIssuance::RewardWalletByMiner, block_hash)`
 4. 更新累计收益、按 UTC 天收益桶、最近 20 条记录。
 5. 返回聚合结果。
 

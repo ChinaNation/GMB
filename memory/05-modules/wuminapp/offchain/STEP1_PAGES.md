@@ -68,7 +68,7 @@ No issues found! (ran in 2.7s)
 
 | 端 | 文件 | 对应链上 |
 |---|---|---|
-| `OnchainClearingBankRpc.bindClearingBank` | wuminapp | `offchain_transaction_pos::Call::bind_clearing_bank` (call_index 30) |
+| `OnchainClearingBankRpc.bindClearingBank` | wuminapp | `offchain_transaction::Call::bind_clearing_bank` (call_index 30) |
 | `OnchainClearingBankRpc.deposit` | wuminapp | call_index 31 |
 | `OnchainClearingBankRpc.withdraw` | wuminapp | call_index 32 |
 | `OnchainClearingBankRpc.switchBank` | wuminapp | call_index 33 |

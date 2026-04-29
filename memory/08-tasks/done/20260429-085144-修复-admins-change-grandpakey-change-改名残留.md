@@ -12,7 +12,7 @@
 
 ## 改动范围
 
-- `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`
+- `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`
 - `memory/08-tasks/done/20260408-sfid-三角色命名统一-任务卡0.5.md`
 - `memory/08-tasks/done/20260328-112311-审查-admins-change-模块安全与质量.md`
 - `memory/08-tasks/open/20260429-runtime-step2-admins-change-unified-subjects.md`
@@ -21,11 +21,11 @@
 ## 实施记录
 
 - 任务卡已创建。
-- 已修复 `duoqian-manage-pow` 测试提示文案中的旧命名。
+- 已修复 `duoqian-manage` 测试提示文案中的旧命名。
 - 已修复历史任务文档中的旧管理员 storage 口径。
 - 已将 step2 任务卡文件名和任务索引统一到 `admins-change`。
 - 已复扫旧模块名、旧 crate 标识和旧管理员 storage 口径，当前活跃仓库范围未再命中。
-- 已执行验证：`cargo test -p duoqian-manage-pow --lib`，21 个测试全部通过。
+- 已执行验证：`cargo test -p duoqian-manage --lib`，21 个测试全部通过。
 
 ## 完成信息
 

@@ -177,7 +177,7 @@ pub mod pallet {
     /// 统一管理员主体表：subject_id → 管理员、阈值和生命周期。
     ///
     /// 创世时写入国储会、省储会、省储行；SFID 机构多签和个人多签由
-    /// `duoqian-manage-pow` 在创建提案阶段写入 Pending，投票通过后激活。
+    /// `duoqian-manage` 在创建提案阶段写入 Pending，投票通过后激活。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
@@ -1208,8 +1208,8 @@ mod tests {
                 assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
-            let proposal = voting_engine::Pallet::<Test>::proposals(pid)
-                .expect("proposal should exist");
+            let proposal =
+                voting_engine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_PASSED);
             let data = voting_engine::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");

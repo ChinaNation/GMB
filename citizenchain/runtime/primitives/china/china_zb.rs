@@ -1,6 +1,6 @@
 //! 汇总 runtime/primitives/china 目录下所有制度保留地址
 //! （main_address + fee_address + stake_address + NRC_ANQUAN_ADDRESS）。
-//! 用于禁止 duoqian-manage-pow 抢注这些机构地址。
+//! 用于禁止 duoqian-manage 抢注这些机构地址。
 //! 派生统一走 `primitives::core_const::DUOQIAN_DOMAIN` + op_tag，由`tools/duoqian.py` 一次性生成，禁止手改。
 
 use hex_literal::hex;

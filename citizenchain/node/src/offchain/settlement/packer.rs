@@ -39,10 +39,10 @@ pub const BATCH_SIGNING_DOMAIN: &[u8] = b"GMB_OFFCHAIN_BATCH_V1";
 // ---------------- 节点批次项(与 runtime 结构对齐) ----------------
 
 /// `NodeBatchItem`:节点层批次项,字节级对齐 runtime 端
-/// `offchain_transaction_pos::batch_item::OffchainBatchItemV2`。
+/// `offchain_transaction::batch_item::OffchainBatchItemV2`。
 ///
 /// 之所以再定义一份而不直接引用 pallet 类型:
-/// - 避免 `node/Cargo.toml` 直接 dep 到 `offchain-transaction-pos` pallet
+/// - 避免 `node/Cargo.toml` 直接 dep 到 `offchain-transaction` pallet
 ///   (`citizenchain` runtime 已传递依赖,但我们希望 node/offchain 子树可以
 ///   独立于 runtime 升级节奏编译)。
 /// - SCALE 编码只看**字段顺序和宽度**,两边逐字段对齐即可跨 crate 互认。
@@ -90,7 +90,7 @@ pub trait BatchSigner: Send + Sync {
 }
 
 /// Extrinsic 提交器。负责把 `(institution, batch_seq, batch_bytes, sig)` 转成
-/// `offchain_transaction_pos::Call::submit_offchain_batch_v2` extrinsic 并提
+/// `offchain_transaction::Call::submit_offchain_batch_v2` extrinsic 并提
 /// 交到节点的 `TransactionPool`。
 ///
 /// Step 2b-ii-α:`NoopBatchSubmitter` 占位;Step 2b-ii-β 接 substrate client +

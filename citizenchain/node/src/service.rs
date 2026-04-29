@@ -14,7 +14,7 @@ use citizenchain::{self, apis::RuntimeApi, opaque::Block};
 use codec::{Decode, Encode};
 use futures::FutureExt;
 use genesis_pallet::GenesisPalletApi;
-use pow_difficulty_module::PowDifficultyApi;
+use pow_difficulty::PowDifficultyApi;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus_pow::{MiningHandle, PowAlgorithm, PowBlockImport};
 use sc_network::NetworkBackend as _;

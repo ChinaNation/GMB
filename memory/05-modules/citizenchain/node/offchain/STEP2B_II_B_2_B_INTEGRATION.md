@@ -115,7 +115,7 @@ every 30s (spawned task)
                                    ✅ pool.submit_one(best_hash,
                                          Local, opaque)        → TransactionPool
                                                                 ↓
-                                                          RuntimeCall::OffchainTransactionPos(
+                                                          RuntimeCall::OffchainTransaction(
                                                             submit_offchain_batch_v2 {..})
                                                                 ↓
                                                           ✅ settlement::execute_clearing_bank_batch
@@ -188,7 +188,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 - 删除 `node/src/offchain_{ledger,packer,gossip}.rs`
 - 删除 `main.rs` 里对应 mod 声明
 - 删除 `rpc.rs::FullDeps` 中 `offchain_ledger` / `offchain_shenfen_id` / `offchain_gossip_tx`(老省储行清算字段)
-- runtime `offchain-transaction-pos` 删除 call_index 0 旧 `submit_offchain_batch` / 9 旧 `bind_clearing_institution` / 1/2 旧 `propose_institution_rate`
+- runtime `offchain-transaction` 删除 call_index 0 旧 `submit_offchain_batch` / 9 旧 `bind_clearing_institution` / 1/2 旧 `propose_institution_rate`
 
 ## 8. 变更记录
 

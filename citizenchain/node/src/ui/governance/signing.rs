@@ -119,7 +119,7 @@ pub struct VoteSubmitResult {
 ///
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」:
 /// 所有业务 pallet(admins_change / resolution_destro /
-/// grandpakey_change / duoqian_manage_pow / duoqian_transfer_pow)的 vote_X
+/// grandpakey_change / duoqian_manage / duoqian_transfer)的 vote_X
 /// 已物理删除,管理员一人一票统一走 `VotingEngine::internal_vote`
 /// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
 /// `InternalVoteExecutor`。
@@ -361,7 +361,7 @@ pub fn build_propose_transfer_sign_request(
     let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
     let mut call_data =
         Vec::with_capacity(2 + 1 + 48 + 32 + 16 + remark_compact.len() + remark_bytes.len());
-    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(19u8); // DuoqianTransfer pallet
     call_data.push(0u8); // propose_transfer call
     call_data.push(org_type);
     call_data.extend_from_slice(&institution_id);
@@ -470,7 +470,7 @@ pub fn build_propose_safety_fund_sign_request(
     // call data: [0x13][0x03][beneficiary:32][amount:u128_le][remark:Vec<u8>]
     let remark_compact = encode_compact_u32(remark_bytes.len() as u32);
     let mut call_data = Vec::with_capacity(2 + 32 + 16 + remark_compact.len() + remark_bytes.len());
-    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(19u8); // DuoqianTransfer pallet
     call_data.push(1u8); // propose_safety_fund_transfer call (Phase 2 重排,原 3)
     call_data.extend_from_slice(&beneficiary_bytes);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());
@@ -563,7 +563,7 @@ pub fn build_propose_sweep_sign_request(
 
     // call data: [0x13][0x05][institution:48][amount:u128_le]
     let mut call_data = Vec::with_capacity(2 + 48 + 16);
-    call_data.push(19u8); // DuoqianTransferPow pallet
+    call_data.push(19u8); // DuoqianTransfer pallet
     call_data.push(2u8); // propose_sweep_to_main call (Phase 2 重排,原 5)
     call_data.extend_from_slice(&institution_id);
     call_data.extend_from_slice(&amount_fen.to_le_bytes());

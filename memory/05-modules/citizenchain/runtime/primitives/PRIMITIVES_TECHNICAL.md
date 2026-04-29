@@ -16,7 +16,7 @@
 | `src/lib.rs` | 模块声明入口 |
 | `src/core_const.rs` | 货币基础参数、手续费模型、利率模型、安全参数 |
 | `src/pow_const.rs` | PoW 难度、全节点发行、区块时间参数 |
-| `src/citizen_const.rs` | 公民轻节点认证发行常量 |
+| `src/citizen_const.rs` | 公民认证发行常量 |
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限） |
 | `src/genesis.rs` | 创世宣言、创世人口、创世发行总量 |
 | `china/mod.rs` | 机构常量模块声明 |
@@ -62,12 +62,12 @@
 | FULLNODE_REWARD_END_BLOCK | 9,999,999 | 发行 9,999,999 块 |
 | FULLNODE_TOTAL_ISSUANCE（计算值） | 9,998,999,000,100 分 | 99,989,990,001 元 |
 
-### 2.5 公民轻节点发行
+### 2.5 公民发行
 | 常量 | 值 | 白皮书对应 |
 |------|-----|-----------|
-| CITIZEN_LIGHTNODE_HIGH_REWARD_COUNT | 14,436,417 | 高额阶段节点数 |
-| CITIZEN_LIGHTNODE_HIGH_REWARD | 999,900 分 | 前期 9,999 元/节点 |
-| CITIZEN_LIGHTNODE_NORMAL_REWARD | 99,900 分 | 后期 999 元/节点 |
+| CITIZEN_ISSUANCE_HIGH_REWARD_COUNT | 14,436,417 | 高额阶段节点数 |
+| CITIZEN_ISSUANCE_HIGH_REWARD | 999,900 分 | 前期 9,999 元/节点 |
+| CITIZEN_ISSUANCE_NORMAL_REWARD | 99,900 分 | 后期 999 元/节点 |
 
 ### 2.6 交易手续费
 | 常量 | 值 | 白皮书对应 |
@@ -93,7 +93,7 @@
 ## 3. china/ 目录规则
 - 每个机构文件必须在 `china/mod.rs` 中显式声明，避免目录中存在未编译的残留文件。
 - 多签管理员字段统一命名 `duoqian_admins`，不允许 `admins` 变体。
-- `china_zb.rs` 中的 277 个保留地址由 `duoqian-manage-pow` 模块在转账时校验，防止抢注机构地址。
+- `china_zb.rs` 中的 277 个保留地址由 `duoqian-manage` 模块在转账时校验，防止抢注机构地址。
 
 ---
 

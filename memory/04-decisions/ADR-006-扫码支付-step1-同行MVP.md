@@ -29,12 +29,12 @@
   - 主账户地址 = `blake2b_256("GMB_DUOQIAN_V1" || sfid_id || "主账户" || nonce_1)[0..32]`
   - 费用账户地址 = `blake2b_256("GMB_DUOQIAN_V1" || sfid_id || "费用账户" || nonce_2)[0..32]`
 - **管理员数量 N 由链上 `propose_create` 时写入**,阈值 T ≥ ⌈N/2⌉,非固定 9
-- 清算行在链上两步注册(SFID 颁证 + duoqian-manage-pow),**不经省储行审批**
+- 清算行在链上两步注册(SFID 颁证 + duoqian-manage),**不经省储行审批**
 
 ### 3.2 L3 绑定
 
 - `bind_clearing_bank` = **绑定即开户,无预存,无业务开户费**
-- 链上只产生"付费调用交易 1 元/次"(沿用现有 `PowTxAmountExtractor` 分类规则)
+- 链上只产生"付费调用交易 1 元/次"(沿用现有 `OnchainTxAmountExtractor` 分类规则)
 - 同时只能绑定一家清算行;自由切换(前置:余额清零),无次数/时间间隔限制
 - 绑定对象必须是**主账户**(不能绑费用账户)
 
@@ -66,10 +66,10 @@
 
 ### 4.1 不新增 pallet
 
-扫码支付全部逻辑合入现有 `citizenchain/runtime/transaction/offchain-transaction-pos/`,按子文件拆分:
+扫码支付全部逻辑合入现有 `citizenchain/runtime/transaction/offchain-transaction/`,按子文件拆分:
 
 ```
-offchain-transaction-pos/src/
+offchain-transaction/src/
 ├── lib.rs           # pallet 入口,聚合 Storage/Events/Errors/Calls
 ├── batch_item.rs    # Step 1 新增:PaymentIntent + 未来批次结构
 ├── bank_check.rs    # Step 1 新增:A3 ∈ {SFR,FFR} + Active 判定
@@ -82,11 +82,11 @@ offchain-transaction-pos/src/
 
 ### 4.2 与现有模块的边界
 
-- `duoqian-manage-pow`:**不动**,负责机构多签账户的链上注册
-- `duoqian-transfer-pow`:**不动**,负责机构多签账户之间的转账
-- `onchain-transaction-pow`:**不动**,链上支付独立入口
-- `sfid-code-auth`:**不动**
-- `institution-asset-guard`:Step 1 微调新增 4 个 Action(L3DepositIn / L3WithdrawOut / L2ClearingDebit / L2FeeCollect)
+- `duoqian-manage`:**不动**,负责机构多签账户的链上注册
+- `duoqian-transfer`:**不动**,负责机构多签账户之间的转账
+- `onchain-transaction`:**不动**,链上支付独立入口
+- `sfid-system`:**不动**
+- `institution-asset`:Step 1 微调新增 4 个 Action(L3DepositIn / L3WithdrawOut / L2ClearingDebit / L2FeeCollect)
 
 ### 4.3 现有 lib.rs 中的旧逻辑处置
 

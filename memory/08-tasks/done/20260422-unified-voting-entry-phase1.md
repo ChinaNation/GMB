@@ -106,7 +106,7 @@ Phase 2 业务模块改造完成后替换为 5 元 tuple。
 ## 不在本 Phase 范围
 
 - ⚠️ **整链 `cargo check -p node` 不通过**：业务模块（admins-change / resolution-destro /
-  grandpakey-change / duoqian-manage-pow / duoqian-transfer-pow）当前仍在引用
+  grandpakey-change / duoqian-manage / duoqian-transfer）当前仍在引用
   `InternalVoteEngine::cast_internal_vote`，Phase 2 会统一清理。
 - Phase 2：业务模块改造（删 `vote_X` / `finalize_X`，新增 `InternalVoteExecutor`
   实现 `InternalVoteResultCallback`）

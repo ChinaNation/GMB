@@ -15,7 +15,7 @@ const techStack = [
 const pallets = [
   {
     name: 'PoW 共识',
-    module: 'pow-difficulty-module',
+    module: 'pow-difficulty',
     desc: '工作量证明挖矿机制，动态难度调整，保障全节点公平参与出块',
   },
   {
@@ -25,17 +25,17 @@ const pallets = [
   },
   {
     name: 'SFID 身份认证',
-    module: 'sfid-code-auth',
+    module: 'sfid-system',
     desc: '链上公民身份绑定与验证，一人一链上身份，保障投票资格',
   },
   {
-    name: '公民轻节点发行',
-    module: 'citizen-lightnode-issuance',
+    name: '公民发行',
+    module: 'citizen-issuance',
     desc: '经 SFID 认证的公民轻节点获得公民币发行，按节点认证数量线性释放',
   },
   {
-    name: '全节点 PoW 奖励',
-    module: 'fullnode-pow-reward',
+    name: '全节点发行',
+    module: 'fullnode-issuance',
     desc: '全节点通过 PoW 出块获取区块奖励，奖励逐块释放，跨约 1000 万区块',
   },
   {

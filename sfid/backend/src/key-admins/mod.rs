@@ -1216,7 +1216,7 @@ async fn fetch_chain_keyring_from_chain() -> Result<ChainKeyringState, String> {
     async fn fetch_pubkey(storage_name: &str) -> Result<String, String> {
         let storage_key = format!(
             "0x{}{}",
-            hex::encode(twox_128(b"SfidCodeAuth")),
+            hex::encode(twox_128(b"SfidSystem")),
             hex::encode(twox_128(storage_name.as_bytes()))
         );
         let raw = chain_rpc_call("state_getStorage", json!([storage_key])).await?;
@@ -1276,7 +1276,7 @@ async fn submit_rotate_sfid_keys_extrinsic(
     let new_backup_account = parse_account_id32(new_backup_pubkey)
         .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
     let payload = tx(
-        "SfidCodeAuth",
+        "SfidSystem",
         "rotate_sfid_keys",
         vec![Value::from_bytes(new_backup_account)],
     );
@@ -1353,7 +1353,7 @@ async fn submit_rotate_sfid_keys_extrinsic(
 /// 1. 若数据库里该管理员已有 `encrypted_signing_privkey` → 解密 → 构造 Pair → 载入
 ///    cache。
 /// 2. 否则（首次登录）→ 随机生成 32 字节 seed → 派生 Pair → 加密持久化 → 推链
-///    `SfidCodeAuth::set_sheng_signing_pubkey(province, Some(pubkey))` → 载入 cache。
+///    `SfidSystem::set_sheng_signing_pubkey(province, Some(pubkey))` → 载入 cache。
 ///
 /// 失败时返回 Err，登录流程应记录 warn 但继续颁发 access_token（等下次登录重试
 /// bootstrap，或由运维手工处理）。

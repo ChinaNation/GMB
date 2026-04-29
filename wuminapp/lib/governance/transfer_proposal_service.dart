@@ -24,7 +24,7 @@ class TransferProposalService {
 
   // ──── 常量 ────
 
-  /// DuoqianTransferPow pallet index（runtime pallet_index=19）。
+  /// DuoqianTransfer pallet index（runtime pallet_index=19）。
   ///
   /// Phase 3(2026-04-22): 本 pallet 的所有 vote_X / finalize_X 已删除,
   /// 只保留 propose_X(0/1/2) 与 execute_X(3/4/5) 两组路径;
@@ -354,8 +354,8 @@ class TransferProposalService {
       if (cached != null) {
         cachedMetas[id] = cached;
       } else {
-        final keyBytes = _buildStorageKey(
-            'VotingEngine', 'Proposals', _u64ToLeBytes(id));
+        final keyBytes =
+            _buildStorageKey('VotingEngine', 'Proposals', _u64ToLeBytes(id));
         uncachedMetaKeys.add('0x${_hexEncode(keyBytes)}');
         uncachedMetaIds.add(id);
       }
@@ -935,7 +935,8 @@ class TransferProposalService {
 
     // remark: Vec<u8>
     final remarkBytes = utf8.encode(remark);
-    output.write(CompactBigIntCodec.codec.encode(BigInt.from(remarkBytes.length)));
+    output.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(remarkBytes.length)));
     if (remarkBytes.isNotEmpty) {
       output.write(Uint8List.fromList(remarkBytes));
     }
@@ -946,7 +947,7 @@ class TransferProposalService {
   /// 从链上 SafetyFundProposalActions 存储查询安全基金转账提案详情。
   Future<SafetyFundProposalInfo?> fetchSafetyFundAction(int proposalId) async {
     final key = _buildStorageKey(
-      'DuoqianTransferPow',
+      'DuoqianTransfer',
       'SafetyFundProposalActions',
       _u64ToLeBytes(proposalId),
     );
@@ -987,7 +988,7 @@ class TransferProposalService {
   /// 从链上 SweepProposalActions 存储查询手续费划转提案详情。
   Future<SweepProposalInfo?> fetchSweepAction(int proposalId) async {
     final key = _buildStorageKey(
-      'DuoqianTransferPow',
+      'DuoqianTransfer',
       'SweepProposalActions',
       _u64ToLeBytes(proposalId),
     );
@@ -1074,25 +1075,42 @@ class TransferProposalService {
 
     // ──── 诊断：逐字节打印 extrinsic 结构 ────
     debugPrint('[TransferProposal] ════════ EXTRINSIC 诊断 ════════');
-    debugPrint('[TransferProposal] signing payload hex (${payloadBytes.length} bytes): ${_hexEncode(payloadBytes)}');
-    debugPrint('[TransferProposal] signature hex (${signature.length} bytes): ${_hexEncode(signature)}');
-    debugPrint('[TransferProposal] signer pubkey hex: ${_hexEncode(signerPubkey)}');
-    debugPrint('[TransferProposal] call data hex (${callData.length} bytes): ${_hexEncode(callData)}');
-    debugPrint('[TransferProposal] nonce=$nonce, eraPeriod=$_eraPeriod, blockNumber=${latestBlock.blockNumber}');
-    debugPrint('[TransferProposal] specVersion=${runtimeVersion.specVersion}, txVersion=${runtimeVersion.transactionVersion}');
+    debugPrint(
+        '[TransferProposal] signing payload hex (${payloadBytes.length} bytes): ${_hexEncode(payloadBytes)}');
+    debugPrint(
+        '[TransferProposal] signature hex (${signature.length} bytes): ${_hexEncode(signature)}');
+    debugPrint(
+        '[TransferProposal] signer pubkey hex: ${_hexEncode(signerPubkey)}');
+    debugPrint(
+        '[TransferProposal] call data hex (${callData.length} bytes): ${_hexEncode(callData)}');
+    debugPrint(
+        '[TransferProposal] nonce=$nonce, eraPeriod=$_eraPeriod, blockNumber=${latestBlock.blockNumber}');
+    debugPrint(
+        '[TransferProposal] specVersion=${runtimeVersion.specVersion}, txVersion=${runtimeVersion.transactionVersion}');
     debugPrint('[TransferProposal] genesisHash=0x${_hexEncode(genesisHash)}');
-    debugPrint('[TransferProposal] blockHash=0x${_hexEncode(latestBlock.blockHash)}');
-    debugPrint('[TransferProposal] registry.extrinsicVersion=${registry.extrinsicVersion}');
+    debugPrint(
+        '[TransferProposal] blockHash=0x${_hexEncode(latestBlock.blockHash)}');
+    debugPrint(
+        '[TransferProposal] registry.extrinsicVersion=${registry.extrinsicVersion}');
     // 打印 registry 中的 signedExtension 键列表（按序）
     try {
-      final extKeys = (registry.getSignedExtensionTypes() as Map<String, dynamic>).keys.toList();
-      debugPrint('[TransferProposal] signedExtension keys (${extKeys.length}): $extKeys');
-      final addExtKeys = (registry.getAdditionalSignedExtensionTypes() as Map<String, dynamic>).keys.toList();
-      debugPrint('[TransferProposal] additionalSignedExtension keys (${addExtKeys.length}): $addExtKeys');
+      final extKeys =
+          (registry.getSignedExtensionTypes() as Map<String, dynamic>)
+              .keys
+              .toList();
+      debugPrint(
+          '[TransferProposal] signedExtension keys (${extKeys.length}): $extKeys');
+      final addExtKeys =
+          (registry.getAdditionalSignedExtensionTypes() as Map<String, dynamic>)
+              .keys
+              .toList();
+      debugPrint(
+          '[TransferProposal] additionalSignedExtension keys (${addExtKeys.length}): $addExtKeys');
     } catch (e) {
       debugPrint('[TransferProposal] 获取 extension keys 失败: $e');
     }
-    debugPrint('[TransferProposal] encoded extrinsic hex (${encoded.length} bytes): ${_hexEncode(encoded)}');
+    debugPrint(
+        '[TransferProposal] encoded extrinsic hex (${encoded.length} bytes): ${_hexEncode(encoded)}');
     // 手工拆解 encoded extrinsic：compact_length + [0x84][0x00+signer(32)][0x01+sig(64)][extensions][calldata]
     {
       int pos = 0;
@@ -1100,19 +1118,30 @@ class TransferProposalService {
       final firstByte = encoded[0];
       int compactLen;
       if (firstByte & 0x03 == 0x00) {
-        compactLen = firstByte >> 2; pos = 1;
+        compactLen = firstByte >> 2;
+        pos = 1;
       } else if (firstByte & 0x03 == 0x01) {
-        compactLen = ((encoded[1] << 8 | firstByte) >> 2); pos = 2;
+        compactLen = ((encoded[1] << 8 | firstByte) >> 2);
+        pos = 2;
       } else if (firstByte & 0x03 == 0x02) {
-        compactLen = ((encoded[3] << 24 | encoded[2] << 16 | encoded[1] << 8 | firstByte) >> 2); pos = 4;
+        compactLen = ((encoded[3] << 24 |
+                encoded[2] << 16 |
+                encoded[1] << 8 |
+                firstByte) >>
+            2);
+        pos = 4;
       } else {
-        compactLen = -1; pos = 0;
+        compactLen = -1;
+        pos = 0;
       }
-      debugPrint('[TransferProposal] compact length prefix: $compactLen, body starts at byte $pos');
+      debugPrint(
+          '[TransferProposal] compact length prefix: $compactLen, body starts at byte $pos');
       if (pos < encoded.length) {
-        debugPrint('[TransferProposal] version byte: 0x${encoded[pos].toRadixString(16).padLeft(2, '0')}');
+        debugPrint(
+            '[TransferProposal] version byte: 0x${encoded[pos].toRadixString(16).padLeft(2, '0')}');
         final bodyHex = _hexEncode(encoded.sublist(pos));
-        debugPrint('[TransferProposal] extrinsic body hex ($compactLen bytes): $bodyHex');
+        debugPrint(
+            '[TransferProposal] extrinsic body hex ($compactLen bytes): $bodyHex');
       }
     }
     debugPrint('[TransferProposal] ════════ 诊断结束 ════════');
@@ -1155,7 +1184,8 @@ class TransferProposalService {
   // ──── 内部：编码工具 ────
 
   Uint8List _institutionIdentityToFixed48(String institutionIdentity) {
-    return Uint8List.fromList(institutionIdentityToPalletId(institutionIdentity));
+    return Uint8List.fromList(
+        institutionIdentityToPalletId(institutionIdentity));
   }
 
   /// 将 BigInt 编码为 u128 little-endian（16 字节）。

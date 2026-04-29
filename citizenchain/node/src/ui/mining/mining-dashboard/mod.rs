@@ -469,7 +469,7 @@ fn timestamp_now_storage_key() -> String {
 
 fn reward_wallet_storage_key(miner_account: &[u8; 32]) -> String {
     let mut key = Vec::with_capacity(16 + 16 + 16 + 32);
-    key.extend_from_slice(&twox_128(b"FullnodePowReward"));
+    key.extend_from_slice(&twox_128(b"FullnodeIssuance"));
     key.extend_from_slice(&twox_128(b"RewardWalletByMiner"));
     key.extend_from_slice(&blake2_128(miner_account));
     key.extend_from_slice(miner_account);

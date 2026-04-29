@@ -46,7 +46,7 @@ fn known_peers_cache() -> &'static Mutex<CachedKnownPeers> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// 网络总览面板对前端返回的聚合统计结果。
-/// clearing_nodes 自 ADR-007 Step 2 起取自链上 `OffchainTransactionPos::ClearingBankNodes`
+/// clearing_nodes 自 ADR-007 Step 2 起取自链上 `OffchainTransaction::ClearingBankNodes`
 /// storage 的总条目数(即声明为清算行的机构数量)。
 pub struct NetworkOverview {
     pub total_nodes: u64,

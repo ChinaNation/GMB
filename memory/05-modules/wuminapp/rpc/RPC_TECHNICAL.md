@@ -216,7 +216,7 @@ Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compa
 
 `OnchainRpc.estimateTransferFeeYuan(double amountYuan)` — 纯客户端静态方法，无需 RPC。
 
-citizenchain 使用自定义 `PowOnchainChargeAdapter`，标准 `payment_queryInfo` 返回 0。客户端按链上相同逻辑计算：
+citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo` 返回 0。客户端按链上相同逻辑计算：
 
 - 费率：`Perbill(1_000_000)` = 0.1%
 - 最低手续费：10 fen = 0.10 元

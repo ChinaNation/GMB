@@ -204,7 +204,7 @@ fn build_genesis() -> Value {
         }),
     );
     root.insert(
-        "sfidCodeAuth".into(),
+        "sfidSystem".into(),
         json!({
             "sfidMainAccount": account_to_genesis_ss58(&sfid_main),
             "sfidBackupAccount1": account_to_genesis_ss58(&sfid_backup_1),
@@ -218,10 +218,10 @@ fn build_genesis() -> Value {
         }),
     );
 
-    // 中文注释:`offchain-transaction-pos` pallet 未声明 `#[pallet::genesis_config]`,
+    // 中文注释:`offchain-transaction` pallet 未声明 `#[pallet::genesis_config]`,
     // 所有 Storage 都是 ValueQuery=0 / OptionQuery=None / 治理运行时产生,
     // 不应在创世 preset 中塞入对应字段(会导致 runtime GenesisConfig
-    // schema 拒绝"unknown field `offchainTransactionPos`")。Step 2b-iv-b
+    // schema 拒绝"unknown field `offchainTransaction`")。Step 2b-iv-b
     // 彻底清理老省储行清算后,老的 `initialRates` 创世路径也一并作废。
 
     // 中文注释：创世常量写入 genesis-pallet 链上存储。
@@ -441,7 +441,7 @@ mod tests {
             "sfidBackupAccount1",
             "sfidBackupAccount2",
         ] {
-            let account = patch["sfidCodeAuth"][field].clone();
+            let account = patch["sfidSystem"][field].clone();
             let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
             assert!(
                 parsed.is_ok(),
@@ -479,11 +479,11 @@ mod tests {
             resolution_issuance.err()
         );
 
-        let sfid: Result<sfid_code_auth::GenesisConfig<crate::Runtime>, _> =
-            serde_json::from_value(patch["sfidCodeAuth"].clone());
+        let sfid: Result<sfid_system::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["sfidSystem"].clone());
         assert!(
             sfid.is_ok(),
-            "sfidCodeAuth should deserialize: {:?}",
+            "sfidSystem should deserialize: {:?}",
             sfid.err()
         );
     }

@@ -174,7 +174,7 @@ Response: {
 2. `build_bind_credential(state, account_pubkey, archive_no, uuid_nonce)`
    - `binding_id = blake2_256(archive_no.as_bytes())`
    - 省级密钥签名 payload
-3. 构造 `SfidCodeAuth::bind_sfid(credential)` extrinsic
+3. 构造 `SfidSystem::bind_sfid(credential)` extrinsic
 4. 参考 `submit_register_sfid_institution_extrinsic` 模式：
    - `resolve_business_signer(state, ctx)` 获取省级 Pair
    - 显式 nonce + immortal + submit_and_watch + 等 InBestBlock
@@ -343,7 +343,7 @@ pub fn unbind_sfid(
 
 | 文件 | 改动 |
 |---|---|
-| `citizenchain/runtime/otherpallet/sfid-code-auth/src/lib.rs` | 改造 `unbind_sfid`（call_index 1）：新增 `target` 参数，权限改为仅 SFID 主账户/省级签名账户可调用，禁止用户自行解绑 |
+| `citizenchain/runtime/otherpallet/sfid-system/src/lib.rs` | 改造 `unbind_sfid`（call_index 1）：新增 `target` 参数，权限改为仅 SFID 主账户/省级签名账户可调用，禁止用户自行解绑 |
 
 ### 不改动
 

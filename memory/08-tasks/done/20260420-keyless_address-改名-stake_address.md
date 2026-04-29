@@ -11,8 +11,8 @@ completed: 2026-04-20
 - [primitives/china/china_ch.rs](citizenchain/runtime/primitives/china/china_ch.rs) 44 处 `keyless_address → stake_address`
 - runtime 调用方：[configs/mod.rs](citizenchain/runtime/src/configs/mod.rs)（字段访问 + `is_keyless_account → is_stake_account` / `is_keyless_multi_address → is_stake_multi_address` / 测试辅助 `keyless_account → stake_account` / 3 个测试函数名 + 局部变量 `keyless/keyless_raw` → `stake/stake_raw`）、[genesis_config_presets.rs](citizenchain/runtime/src/genesis_config_presets.rs)、[runtime/src/lib.rs](citizenchain/runtime/src/lib.rs)
 - 节点 UI：[node/src/ui/governance/mod.rs](citizenchain/node/src/ui/governance/mod.rs) + [node/src/ui/home/rpc/mod.rs](citizenchain/node/src/ui/home/rpc/mod.rs)
-- institution-asset-guard [注释](citizenchain/runtime/transaction/institution-asset-guard/src/lib.rs) 分类记法更新
-- 文档：GMB_WHITEPAPER、CITIZENCHAIN_TECHNICAL、CROSS_MODULE_INTEGRATION、INSTITUTION_ASSET_GUARD_TECHNICAL、DUOQIAN_TRANSFER_TECHNICAL、2 份任务卡注释
+- institution-asset [注释](citizenchain/runtime/transaction/institution-asset/src/lib.rs) 分类记法更新
+- 文档：GMB_WHITEPAPER、CITIZENCHAIN_TECHNICAL、CROSS_MODULE_INTEGRATION、INSTITUTION_ASSET_TECHNICAL、DUOQIAN_TRANSFER_TECHNICAL、2 份任务卡注释
 - 验证：`cargo check -p primitives ...` 9 crate 全通过；`cargo test -p primitives` 7/7 通过
 - 全仓库 `rg keyless` 残留：仅本任务卡本身（叙事保留）
 
@@ -68,16 +68,16 @@ completed: 2026-04-20
 
 ## 第 4 步：文档/注释
 - [ ] [GMB_WHITEPAPER.md](memory/00-vision/GMB_WHITEPAPER.md)
-- [ ] [INSTITUTION_ASSET_GUARD_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/institution-asset-guard/INSTITUTION_ASSET_GUARD_TECHNICAL.md)
-- [ ] [DUOQIAN_TRANSFER_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer-pow/DUOQIAN_TRANSFER_TECHNICAL.md)
+- [ ] [INSTITUTION_ASSET_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md)
+- [ ] [DUOQIAN_TRANSFER_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md)
 - [ ] [CITIZENCHAIN_TECHNICAL.md](memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md)
 - [ ] [CROSS_MODULE_INTEGRATION.md](memory/05-modules/citizenchain/runtime/CROSS_MODULE_INTEGRATION.md)
-- [ ] [20260325-130439-...md](memory/08-tasks/done/20260325-130439-新增-institution-asset-guard-公共模块-并接入机构账户资金操作白名单边界.md)
-- [ ] [20260328-123104-...md](memory/08-tasks/done/20260328-123104-全面仔细检查-institution-asset-guard-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md)
-- [ ] [institution-asset-guard/src/lib.rs](citizenchain/runtime/transaction/institution-asset-guard/src/lib.rs) line 12 注释
+- [ ] [20260325-130439-...md](memory/08-tasks/done/20260325-130439-新增-institution-asset-公共模块-并接入机构账户资金操作白名单边界.md)
+- [ ] [20260328-123104-...md](memory/08-tasks/done/20260328-123104-全面仔细检查-institution-asset-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md)
+- [ ] [institution-asset/src/lib.rs](citizenchain/runtime/transaction/institution-asset/src/lib.rs) line 12 注释
 
 ## 第 5 步：验证
-- [ ] `cargo check -p primitives -p institution-asset-guard -p duoqian-transfer-pow -p shengbank-stake-interest -p onchain-transaction-pow -p offchain-transaction-pos -p resolution-destro -p resolution-issuance-gov -p duoqian-manage-pow`
+- [ ] `cargo check -p primitives -p institution-asset -p duoqian-transfer -p shengbank-interest -p onchain-transaction -p offchain-transaction -p resolution-destro -p resolution-issuance-gov -p duoqian-manage`
 - [ ] `cargo test -p primitives`
 
 # 验收

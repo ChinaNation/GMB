@@ -1,4 +1,4 @@
-# 任务卡：修复 duoqian-transfer-pow try_execute_transfer 缺少原子性保护
+# 任务卡：修复 duoqian-transfer try_execute_transfer 缺少原子性保护
 
 - 任务编号：20260327-fix-try-execute-transfer-atomicity
 - 状态：open
@@ -9,11 +9,11 @@
 
 ## 任务需求
 
-为 `duoqian-transfer-pow` 的 `try_execute_transfer` 函数添加 `with_transaction` 原子性保护，防止转账成功但扣费失败时出现部分生效。
+为 `duoqian-transfer` 的 `try_execute_transfer` 函数添加 `with_transaction` 原子性保护，防止转账成功但扣费失败时出现部分生效。
 
 ## 问题描述
 
-`try_execute_transfer`（`citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs:397-468`）内部三步操作没有子事务包裹：
+`try_execute_transfer`（`citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs:397-468`）内部三步操作没有子事务包裹：
 
 1. `Currency::transfer()` — 转账
 2. `Currency::withdraw()` — 扣手续费

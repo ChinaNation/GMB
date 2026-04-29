@@ -124,14 +124,14 @@ make_transfer_sigs
 
 | Pallet | pallet_index | call | call_index | decoded.fields |
 |---|---|---|---|---|
-| DuoqianTransferPow | 19 | execute_transfer | 3 | proposal_id |
-| DuoqianTransferPow | 19 | execute_safety_fund_transfer | 4 | proposal_id |
-| DuoqianTransferPow | 19 | execute_sweep_to_main | 5 | proposal_id |
+| DuoqianTransfer | 19 | execute_transfer | 3 | proposal_id |
+| DuoqianTransfer | 19 | execute_safety_fund_transfer | 4 | proposal_id |
+| DuoqianTransfer | 19 | execute_sweep_to_main | 5 | proposal_id |
 | ResolutionDestro | 14 | execute_destroy | 1 | proposal_id |
 | AdminsChange | 12 | execute_admin_replacement | 1 | proposal_id |
 | GrandpaKeyChange | 16 | execute_replace_grandpa_key | 1 | proposal_id |
 | GrandpaKeyChange | 16 | cancel_failed_replace_grandpa_key | 2 | proposal_id |
-| DuoqianManagePow | 17 | cleanup_rejected_proposal | 4 | proposal_id |
+| DuoqianManage | 17 | cleanup_rejected_proposal | 4 | proposal_id |
 
 (`register_sfid_institution` 由 sfid 后端 ShengSigningPubkey 直签,不走冷钱包 ⇒ 不补 decoder。)
 

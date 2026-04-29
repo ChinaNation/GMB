@@ -1528,7 +1528,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "citizen-lightnode-issuance"
+name = "citizen-issuance"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -1538,7 +1538,7 @@ dependencies = [
  "parity-scale-codec",
  "primitives",
  "scale-info",
- "sfid-code-auth",
+ "sfid-system",
  "sp-io",
  "sp-runtime",
 ]
@@ -1548,9 +1548,9 @@ name = "citizenchain"
 version = "1.0.0"
 dependencies = [
  "admins-change",
- "citizen-lightnode-issuance",
- "duoqian-manage-pow",
- "duoqian-transfer-pow",
+ "citizen-issuance",
+ "duoqian-manage",
+ "duoqian-transfer",
  "ed25519-dalek",
  "frame-benchmarking",
  "frame-executive",
@@ -1560,29 +1560,29 @@ dependencies = [
  "frame-system-benchmarking",
  "frame-system-rpc-runtime-api",
  "frame-try-runtime",
- "fullnode-pow-reward",
+ "fullnode-issuance",
  "genesis-pallet",
  "grandpakey-change",
  "hex",
  "hex-literal",
- "institution-asset-guard",
- "offchain-transaction-pos",
- "onchain-transaction-pow",
+ "institution-asset",
+ "offchain-transaction",
+ "onchain-transaction",
  "pallet-balances",
  "pallet-grandpa",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
- "pow-difficulty-module",
+ "pow-difficulty",
  "primitives",
  "resolution-destro",
  "resolution-issuance",
  "runtime-upgrade",
  "scale-info",
  "serde_json",
- "sfid-code-auth",
- "shengbank-stake-interest",
+ "sfid-system",
+ "shengbank-interest",
  "sp-api",
  "sp-block-builder",
  "sp-consensus-grandpa",
@@ -3033,20 +3033,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
-name = "duoqian-manage-pow"
+name = "duoqian-manage"
 version = "1.0.0"
 dependencies = [
  "admins-change",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset-guard",
- "onchain-transaction-pow",
+ "institution-asset",
+ "onchain-transaction",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
  "scale-info",
- "sfid-code-auth",
+ "sfid-system",
  "sp-core",
  "sp-io",
  "sp-runtime",
@@ -3055,16 +3055,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "duoqian-transfer-pow"
+name = "duoqian-transfer"
 version = "1.0.0"
 dependencies = [
  "admins-change",
- "duoqian-manage-pow",
+ "duoqian-manage",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset-guard",
- "onchain-transaction-pow",
+ "institution-asset",
+ "onchain-transaction",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -3977,7 +3977,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "fullnode-pow-reward"
+name = "fullnode-issuance"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -5389,7 +5389,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "institution-asset-guard"
+name = "institution-asset"
 version = "1.0.0"
 dependencies = [
  "parity-scale-codec",
@@ -7318,7 +7318,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frame-system-rpc-runtime-api",
- "fullnode-pow-reward",
+ "fullnode-issuance",
  "futures 0.3.32",
  "genesis-pallet",
  "hex",
@@ -7328,12 +7328,12 @@ dependencies = [
  "libp2p-identity",
  "log",
  "ocl",
- "offchain-transaction-pos",
- "onchain-transaction-pow",
+ "offchain-transaction",
+ "onchain-transaction",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
- "pow-difficulty-module",
+ "pow-difficulty",
  "primitives",
  "rand 0.8.5",
  "rcgen 0.13.2",
@@ -7735,13 +7735,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "offchain-transaction-pos"
+name = "offchain-transaction"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
- "institution-asset-guard",
+ "institution-asset",
  "log",
  "pallet-balances",
  "parity-scale-codec",
@@ -7789,13 +7789,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "onchain-transaction-pow"
+name = "onchain-transaction"
 version = "1.0.0"
 dependencies = [
  "criterion",
  "frame-support",
  "frame-system",
- "fullnode-pow-reward",
+ "fullnode-issuance",
  "log",
  "pallet-balances",
  "pallet-transaction-payment",
@@ -9165,7 +9165,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pow-difficulty-module"
+name = "pow-difficulty"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -12220,7 +12220,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sfid-code-auth"
+name = "sfid-system"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -12289,7 +12289,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "shengbank-stake-interest"
+name = "shengbank-interest"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",

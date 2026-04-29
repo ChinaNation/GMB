@@ -112,7 +112,7 @@ onchain/
 
 ### 8.1 费率模型
 
-链上使用自定义 `PowOnchainChargeAdapter`，标准 Substrate `payment_queryInfo` 不适用（weight/length 费用均为 0）。
+链上使用自定义 `OnchainChargeAdapter`，标准 Substrate `payment_queryInfo` 不适用（weight/length 费用均为 0）。
 
 - **费率**：`Perbill::from_parts(1_000_000)` = **0.1%**
 - **最低手续费**：`10 fen` = **0.10 元**

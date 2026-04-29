@@ -99,14 +99,14 @@ lib/signer/
 | --- | --- | --- |
 | GMB_ACTIVATE 前缀 (非链上) | `activate_admin` | 管理员激活签名 |
 | Balances(2) / transfer_keep_alive(3) | `transfer` | 转账 |
-| DuoqianTransferPow(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
-| DuoqianTransferPow(19) / vote_transfer(1) | `vote_transfer` | 投票转账提案 |
+| DuoqianTransfer(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
+| DuoqianTransfer(19) / vote_transfer(1) | `vote_transfer` | 投票转账提案 |
 | VotingEngine(9) / joint_vote(3) | `joint_vote` | 联合投票 |
 | VotingEngine(9) / citizen_vote(4) | `citizen_vote` | 公民投票 |
 | RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | Runtime 升级提案 |
 | RuntimeUpgrade(13) / developer(2) | `developer_upgrade` | 开发者直升 |
-| OffchainTransactionPos(21) / bind(9) | `bind_clearing` | 绑定清算行 |
-| OffchainTransactionPos(21) / pay(99) | `offchain_pay` | 链下支付授权 |
+| OffchainTransaction(21) / bind(9) | `bind_clearing` | 绑定清算行 |
+| OffchainTransaction(21) / pay(99) | `offchain_pay` | 链下支付授权 |
 
 交叉验证三态（`DisplayMatchStatus`）：
 
@@ -121,7 +121,7 @@ lib/signer/
 职责：
 
 - 用二维码中的 `sys_pubkey` 验证 `sys_sig`
-- 从链上读取 `SfidCodeAuth::SfidMainAccount`，得到当前 SFID 主验签公钥
+- 从链上读取 `SfidSystem::SfidMainAccount`，得到当前 SFID 主验签公钥
 - `sfid` 场景校验二维码公钥与链上当前 SFID 公钥一致
 - `cpms` 场景校验 `sys_cert` 是否由链上 SFID 当前公钥签发
 - 对 CPMS 证书时间窗口做覆盖校验，拒绝挑战有效期超出证书范围的请求

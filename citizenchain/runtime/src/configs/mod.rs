@@ -44,7 +44,7 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
-use onchain_transaction_pow::NrcAccountProvider as _;
+use onchain_transaction::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
@@ -57,8 +57,8 @@ use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::RuntimeUpgrade;
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenLightnodeIssuance,
-    GenesisPallet, Hash, Nonce, PalletInfo, ResolutionIssuance, Runtime, RuntimeCall, RuntimeEvent,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance, GenesisPallet,
+    Hash, Nonce, PalletInfo, ResolutionIssuance, Runtime, RuntimeCall, RuntimeEvent,
     RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, VotingEngine,
     BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
@@ -243,15 +243,15 @@ parameter_types! {
 
 impl pallet_transaction_payment::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type OnChargeTransaction = onchain_transaction_pow::PowOnchainChargeAdapter<
+    type OnChargeTransaction = onchain_transaction::OnchainChargeAdapter<
         Balances,
-        onchain_transaction_pow::PowOnchainFeeRouter<
+        onchain_transaction::OnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
             RuntimeNrcAccountProvider,
         >,
-        PowTxAmountExtractor,
+        OnchainTxAmountExtractor,
         RuntimeFeePayerExtractor,
     >;
     type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
@@ -261,11 +261,11 @@ impl pallet_transaction_payment::Config for Runtime {
     type WeightInfo = pallet_transaction_payment::weights::SubstrateWeight<Runtime>;
 }
 
-impl onchain_transaction_pow::pallet::Config for Runtime {}
+impl onchain_transaction::pallet::Config for Runtime {}
 
 pub struct RuntimeNrcAccountProvider;
 
-impl onchain_transaction_pow::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
+impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountProvider {
     fn nrc_account() -> Option<AccountId> {
         Some(AccountId::new(
             primitives::china::china_cb::CHINA_CB[0].fee_address,
@@ -287,35 +287,35 @@ impl OnUnbalanced<Credit<AccountId, Balances>> for RuntimeDustHandler {
     }
 }
 
-pub struct PowTxAmountExtractor;
+pub struct OnchainTxAmountExtractor;
 
-impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for PowTxAmountExtractor {
+impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for OnchainTxAmountExtractor {
     fn amount(
         who: &AccountId,
         call: &RuntimeCall,
-    ) -> onchain_transaction_pow::AmountExtractResult<Balance> {
+    ) -> onchain_transaction::AmountExtractResult<Balance> {
         match call {
             RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
                 value, ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(*value),
+            }) => onchain_transaction::AmountExtractResult::Amount(*value),
             RuntimeCall::Balances(pallet_balances::Call::transfer_keep_alive { value, .. }) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(*value)
+                onchain_transaction::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_transfer { value, .. }) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(*value)
+                onchain_transaction::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_unreserve { amount, .. }) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(*amount)
+                onchain_transaction::AmountExtractResult::Amount(*amount)
             }
             RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
                 new_free, ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(*new_free),
+            }) => onchain_transaction::AmountExtractResult::Amount(*new_free),
             RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
                 delta,
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(*delta),
+            }) => onchain_transaction::AmountExtractResult::Amount(*delta),
             RuntimeCall::Balances(pallet_balances::Call::burn { value, .. }) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(*value)
+                onchain_transaction::AmountExtractResult::Amount(*value)
             }
             RuntimeCall::Balances(pallet_balances::Call::transfer_all { keep_alive, .. }) => {
                 let preservation = if *keep_alive {
@@ -328,47 +328,46 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     preservation,
                     Fortitude::Polite,
                 );
-                onchain_transaction_pow::AmountExtractResult::Amount(value)
+                onchain_transaction::AmountExtractResult::Amount(value)
             }
-            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_create {
+            RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create {
                 amount,
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_create_personal { amount, .. },
-            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::propose_create_institution { accounts, .. },
+            }) => onchain_transaction::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create_personal {
+                amount,
+                ..
+            }) => onchain_transaction::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianManage(
+                duoqian_manage::pallet::Call::propose_create_institution { accounts, .. },
             ) => {
                 let mut total: Balance = 0;
                 for account in accounts.iter() {
                     let Some(next) = total.checked_add(account.amount) else {
-                        return onchain_transaction_pow::AmountExtractResult::Amount(100_000);
+                        return onchain_transaction::AmountExtractResult::Amount(100_000);
                     };
                     total = next;
                 }
-                onchain_transaction_pow::AmountExtractResult::Amount(total)
+                onchain_transaction::AmountExtractResult::Amount(total)
             }
-            RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_close {
+            RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_close {
                 duoqian_address,
                 ..
-            }) => onchain_transaction_pow::AmountExtractResult::Amount(Balances::free_balance(
+            }) => onchain_transaction::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
             // 免费调用交易：SFID 注册是证明型操作
-            RuntimeCall::DuoqianManagePow(
-                duoqian_manage_pow::pallet::Call::register_sfid_institution { .. },
-            ) => onchain_transaction_pow::AmountExtractResult::NoAmount,
+            RuntimeCall::DuoqianManage(
+                duoqian_manage::pallet::Call::register_sfid_institution { .. },
+            ) => onchain_transaction::AmountExtractResult::NoAmount,
             // 付费调用交易：多签管理其他操作（propose_create_personal、cleanup 等）
-            RuntimeCall::DuoqianManagePow(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(100000)
+            RuntimeCall::DuoqianManage(_) => {
+                onchain_transaction::AmountExtractResult::Amount(100000)
             }
             // 免费调用交易：系统内部调用
-            RuntimeCall::System(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::Timestamp(_) => onchain_transaction_pow::AmountExtractResult::NoAmount,
-            RuntimeCall::ShengBankStakeInterest(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
-            }
+            RuntimeCall::System(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            RuntimeCall::Timestamp(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            RuntimeCall::ShengBankInterest(_) => onchain_transaction::AmountExtractResult::NoAmount,
             // 付费调用交易：治理/用户操作（1 元/次）
             RuntimeCall::ResolutionIssuance(ref ri_call) => {
                 match ri_call {
@@ -377,10 +376,10 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     | resolution_issuance::pallet::Call::set_allowed_recipients { .. }
                     | resolution_issuance::pallet::Call::clear_executed { .. }
                     | resolution_issuance::pallet::Call::set_paused { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费：管理员主动发起增发提案
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             // 投票引擎:拆分"内部投票"(免费,鼓励管理员踊跃履职)与其他调用(付费)。
@@ -389,53 +388,49 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 match ve_call {
                     // 免费:管理员内部投票(最高频路径,0 gas 降门槛)
                     voting_engine::pallet::Call::internal_vote { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 免费:终结已完成提案(任意人都可调,推动清理)
                     voting_engine::pallet::Call::finalize_proposal { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费:用户主动参与联合/公民投票(1 元/次)
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
-            RuntimeCall::SfidCodeAuth(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(100000)
-            }
-            RuntimeCall::CitizenLightnodeIssuance(_) => {
-                onchain_transaction_pow::AmountExtractResult::NoAmount
-            }
-            RuntimeCall::FullnodePowReward(_) => {
-                onchain_transaction_pow::AmountExtractResult::Amount(100000)
+            RuntimeCall::SfidSystem(_) => onchain_transaction::AmountExtractResult::Amount(100000),
+            RuntimeCall::CitizenIssuance(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            RuntimeCall::FullnodeIssuance(_) => {
+                onchain_transaction::AmountExtractResult::Amount(100000)
             }
             RuntimeCall::AdminsChange(ref ag_call) => {
                 match ag_call {
                     // 免费：触发已通过提案的执行
                     admins_change::pallet::Call::execute_admin_replacement { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费：管理员主动提案/投票
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             RuntimeCall::RuntimeUpgrade(ref ru_call) => {
                 match ru_call {
                     // 免费：Root 权限终结联合投票
                     runtime_upgrade::pallet::Call::finalize_joint_vote { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费：管理员主动提案/开发升级
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             RuntimeCall::ResolutionDestro(ref rd_call) => {
                 match rd_call {
                     // 免费：触发已通过提案的执行
                     resolution_destro::pallet::Call::execute_destroy { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费：管理员主动提案/投票
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             RuntimeCall::GrandpaKeyChange(ref gk_call) => {
@@ -444,62 +439,61 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                     grandpakey_change::pallet::Call::execute_replace_grandpa_key { .. }
                     | grandpakey_change::pallet::Call::cancel_failed_replace_grandpa_key {
                         ..
-                    } => onchain_transaction_pow::AmountExtractResult::NoAmount,
+                    } => onchain_transaction::AmountExtractResult::NoAmount,
                     // 付费：管理员主动提案/投票
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             // 机构转账模块：拆分执行（免费）和提案/投票（付费）
-            RuntimeCall::DuoqianTransferPow(ref dt_call) => {
+            RuntimeCall::DuoqianTransfer(ref dt_call) => {
                 match dt_call {
                     // 免费：触发已通过提案的执行（手续费在执行时从机构内部扣）
-                    duoqian_transfer_pow::pallet::Call::execute_transfer { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    duoqian_transfer::pallet::Call::execute_transfer { .. } => {
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 付费：管理员主动提案/投票（1 元/次）
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             // 清算行(L2)扫码支付清算:Step 2b-iv-b 清理后只剩新体系 Call。
-            RuntimeCall::OffchainTransactionPos(ref offchain_call) => {
+            RuntimeCall::OffchainTransaction(ref offchain_call) => {
                 match offchain_call {
                     // L3 充值 / 提现:按金额计费(链上资金交易 0.1% 最低 0.1 元)
-                    offchain_transaction_pos::pallet::Call::deposit { amount } => {
-                        onchain_transaction_pow::AmountExtractResult::Amount(*amount)
+                    offchain_transaction::pallet::Call::deposit { amount } => {
+                        onchain_transaction::AmountExtractResult::Amount(*amount)
                     }
-                    offchain_transaction_pos::pallet::Call::withdraw { amount } => {
-                        onchain_transaction_pow::AmountExtractResult::Amount(*amount)
+                    offchain_transaction::pallet::Call::withdraw { amount } => {
+                        onchain_transaction::AmountExtractResult::Amount(*amount)
                     }
                     // 清算行批次 V2 上链:按 sum(fee_amount) 计费(链下资金交易)
-                    offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
-                        batch,
-                        ..
+                    offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
+                        batch, ..
                     } => {
                         let mut total_fee: u128 = 0;
                         for item in batch.iter() {
                             total_fee = total_fee.saturating_add(item.fee_amount);
                         }
-                        onchain_transaction_pow::AmountExtractResult::Amount(total_fee)
+                        onchain_transaction::AmountExtractResult::Amount(total_fee)
                     }
                     // 全局费率上限调整(Root Origin,免费)
-                    offchain_transaction_pos::pallet::Call::set_max_l2_fee_rate { .. } => {
-                        onchain_transaction_pow::AmountExtractResult::NoAmount
+                    offchain_transaction::pallet::Call::set_max_l2_fee_rate { .. } => {
+                        onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
                     // 固定 1 元/次
-                    _ => onchain_transaction_pow::AmountExtractResult::Amount(100000),
+                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免”有金额但漏提取”。
-            RuntimeCall::Balances(_) => onchain_transaction_pow::AmountExtractResult::Unknown,
-            _ => onchain_transaction_pow::AmountExtractResult::Unknown,
+            RuntimeCall::Balances(_) => onchain_transaction::AmountExtractResult::Unknown,
+            _ => onchain_transaction::AmountExtractResult::Unknown,
         }
     }
 }
 
 pub struct RuntimeFeePayerExtractor;
 
-impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
+impl onchain_transaction::CallFeePayer<AccountId, RuntimeCall> for RuntimeFeePayerExtractor {
     fn fee_payer(_who: &AccountId, call: &RuntimeCall) -> Option<AccountId> {
         match call {
             // 清算行 V2 批次:链上 gas 由 institution_main 的费用账户直接承担。
@@ -510,25 +504,25 @@ impl onchain_transaction_pow::CallFeePayer<AccountId, RuntimeCall> for RuntimeFe
             //
             // 提交者(origin)是该机构的某个激活管理员(已在节点端解密私钥,自动签),
             // 但其个人钱包余额不参与 gas 扣费。
-            RuntimeCall::OffchainTransactionPos(
-                offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
+            RuntimeCall::OffchainTransaction(
+                offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
                     institution_main,
                     ..
                 },
-            ) => offchain_transaction_pos::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
+            ) => offchain_transaction::Pallet::<Runtime>::fee_account_of(institution_main).ok(),
             // 其他 offchain Call 及其他 RuntimeCall 由调用者个人账户付费。
             _ => None,
         }
     }
 }
 
-/// 省储行质押利息模块配置：
+/// 省储行利息模块配置：
 /// - 使用 Balances 作为铸币/记账货币
 /// - 每年区块数统一采用 primitives 中的制度常量
-impl shengbank_stake_interest::Config for Runtime {
+impl shengbank_interest::Config for Runtime {
     type Currency = Balances;
     type BlocksPerYear = ConstU64<{ primitives::pow_const::BLOCKS_PER_YEAR }>;
-    type WeightInfo = shengbank_stake_interest::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = shengbank_interest::weights::SubstrateWeight<Runtime>;
 }
 
 /// PoW 作者解析器：
@@ -556,18 +550,18 @@ impl FindAuthor<AccountId> for PowDigestAuthor {
     }
 }
 
-/// 全节点 PoW 奖励模块配置：
+/// 全节点发行模块配置：
 /// - 链上货币使用 Balances
 /// - 作者识别完全基于 PoW digest（不依赖 Aura/Grandpa）
-impl fullnode_pow_reward::Config for Runtime {
+impl fullnode_issuance::Config for Runtime {
     type Currency = Balances;
     type FindAuthor = PowDigestAuthor;
-    type WeightInfo = fullnode_pow_reward::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = fullnode_issuance::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimeDuoqianAddressValidator;
 
-impl duoqian_manage_pow::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
+impl duoqian_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
     fn is_valid(address: &AccountId) -> bool {
         // 中文注释：禁止零地址。
         if address == &AccountId::new([0u8; 32]) {
@@ -616,19 +610,16 @@ pub struct RuntimeDuoqianReservedAddressChecker;
 pub struct RuntimeSfidInstitutionVerifier;
 
 pub struct RuntimeProtectedSourceChecker;
-pub struct RuntimeInstitutionAssetGuard;
+pub struct RuntimeInstitutionAsset;
 
-impl duoqian_manage_pow::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+impl duoqian_manage::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
         is_stake_account(address)
     }
 }
 
-impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstitutionAssetGuard {
-    fn can_spend(
-        source: &AccountId,
-        action: institution_asset_guard::InstitutionAssetAction,
-    ) -> bool {
+impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset {
+    fn can_spend(source: &AccountId, action: institution_asset::InstitutionAssetAction) -> bool {
         // 中文注释：匹配顺序很重要——更具体的账户类型必须放在更宽泛的类型之前。
         // fee_address 同时出现在 CHINA_RESERVED_MAIN_ADDRESSES 列表中（同由 BLAKE2 派生且统一保留），
         // 如果 is_reserved_main_account 先匹配，fee_address 会被错误地按主账户规则放行。
@@ -642,7 +633,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         if is_reserved_fee_account(source) {
             return matches!(
                 action,
-                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+                institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
             );
         }
 
@@ -650,7 +641,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         if is_cb_fee_account(source) {
             return matches!(
                 action,
-                institution_asset_guard::InstitutionAssetAction::OffchainFeeSweepExecute
+                institution_asset::InstitutionAssetAction::OffchainFeeSweepExecute
             );
         }
 
@@ -658,7 +649,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         if source == &AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS) {
             return matches!(
                 action,
-                institution_asset_guard::InstitutionAssetAction::NrcSafetyFundTransfer
+                institution_asset::InstitutionAssetAction::NrcSafetyFundTransfer
             );
         }
 
@@ -666,8 +657,8 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
         if is_reserved_main_account(source) {
             return matches!(
                 action,
-                institution_asset_guard::InstitutionAssetAction::DuoqianTransferExecute
-                    | institution_asset_guard::InstitutionAssetAction::DuoqianCloseExecute
+                institution_asset::InstitutionAssetAction::DuoqianTransferExecute
+                    | institution_asset::InstitutionAssetAction::DuoqianCloseExecute
             );
         }
 
@@ -676,7 +667,7 @@ impl institution_asset_guard::InstitutionAssetGuard<AccountId> for RuntimeInstit
     }
 }
 
-impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
+impl duoqian_manage::DuoqianReservedAddressChecker<AccountId>
     for RuntimeDuoqianReservedAddressChecker
 {
     fn is_reserved(address: &AccountId) -> bool {
@@ -711,17 +702,17 @@ impl duoqian_manage_pow::DuoqianReservedAddressChecker<AccountId>
 }
 
 impl
-    duoqian_manage_pow::SfidInstitutionVerifier<
-        duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
-        duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
-        duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
+    duoqian_manage::SfidInstitutionVerifier<
+        duoqian_manage::pallet::AccountNameOf<Runtime>,
+        duoqian_manage::pallet::RegisterNonceOf<Runtime>,
+        duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        account_name: &duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
-        nonce: &duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
-        signature: &duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
+        account_name: &duoqian_manage::pallet::AccountNameOf<Runtime>,
+        nonce: &duoqian_manage::pallet::RegisterNonceOf<Runtime>,
+        signature: &duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
         signing_province: Option<&[u8]>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
@@ -739,7 +730,7 @@ impl
             //   Some(p) → 查 ShengSigningPubkey[p]，省签名公钥验签；
             //   None    → fallback 用 SfidMainAccount 当前主公钥验签。
             let public_bytes: [u8; 32] = match signing_province {
-                Some(p) => match sfid_code_auth::Pallet::<Runtime>::sheng_signing_pubkey(p) {
+                Some(p) => match sfid_system::Pallet::<Runtime>::sheng_signing_pubkey(p) {
                     Some(k) => k,
                     None => return false,
                 },
@@ -791,14 +782,14 @@ impl
     }
 }
 
-impl duoqian_manage_pow::Config for Runtime {
+impl duoqian_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = voting_engine::Pallet<Runtime>;
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
-    type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
+    type InstitutionAsset = RuntimeInstitutionAsset;
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
@@ -818,27 +809,27 @@ impl duoqian_manage_pow::Config for Runtime {
     type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
-    type WeightInfo = duoqian_manage_pow::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = duoqian_manage::weights::SubstrateWeight<Runtime>;
 }
 
 fn current_sfid_verify_public() -> Option<sr25519::Public> {
-    let key = sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey()?;
+    let key = sfid_system::Pallet::<Runtime>::current_sfid_verify_pubkey()?;
     Some(sr25519::Public::from_raw(key))
 }
 
 pub struct RuntimeSfidVerifier;
 
 impl
-    sfid_code_auth::SfidVerifier<
+    sfid_system::SfidVerifier<
         AccountId,
         Hash,
-        sfid_code_auth::pallet::NonceOf<Runtime>,
-        sfid_code_auth::pallet::SignatureOf<Runtime>,
+        sfid_system::pallet::NonceOf<Runtime>,
+        sfid_system::pallet::SignatureOf<Runtime>,
     > for RuntimeSfidVerifier
 {
     fn verify(
         account: &AccountId,
-        credential: &sfid_code_auth::pallet::CredentialOf<Runtime>,
+        credential: &sfid_system::pallet::CredentialOf<Runtime>,
     ) -> bool {
         let public = match current_sfid_verify_public() {
             Some(v) => v,
@@ -870,19 +861,19 @@ impl
 pub struct RuntimeSfidVoteVerifier;
 
 impl
-    sfid_code_auth::SfidVoteVerifier<
+    sfid_system::SfidVoteVerifier<
         AccountId,
         Hash,
-        sfid_code_auth::pallet::NonceOf<Runtime>,
-        sfid_code_auth::pallet::SignatureOf<Runtime>,
+        sfid_system::pallet::NonceOf<Runtime>,
+        sfid_system::pallet::SignatureOf<Runtime>,
     > for RuntimeSfidVoteVerifier
 {
     fn verify_vote(
         account: &AccountId,
         binding_id: Hash,
         proposal_id: u64,
-        nonce: &sfid_code_auth::pallet::NonceOf<Runtime>,
-        signature: &sfid_code_auth::pallet::SignatureOf<Runtime>,
+        nonce: &sfid_system::pallet::NonceOf<Runtime>,
+        signature: &sfid_system::pallet::SignatureOf<Runtime>,
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
@@ -921,15 +912,15 @@ impl
     }
 }
 
-impl sfid_code_auth::Config for Runtime {
+impl sfid_system::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxCredentialNonceLength = ConstU32<64>;
     // 中文注释：SFID 绑定与投票验签统一使用 64 字节原始 sr25519 签名。
     type MaxCredentialSignatureLength = ConstU32<64>;
     type SfidVerifier = RuntimeSfidVerifier;
     type SfidVoteVerifier = RuntimeSfidVoteVerifier;
-    type OnSfidBound = CitizenLightnodeIssuance;
-    type WeightInfo = sfid_code_auth::weights::SubstrateWeight<Runtime>;
+    type OnSfidBound = CitizenIssuance;
+    type WeightInfo = sfid_system::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct RuntimePopulationSnapshotVerifier;
@@ -983,10 +974,10 @@ impl
     }
 }
 
-impl citizen_lightnode_issuance::Config for Runtime {
+impl citizen_issuance::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type WeightInfo = citizen_lightnode_issuance::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = citizen_issuance::weights::SubstrateWeight<Runtime>;
 }
 
 parameter_types! {
@@ -1001,7 +992,7 @@ parameter_types! {
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
     // 必须 >= admins_change::MaxAdminsPerInstitution (32)
-    // 且 >= duoqian_manage_pow::MaxAdmins (64)，否则快照写入会静默失败。
+    // 且 >= duoqian_manage::MaxAdmins (64)，否则快照写入会静默失败。
     pub const MaxAdminsPerInstitution: u32 = 64;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
@@ -1030,7 +1021,7 @@ impl grandpakey_change::Config for Runtime {
 }
 
 /// 转账提案手续费分账适配器：将旧 Currency NegativeImbalance 转换后
-/// 交给现有 PowOnchainFeeRouter 处理（80% 全节点 / 10% 国储会 / 10% 安全基金）。
+/// 交给现有 OnchainFeeRouter 处理（80% 全节点 / 10% 国储会 / 10% 安全基金）。
 pub struct TransferFeeRouter;
 
 impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>>
@@ -1047,7 +1038,7 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
         // issue() 再铸回等额 Credit 让 router 分配，总量不变。
         let credit = <Balances as Balanced<AccountId>>::issue(value);
 
-        type FeeRouter = onchain_transaction_pow::PowOnchainFeeRouter<
+        type FeeRouter = onchain_transaction::OnchainFeeRouter<
             Runtime,
             Balances,
             PowDigestAuthor,
@@ -1059,11 +1050,11 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
     }
 }
 
-impl duoqian_transfer_pow::Config for Runtime {
+impl duoqian_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
-    type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = duoqian_transfer::weights::SubstrateWeight<Runtime>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1072,38 +1063,37 @@ impl duoqian_transfer_pow::Config for Runtime {
 
 /// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
 ///
-/// 委托给 `duoqian-manage-pow` 的 SFID 地址索引和机构账户表；
+/// 委托给 `duoqian-manage` 的 SFID 地址索引和机构账户表；
 /// 管理员校验再统一转给 `admins-change::Institutions`。
 pub struct DuoqianSfidAccountQuery;
 
-impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
+impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
-        duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr)
+        duoqian_manage::AddressRegisteredSfid::<Runtime>::get(addr)
             .map(|info| (info.sfid_id.to_vec(), info.account_name.to_vec()))
     }
 
     fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: duoqian_manage_pow::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
-        let an: duoqian_manage_pow::AccountNameOf<Runtime> =
-            account_name.to_vec().try_into().ok()?;
-        duoqian_manage_pow::SfidRegisteredAddress::<Runtime>::get(&id, &an)
+        let id: duoqian_manage::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
+        let an: duoqian_manage::AccountNameOf<Runtime> = account_name.to_vec().try_into().ok()?;
+        duoqian_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        if let Some(registered) = duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr) {
+        if let Some(registered) = duoqian_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             return matches!(
-                duoqian_manage_pow::InstitutionAccounts::<Runtime>::get(
+                duoqian_manage::InstitutionAccounts::<Runtime>::get(
                     &registered.sfid_id,
                     &registered.account_name,
                 )
                 .map(|a| a.status),
-                Some(duoqian_manage_pow::InstitutionLifecycleStatus::Active)
+                Some(duoqian_manage::InstitutionLifecycleStatus::Active)
             );
         }
 
         matches!(
-            duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(addr).map(|a| a.status),
-            Some(duoqian_manage_pow::DuoqianStatus::Active)
+            duoqian_manage::DuoqianAccounts::<Runtime>::get(addr).map(|a| a.status),
+            Some(duoqian_manage::DuoqianStatus::Active)
         )
     }
 
@@ -1111,7 +1101,7 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(subject_id) =
-            duoqian_manage_pow::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
+            duoqian_manage::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
         else {
             return false;
         };
@@ -1130,16 +1120,15 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
     /// - 其他                                   → ❌
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
         // 1. 反查地址所属的 sfid_id
-        let registered = match duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr) {
+        let registered = match duoqian_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             Some(info) => info,
             None => return false,
         };
         // 2. 查机构元数据
-        let meta =
-            match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(&registered.sfid_id) {
-                Some(m) => m,
-                None => return false,
-            };
+        let meta = match duoqian_manage::InstitutionMetadata::<Runtime>::get(&registered.sfid_id) {
+            Some(m) => m,
+            None => return false,
+        };
         match meta.a3.as_slice() {
             b"SFR" => meta.sub_type.as_ref().map(|s| s.as_slice()) == Some(&b"JOINT_STOCK"[..]),
             b"FFR" => {
@@ -1148,7 +1137,7 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
                     None => return false,
                 };
                 let parent_meta =
-                    match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(parent_id) {
+                    match duoqian_manage::InstitutionMetadata::<Runtime>::get(parent_id) {
                         Some(m) => m,
                         None => return false,
                     };
@@ -1163,7 +1152,7 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
     /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_id 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
-        let registered = match duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(bank) {
+        let registered = match duoqian_manage::AddressRegisteredSfid::<Runtime>::get(bank) {
             Some(info) => info,
             None => return false,
         };
@@ -1174,16 +1163,16 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
             Ok(b) => b,
             Err(_) => return false,
         };
-        offchain_transaction_pos::pallet::ClearingBankNodes::<Runtime>::contains_key(&key)
+        offchain_transaction::pallet::ClearingBankNodes::<Runtime>::contains_key(&key)
     }
 }
 
-impl offchain_transaction_pos::Config for Runtime {
+impl offchain_transaction::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type MaxBatchSize = ConstU32<100_000>;
     type MaxBatchSignatureLength = ConstU32<128>;
-    type InstitutionAssetGuard = RuntimeInstitutionAssetGuard;
+    type InstitutionAsset = RuntimeInstitutionAsset;
     type SfidAccountQuery = DuoqianSfidAccountQuery;
     type WeightInfo = ();
 }
@@ -1400,8 +1389,8 @@ impl voting_engine::Config for Runtime {
     // 每个 Executor 通过 MODULE_TAG 前缀 + 独立存储键互斥认领本模块提案,
     // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
     type InternalVoteResultCallback = (
-        duoqian_transfer_pow::InternalVoteExecutor<Runtime>,
-        duoqian_manage_pow::InternalVoteExecutor<Runtime>,
+        duoqian_transfer::InternalVoteExecutor<Runtime>,
+        duoqian_manage::InternalVoteExecutor<Runtime>,
         admins_change::InternalVoteExecutor<Runtime>,
         resolution_destro::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,
@@ -1414,8 +1403,8 @@ impl voting_engine::Config for Runtime {
     type WeightInfo = voting_engine::weights::SubstrateWeight<Runtime>;
 }
 
-impl pow_difficulty_module::Config for Runtime {
-    type WeightInfo = pow_difficulty_module::weights::SubstrateWeight<Runtime>;
+impl pow_difficulty::Config for Runtime {
+    type WeightInfo = pow_difficulty::weights::SubstrateWeight<Runtime>;
 }
 
 frame_support::parameter_types! {
@@ -1431,13 +1420,13 @@ impl genesis_pallet::Config for Runtime {
 mod tests {
     use super::*;
     use crate::ResolutionDestro;
-    use duoqian_manage_pow::DuoqianReservedAddressChecker;
+    use duoqian_manage::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
     };
-    use sfid_code_auth::{SfidVerifier, SfidVoteVerifier};
+    use sfid_system::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
     use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
     use voting_engine::{
@@ -1486,7 +1475,7 @@ mod tests {
             resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
             let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
-            sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::insert(
+            sfid_system::pallet::UsedVoteNonce::<Runtime>::insert(
                 proposal_id,
                 (binding_id, nonce_hash),
                 true,
@@ -1507,7 +1496,7 @@ mod tests {
             // 这里仅验证 runtime 包装层能正确透传到 SFID 投票凭证清理接口。
             RuntimeSfidEligibility::cleanup_vote_credentials(proposal_id);
 
-            assert!(!sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
+            assert!(!sfid_system::pallet::UsedVoteNonce::<Runtime>::get(
                 proposal_id,
                 (binding_id, nonce_hash)
             ));
@@ -1562,7 +1551,7 @@ mod tests {
     }
 
     #[test]
-    fn pow_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
+    fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
         new_test_ext().execute_with(|| {
             let who = AccountId::new([1u8; 32]);
             let recipient = AccountId::new([2u8; 32]);
@@ -1570,14 +1559,14 @@ mod tests {
             let system_call = RuntimeCall::System(frame_system::Call::remark {
                 remark: b"x".to_vec(),
             });
-            let no_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
+            let no_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &system_call);
             assert!(matches!(
                 no_amount,
-                onchain_transaction_pow::AmountExtractResult::NoAmount
+                onchain_transaction::AmountExtractResult::NoAmount
             ));
 
             let transfer_call =
@@ -1585,20 +1574,20 @@ mod tests {
                     dest: sp_runtime::MultiAddress::Id(recipient),
                     value: 123,
                 });
-            let amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
+            let amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &transfer_call);
             match amount {
-                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
+                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
                 _ => panic!("expected amount path"),
             }
         });
     }
 
     #[test]
-    fn pow_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
+    fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
         new_test_ext().execute_with(|| {
             let (p1, _) = sr25519::Pair::generate();
             let (p2, _) = sr25519::Pair::generate();
@@ -1608,24 +1597,23 @@ mod tests {
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
-            let sfid_id: duoqian_manage_pow::pallet::SfidIdOf<Runtime> =
+            let sfid_id: duoqian_manage::pallet::SfidIdOf<Runtime> =
                 b"GFR-LN001-CB0C-runtime-20260222"
                     .to_vec()
                     .try_into()
                     .expect("sfid id should fit");
-            let admins: duoqian_manage_pow::pallet::DuoqianAdminsOf<Runtime> =
+            let admins: duoqian_manage::pallet::DuoqianAdminsOf<Runtime> =
                 vec![who.clone(), admin2.clone()]
                     .try_into()
                     .expect("admins should fit");
             // 中文注释：propose_create 新接口需要账户名称，本测试只覆盖金额提取路径。
-            let account_name: duoqian_manage_pow::pallet::AccountNameOf<Runtime> =
-                b"runtime-test-main"
-                    .to_vec()
-                    .try_into()
-                    .expect("account_name should fit");
+            let account_name: duoqian_manage::pallet::AccountNameOf<Runtime> = b"runtime-test-main"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
 
             let create_call =
-                RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_create {
+                RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create {
                     sfid_id,
                     account_name,
                     admin_count: 2,
@@ -1633,29 +1621,29 @@ mod tests {
                     threshold: 2,
                     amount: 1_000,
                 });
-            let create_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
+            let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &create_call);
             match create_amount {
-                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
+                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
                 _ => panic!("expected create amount"),
             }
 
             let _ = Balances::deposit_creating(&duoqian_address, 777);
             let close_call =
-                RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_close {
+                RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_close {
                     duoqian_address,
                     beneficiary,
                 });
-            let close_amount = <PowTxAmountExtractor as onchain_transaction_pow::CallAmount<
+            let close_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
                 AccountId,
                 RuntimeCall,
                 Balance,
             >>::amount(&who, &close_call);
             match close_amount {
-                onchain_transaction_pow::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
+                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
                 _ => panic!("expected close amount"),
             }
         });
@@ -1801,19 +1789,19 @@ mod tests {
         new_test_ext().execute_with(|| {
             let (pair, _) = sr25519::Pair::generate();
             let sfid_main: AccountId = MultiSigner::from(pair.public()).into_account();
-            sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
+            sfid_system::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
             assert_eq!(
-                sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey(),
+                sfid_system::Pallet::<Runtime>::current_sfid_verify_pubkey(),
                 Some(pair.public().0)
             );
             assert_eq!(
-                sfid_code_auth::Pallet::<Runtime>::current_sfid_verify_pubkey(),
+                sfid_system::Pallet::<Runtime>::current_sfid_verify_pubkey(),
                 Some(pair.public().0)
             );
 
             let account = AccountId::new([31u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
-            let bind_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
+            let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
                 b"bind-nonce".to_vec().try_into().expect("nonce should fit");
             let bind_payload = (
                 primitives::core_const::DUOQIAN_DOMAIN,
@@ -1825,30 +1813,30 @@ mod tests {
             );
             let bind_msg = blake2_256(&bind_payload.encode());
             let bind_sig = pair.sign(&bind_msg);
-            let bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = bind_sig
+            let bind_signature: sfid_system::pallet::SignatureOf<Runtime> = bind_sig
                 .0
                 .to_vec()
                 .try_into()
                 .expect("signature should fit");
-            let bind_credential = sfid_code_auth::BindCredential {
+            let bind_credential = sfid_system::BindCredential {
                 binding_id,
                 bind_nonce: bind_nonce.clone(),
                 signature: bind_signature,
             };
             assert!(RuntimeSfidVerifier::verify(&account, &bind_credential));
 
-            let bad_bind_signature: sfid_code_auth::pallet::SignatureOf<Runtime> =
+            let bad_bind_signature: sfid_system::pallet::SignatureOf<Runtime> =
                 vec![7u8; 63].try_into().expect("signature should fit");
-            let bad_bind_credential = sfid_code_auth::BindCredential {
+            let bad_bind_credential = sfid_system::BindCredential {
                 binding_id,
                 bind_nonce,
                 signature: bad_bind_signature,
             };
             assert!(!RuntimeSfidVerifier::verify(&account, &bad_bind_credential));
 
-            let vote_nonce: sfid_code_auth::pallet::NonceOf<Runtime> =
+            let vote_nonce: sfid_system::pallet::NonceOf<Runtime> =
                 b"vote-nonce".to_vec().try_into().expect("nonce should fit");
-            let vote_signature: sfid_code_auth::pallet::SignatureOf<Runtime> = pair
+            let vote_signature: sfid_system::pallet::SignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
                         primitives::core_const::DUOQIAN_DOMAIN,
@@ -1907,12 +1895,12 @@ mod tests {
         new_test_ext().execute_with(|| {
             let (pair, _) = sr25519::Pair::generate();
             let sfid_main: AccountId = MultiSigner::from(pair.public()).into_account();
-            sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
+            sfid_system::pallet::SfidMainAccount::<Runtime>::put(sfid_main);
 
             let who = AccountId::new([41u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
-            sfid_code_auth::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
-            sfid_code_auth::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
+            sfid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
+            sfid_system::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
 
             assert!(RuntimeSfidEligibility::is_eligible(&binding_id, &who));
             assert!(!RuntimeSfidEligibility::is_eligible(
@@ -1934,9 +1922,9 @@ mod tests {
                     .encode(),
             );
             let signature = pair.sign(&vote_msg).0.to_vec();
-            let nonce_bounded: sfid_code_auth::pallet::NonceOf<Runtime> =
+            let nonce_bounded: sfid_system::pallet::NonceOf<Runtime> =
                 nonce.to_vec().try_into().expect("nonce should fit");
-            let signature_bounded: sfid_code_auth::pallet::SignatureOf<Runtime> =
+            let signature_bounded: sfid_system::pallet::SignatureOf<Runtime> =
                 signature.clone().try_into().expect("signature should fit");
             assert!(RuntimeSfidVoteVerifier::verify_vote(
                 &who,
@@ -1992,19 +1980,19 @@ mod tests {
         new_test_ext().execute_with(|| {
             let (pair, _) = sr25519::Pair::generate();
             let main: AccountId = MultiSigner::from(pair.public()).into_account();
-            sfid_code_auth::pallet::SfidMainAccount::<Runtime>::put(main);
+            sfid_system::pallet::SfidMainAccount::<Runtime>::put(main);
             let sfid_id = b"GFR-LN001-CB0C-000000001-20260222";
-            let register_nonce: duoqian_manage_pow::pallet::RegisterNonceOf<Runtime> =
+            let register_nonce: duoqian_manage::pallet::RegisterNonceOf<Runtime> =
                 b"register-nonce"
                     .to_vec()
                     .try_into()
                     .expect("nonce should fit");
-            let register_account_name: duoqian_manage_pow::pallet::AccountNameOf<Runtime> =
+            let register_account_name: duoqian_manage::pallet::AccountNameOf<Runtime> =
                 b"test-account-name"
                     .to_vec()
                     .try_into()
                     .expect("account_name should fit");
-            let register_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> = pair
+            let register_signature: duoqian_manage::pallet::RegisterSignatureOf<Runtime> = pair
                 .sign(&blake2_256(
                     &(
                         primitives::core_const::DUOQIAN_DOMAIN,
@@ -2021,10 +2009,10 @@ mod tests {
                 .try_into()
                 .expect("signature should fit");
             assert!(
-                <RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
-                    duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
-                    duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
-                    duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
+                <RuntimeSfidInstitutionVerifier as duoqian_manage::SfidInstitutionVerifier<
+                    duoqian_manage::pallet::AccountNameOf<Runtime>,
+                    duoqian_manage::pallet::RegisterNonceOf<Runtime>,
+                    duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
                     &register_account_name,
@@ -2034,13 +2022,13 @@ mod tests {
                 )
             );
 
-            let bad_signature: duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime> =
+            let bad_signature: duoqian_manage::pallet::RegisterSignatureOf<Runtime> =
                 vec![9u8; 63].try_into().expect("signature should fit");
             assert!(
-                !<RuntimeSfidInstitutionVerifier as duoqian_manage_pow::SfidInstitutionVerifier<
-                    duoqian_manage_pow::pallet::AccountNameOf<Runtime>,
-                    duoqian_manage_pow::pallet::RegisterNonceOf<Runtime>,
-                    duoqian_manage_pow::pallet::RegisterSignatureOf<Runtime>,
+                !<RuntimeSfidInstitutionVerifier as duoqian_manage::SfidInstitutionVerifier<
+                    duoqian_manage::pallet::AccountNameOf<Runtime>,
+                    duoqian_manage::pallet::RegisterNonceOf<Runtime>,
+                    duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id.as_slice(),
                     &register_account_name,
@@ -2096,14 +2084,14 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
         {
             let _ = (
                 who,
-                sfid_code_auth::pallet::BindingIdToAccount::<Runtime>::get(binding_id),
+                sfid_system::pallet::BindingIdToAccount::<Runtime>::get(binding_id),
             );
             true
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+            <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
                 AccountId,
                 Hash,
             >>::is_eligible(binding_id, who)
@@ -2126,14 +2114,14 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
 
             let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash_of(&nonce);
             let vote_nonce_key = (binding_id.clone(), nonce_hash);
-            if sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::get(
+            if sfid_system::pallet::UsedVoteNonce::<Runtime>::get(
                 proposal_id,
                 vote_nonce_key.clone(),
             ) {
                 return false;
             }
 
-            sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::insert(
+            sfid_system::pallet::UsedVoteNonce::<Runtime>::insert(
                 proposal_id,
                 vote_nonce_key,
                 true,
@@ -2143,7 +2131,7 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
-            <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+            <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
                 AccountId,
                 Hash,
             >>::verify_and_consume_vote_credential(
@@ -2153,7 +2141,7 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
     }
 
     fn cleanup_vote_credentials(proposal_id: u64) {
-        <sfid_code_auth::Pallet<Runtime> as sfid_code_auth::SfidEligibilityProvider<
+        <sfid_system::Pallet<Runtime> as sfid_system::SfidEligibilityProvider<
             AccountId,
             Hash,
         >>::cleanup_vote_credentials(proposal_id)
@@ -2163,11 +2151,8 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
         proposal_id: u64,
         limit: u32,
     ) -> voting_engine::VoteCredentialCleanup {
-        let result = sfid_code_auth::pallet::UsedVoteNonce::<Runtime>::clear_prefix(
-            proposal_id,
-            limit,
-            None,
-        );
+        let result =
+            sfid_system::pallet::UsedVoteNonce::<Runtime>::clear_prefix(proposal_id, limit, None);
         voting_engine::VoteCredentialCleanup {
             removed: result.unique,
             loops: result.loops,
@@ -2181,9 +2166,9 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
 // ============================================================================
 
 #[cfg(test)]
-mod asset_guard_tests {
+mod asset_tests {
     use super::*;
-    use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
+    use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 
     fn stake_account() -> AccountId {
         AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address)
@@ -2204,19 +2189,19 @@ mod asset_guard_tests {
     #[test]
     fn stake_account_is_completely_blocked() {
         let account = stake_account();
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianCloseExecute
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainBatchDebit
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainFeeSweepExecute
         ));
@@ -2225,19 +2210,19 @@ mod asset_guard_tests {
     #[test]
     fn reserved_duoqian_only_allows_transfer_and_close() {
         let account = reserved_main_account();
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute
         ));
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianCloseExecute
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainBatchDebit
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainFeeSweepExecute
         ));
@@ -2246,19 +2231,19 @@ mod asset_guard_tests {
     #[test]
     fn reserved_fee_account_only_allows_fee_sweep() {
         let account = reserved_fee_account();
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianCloseExecute
         ));
-        assert!(!RuntimeInstitutionAssetGuard::can_spend(
+        assert!(!RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainBatchDebit
         ));
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainFeeSweepExecute
         ));
@@ -2267,19 +2252,19 @@ mod asset_guard_tests {
     #[test]
     fn ordinary_account_allows_all_actions() {
         let account = ordinary_account();
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianTransferExecute
         ));
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::DuoqianCloseExecute
         ));
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainBatchDebit
         ));
-        assert!(RuntimeInstitutionAssetGuard::can_spend(
+        assert!(RuntimeInstitutionAsset::can_spend(
             &account,
             InstitutionAssetAction::OffchainFeeSweepExecute
         ));

@@ -21,7 +21,7 @@ completed: 2026-04-20
 - **configs/mod.rs 4 个 verifier 11 处**：BIND/VOTE/POP/INST 各自拼对应 op_tag
 - **SFID 后端**：`sfid/backend/src/chain/runtime_align.rs` 5 个旧 `*_DOMAIN` 统一成 `DUOQIAN_DOMAIN + OP_SIGN_*`
 - **前端镜像**：`deriveDuoqianAddress.ts` + `personal_duoqian_create_page.dart` 重写 preimage 组装
-- **Benchmarks**：`sfid-code-auth/src/benchmarks.rs` 同步
+- **Benchmarks**：`sfid-system/src/benchmarks.rs` 同步
 - **注释清理**：`china_cb.rs` / `china_ch.rs` 顶部注释、`sfid/backend/src/institutions/service.rs` 注释
 - **验证**：9 个 pallet `cargo check` 全通过；`cargo test -p primitives` 7/7 通过（含 `all_china_ch_main_addresses_are_unique`）
 
@@ -94,7 +94,7 @@ pub const OP_SIGN_TRANSFER: u8 = 0x15;  // 预留：多签转账离线聚合
   - 365 `CHINA_RESERVED_MAIN_ADDRESSES`（排序后重建）
 
 ## 第 3 步：链上派生函数
-- [ ] `duoqian-manage-pow/src/lib.rs` 的 `derive_duoqian_address_from_sfid_id`：`b"DUOQIAN_SFID_V1"` → `DUOQIAN_DOMAIN + OP_MAIN`
+- [ ] `duoqian-manage/src/lib.rs` 的 `derive_duoqian_address_from_sfid_id`：`b"DUOQIAN_SFID_V1"` → `DUOQIAN_DOMAIN + OP_MAIN`
 - [ ] `derive_personal_duoqian_address`：`b"DUOQIAN_PERSONAL_V1"` → `DUOQIAN_DOMAIN + OP_PERSONAL`
 
 ## 第 4 步：configs 4 个 verifier
@@ -108,16 +108,16 @@ pub const OP_SIGN_TRANSFER: u8 = 0x15;  // 预留：多签转账离线聚合
 - [ ] `wuminapp/lib/governance/personal_duoqian_create_page.dart`
 
 ## 第 7 步：bench + 注释
-- [ ] `sfid-code-auth/src/benchmarks.rs:41`
+- [ ] `sfid-system/src/benchmarks.rs:41`
 - [ ] `china_cb.rs` / `china_ch.rs` 顶部注释
 
 ## 第 8 步：验证
-- [ ] `cargo check -p primitives -p duoqian-manage-pow -p sfid-code-auth -p citizenchain-runtime --offline`
+- [ ] `cargo check -p primitives -p duoqian-manage -p sfid-system -p citizenchain-runtime --offline`
 - [ ] `cargo test -p primitives`
 
 ## 第 9 步：文档彻底清理（V2/V3 名字零保留）
 - [ ] BLAKE2_ADDRESS_DERIVATION.md 整篇重写
-- [ ] DUOQIAN_TECHNICAL.md、GOVERNANCE_TECHNICAL.md、SIGNER_TECHNICAL.md、SFIDCODEAUTH_TECHNICAL.md、CHAIN_TECHNICAL.md、SAFETY_FUND_GOVERNANCE.md
+- [ ] DUOQIAN_TECHNICAL.md、GOVERNANCE_TECHNICAL.md、SIGNER_TECHNICAL.md、SFID_SYSTEM_TECHNICAL.md、CHAIN_TECHNICAL.md、SAFETY_FUND_GOVERNANCE.md
 - [ ] GMB_WHITEPAPER.md（stake_address 派生说明）
 - [ ] ADR-005 加尾注 "Superseded by DUOQIAN_V1 unification"
 - [ ] feedback_sfid_sheng_signing_keyring.md 更新铁律

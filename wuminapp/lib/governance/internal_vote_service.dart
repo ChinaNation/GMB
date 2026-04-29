@@ -11,7 +11,7 @@ import '../rpc/nonce_manager.dart';
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」在客户端的落地:
 ///
 /// - 所有业务 pallet(admins_change / resolution_destro /
-///   grandpakey_change / duoqian_manage_pow / duoqian_transfer_pow)的
+///   grandpakey_change / duoqian_manage / duoqian_transfer)的
 ///   `vote_X` call 在 Phase 2 已从链端物理删除,管理员一人一票一律走
 ///   `VotingEngine::internal_vote(proposal_id, approve)` 一条路径。
 /// - 业务 service(TransferProposalService / DuoqianManageService 等)

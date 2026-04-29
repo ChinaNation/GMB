@@ -53,9 +53,7 @@ fn propose<T: pallet::Config>(
 /// 用引擎低级接口直接把提案推到 PASSED(绕开投票路径;benchmark 只测
 /// execute / cancel 本身的开销)。
 fn pass_proposal<T: pallet::Config>(proposal_id: u64) {
-    assert!(
-        voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok()
-    );
+    assert!(voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok());
 }
 
 #[benchmarks]
@@ -99,16 +97,15 @@ mod benchmarks {
         pass_proposal::<T>(0);
 
         // 将 old_key 篡改为不存在的 authority,制造"已通过但不可执行"场景。
-        let old_raw = voting_engine::Pallet::<T>::get_proposal_data(0)
-            .expect("proposal data should exist");
+        let old_raw =
+            voting_engine::Pallet::<T>::get_proposal_data(0).expect("proposal data should exist");
         let tag = crate::MODULE_TAG;
         let mut action = GrandpaKeyReplacementAction::decode(&mut &old_raw[tag.len()..])
             .expect("action should decode");
         action.old_key = seeded_public_key(250);
         let mut new_data = sp_runtime::sp_std::vec::Vec::from(tag);
         new_data.extend_from_slice(&action.encode());
-        voting_engine::Pallet::<T>::store_proposal_data(0, new_data)
-            .expect("store should succeed");
+        voting_engine::Pallet::<T>::store_proposal_data(0, new_data).expect("store should succeed");
 
         #[extrinsic_call]
         cancel_failed_replace_grandpa_key(RawOrigin::Signed(caller), 0);

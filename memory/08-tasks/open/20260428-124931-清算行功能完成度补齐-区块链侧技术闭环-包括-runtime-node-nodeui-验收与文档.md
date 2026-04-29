@@ -20,8 +20,8 @@
 - memory/07-ai/context-loading-order.md
 - memory/04-decisions/ADR-007-clearing-bank-three-phase.md
 - memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md
-- memory/05-modules/citizenchain/runtime/transaction/offchain-transaction-pos/STEP1_TECHNICAL.md
-- memory/05-modules/citizenchain/runtime/transaction/offchain-transaction-pos/STEP2A_RUNTIME.md
+- memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md
+- memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP2A_RUNTIME.md
 - memory/05-modules/citizenchain/node/offchain/STEP2B_I_NODE.md
 - memory/05-modules/citizenchain/node/offchain/STEP2B_II_A_PACKER.md
 - memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_1_SIGNER.md
@@ -33,7 +33,7 @@
 ## 本卡目标
 
 - 把区块链侧完成度从约 82% 补到可验收状态。
-- 范围包括 `citizenchain/runtime/transaction/offchain-transaction-pos`、`citizenchain/runtime/src/configs/mod.rs`、`citizenchain/node/src/offchain`、`citizenchain/node/frontend/offchain` 与相关文档。
+- 范围包括 `citizenchain/runtime/transaction/offchain-transaction`、`citizenchain/runtime/src/configs/mod.rs`、`citizenchain/node/src/offchain`、`citizenchain/node/frontend/offchain` 与相关文档。
 - 不直接修改 `sfid`、`wuminapp`、`wumin`；跨端契约变化必须先同步对应任务卡。
 
 ## 待补齐清单
@@ -48,7 +48,7 @@
 
 ## 验收标准
 
-- `cargo test --manifest-path citizenchain/Cargo.toml -p offchain-transaction-pos --lib` 通过。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p offchain-transaction --lib` 通过。
 - 设置 `WASM_FILE` 后，`cargo test --manifest-path citizenchain/Cargo.toml -p node clearing_bank` 通过。
 - `citizenchain/node/frontend` 执行 `npm run build` 通过。
 - dev 链手工或脚本验收至少覆盖：清算行节点声明、wuminapp 提交后的节点 pending、packer 上链、runtime settlement、event_listener 回写、reserve_monitor 无差异。
@@ -88,7 +88,7 @@
 
 ## 本轮验证
 
-- 通过：`cargo test --manifest-path citizenchain/Cargo.toml -p offchain-transaction-pos --lib`（23 passed）
+- 通过：`cargo test --manifest-path citizenchain/Cargo.toml -p offchain-transaction --lib`（23 passed）
 - 通过：`WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node clearing_bank`（18 passed）
 - 通过：`WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node offchain`（43 passed）
 - 通过：`npm run build`（`citizenchain/node/frontend`）

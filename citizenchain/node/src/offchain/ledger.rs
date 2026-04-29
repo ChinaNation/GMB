@@ -1,7 +1,7 @@
 //! 清算行本地 L3 存款缓存账本(Step 1 新增骨架)。
 //!
 //! 中文注释:
-//! - 权威账本在链上 `offchain_transaction_pos::DepositBalance` /
+//! - 权威账本在链上 `offchain_transaction::DepositBalance` /
 //!   `BankTotalDeposits`。本模块只是**缓存**,用于:
 //!     1. wuminapp 查询余额时的快速响应(避免每次落到链上 state 查询)
 //!     2. 扫码支付时本地验"可用余额 = confirmed - pending_debit"(Step 2 用)
@@ -70,7 +70,7 @@ pub struct PendingPayment {
 /// L3 支付意图的**节点层镜像结构**(Step 2b 新增)。
 ///
 /// 中文注释:
-/// - 字段顺序与 runtime 侧 `offchain_transaction_pos::batch_item::PaymentIntent`
+/// - 字段顺序与 runtime 侧 `offchain_transaction::batch_item::PaymentIntent`
 ///   **严格一致**,否则 SCALE 编解码得到的 `signing_hash` 会不匹配,导致链上验签
 ///   失败。
 /// - 之所以节点侧再定义一份,是为了不让 node/Cargo.toml 直接依赖 pallet crate

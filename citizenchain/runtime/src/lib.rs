@@ -113,7 +113,18 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 2026-04-29:治理投票引擎彻底更名为 voting-engine,
     // runtime pallet 名同步变为 VotingEngine。pallet index 与 call index 保持不变,
     // 但 metadata 与 storage prefix 变化,故 spec_version 7 → 8。
-    spec_version: 8,
+    //
+    // 2026-04-29:三类发行 pallet 统一新名称:
+    // citizen-issuance / fullnode-issuance / shengbank-interest,runtime pallet
+    // 名同步变为 CitizenIssuance / FullnodeIssuance / ShengBankInterest。
+    // pallet index 与 call index 保持不变,但 metadata 与 storage prefix 变化,
+    // 故 spec_version 8 → 9。
+    //
+    // 2026-04-29:多签管理与多签转账 pallet 统一新名称:
+    // duoqian-manage / duoqian-transfer,runtime pallet 名同步变为
+    // DuoqianManage / DuoqianTransfer。pallet index 与 call index 保持不变,
+    // 但 metadata 与 storage prefix 变化,故 spec_version 9 → 10。
+    spec_version: 10,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 3,
@@ -318,15 +329,15 @@ mod runtime {
 
     // 链上交易手续费模块：发出 FeePaid 事件，供客户端读取真实手续费
     #[runtime::pallet_index(4)]
-    pub type OnchainTransactionPow = onchain_transaction_pow::pallet;
+    pub type OnchainTransaction = onchain_transaction::pallet;
 
-    // 省储行质押利息模块：按年度给固定省储行账户发放质押利息
+    // 省储行利息模块：按年度给固定省储行账户发放质押利息
     #[runtime::pallet_index(5)]
-    pub type ShengBankStakeInterest = shengbank_stake_interest;
+    pub type ShengBankInterest = shengbank_interest;
 
-    // 全节点 PoW 发行模块：出块成功后发放固定铸块奖励
+    // 全节点发行模块：出块成功后发放固定铸块奖励
     #[runtime::pallet_index(6)]
-    pub type FullnodePowReward = fullnode_pow_reward;
+    pub type FullnodeIssuance = fullnode_issuance;
 
     // 决议发行模块：完整承载提案、联合投票回调、发行执行与维护审计
     #[runtime::pallet_index(8)]
@@ -338,11 +349,11 @@ mod runtime {
 
     // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]
-    pub type SfidCodeAuth = sfid_code_auth;
+    pub type SfidSystem = sfid_system;
 
-    // 公民轻节点发行：仅负责认证奖励发放
+    // 公民发行：仅负责认证奖励发放
     #[runtime::pallet_index(11)]
-    pub type CitizenLightnodeIssuance = citizen_lightnode_issuance;
+    pub type CitizenIssuance = citizen_issuance;
 
     // 管理员治理模块：本机构管理员更换事项（走内部投票）
     #[runtime::pallet_index(12)]
@@ -362,15 +373,15 @@ mod runtime {
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验（注册型多签，非宪法保留主账户）
     #[runtime::pallet_index(17)]
-    pub type DuoqianManagePow = duoqian_manage_pow;
+    pub type DuoqianManage = duoqian_manage;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
-    pub type PowDifficulty = pow_difficulty_module;
+    pub type PowDifficulty = pow_difficulty;
 
     // 机构多签名地址转账模块：治理机构内部投票通过后从 main_address 转账（宪法保留主账户，同时兼容注册型 duoqian_address）
     #[runtime::pallet_index(19)]
-    pub type DuoqianTransferPow = duoqian_transfer_pow;
+    pub type DuoqianTransfer = duoqian_transfer;
 
     // 创世模块：存储创世期/运行期阶段、出块目标时间、开发者直升开关、创世常量
     #[runtime::pallet_index(20)]
@@ -378,7 +389,7 @@ mod runtime {
 
     // 链下交易清算模块：省储行即时清算、批量上链、绑定清算行、费率治理
     #[runtime::pallet_index(21)]
-    pub type OffchainTransactionPos = offchain_transaction_pos::pallet;
+    pub type OffchainTransaction = offchain_transaction::pallet;
 }
 
 #[cfg(test)]
@@ -395,30 +406,29 @@ mod tests {
     }
 
     #[test]
-    fn fee_payer_returns_none_for_transfer_pow() {
+    fn fee_payer_returns_none_for_transfer() {
         use configs::RuntimeFeePayerExtractor;
         use frame_support::BoundedVec;
-        use onchain_transaction_pow::CallFeePayer;
+        use onchain_transaction::CallFeePayer;
         use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
 
         let institution =
             shenfen_id_to_fixed48(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
         let beneficiary = AccountId::new([99u8; 32]);
-        let call =
-            RuntimeCall::DuoqianTransferPow(duoqian_transfer_pow::pallet::Call::propose_transfer {
-                org: 0,
-                institution,
-                beneficiary,
-                amount: 10000,
-                remark: BoundedVec::default(),
-            });
+        let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
+            org: 0,
+            institution,
+            beneficiary,
+            amount: 10000,
+            remark: BoundedVec::default(),
+        });
         let signer = AccountId::new([1u8; 32]);
         // 机构转账提案/投票为 NoAmount（免费），手续费在 pallet 内部扣取，
         // RuntimeFeePayerExtractor 不再参与。
         let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
         assert!(
             payer.is_none(),
-            "fee_payer must return None for DuoqianTransferPow (fees handled internally)"
+            "fee_payer must return None for DuoqianTransfer (fees handled internally)"
         );
     }
 
@@ -437,8 +447,8 @@ mod tests {
             ("resolution_destro", resolution_destro::MODULE_TAG),
             ("resolution_issuance", resolution_issuance::MODULE_TAG),
             ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
-            ("duoqian_manage_pow", duoqian_manage_pow::MODULE_TAG),
-            ("duoqian_transfer_pow", duoqian_transfer_pow::MODULE_TAG),
+            ("duoqian_manage", duoqian_manage::MODULE_TAG),
+            ("duoqian_transfer", duoqian_transfer::MODULE_TAG),
         ];
         let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
         assert_eq!(

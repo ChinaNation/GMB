@@ -1,4 +1,4 @@
-# 第2步-A：offchain-transaction-pos 简化密钥机制
+# 第2步-A：offchain-transaction 简化密钥机制
 
 ## 状态：open
 
@@ -34,7 +34,7 @@
 
 ### 涉及文件
 
-- `citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs` — 核心重构
+- `citizenchain/runtime/transaction/offchain-transaction/src/lib.rs` — 核心重构
 - `citizenchain/runtime/src/configs/mod.rs` — Config 实现适配
 - 相关测试代码
 

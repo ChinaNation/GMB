@@ -18,7 +18,7 @@ class ChainRpc {
 
   static final _keyring = Keyring();
   static final Uint8List _sfidMainAccountKey =
-      _buildStorageValueKey('SfidCodeAuth', 'SfidMainAccount');
+      _buildStorageValueKey('SfidSystem', 'SfidMainAccount');
 
   // ──── 批量查询 ────
 
@@ -36,7 +36,8 @@ class ChainRpc {
       final valueHex = rawMap[key];
       result[key] = valueHex == null
           ? null
-          : _hexDecode(valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex);
+          : _hexDecode(
+              valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex);
     }
     return result;
   }
@@ -129,12 +130,12 @@ class ChainRpc {
   /// 瞬断重试已由 `SmoldotClientManager._withRetry` 统一处理。
   Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
     final hex = '0x${_hexEncode(encoded)}';
-    debugPrint('[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes), hex 前 80 字符: ${hex.substring(0, hex.length.clamp(0, 82))}...');
+    debugPrint(
+        '[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes), hex 前 80 字符: ${hex.substring(0, hex.length.clamp(0, 82))}...');
     // 诊断：提交前检查 peer 数量
     final peerCount = await SmoldotClientManager.instance.getPeerCount();
     debugPrint('[ChainRpc.submitExtrinsic] 当前 peer 数量: $peerCount');
-    final result =
-        await SmoldotClientManager.instance.submitExtrinsicHex(hex);
+    final result = await SmoldotClientManager.instance.submitExtrinsicHex(hex);
     debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回: $result');
     if (result == null || result.isEmpty) {
       throw StateError('smoldot 轻节点未返回交易哈希');
@@ -148,8 +149,8 @@ class ChainRpc {
   /// 返回原始 SCALE 编码字节。key 不存在时返回 null。
   Future<Uint8List?> fetchStorage(String storageKeyHex) async {
     // 中文注释：轻节点模式统一通过原生 storage 读取，逐步清理 Dart 层的裸 RPC。
-    final valueHex = await SmoldotClientManager.instance
-        .getStorageValueHex(storageKeyHex);
+    final valueHex =
+        await SmoldotClientManager.instance.getStorageValueHex(storageKeyHex);
     if (valueHex == null) return null;
     return _hexDecode(
       valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex,
@@ -249,7 +250,8 @@ class ChainRpc {
       final accountId = _hexDecode(
           pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex);
       final blake2 = Hasher.blake2b128.hash(accountId);
-      final fullKey = Uint8List(_systemAccountPrefix.length + blake2.length + accountId.length);
+      final fullKey = Uint8List(
+          _systemAccountPrefix.length + blake2.length + accountId.length);
       fullKey.setAll(0, _systemAccountPrefix);
       fullKey.setAll(_systemAccountPrefix.length, blake2);
       fullKey.setAll(_systemAccountPrefix.length + blake2.length, accountId);
@@ -286,7 +288,7 @@ class ChainRpc {
 
   /// 读取链上当前 SFID 主验签公钥（32 字节 AccountId）。
   ///
-  /// 存储项：`SfidCodeAuth::SfidMainAccount`，类型为 `Option<AccountId32>`。
+  /// 存储项：`SfidSystem::SfidMainAccount`，类型为 `Option<AccountId32>`。
   Future<String?> fetchCurrentSfidMainPubkeyHex() async {
     final cached = _cachedCurrentSfidMainPubkeyHex;
     if (cached != null && cached.isNotEmpty) {
@@ -294,7 +296,8 @@ class ChainRpc {
     }
 
     final keyHex = '0x${_hexEncode(_sfidMainAccountKey)}';
-    final result = await SmoldotClientManager.instance.getStorageValueHex(keyHex);
+    final result =
+        await SmoldotClientManager.instance.getStorageValueHex(keyHex);
     if (result == null) {
       return null;
     }

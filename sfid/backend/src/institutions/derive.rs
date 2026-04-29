@@ -1,6 +1,6 @@
 //! DUOQIAN_V1 机构账户地址派生。
 //!
-//! 与链端 `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`
+//! 与链端 `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`
 //! `Pallet::derive_institution_address` + `role_from_account_name` 完全对齐的
 //! 纯 Rust 实现(无需 substrate 依赖),用于:
 //!   - 创建账户时立即在本地算出 `duoqian_address`,无需等激活上链
@@ -27,8 +27,8 @@
 //!
 //! - `primitives/core_const.rs:45-55`:`DUOQIAN_DOMAIN = b"DUOQIAN_V1"`、
 //!   `OP_MAIN = 0x00`、`OP_FEE = 0x01`、`OP_INSTITUTION = 0x05`
-//! - `duoqian-manage-pow/src/lib.rs:1199-1223`:`derive_institution_address`
-//! - `duoqian-manage-pow/src/lib.rs:1234-1247`:`role_from_account_name`
+//! - `duoqian-manage/src/lib.rs:1199-1223`:`derive_institution_address`
+//! - `duoqian-manage/src/lib.rs:1234-1247`:`role_from_account_name`
 //!   按字节匹配:`"主账户".as_bytes() → Role::Main`;`"费用账户".as_bytes() → Role::Fee`;
 //!   其他非空 → `Role::Named(account_name)`
 

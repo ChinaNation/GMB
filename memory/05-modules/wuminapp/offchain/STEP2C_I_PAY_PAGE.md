@@ -31,8 +31,8 @@ Step 2b-iv-a 把老省储行清算代码从节点和 wuminapp 的 onchain 入口
 
 | RPC | 入参 | 返回 | 数据源 |
 |---|---|---|---|
-| `offchain_queryUserBank` | `user: AccountId32` | `Option<AccountId32>` | 链上 `OffchainTransactionPos::UserBank[user]` |
-| `offchain_queryFeeRate` | `bank: AccountId32` | `FeeRateResp { rate_bp: u32, min_fee_fen: u128 }` | 链上 `OffchainTransactionPos::L2FeeRateBp[bank]` + 节点常量 `MIN_FEE_FEN=1` |
+| `offchain_queryUserBank` | `user: AccountId32` | `Option<AccountId32>` | 链上 `OffchainTransaction::UserBank[user]` |
+| `offchain_queryFeeRate` | `bank: AccountId32` | `FeeRateResp { rate_bp: u32, min_fee_fen: u128 }` | 链上 `OffchainTransaction::L2FeeRateBp[bank]` + 节点常量 `MIN_FEE_FEN=1` |
 
 `OffchainClearingRpcImpl` 新增 `client: Arc<FullClient>` 字段(通过
 `start_clearing_bank_components` 额外参数注入)用于 `client.storage()` 单点读。
@@ -134,7 +134,7 @@ UI(ready):
 ```
 
 签名域:`b"GMB_L3_PAY_V1"`(13 字节 ASCII,`payment_intent.dart::signingDomain`
-常量与 runtime `offchain_transaction_pos::batch_item::L3_PAY_SIGNING_DOMAIN`
+常量与 runtime `offchain_transaction::batch_item::L3_PAY_SIGNING_DOMAIN`
 一致)。
 
 **若 runtime 侧新增/删除 `NodePaymentIntent` 字段**:必须同改 node `ledger.rs`、

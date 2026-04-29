@@ -140,28 +140,30 @@ citizenchain/
 - `voting-engine`
 
 ### 9.2 发行模块（`runtime/issuance/`）
-- 负责轻节点认证发行、全节点 PoW 奖励、省储行质押利息、决议发行完整流程。
+- 负责公民发行、全节点发行、省储行利息、决议发行完整流程。
 
 当前模块：
-- `citizen-lightnode-issuance`
-- `fullnode-pow-reward`
+- `citizen-issuance`
+- `fullnode-issuance`
 - `resolution-issuance`
-- `shengbank-stake-interest`
+- `shengbank-interest`
 
 ### 9.3 交易模块（`runtime/transaction/`）
 - 负责链上交易手续费、链下交易手续费、机构多签交易能力。
 
 当前模块：
-- `duoqian-manage-pow`
-- `offchain-transaction-pos`
-- `onchain-transaction-pow`
+- `duoqian-manage`
+- `duoqian-transfer`
+- `institution-asset`
+- `offchain-transaction`
+- `onchain-transaction`
 
 ### 9.4 其他模块（`runtime/otherpallet/`）
 - 负责 SFID 链上绑定 / 资格校验、PoW 难度调整等基础能力。
 
 当前模块：
-- `pow-difficulty-module`
-- `sfid-code-auth`
+- `pow-difficulty`
+- `sfid-system`
 
 ## 10. 桌面节点软件（`nodeui/`）
 
@@ -206,19 +208,22 @@ citizenchain/
 - `runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md`
 
 ### 12.2 发行
-- `runtime/issuance/citizen-lightnode-issuance/CITIZENISS_TECHNICAL.md`
-- `runtime/issuance/fullnode-pow-reward/FULLNODE_TECHNICAL.md`
+- `runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md`
+- `runtime/issuance/fullnode-issuance/FULLNODE_TECHNICAL.md`
 - `runtime/issuance/resolution-issuance/RESOLUTIONISSUANCE_TECHNICAL.md`
-- `runtime/issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md`
+- `runtime/issuance/shengbank-interest/SHENGBANK_TECHNICAL.md`
 
 ### 12.3 交易
-- `runtime/transaction/duoqian-manage-pow/DUOQIAN_TECHNICAL.md`
-- `runtime/transaction/offchain-transaction-pos/OFFCHAIN_TECHNICAL.md`
-- `runtime/transaction/onchain-transaction-pow/ONCHAIN_TECHNICAL.md`
+- `runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md`
+- `runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md`
+- `runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md`
+- `runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md`
+- `runtime/transaction/offchain-transaction/STEP2A_RUNTIME.md`
+- `runtime/transaction/onchain-transaction/ONCHAIN_TECHNICAL.md`
 
 ### 12.4 其他链上模块
-- `runtime/otherpallet/pow-difficulty-module/POW_DIFFICULTY_TECHNICAL.md`
-- `runtime/otherpallet/sfid-code-auth/SFIDCODEAUTH_TECHNICAL.md`
+- `runtime/otherpallet/pow-difficulty/POW_DIFFICULTY_TECHNICAL.md`
+- `runtime/otherpallet/sfid-system/SFID_SYSTEM_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
 - `memory/05-modules/citizenchain/nodeui/home/HOME_TECHNICAL.md`

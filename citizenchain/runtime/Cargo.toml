@@ -60,22 +60,22 @@ pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 frame-benchmarking = { optional = true, workspace = true }
 frame-system-benchmarking = { optional = true, workspace = true }
 
-shengbank-stake-interest = { path = "issuance/shengbank-stake-interest", default-features = false }
-fullnode-pow-reward = { path = "issuance/fullnode-pow-reward", default-features = false }
-citizen-lightnode-issuance = { path = "issuance/citizen-lightnode-issuance", default-features = false }
-sfid-code-auth = { path = "otherpallet/sfid-code-auth", default-features = false }
-pow-difficulty-module = { path = "otherpallet/pow-difficulty-module", default-features = false }
-onchain-transaction-pow = { path = "transaction/onchain-transaction-pow", default-features = false }
-duoqian-manage-pow = { path = "transaction/duoqian-manage-pow", default-features = false }
+shengbank-interest = { path = "issuance/shengbank-interest", default-features = false }
+fullnode-issuance = { path = "issuance/fullnode-issuance", default-features = false }
+citizen-issuance = { path = "issuance/citizen-issuance", default-features = false }
+sfid-system = { path = "otherpallet/sfid-system", default-features = false }
+pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
+onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
+duoqian-manage = { path = "transaction/duoqian-manage", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 voting-engine = { path = "governance/voting-engine", default-features = false }
 admins-change = { path = "governance/admins-change", default-features = false }
 grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
 runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
 resolution-destro = { path = "governance/resolution-destro", default-features = false }
-duoqian-transfer-pow = { path = "transaction/duoqian-transfer-pow", default-features = false }
-institution-asset-guard = { path = "transaction/institution-asset-guard", default-features = false }
-offchain-transaction-pos = { path = "transaction/offchain-transaction-pos", default-features = false }
+duoqian-transfer = { path = "transaction/duoqian-transfer", default-features = false }
+institution-asset = { path = "transaction/institution-asset", default-features = false }
+offchain-transaction = { path = "transaction/offchain-transaction", default-features = false }
 genesis-pallet = { path = "genesis", default-features = false }
 
 [build-dependencies]
@@ -95,22 +95,22 @@ std = [
 	"frame-try-runtime?/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
-	"shengbank-stake-interest/std",
-	"fullnode-pow-reward/std",
-	"citizen-lightnode-issuance/std",
-	"sfid-code-auth/std",
-	"pow-difficulty-module/std",
-	"onchain-transaction-pow/std",
-	"duoqian-manage-pow/std",
+	"shengbank-interest/std",
+	"fullnode-issuance/std",
+	"citizen-issuance/std",
+	"sfid-system/std",
+	"pow-difficulty/std",
+	"onchain-transaction/std",
+	"duoqian-manage/std",
 	"resolution-issuance/std",
 	"voting-engine/std",
 	"admins-change/std",
 	"grandpakey-change/std",
 	"runtime-upgrade/std",
 	"resolution-destro/std",
-	"duoqian-transfer-pow/std",
-	"institution-asset-guard/std",
-	"offchain-transaction-pos/std",
+	"duoqian-transfer/std",
+	"institution-asset/std",
+	"offchain-transaction/std",
 	"genesis-pallet/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
@@ -143,22 +143,22 @@ runtime-benchmarks = [
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
-	"shengbank-stake-interest/runtime-benchmarks",
-	"fullnode-pow-reward/runtime-benchmarks",
-	"citizen-lightnode-issuance/runtime-benchmarks",
-	"sfid-code-auth/runtime-benchmarks",
-	"pow-difficulty-module/runtime-benchmarks",
-	"onchain-transaction-pow/runtime-benchmarks",
-	"duoqian-manage-pow/runtime-benchmarks",
+	"shengbank-interest/runtime-benchmarks",
+	"fullnode-issuance/runtime-benchmarks",
+	"citizen-issuance/runtime-benchmarks",
+	"sfid-system/runtime-benchmarks",
+	"pow-difficulty/runtime-benchmarks",
+	"onchain-transaction/runtime-benchmarks",
+	"duoqian-manage/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
 	"voting-engine/runtime-benchmarks",
 	"admins-change/runtime-benchmarks",
 	"grandpakey-change/runtime-benchmarks",
 	"runtime-upgrade/runtime-benchmarks",
 	"resolution-destro/runtime-benchmarks",
-	"duoqian-transfer-pow/runtime-benchmarks",
-	"institution-asset-guard/std",
-	"offchain-transaction-pos/runtime-benchmarks",
+	"duoqian-transfer/runtime-benchmarks",
+	"institution-asset/std",
+	"offchain-transaction/runtime-benchmarks",
 	"genesis-pallet/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]
@@ -171,22 +171,22 @@ try-runtime = [
 	"pallet-grandpa/try-runtime",
 	"pallet-timestamp/try-runtime",
 	"pallet-transaction-payment/try-runtime",
-	"shengbank-stake-interest/try-runtime",
-	"fullnode-pow-reward/try-runtime",
-	"citizen-lightnode-issuance/try-runtime",
-	"sfid-code-auth/try-runtime",
-	"pow-difficulty-module/try-runtime",
-	"onchain-transaction-pow/try-runtime",
-	"duoqian-manage-pow/try-runtime",
+	"shengbank-interest/try-runtime",
+	"fullnode-issuance/try-runtime",
+	"citizen-issuance/try-runtime",
+	"sfid-system/try-runtime",
+	"pow-difficulty/try-runtime",
+	"onchain-transaction/try-runtime",
+	"duoqian-manage/try-runtime",
 	"resolution-issuance/try-runtime",
 	"voting-engine/try-runtime",
 	"admins-change/try-runtime",
 	"grandpakey-change/try-runtime",
 	"runtime-upgrade/try-runtime",
 	"resolution-destro/try-runtime",
-	"duoqian-transfer-pow/try-runtime",
-	"institution-asset-guard/std",
-	"offchain-transaction-pos/try-runtime",
+	"duoqian-transfer/try-runtime",
+	"institution-asset/std",
+	"offchain-transaction/try-runtime",
 	"genesis-pallet/try-runtime",
 	"sp-runtime/try-runtime",
 ]

@@ -157,8 +157,8 @@ fn match_event(
             })
         }
 
-        // ─── fullnode_pow_reward (index 6) ──────────────────────────
-        ("FullnodePowReward", "PowRewardIssued") => {
+        // ─── fullnode_issuance (index 6) ──────────────────────────
+        ("FullnodeIssuance", "FullnodeIssuanceIssued") => {
             let wallet = fields.at("wallet").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
@@ -174,8 +174,8 @@ fn match_event(
             })
         }
 
-        // ─── shengbank_stake_interest (index 5) ─────────────────────
-        ("ShengBankStakeInterest", "ShengBankInterestMinted") => {
+        // ─── shengbank_interest (index 5) ─────────────────────
+        ("ShengBankInterest", "ShengBankInterestMinted") => {
             let account = fields.at("account").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
@@ -207,8 +207,8 @@ fn match_event(
             })
         }
 
-        // ─── citizen_lightnode_issuance (index 11) ───────────────────
-        ("CitizenLightnodeIssuance", "CertificationRewardIssued") => {
+        // ─── citizen_issuance (index 11) ───────────────────
+        ("CitizenIssuance", "CertificationRewardIssued") => {
             let who = fields.at("who").and_then(extract_account_id)?;
             let reward = fields.at("reward").and_then(extract_balance)?;
             Some(TxRecordInsert {
@@ -224,8 +224,8 @@ fn match_event(
             })
         }
 
-        // ─── duoqian_transfer_pow (index 19) ────────────────────────
-        ("DuoqianTransferPow", "TransferExecuted") => {
+        // ─── duoqian_transfer (index 19) ────────────────────────
+        ("DuoqianTransfer", "TransferExecuted") => {
             let beneficiary = fields.at("beneficiary").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
             let fee = fields.at("fee").and_then(extract_balance);
@@ -242,8 +242,8 @@ fn match_event(
             })
         }
 
-        // ─── duoqian_manage_pow (index 17) ──────────────────────────
-        ("DuoqianManagePow", "DuoqianCreated") => {
+        // ─── duoqian_manage (index 17) ──────────────────────────
+        ("DuoqianManage", "DuoqianCreated") => {
             let duoqian = fields.at("duoqian_address").and_then(extract_account_id)?;
             let creator = fields.at("creator").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
@@ -259,7 +259,7 @@ fn match_event(
                 block_timestamp: block_ts,
             })
         }
-        ("DuoqianManagePow", "DuoqianClosed") => {
+        ("DuoqianManage", "DuoqianClosed") => {
             let duoqian = fields.at("duoqian_address").and_then(extract_account_id)?;
             let beneficiary = fields.at("beneficiary").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;

@@ -24,7 +24,7 @@ use crate::sfid::{
 /// - 其他任意非空字符串 → `Role::Named(name)`,preimage 含 name
 ///
 /// 派生细节完全是链端内部关注点(见 `citizenchain/runtime/transaction/
-/// duoqian-manage-pow/src/lib.rs` 的 `InstitutionAccountRole` /
+/// duoqian-manage/src/lib.rs` 的 `InstitutionAccountRole` /
 /// `derive_institution_address`)。sfid 后端只负责把字符串原样传过去。
 ///
 /// **两个保留名**:`delete_account` 对这两个 `account_name` 直接 409 拒绝,

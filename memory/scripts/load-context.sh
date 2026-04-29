@@ -35,29 +35,45 @@ case "$MODULE" in
     print_if_exists "memory/07-ai/document-boundaries.md"
     print_if_exists "memory/07-ai/startup-acceptance.md"
     ;;
-  citizenchain/runtime/issuance/citizen-lightnode-issuance|citizenchain/issuance/citizen-lightnode-issuance)
+  citizenchain/runtime/issuance/citizen-issuance|citizenchain/issuance/citizen-issuance)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/citizen-lightnode-issuance/CITIZENISS_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md"
     ;;
-  citizenchain/runtime/otherpallet/sfid-code-auth|citizenchain/otherpallet/sfid-code-auth|sfid-code-auth)
+  citizenchain/runtime/issuance/fullnode-issuance|citizenchain/issuance/fullnode-issuance)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/otherpallet/sfid-code-auth/SFIDCODEAUTH_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/fullnode-issuance/FULLNODE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/otherpallet/pow-difficulty-module|citizenchain/otherpallet/pow-difficulty-module|pow-difficulty-module)
+  citizenchain/runtime/issuance/shengbank-interest|citizenchain/issuance/shengbank-interest)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/otherpallet/pow-difficulty-module/POW_DIFFICULTY_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/shengbank-interest/SHENGBANK_TECHNICAL.md"
+    ;;
+  citizenchain/runtime/otherpallet/sfid-system|citizenchain/otherpallet/sfid-system|sfid-system)
+    print_base_context
+    print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
+    print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/otherpallet/sfid-system/SFID_SYSTEM_TECHNICAL.md"
+    ;;
+  citizenchain/runtime/otherpallet/pow-difficulty|citizenchain/otherpallet/pow-difficulty|pow-difficulty)
+    print_base_context
+    print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
+    print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/otherpallet/pow-difficulty/POW_DIFFICULTY_TECHNICAL.md"
     ;;
   citizenchain/runtime/governance/grandpakey-change|citizenchain/governance/grandpakey-change|grandpakey-change)
     print_base_context
@@ -107,19 +123,46 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/transaction/duoqian-transfer-pow|citizenchain/transaction/duoqian-transfer-pow|duoqian-transfer-pow)
+  citizenchain/runtime/transaction/duoqian-transfer|citizenchain/transaction/duoqian-transfer|duoqian-transfer)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer-pow/DUOQIAN_TRANSFER_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md"
     ;;
-  citizenchain/runtime/transaction/institution-asset-guard|citizenchain/transaction/institution-asset-guard|institution-asset-guard)
+  citizenchain/runtime/transaction/duoqian-manage|citizenchain/transaction/duoqian-manage|duoqian-manage)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/institution-asset-guard/INSTITUTION_ASSET_GUARD_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md"
+    ;;
+  citizenchain/runtime/transaction/institution-asset|citizenchain/transaction/institution-asset|institution-asset)
+    print_base_context
+    print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
+    print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/institution-asset/INSTITUTION_ASSET_TECHNICAL.md"
+    ;;
+  citizenchain/runtime/transaction/offchain-transaction|citizenchain/transaction/offchain-transaction|offchain-transaction)
+    print_base_context
+    print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
+    print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP2A_RUNTIME.md"
+    ;;
+  citizenchain/runtime/transaction/onchain-transaction|citizenchain/transaction/onchain-transaction|onchain-transaction)
+    print_base_context
+    print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
+    print_if_exists "memory/07-ai/ci-path-routing.md"
+    print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
+    print_if_exists "citizenchain/runtime/README.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/onchain-transaction/ONCHAIN_TECHNICAL.md"
     ;;
   citizenchain/runtime/genesis|citizenchain/genesis|genesis-pallet)
     print_base_context

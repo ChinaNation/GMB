@@ -40,8 +40,8 @@
    - 投票 payload：`citizenchain/runtime/src/configs/mod.rs:720`
    - 人口快照 payload：`citizenchain/runtime/src/configs/mod.rs:780`
 4. 防重放锚点：
-   - 绑定：`citizenchain/otherpallet/sfid-code-auth/src/lib.rs:294`（`hash(nonce)`）
-   - 投票：`citizenchain/otherpallet/sfid-code-auth/src/lib.rs:434`（`proposal_id + binding_id + hash(vote_nonce)`）
+   - 绑定：`citizenchain/otherpallet/sfid-system/src/lib.rs:294`（`hash(nonce)`）
+   - 投票：`citizenchain/otherpallet/sfid-system/src/lib.rs:434`（`proposal_id + binding_id + hash(vote_nonce)`）
 
 ## 3. API 矩阵（模块内）
 1. `POST /api/v1/bind/request`
@@ -122,7 +122,7 @@
 2. 改造 SFID 后端功能 1/2/3 接口 payload 结构，严格对齐 Runtime。
 3. 改造链侧调用参数组装，确保 `who`、`binding_id/binding_id`、`nonce` 类型一致。
 4. 完成本地链 + SFID 集成联调，覆盖重放攻击与密钥轮换回归。
-5. 清理不一致口径：同步更新 `SFIDCODEAUTH_TECHNICAL.md`、`CHAIN_TECHNICAL.md`、`SUPER_ADMINS_TECHNICAL.md`、`KEY_ADMINS_TECHNICAL.md`。
+5. 清理不一致口径：同步更新 `SFID_SYSTEM_TECHNICAL.md`、`CHAIN_TECHNICAL.md`、`SUPER_ADMINS_TECHNICAL.md`、`KEY_ADMINS_TECHNICAL.md`。
 
 ## 7. 验收标准
 1. 功能 1/2/3 链上验签通过率 `100%`，摘要算法全部为 `blake2_256`。
@@ -153,9 +153,9 @@
 1. `sfid` 当前在线主私钥只允许来自部署环境中的 `SFID_SIGNING_SEED_HEX`。
 2. 这把主私钥必须使用 Substrate `sp-core::sr25519::Pair::from_seed_slice` 规则派生公钥与签名，不允许使用裸 schnorrkel uniform 扩展替代。
 3. 启动时必须先从链上读取：
-   - `SfidCodeAuth::SfidMainAccount`
-   - `SfidCodeAuth::SfidBackupAccount1`
-   - `SfidCodeAuth::SfidBackupAccount2`
+   - `SfidSystem::SfidMainAccount`
+   - `SfidSystem::SfidBackupAccount1`
+   - `SfidSystem::SfidBackupAccount2`
 4. `sfid` 必须把链上三把公钥同步到本地 `chain_keyring_state` 镜像，再做签名服务启动。
 5. 若本地主私钥派生公钥不等于链上 `SfidMainAccount`，服务必须拒绝启动，不能继续提供绑定凭证、投票凭证、人口快照签名。
 

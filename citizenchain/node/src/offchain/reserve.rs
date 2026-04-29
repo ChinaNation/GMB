@@ -38,10 +38,10 @@ use crate::service::FullClient;
 
 use super::ledger::OffchainLedger;
 
-/// 链上 `offchain_transaction_pos` pallet 在 `construct_runtime!` 中注册的实例名。
+/// 链上 `offchain_transaction` pallet 在 `construct_runtime!` 中注册的实例名。
 ///
 /// Storage key 前缀 `twox_128(PALLET_NAME)` 必须与 runtime 一致,否则读不到值。
-const PALLET_NAME: &[u8] = b"OffchainTransactionPos";
+const PALLET_NAME: &[u8] = b"OffchainTransaction";
 
 /// `BankTotalDeposits` Storage 名称(pallet 内 `#[pallet::storage]` 项名)。
 const STORAGE_BANK_TOTAL_DEPOSITS: &[u8] = b"BankTotalDeposits";
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(key.0.len(), expected_len);
         assert_eq!(
             &key.0[..16],
-            &sp_io::hashing::twox_128(b"OffchainTransactionPos")
+            &sp_io::hashing::twox_128(b"OffchainTransaction")
         );
         assert_eq!(
             &key.0[16..32],

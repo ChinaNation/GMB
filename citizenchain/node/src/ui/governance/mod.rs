@@ -723,7 +723,7 @@ pub async fn submit_propose_safety_fund(
         let remark_compact = signing::encode_compact_u32_pub(remark_bytes.len() as u32);
 
         let mut call_data = Vec::new();
-        call_data.push(19u8); // DuoqianTransferPow pallet
+        call_data.push(19u8); // DuoqianTransfer pallet
         call_data.push(1u8); // propose_safety_fund_transfer call (Phase 2 重排,原 3)
         call_data.extend_from_slice(&beneficiary_bytes);
         call_data.extend_from_slice(&amount_fen.to_le_bytes());
@@ -788,7 +788,7 @@ pub async fn submit_propose_sweep(
         let amount_fen = (amount_yuan * 100.0).round() as u128;
         let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
         let mut call_data = Vec::with_capacity(66);
-        call_data.push(19u8); // DuoqianTransferPow pallet
+        call_data.push(19u8); // DuoqianTransfer pallet
         call_data.push(2u8); // propose_sweep_to_main call (Phase 2 重排,原 5)
         call_data.extend_from_slice(&institution_id);
         call_data.extend_from_slice(&amount_fen.to_le_bytes());

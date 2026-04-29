@@ -8,7 +8,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 调链上 `deposit(amount)`(call_index 31)。
-/// - 链上费按金额 0.1% 最低 0.1 元(链上资金交易,由 `PowTxAmountExtractor` 处理)。
+/// - 链上费按金额 0.1% 最低 0.1 元(链上资金交易,由 `OnchainTxAmountExtractor` 处理)。
 /// - 本步仅支持热钱包,冷钱包 QR 签名留 Step 2。
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key, required this.wallet});

@@ -296,8 +296,8 @@ pub(crate) struct AppState {
 
 | 改动文件 | Phase | 动作 |
 |---|---|---|
-| `citizenchain/frame/sfid-code-auth/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
-| `citizenchain/frame/sfid-code-auth/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
+| `citizenchain/frame/sfid-system/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
+| `citizenchain/frame/sfid-system/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
 | `sfid/backend/src/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
 | `sfid/backend/src/key-admins/` | 1 | 新 `signer_cache.rs`(42 省 cache) |
 | `sfid/backend/src/sheng-admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |

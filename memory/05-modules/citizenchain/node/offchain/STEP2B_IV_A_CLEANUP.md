@@ -118,16 +118,16 @@ No issues found!
 | CLI 清算行模式下 `stop_node` 不再有 pending 保护 | **P2** | UI 路径本来就没启动清算行;CLI `Ctrl+C` 会 drop task_manager → 所有 spawn 的 task 被取消,packer/listener/monitor 最后一次 tick 可能漏做。Step 3 改为 spawn_essential_handle + graceful shutdown 通道 |
 | `offchain::keystore::SigningKey.shenfen_id` 字段名语义漂移 | **P3** | 本步仅改注释,不改字段名(避免 blast radius);rename 留 Step 3 |
 | 跨行 ghost account bug(Step 2b-iii-a 发现) | **P2** | 已登记为独立任务,Step 3 跨行前修复;本步 Step 1 同行不触发 |
-| Runtime 侧老 Calls 仍存在占 `RuntimeCall` 枚举槽位 | **P3** | `PowTxAmountExtractor` 分类还在;不影响功能,Step 2b-iv-b 删除 |
+| Runtime 侧老 Calls 仍存在占 `RuntimeCall` 枚举槽位 | **P3** | `OnchainTxAmountExtractor` 分类还在;不影响功能,Step 2b-iv-b 删除 |
 
 ---
 
 ## 5. 后续
 
 **Step 2b-iv-b**(runtime 清理,独立 **待评估**):
-- 删除 `offchain-transaction-pos::pallet` 的 `submit_offchain_batch`(call_index 0)/ `propose_institution_rate`(1+2)/ `bind_clearing_institution`(9)等老 Calls
+- 删除 `offchain-transaction::pallet` 的 `submit_offchain_batch`(call_index 0)/ `propose_institution_rate`(1+2)/ `bind_clearing_institution`(9)等老 Calls
 - 删除对应 `RecipientClearingInstitution` / `InstitutionRateBp` / `QueuedBatches` Storage
-- `configs/mod.rs::PowTxAmountExtractor` 删对应分类分支
+- `configs/mod.rs::OnchainTxAmountExtractor` 删对应分类分支
 - **关键前置**:确认链上是否有此类历史 tx,评估 spec_version bump 下历史块重放兼容性,必要时保留 Call stub 返回 `Error::Removed`
 
 **Step 2c**(wuminapp 重写):

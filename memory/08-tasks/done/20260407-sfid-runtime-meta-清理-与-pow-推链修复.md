@@ -67,7 +67,7 @@
 2. `Invalid Transaction (1010) AncientBirthBlock` —— mortal era birth block 视图不一致
 3. `Invalid Transaction (1010) Stale` —— nonce 视图不一致
 4. `timed out waiting for finalization` —— GRANDPA finality 在 PoW 下慢于 120s 业务超时
-5. `Pallet error: DuoqianManagePow::InvalidSfidInstitutionSignature` —— SCALE 编码差异
+5. `Pallet error: DuoqianManage::InvalidSfidInstitutionSignature` —— SCALE 编码差异
 
 ### 真正根因（共 4 个，不是同一个问题）
 

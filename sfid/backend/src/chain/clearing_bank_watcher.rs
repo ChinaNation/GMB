@@ -1,6 +1,6 @@
 //! 清算行节点声明缓存(ADR-007 Step 2 阶段 D 新增)。
 //!
-//! 链上权威 storage 在 `OffchainTransactionPos::ClearingBankNodes`,key = sfid_id 字节串,
+//! 链上权威 storage 在 `OffchainTransaction::ClearingBankNodes`,key = sfid_id 字节串,
 //! value = ClearingBankNodeInfo。SFID 后端 `app_search_clearing_banks` 的"第 2 轮过滤"
 //! 需要 `AND sfid_id ∈ ClearingBankNodes` 才能保证只返回**已加入清算网络**的候选。
 //!
@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_KEYS_PER_PAGE: u32 = 1000;
-/// twox_128("OffchainTransactionPos") + twox_128("ClearingBankNodes") 的 hex 前缀。
+/// twox_128("OffchainTransaction") + twox_128("ClearingBankNodes") 的 hex 前缀。
 /// 启动时初始化(避免反复哈希),后续读 storage 复用。
 const STORAGE_PREFIX_INIT: () = ();
 
@@ -124,9 +124,9 @@ async fn run_watcher_loop(http_url: String, cache: Arc<ClearingBankNodeCache>) {
     }
 }
 
-/// 计算 `twox_128(b"OffchainTransactionPos")||twox_128(b"ClearingBankNodes")` 的 hex 前缀(0x...)。
+/// 计算 `twox_128(b"OffchainTransaction")||twox_128(b"ClearingBankNodes")` 的 hex 前缀(0x...)。
 fn clearing_bank_nodes_prefix_hex() -> String {
-    let pallet = twox_128(b"OffchainTransactionPos");
+    let pallet = twox_128(b"OffchainTransaction");
     let storage = twox_128(b"ClearingBankNodes");
     let mut combined = Vec::with_capacity(32);
     combined.extend_from_slice(&pallet);
@@ -265,8 +265,8 @@ fn twox_128(data: &[u8]) -> [u8; 16] {
 }
 
 fn twox_64(data: &[u8], seed: u64) -> u64 {
-    use twox_hash::XxHash64;
     use std::hash::Hasher;
+    use twox_hash::XxHash64;
     let mut hasher = XxHash64::with_seed(seed);
     hasher.write(data);
     hasher.finish()

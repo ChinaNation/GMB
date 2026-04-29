@@ -5,4 +5,4 @@
 
 补充：
 
-- `institution-asset-guard` 虽然不是 pallet，但属于交易资金边界的公共 crate，也统一放在本目录。
+- `institution-asset` 虽然不是 pallet，但属于交易资金边界的公共 crate，也统一放在本目录。

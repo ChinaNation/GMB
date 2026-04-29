@@ -1,0 +1,90 @@
+# 任务卡：全面仔细检查 sfid-system 模块是否存在安全漏洞、改进点、功能需求实现偏差、中文注释/技术文档缺失，以及需要清理的残留。
+
+- 任务编号：20260328-101548
+- 状态：open
+- 所属模块：citizenchain/runtime/otherpallet/sfid-system
+- 当前负责人：Codex
+- 创建时间：2026-03-28 10:15:48
+
+## 任务需求
+
+全面仔细检查 sfid-system 模块是否存在安全漏洞、改进点、功能需求实现偏差、中文注释/技术文档缺失，以及需要清理的残留。
+
+## 必读上下文
+
+- memory/00-vision/project-goal.md
+- memory/00-vision/trust-boundary.md
+- memory/01-architecture/repo-map.md
+- memory/03-security/security-rules.md
+- memory/07-ai/agent-rules.md
+- memory/07-ai/context-loading-order.md
+- memory/05-modules/citizenchain/runtime/otherpallet/sfid-system/SFID_SYSTEM_TECHNICAL.md
+
+## 必须遵守
+
+- 不可突破模块边界
+- 不可绕过既有契约
+- 不可擅自修改安全红线
+- 不清楚逻辑时先沟通
+- 改代码后必须更新文档和清理残留
+
+## 输出物
+
+- 代码
+- 中文注释
+- 文档更新
+- 残留清理
+
+## 待确认问题
+
+- 暂无
+
+## 实施记录
+
+- 任务卡已创建
+- 已读取模块代码、benchmark、weights、runtime verifier 接线与模块技术文档
+- 已执行 `cargo test -p sfid-system`
+- 已执行 `cargo check -p sfid-system`
+- 已执行 `cargo check -p sfid-system --features runtime-benchmarks`
+- 已执行 `cargo check -p citizenchain`
+- 已执行模块源码 `rustfmt --check`
+
+## 审查结论
+
+### 已确认
+
+- 未发现 `sfid-system` 模块内可直接利用的高危逻辑漏洞
+- 按当前 runtime 与 `sfid/backend/src/chain/runtime_align.rs` 的对齐口径，核心功能已实现：绑定/解绑、一对一映射、投票资格校验、主备验签账户轮换、链域隔离、绑定成功后回调发行模块
+- 关键业务代码已包含中文注释，但测试覆盖与技术文档同步性明显不足
+
+### 已确认问题与改进点
+
+1. `sfid-system/src/weights.rs` 与当前实现严重漂移，`bind_sfid` 的 weight 元数据仍引用已删除的旧存储与旧字段：
+   - `UsedCredentialNonce`
+   - `SfidToAccount`
+   - `AccountToSfid`
+   - `CredentialNoncesByExpiry`
+   当前真实实现已改为 `UsedBindNonce`、`BindingIdToAccount`、`AccountToBindingId`，且不存在 `CredentialNoncesByExpiry`。这会导致 `bind_sfid` 的总 weight 可信度不足，并影响叠加 `OnSfidBound` 回调后的计费/DoS 保护口径。
+
+2. 模块技术文档与当前实现大面积漂移，且文档内部自相矛盾：
+   - 文档仍写 `bind_sfid(origin, sfid_code, credential)`，但当前链上接口已经是 `bind_sfid(origin, credential)`
+   - 文档仍写 `expires_at` / `MaxBindCredentialLifetimeBlocks` / `CredentialNoncesByExpiry`
+   - 文档错误码、存储命名、测试覆盖清单均与当前代码不一致
+   - 文档后半段又同时写明“链上交易更新为 `bind_sfid(origin, credential)`”，说明文档内部已出现两套口径
+
+3. 安全敏感路径缺少直接回归测试：
+   - 未直接覆盖 `BindingIdAlreadyBoundToAnotherAccount`
+   - 未直接覆盖 `SameBindingIdAlreadyBound`
+   - 未直接覆盖 `unbind_sfid` 成功/失败路径
+   - 未直接覆盖 `rotate_sfid_keys` 的未授权与重复 key 拒绝路径
+   - 未直接覆盖 `cleanup_vote_credentials` / 分块清理契约
+   当前单测更多覆盖 happy path，与文档声称的覆盖范围不一致。
+
+4. 残留与治理问题：
+   - `memory/scripts/load-context.sh` 未登记 `citizenchain/runtime/otherpallet/sfid-system`
+   - `src/benchmarks.rs` 在 `runtime-benchmarks` 编译下存在未使用导入 `Saturating`
+
+### 说明
+
+- 若以当前 runtime 代码和 `sfid/backend/src/chain/runtime_align.rs` 为真相源，则“绑定凭证过期回收”不是现行实现，而是旧文档残留
+- 若项目仍坚持保留“过期块高回收绑定 nonce”的需求，则当前模块并未实现这一能力，需要单独澄清

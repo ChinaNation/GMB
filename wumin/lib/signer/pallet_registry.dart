@@ -17,10 +17,10 @@ class PalletRegistry {
 
   /// 当前注册表适配的链 spec_version 集合。
   ///
-  /// 2026-04-29 治理投票引擎更名为 `voting-engine` 后升级到
-  /// `spec_version = 8`，冷钱包同步仅接受当前开发期版本。
+  /// 2026-04-29 多签管理与多签转账 pallet 完成新命名后升级到
+  /// `spec_version = 10`，冷钱包同步仅接受当前开发期版本。
   /// 遇到 spec=1 的离线请求（旧版在线端）视为过期，拒绝解码。
-  static const Set<int> supportedSpecVersions = {8};
+  static const Set<int> supportedSpecVersions = {10};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///
@@ -61,8 +61,8 @@ class PalletRegistry {
   // 业务 pallet 仅保留 propose 提案创建、execute 执行兜底、cleanup 被拒清理、
   // cancel 失败取消 等幂等入口。冷钱包 decoder 与此对齐。
 
-  // ---- DuoqianTransferPow (19) ----
-  static const int duoqianTransferPowPallet = 19;
+  // ---- DuoqianTransfer (19) ----
+  static const int duoqianTransferPallet = 19;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
   static const int proposeSweepCall = 2;
@@ -75,8 +75,8 @@ class PalletRegistry {
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
-  // ---- DuoqianManagePow (17) ----
-  static const int duoqianManagePowPallet = 17;
+  // ---- DuoqianManage (17) ----
+  static const int duoqianManagePallet = 17;
   static const int proposeCreateCall = 0;
   static const int proposeCloseCall = 1;
   static const int registerSfidInstitutionCall = 2;
@@ -103,8 +103,8 @@ class PalletRegistry {
   static const int resolutionIssuancePallet = 8;
   static const int proposeResolutionIssuanceCall = 0;
 
-  // ---- OffchainTransactionPos (21) · 清算行 L2 体系 ----
-  static const int offchainTransactionPosPallet = 21;
+  // ---- OffchainTransaction (21) · 清算行 L2 体系 ----
+  static const int offchainTransactionPallet = 21;
   static const int bindClearingBankCall = 30;
   static const int depositCall = 31;
   static const int withdrawCall = 32;

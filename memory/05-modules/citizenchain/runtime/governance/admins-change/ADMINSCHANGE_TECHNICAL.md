@@ -48,7 +48,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 - `Active`：创建提案通过并执行成功，主体可继续发起转账、清算、管理员替换等内部投票。
 - `Closed`：主体已关闭，管理员不再有效。
 
-`duoqian-manage-pow` 在创建机构多签或个人多签时调用：
+`duoqian-manage` 在创建机构多签或个人多签时调用：
 
 - `create_pending_subject`
 - `activate_subject`
@@ -100,7 +100,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 - `RuntimeInternalAdminCountProvider` 从 `subject_admin_count` 读取。
 - `EnsureNrcAdmin` 与联合治理发起人校验也从统一主体表读取。
 
-`duoqian-manage-pow` 不再作为管理员长期真源；它只保留账户、资金和生命周期 storage。
+`duoqian-manage` 不再作为管理员长期真源；它只保留账户、资金和生命周期 storage。
 
 ## 7. 事件
 
