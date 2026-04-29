@@ -58,7 +58,7 @@
 
 ### 2.1 银行注册流程
 
-银行使用现有的 `duoqian-manage-pow` 多签注册机制：
+银行使用现有的 `duoqian-manage` 多签注册机制：
 
 ```
 1. 银行发起人获取 SFID 机构身份码
@@ -312,7 +312,7 @@ pub type UserBank<T> = StorageMap<
 | 5 | `switch_bank` | 用户 | 换绑银行（需先清零旧银行余额） |
 | 6 | `revoke_clearing_license` | 省储行管理员 | 撤销银行清算许可（发起投票） |
 
-### 6.2 修改 `offchain-transaction-pos`
+### 6.2 修改 `offchain-transaction`
 
 #### OffchainBatchItem 新增字段
 
@@ -352,7 +352,7 @@ for item in batch.iter() {
 }
 ```
 
-### 6.3 InstitutionAssetGuard 新增
+### 6.3 InstitutionAsset 新增
 
 ```rust
 pub enum InstitutionAssetAction {
@@ -537,8 +537,8 @@ Future<List<BankInfo>> queryRegisteredBanks();
    - Extrinsic：apply/vote_clearing_license、open_deposit_account、deposit、withdraw、switch_bank
    - 事件和错误定义
    - 单元测试
-2. configs/mod.rs 配置（AmountExtractor、FeePayerExtractor、InstitutionAssetGuard）
-3. institution-asset-guard 新增 BankSettlementDebit、BankWithdrawalDebit
+2. configs/mod.rs 配置（AmountExtractor、FeePayerExtractor、InstitutionAsset）
+3. institution-asset 新增 BankSettlementDebit、BankWithdrawalDebit
 
 ### Phase 2：Runtime 清算改造（1-2 周）
 1. OffchainBatchItem 新增 payer_bank、recipient_bank 字段

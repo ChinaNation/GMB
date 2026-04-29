@@ -1,0 +1,51 @@
+[package]
+name = "duoqian-transfer"  # 多签名地址转账模块
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+license = "MIT"
+
+[dependencies]
+codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+frame-benchmarking = { workspace = true, optional = true }
+pallet-balances = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-io = { workspace = true }
+
+primitives = { path = "../../primitives", default-features = false }
+voting-engine = { path = "../../governance/voting-engine", default-features = false }
+admins-change = { path = "../../governance/admins-change", default-features = false }
+duoqian-manage = { path = "../duoqian-manage", default-features = false }
+onchain-transaction = { path = "../onchain-transaction", default-features = false }
+institution-asset = { path = "../institution-asset", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "codec/std",
+    "scale-info/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-io/std",
+    "primitives/std",
+    "voting-engine/std",
+    "admins-change/std",
+    "duoqian-manage/std",
+    "onchain-transaction/std",
+    "institution-asset/std",
+]
+runtime-benchmarks = [
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+]
+try-runtime = []

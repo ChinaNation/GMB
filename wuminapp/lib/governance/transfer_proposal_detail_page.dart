@@ -145,12 +145,13 @@ class _TransferProposalDetailPageState
       // 根据 kind 选择对应的详情查询方法。
       // 不同 kind 写在不同的 storage map：
       //   transfer   → VotingEngine.ProposalData（带 dq-xfer tag）
-      //   safetyFund → DuoqianTransferPow.SafetyFundProposalActions
-      //   sweep      → DuoqianTransferPow.SweepProposalActions
+      //   safetyFund → DuoqianTransfer.SafetyFundProposalActions
+      //   sweep      → DuoqianTransfer.SweepProposalActions
       final Future<dynamic> detailFuture;
       switch (widget.kind) {
         case TransferProposalKind.transfer:
-          detailFuture = _proposalService.fetchProposalAction(widget.proposalId);
+          detailFuture =
+              _proposalService.fetchProposalAction(widget.proposalId);
           break;
         case TransferProposalKind.safetyFund:
           detailFuture =
@@ -469,7 +470,8 @@ class _TransferProposalDetailPageState
             const SizedBox(height: 6),
             Text(
               _error!,
-              style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
               textAlign: TextAlign.center,
               maxLines: 4,
               overflow: TextOverflow.ellipsis,
@@ -712,10 +714,10 @@ class _TransferProposalDetailPageState
         if (onCopy != null)
           GestureDetector(
             onTap: onCopy,
-            child: const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
+            child:
+                const Icon(Icons.copy, size: 16, color: AppTheme.textTertiary),
           ),
       ],
     );
   }
-
 }

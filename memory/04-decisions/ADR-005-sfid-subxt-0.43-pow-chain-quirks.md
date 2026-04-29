@@ -8,8 +8,8 @@
 
 sfid 后端通过 `subxt = 0.43.1` 向 citizenchain 提交两类 extrinsic：
 
-- `DuoqianManagePow.register_sfid_institution`（生成机构 SFID 后上链登记）
-- `SfidCodeAuth.rotate_sfid_keys`（密钥环旋转）
+- `DuoqianManage.register_sfid_institution`（生成机构 SFID 后上链登记）
+- `SfidSystem.rotate_sfid_keys`（密钥环旋转）
 
 citizenchain 是 **PoW 链**：出块依赖矿工算力，GRANDPA finality 显著落后 best block
 （实测 best=64 / finalized=62 是常态）。
@@ -40,7 +40,7 @@ subxt 0.43 默认 `DefaultExtrinsicParams` + `inject_account_nonce_and_block`
 `&[u8]`，与链端 verifier 用的 `b"GMB_SFID_INSTITUTION_V2"`（类型 `&[u8; 23]`）
 SCALE 编码不同（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
 `build_institution_credential` 算出的 blake2_256 与链端 verifier 算出的不一致，
-链端返回 `Pallet error: DuoqianManagePow::InvalidSfidInstitutionSignature`。
+链端返回 `Pallet error: DuoqianManage::InvalidSfidInstitutionSignature`。
 这是协议对齐 bug，与上述 PoW 链坑无关，但本次一并修掉。
 
 > **尾注 · 2026-04-20**: 上述 `GMB_SFID_INSTITUTION_V2` 域名已在

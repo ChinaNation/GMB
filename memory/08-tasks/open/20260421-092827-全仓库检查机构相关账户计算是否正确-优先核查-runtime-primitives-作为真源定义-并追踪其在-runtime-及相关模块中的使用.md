@@ -47,16 +47,16 @@
   - `count_const.rs` 的机构数量与联合投票总票数计算通过单元测试校验
   - `genesis.rs`、`china_ch.rs` 中的人口、创世发行、质押本金汇总通过单元测试校验
 - 已追踪 runtime 消费路径：
-  - `duoqian-manage-pow` 是机构地址派生的唯一实现入口
-  - `offchain-transaction-pos` 通过 `(sfid_id, "费用账户")` 反查费用账户
-  - `duoqian-transfer-pow` 直接使用机构 `main_address` / `fee_address` / `NRC_ANQUAN_ADDRESS`
+  - `duoqian-manage` 是机构地址派生的唯一实现入口
+  - `offchain-transaction` 通过 `(sfid_id, "费用账户")` 反查费用账户
+  - `duoqian-transfer` 直接使用机构 `main_address` / `fee_address` / `NRC_ANQUAN_ADDRESS`
   - `runtime/src/configs/mod.rs` 负责机构账户保护与保留地址判定
 - 已执行验证：
   - `cargo test -p primitives --lib` 通过（7/7）
-  - `cargo test -p duoqian-manage-pow --lib` 通过（15/15）
-  - `cargo test -p shengbank-stake-interest --lib` 通过（18/18）
-  - `cargo test -p offchain-transaction-pos --lib` 通过（20/20）
-  - `cargo test -p duoqian-transfer-pow --lib` 通过（22/22）
+  - `cargo test -p duoqian-manage --lib` 通过（15/15）
+  - `cargo test -p shengbank-interest --lib` 通过（18/18）
+  - `cargo test -p offchain-transaction --lib` 通过（20/20）
+  - `cargo test -p duoqian-transfer --lib` 通过（22/22）
 - 额外静态校验：
   - `china_zb.rs` 的 408 个制度保留地址当前有序、无重复，可满足 `binary_search` 前提
   - 408 个保留地址与各机构族地址总量吻合：
@@ -76,13 +76,13 @@
   - 仍存在测试覆盖盲区：尚未看到专门验证 `"主账户"` / `"费用账户"` 保留名派生到固定地址的单元测试
   - 仍存在可维护性风险：`is_reserved_main_address` / `is_reserved_main_account` 命名偏窄，实际覆盖的不仅是主账户，还包括 fee/stake/安全基金等制度保留地址，后续维护容易误判
 - 已补测试盲区：
-  - 在 `duoqian-manage-pow` 新增保留角色名测试，验证 `"主账户"` / `"费用账户"` 注册时会强制派生到固定 `OP_MAIN` / `OP_FEE` 地址，且不能伪装成 `Named(...)` 落到 `OP_INSTITUTION`
+  - 在 `duoqian-manage` 新增保留角色名测试，验证 `"主账户"` / `"费用账户"` 注册时会强制派生到固定 `OP_MAIN` / `OP_FEE` 地址，且不能伪装成 `Named(...)` 落到 `OP_INSTITUTION`
   - 在 `china_zb.rs` 新增制度保留地址表测试，验证 408 个地址严格递增且无重复，持续满足 `binary_search` 前提
 - 补测结果：
   - `cargo test -p primitives --lib` 通过（8/8）
-  - `cargo test -p duoqian-manage-pow --lib` 通过（17/17）
+  - `cargo test -p duoqian-manage --lib` 通过（17/17）
 - 已继续核查 `sfid` / `wuminapp` 跨模块口径：
-  - `sfid/backend` 不再本地重算机构地址，创建/激活时只把 `account_name` 原样交给链端，注册成功后再从 `DuoqianManagePow::SfidRegisteredAddress(sfid_id, account_name)` 回读 `duoqian_address`
+  - `sfid/backend` 不再本地重算机构地址，创建/激活时只把 `account_name` 原样交给链端，注册成功后再从 `DuoqianManage::SfidRegisteredAddress(sfid_id, account_name)` 回读 `duoqian_address`
   - `sfid/frontend` 只管理 `account_name`、状态和展示，不持有第二套机构地址派生公式
   - `wuminapp` 创建机构多签提案时，优先使用 SFID 返回的 `duoqian_address`，否则回退到链上查询 `SfidRegisteredAddress(sfid_id, account_name)`，也没有单独重算主账户/费用账户地址
 - 新发现并已修复的跨模块问题：

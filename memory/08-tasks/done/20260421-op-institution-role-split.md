@@ -9,16 +9,16 @@ completed: 2026-04-21
 # 执行结果（2026-04-21）
 
 - **primitives**：[core_const.rs](citizenchain/runtime/primitives/src/core_const.rs) 新增 `OP_INSTITUTION = 0x05` 常量，注释约束为 "SFID 机构自定义命名账户"
-- **链端枚举 + 派生**（[duoqian-manage-pow/src/lib.rs](citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs)）：
+- **链端枚举 + 派生**（[duoqian-manage/src/lib.rs](citizenchain/runtime/transaction/duoqian-manage/src/lib.rs)）：
   - 新增 `InstitutionAccountRole<'a>` 枚举（`Main` / `Fee` / `Named(&'a [u8])`）+ 保留名常量 `RESERVED_NAME_MAIN` / `RESERVED_NAME_FEE`
   - 旧 `derive_duoqian_address_from_sfid_id(sfid_id, name)` **重构为** `derive_institution_address(sfid_id, role)`
   - 新增 `role_from_name(name)` 翻译辅助："主账户"→Main, "费用账户"→Fee, 其他非空→Named(name), 空→`EmptySfidName`
   - 新增 `ReservedAccountName` 错误变体，拦截 `Role::Named("主账户")` / `Role::Named("费用账户")`
-- **调用点同步**：`register_sfid_institution` 用 `role_from_name` + `derive_institution_address` 两步；[benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage-pow/src/benchmarks.rs) 改用 `Role::Main`
+- **调用点同步**：`register_sfid_institution` 用 `role_from_name` + `derive_institution_address` 两步；[benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage/src/benchmarks.rs) 改用 `Role::Main`
 - **SFID 后端**：[service.rs](sfid/backend/src/institutions/service.rs) CLEARING_BANK_NAMES 注释更新，[INSTITUTIONS_TECHNICAL.md](memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md) 补 2026-04-21 段
 - **TS 镜像**：[deriveDuoqianAddress.ts](sfid/frontend/src/utils/deriveDuoqianAddress.ts) 重写为 3 路派生（按 name 值路由到 Main/Fee/Named）
 - **Dart 镜像**：wuminapp 只有 OP_PERSONAL 派生，本次无改动；wumin 无本地派生
-- **文档**：[BLAKE2_ADDRESS_DERIVATION.md](memory/05-modules/citizenchain/runtime/primitives/BLAKE2_ADDRESS_DERIVATION.md)、[DUOQIAN_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/duoqian-manage-pow/DUOQIAN_TECHNICAL.md)、[feedback_sfid_sheng_signing_keyring.md](memory/feedback_sfid_sheng_signing_keyring.md)、[20260405-sfid-多签地址派生加入name字段](memory/08-tasks/open/20260405-sfid-多签地址派生加入name字段.md) 全部加 2026-04-21 尾注
+- **文档**：[BLAKE2_ADDRESS_DERIVATION.md](memory/05-modules/citizenchain/runtime/primitives/BLAKE2_ADDRESS_DERIVATION.md)、[DUOQIAN_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md)、[feedback_sfid_sheng_signing_keyring.md](memory/feedback_sfid_sheng_signing_keyring.md)、[20260405-sfid-多签地址派生加入name字段](memory/08-tasks/open/20260405-sfid-多签地址派生加入name字段.md) 全部加 2026-04-21 尾注
 - **验证**：10 个 pallet `cargo check` 全通过；`cargo test -p primitives` 7/7 通过；全仓库活代码 `rg derive_duoqian_address_from_sfid_id` 零残留
 
 # 最终账户派生公式对齐
@@ -74,7 +74,7 @@ SFID 机构创建 `Named(name)` 账户时：
 - [ ] `primitives/src/core_const.rs` 加 `OP_INSTITUTION = 0x05`（注释说明适用范围）
 
 ## 第 2 步：链端 pallet 重构
-- [ ] `duoqian-manage-pow/src/lib.rs`：
+- [ ] `duoqian-manage/src/lib.rs`：
   - 定义 `InstitutionAccountRole` 枚举（`Main` / `Fee` / `Named(BoundedVec<u8>)`）
   - `derive_duoqian_address_from_sfid_id(sfid_id, name)` → `derive_institution_address(sfid_id, role)`
   - 保留名校验：reject `Named("主账户")` / `Named("费用账户")`
@@ -92,13 +92,13 @@ SFID 机构创建 `Named(name)` 账户时：
 - [ ] wuminapp Dart 镜像同步
 
 ## 第 5 步：验证
-- [ ] `cargo check -p primitives -p duoqian-manage-pow`
+- [ ] `cargo check -p primitives -p duoqian-manage`
 - [ ] `cargo test -p primitives`
-- [ ] `cargo test -p duoqian-manage-pow`（若有单元测试）
+- [ ] `cargo test -p duoqian-manage`（若有单元测试）
 
 ## 第 6 步：文档
 - [ ] `primitives/BLAKE2_ADDRESS_DERIVATION.md` 加 OP_INSTITUTION 段
-- [ ] `duoqian-manage-pow/DUOQIAN_TECHNICAL.md` 更新派生公式表
+- [ ] `duoqian-manage/DUOQIAN_TECHNICAL.md` 更新派生公式表
 - [ ] `sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md` 更新账户模型
 - [ ] `feedback_sfid_sheng_signing_keyring.md` 更新 op_tag 清单
 - [ ] 历史任务卡 `20260408-sfid-机构账户两层模型-任务卡2` 加尾注

@@ -332,8 +332,8 @@ where
         module.register_method("reward_bindWallet", move |params, _, _| {
             let wallet_ss58: String = params.one()?;
             let wallet = parse_ss58_account(&wallet_ss58)?;
-            let call = runtime::RuntimeCall::FullnodePowReward(
-                fullnode_pow_reward::pallet::Call::bind_reward_wallet { wallet },
+            let call = runtime::RuntimeCall::FullnodeIssuance(
+                fullnode_issuance::pallet::Call::bind_reward_wallet { wallet },
             );
             submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
@@ -349,8 +349,8 @@ where
         module.register_method("reward_rebindWallet", move |params, _, _| {
             let wallet_ss58: String = params.one()?;
             let new_wallet = parse_ss58_account(&wallet_ss58)?;
-            let call = runtime::RuntimeCall::FullnodePowReward(
-                fullnode_pow_reward::pallet::Call::rebind_reward_wallet { new_wallet },
+            let call = runtime::RuntimeCall::FullnodeIssuance(
+                fullnode_issuance::pallet::Call::rebind_reward_wallet { new_wallet },
             );
             submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
@@ -396,8 +396,8 @@ where
             for record in &events {
                 match &record.event {
                     // base_fee（不含 tip）
-                    runtime::RuntimeEvent::OnchainTransactionPow(
-                        onchain_transaction_pow::pallet::Event::FeePaid { fee, .. },
+                    runtime::RuntimeEvent::OnchainTransaction(
+                        onchain_transaction::pallet::Event::FeePaid { fee, .. },
                     ) => {
                         total_fee = total_fee.saturating_add(*fee);
                     }

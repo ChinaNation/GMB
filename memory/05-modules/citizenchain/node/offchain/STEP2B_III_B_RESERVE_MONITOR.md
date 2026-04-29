@@ -68,7 +68,7 @@ runtime 同行 `BankTotalDeposits -= fee`,正好对齐。
 | `ReserveMonitor { ledger, my_bank }` | 持账本 + 本行主账户 |
 | `run(self: Arc<Self>, client, interval)` | 长循环;**首 tick 跳过**(等待 listener 追 chain 头稳定),之后按 interval 触发 |
 | `check_once(&self, client)` | 读 `client.info().best_hash` → 读链上 `BankTotalDeposits[my_bank]` → 与 `ledger.confirmed_sum_snapshot()` 比较;相等 `debug!`,不等 `error!` |
-| `bank_total_deposits_key(bank)` | 构造 `twox_128("OffchainTransactionPos") ++ twox_128("BankTotalDeposits") ++ blake2_128(encoded) ++ encoded` |
+| `bank_total_deposits_key(bank)` | 构造 `twox_128("OffchainTransaction") ++ twox_128("BankTotalDeposits") ++ blake2_128(encoded) ++ encoded` |
 | `read_bank_total_deposits(client, block, bank)` | 读 storage → SCALE decode u128;`None → 0`(`ValueQuery` 语义) |
 | 单测 | 5 个(`confirmed_sum_empty` / `confirmed_sum_adds` / `confirmed_sum_after_withdraw` / `storage_key_layout_stable` / `storage_key_differs_per_bank`) |
 
@@ -213,7 +213,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 
 **Step 2b-iv**(清理):
 - 删除 `node/src/offchain_{ledger,packer,gossip}.rs`
-- runtime `offchain-transaction-pos` 删 call_index 0/1/2/9 老 calls
+- runtime `offchain-transaction` 删 call_index 0/1/2/9 老 calls
 
 **Step 3**:
 - 逐户 diff(`DepositBalance::iter_key_prefix`)

@@ -1,7 +1,7 @@
 //! 链上事件 → 清算行本地账本的同步器。
 //!
 //! 中文注释:
-//! - 本模块监听 `offchain_transaction_pos` pallet 的事件:
+//! - 本模块监听 `offchain_transaction` pallet 的事件:
 //!     - `Deposited { user, bank, amount }`     → `ledger.on_deposited`
 //!     - `Withdrawn { user, bank, amount }`     → `ledger.on_withdrawn`
 //!     - `PaymentSettled { payer, recipient, amount, fee, ... }`
@@ -33,19 +33,19 @@ use crate::offchain::ledger::OffchainLedger;
 /// 抽象的链上事件(Step 1 mock,Step 2 由 sc-client-api 解码得出)。
 #[derive(Clone, Debug)]
 pub enum OffchainChainEvent {
-    /// `offchain_transaction_pos::Event::Deposited`
+    /// `offchain_transaction::Event::Deposited`
     Deposited {
         user: AccountId32,
         bank: AccountId32,
         amount: u128,
     },
-    /// `offchain_transaction_pos::Event::Withdrawn`
+    /// `offchain_transaction::Event::Withdrawn`
     Withdrawn {
         user: AccountId32,
         bank: AccountId32,
         amount: u128,
     },
-    /// `offchain_transaction_pos::Event::PaymentSettled`(Step 2 启用)
+    /// `offchain_transaction::Event::PaymentSettled`(Step 2 启用)
     PaymentSettled {
         tx_id: H256,
         payer: AccountId32,
@@ -143,7 +143,7 @@ impl EventListener {
     /// 的端到端延迟;runtime 已通过防重放机制避免 reorg 时重复处理。
     pub async fn run(self: Arc<Self>, client: Arc<FullClient>) {
         let mut stream = client.import_notification_stream();
-        log::info!("[EventListener] 开始订阅 offchain_transaction_pos 事件");
+        log::info!("[EventListener] 开始订阅 offchain_transaction 事件");
         while let Some(notification) = stream.next().await {
             // 只处理"被纳入主链"的块(避免 re-import 重复分发)
             if !notification.is_new_best {
@@ -186,14 +186,14 @@ fn system_events_storage_key() -> StorageKey {
     StorageKey(k)
 }
 
-/// 从 `runtime::RuntimeEvent` 过滤出 `offchain_transaction_pos` 的本地事件。
+/// 从 `runtime::RuntimeEvent` 过滤出 `offchain_transaction` 的本地事件。
 ///
 /// 返回 `None` 表示该事件不是本 pallet 的事件(或是本 pallet 的其他事件:
 /// 费率治理 / 批次级别等在本步不触发 ledger 分发的事件)。
 pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
-    use offchain_transaction_pos::pallet::Event as OffchainEvent;
+    use offchain_transaction::pallet::Event as OffchainEvent;
     match ev {
-        runtime::RuntimeEvent::OffchainTransactionPos(inner) => match inner {
+        runtime::RuntimeEvent::OffchainTransaction(inner) => match inner {
             OffchainEvent::Deposited { user, bank, amount } => {
                 Some(OffchainChainEvent::Deposited { user, bank, amount })
             }
@@ -229,7 +229,7 @@ pub fn convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent> {
                 old_bank,
                 new_bank,
             }),
-            // 其他 offchain_transaction_pos 事件(费率治理、批次级别等)
+            // 其他 offchain_transaction 事件(费率治理、批次级别等)
             // 与本地 ledger 同步无关,忽略。
             _ => None,
         },
@@ -298,13 +298,13 @@ mod tests {
     // 覆盖 5 个本 pallet 事件变体:Deposited / Withdrawn / PaymentSettled /
     // BankBound / BankSwitched,以及非本 pallet 的事件应返回 None。
 
-    use offchain_transaction_pos::pallet::Event as PalletEvent;
+    use offchain_transaction::pallet::Event as PalletEvent;
 
     #[test]
     fn convert_event_deposited() {
         let user = AccountId32::new([1u8; 32]);
         let bank = AccountId32::new([0xAA; 32]);
-        let ev = runtime::RuntimeEvent::OffchainTransactionPos(PalletEvent::Deposited {
+        let ev = runtime::RuntimeEvent::OffchainTransaction(PalletEvent::Deposited {
             user: user.clone(),
             bank: bank.clone(),
             amount: 100,
@@ -332,7 +332,7 @@ mod tests {
         let recipient = AccountId32::new([2u8; 32]);
         let recipient_bank = AccountId32::new([0xA2; 32]);
         let tx_id = H256::repeat_byte(7);
-        let ev = runtime::RuntimeEvent::OffchainTransactionPos(PalletEvent::PaymentSettled {
+        let ev = runtime::RuntimeEvent::OffchainTransaction(PalletEvent::PaymentSettled {
             tx_id,
             payer: payer.clone(),
             payer_bank: payer_bank.clone(),

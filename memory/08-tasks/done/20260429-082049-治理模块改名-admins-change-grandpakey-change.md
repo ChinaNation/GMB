@@ -99,12 +99,12 @@
   - `cargo test -p admins-change --lib`
   - `cargo test -p grandpakey-change --lib`
   - `WASM_FILE=/private/tmp/dummy_wasm.wasm cargo test -p node governance`
-  - `cargo test -p duoqian-manage-pow --lib`
-  - `cargo test -p duoqian-transfer-pow --lib`
+  - `cargo test -p duoqian-manage --lib`
+  - `cargo test -p duoqian-transfer --lib`
   - `dart format ...`
   - `flutter test`（wumin）
   - `flutter test`（wuminapp）
-  - `cargo fmt --manifest-path citizenchain/Cargo.toml --package admins-change --package grandpakey-change --package node --package citizenchain --package duoqian-manage-pow --package duoqian-transfer-pow`
+  - `cargo fmt --manifest-path citizenchain/Cargo.toml --package admins-change --package grandpakey-change --package node --package citizenchain --package duoqian-manage --package duoqian-transfer`
 
 ## 完成信息
 

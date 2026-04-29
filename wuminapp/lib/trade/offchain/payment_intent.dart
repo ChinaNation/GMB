@@ -65,7 +65,7 @@ class NodePaymentIntent {
   final BigInt nonce;
   final int expiresAt;
 
-  /// 与链上 runtime `offchain_transaction_pos::batch_item::L3_PAY_SIGNING_DOMAIN`
+  /// 与链上 runtime `offchain_transaction::batch_item::L3_PAY_SIGNING_DOMAIN`
   /// 逐字节一致的签名域前缀。改动必须同改 runtime,否则签名不通过。
   static const List<int> signingDomain = [
     0x47, 0x4D, 0x42, 0x5F, 0x4C, 0x33, 0x5F, 0x50, 0x41, 0x59, 0x5F, 0x56, 0x31,

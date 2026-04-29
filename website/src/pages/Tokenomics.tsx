@@ -17,10 +17,10 @@ const allocations = [
     color: 'bg-gold-600',
   },
   {
-    name: '省储行质押利息发行',
+    name: '省储行利息发行',
     amount: '728.97 亿',
     percent: 3.58,
-    desc: '省储行质押利息，100 年线性释放',
+    desc: '省储行利息按质押基数 100 年线性释放',
     color: 'bg-navy-400',
   },
   {
@@ -112,7 +112,7 @@ export default function Tokenomics() {
         {/* Additional: Citizen Light Node */}
         <GlowCard glow="gold" className="mt-6">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">公民轻节点发行</h3>
+            <h3 className="text-lg font-semibold text-white">公民发行</h3>
             <span className="text-2xl font-bold text-gold-400">77.30%</span>
           </div>
           <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/10">

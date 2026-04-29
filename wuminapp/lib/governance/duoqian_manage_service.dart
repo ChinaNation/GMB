@@ -1,4 +1,3 @@
-
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart'
     show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
@@ -9,7 +8,7 @@ import '../rpc/chain_rpc.dart';
 import '../rpc/nonce_manager.dart';
 import 'duoqian_manage_models.dart';
 
-/// 多签账户管理链上交互服务（对应 DuoqianManagePow pallet 17）。
+/// 多签账户管理链上交互服务（对应 DuoqianManage pallet 17）。
 ///
 /// 负责 propose_create / propose_close / propose_create_personal 等
 /// 提案创建类 extrinsic 的编码与提交,以及 SFID 注册状态和多签账户的
@@ -26,7 +25,7 @@ class DuoqianManageService {
 
   // ──── 常量 ────
 
-  /// DuoqianManagePow pallet index（runtime pallet_index=17）。
+  /// DuoqianManage pallet index（runtime pallet_index=17）。
   static const _palletIndex = 17;
 
   /// propose_create call_index=0。
@@ -68,8 +67,7 @@ class DuoqianManageService {
     output.pushByte(_proposeCreateCallIndex);
 
     // sfid_id: BoundedVec<u8> = Compact<u32> length + bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(sfidId.length)));
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(sfidId.length)));
     output.write(sfidId);
 
     // account_name: BoundedVec<u8> = Compact<u32> length + bytes
@@ -182,9 +180,10 @@ class DuoqianManageService {
   // ──── 链上查询 ────
 
   /// 查询 SFID (sfid_id + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
-  Future<String?> fetchSfidRegisteredAddress(Uint8List sfidId, Uint8List accountName) async {
+  Future<String?> fetchSfidRegisteredAddress(
+      Uint8List sfidId, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
-      'DuoqianManagePow',
+      'DuoqianManage',
       'SfidRegisteredAddress',
       sfidId,
       accountName,
@@ -204,7 +203,7 @@ class DuoqianManageService {
   Future<DuoqianAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
     final key = _buildStorageKey(
-      'DuoqianManagePow',
+      'DuoqianManage',
       'DuoqianAccounts',
       _hexDecode(duoqianAddressHex),
     );
@@ -226,7 +225,8 @@ class DuoqianManageService {
     offset += lenSize;
     final pubkeys = <String>[];
     for (var i = 0; i < adminLen && offset + 32 <= data.length; i++) {
-      pubkeys.add(_hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32))));
+      pubkeys.add(
+          _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32))));
       offset += 32;
     }
 
@@ -253,8 +253,16 @@ class DuoqianManageService {
   /// ACTION_CLOSE(2): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CreateDuoqianProposalInfo 或 CloseDuoqianProposalInfo，解码失败返回 null。
-  /// MODULE_TAG 前缀（与链上 duoqian-manage-pow 的 MODULE_TAG 一致）。
-  static const _moduleTag = [0x64, 0x71, 0x2d, 0x6d, 0x67, 0x6d, 0x74]; // "dq-mgmt"
+  /// MODULE_TAG 前缀（与链上 duoqian-manage 的 MODULE_TAG 一致）。
+  static const _moduleTag = [
+    0x64,
+    0x71,
+    0x2d,
+    0x6d,
+    0x67,
+    0x6d,
+    0x74
+  ]; // "dq-mgmt"
 
   Object? decodeManageProposalData(int proposalId, Uint8List raw) {
     try {
@@ -322,8 +330,7 @@ class DuoqianManageService {
     );
   }
 
-  CloseDuoqianProposalInfo? _decodeCloseAction(
-      int proposalId, Uint8List data) {
+  CloseDuoqianProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
     // duoqian_address(32) + beneficiary(32) + proposer(32)
     if (data.length < 32 + 32 + 32) return null;
     var offset = 0;
@@ -363,8 +370,7 @@ class DuoqianManageService {
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint(
-        '[DuoqianManage] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
+    debugPrint('[DuoqianManage] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       NonceManager.instance.getNextNonce(
@@ -393,8 +399,7 @@ class DuoqianManageService {
     );
     final payloadBytes = signingPayload.encode(registry);
 
-    debugPrint(
-        '[DuoqianManage] 步骤5: 签名 (${payloadBytes.length} bytes)...');
+    debugPrint('[DuoqianManage] 步骤5: 签名 (${payloadBytes.length} bytes)...');
     final signature = await sign(payloadBytes);
     debugPrint('[DuoqianManage] 签名完成 (${signature.length} bytes)');
 
@@ -409,8 +414,7 @@ class DuoqianManageService {
       tip: 0,
     );
     final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint(
-        '[DuoqianManage] extrinsic 编码完成 (${encoded.length} bytes)');
+    debugPrint('[DuoqianManage] extrinsic 编码完成 (${encoded.length} bytes)');
 
     debugPrint('[DuoqianManage] 步骤7: 提交到链...');
     debugPrint('[DuoqianManage] call data hex: ${_hexEncode(callData)}');
@@ -459,8 +463,10 @@ class DuoqianManageService {
     final key1Hash = _blake2128Concat(key1Data);
     final key2Hash = _blake2128Concat(key2Data);
 
-    final result = Uint8List(
-        palletHash.length + storageHash.length + key1Hash.length + key2Hash.length);
+    final result = Uint8List(palletHash.length +
+        storageHash.length +
+        key1Hash.length +
+        key2Hash.length);
     var offset = 0;
     result.setAll(offset, palletHash);
     offset += palletHash.length;

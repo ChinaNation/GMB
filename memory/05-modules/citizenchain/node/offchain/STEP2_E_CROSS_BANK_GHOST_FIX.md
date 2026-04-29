@@ -136,7 +136,7 @@ self.ledger.on_payment_settled(
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo test -p node --no-run
 (仅 Tauri `frontend/dist` proc macro 门禁;所有 Rust 源代码 + 测试均零 error)
 
-$ cargo test -p offchain-transaction-pos --lib
+$ cargo test -p offchain-transaction --lib
 test result: ok. 20 passed; 0 failed
 (本修复未涉及 pallet 层,仅 node 侧 ledger;保持原先 D 阶段建立的 20 个测试全绿)
 ```

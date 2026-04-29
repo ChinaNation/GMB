@@ -2,7 +2,7 @@
 //!
 //! 中文注释:
 //! - 本文件实现 `packer::BatchSubmitter` trait,把组好的 batch 包进
-//!   `RuntimeCall::OffchainTransactionPos(submit_offchain_batch_v2 { .. })`
+//!   `RuntimeCall::OffchainTransaction(submit_offchain_batch_v2 { .. })`
 //!   → `UncheckedExtrinsic` → 扔到节点本地 `TransactionPool`。
 //! - extrinsic 构造流程与 `benchmarking.rs::create_benchmark_extrinsic` 严格对齐
 //!   (`TxExtension` 各 Check 顺序必须与 runtime `type TxExtension = (..)` 完全一致)。
@@ -30,7 +30,7 @@ use sp_runtime::{
 use std::sync::{Arc, RwLock};
 
 use citizenchain as runtime;
-use offchain_transaction_pos::batch_item::OffchainBatchItemV2;
+use offchain_transaction::batch_item::OffchainBatchItemV2;
 
 use crate::offchain::keystore::SigningKey;
 use crate::service::FullClient;
@@ -85,8 +85,8 @@ impl BatchSubmitter for PoolBatchSubmitter {
         let batch_bounded = encode_bounded_batch::<runtime::Runtime>(batch)?;
 
         // 4. 拼 RuntimeCall
-        let call = runtime::RuntimeCall::OffchainTransactionPos(
-            offchain_transaction_pos::pallet::Call::submit_offchain_batch_v2 {
+        let call = runtime::RuntimeCall::OffchainTransaction(
+            offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
                 institution_main: institution_main.clone(),
                 batch_seq,
                 batch: batch_bounded,
@@ -154,12 +154,12 @@ pub fn decode_batch_items(
 }
 
 /// 把 64 字节签名包装为 runtime `BatchSignatureOf<Runtime>`(`BoundedVec<u8, MaxBatchSignatureLength>`)。
-pub fn encode_bounded_sig<T: offchain_transaction_pos::pallet::Config>(
+pub fn encode_bounded_sig<T: offchain_transaction::pallet::Config>(
     sig: &[u8; 64],
 ) -> Result<
     frame_support::BoundedVec<
         u8,
-        <T as offchain_transaction_pos::pallet::Config>::MaxBatchSignatureLength,
+        <T as offchain_transaction::pallet::Config>::MaxBatchSignatureLength,
     >,
     String,
 > {
@@ -169,7 +169,7 @@ pub fn encode_bounded_sig<T: offchain_transaction_pos::pallet::Config>(
 }
 
 /// 把 Vec<OffchainBatchItemV2> 包装为 `BoundedVec<_, MaxBatchSize>`。
-pub fn encode_bounded_batch<T: offchain_transaction_pos::pallet::Config>(
+pub fn encode_bounded_batch<T: offchain_transaction::pallet::Config>(
     items: Vec<OffchainBatchItemV2<AccountId32, u32>>,
 ) -> Result<
     frame_support::BoundedVec<
@@ -177,7 +177,7 @@ pub fn encode_bounded_batch<T: offchain_transaction_pos::pallet::Config>(
             <T as frame_system::Config>::AccountId,
             frame_system::pallet_prelude::BlockNumberFor<T>,
         >,
-        <T as offchain_transaction_pos::pallet::Config>::MaxBatchSize,
+        <T as offchain_transaction::pallet::Config>::MaxBatchSize,
     >,
     String,
 >
@@ -282,7 +282,6 @@ pub fn build_signed_extrinsic(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sp_core::sr25519;
 
     fn mk_item(seed: u8) -> OffchainBatchItemV2<AccountId32, u32> {
         OffchainBatchItemV2 {
@@ -312,7 +311,10 @@ mod tests {
     #[test]
     fn encode_bounded_sig_respects_limit() {
         let ok: Result<
-            frame_support::BoundedVec<u8, <runtime::Runtime as offchain_transaction_pos::pallet::Config>::MaxBatchSignatureLength>,
+            frame_support::BoundedVec<
+                u8,
+                <runtime::Runtime as offchain_transaction::pallet::Config>::MaxBatchSignatureLength,
+            >,
             String,
         > = encode_bounded_sig::<runtime::Runtime>(&[7u8; 64]);
         let bounded = ok.expect("64 字节应在 MaxBatchSignatureLength 以内");

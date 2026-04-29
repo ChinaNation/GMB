@@ -171,8 +171,8 @@ impl InternalVoteResultCallback for () {
 // 立即短路返回,后续成员不再调用——这与 `with_transaction` 内的
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
-// 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer_pow /
-// duoqian_manage_pow / admins_change / resolution_destro /
+// 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer /
+// duoqian_manage / admins_change / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
     fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
@@ -2923,10 +2923,7 @@ mod tests {
             let total = 70u64;
             for proposal_id in 0..total {
                 insert_citizen_proposal(proposal_id, 10, end);
-                assert_ok!(VotingEngine::schedule_proposal_expiry(
-                    proposal_id,
-                    end
-                ));
+                assert_ok!(VotingEngine::schedule_proposal_expiry(proposal_id, end));
             }
 
             System::set_block_number(6);
@@ -2954,10 +2951,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let end = 5u64;
             for proposal_id in 0..128u64 {
-                assert_ok!(VotingEngine::schedule_proposal_expiry(
-                    proposal_id,
-                    end
-                ));
+                assert_ok!(VotingEngine::schedule_proposal_expiry(proposal_id, end));
             }
 
             assert_noop!(
@@ -3058,11 +3052,7 @@ mod tests {
             assert!(VotingEngine::get_proposal_object_meta(7).is_none());
 
             let object = vec![1u8, 2, 3, 4, 5, 6];
-            assert_ok!(VotingEngine::store_proposal_object(
-                7,
-                1,
-                object.clone()
-            ));
+            assert_ok!(VotingEngine::store_proposal_object(7, 1, object.clone()));
 
             let stored = VotingEngine::get_proposal_object(7).expect("object should exist");
             assert_eq!(stored, object);

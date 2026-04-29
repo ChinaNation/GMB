@@ -11,7 +11,7 @@
 
 当前状态:
 - 所有链上写操作(`register_sfid_institution` 等)签名账户唯一 —— `KEY_ADMIN` 主公钥
-- 链端 `sfid_code_auth` pallet 的 verifier 只信任这一个账户
+- 链端 `sfid_system` pallet 的 verifier 只信任这一个账户
 - nonce 递增严格串行,50K 并发直接在 KEY_ADMIN 账户上排队
 - 省级管理员管理通过 `replace_sheng_admin` HTTP handler 进行,但**不涉及链上权限**
 
@@ -44,7 +44,7 @@
 ┌──────────────────────────────────────────────────────────────┐
 │                  citizenchain runtime                        │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  sfid_code_auth pallet                                 │  │
+│  │  sfid_system pallet                                 │  │
 │  │  Storage:                                              │  │
 │  │    KeyAdminKeyring: [Pub; 3]           ← 已有           │  │
 │  │    ShengAdminPubkey:                                   │  │
@@ -97,7 +97,7 @@
 
 ### 阶段 1 — 链端 runtime 修改(0.75 天)
 
-**文件**:`citizenchain/frame/sfid-code-auth/src/lib.rs`
+**文件**:`citizenchain/frame/sfid-system/src/lib.rs`
 
 **1.1 新增 storage**:
 ```rust
