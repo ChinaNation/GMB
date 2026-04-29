@@ -117,7 +117,7 @@ pub struct FeeRateResp {
 #[derive(Clone)]
 pub struct OffchainClearingRpcImpl {
     ledger: Arc<OffchainLedger>,
-    /// 用于读取链上 storage(`UserBank` / `L2FeeRateBp`)。
+    /// 用于读取链上 storage(`UserBank` / `DepositBalance` / `L3PaymentNonce` / `L2FeeRateBp`)。
     client: Arc<FullClient>,
     /// 当前节点归属的收款方清算行主账户,用于拒绝错路由支付。
     bank_main: AccountId32,
@@ -173,6 +173,34 @@ impl OffchainClearingRpcImpl {
                 .map_err(|e| rpc_err(ErrorCode::InternalError, format!("u32 解码失败:{e}"))),
         }
     }
+
+    fn read_l3_payment_nonce(&self, user: &AccountId32) -> RpcResult<u64> {
+        let best = self.client.info().best_hash;
+        let key = l3_payment_nonce_storage_key(user);
+        let raw = self
+            .client
+            .storage(best, &key)
+            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
+        match raw {
+            None => Ok(0),
+            Some(data) => u64::decode(&mut &data.0[..])
+                .map_err(|e| rpc_err(ErrorCode::InternalError, format!("u64 解码失败:{e}"))),
+        }
+    }
+
+    fn read_deposit_balance(&self, bank: &AccountId32, user: &AccountId32) -> RpcResult<u128> {
+        let best = self.client.info().best_hash;
+        let key = deposit_balance_storage_key(bank, user);
+        let raw = self
+            .client
+            .storage(best, &key)
+            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
+        match raw {
+            None => Ok(0),
+            Some(data) => u128::decode(&mut &data.0[..])
+                .map_err(|e| rpc_err(ErrorCode::InternalError, format!("u128 解码失败:{e}"))),
+        }
+    }
 }
 
 impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
@@ -181,7 +209,8 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
     }
 
     fn query_next_nonce(&self, user: AccountId32) -> RpcResult<u64> {
-        Ok(self.ledger.next_nonce(&user))
+        let chain_next = self.read_l3_payment_nonce(&user)?.saturating_add(1);
+        Ok(chain_next.max(self.ledger.next_nonce(&user)))
     }
 
     fn query_pending_count(&self) -> RpcResult<u64> {
@@ -264,9 +293,31 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
             .map_err(|e| rpc_err(ErrorCode::InternalError, format!("L2 ACK 签名失败:{e}")))?;
 
         // 4. 调 ledger 执行 L3 签名、nonce、余额校验并写入 pending。
+        //
+        // 中文注释:收款方主导清算后,跨行支付会提交到收款方清算节点。此时付款方
+        // 不属于本地 ledger,必须读取链上权威 `DepositBalance/L3PaymentNonce`
+        // 做校验,不能把付款方写成本地 ghost 账户。
+        let cross_bank = intent.payer_bank != self.bank_main;
+        let (chain_confirmed, chain_nonce) = if cross_bank {
+            (
+                Some(self.read_deposit_balance(&intent.payer_bank, &intent.payer)?),
+                Some(self.read_l3_payment_nonce(&intent.payer)?),
+            )
+        } else {
+            (None, None)
+        };
         let (tx_id, l2_ack) = self
             .ledger
-            .accept_payment(intent, payer_sig, Some(current_block), l2_ack, accepted_at)
+            .accept_payment_with_chain_state(
+                intent,
+                payer_sig,
+                Some(current_block),
+                l2_ack,
+                accepted_at,
+                &self.bank_main,
+                chain_confirmed,
+                chain_nonce,
+            )
             .map_err(|e| rpc_err(ErrorCode::InvalidParams, e))?;
 
         Ok(SubmitPaymentResp {
@@ -351,6 +402,34 @@ fn l2_fee_rate_bp_storage_key(bank: &AccountId32) -> StorageKey {
     StorageKey(k)
 }
 
+/// 构造 `L3PaymentNonce[user]` 的 storage key(`StorageMap<_, Blake2_128Concat, AccountId, u64, ValueQuery>`)。
+fn l3_payment_nonce_storage_key(user: &AccountId32) -> StorageKey {
+    let encoded = user.encode();
+    let mut k = Vec::with_capacity(16 + 16 + 16 + encoded.len());
+    k.extend_from_slice(&sp_io::hashing::twox_128(PALLET_NAME));
+    k.extend_from_slice(&sp_io::hashing::twox_128(b"L3PaymentNonce"));
+    k.extend_from_slice(&sp_io::hashing::blake2_128(&encoded));
+    k.extend_from_slice(&encoded);
+    StorageKey(k)
+}
+
+/// 构造 `DepositBalance[bank][user]` 的 storage key。
+///
+/// runtime 定义为 `StorageDoubleMap<_, Blake2_128Concat, AccountId, Blake2_128Concat,
+/// AccountId, u128, ValueQuery>`,因此两级 key 都是 `blake2_128(account) || account`。
+fn deposit_balance_storage_key(bank: &AccountId32, user: &AccountId32) -> StorageKey {
+    let bank_encoded = bank.encode();
+    let user_encoded = user.encode();
+    let mut k = Vec::with_capacity(16 + 16 + 16 + bank_encoded.len() + 16 + user_encoded.len());
+    k.extend_from_slice(&sp_io::hashing::twox_128(PALLET_NAME));
+    k.extend_from_slice(&sp_io::hashing::twox_128(b"DepositBalance"));
+    k.extend_from_slice(&sp_io::hashing::blake2_128(&bank_encoded));
+    k.extend_from_slice(&bank_encoded);
+    k.extend_from_slice(&sp_io::hashing::blake2_128(&user_encoded));
+    k.extend_from_slice(&user_encoded);
+    StorageKey(k)
+}
+
 // ─── 内部工具 ───
 
 /// 解析 hex(支持 `0x` 前缀),与现有 wuminapp / offchain 客户端风格一致。
@@ -421,6 +500,37 @@ mod tests {
     }
 
     #[test]
+    fn l3_payment_nonce_storage_key_layout() {
+        let user = acc(0x33);
+        let encoded = user.encode();
+        let key = l3_payment_nonce_storage_key(&user);
+        assert_eq!(key.0.len(), 16 + 16 + 16 + encoded.len());
+        assert_eq!(&key.0[..16], &sp_io::hashing::twox_128(PALLET_NAME));
+        assert_eq!(&key.0[16..32], &sp_io::hashing::twox_128(b"L3PaymentNonce"));
+        assert_eq!(&key.0[32..48], &sp_io::hashing::blake2_128(&encoded));
+        assert_eq!(&key.0[48..], &encoded[..]);
+    }
+
+    #[test]
+    fn deposit_balance_storage_key_layout() {
+        let bank = acc(0x44);
+        let user = acc(0x55);
+        let bank_encoded = bank.encode();
+        let user_encoded = user.encode();
+        let key = deposit_balance_storage_key(&bank, &user);
+        assert_eq!(
+            key.0.len(),
+            16 + 16 + 16 + bank_encoded.len() + 16 + user_encoded.len()
+        );
+        assert_eq!(&key.0[..16], &sp_io::hashing::twox_128(PALLET_NAME));
+        assert_eq!(&key.0[16..32], &sp_io::hashing::twox_128(b"DepositBalance"));
+        assert_eq!(&key.0[32..48], &sp_io::hashing::blake2_128(&bank_encoded));
+        assert_eq!(&key.0[48..80], &bank_encoded[..]);
+        assert_eq!(&key.0[80..96], &sp_io::hashing::blake2_128(&user_encoded));
+        assert_eq!(&key.0[96..], &user_encoded[..]);
+    }
+
+    #[test]
     fn storage_keys_distinct_per_account() {
         assert_ne!(
             user_bank_storage_key(&acc(1)).0,
@@ -429,6 +539,14 @@ mod tests {
         assert_ne!(
             l2_fee_rate_bp_storage_key(&acc(1)).0,
             l2_fee_rate_bp_storage_key(&acc(2)).0,
+        );
+        assert_ne!(
+            l3_payment_nonce_storage_key(&acc(1)).0,
+            l3_payment_nonce_storage_key(&acc(2)).0,
+        );
+        assert_ne!(
+            deposit_balance_storage_key(&acc(1), &acc(2)).0,
+            deposit_balance_storage_key(&acc(2), &acc(1)).0,
         );
     }
 

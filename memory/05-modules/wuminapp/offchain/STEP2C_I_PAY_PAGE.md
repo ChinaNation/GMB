@@ -1,8 +1,8 @@
 # 扫码支付 Step 2c-i 技术说明 · wuminapp 付款端新版
 
-- **日期**:2026-04-20
-- **范围**:wuminapp 扫码付款页重写(同行 MVP);对接清算行节点
-  `offchain_submitPayment` 新 RPC;配套 2 个前置查询 RPC;删除老 dart 文件。
+- **日期**:2026-04-20；2026-04-29 补齐 Step 3 跨行与清算行目录
+- **范围**:wuminapp 扫码付款页重写;对接清算行节点
+  `offchain_submitPayment` RPC、清算行目录查询、绑定缓存与跨行收款方主导支付。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2B_IV_A_CLEANUP.md`(老节点代码 + wuminapp 老入口下架)
 - **后续**:`STEP2C_II_RECEIVE_QR.md`(收款码与 WUMIN_QR_V1 协议完整化)与
@@ -18,8 +18,10 @@ Step 2b-iv-a 把老省储行清算代码从节点和 wuminapp 的 onchain 入口
 `offchain_submitPayment` → 显示 tx_id;runtime + node 链路(Step 2b-iii-b 已
 落地)自动把这笔支付打包上链并清理 pending。
 
-**只做**同行(`payer_bank == recipient_bank`)+ 热钱包。跨行(Step 3)与冷钱包
-(Step 2c-iii)在校验层拦住并提示。
+2026-04-29 Step 3 补齐后,付款页不再强制同行。扫码得到收款方 `bank`
+后,wuminapp 先从链上 `ClearingBankNodes[sfid_id]` 读取收款方清算节点端点,
+再把支付意图提交给**收款方清算节点**;页面同时展示付款方清算行、收款方
+清算行与同行/跨行状态。冷钱包支付授权仍留给后续 QR 往返签名流程。
 
 ---
 
@@ -62,7 +64,11 @@ storage key 布局稳定性 + 不同 bank 不同 key + hex 编解码 roundtrip +
 | 文件 | 变更 |
 |---|---|
 | `lib/rpc/offchain_clearing.dart` | 追加 `queryUserBank` / `queryFeeRate` / `submitPayment` 3 个方法(WSS over JSON-RPC 的 record 返回值) |
-| `lib/trade/onchain/onchain_trade_page.dart` | `_openOffchainPay` 恢复扫码后跳转到新页面(之前 2b-iv-a 临时下架为 SnackBar);通过 `String.fromEnvironment` 读 `SFID_BASE_URL` 与 `CLEARING_NODE_WSS`,与 `wallet_page._openClearingPaymentEntry` 同口径 |
+| `lib/rpc/clearing_bank_directory.dart` | 新增清算行目录服务:SFID 后端搜索候选机构,链上读取 `ClearingBankNodes` 端点、`UserBank` 绑定 |
+| `lib/trade/onchain/onchain_trade_page.dart` | 扫码后按收款方 `bank` 查询链上端点,跳转到新付款页;不再依赖固定启动参数配置清算节点 |
+| `lib/trade/offchain/clearing_bank_settings_page.dart` | 设置页从占位页变成真实搜索/当前绑定/绑定或切换入口 |
+| `lib/trade/offchain/clearing_bank_prefs.dart` | 本地缓存从单一 sfid 字符串升级为 `ClearingBankBindingSnapshot`,记录 sfid、机构名、主/费用账户与节点端点 |
+| `lib/wallet/ui/cards/wallet_action_card.dart` | 钱包卡读取清算行缓存并查询节点余额;未绑定时充值/提现提示先绑定 |
 
 #### 删除(老省储行清算遗留)
 
@@ -77,7 +83,7 @@ storage key 布局稳定性 + 不同 bank 不同 key + hex 编解码 roundtrip +
 
 ```
 用户扫商户 QR → onchain_trade_page._openOffchainPay
-  ├─ 校验:未选钱包 / 无 bank 字段 / 未配置 WSS → SnackBar 并返回
+  ├─ 校验:未选钱包 / 无 bank 字段 / 收款方未声明节点 → SnackBar 并返回
   └─ 跳转 OffchainClearingPayPage
 
 OffchainClearingPayPage 初始化(_loadPrerequisites):
@@ -85,18 +91,16 @@ OffchainClearingPayPage 初始化(_loadPrerequisites):
      └─ null:"请先绑定清算行" + pop
   2. sfid.searchClearingBanks(keyword=qrBank) → recipient_bank main_account hex
      └─ 未上链 / 未查到:错误态
-  3. payer_bank(hex) == recipient_bank(hex) ?
-     └─ 否:"Step 1 仅支持同行"(跨行 Step 3)
-  4. node.queryFeeRate(payer_bank)   → rate_bp / min_fee_fen
+  3. node.queryFeeRate(recipient_bank) → rate_bp / min_fee_fen
      └─ rate_bp == 0:"费率未配置"
-  5. ChainRpc().fetchLatestBlock()   → currentBlockNumber (for expires_at)
+  4. ChainRpc().fetchLatestBlock()   → currentBlockNumber (for expires_at)
 
 UI(ready):
-  金额输入框(或 QR 预填)+ 自动显示手续费 + 合计 + 收款地址 + 备注
+  金额输入框(或 QR 预填)+ 自动显示手续费 + 合计 + 收款地址 + 付款方/收款方清算行 + 备注
 
 用户点"确认并签名付款":
-  6. node.queryNextNonce(user)
-  7. intent = NodePaymentIntent{
+  5. node.queryNextNonce(user)
+  6. intent = NodePaymentIntent{
        tx_id = Random.secure 32B,
        payer = wallet.pubkeyHex,
        payer_bank = ss58ToBytes(payer_bank),
@@ -107,11 +111,11 @@ UI(ready):
        nonce,
        expires_at = currentBlockNumber + 100,        // ~10 分钟缓冲
      }
-  8. digest = blake2b_256("GMB_L3_PAY_V1" ++ scaleEncode(intent))
-  9. WalletManager.authenticateForSigning()
+  7. digest = blake2b_256("GMB_L3_PAY_V1" ++ scaleEncode(intent))
+  8. WalletManager.authenticateForSigning()
        + signWithWalletNoAuth(walletIndex, digest)  → 64B sig
-  10. node.submitPayment(intentHex, sigHex) → { tx_id, l2_ack_sig, accepted_at }
-  11. 显示完成态 + 可复制 tx_id + "完成"按钮
+  9. node.submitPayment(intentHex, sigHex) → { tx_id, l2_ack_sig, accepted_at }
+  10. 显示完成态 + 可复制 tx_id + "完成"按钮
 ```
 
 ---
@@ -162,10 +166,10 @@ No issues found!  (全项目)
 | `NodePaymentIntent` 字段变动 → 跨端布局错位 → 签名失败 | **P0** | 本文档第 4 节与 `payment_intent.dart` 注释双处锁布局;`scaleEncode` 末尾 `assert(bytes.length == 204)` 立即抛 |
 | `expires_at` 设为 `currentBlockNumber + 100`,签名到节点打包约 30s,但用户看到确认页到点提交可能>10min | **P2** | 100 块 ≈ 10 分钟(6s 出块)。极慢用户可能遇到 `ExpiredIntent`,此时报错提示重扫;后续可把缓冲改为 200 块或查询 runtime `target_block_time_ms` 动态算 |
 | 费率查询 / 提交走独立 WSS 连接,RTT 叠加 | **P2** | 每次方法连→发→收首帧→断开,确认流程总 5 次 RTT;Step 2c-ii 考虑复用长连接 |
-| 跨行(`payer_bank != recipient_bank`)在提交前就被 wuminapp 拦住,但若绕过(比如 QR 造假),节点 `accept_payment` 不检清算行匹配 | **P1** | 节点依赖后续 on-chain `settlement::execute_clearing_bank_batch` 的 `payer_bank == institution_main` 校验拒绝;付款方 L3 会在 packer 提交后的下一批 revert 时发现失败。Step 3 修 runtime 侧校验同步到 node 层 RPC 早拒 |
+| 跨行支付提交到收款方节点后,付款方余额/nonce 不在收款方本地 ledger | **已修复** | node RPC 会读链上 `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]`,并叠加本节点 pending 做早拒,不创建付款方 ghost 账户 |
 | `offchain_queryFeeRate` 返回 `rate_bp==0` 时 UI 仅显示错误,用户体验欠缺 | **P3** | 本步先 hard-fail 提示联系运维,后续可引导到"查看清算行详情"页面 |
 | 冷钱包 `isHotWallet==false` 直接 SnackBar 拒绝 | **P2** | Step 2c-iii 通过 QR 往返签名闭合 |
-| `SFID_BASE_URL` / `CLEARING_NODE_WSS` 走 `String.fromEnvironment` 占位 | **P3** | 与 `wallet_page._openClearingPaymentEntry` 同口径,Step 2c-ii 统一配置中心 |
+| `SFID_BASE_URL` 仍走 `String.fromEnvironment` | **P3** | 本地默认 `http://127.0.0.1:8080`;清算节点端点已改为链上 `ClearingBankNodes` 真源 |
 
 ---
 
@@ -174,8 +178,6 @@ No issues found!  (全项目)
 - **Step 2c-ii**:`receive_qr_page` 实时余额推送 + WUMIN_QR_V1 协议规范化(统一
   商户码格式)
 - **Step 2c-iii**:冷钱包扫签(热→冷 sign request QR + 冷→热 sign response QR)
-- **Step 3**:跨行扫码(含 `recipient_bank` 主账户 SS58 的二次验证 + 节点侧
-  `accept_payment` 早拒)
 - **提交成功后本地历史记录**:暂不写入本地 `LocalTxStore`(老路径用,新清算行
   历史改由订阅 `PaymentSettled` 事件沉淀,Step 2c-ii 一并实现)
 
@@ -189,3 +191,7 @@ No issues found!  (全项目)
   (5 阶段状态机)+ `offchain_clearing.dart` 3 方法;删除 `lib/rpc/offchain.dart`
   和 `lib/trade/offchain/offchain_pay_page.dart` 两个老文件;`onchain_trade_page`
   恢复扫码跳转。`cargo check -p node --tests` 零 error;`flutter analyze` 零 issue。
+- 2026-04-29:Step 3 补齐收款方主导跨行支付。新增
+  `clearing_bank_directory.dart`,设置页真实搜索并缓存节点端点;扫码付款按收款方
+  `ClearingBankNodes` 选择节点,付款页放开跨行并按收款方费率计费;钱包卡接入
+  绑定余额、充值、提现入口。`flutter analyze` 与清算行相关 widget/prefs 测试通过。

@@ -44,9 +44,6 @@ template_file_for_module() {
     citizenchain/node)
       printf '%s' "memory/08-tasks/templates/citizenchain-node.md"
       ;;
-    citizenchain/nodeui)
-      printf '%s' "memory/08-tasks/templates/citizenchain-nodeui.md"
-      ;;
     sfid|sfid/backend|sfid/deploy)
       printf '%s' "memory/08-tasks/templates/sfid-backend.md"
       ;;
@@ -77,7 +74,7 @@ checklist_file_for_module() {
     ai/system)
       printf '%s' "memory/07-ai/module-checklists/ai-system.md"
       ;;
-    citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|citizenchain/nodeui|primitives)
+    citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|primitives)
       printf '%s' "memory/07-ai/module-checklists/citizenchain.md"
       ;;
     sfid|sfid/backend|sfid/frontend|sfid/deploy)
@@ -101,7 +98,7 @@ dod_file_for_module() {
     ai/system)
       printf '%s' "memory/07-ai/module-definition-of-done/ai-system.md"
       ;;
-    citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|citizenchain/nodeui|primitives)
+    citizenchain/runtime|citizenchain/governance|citizenchain/issuance|citizenchain/otherpallet|citizenchain/transaction|citizenchain/node|primitives)
       printf '%s' "memory/07-ai/module-definition-of-done/citizenchain.md"
       ;;
     sfid|sfid/backend|sfid/frontend|sfid/deploy)
@@ -151,10 +148,6 @@ write_context_block() {
     citizenchain/node)
       append_line "$file" "- memory/01-architecture/citizenchain-target-structure.md"
       append_line "$file" "- citizenchain/CITIZENCHAIN_TECHNICAL.md"
-      ;;
-    citizenchain/nodeui)
-      append_line "$file" "- memory/01-architecture/citizenchain-target-structure.md"
-      append_line "$file" "- memory/01-architecture/citizenchain/CITIZENCHAIN_TECHNICAL.md"
       ;;
     sfid|sfid/backend|sfid/frontend|sfid/deploy)
       append_line "$file" "- sfid/README.md"

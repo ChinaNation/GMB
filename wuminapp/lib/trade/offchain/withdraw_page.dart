@@ -72,7 +72,8 @@ class _WithdrawPageState extends State<WithdrawPage> {
             const SizedBox(height: 16),
             TextField(
               controller: _amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: '提现金额(元)',
                 hintText: '例如 50.00',
@@ -110,8 +111,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
           style: const TextStyle(color: Colors.red));
     }
     if (_balanceFen == null) {
-      return const Text('正在查询清算行存款余额...',
-          style: TextStyle(color: Colors.grey));
+      return const Text('正在查询清算行存款余额...', style: TextStyle(color: Colors.grey));
     }
     final yuan = _balanceFen! / 100.0;
     return Text('当前清算行存款余额:¥${yuan.toStringAsFixed(2)}',
@@ -128,6 +128,12 @@ class _WithdrawPageState extends State<WithdrawPage> {
     }
 
     final wallet = widget.wallet;
+    if (widget.wssUrl == null || widget.wssUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先绑定清算行')),
+      );
+      return;
+    }
     if (!wallet.isHotWallet) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Step 1 暂仅支持热钱包提现;冷钱包路径 Step 2 接入')),
@@ -160,10 +166,12 @@ class _WithdrawPageState extends State<WithdrawPage> {
       Navigator.pop(context, true);
     } on WalletAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('提现失败:$e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('提现失败:$e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

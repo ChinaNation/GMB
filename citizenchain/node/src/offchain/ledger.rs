@@ -148,8 +148,25 @@ impl OffchainLedger {
     }
 
     /// 查下一个应提交的 nonce(Step 2 起 wuminapp RPC 调用)。
+    ///
+    /// 中文注释:跨行收款方节点不会把付款方写入本地 `accounts`,因此这里必须把
+    /// 已接受的 cross-bank pending 也纳入计算,避免连续两笔跨行支付都拿到同一个
+    /// `chain_nonce + 1`。
     pub fn next_nonce(&self, user: &AccountId32) -> u64 {
-        self.get_state(user).cached_nonce.saturating_add(1)
+        let ledger = self.inner.read().unwrap_or_else(|e| e.into_inner());
+        let account_next = ledger
+            .accounts
+            .get(user)
+            .map(|s| s.cached_nonce.saturating_add(1))
+            .unwrap_or(1);
+        let pending_next = ledger
+            .pending
+            .iter()
+            .filter(|p| &p.payer == user)
+            .map(|p| p.nonce.saturating_add(1))
+            .max()
+            .unwrap_or(1);
+        account_next.max(pending_next)
     }
 
     /// 待上链笔数。
@@ -360,6 +377,39 @@ impl OffchainLedger {
         l2_ack_sig_provider: [u8; 64],
         accepted_at: u64,
     ) -> Result<(H256, [u8; 64]), String> {
+        let my_bank = intent.payer_bank.clone();
+        self.accept_payment_with_chain_state(
+            intent,
+            payer_sig,
+            current_block,
+            l2_ack_sig_provider,
+            accepted_at,
+            &my_bank,
+            None,
+            None,
+        )
+    }
+
+    /// 接收支付意图并允许 RPC 层注入链上余额 / nonce。
+    ///
+    /// 中文注释:
+    /// - 本行付款(`intent.payer_bank == my_bank`)继续走本地 `accounts` 缓存,保持
+    ///   已有充值/提现/同行扫码的行为。
+    /// - 跨行收款(`intent.recipient_bank == my_bank && intent.payer_bank != my_bank`)
+    ///   不创建付款方本地账户,而是使用链上 `DepositBalance[payer_bank][payer]`
+    ///   与 `L3PaymentNonce[payer]`,再叠加本节点已接受未上链 pending 做早拒。
+    /// - 这样收款方清算节点可以主导跨行批次,同时不会污染本地主账对账快照。
+    pub fn accept_payment_with_chain_state(
+        &self,
+        intent: NodePaymentIntent,
+        payer_sig: [u8; 64],
+        current_block: Option<u32>,
+        l2_ack_sig_provider: [u8; 64],
+        accepted_at: u64,
+        my_bank: &AccountId32,
+        chain_confirmed: Option<u128>,
+        chain_nonce: Option<u64>,
+    ) -> Result<(H256, [u8; 64]), String> {
         // 1. sr25519 验签
         let msg = intent.signing_hash();
         let pub_bytes: [u8; 32] = intent.payer.clone().into();
@@ -386,26 +436,62 @@ impl OffchainLedger {
             return Err("tx_id 已被本地接受过,拒绝重复".to_string());
         }
 
-        let state = ledger.accounts.entry(intent.payer.clone()).or_default();
-        let expected_nonce = state.cached_nonce.saturating_add(1);
-        if intent.nonce != expected_nonce {
-            return Err(format!(
-                "L3 nonce 错位:expected={expected_nonce}, actual={}",
-                intent.nonce
-            ));
-        }
-
         let total_debit = intent.amount.saturating_add(intent.fee);
-        let available = state.confirmed.saturating_sub(state.pending_debit);
-        if available < total_debit {
-            return Err(format!(
-                "清算行存款余额不足:需 {total_debit}, 可用 {available}"
-            ));
+        if intent.payer_bank == *my_bank {
+            let state = ledger.accounts.entry(intent.payer.clone()).or_default();
+            let expected_nonce = state.cached_nonce.saturating_add(1);
+            if intent.nonce != expected_nonce {
+                return Err(format!(
+                    "L3 nonce 错位:expected={expected_nonce}, actual={}",
+                    intent.nonce
+                ));
+            }
+
+            let available = state.confirmed.saturating_sub(state.pending_debit);
+            if available < total_debit {
+                return Err(format!(
+                    "清算行存款余额不足:需 {total_debit}, 可用 {available}"
+                ));
+            }
+
+            // 本行付款才更新本地账户缓存;跨行收款方节点不能生成付款方 ghost 账户。
+            state.pending_debit = state.pending_debit.saturating_add(total_debit);
+            state.cached_nonce = intent.nonce;
+        } else if intent.recipient_bank == *my_bank {
+            let base_nonce = chain_nonce.unwrap_or(0);
+            let local_max_nonce = ledger
+                .pending
+                .iter()
+                .filter(|p| p.payer == intent.payer)
+                .map(|p| p.nonce)
+                .max()
+                .unwrap_or(base_nonce);
+            let expected_nonce = base_nonce.max(local_max_nonce).saturating_add(1);
+            if intent.nonce != expected_nonce {
+                return Err(format!(
+                    "L3 nonce 错位:expected={expected_nonce}, actual={}",
+                    intent.nonce
+                ));
+            }
+
+            let local_pending_debit = ledger
+                .pending
+                .iter()
+                .filter(|p| p.payer == intent.payer)
+                .fold(0u128, |acc, p| {
+                    acc.saturating_add(p.amount.saturating_add(p.fee))
+                });
+            let confirmed = chain_confirmed.unwrap_or(0);
+            let available = confirmed.saturating_sub(local_pending_debit);
+            if available < total_debit {
+                return Err(format!(
+                    "清算行存款余额不足:需 {total_debit}, 可用 {available}"
+                ));
+            }
+        } else {
+            return Err("支付意图不属于当前清算行节点".to_string());
         }
 
-        // 入账
-        state.pending_debit = state.pending_debit.saturating_add(total_debit);
-        state.cached_nonce = intent.nonce;
         ledger.accepted_tx_ids.insert(intent.tx_id);
 
         ledger.pending.push(PendingPayment {
@@ -437,8 +523,11 @@ impl OffchainLedger {
         let p = ledger.pending.remove(pos);
         let total = p.amount.saturating_add(p.fee);
         if let Some(state) = ledger.accounts.get_mut(&p.payer) {
-            state.pending_debit = state.pending_debit.saturating_sub(total);
-            if state.cached_nonce == p.nonce {
+            let had_local_debit = total > 0 && state.pending_debit >= total;
+            if had_local_debit {
+                state.pending_debit = state.pending_debit.saturating_sub(total);
+            }
+            if had_local_debit && state.cached_nonce == p.nonce {
                 state.cached_nonce = state.cached_nonce.saturating_sub(1);
             }
         }
@@ -459,9 +548,32 @@ impl OffchainLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sp_core::{sr25519, Pair};
 
     fn acc(b: u8) -> AccountId32 {
         AccountId32::new([b; 32])
+    }
+
+    fn signed_intent(
+        pair: &sr25519::Pair,
+        tx_id: u8,
+        payer_bank: AccountId32,
+        recipient_bank: AccountId32,
+        nonce: u64,
+    ) -> (NodePaymentIntent, [u8; 64]) {
+        let intent = NodePaymentIntent {
+            tx_id: H256::repeat_byte(tx_id),
+            payer: AccountId32::new(pair.public().0),
+            payer_bank,
+            recipient: acc(0x22),
+            recipient_bank,
+            amount: 99,
+            fee: 1,
+            nonce,
+            expires_at: 100,
+        };
+        let sig = <sr25519::Pair as Pair>::sign(pair, &intent.signing_hash());
+        (intent, sig.0)
     }
 
     #[test]
@@ -619,5 +731,103 @@ mod tests {
         );
         let after = ledger.confirmed_sum_snapshot();
         assert_eq!(after, before.saturating_sub(1), "Σ confirmed 应减 fee=1");
+    }
+
+    #[test]
+    fn accept_cross_bank_recipient_uses_chain_balance_without_ghost_payer() {
+        // 跨行扫码由收款方清算节点接受 pending:付款方余额与 nonce 来自链上,
+        // 本地 ledger 不应该创建付款方账户,否则 reserve 对账会被污染。
+        let tmp = std::env::temp_dir().join("offchain_ledger_accept_cross_recipient_test");
+        let _ = fs::remove_dir_all(&tmp);
+        let ledger = OffchainLedger::new(&tmp);
+        let pair = <sr25519::Pair as Pair>::from_seed(&[0x42u8; 32]);
+        let payer = AccountId32::new(pair.public().0);
+        let payer_bank = acc(0xAA);
+        let recipient_bank = acc(0xBB);
+
+        let (intent1, sig1) =
+            signed_intent(&pair, 0x11, payer_bank.clone(), recipient_bank.clone(), 1);
+        let (tx1, _) = ledger
+            .accept_payment_with_chain_state(
+                intent1,
+                sig1,
+                Some(1),
+                [7u8; 64],
+                1_717_000_000,
+                &recipient_bank,
+                Some(1_000),
+                Some(0),
+            )
+            .unwrap();
+
+        assert_eq!(tx1, H256::repeat_byte(0x11));
+        assert_eq!(ledger.pending_count(), 1);
+        assert_eq!(ledger.next_nonce(&payer), 2);
+        let inner = ledger.inner.read().unwrap();
+        assert!(
+            !inner.accounts.contains_key(&payer),
+            "跨行收款方节点不能创建付款方 ghost 账户"
+        );
+    }
+
+    #[test]
+    fn accept_cross_bank_recipient_nonce_counts_local_pending() {
+        // 链上 nonce 尚未更新前,第二笔跨行 pending 应接在第一笔后面。
+        let tmp = std::env::temp_dir().join("offchain_ledger_accept_cross_nonce_test");
+        let _ = fs::remove_dir_all(&tmp);
+        let ledger = OffchainLedger::new(&tmp);
+        let pair = <sr25519::Pair as Pair>::from_seed(&[0x43u8; 32]);
+        let payer_bank = acc(0xAA);
+        let recipient_bank = acc(0xBB);
+
+        let (intent1, sig1) =
+            signed_intent(&pair, 0x21, payer_bank.clone(), recipient_bank.clone(), 1);
+        ledger
+            .accept_payment_with_chain_state(
+                intent1,
+                sig1,
+                Some(1),
+                [7u8; 64],
+                1_717_000_000,
+                &recipient_bank,
+                Some(1_000),
+                Some(0),
+            )
+            .unwrap();
+
+        let (intent2, sig2) =
+            signed_intent(&pair, 0x22, payer_bank.clone(), recipient_bank.clone(), 2);
+        ledger
+            .accept_payment_with_chain_state(
+                intent2,
+                sig2,
+                Some(1),
+                [8u8; 64],
+                1_717_000_001,
+                &recipient_bank,
+                Some(1_000),
+                Some(0),
+            )
+            .unwrap();
+        assert_eq!(ledger.pending_count(), 2);
+
+        let (intent_bad, sig_bad) =
+            signed_intent(&pair, 0x23, payer_bank, recipient_bank.clone(), 2);
+        let err = ledger
+            .accept_payment_with_chain_state(
+                intent_bad,
+                sig_bad,
+                Some(1),
+                [9u8; 64],
+                1_717_000_002,
+                &recipient_bank,
+                Some(1_000),
+                Some(0),
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("L3 nonce 错位"),
+            "重复 nonce 应被本地 pending 早拒:{err}"
+        );
     }
 }

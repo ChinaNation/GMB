@@ -20,8 +20,8 @@ infer_module() {
     *wallet*|*钱包*|*手机*app*|*手机端*|*isar*|*转账*|*扫码登录*)
       printf '%s' "wuminapp"
       ;;
-    *nodeuitauri*|*nodeui*|*节点ui*|*桌面端*|*挖矿界面*|*节点状态界面*|*flutter*desktop*)
-      printf '%s' "citizenchain/nodeui"
+    *节点ui*|*桌面端*|*挖矿界面*|*节点状态界面*|*flutter*desktop*)
+      printf '%s' "citizenchain/node"
       ;;
     *node*|*节点*|*出块*|*同步*|*cli*|*矿工*|*挖矿*)
       printf '%s' "citizenchain/node"
@@ -50,9 +50,6 @@ impact_scope_for_module() {
       ;;
     citizenchain/node)
       printf '%s\n' "citizenchain/node" "memory"
-      ;;
-    citizenchain/nodeui)
-      printf '%s\n' "citizenchain/nodeui" "memory"
       ;;
     sfid|sfid/backend)
       printf '%s\n' "sfid/backend" "memory"
@@ -112,11 +109,6 @@ risk_points_for_module() {
       printf '%s\n' \
         "节点行为可能与 runtime、安装包和启动流程联动。" \
         "不能在 node 层越权决定链上规则。"
-      ;;
-    citizenchain/nodeui)
-      printf '%s\n' \
-        "节点 UI 只能承载交互，不能把链规则固化在界面层。" \
-        "节点启停、本地设置、打包与 sidecar 改动会联动桌面发布链路。"
       ;;
     sfid|sfid/backend|sfid/frontend|sfid/deploy)
       printf '%s\n' \
