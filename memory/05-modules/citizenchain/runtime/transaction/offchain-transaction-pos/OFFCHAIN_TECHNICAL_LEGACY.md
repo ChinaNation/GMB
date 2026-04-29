@@ -148,7 +148,7 @@
 
 ## 7.1 治理提案执行与 STATUS_EXECUTED
 
-四类治理动作（rate、verify_key、sweep、relay_submitters）在投票通过后由投票引擎回调本模块执行。执行成功后，本模块调用 `voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将投票引擎侧的提案状态标记为已执行，防止同一提案被重复执行。
+四类治理动作（rate、verify_key、sweep、relay_submitters）在投票通过后由投票引擎回调本模块执行。执行成功后，本模块调用 `voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将投票引擎侧的提案状态标记为已执行，防止同一提案被重复执行。
 
 各动作执行函数：
 - `try_execute_rate`：执行成功后调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)`

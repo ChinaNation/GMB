@@ -20,10 +20,10 @@ class RuntimeUpgradeService {
 
   // ──── 常量 ────
 
-  /// runtime-root-upgrade pallet index=13。
+  /// runtime-upgrade pallet index=13。
   static const _palletIndex = 13;
 
-  /// VotingEngineSystem pallet index=9。
+  /// VotingEngine pallet index=9。
   static const _jointVotePalletIndex = 9;
 
   /// propose_runtime_upgrade call_index=0。
@@ -101,7 +101,7 @@ class RuntimeUpgradeService {
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'ProposalData',
       _u64ToLeBytes(proposalId),
     );
@@ -133,7 +133,7 @@ class RuntimeUpgradeService {
   /// Value: VoteCountU32 { yes: u32, no: u32 } = 8 bytes。
   Future<({int yes, int no})> fetchJointTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'JointTallies',
       _u64ToLeBytes(proposalId),
     );
@@ -152,7 +152,7 @@ class RuntimeUpgradeService {
   Future<bool?> fetchJointVoteByInstitution(
       int proposalId, Uint8List institutionId48) async {
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'JointVotesByInstitution',
       _u64ToLeBytes(proposalId),
       institutionId48,
@@ -166,7 +166,7 @@ class RuntimeUpgradeService {
   Future<({int yes, int no})> fetchJointInstitutionTally(
       int proposalId, Uint8List institutionId48) async {
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'JointInstitutionTallies',
       _u64ToLeBytes(proposalId),
       institutionId48,
@@ -188,7 +188,7 @@ class RuntimeUpgradeService {
       ..setAll(0, institutionId48)
       ..setAll(institutionId48.length, accountBytes);
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'JointVotesByAdmin',
       _u64ToLeBytes(proposalId),
       compositeKey,
@@ -203,7 +203,7 @@ class RuntimeUpgradeService {
   /// Value: VoteCountU64 { yes: u64, no: u64 } = 16 bytes。
   Future<({int yes, int no})> fetchCitizenTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'CitizenTallies',
       _u64ToLeBytes(proposalId),
     );
@@ -219,7 +219,7 @@ class RuntimeUpgradeService {
   /// 返回 null 表示提案不存在。
   Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'Proposals',
       _u64ToLeBytes(proposalId),
     );
@@ -266,7 +266,7 @@ class RuntimeUpgradeService {
 
   /// 查询 NextProposalId（投票引擎全局递增 ID）。
   Future<int> fetchNextProposalId() async {
-    final palletHash = _twoxx128String('VotingEngineSystem');
+    final palletHash = _twoxx128String('VotingEngine');
     final storageHash = _twoxx128String('NextProposalId');
     final key = Uint8List(palletHash.length + storageHash.length);
     key.setAll(0, palletHash);

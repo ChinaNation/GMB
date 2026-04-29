@@ -96,9 +96,9 @@ class PayloadDecoder {
         return _decodeTransferKeepAlive(bytes);
       }
 
-      // ── VotingEngineSystem(9) · 统一投票入口 ──
+      // ── VotingEngine(9) · 统一投票入口 ──
       // Phase 3：业务 pallet 的 vote_X 全部下线，冷钱包只在这里解码投票 payload。
-      if (palletIndex == PalletRegistry.votingEngineSystemPallet) {
+      if (palletIndex == PalletRegistry.votingEnginePallet) {
         if (callIndex == PalletRegistry.internalVoteCall) {
           return _decodeInternalVote(bytes);
         }
@@ -114,7 +114,7 @@ class PayloadDecoder {
       }
 
       // ── DuoqianTransferPow(19) ──
-      // Phase 3：投票入口统一到 VotingEngineSystem::internal_vote,
+      // Phase 3：投票入口统一到 VotingEngine::internal_vote,
       // 本 pallet 保留 3 条 propose_X + 3 条 execute_X 兜底执行。
       if (palletIndex == PalletRegistry.duoqianTransferPowPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
@@ -149,8 +149,8 @@ class PayloadDecoder {
         }
       }
 
-      // ── RuntimeRootUpgrade(13) ──
-      if (palletIndex == PalletRegistry.runtimeRootUpgradePallet) {
+      // ── RuntimeUpgrade(13) ──
+      if (palletIndex == PalletRegistry.runtimeUpgradePallet) {
         if (callIndex == PalletRegistry.proposeRuntimeUpgradeCall) {
           return _decodeProposeRuntimeUpgrade(bytes);
         }
@@ -160,14 +160,17 @@ class PayloadDecoder {
       }
 
       // ── DuoqianManagePow(17) ──
-      // Phase 3：投票入口统一到 VotingEngineSystem::internal_vote。本 pallet
+      // Phase 3：投票入口统一到 VotingEngine::internal_vote。本 pallet
       // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_sfid_institution 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
       if (palletIndex == PalletRegistry.duoqianManagePowPallet) {
-        if (callIndex == PalletRegistry.proposeCreateCall) return _decodeProposeCreate(bytes);
-        if (callIndex == PalletRegistry.proposeCloseCall) return _decodeProposeClose(bytes);
-        if (callIndex == PalletRegistry.proposeCreatePersonalCall) return _decodeProposeCreatePersonal(bytes);
+        if (callIndex == PalletRegistry.proposeCreateCall)
+          return _decodeProposeCreate(bytes);
+        if (callIndex == PalletRegistry.proposeCloseCall)
+          return _decodeProposeClose(bytes);
+        if (callIndex == PalletRegistry.proposeCreatePersonalCall)
+          return _decodeProposeCreatePersonal(bytes);
         if (callIndex == PalletRegistry.cleanupRejectedProposalCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -177,9 +180,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── ResolutionDestroGov(14) ──
-      if (palletIndex == PalletRegistry.resolutionDestroGovPallet) {
-        if (callIndex == PalletRegistry.proposeDestroyCall) return _decodeProposeDestroy(bytes);
+      // ── ResolutionDestro(14) ──
+      if (palletIndex == PalletRegistry.resolutionDestroPallet) {
+        if (callIndex == PalletRegistry.proposeDestroyCall)
+          return _decodeProposeDestroy(bytes);
         if (callIndex == PalletRegistry.executeDestroyCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -189,9 +193,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── AdminsOriginGov(12) ──
-      if (palletIndex == PalletRegistry.adminsOriginGovPallet) {
-        if (callIndex == PalletRegistry.proposeAdminReplacementCall) return _decodeProposeAdminReplacement(bytes);
+      // ── AdminsChange(12) ──
+      if (palletIndex == PalletRegistry.adminsChangePallet) {
+        if (callIndex == PalletRegistry.proposeAdminReplacementCall)
+          return _decodeProposeAdminReplacement(bytes);
         if (callIndex == PalletRegistry.executeAdminReplacementCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -201,9 +206,10 @@ class PayloadDecoder {
         }
       }
 
-      // ── GrandpaKeyGov(16) ──
-      if (palletIndex == PalletRegistry.grandpaKeyGovPallet) {
-        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) return _decodeProposeKeyChange(bytes);
+      // ── GrandpaKeyChange(16) ──
+      if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
+        if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall)
+          return _decodeProposeKeyChange(bytes);
         if (callIndex == PalletRegistry.executeReplaceGrandpaKeyCall) {
           return _decodeProposalIdOnly(
             bytes,
@@ -243,7 +249,8 @@ class PayloadDecoder {
     // 收款地址 32 bytes
     final toAccountId = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final toAddress = Keyring().encodeAddress(toAccountId.toList(), _ss58Prefix);
+    final toAddress =
+        Keyring().encodeAddress(toAccountId.toList(), _ss58Prefix);
 
     // Compact<u128> 金额（分）
     final (amountFen, _) = _decodeCompactBigInt(bytes, offset);
@@ -301,7 +308,8 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_transfer',
-      summary: '$orgName 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+      summary:
+          '$orgName 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
       fields: {
         'org': orgName,
         'beneficiary': beneficiary,
@@ -315,7 +323,7 @@ class PayloadDecoder {
   // 冷钱包统一通过 `_decodeInternalVote` 解码一人一票的管理员投票 payload。
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / internal_vote(0)
+  // VotingEngine(9) / internal_vote(0)
   // 格式：[0x09][0x00][proposal_id:u64_le][approve:bool]
   //
   // Phase 3 统一入口：所有业务 pallet(admins/resolution_destro/grandpa_key/
@@ -338,7 +346,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / finalize_proposal(3)
+  // VotingEngine(9) / finalize_proposal(3)
   // 格式：[0x09][0x03][proposal_id:u64_le]
   //
   // 任意账户触发终态执行，无需签投票语义。
@@ -356,7 +364,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / joint_vote(1)
+  // VotingEngine(9) / joint_vote(1)
   // 格式：[0x09][0x01][proposal_id:u64_le][institution:48][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
@@ -379,7 +387,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngineSystem(9) / citizen_vote(2)
+  // VotingEngine(9) / citizen_vote(2)
   // 格式：[0x09][0x02][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCitizenVote(Uint8List bytes) {
@@ -419,7 +427,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // RuntimeRootUpgrade(13) / propose_runtime_upgrade(0)
+  // RuntimeUpgrade(13) / propose_runtime_upgrade(0)
   //
   // 链端签名：
   //   pub fn propose_runtime_upgrade(
@@ -489,7 +497,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // RuntimeRootUpgrade(13) / developer_direct_upgrade(2)
+  // RuntimeUpgrade(13) / developer_direct_upgrade(2)
   //
   // 链端签名：pub fn developer_direct_upgrade(origin, code: CodeOf<T>)
   // SCALE 编码：[13][2] + Compact<u32> wasm_len + wasm_bytes
@@ -562,19 +570,26 @@ class PayloadDecoder {
     final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
     offset += sfidLenSize;
     if (offset + sfidLen > bytes.length) return null;
-    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen), allowMalformed: true);
+    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen),
+        allowMalformed: true);
     offset += sfidLen;
 
     // account_name: BoundedVec<u8>
-    final (accountNameLen, accountNameLenSize) = _decodeCompactU32(bytes, offset);
+    final (accountNameLen, accountNameLenSize) =
+        _decodeCompactU32(bytes, offset);
     offset += accountNameLenSize;
     if (offset + accountNameLen > bytes.length) return null;
-    final accountName = utf8.decode(bytes.sublist(offset, offset + accountNameLen), allowMalformed: true);
+    final accountName = utf8.decode(
+        bytes.sublist(offset, offset + accountNameLen),
+        allowMalformed: true);
     offset += accountNameLen;
 
     // admin_count: u32
     if (offset + 4 > bytes.length) return null;
-    final adminCount = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    final adminCount = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
     offset += 4;
 
     // admins: BoundedVec<AccountId32> — 跳过
@@ -584,7 +599,10 @@ class PayloadDecoder {
     if (offset + 4 + 16 > bytes.length) return null;
 
     // threshold: u32
-    final threshold = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    final threshold = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
     offset += 4;
 
     // amount: u128
@@ -593,7 +611,8 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_create',
-      summary: '创建多签账户「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      summary:
+          '创建多签账户「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: {
         'sfid_id': sfidId,
         'account_name': accountName,
@@ -613,15 +632,21 @@ class PayloadDecoder {
     var offset = 2;
 
     // account_name: BoundedVec<u8>
-    final (accountNameLen, accountNameLenSize) = _decodeCompactU32(bytes, offset);
+    final (accountNameLen, accountNameLenSize) =
+        _decodeCompactU32(bytes, offset);
     offset += accountNameLenSize;
     if (offset + accountNameLen > bytes.length) return null;
-    final accountName = utf8.decode(bytes.sublist(offset, offset + accountNameLen), allowMalformed: true);
+    final accountName = utf8.decode(
+        bytes.sublist(offset, offset + accountNameLen),
+        allowMalformed: true);
     offset += accountNameLen;
 
     // admin_count: u32
     if (offset + 4 > bytes.length) return null;
-    final adminCount = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    final adminCount = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
     offset += 4;
 
     // admins: BoundedVec<AccountId32> — 跳过
@@ -631,7 +656,10 @@ class PayloadDecoder {
     if (offset + 4 + 16 > bytes.length) return null;
 
     // threshold: u32
-    final threshold = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+    final threshold = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
     offset += 4;
 
     // amount: u128
@@ -640,7 +668,8 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_create_personal',
-      summary: '创建个人多签「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      summary:
+          '创建个人多签「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
       fields: {
         'account_name': accountName,
         'admin_count': adminCount.toString(),
@@ -659,7 +688,8 @@ class PayloadDecoder {
     final duoqianId = bytes.sublist(2, 34);
     final beneficiaryId = bytes.sublist(34, 66);
     final duoqian = Keyring().encodeAddress(duoqianId.toList(), _ss58Prefix);
-    final beneficiary = Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final beneficiary =
+        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
     return DecodedPayload(
       action: 'propose_close',
       summary: '提案关闭多签 ${_truncateAddress(duoqian)}',
@@ -679,7 +709,8 @@ class PayloadDecoder {
     var offset = 2;
     final beneficiaryId = bytes.sublist(offset, offset + 32);
     offset += 32;
-    final beneficiary = Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
+    final beneficiary =
+        Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
     final amountFen = _readU128Le(bytes, offset);
     offset += 16;
     final amountYuan = _fenToYuan(amountFen);
@@ -687,7 +718,8 @@ class PayloadDecoder {
     offset += remarkLenSize;
     var remark = '';
     if (remarkLen > 0 && offset + remarkLen <= bytes.length) {
-      remark = utf8.decode(bytes.sublist(offset, offset + remarkLen), allowMalformed: true);
+      remark = utf8.decode(bytes.sublist(offset, offset + remarkLen),
+          allowMalformed: true);
     }
     return DecodedPayload(
       action: 'propose_safety_fund_transfer',
@@ -710,8 +742,12 @@ class PayloadDecoder {
     final institutionBytes = bytes.sublist(offset, offset + 48);
     offset += 48;
     var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) { endIndex--; }
-    final shenfenId = endIndex > 0 ? String.fromCharCodes(institutionBytes.sublist(0, endIndex)) : '';
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    final shenfenId = endIndex > 0
+        ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
+        : '';
     final bankName = institutionName(shenfenId) ?? shenfenId;
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
@@ -726,7 +762,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // ResolutionDestroGov(14) / propose_destroy(0)
+  // ResolutionDestro(14) / propose_destroy(0)
   // 格式：[14][0][org:u8][institution:48][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeDestroy(Uint8List bytes) {
@@ -748,7 +784,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // AdminsOriginGov(12) / propose_admin_replacement(0)
+  // AdminsChange(12) / propose_admin_replacement(0)
   // 格式：[12][0][org:u8][institution:48][old_admin:32][new_admin:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminReplacement(Uint8List bytes) {
@@ -774,7 +810,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // GrandpaKeyGov(16) / propose_key_change(0)
+  // GrandpaKeyChange(16) / propose_key_change(0)
   // 格式：[16][0][institution:48][new_key:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeKeyChange(Uint8List bytes) {
@@ -783,10 +819,15 @@ class PayloadDecoder {
     final institutionBytes = bytes.sublist(offset, offset + 48);
     offset += 48;
     var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) { endIndex--; }
-    final shenfenId = endIndex > 0 ? String.fromCharCodes(institutionBytes.sublist(0, endIndex)) : '';
+    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    final shenfenId = endIndex > 0
+        ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
+        : '';
     final keyBytes = bytes.sublist(offset, offset + 32);
-    final keyHex = keyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final keyHex =
+        keyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return DecodedPayload(
       action: 'propose_replace_grandpa_key',
       summary: 'GRANDPA 密钥替换提案',
@@ -918,9 +959,9 @@ class PayloadDecoder {
     final yuan = fen ~/ BigInt.from(100);
     final remainder = (fen % BigInt.from(100)).toInt().abs();
     final intStr = yuan.toString().replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
-    );
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
     return '$intStr.${remainder.toString().padLeft(2, '0')}';
   }
 

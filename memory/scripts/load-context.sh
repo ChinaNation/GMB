@@ -59,53 +59,53 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/otherpallet/pow-difficulty-module/POW_DIFFICULTY_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/grandpa-key-gov|citizenchain/governance/grandpa-key-gov|grandpa-key-gov)
+  citizenchain/runtime/governance/grandpakey-change|citizenchain/governance/grandpakey-change|grandpakey-change)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/grandpa-key-gov/GRANDPAKEYGOV_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/grandpakey-change/GRANDPAKEYCHANGE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/admins-origin-gov|citizenchain/governance/admins-origin-gov|admins-origin-gov)
+  citizenchain/runtime/governance/admins-change|citizenchain/governance/admins-change|admins-change)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/admins-origin-gov/ADMINSORIGIN_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/admins-change/ADMINSCHANGE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/resolution-destro-gov|citizenchain/governance/resolution-destro-gov|resolution-destro-gov)
+  citizenchain/runtime/governance/resolution-destro|citizenchain/governance/resolution-destro|resolution-destro)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/resolution-destro-gov/RESOLUTIONDESTRO_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/resolution-issuance-gov|citizenchain/governance/resolution-issuance-gov|resolution-issuance-gov)
+  citizenchain/runtime/issuance/resolution-issuance|citizenchain/issuance/resolution-issuance|resolution-issuance)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/resolution-issuance-gov/RESOLUTIONISSUANCEGOV_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/issuance/resolution-issuance/RESOLUTIONISSUANCE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/voting-engine-system|citizenchain/governance/voting-engine-system|voting-engine-system)
+  citizenchain/runtime/governance/voting-engine|citizenchain/governance/voting-engine|voting-engine)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/voting-engine-system/VOTINGENGINE_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/governance/runtime-root-upgrade|citizenchain/governance/runtime-root-upgrade|runtime-root-upgrade)
+  citizenchain/runtime/governance/runtime-upgrade|citizenchain/governance/runtime-upgrade|runtime-upgrade)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md"
     ;;
   citizenchain/runtime/transaction/duoqian-transfer-pow|citizenchain/transaction/duoqian-transfer-pow|duoqian-transfer-pow)
     print_base_context

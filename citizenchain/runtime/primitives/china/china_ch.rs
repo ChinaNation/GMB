@@ -16,7 +16,7 @@ pub struct ChinaCh {
     pub duoqian_admins: &'static [[u8; 32]],
 }
 
-/// 将 shenfen_id 编码为固定 48 字节 `voting_engine_system::InstitutionPalletId`（右侧补零）。
+/// 将 shenfen_id 编码为固定 48 字节 `voting_engine::InstitutionPalletId`（右侧补零）。
 /// 用于治理提案 / 投票计票 / 管理员注册等按机构身份索引的场景（storage key、
 pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> Option<[u8; 48]> {
     let raw = shenfen_id.as_bytes();

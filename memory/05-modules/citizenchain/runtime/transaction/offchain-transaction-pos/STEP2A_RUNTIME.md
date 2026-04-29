@@ -84,9 +84,9 @@ pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
 
 ### 2.5 `bank_check::SfidAccountQuery::is_admin_of`
 
-trait 新增方法,`()` 默认返回 false。runtime 侧 `DuoqianSfidAccountQuery` 先通过 `duoqian_manage_pow::Pallet::resolve_admin_subject_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_origin_gov::Pallet::is_subject_admin` 校验。
+trait 新增方法,`()` 默认返回 false。runtime 侧 `DuoqianSfidAccountQuery` 先通过 `duoqian_manage_pow::Pallet::resolve_admin_subject_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_change::Pallet::is_subject_admin` 校验。
 
-2026-04-29 补齐：清算行管理员真源不再是 `DuoqianAccounts.duoqian_admins`，所有内部投票和清算权限统一读取 `admins-origin-gov::Institutions`。
+2026-04-29 补齐：清算行管理员真源不再是 `DuoqianAccounts.duoqian_admins`，所有内部投票和清算权限统一读取 `admins-change::Institutions`。
 
 ## 3. lib.rs 扩展
 
@@ -162,7 +162,7 @@ $ cargo check -p offchain-transaction-pos
 - 运行完整单元/集成测试
 
 **Step 2b `set_max_l2_fee_rate` 联合投票**:
-把本步的 `ensure_root(origin)` 入口改为接 `voting-engine-system` 联合投票 pallet 的 `JointVoteEngine::execute_if_passed`,让提案通过后再由投票引擎回调本 pallet 的内部执行函数。
+把本步的 `ensure_root(origin)` 入口改为接 `voting-engine` 联合投票 pallet 的 `JointVoteEngine::execute_if_passed`,让提案通过后再由投票引擎回调本 pallet 的内部执行函数。
 
 ## 7. 风险与验证后续
 

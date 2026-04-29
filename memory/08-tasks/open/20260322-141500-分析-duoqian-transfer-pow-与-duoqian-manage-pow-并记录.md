@@ -20,7 +20,7 @@
 - `memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer-pow/DUOQIAN_TRANSFER_TECHNICAL.md`
 - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`
 - `citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs`
+- `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`
 - `citizenchain/runtime/src/configs/mod.rs`
 
 ## 必须遵守
@@ -44,7 +44,7 @@
 ## 实施记录
 
 - 已确认：`duoqian-transfer-pow` 当前只支持内置治理机构 `NRC / PRC / PRB` 转账，不支持注册型 `ORG_DUOQIAN`，也尚未接入 `ZF / LF / JC / JY / SF`。
-- 已确认：`duoqian-transfer-pow` 的转账审批实际就是复用 `voting-engine-system` 的内部投票能力；只要机构类型被本模块识别，并接入 runtime 管理员/阈值提供器，就可以走内部投票转账，不需要新增转账模块。
+- 已确认：`duoqian-transfer-pow` 的转账审批实际就是复用 `voting-engine` 的内部投票能力；只要机构类型被本模块识别，并接入 runtime 管理员/阈值提供器，就可以走内部投票转账，不需要新增转账模块。
 - 已确认：`duoqian-manage-pow` 当前真实职责是 `sfid` 机构登记、注册型多签机构创建、注册型多签机构关闭；创建/关闭当前都走 `ORG_DUOQIAN` 内部投票，不是旧文档里的离线 M-of-N 一次性签名提交。
 - 已记录关键问题：在 `propose_create`（`citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`，约第 490 行）里，模块会先把 `DuoqianAccounts` 写成 `Pending`，然后才创建内部投票提案。
 - 已进一步确认：当前模块中可以看到 `execute_create` 把 `Pending` 改成 `Active`，`execute_close` 删除 `Active` 账户，但未看到“创建提案被拒绝 / 超时后清理 Pending 记录”的路径。

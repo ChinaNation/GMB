@@ -3,7 +3,7 @@
 //! 中文注释:
 //! - 每个清算行主账户对应一个 `L2FeeRateBp` 费率(单位 bp,范围 1~10)。
 //! - 清算行管理员可提案改费率,**延迟 7 天生效**(防突袭改价,给 L3 换行时间)。
-//! - 全局上限 `MaxL2FeeRateBp` 由联合投票调整(沿用 `voting-engine-system`,
+//! - 全局上限 `MaxL2FeeRateBp` 由联合投票调整(沿用 `voting-engine`,
 //!   这里只定义 extrinsic 入口;具体联合投票执行回调的对接由 Step 2b 补)。
 //! - 在 `on_initialize` 每块扫描一次到期提案并激活(小成本,Step 3 可优化为 cursor)。
 

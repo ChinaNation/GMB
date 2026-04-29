@@ -105,7 +105,7 @@ sig = sr25519_sign(admin_key, signing_hash)
   - 创世预置的治理机构（NRC / PRC / PRB）
   - `duoqian-manage-pow` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
-- 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine-system` 的 `InternalVoteEngine`。
+- 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine` 的 `InternalVoteEngine`。
 
 补充说明：
 - 只要某类内置机构被本模块的 `institution_org()` / `institution_pallet_address()` 正式识别，
@@ -119,11 +119,11 @@ sig = sr25519_sign(admin_key, signing_hash)
 | `duoqian-manage-pow` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
 | `duoqian-transfer-pow` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
-### 0.4 与 `resolution-destro-gov` 的关系
+### 0.4 与 `resolution-destro` 的关系
 
 两者结构高度一致，区别在于资金操作：
 
-| 对比 | `resolution-destro-gov` | `duoqian-transfer-pow` |
+| 对比 | `resolution-destro` | `duoqian-transfer-pow` |
 | --- | --- | --- |
 | 资金操作 | `Currency::slash()` 销毁 | `Currency::transfer()` 转账 |
 | 目标 | 销毁机构持有的代币 | 转账到指定收款地址 |
@@ -143,7 +143,7 @@ sig = sr25519_sign(admin_key, signing_hash)
 机构主账户地址有两种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `duoqian-manage-pow::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-origin-gov::Institutions` 读取。
+- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `duoqian-manage-pow::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Institutions` 读取。
 
 ### 1.3 institution-asset-guard 边界
 
@@ -174,18 +174,18 @@ pub fn propose_transfer(
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
    - 注册型机构：能解码出主账户地址，且在 `DuoqianAccounts` 中存在并处于 Active。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
-5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-origin-gov::Institutions`）。
+5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Institutions`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
 9. 机构主账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
-10. 活跃提案数由 `voting-engine-system` 在 `create_internal_proposal` 中统一检查（全局限额）。
+10. 活跃提案数由 `voting-engine` 在 `create_internal_proposal` 中统一检查（全局限额）。
 
 **执行逻辑：**
 
 1. 调用 `InternalVoteEngine::create_internal_proposal(proposer, org, institution)` 获取 `proposal_id`。
-2. 编码 `TransferAction { institution, beneficiary, amount, remark, proposer }` 存入 `voting_engine_system::ProposalData`。
-3. 记录 `ProposalMeta`（创建块号）到 `voting_engine_system`。
+2. 编码 `TransferAction { institution, beneficiary, amount, remark, proposer }` 存入 `voting_engine::ProposalData`。
+3. 记录 `ProposalMeta`（创建块号）到 `voting_engine`。
 4. 发出 `TransferProposed` 事件。
 
 ### 2.2 finalize_transfer — 离线聚合代投(Step 2 替换 vote_transfer)
@@ -204,7 +204,7 @@ pub fn finalize_transfer(
 **校验规则：**
 
 1. `origin` 必须是 `signed`(任何账户,发起人不必是管理员 — Tx 1 已锁定 `proposer`)。
-2. `proposal_id` 必须在 `voting_engine_system::ProposalData` 中存在且能解码为 `TransferAction`。
+2. `proposal_id` 必须在 `voting_engine::ProposalData` 中存在且能解码为 `TransferAction`。
 3. 聚合签名数量 >= 该机构阈值,否则 `InsufficientSignatures`。
 4. `sigs` 中每个 `admin` 必须是该机构当前管理员(`UnauthorizedSignature`),且同批次不重复(`DuplicateSignature`)。
 5. 每条 `sig_bytes.len() == 64`(`MalformedSignature`),且对 `TransferVoteIntent.signing_hash(ss58, OP_SIGN_TRANSFER)` 的 sr25519 验签通过(`InvalidSignature`)。
@@ -242,17 +242,17 @@ pub fn execute_transfer(
 
 **执行逻辑：** 与 `vote_transfer` 中自动执行的逻辑完全一致（共用 `try_execute_transfer` 内部方法）。执行成功后提案状态变为 `STATUS_EXECUTED`，防止双重执行。
 
-**设计说明：** 任何签名账户都可调用（不限管理员），避免因管理员离线导致已通过的提案无法落地。与 `resolution-destro-gov::execute_destroy` 保持一致。
+**设计说明：** 任何签名账户都可调用（不限管理员），避免因管理员离线导致已通过的提案无法落地。与 `resolution-destro::execute_destroy` 保持一致。
 
 ## 3. 存储项
 
-本模块**自身不定义存储项**。所有提案数据统一存储在 `voting-engine-system` 中：
+本模块**自身不定义存储项**。所有提案数据统一存储在 `voting-engine` 中：
 
 | 存储位置 | Key | Value | 说明 |
 | --- | --- | --- | --- |
-| `voting_engine_system::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
-| `voting_engine_system::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
-| `voting_engine_system::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
+| `voting_engine::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
+| `voting_engine::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
+| `voting_engine::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
 
 ### 3.1 TransferAction 结构
 
@@ -399,7 +399,7 @@ pub enum Error<T> {
 1. verify_and_cast_votes() 循环结束,最后一次 cast_internal_vote() 触发 STATUS_PASSED
 2. 读取 proposal.status:
 3. 若 STATUS_PASSED(yes >= threshold):
-   a. 从 voting_engine_system::ProposalData 读取 TransferAction
+   a. 从 voting_engine::ProposalData 读取 TransferAction
    b. institution_pallet_address(institution) 获取 from 地址
    c. 计算手续费 fee = calculate_onchain_fee(amount)
    d. 校验余额: free_balance >= amount + fee + ED
@@ -433,7 +433,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 
 ### 7.4 转账 vs 销毁
 
-| 操作 | resolution-destro-gov | duoqian-transfer-pow |
+| 操作 | resolution-destro | duoqian-transfer-pow |
 | --- | --- | --- |
 | API | `Currency::slash()` | `Currency::transfer()` |
 | 总发行量 | 减少（资金销毁） | 不变（资金转移） |
@@ -494,7 +494,7 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 ```rust
 #[pallet::config]
 pub trait Config:
-    frame_system::Config + voting_engine_system::Config + duoqian_manage_pow::Config
+    frame_system::Config + voting_engine::Config + duoqian_manage_pow::Config
 {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -512,7 +512,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAssetGuard` 等类型由上游 `duoqian_manage_pow::Config` 和 `voting_engine_system::Config` 提供，本模块不再单独声明。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAssetGuard` 等类型由上游 `duoqian_manage_pow::Config` 和 `voting_engine::Config` 提供，本模块不再单独声明。
 
 ## 11. Weight 估算(Step 2 已更新)
 
@@ -555,7 +555,7 @@ impl duoqian_transfer_pow::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type MaxRemarkLen = ConstU32<256>;
-    type InternalVoteEngine = VotingEngineSystem;
+    type InternalVoteEngine = VotingEngine;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type FeeRouter = TransferFeeRouter;
     type WeightInfo = duoqian_transfer_pow::weights::SubstrateWeight<Runtime>;

@@ -1,13 +1,13 @@
 # DUOQIAN_TECHNICAL
 
 模块：`duoqian-manage-pow`  
-最新更新：2026-04-29，第2步接入 admins-origin-gov 统一管理员真源
+最新更新：2026-04-29，第2步接入 admins-change 统一管理员真源
 
 ## 1. 当前边界
 
 `duoqian-manage-pow` 负责链上多签机构和个人多签的创建、激活、关闭提案，以及与内部投票引擎 `ORG_DUOQIAN` 的对接。
 
-本次第2步只处理区块链 runtime 段：`duoqian-manage-pow` 接入 `admins-origin-gov`，runtime provider 改为统一从管理员主体表读取。不改 SFID 后端、node UI、wuminapp、wumin。
+本次第2步只处理区块链 runtime 段：`duoqian-manage-pow` 接入 `admins-change`，runtime provider 改为统一从管理员主体表读取。不改 SFID 后端、node UI、wuminapp、wumin。
 
 ## 2. 目录结构
 
@@ -49,7 +49,7 @@
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，写入 `admins-origin-gov::Institutions` 的 `Pending` 主体。
+- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，写入 `admins-change::Institutions` 的 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后激活主体；创建拒绝或执行失败后清理主体；多签关闭后关闭主体。
 
@@ -130,7 +130,7 @@ propose_create_institution(
 已完成的 runtime 适配：
 
 - runtime 顶层配置补齐 `MaxInstitutionAccounts`。
-- `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-origin-gov`。
+- `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
 - `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_subject_for_account` 映射到账户所属管理员主体。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
 
@@ -147,6 +147,6 @@ propose_create_institution(
 
 第2步补充验证：
 
-- `cargo test -p admins-origin-gov --lib`
+- `cargo test -p admins-change --lib`
 - `cargo test -p duoqian-transfer-pow --lib`
 - `cargo test -p offchain-transaction-pos --lib`

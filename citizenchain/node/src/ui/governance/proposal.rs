@@ -1,4 +1,4 @@
-// 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngineSystem 链上存储。
+// 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
 use crate::ui::shared::rpc;
 use serde::Serialize;
@@ -27,7 +27,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// 提案元数据（从 VotingEngineSystem::Proposals 解码）。
+/// 提案元数据（从 VotingEngine::Proposals 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProposalMeta {
@@ -43,7 +43,7 @@ pub struct ProposalMeta {
     pub institution_hex: Option<String>,
 }
 
-/// 转账提案详情（从 VotingEngineSystem::ProposalData 解码）。
+/// 转账提案详情（从 VotingEngine::ProposalData 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferProposalDetail {
@@ -59,7 +59,7 @@ pub struct TransferProposalDetail {
     pub proposer_hex: String,
 }
 
-/// Runtime 升级提案详情（从 VotingEngineSystem::ProposalData 解码）。
+/// Runtime 升级提案详情（从 VotingEngine::ProposalData 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeUpgradeDetail {
@@ -223,9 +223,9 @@ enum ProposalAction {
 
 // ──── 公开查询函数 ────
 
-/// 查询 NextProposalId（VotingEngineSystem 全局递增 ID）。
+/// 查询 NextProposalId（VotingEngine 全局递增 ID）。
 pub fn fetch_next_proposal_id() -> Result<u64, String> {
-    let key = storage_keys::value_key("VotingEngineSystem", "NextProposalId");
+    let key = storage_keys::value_key("VotingEngine", "NextProposalId");
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(0),
@@ -283,7 +283,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     id -= 1;
                     continue;
                 }
-                // 中文注释：runtime-root-upgrade 的业务终态保存在 ProposalData，
+                // 中文注释：runtime-upgrade 的业务终态保存在 ProposalData，
                 // 这里只把它折叠成列表展示状态，避免 UI 把”已否决/执行失败”误显示成”已执行”。
                 let display = match fetch_proposal_display(id, &meta) {
                     Ok(v) => v,
@@ -496,7 +496,7 @@ pub fn fetch_institution_proposal_page(
 pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
     let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id);
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "ActiveProposalsByInstitution",
         &institution_id,
     );
@@ -515,7 +515,7 @@ pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
 
 fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String> {
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "Proposals",
         &proposal_id.to_le_bytes(),
     );
@@ -532,7 +532,7 @@ fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String>
 
 fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> {
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "ProposalData",
         &proposal_id.to_le_bytes(),
     );
@@ -550,7 +550,7 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
 /// 按优先级依次查询所有提案动作来源,返回命中的第一个业务动作。
 ///
 /// 查找顺序(命中即返回,不重复查询):
-/// 1. `VotingEngineSystem::ProposalData`(转账/升级/发行/销毁 4 种,按 kind 分流)
+/// 1. `VotingEngine::ProposalData`(转账/升级/发行/销毁 4 种,按 kind 分流)
 /// 2. `DuoqianTransferPow::SafetyFundProposalActions`
 /// 3. `DuoqianTransferPow::SweepProposalActions`
 /// 4. 全部未命中 → [`ProposalAction::Unknown`]
@@ -563,7 +563,7 @@ fn resolve_proposal_action(
     proposal_id: u64,
     meta: &ProposalMeta,
 ) -> Result<ProposalAction, String> {
-    // ── Step 1:尝试从 VotingEngineSystem::ProposalData 解码 ──
+    // ── Step 1:尝试从 VotingEngine::ProposalData 解码 ──
     if let Some(raw) = fetch_proposal_data_raw(proposal_id)? {
         if !raw.is_empty() {
             // ProposalData 存储为 BoundedVec<u8>:Compact<len> + bytes
@@ -608,7 +608,7 @@ fn resolve_proposal_action(
 
 fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "InternalTallies",
         &proposal_id.to_le_bytes(),
     );
@@ -638,7 +638,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
 
 fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "JointTallies",
         &proposal_id.to_le_bytes(),
     );
@@ -668,7 +668,7 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
 
 fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
     let key = storage_keys::map_key(
-        "VotingEngineSystem",
+        "VotingEngine",
         "CitizenTallies",
         &proposal_id.to_le_bytes(),
     );
@@ -1212,7 +1212,7 @@ pub fn fetch_user_vote_status(
     // 查询内部投票状态（InternalVotesByAccount: DoubleMap<u64, AccountId32> → bool）
     let internal_vote = {
         let key = storage_keys::double_map_key(
-            "VotingEngineSystem",
+            "VotingEngine",
             "InternalVotesByAccount",
             &proposal_id.to_le_bytes(),
             &pubkey_bytes,
@@ -1229,7 +1229,7 @@ pub fn fetch_user_vote_status(
         composite_key.extend_from_slice(&institution_id);
         composite_key.extend_from_slice(&pubkey_bytes);
         let key = storage_keys::double_map_key(
-            "VotingEngineSystem",
+            "VotingEngine",
             "JointVotesByAdmin",
             &proposal_id.to_le_bytes(),
             &composite_key,

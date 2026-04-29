@@ -70,7 +70,7 @@
    - 位置：
      - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs:581`
      - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs:663`
-     - `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs:249`
+     - `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs:249`
      - `memory/05-modules/citizenchain/runtime/transaction/duoqian-manage-pow/DUOQIAN_TECHNICAL.md:198`
 
 2. 关闭路径状态清理不完整
@@ -80,7 +80,7 @@
    - 位置：
      - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs:854`
      - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs:900`
-     - `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs:249`
+     - `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs:249`
 
 3. 技术文档明显过期
    - 文档仍写 `register_sfid_institution` 只接受 `sfid_id + register_nonce + signature`

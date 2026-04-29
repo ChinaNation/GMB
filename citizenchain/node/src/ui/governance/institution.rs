@@ -21,7 +21,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 /// 查询指定机构的管理员公钥列表。
 /// 返回不含 0x 前缀的小写 hex 公钥列表。
 pub fn fetch_admins(shenfen_id: &str) -> Result<Vec<String>, String> {
-    let storage_key = storage_keys::current_admins_key(shenfen_id);
+    let storage_key = storage_keys::admin_institutions_key(shenfen_id);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![Value::String(storage_key)]),
@@ -31,7 +31,7 @@ pub fn fetch_admins(shenfen_id: &str) -> Result<Vec<String>, String> {
         Value::Null => Ok(Vec::new()),
         Value::String(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
-            decode_admin_list(&data)
+            decode_admin_institution_admins(&data)
         }
         _ => Err("state_getStorage 返回格式无效".to_string()),
     }
@@ -79,14 +79,15 @@ fn decode_hex_storage(hex_str: &str) -> Result<Vec<u8>, String> {
     hex::decode(clean).map_err(|e| format!("hex 解码失败: {e}"))
 }
 
-/// 解码 SCALE 编码的 BoundedVec<AccountId32>。
-/// 格式：Compact<u32> 长度 + N 个 32 字节公钥。
-fn decode_admin_list(data: &[u8]) -> Result<Vec<String>, String> {
-    if data.is_empty() {
+/// 解码 `AdminsChange::Institutions` 中的管理员列表。
+///
+/// AdminInstitution 布局前缀为 org:u8 + kind:enum(u8) + admins:BoundedVec<AccountId32>。
+fn decode_admin_institution_admins(data: &[u8]) -> Result<Vec<String>, String> {
+    if data.len() < 2 {
         return Ok(Vec::new());
     }
-    let (count, bytes_read) = read_compact_u32(data, 0)?;
-    let mut offset = bytes_read;
+    let (count, bytes_read) = read_compact_u32(data, 2)?;
+    let mut offset = 2 + bytes_read;
     let mut admins = Vec::with_capacity(count as usize);
     for _ in 0..count {
         if offset + 32 > data.len() {
@@ -153,16 +154,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decode_admin_list_empty() {
-        assert!(decode_admin_list(&[]).unwrap().is_empty());
+    fn decode_admin_institution_admins_empty() {
+        assert!(decode_admin_institution_admins(&[]).unwrap().is_empty());
     }
 
     #[test]
-    fn decode_admin_list_single() {
-        // Compact<u32> 1 = 0x04, 后跟 32 字节
-        let mut data = vec![0x04];
+    fn decode_admin_institution_admins_single() {
+        // org=0, kind=0, Compact<u32> 1 = 0x04, 后跟 32 字节管理员公钥。
+        let mut data = vec![0x00, 0x00, 0x04];
         data.extend_from_slice(&[0xAA; 32]);
-        let admins = decode_admin_list(&data).unwrap();
+        let admins = decode_admin_institution_admins(&data).unwrap();
         assert_eq!(admins.len(), 1);
         assert_eq!(admins[0], "aa".repeat(32));
     }

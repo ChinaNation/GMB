@@ -191,8 +191,8 @@ fn match_event(
             })
         }
 
-        // ─── resolution_issuance_iss (index 7) ──────────────────────
-        ("ResolutionIssuanceIss", "ResolutionIssuanceExecuted") => {
+        // ─── resolution_issuance (index 8) ──────────────────────
+        ("ResolutionIssuance", "ResolutionIssuanceExecuted") => {
             let total = fields.at("total_amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
                 block_number,
@@ -276,8 +276,8 @@ fn match_event(
             })
         }
 
-        // ─── resolution_destro_gov (index 14) ───────────────────────
-        ("ResolutionDestroGov", "DestroyExecuted") => {
+        // ─── resolution_destro (index 14) ───────────────────────
+        ("ResolutionDestro", "DestroyExecuted") => {
             let amount = fields.at("amount").and_then(extract_balance)?;
             Some(TxRecordInsert {
                 block_number,

@@ -54,7 +54,7 @@ void main() {
     test(
         'signParsedRequest should sign matched internal_vote (Phase 3 统一入口)',
         () async {
-      // Phase 3(2026-04-22): 所有管理员投票走 VotingEngineSystem(9).internal_vote(0)
+      // Phase 3(2026-04-22): 所有管理员投票走 VotingEngine(9).internal_vote(0)
       // payload = [0x09][0x00][u64 LE proposal_id=1][bool approve=1]
       const payloadHex = '0x09000100000000000000' '01';
       final knownSpec = PalletRegistry.supportedSpecVersions.first;

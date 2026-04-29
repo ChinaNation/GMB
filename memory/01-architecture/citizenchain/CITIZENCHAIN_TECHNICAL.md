@@ -130,23 +130,22 @@ citizenchain/
 ## 9. 链上模块分组
 
 ### 9.1 治理模块（`runtime/governance/`）
-- 负责内部投票、联合投票、公民投票、最终性密钥治理、管理员权限治理、运行时升级治理、决议发行治理、销毁治理。
+- 负责内部投票、联合投票、公民投票、最终性密钥治理、管理员权限治理、运行时升级治理、销毁治理，并为决议发行提供联合投票引擎。
 
 当前模块：
-- `admins-origin-gov`
-- `grandpa-key-gov`
-- `resolution-destro-gov`
-- `resolution-issuance-gov`
-- `runtime-root-upgrade`
-- `voting-engine-system`
+- `admins-change`
+- `grandpakey-change`
+- `resolution-destro`
+- `runtime-upgrade`
+- `voting-engine`
 
 ### 9.2 发行模块（`runtime/issuance/`）
-- 负责轻节点认证发行、全节点 PoW 奖励、省储行质押利息、决议发行执行。
+- 负责轻节点认证发行、全节点 PoW 奖励、省储行质押利息、决议发行完整流程。
 
 当前模块：
 - `citizen-lightnode-issuance`
 - `fullnode-pow-reward`
-- `resolution-issuance-iss`
+- `resolution-issuance`
 - `shengbank-stake-interest`
 
 ### 9.3 交易模块（`runtime/transaction/`）
@@ -200,17 +199,16 @@ citizenchain/
 ## 12. 产品级模块文档索引
 
 ### 12.1 治理
-- `runtime/governance/admins-origin-gov/ADMINSORIGIN_TECHNICAL.md`
-- `runtime/governance/grandpa-key-gov/GRANDPAKEYGOV_TECHNICAL.md`
-- `runtime/governance/resolution-destro-gov/RESOLUTIONDESTRO_TECHNICAL.md`
-- `runtime/governance/resolution-issuance-gov/RESOLUTIONISSUANCEGOV_TECHNICAL.md`
-- `runtime/governance/runtime-root-upgrade/RUNTIMEROOT_TECHNICAL.md`
-- `runtime/governance/voting-engine-system/VOTINGENGINE_TECHNICAL.md`
+- `runtime/governance/admins-change/ADMINSCHANGE_TECHNICAL.md`
+- `runtime/governance/grandpakey-change/GRANDPAKEYCHANGE_TECHNICAL.md`
+- `runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md`
+- `runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md`
+- `runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md`
 
 ### 12.2 发行
 - `runtime/issuance/citizen-lightnode-issuance/CITIZENISS_TECHNICAL.md`
 - `runtime/issuance/fullnode-pow-reward/FULLNODE_TECHNICAL.md`
-- `runtime/issuance/resolution-issuance-iss/RESOLUTIONISS_TECHNICAL.md`
+- `runtime/issuance/resolution-issuance/RESOLUTIONISSUANCE_TECHNICAL.md`
 - `runtime/issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md`
 
 ### 12.3 交易

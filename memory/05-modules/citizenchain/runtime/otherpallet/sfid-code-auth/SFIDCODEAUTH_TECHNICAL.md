@@ -203,7 +203,7 @@ weight：
 - algorithm: `sr25519`
 
 ### 7.3 人口快照凭证域（同一信任根）
-该逻辑位于 `voting-engine-system` 的 snapshot verifier：
+该逻辑位于 `voting-engine` 的 snapshot verifier：
 - payload: `(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, snapshot_nonce)`
 - `genesis_hash = block_hash(0)`（链域隔离）
 - message: `blake2_256(scale_encode(payload))`

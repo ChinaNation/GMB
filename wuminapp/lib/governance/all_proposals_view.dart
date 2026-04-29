@@ -581,7 +581,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       );
     } else if (item.proposal.safetyFundDetail != null && inst != null) {
       // 安全基金转账提案：复用 TransferProposalDetailPage，传 kind=safetyFund。
-      // Phase 3 后管理员投票统一走 VotingEngineSystem::internal_vote(9.0)。
+      // Phase 3 后管理员投票统一走 VotingEngine::internal_vote(9.0)。
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TransferProposalDetailPage(
@@ -594,7 +594,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       );
     } else if (item.proposal.sweepDetail != null && inst != null) {
       // 手续费划转提案：kind=sweep。
-      // Phase 3 后管理员投票统一走 VotingEngineSystem::internal_vote(9.0)。
+      // Phase 3 后管理员投票统一走 VotingEngine::internal_vote(9.0)。
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => TransferProposalDetailPage(

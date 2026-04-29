@@ -77,7 +77,7 @@ completed: 2026-04-20
 - [ ] [institution-asset-guard/src/lib.rs](citizenchain/runtime/transaction/institution-asset-guard/src/lib.rs) line 12 注释
 
 ## 第 5 步：验证
-- [ ] `cargo check -p primitives -p institution-asset-guard -p duoqian-transfer-pow -p shengbank-stake-interest -p onchain-transaction-pow -p offchain-transaction-pos -p resolution-destro-gov -p resolution-issuance-gov -p duoqian-manage-pow`
+- [ ] `cargo check -p primitives -p institution-asset-guard -p duoqian-transfer-pow -p shengbank-stake-interest -p onchain-transaction-pow -p offchain-transaction-pos -p resolution-destro -p resolution-issuance-gov -p duoqian-manage-pow`
 - [ ] `cargo test -p primitives`
 
 # 验收

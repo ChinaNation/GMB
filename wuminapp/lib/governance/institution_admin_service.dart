@@ -16,11 +16,10 @@ class InstitutionAdminState {
   final int? threshold;
 }
 
-/// 查询链上 `AdminsOriginGov.CurrentAdmins` 存储，
+/// 查询链上 `AdminsChange.Institutions` 存储，
 /// 判断指定公钥是否为某机构管理员。
 class InstitutionAdminService {
-  InstitutionAdminService({ChainRpc? chainRpc})
-      : _rpc = chainRpc ?? ChainRpc();
+  InstitutionAdminService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -38,7 +37,7 @@ class InstitutionAdminService {
 
   /// 查询机构当前内部投票阈值。
   ///
-  /// 静态治理机构返回 null，由页面使用本地常量。
+  /// 内置治理机构从 `AdminsChange.Institutions.threshold` 读取，
   /// 注册型机构从 `DuoqianAccounts.threshold` 动态读取。
   Future<int?> fetchThreshold(String shenfenId) async {
     final state = await _fetchState(shenfenId);
@@ -92,13 +91,13 @@ class InstitutionAdminService {
   }
 
   Future<InstitutionAdminState> _fetchGovernanceAdmins(String shenfenId) async {
-    final storageKey = _buildCurrentAdminsKey(shenfenId);
+    final storageKey = _buildAdminInstitutionKey(shenfenId);
     final keyHex = '0x${_hexEncode(storageKey)}';
     final data = await _rpc.fetchStorage(keyHex);
     if (data == null) {
       return const InstitutionAdminState(admins: []);
     }
-    return InstitutionAdminState(admins: _decodeAdminList(data));
+    return _decodeAdminInstitutionState(data);
   }
 
   Future<InstitutionAdminState> _fetchRegisteredDuoqianState(
@@ -113,14 +112,14 @@ class InstitutionAdminService {
     return _decodeDuoqianAccountState(data);
   }
 
-  /// 构造 `AdminsOriginGov::CurrentAdmins(institution_id)` 的 storage key。
+  /// 构造 `AdminsChange::Institutions(institution_id)` 的 storage key。
   ///
-  /// 格式：twox_128("AdminsOriginGov") + twox_128("CurrentAdmins")
+  /// 格式：twox_128("AdminsChange") + twox_128("Institutions")
   ///        + blake2_128(institution_48bytes) + institution_48bytes
-  Uint8List _buildCurrentAdminsKey(String shenfenId) {
+  Uint8List _buildAdminInstitutionKey(String shenfenId) {
     final institutionId = _shenfenIdToFixed48(shenfenId);
-    final palletHash = Hasher.twoxx128.hashString('AdminsOriginGov');
-    final storageHash = Hasher.twoxx128.hashString('CurrentAdmins');
+    final palletHash = Hasher.twoxx128.hashString('AdminsChange');
+    final storageHash = Hasher.twoxx128.hashString('Institutions');
     final blake2Hash = Hasher.blake2b128.hash(institutionId);
 
     final key = Uint8List(
@@ -148,7 +147,10 @@ class InstitutionAdminService {
     final blake2Hash = Hasher.blake2b128.hash(address);
 
     final key = Uint8List(
-      palletHash.length + storageHash.length + blake2Hash.length + address.length,
+      palletHash.length +
+          storageHash.length +
+          blake2Hash.length +
+          address.length,
     );
     var offset = 0;
     key.setAll(offset, palletHash);
@@ -176,14 +178,20 @@ class InstitutionAdminService {
   // SCALE 解码
   // ---------------------------------------------------------------------------
 
-  /// 解码 SCALE 编码的 `BoundedVec<AccountId32, MaxAdminsPerInstitution>`。
+  /// 解码 `AdminsChange::Institutions` 的管理员与阈值。
   ///
-  /// BoundedVec 在链上编码与普通 Vec 一致：Compact<u32> 长度 + N 个 32 字节元素。
-  List<String> _decodeAdminList(Uint8List data) {
-    if (data.isEmpty) return const [];
+  /// AdminInstitution 前缀布局：
+  /// - org: u8
+  /// - kind: enum(u8)
+  /// - admins: BoundedVec<AccountId32>
+  /// - threshold: u32
+  InstitutionAdminState _decodeAdminInstitutionState(Uint8List data) {
+    if (data.length <= 2) {
+      return const InstitutionAdminState(admins: []);
+    }
 
-    var offset = 0;
-    // 读取 Compact<u32> 长度
+    // 中文注释：跳过 org 与 kind，随后读取 BoundedVec<AccountId32>。
+    var offset = 2;
     final (count, bytesRead) = _readCompactU32(data, offset);
     offset += bytesRead;
 
@@ -194,7 +202,10 @@ class InstitutionAdminService {
       admins.add(_hexEncode(pubkey));
       offset += 32;
     }
-    return admins;
+
+    final threshold =
+        offset + 4 <= data.length ? _decodeU32(data, offset) : null;
+    return InstitutionAdminState(admins: admins, threshold: threshold);
   }
 
   /// 解码 `DuoqianAccount` 的前半段，提取 threshold 与管理员列表。

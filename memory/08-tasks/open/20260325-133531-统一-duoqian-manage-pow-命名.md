@@ -16,7 +16,7 @@
 - `citizenchain/runtime/src/lib.rs`
 - `citizenchain/runtime/src/configs/mod.rs`
 - `citizenchain/runtime/src/benchmarks.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs`
+- `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`
 - `citizenchain/runtime/transaction/duoqian-transfer-pow/`
 - `sfid/backend/src/super-admins/institutions.rs`
 - `memory/05-modules/`

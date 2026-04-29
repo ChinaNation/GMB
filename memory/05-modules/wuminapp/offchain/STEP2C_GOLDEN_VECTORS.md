@@ -70,7 +70,7 @@ revert,用户 L3 付款看似成功实则全挂。
 
 ### 5.1 `lib.rs:2406` mock `Test` 测试 runtime 补 `MaxAdminsPerInstitution`
 
-`voting_engine_system::Config for Test` 缺少新近引入的
+`voting_engine::Config for Test` 缺少新近引入的
 `type MaxAdminsPerInstitution`,导致整个 pallet 测试二进制编译失败。补
 `ConstU32<32>` 后编译恢复,golden 测试可运行。
 

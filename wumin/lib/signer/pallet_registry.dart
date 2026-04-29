@@ -8,7 +8,7 @@
 ///
 /// Phase 3 · 投票引擎统一入口整改（2026-04-22）：
 /// - 业务 pallet 的 `vote_X` 全部下线，所有管理员投票走
-///   `VotingEngineSystem::internal_vote`（9.0）。
+///   `VotingEngine::internal_vote`（9.0）。
 /// - `joint_vote` / `citizen_vote` / `finalize_proposal` 在投票引擎内部
 ///   重新排 call_index：0=internal_vote / 1=joint_vote / 2=citizen_vote /
 ///   3=finalize_proposal。
@@ -17,9 +17,10 @@ class PalletRegistry {
 
   /// 当前注册表适配的链 spec_version 集合。
   ///
-  /// Phase 3 runtime 升级到 `spec_version = 2`，冷钱包同步仅接受 2。
+  /// 2026-04-29 治理投票引擎更名为 `voting-engine` 后升级到
+  /// `spec_version = 8`，冷钱包同步仅接受当前开发期版本。
   /// 遇到 spec=1 的离线请求（旧版在线端）视为过期，拒绝解码。
-  static const Set<int> supportedSpecVersions = {2};
+  static const Set<int> supportedSpecVersions = {8};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///
@@ -35,8 +36,8 @@ class PalletRegistry {
   static const int balancesPallet = 2;
   static const int transferKeepAliveCall = 3;
 
-  // ---- VotingEngineSystem (9) · 所有治理投票唯一入口 ----
-  static const int votingEngineSystemPallet = 9;
+  // ---- VotingEngine (9) · 所有治理投票唯一入口 ----
+  static const int votingEnginePallet = 9;
 
   /// `internal_vote(proposal_id, approve)` — 管理员一人一票，
   /// 覆盖所有业务 pallet 的内部投票（admins/resolution_destro/grandpa_key/
@@ -56,7 +57,7 @@ class PalletRegistry {
   // ---- 业务 pallet:仅保留提案创建与幂等兜底入口 ----
   //
   // Phase 2/3 已在链端物理删除所有业务 pallet 内部的聚合签名与投票入口
-  // (共八条),全部通过 `VotingEngineSystem(9).internal_vote(0)` 统一收敛。
+  // (共八条),全部通过 `VotingEngine(9).internal_vote(0)` 统一收敛。
   // 业务 pallet 仅保留 propose 提案创建、execute 执行兜底、cleanup 被拒清理、
   // cancel 失败取消 等幂等入口。冷钱包 decoder 与此对齐。
 
@@ -69,8 +70,8 @@ class PalletRegistry {
   static const int executeSafetyFundCall = 4;
   static const int executeSweepCall = 5;
 
-  // ---- RuntimeRootUpgrade (13) ----
-  static const int runtimeRootUpgradePallet = 13;
+  // ---- RuntimeUpgrade (13) ----
+  static const int runtimeUpgradePallet = 13;
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
@@ -82,24 +83,24 @@ class PalletRegistry {
   static const int proposeCreatePersonalCall = 3;
   static const int cleanupRejectedProposalCall = 4;
 
-  // ---- ResolutionDestroGov (14) ----
-  static const int resolutionDestroGovPallet = 14;
+  // ---- ResolutionDestro (14) ----
+  static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
   static const int executeDestroyCall = 1;
 
-  // ---- AdminsOriginGov (12) ----
-  static const int adminsOriginGovPallet = 12;
+  // ---- AdminsChange (12) ----
+  static const int adminsChangePallet = 12;
   static const int proposeAdminReplacementCall = 0;
   static const int executeAdminReplacementCall = 1;
 
-  // ---- GrandpaKeyGov (16) ----
-  static const int grandpaKeyGovPallet = 16;
+  // ---- GrandpaKeyChange (16) ----
+  static const int grandpaKeyChangePallet = 16;
   static const int proposeReplaceGrandpaKeyCall = 0;
   static const int executeReplaceGrandpaKeyCall = 1;
   static const int cancelFailedReplaceGrandpaKeyCall = 2;
 
-  // ---- ResolutionIssuanceGov (8) ----
-  static const int resolutionIssuanceGovPallet = 8;
+  // ---- ResolutionIssuance (8) ----
+  static const int resolutionIssuancePallet = 8;
   static const int proposeResolutionIssuanceCall = 0;
 
   // ---- OffchainTransactionPos (21) · 清算行 L2 体系 ----

@@ -2,9 +2,9 @@
 //!
 //! Phase 3(2026-04-22)「投票引擎统一入口整改」:
 //! 本 pallet 的 `vote_X` / `finalize_X` 已物理删除,所有管理员投票一律通过
-//! `VotingEngineSystem::internal_vote`(9.0)。本文件只保留 `propose_transfer`
+//! `VotingEngine::internal_vote`(9.0)。本文件只保留 `propose_transfer`
 //! 和 `execute_transfer` 两个业务动作的 benchmark;投票 weight 全部归入
-//! voting-engine-system pallet 自身的 benchmark,业务端无需重复覆盖。
+//! voting-engine pallet 自身的 benchmark,业务端无需重复覆盖。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -43,7 +43,7 @@ fn beneficiary_account<T: Config>() -> T::AccountId {
 }
 
 fn last_proposal_id<T: Config>() -> u64 {
-    voting_engine_system::Pallet::<T>::next_proposal_id().saturating_sub(1)
+    voting_engine::Pallet::<T>::next_proposal_id().saturating_sub(1)
 }
 
 #[benchmarks]
@@ -72,11 +72,11 @@ mod benchmarks {
         );
 
         let pid = last_proposal_id::<T>();
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(pid).is_some());
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(pid).is_some());
     }
 
     /// execute_transfer benchmark:触发自动执行失败,然后补足余额手动重试成功。
-    /// 投票阶段直接调用 `VotingEngineSystem::internal_vote` 统一入口累计赞成票。
+    /// 投票阶段直接调用 `VotingEngine::internal_vote` 统一入口累计赞成票。
     #[benchmark]
     fn execute_transfer() {
         let institution = prc_institution();
@@ -102,10 +102,10 @@ mod benchmarks {
         let pid = last_proposal_id::<T>();
 
         // 投票通过（自动执行可能因余额不足失败，这不影响提案状态）。
-        // Phase 3: 走 VotingEngineSystem 统一入口,benchmark 不测验签路径。
+        // Phase 3: 走 VotingEngine 统一入口,benchmark 不测验签路径。
         for i in 0..6 {
             let voter = prc_admin::<T>(i);
-            assert!(voting_engine_system::Pallet::<T>::internal_vote(
+            assert!(voting_engine::Pallet::<T>::internal_vote(
                 RawOrigin::Signed(voter).into(),
                 pid,
                 true,

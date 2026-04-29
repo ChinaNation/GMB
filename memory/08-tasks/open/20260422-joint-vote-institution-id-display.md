@@ -7,7 +7,7 @@
 
 ## 背景
 
-`VotingEngineSystem::joint_vote(proposal_id, institution_id_48, approve)`
+`VotingEngine::joint_vote(proposal_id, institution_id_48, approve)`
 的 call payload 包含 48 字节 `institution_id`(shenfen_id),决定"以哪个
 机构身份投票"。
 

@@ -212,7 +212,7 @@ fn build_genesis() -> Value {
         }),
     );
     root.insert(
-        "resolutionIssuanceGov".into(),
+        "resolutionIssuance".into(),
         json!({
             "allowedRecipients": issuance_allowed_recipients_json,
         }),
@@ -424,7 +424,7 @@ mod tests {
             );
         }
 
-        for account in patch["resolutionIssuanceGov"]["allowedRecipients"]
+        for account in patch["resolutionIssuance"]["allowedRecipients"]
             .as_array()
             .expect("allowedRecipients should be an array")
         {
@@ -471,11 +471,11 @@ mod tests {
             grandpa.err()
         );
 
-        let resolution_issuance: Result<resolution_issuance_gov::GenesisConfig<crate::Runtime>, _> =
-            serde_json::from_value(patch["resolutionIssuanceGov"].clone());
+        let resolution_issuance: Result<resolution_issuance::GenesisConfig<crate::Runtime>, _> =
+            serde_json::from_value(patch["resolutionIssuance"].clone());
         assert!(
             resolution_issuance.is_ok(),
-            "resolutionIssuanceGov should deserialize: {:?}",
+            "resolutionIssuance should deserialize: {:?}",
             resolution_issuance.err()
         );
 

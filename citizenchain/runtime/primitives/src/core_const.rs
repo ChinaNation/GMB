@@ -62,7 +62,7 @@ pub const OP_SIGN_POP: u8 = 0x12; // 人口快照
 pub const OP_SIGN_INST: u8 = 0x13; // SFID 机构登记
                                    // 注:0x14 ~ 0x17 原为多签/转账/安全基金/手续费划转的离线聚合签名 op_tag
                                    // (Step 1 / Step 2 旧架构),已随 Phase 2"统一投票入口"整改全部删除。
-                                   // 所有治理投票一律走 `VotingEngineSystem::internal_vote` 公开 call,业务模块
+                                   // 所有治理投票一律走 `VotingEngine::internal_vote` 公开 call,业务模块
                                    // 不再持有 `finalize_X` / `vote_X` 聚合签名接口。
                                    // 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
 

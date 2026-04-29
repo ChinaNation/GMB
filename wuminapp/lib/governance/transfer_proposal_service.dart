@@ -28,7 +28,7 @@ class TransferProposalService {
   ///
   /// Phase 3(2026-04-22): 本 pallet 的所有 vote_X / finalize_X 已删除,
   /// 只保留 propose_X(0/1/2) 与 execute_X(3/4/5) 两组路径;
-  /// 管理员投票一律走 VotingEngineSystem(9).internal_vote(0)。
+  /// 管理员投票一律走 VotingEngine(9).internal_vote(0)。
   static const _palletIndex = 19;
 
   /// propose_transfer call_index=0。
@@ -124,10 +124,10 @@ class TransferProposalService {
   /// 每个机构最多同时 10 个活跃提案（全局，不区分提案类型）。
   static const maxActiveProposalsPerInstitution = 10;
 
-  /// 查询机构活跃的提案 ID 列表（从 VotingEngineSystem 全局存储读取）。
+  /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
   Future<List<int>> fetchActiveProposalIds(String shenfenId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'ActiveProposalsByInstitution',
       _institutionIdentityToFixed48(shenfenId),
     );
@@ -147,7 +147,7 @@ class TransferProposalService {
   /// 查询投票计数。
   Future<({int yes, int no})> fetchVoteTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'InternalTallies',
       _u64ToLeBytes(proposalId),
     );
@@ -162,7 +162,7 @@ class TransferProposalService {
   /// 查询提案状态。返回 status（0=voting, 1=passed, 2=rejected），null 表示不存在。
   Future<int?> fetchProposalStatus(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'Proposals',
       _u64ToLeBytes(proposalId),
     );
@@ -178,7 +178,7 @@ class TransferProposalService {
   /// 返回 null 表示提案不存在。
   Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'Proposals',
       _u64ToLeBytes(proposalId),
     );
@@ -256,7 +256,7 @@ class TransferProposalService {
         try {
           final manageService = DuoqianManageService(chainRpc: _rpc);
           final key = _buildStorageKey(
-            'VotingEngineSystem',
+            'VotingEngine',
             'ProposalData',
             _u64ToLeBytes(meta.proposalId),
           );
@@ -355,7 +355,7 @@ class TransferProposalService {
         cachedMetas[id] = cached;
       } else {
         final keyBytes = _buildStorageKey(
-            'VotingEngineSystem', 'Proposals', _u64ToLeBytes(id));
+            'VotingEngine', 'Proposals', _u64ToLeBytes(id));
         uncachedMetaKeys.add('0x${_hexEncode(keyBytes)}');
         uncachedMetaIds.add(id);
       }
@@ -414,7 +414,7 @@ class TransferProposalService {
         }
       }
       final keyBytes = _buildStorageKey(
-          'VotingEngineSystem', 'ProposalData', _u64ToLeBytes(entry.key));
+          'VotingEngine', 'ProposalData', _u64ToLeBytes(entry.key));
       uncachedDetailKeys.add('0x${_hexEncode(keyBytes)}');
       uncachedDetailIds.add(entry.key);
     }
@@ -636,7 +636,7 @@ class TransferProposalService {
   /// 读取原始 ProposalData 存储字节。
   Future<Uint8List?> fetchProposalDataRaw(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'ProposalData',
       _u64ToLeBytes(proposalId),
     );
@@ -697,7 +697,7 @@ class TransferProposalService {
     final accountBytes = _hexDecode(pubkeyHex);
 
     // 双 key：blake2_128_concat(proposal_id) + blake2_128_concat(account)
-    final palletHash = _twoxx128String('VotingEngineSystem');
+    final palletHash = _twoxx128String('VotingEngine');
     final storageHash = _twoxx128String('InternalVotesByAccount');
     final key1 = _blake2128Concat(proposalIdBytes);
     final key2 = _blake2128Concat(accountBytes);
@@ -720,7 +720,7 @@ class TransferProposalService {
 
   /// 查询 NextProposalId（投票引擎全局递增 ID）。
   Future<int> fetchNextProposalId() async {
-    final palletHash = _twoxx128String('VotingEngineSystem');
+    final palletHash = _twoxx128String('VotingEngine');
     final storageHash = _twoxx128String('NextProposalId');
     final key = Uint8List(palletHash.length + storageHash.length);
     key.setAll(0, palletHash);
@@ -738,7 +738,7 @@ class TransferProposalService {
   ///   + remark: Vec<u8>(Compact len + bytes) + proposer: AccountId32(32)
   Future<TransferProposalInfo?> fetchProposalAction(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngineSystem',
+      'VotingEngine',
       'ProposalData',
       _u64ToLeBytes(proposalId),
     );

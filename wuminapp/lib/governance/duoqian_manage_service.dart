@@ -16,7 +16,7 @@ import 'duoqian_manage_models.dart';
 /// storage 查询。
 ///
 /// Phase 3(2026-04-22): 本 pallet 内部的管理员投票入口已从链端物理删除,
-/// 管理员投票一律走 `VotingEngineSystem::internal_vote`(9.0),
+/// 管理员投票一律走 `VotingEngine::internal_vote`(9.0),
 /// 通过 [InternalVoteService] 或业务 service 的 `submitInternalVote`
 /// 统一入口发送。
 class DuoqianManageService {

@@ -9,7 +9,7 @@
 //! # 设计原则
 //! - 纯存储 + getter + trait，不暴露 extrinsic。
 //! - 阶段切换仅通过 runtime 升级迁移（OnRuntimeUpgrade）一次性写入，不设链上调用。
-//! - 其他模块（难度调整、矿工门控、runtime-root-upgrade）各自读本模块的链上值。
+//! - 其他模块（难度调整、矿工门控、runtime-upgrade）各自读本模块的链上值。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -29,7 +29,7 @@ sp_api::decl_runtime_apis! {
 }
 
 // ─── DeveloperUpgradeCheck trait ────────────────────────────────────────────
-// 供 runtime-root-upgrade 通过关联类型读取开发者直升开关，不硬耦合。
+// 供 runtime-upgrade 通过关联类型读取开发者直升开关，不硬耦合。
 pub trait DeveloperUpgradeCheck {
     /// 开发者直升是否启用。
     fn is_enabled() -> bool;

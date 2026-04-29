@@ -5,16 +5,15 @@ members = [
     "runtime",                               # 链上运行时
     "runtime/primitives",                    # 运行时共享常量与基础类型
 
-    "runtime/governance/admins-origin-gov",       # 治理-管理员权限治理模块 pallet
-    "runtime/governance/grandpa-key-gov",         # 治理-GRANDPA 密钥治理模块 pallet
-    "runtime/governance/resolution-destro-gov",   # 治理-决议销毁模块 pallet
-    "runtime/governance/resolution-issuance-gov", # 治理-决议发行提案投票模块 pallet
-    "runtime/governance/runtime-root-upgrade",    # 治理-运行时状态升级与超级管理员模块 pallet
-    "runtime/governance/voting-engine-system",    # 治理-投票引擎模块 pallet
+    "runtime/governance/admins-change",       # 治理-管理员权限治理模块 pallet
+    "runtime/governance/grandpakey-change",         # 治理-GRANDPA 密钥治理模块 pallet
+    "runtime/governance/resolution-destro",   # 治理-决议销毁模块 pallet
+    "runtime/governance/runtime-upgrade",    # 治理-运行时状态升级与超级管理员模块 pallet
+    "runtime/governance/voting-engine",    # 治理-投票引擎模块 pallet
 
     "runtime/issuance/citizen-lightnode-issuance", # 发行-公民轻节点发行模块 pallet
     "runtime/issuance/fullnode-pow-reward",        # 发行-全节点发行模块 pallet
-    "runtime/issuance/resolution-issuance-iss",    # 发行-决议发行执行模块 pallet
+    "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
     "runtime/issuance/shengbank-stake-interest",   # 发行-省储行质押利息模块 pallet
     "runtime/otherpallet/sfid-code-auth",          # 其他-SFID 绑定与资格校验模块 pallet
     "runtime/otherpallet/pow-difficulty-module",   # 其他-PoW 动态难度调整模块 pallet

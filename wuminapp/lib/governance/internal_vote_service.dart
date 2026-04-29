@@ -10,10 +10,10 @@ import '../rpc/nonce_manager.dart';
 ///
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」在客户端的落地:
 ///
-/// - 所有业务 pallet(admins_origin_gov / resolution_destro_gov /
-///   grandpa_key_gov / duoqian_manage_pow / duoqian_transfer_pow)的
+/// - 所有业务 pallet(admins_change / resolution_destro /
+///   grandpakey_change / duoqian_manage_pow / duoqian_transfer_pow)的
 ///   `vote_X` call 在 Phase 2 已从链端物理删除,管理员一人一票一律走
-///   `VotingEngineSystem::internal_vote(proposal_id, approve)` 一条路径。
+///   `VotingEngine::internal_vote(proposal_id, approve)` 一条路径。
 /// - 业务 service(TransferProposalService / DuoqianManageService 等)
 ///   只负责发起提案(propose_X)与提案执行重试(execute_X),投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
@@ -27,8 +27,8 @@ class InternalVoteService {
 
   // ──── 常量 ────
 
-  /// VotingEngineSystem pallet index（runtime pallet_index=9）。
-  static const int votingEngineSystemPallet = 9;
+  /// VotingEngine pallet index（runtime pallet_index=9）。
+  static const int votingEnginePallet = 9;
 
   /// internal_vote call_index=0（Phase 2 重排后在投票引擎第 0 位）。
   static const int internalVoteCallIndex = 0;
@@ -38,7 +38,7 @@ class InternalVoteService {
 
   // ──── 公开 API ────
 
-  /// 提交 `VotingEngineSystem::internal_vote(proposal_id, approve)` extrinsic。
+  /// 提交 `VotingEngine::internal_vote(proposal_id, approve)` extrinsic。
   ///
   /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。业务模块无需感知
   /// 提案所属 pallet/MODULE_TAG,投票引擎会按 ProposalData 前缀自动
@@ -67,7 +67,7 @@ class InternalVoteService {
     required bool approve,
   }) {
     final output = ByteOutput();
-    output.pushByte(votingEngineSystemPallet);
+    output.pushByte(votingEnginePallet);
     output.pushByte(internalVoteCallIndex);
     output.write(_u64ToLeBytes(proposalId));
     output.pushByte(approve ? 1 : 0);

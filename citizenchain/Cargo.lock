@@ -37,7 +37,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "admins-origin-gov"
+name = "admins-change"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -49,7 +49,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -1547,7 +1547,7 @@ dependencies = [
 name = "citizenchain"
 version = "1.0.0"
 dependencies = [
- "admins-origin-gov",
+ "admins-change",
  "citizen-lightnode-issuance",
  "duoqian-manage-pow",
  "duoqian-transfer-pow",
@@ -1562,7 +1562,7 @@ dependencies = [
  "frame-try-runtime",
  "fullnode-pow-reward",
  "genesis-pallet",
- "grandpa-key-gov",
+ "grandpakey-change",
  "hex",
  "hex-literal",
  "institution-asset-guard",
@@ -1576,10 +1576,9 @@ dependencies = [
  "parity-scale-codec",
  "pow-difficulty-module",
  "primitives",
- "resolution-destro-gov",
- "resolution-issuance-gov",
- "resolution-issuance-iss",
- "runtime-root-upgrade",
+ "resolution-destro",
+ "resolution-issuance",
+ "runtime-upgrade",
  "scale-info",
  "serde_json",
  "sfid-code-auth",
@@ -1599,7 +1598,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -3037,7 +3036,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 name = "duoqian-manage-pow"
 version = "1.0.0"
 dependencies = [
- "admins-origin-gov",
+ "admins-change",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
@@ -3052,14 +3051,14 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
 name = "duoqian-transfer-pow"
 version = "1.0.0"
 dependencies = [
- "admins-origin-gov",
+ "admins-change",
  "duoqian-manage-pow",
  "frame-benchmarking",
  "frame-support",
@@ -3073,7 +3072,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -4512,7 +4511,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "grandpa-key-gov"
+name = "grandpakey-change"
 version = "1.0.0"
 dependencies = [
  "curve25519-dalek",
@@ -4528,7 +4527,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -7752,7 +7751,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -10124,7 +10123,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "resolution-destro-gov"
+name = "resolution-destro"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -10137,28 +10136,11 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
-name = "resolution-issuance-gov"
-version = "1.0.0"
-dependencies = [
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "parity-scale-codec",
- "primitives",
- "resolution-issuance-iss",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "voting-engine-system",
-]
-
-[[package]]
-name = "resolution-issuance-iss"
+name = "resolution-issuance"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -10166,10 +10148,12 @@ dependencies = [
  "frame-system",
  "pallet-balances",
  "parity-scale-codec",
+ "primitives",
  "scale-info",
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "voting-engine",
 ]
 
 [[package]]
@@ -10306,7 +10290,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "runtime-root-upgrade"
+name = "runtime-upgrade"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",
@@ -10318,7 +10302,7 @@ dependencies = [
  "scale-info",
  "sp-io",
  "sp-runtime",
- "voting-engine-system",
+ "voting-engine",
 ]
 
 [[package]]
@@ -15416,7 +15400,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
-name = "voting-engine-system"
+name = "voting-engine"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",

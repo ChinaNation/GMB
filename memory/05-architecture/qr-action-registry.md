@@ -15,7 +15,7 @@
 |---|---|---|---|---|
 | `transfer` | 3 | `transfer_keep_alive` | `to`, `amount_yuan` | node_ui, wuminapp |
 
-### 1.2 VotingEngineSystem(pallet_index = 9)
+### 1.2 VotingEngine(pallet_index = 9)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
@@ -24,28 +24,28 @@
 | `citizen_vote` | 2 | `citizen_vote` | `proposal_id`, `binding_id`, `nonce`, `approve` | wuminapp |
 | `finalize_proposal` | 3 | `finalize_proposal` | `proposal_id` | node_ui, wuminapp |
 
-### 1.3 AdminsOriginGov(pallet_index = 12)
+### 1.3 AdminsChange(pallet_index = 12)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
 | `propose_admin_replacement` | 0 | `propose_admin_replacement` | `org`, `old_admin`, `new_admin` | node_ui, wuminapp |
 | `execute_admin_replacement` | 1 | `execute_admin_replacement` | `proposal_id` | node_ui, wuminapp |
 
-### 1.4 RuntimeRootUpgrade(pallet_index = 13)
+### 1.4 RuntimeUpgrade(pallet_index = 13)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
 | `propose_runtime_upgrade` | 0 | `propose_runtime_upgrade` | `reason`, `wasm_size`, `wasm_hash`, `eligible_total` | node_ui, wuminapp |
 | `developer_direct_upgrade` | 2 | `developer_direct_upgrade` | `wasm_size`, `wasm_hash` | node_ui, wuminapp |
 
-### 1.5 ResolutionDestroGov(pallet_index = 14)
+### 1.5 ResolutionDestro(pallet_index = 14)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
 | `propose_destroy` | 0 | `propose_destroy` | `org`, `amount_yuan` | wuminapp |
 | `execute_destroy` | 1 | `execute_destroy` | `proposal_id` | wuminapp |
 
-### 1.6 GrandpaKeyGov(pallet_index = 16)
+### 1.6 GrandpaKeyChange(pallet_index = 16)
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|

@@ -51,7 +51,7 @@ export function VoteSigningFlow({
       let result: VoteSignRequestResult;
       let cdHex: string;
       // Phase 3(2026-04-22): 内部投票(管理员一人一票)统一走
-      // VotingEngineSystem::internal_vote(9.0),不再按业务类型分派。
+      // VotingEngine::internal_vote(9.0),不再按业务类型分派。
       // 联合投票仍走 joint_vote(9.1),由 proposalKind===1 分支决定。
       if (proposalKind === 1 && shenfenId) {
         result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, shenfenId, approve);
@@ -160,13 +160,13 @@ export function VoteSigningFlow({
  * `[0x09][0x00][proposal_id:u64_le][approve:bool]` = 11 bytes。
  *
  * 所有业务 pallet 的 vote_X / finalize_X 已物理删除,管理员一人一票
- * 一律走 VotingEngineSystem::internal_vote(pallet=9, call=0)。
+ * 一律走 VotingEngine::internal_vote(pallet=9, call=0)。
  */
 function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): string {
   const buf = new ArrayBuffer(11);
   const view = new DataView(buf);
   const arr = new Uint8Array(buf);
-  arr[0] = 9; arr[1] = 0; // VotingEngineSystem.internal_vote
+  arr[0] = 9; arr[1] = 0; // VotingEngine.internal_vote
   view.setUint32(2, proposalId & 0xFFFFFFFF, true);
   view.setUint32(6, Math.floor(proposalId / 0x100000000), true);
   arr[10] = approve ? 1 : 0;
@@ -184,7 +184,7 @@ function buildJointVoteCallDataHex(proposalId: number, shenfenId: string, approv
   const institution = new Uint8Array(48);
   institution.set(shenfenBytes.subarray(0, Math.min(48, shenfenBytes.length)));
   const buf = new Uint8Array(59);
-  buf[0] = 9; buf[1] = 1; // VotingEngineSystem.joint_vote (Phase 2 重排,原 3)
+  buf[0] = 9; buf[1] = 1; // VotingEngine.joint_vote (Phase 2 重排,原 3)
   const dv = new DataView(buf.buffer);
   dv.setUint32(2, proposalId & 0xFFFFFFFF, true);
   dv.setUint32(6, Math.floor(proposalId / 0x100000000), true);

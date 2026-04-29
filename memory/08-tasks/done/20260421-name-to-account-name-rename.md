@@ -43,7 +43,7 @@ completed: 2026-04-21
 
 ## 验证
 
-- `cargo check -p primitives -p duoqian-manage-pow -p duoqian-transfer-pow -p offchain-transaction-pos -p sfid-code-auth -p shengbank-stake-interest -p resolution-destro-gov -p resolution-issuance-gov -p onchain-transaction-pow -p institution-asset-guard` 10/10 通过
+- `cargo check -p primitives -p duoqian-manage-pow -p duoqian-transfer-pow -p offchain-transaction-pos -p sfid-code-auth -p shengbank-stake-interest -p resolution-destro -p resolution-issuance-gov -p onchain-transaction-pow -p institution-asset-guard` 10/10 通过
 - `cargo test -p primitives` 7/7 通过（含 `all_china_ch_main_addresses_are_unique`）
 - `cargo test -p duoqian-manage-pow` 全绿
 

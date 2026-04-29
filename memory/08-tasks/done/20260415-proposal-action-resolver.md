@@ -22,7 +22,7 @@ if raw.is_empty() {
 }
 ```
 
-该函数只读 `VotingEngineSystem::ProposalData` 一个存储项。
+该函数只读 `VotingEngine::ProposalData` 一个存储项。
 手续费划转/安全基金/费率提案的业务 detail 存储在各自独立的 pallet storage：
 
 - `DuoqianTransferPow::SweepProposalActions`
