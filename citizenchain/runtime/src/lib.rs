@@ -94,7 +94,11 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // Step 2(2026-04-27, ADR-007)清算行节点声明 + 收款方主导清算 + InstitutionMetadata
     // 上链 → spec_version 2 → 3,transaction_version 1 → 2(register_sfid_institution
     // 等 extrinsic 签名变化)。开发期 fresh genesis,不主网升级。
-    spec_version: 3,
+    //
+    // Step 2 hardening(2026-04-28):submit_offchain_batch_v2 启用 batch 级签名校验、
+    // LastClearingBatchSeq 防重与 UserBank 绑定一致性校验。Call 编码不变,
+    // transaction_version 保持 2;runtime 语义变更,故 spec_version 3 → 4。
+    spec_version: 4,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 2,
@@ -420,7 +424,10 @@ mod tests {
             ("admins_origin_gov", admins_origin_gov::MODULE_TAG),
             ("grandpa_key_gov", grandpa_key_gov::MODULE_TAG),
             ("resolution_destro_gov", resolution_destro_gov::MODULE_TAG),
-            ("resolution_issuance_gov", resolution_issuance_gov::MODULE_TAG),
+            (
+                "resolution_issuance_gov",
+                resolution_issuance_gov::MODULE_TAG,
+            ),
             ("runtime_root_upgrade", runtime_root_upgrade::MODULE_TAG),
             ("duoqian_manage_pow", duoqian_manage_pow::MODULE_TAG),
             ("duoqian_transfer_pow", duoqian_transfer_pow::MODULE_TAG),

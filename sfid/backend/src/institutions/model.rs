@@ -16,7 +16,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::models::MultisigChainStatus;
+use crate::models::{InstitutionChainStatus, MultisigChainStatus};
 use crate::scope::HasProvinceCity;
 use crate::sfid::InstitutionCategory;
 
@@ -65,6 +65,18 @@ pub struct MultisigInstitution {
     /// 此后永久不变。
     #[serde(default)]
     pub sfid_finalized: bool,
+    /// 机构链上注册状态。SFID 只记录链上同步结果,不在后台手动注册机构。
+    #[serde(default)]
+    pub chain_status: InstitutionChainStatus,
+    /// 最近一次链上注册/注销交易哈希。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_tx_hash: Option<String>,
+    /// 最近一次链上注册/注销确认区块。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_block_number: Option<u64>,
+    /// 最近一次链上状态同步时间。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_synced_at: Option<DateTime<Utc>>,
     /// 创建人 pubkey。
     pub created_by: String,
     pub created_at: DateTime<Utc>,
@@ -91,6 +103,9 @@ pub struct MultisigAccount {
     /// 链上状态。
     #[serde(default)]
     pub chain_status: MultisigChainStatus,
+    /// 最近一次链上状态同步时间。SFID 后台不直接激活账户,只记录同步事实。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_synced_at: Option<DateTime<Utc>>,
     pub chain_tx_hash: Option<String>,
     pub chain_block_number: Option<u64>,
     pub created_by: String,
@@ -150,7 +165,7 @@ pub struct CreateInstitutionInput {
     /// 公权(GFR)/公安局必传
     pub institution_name: Option<String>,
     /// 私法人子类型。两步式改造后:**创建阶段不再接受** sub_type,
-    /// 统一由 `update_institution` 在详情页设置。保留字段仅为向后兼容旧请求(忽略)。
+    /// 统一由 `update_institution` 在详情页设置;创建请求传入该字段会被拒绝。
     #[serde(default)]
     pub sub_type: Option<String>,
 }
@@ -183,6 +198,7 @@ pub struct CreateAccountOutput {
     pub sfid_id: String,
     pub account_name: String,
     pub chain_status: MultisigChainStatus,
+    pub chain_synced_at: Option<DateTime<Utc>>,
     pub chain_tx_hash: Option<String>,
     pub chain_block_number: Option<u64>,
     pub duoqian_address: Option<String>,
@@ -203,6 +219,7 @@ pub struct InstitutionListRow {
     pub sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_sfid_id: Option<String>,
+    pub chain_status: InstitutionChainStatus,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
@@ -238,4 +255,35 @@ pub struct InstitutionDetailOutput {
     /// 创建者角色:"KEY_ADMIN" / "SHENG_ADMIN" / "SHI_ADMIN"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChainSyncAccountInput {
+    pub account_name: String,
+    pub chain_status: MultisigChainStatus,
+    #[serde(default)]
+    pub duoqian_address: Option<String>,
+    #[serde(default)]
+    pub chain_tx_hash: Option<String>,
+    #[serde(default)]
+    pub chain_block_number: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChainSyncInput {
+    pub institution_status: InstitutionChainStatus,
+    #[serde(default)]
+    pub accounts: Vec<ChainSyncAccountInput>,
+    #[serde(default)]
+    pub chain_tx_hash: Option<String>,
+    #[serde(default)]
+    pub chain_block_number: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChainSyncOutput {
+    pub sfid_id: String,
+    pub institution_status: InstitutionChainStatus,
+    pub synced_accounts: usize,
+    pub chain_synced_at: DateTime<Utc>,
 }

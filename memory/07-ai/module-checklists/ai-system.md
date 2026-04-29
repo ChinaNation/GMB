@@ -12,6 +12,7 @@
 - Claude 审查改动时同步检查 `memory/CLAUDE.md`
 - GitHub 门禁改动时同步检查 `.github/workflows/ai-guardrails.yml`
 - 真实开发任务必须创建任务卡
+- 包含 `检查为什么报错` 的只读报错诊断请求不得创建任务卡、不得修改代码
 
 ## 收口时
 

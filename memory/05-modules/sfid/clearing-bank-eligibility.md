@@ -70,7 +70,7 @@ GFR / SF 等其他 a3 一律 ❌。
 
 ### `GET /api/v1/app/clearing-banks/search`（已有，本次收紧）
 
-返回**已加入清算网络候选**：资格白名单 ∩ 主账户已激活上链。
+返回**已加入清算网络候选**：资格白名单 ∩ 主账户 `ACTIVE_ON_CHAIN`。
 
 响应字段（在原 7 字段基础上扩展）：
 ```json
@@ -91,18 +91,32 @@ GFR / SF 等其他 a3 一律 ❌。
 
 ### `GET /api/v1/app/clearing-banks/eligible-search`（本次新增）
 
-返回**资格候选**：仅用资格白名单过滤，不要求主账户已激活（NodeUI"添加清算行"用，因为可能正在创建中）。
+返回**资格候选**：仅用资格白名单过滤，不要求主账户已经 `ACTIVE_ON_CHAIN`（NodeUI"添加清算行"用，因为可能正在创建中）。
 
 响应在 `app_search_clearing_banks` 基础上增加：
 ```json
 {
-  "main_chain_status": "Inactive" | "Pending" | "Registered" | "Failed",
+  "main_chain_status": "NOT_ON_CHAIN" | "PENDING_ON_CHAIN" | "ACTIVE_ON_CHAIN" | "REVOKED_ON_CHAIN",
   "main_account": "..." | null,
   "fee_account": "..." | null
 }
 ```
 
 参数：仅 `q`（关键字模糊匹配 sfid_id 或机构名）+ `limit`（最大 50，默认 20）。**无 province/city 过滤**（sfid_id 全局唯一，精确定位）。
+
+## NodeUI 调用地址规则
+
+NodeUI 的"添加清算行"页通过 `citizenchain/node/src/offchain/sfid.rs`
+转发调用 `/api/v1/app/clearing-banks/eligible-search`。
+
+SFID 基地址由 `citizenchain/node/src/ui/sfid_config.rs` 统一决定：
+
+- `SFID_BASE_URL` 环境变量优先
+- 本地 debug 构建默认访问 `http://127.0.0.1:8899`
+- 正式 release 构建默认访问 `http://147.224.14.117:8899`
+
+本地局域网 IP 只用于手机或其他设备联调，NodeUI 本机开发不依赖局域网 IP，
+避免 Wi-Fi 地址变化导致清算行搜索请求失败。
 
 ## 不在 Step 1 范围
 

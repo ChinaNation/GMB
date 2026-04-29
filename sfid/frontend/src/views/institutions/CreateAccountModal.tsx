@@ -1,8 +1,8 @@
 // 中文注释:新建账户弹窗。
 //
-// 2026-04-21 统一两步模式:
-//   - 创建后只登记本地 `Inactive`,**不立即上链**
-//   - 管理员需在账户列表点"激活"按钮才触发 `submit_register_account` 推链
+// SFID 账户创建规则:
+//   - 创建后只登记 `account_name`,**不立即上链**
+//   - 链上注册由区块链软件发起,成功后同步状态回 SFID
 //   - 链上派生公式由链端按 `account_name` 路由(Role::Main / Role::Fee / Role::Named),
 //     sfid 前端不做地址预览(避免和链端公式漂移)
 //
@@ -66,7 +66,7 @@ export const CreateAccountModal: React.FC<Props> = ({
     setSubmitting(true);
     try {
       await createAccount(auth, sfidId, name);
-      message.success(`账户已创建,在列表中点"激活"即可推链注册`);
+      message.success('账户名称已创建,链上注册后会自动同步状态');
       onCreated();
     } catch (err) {
       const raw = err instanceof Error ? err.message : '创建账户失败';
@@ -106,7 +106,7 @@ export const CreateAccountModal: React.FC<Props> = ({
             { required: true, message: '请输入账户名称' },
             { max: 30, message: '最多 30 个字' },
           ]}
-          extra={'创建后账户状态为"未激活";需在账户列表中点"激活"按钮才会推链注册。'}
+          extra={'创建后账户状态为"未上链";链上注册由区块链软件完成后同步回来。'}
         >
           <Input
             placeholder="如:办案账户、工资账户、采购账户..."

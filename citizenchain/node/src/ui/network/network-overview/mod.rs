@@ -535,7 +535,7 @@ fn get_network_overview_blocking(app: AppHandle) -> Result<NetworkOverview, Stri
     // ADR-007 Step 2 阶段 B:实时统计链上 ClearingBankNodes storage 的条目数。
     // RPC 失败时降级到 0,并在 warning 中追加原因(避免某次状态读失败把整个网络面板数据置空)。
     let clearing_nodes = if rpc_ready {
-        match crate::ui::clearing_bank::chain::count_clearing_bank_nodes() {
+        match crate::offchain::chain::count_clearing_bank_nodes() {
             Ok(n) => n,
             Err(err) => {
                 warnings.push(format!("读取 ClearingBankNodes 总数失败:{err}"));

@@ -1,5 +1,14 @@
 # L2 链下清算协议
 
+> **Legacy / 已废弃**
+>
+> 本文描述的是旧"43 个省储行组成 L2 清算网络"方案，仅作为历史留档。
+> 当前有效模型为 **注册清算行节点 + 收款方清算行主导 settlement**，
+> 入口见 `memory/04-decisions/ADR-007-clearing-bank-three-phase.md` 与
+> `memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_2_B_INTEGRATION.md`。
+> 新实现不再使用本文中的 `/gmb/offchain-clearing/1`、`offchain_submitSignedTx`
+> 或全局 remote_pending 账本。
+
 ## 概述
 
 43 个省储行节点组成第 2 层清算网络（L2），通过自定义 P2P 通知协议广播链下交易的待结算状态。每笔链下支付由收款方绑定的省储行确认后，向其他 42 个省储行广播，所有节点维护同一份全局待结算账本，用于防止跨省储行双花。

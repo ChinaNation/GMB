@@ -457,9 +457,7 @@ pub fn set_grandpa_key(
         let restore_err = restore_grandpa_persisted_state(&app, &backup).err();
         let restart_restore_err = if was_running && process_was_interrupted && restore_err.is_none()
         {
-            home::start_node_blocking(app.clone())
-                .map(|_| ())
-                .err()
+            home::start_node_blocking(app.clone()).map(|_| ()).err()
         } else {
             None
         };

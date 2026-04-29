@@ -43,6 +43,8 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
+use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
+use sp_io::crypto::sr25519_verify;
 
 /// Step 2(2026-04-27, ADR-007)新增:清算行节点声明信息。
 ///
@@ -75,12 +77,13 @@ pub struct ClearingBankNodeInfo<AccountId, BlockNumber> {
     pub registered_by: AccountId,
 }
 
-/// 清算行清算 pallet 的存储版本。Step 2b-iv-b 清理老省储行 Storage 后从 1 → 2。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+/// 清算行清算 pallet 的存储版本。Step 2b-iv-c 增加批次序号防重后从 2 → 3。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
+    use crate::bank_check::SfidAccountQuery;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -194,6 +197,15 @@ pub mod pallet {
         BlockNumberFor<T>,
         OptionQuery,
     >;
+
+    /// 清算行主账户 → 已成功落账的最新批次序号。
+    ///
+    /// node 侧 packer 启动时读取本值续跑,链上入口要求下一批必须等于
+    /// `last + 1`,避免节点重启或恶意重复提交造成批次级重放。
+    #[pallet::storage]
+    #[pallet::getter(fn last_clearing_batch_seq)]
+    pub type LastClearingBatchSeq<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, u64, ValueQuery>;
 
     /// Step 2(2026-04-27, ADR-007)新增:清算行节点声明 storage。
     ///
@@ -330,6 +342,12 @@ pub mod pallet {
         SolvencyProtected,
         /// `tx_id` 已在链上被清算,拒绝重复提交。
         TxAlreadyProcessed,
+        /// 清算行批次级签名无效。
+        InvalidBatchSignature,
+        /// 清算行批次序号不等于上一成功序号 + 1。
+        InvalidBatchSeq,
+        /// 批次 item 内用户声明的清算行与链上 `UserBank[user]` 不一致。
+        UserBankMismatch,
 
         // ========== L3 账户相关 ==========
         /// 目标地址未在链上 `duoqian-manage-pow` 注册为清算行机构。
@@ -457,8 +475,8 @@ pub mod pallet {
         /// [`batch_signature`] 清算行多签批次级签名(Step 2b 启用阈值校验)
         #[pallet::call_index(34)]
         #[pallet::weight(
-            T::DbWeight::get().reads_writes(6, 6)
-                + T::DbWeight::get().reads_writes(5, 6) * batch.len() as u64
+            T::DbWeight::get().reads_writes(9, 7)
+                + T::DbWeight::get().reads_writes(7, 6) * batch.len() as u64
         )]
         pub fn submit_offchain_batch_v2(
             origin: OriginFor<T>,
@@ -472,8 +490,21 @@ pub mod pallet {
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!batch.is_empty(), Error::<T>::EmptyBatch);
-            // batch_signature 与 batch_seq 暂仅作审计冗余,Step 2b 接多签阈值后严格校验。
-            let _ = (batch_seq, batch_signature);
+            ensure!(
+                T::SfidAccountQuery::is_admin_of(&institution_main, &submitter),
+                Error::<T>::UnauthorizedAdmin
+            );
+            Self::verify_batch_signature(
+                &submitter,
+                &institution_main,
+                batch_seq,
+                batch.as_slice(),
+                &batch_signature,
+            )?;
+            ensure!(
+                batch_seq == LastClearingBatchSeq::<T>::get(&institution_main).saturating_add(1),
+                Error::<T>::InvalidBatchSeq
+            );
 
             with_transaction(|| {
                 match crate::settlement::execute_clearing_bank_batch::<T>(
@@ -481,7 +512,10 @@ pub mod pallet {
                     &institution_main,
                     batch.as_slice(),
                 ) {
-                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Ok(()) => {
+                        LastClearingBatchSeq::<T>::insert(&institution_main, batch_seq);
+                        TransactionOutcome::Commit(Ok(()))
+                    }
                     Err(e) => TransactionOutcome::Rollback(Err(e)),
                 }
             })?;
@@ -593,6 +627,43 @@ pub mod pallet {
             crate::fee_config::activate_pending_rates::<T>(now)
         }
     }
+
+    impl<T: Config> Pallet<T> {
+        /// 验证清算行管理员对整批 item 的批次级签名。
+        ///
+        /// L3 签名仍是资金授权的核心,本签名用于约束“哪个清算行管理员提交了
+        /// 哪个 institution + batch_seq + batch_bytes”,与 `LastClearingBatchSeq`
+        /// 一起防止节点重启后的批次级重放。
+        fn verify_batch_signature(
+            submitter: &T::AccountId,
+            institution_main: &T::AccountId,
+            batch_seq: u64,
+            batch: &[crate::batch_item::OffchainBatchItemV2<T::AccountId, BlockNumberFor<T>>],
+            batch_signature: &BatchSignatureOf<T>,
+        ) -> DispatchResult {
+            let sig = Sr25519Signature::try_from(batch_signature.as_slice())
+                .map_err(|_| Error::<T>::InvalidBatchSignature)?;
+            let public = Self::sr25519_pubkey_from_account(submitter)?;
+            let batch_bytes = batch.encode();
+            let message =
+                crate::batch_item::batch_signing_hash(institution_main, batch_seq, &batch_bytes);
+            ensure!(
+                sr25519_verify(&sig, &message, &public),
+                Error::<T>::InvalidBatchSignature
+            );
+            Ok(())
+        }
+
+        fn sr25519_pubkey_from_account(account: &T::AccountId) -> Result<Sr25519Public, Error<T>> {
+            let encoded = account.encode();
+            if encoded.len() < 32 {
+                return Err(Error::<T>::InvalidBatchSignature);
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&encoded[..32]);
+            Ok(Sr25519Public::from_raw(arr))
+        }
+    }
 }
 
 impl<T: pallet::Config> pallet::Pallet<T> {
@@ -635,9 +706,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 反查 sfid_id 对应的清算行主账户地址(用于校验机构合法性)。
-    fn lookup_main_account_by_sfid(
-        sfid_id: &[u8],
-    ) -> Result<T::AccountId, pallet::Error<T>> {
+    fn lookup_main_account_by_sfid(sfid_id: &[u8]) -> Result<T::AccountId, pallet::Error<T>> {
         use crate::bank_check::{SfidAccountQuery, ACCOUNT_NAME_MAIN};
         T::SfidAccountQuery::find_address(sfid_id, ACCOUNT_NAME_MAIN)
             .ok_or(pallet::Error::<T>::NotRegisteredClearingBank)

@@ -18,15 +18,17 @@ use jsonrpsee::{
 use sc_client_api::StorageProvider;
 use serde::{Deserialize, Serialize};
 use sp_blockchain::HeaderBackend;
+use sp_runtime::traits::SaturatedConversion;
 use sp_runtime::AccountId32;
 use sp_storage::StorageKey;
 use std::sync::Arc;
 
 use super::ledger::{NodePaymentIntent, OffchainLedger};
+use super::settlement::packer::BatchSigner;
 use crate::service::FullClient;
 
 /// 扫码支付 pallet 在 runtime `construct_runtime!` 中的实例名。与
-/// `reserve_monitor.rs` 保持一致,storage key 前缀计算 `twox_128(PALLET_NAME)` 依赖它。
+/// `reserve.rs` 保持一致,storage key 前缀计算 `twox_128(PALLET_NAME)` 依赖它。
 const PALLET_NAME: &[u8] = b"OffchainTransactionPos";
 
 /// 清算行节点暴露给 wuminapp 的查询 RPC。
@@ -58,9 +60,9 @@ pub trait OffchainClearingRpc {
     /// 节点侧:
     /// - 反序列化 intent
     /// - 验证 L3 sr25519 签名
-    /// - 校验 nonce / 可用余额
+    /// - 校验绑定清算行 / 费率 / nonce / 可用余额
     /// - 入账到本地 pending 列表(Step 2b-ii packer 再上链)
-    /// - 返回 tx_id + 清算行 ACK 签名(Step 2b-i 为 0 占位)
+    /// - 返回 tx_id + 清算行 ACK 签名
     #[method(name = "submitPayment")]
     fn submit_payment(
         &self,
@@ -117,11 +119,59 @@ pub struct OffchainClearingRpcImpl {
     ledger: Arc<OffchainLedger>,
     /// 用于读取链上 storage(`UserBank` / `L2FeeRateBp`)。
     client: Arc<FullClient>,
+    /// 当前节点归属的收款方清算行主账户,用于拒绝错路由支付。
+    bank_main: AccountId32,
+    /// 复用清算行管理员签名器生成 L2 ACK。
+    ack_signer: Arc<dyn BatchSigner>,
 }
 
 impl OffchainClearingRpcImpl {
-    pub fn new(ledger: Arc<OffchainLedger>, client: Arc<FullClient>) -> Self {
-        Self { ledger, client }
+    pub fn new(
+        ledger: Arc<OffchainLedger>,
+        client: Arc<FullClient>,
+        bank_main: AccountId32,
+        ack_signer: Arc<dyn BatchSigner>,
+    ) -> Self {
+        Self {
+            ledger,
+            client,
+            bank_main,
+            ack_signer,
+        }
+    }
+
+    fn read_user_bank(&self, user: &AccountId32) -> RpcResult<Option<AccountId32>> {
+        let best = self.client.info().best_hash;
+        let key = user_bank_storage_key(user);
+        let raw = self
+            .client
+            .storage(best, &key)
+            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
+        match raw {
+            None => Ok(None),
+            Some(data) => AccountId32::decode(&mut &data.0[..])
+                .map(Some)
+                .map_err(|e| {
+                    rpc_err(
+                        ErrorCode::InternalError,
+                        format!("AccountId32 解码失败:{e}"),
+                    )
+                }),
+        }
+    }
+
+    fn read_fee_rate(&self, bank: &AccountId32) -> RpcResult<u32> {
+        let best = self.client.info().best_hash;
+        let key = l2_fee_rate_bp_storage_key(bank);
+        let raw = self
+            .client
+            .storage(best, &key)
+            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
+        match raw {
+            None => Ok(0),
+            Some(data) => u32::decode(&mut &data.0[..])
+                .map_err(|e| rpc_err(ErrorCode::InternalError, format!("u32 解码失败:{e}"))),
+        }
     }
 }
 
@@ -165,16 +215,59 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
         let mut payer_sig = [0u8; 64];
         payer_sig.copy_from_slice(&sig_bytes);
 
-        // 3. 调 ledger(Step 2b-i 不传 current_block,Step 2b-ii 接 client 后传 Some)
-        let (tx_id, l2_ack) = self
-            .ledger
-            .accept_payment(intent, payer_sig, None, [0u8; 64])
-            .map_err(|e| rpc_err(ErrorCode::InvalidParams, e))?;
+        // 3. 链上状态早拒:错路由、绑定漂移、费率不一致都不进入 pending。
+        if intent.recipient_bank != self.bank_main {
+            return Err(rpc_err(
+                ErrorCode::InvalidParams,
+                "recipient_bank 不属于当前清算行节点",
+            ))?;
+        }
+        let payer_bank = self.read_user_bank(&intent.payer)?;
+        if payer_bank.as_ref() != Some(&intent.payer_bank) {
+            return Err(rpc_err(
+                ErrorCode::InvalidParams,
+                "payer_bank 与链上 UserBank[payer] 不一致",
+            ))?;
+        }
+        let recipient_bank = self.read_user_bank(&intent.recipient)?;
+        if recipient_bank.as_ref() != Some(&intent.recipient_bank) {
+            return Err(rpc_err(
+                ErrorCode::InvalidParams,
+                "recipient_bank 与链上 UserBank[recipient] 不一致",
+            ))?;
+        }
+        let rate_bp = self.read_fee_rate(&intent.recipient_bank)?;
+        if rate_bp == 0 {
+            return Err(rpc_err(ErrorCode::InvalidParams, "收款方清算行费率未配置"))?;
+        }
+        let expected_fee = calc_fee(intent.amount, rate_bp)
+            .map_err(|e| rpc_err(ErrorCode::InvalidParams, format!("手续费计算失败:{e}")))?;
+        if intent.fee != expected_fee {
+            return Err(rpc_err(
+                ErrorCode::InvalidParams,
+                format!(
+                    "手续费不匹配:expected={expected_fee}, actual={}",
+                    intent.fee
+                ),
+            ))?;
+        }
 
+        let current_block: u32 = self.client.info().best_number.saturated_into();
         let accepted_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
+        let ack_message = l2_ack_signing_message(&self.bank_main, &intent, &payer_sig, accepted_at);
+        let l2_ack = self
+            .ack_signer
+            .sign_batch(&ack_message)
+            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("L2 ACK 签名失败:{e}")))?;
+
+        // 4. 调 ledger 执行 L3 签名、nonce、余额校验并写入 pending。
+        let (tx_id, l2_ack) = self
+            .ledger
+            .accept_payment(intent, payer_sig, Some(current_block), l2_ack, accepted_at)
+            .map_err(|e| rpc_err(ErrorCode::InvalidParams, e))?;
 
         Ok(SubmitPaymentResp {
             tx_id: format!("0x{}", encode_hex(tx_id.as_bytes())),
@@ -184,37 +277,11 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
     }
 
     fn query_user_bank(&self, user: AccountId32) -> RpcResult<Option<AccountId32>> {
-        let best = self.client.info().best_hash;
-        let key = user_bank_storage_key(&user);
-        let raw = self
-            .client
-            .storage(best, &key)
-            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
-        match raw {
-            None => Ok(None),
-            Some(data) => AccountId32::decode(&mut &data.0[..])
-                .map(Some)
-                .map_err(|e| {
-                    rpc_err(
-                        ErrorCode::InternalError,
-                        format!("AccountId32 解码失败:{e}"),
-                    )
-                }),
-        }
+        self.read_user_bank(&user)
     }
 
     fn query_fee_rate(&self, bank: AccountId32) -> RpcResult<FeeRateResp> {
-        let best = self.client.info().best_hash;
-        let key = l2_fee_rate_bp_storage_key(&bank);
-        let raw = self
-            .client
-            .storage(best, &key)
-            .map_err(|e| rpc_err(ErrorCode::InternalError, format!("storage 读取失败:{e}")))?;
-        let rate_bp = match raw {
-            None => 0u32,
-            Some(data) => u32::decode(&mut &data.0[..])
-                .map_err(|e| rpc_err(ErrorCode::InternalError, format!("u32 解码失败:{e}")))?,
-        };
+        let rate_bp = self.read_fee_rate(&bank)?;
         Ok(FeeRateResp {
             rate_bp,
             min_fee_fen: MIN_FEE_FEN,
@@ -224,6 +291,43 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
 
 /// 与 runtime `settlement::MIN_FEE_FEN` 常量逐字节一致的最低手续费。改动必须同改 runtime。
 const MIN_FEE_FEN: u128 = 1;
+
+/// 清算行 ACK 签名域,供 wuminapp 验证"节点确实接受了该支付意图"。
+const L2_ACK_SIGNING_DOMAIN: &[u8] = b"GMB_L2_ACK_V1";
+
+/// 与 runtime `settlement::calc_fee` 保持一致:按万分比四舍五入,最低 1 分。
+fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
+    let numerator = transfer_amount
+        .checked_mul(rate_bp as u128)
+        .ok_or("fee overflow")?;
+    let quotient = numerator / 10_000;
+    let remainder = numerator % 10_000;
+    let rounded = if remainder >= 5_000 {
+        quotient + 1
+    } else {
+        quotient
+    };
+    Ok(core::cmp::max(rounded, MIN_FEE_FEN))
+}
+
+/// 构造 L2 ACK 签名消息:
+/// `blake2_256(DOMAIN || bank_main || SCALE(intent) || payer_sig || accepted_at_le)`。
+fn l2_ack_signing_message(
+    bank_main: &AccountId32,
+    intent: &NodePaymentIntent,
+    payer_sig: &[u8; 64],
+    accepted_at: u64,
+) -> [u8; 32] {
+    let intent_bytes = intent.encode();
+    let mut data =
+        Vec::with_capacity(L2_ACK_SIGNING_DOMAIN.len() + 32 + intent_bytes.len() + 64 + 8);
+    data.extend_from_slice(L2_ACK_SIGNING_DOMAIN);
+    data.extend_from_slice(bank_main.as_ref());
+    data.extend_from_slice(&intent_bytes);
+    data.extend_from_slice(payer_sig);
+    data.extend_from_slice(&accepted_at.to_le_bytes());
+    sp_io::hashing::blake2_256(&data)
+}
 
 /// 构造 `UserBank[user]` 的 storage key(`StorageMap<_, Blake2_128Concat, AccountId, AccountId, OptionQuery>`)。
 fn user_bank_storage_key(user: &AccountId32) -> StorageKey {
@@ -340,5 +444,44 @@ mod tests {
     #[test]
     fn hex_decode_rejects_odd_length() {
         assert!(decode_hex("0xabc").is_err());
+    }
+
+    #[test]
+    fn calc_fee_matches_runtime_rounding() {
+        assert_eq!(calc_fee(10_000, 5).unwrap(), 5);
+        assert_eq!(calc_fee(1, 1).unwrap(), MIN_FEE_FEN);
+        assert_eq!(calc_fee(15_000, 1).unwrap(), 2);
+        assert!(calc_fee(u128::MAX, 10_000).is_err());
+    }
+
+    #[test]
+    fn l2_ack_signing_message_changes_with_inputs() {
+        let intent = NodePaymentIntent {
+            tx_id: sp_core::H256::repeat_byte(1),
+            payer: acc(1),
+            payer_bank: acc(2),
+            recipient: acc(3),
+            recipient_bank: acc(4),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let sig = [9u8; 64];
+        let h1 = l2_ack_signing_message(&acc(0xAA), &intent, &sig, 1_717_000_000);
+        let h2 = l2_ack_signing_message(&acc(0xAA), &intent, &sig, 1_717_000_000);
+        assert_eq!(h1, h2);
+        assert_ne!(
+            h1,
+            l2_ack_signing_message(&acc(0xAB), &intent, &sig, 1_717_000_000)
+        );
+        assert_ne!(
+            h1,
+            l2_ack_signing_message(&acc(0xAA), &intent, &[8u8; 64], 1_717_000_000)
+        );
+        assert_ne!(
+            h1,
+            l2_ack_signing_message(&acc(0xAA), &intent, &sig, 1_717_000_001)
+        );
     }
 }

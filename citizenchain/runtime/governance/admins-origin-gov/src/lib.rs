@@ -11,14 +11,19 @@ use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::StorageVersion, Blake2_128Concat};
 use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
+use sp_runtime::{traits::Zero, RuntimeDebug};
+use sp_std::collections::btree_set::BTreeSet;
 
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
-use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
+use primitives::count_const::{
+    NRC_ADMIN_COUNT, NRC_INTERNAL_THRESHOLD, PRB_ADMIN_COUNT, PRB_INTERNAL_THRESHOLD,
+    PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
+};
 use voting_engine_system::{
-    internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
+    internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
 };
 
@@ -42,15 +47,75 @@ pub struct AdminReplacementAction<AccountId> {
     pub new_admin: AccountId,
 }
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
-
-fn str_to_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    reserve_pallet_id_to_bytes(s)
+/// 管理员主体类型。所有需要内部投票的多签主体都在本模块统一登记。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub enum AdminSubjectKind {
+    /// 国储会、省储会、省储行等创世内置机构。
+    BuiltinInstitution,
+    /// SFID 系统登记后在链上注册的机构多签。
+    SfidInstitution,
+    /// 用户自建的个人多签。
+    PersonalDuoqian,
 }
 
-fn str_to_shengbank_pallet_id(s: &str) -> Option<InstitutionPalletId> {
-    shengbank_pallet_id_to_bytes(s)
+/// 管理员主体生命周期。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    Copy,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub enum AdminSubjectStatus {
+    /// 创建提案投票中；投票引擎可读取管理员快照。
+    Pending,
+    /// 已激活，可发起常规治理/转账/管理员更换。
+    Active,
+    /// 已关闭，管理员不再有效。
+    Closed,
 }
+
+/// 统一管理员主体记录。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+#[scale_info(skip_type_params(AdminList))]
+pub struct AdminInstitution<AdminList, AccountId, BlockNumber> {
+    pub org: u8,
+    pub kind: AdminSubjectKind,
+    pub admins: AdminList,
+    pub threshold: u32,
+    pub creator: AccountId,
+    pub created_at: BlockNumber,
+    pub updated_at: BlockNumber,
+    pub status: AdminSubjectStatus,
+}
+
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
 fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
@@ -59,37 +124,20 @@ fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
         .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
 }
 
-fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
-    // 国储会固定 shenfen_id
-    if Some(institution) == nrc_pallet_id_bytes() {
-        return Some(ORG_NRC);
-    }
-
-    if CHINA_CB
-        .iter()
-        .skip(1)
-        .filter_map(|n| str_to_pallet_id(n.shenfen_id))
-        .any(|pid| pid == institution)
-    {
-        return Some(ORG_PRC);
-    }
-
-    if CHINA_CH
-        .iter()
-        .filter_map(|n| str_to_shengbank_pallet_id(n.shenfen_id))
-        .any(|pid| pid == institution)
-    {
-        return Some(ORG_PRB);
-    }
-
-    None
-}
-
 fn expected_admin_count(org: u8) -> Option<u32> {
     match org {
         ORG_NRC => Some(NRC_ADMIN_COUNT),
         ORG_PRC => Some(PRC_ADMIN_COUNT),
         ORG_PRB => Some(PRB_ADMIN_COUNT),
+        _ => None,
+    }
+}
+
+fn default_threshold(org: u8) -> Option<u32> {
+    match org {
+        ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
+        ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
+        ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
         _ => None,
     }
 }
@@ -120,17 +168,20 @@ pub mod pallet {
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 各机构当前管理员列表：institution_pallet_id → 管理员公钥有序列表。
-    /// 创世时从 china_cb / china_ch 常量加载，通过 `propose_replace_admin` 治理流程 1:1 替换。
-    /// 列表长度恒定（NRC=19, PRC=9, PRB=9），由 `validate_admin_count` 校验。
+    pub type AdminsOf<T> =
+        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdminsPerInstitution>;
+
+    pub type AdminInstitutionOf<T> =
+        AdminInstitution<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
+
+    /// 统一管理员主体表：subject_id → 管理员、阈值和生命周期。
+    ///
+    /// 创世时写入国储会、省储会、省储行；SFID 机构多签和个人多签由
+    /// `duoqian-manage-pow` 在创建提案阶段写入 Pending，投票通过后激活。
     #[pallet::storage]
-    pub type CurrentAdmins<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution>,
-        OptionQuery,
-    >;
+    #[pallet::getter(fn institution_of)]
+    pub type Institutions<T: Config> =
+        StorageMap<_, Blake2_128Concat, InstitutionPalletId, AdminInstitutionOf<T>, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -164,6 +215,11 @@ pub mod pallet {
                 let Some(institution) = reserve_pallet_id_to_bytes(node.shenfen_id) else {
                     continue;
                 };
+                let org = if Some(institution) == nrc_pallet_id_bytes() {
+                    ORG_NRC
+                } else {
+                    ORG_PRC
+                };
                 let admins: Vec<T::AccountId> = node
                     .duoqian_admins
                     .iter()
@@ -176,7 +232,23 @@ pub mod pallet {
                     admins
                         .try_into()
                         .expect("reserve admins must fit MaxAdminsPerInstitution");
-                CurrentAdmins::<T>::insert(institution, bounded);
+                let creator = bounded
+                    .get(0)
+                    .cloned()
+                    .expect("builtin institution must have admins");
+                Institutions::<T>::insert(
+                    institution,
+                    AdminInstitution {
+                        org,
+                        kind: AdminSubjectKind::BuiltinInstitution,
+                        admins: bounded,
+                        threshold: default_threshold(org).expect("builtin org has threshold"),
+                        creator,
+                        created_at: Zero::zero(),
+                        updated_at: Zero::zero(),
+                        status: AdminSubjectStatus::Active,
+                    },
+                );
             }
 
             for node in CHINA_CH.iter() {
@@ -195,7 +267,23 @@ pub mod pallet {
                     admins
                         .try_into()
                         .expect("shengbank admins must fit MaxAdminsPerInstitution");
-                CurrentAdmins::<T>::insert(institution, bounded);
+                let creator = bounded
+                    .get(0)
+                    .cloned()
+                    .expect("builtin institution must have admins");
+                Institutions::<T>::insert(
+                    institution,
+                    AdminInstitution {
+                        org: ORG_PRB,
+                        kind: AdminSubjectKind::BuiltinInstitution,
+                        admins: bounded,
+                        threshold: default_threshold(ORG_PRB).expect("PRB has threshold"),
+                        creator,
+                        created_at: Zero::zero(),
+                        updated_at: Zero::zero(),
+                        status: AdminSubjectStatus::Active,
+                    },
+                );
             }
         }
     }
@@ -227,6 +315,21 @@ pub mod pallet {
             old_admin: T::AccountId,
             new_admin: T::AccountId,
         },
+        /// 多签主体管理员配置已写入 Pending。
+        AdminSubjectPendingCreated {
+            institution: InstitutionPalletId,
+            org: u8,
+            kind: AdminSubjectKind,
+            creator: T::AccountId,
+            admin_count: u32,
+            threshold: u32,
+        },
+        /// 多签主体管理员配置已激活。
+        AdminSubjectActivated { institution: InstitutionPalletId },
+        /// Pending 多签主体管理员配置已清理。
+        AdminSubjectPendingRemoved { institution: InstitutionPalletId },
+        /// 多签主体管理员配置已关闭。
+        AdminSubjectClosed { institution: InstitutionPalletId },
     }
 
     #[pallet::error]
@@ -247,6 +350,18 @@ pub mod pallet {
         ProposalActionNotFound,
         /// 投票尚未通过，不能执行替换
         ProposalNotPassed,
+        /// 管理员主体已存在
+        InstitutionAlreadyExists,
+        /// 管理员主体状态不是 Pending
+        SubjectNotPending,
+        /// 管理员主体状态不是 Active
+        SubjectNotActive,
+        /// 管理员主体类型与 org 不匹配
+        InvalidSubjectKind,
+        /// 阈值不合法
+        InvalidThreshold,
+        /// 管理员重复
+        DuplicateAdmin,
     }
 
     #[pallet::call]
@@ -262,9 +377,14 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 1) 校验机构归属范围（国储会/省储会/省储行）
-            let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
+            // 1) 校验管理员主体已激活且 org 匹配。
+            let subject =
+                Institutions::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                subject.status == AdminSubjectStatus::Active,
+                Error::<T>::SubjectNotActive
+            );
+            ensure!(subject.org == org, Error::<T>::InstitutionOrgMismatch);
 
             // 2) 校验发起人与替换参数合法性
             let admins = Self::admins_for_institution(institution)?;
@@ -322,18 +442,196 @@ pub mod pallet {
         ) -> Result<Vec<T::AccountId>, DispatchError> {
             // 中文注释：创世后只信任链上管理员状态，不再回退常量管理员。
             let stored =
-                CurrentAdmins::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            Ok(stored.into_inner())
+                Institutions::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            Ok(stored.admins.into_inner())
         }
 
-        fn validate_admin_count(org: u8, admins_len: usize) -> DispatchResult {
-            // 固定人数约束：国储会19，省储会9，省储行9
-            let expected = expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
+        fn validate_admin_count_for_subject(
+            kind: AdminSubjectKind,
+            org: u8,
+            admins_len: usize,
+        ) -> DispatchResult {
+            if matches!(kind, AdminSubjectKind::BuiltinInstitution) {
+                // 固定人数约束：国储会19，省储会9，省储行9
+                let expected = expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
+                ensure!(
+                    admins_len == expected as usize,
+                    Error::<T>::InvalidAdminCount
+                );
+            } else {
+                ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+                ensure!(
+                    admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                    Error::<T>::InvalidAdminCount
+                );
+            }
+            Ok(())
+        }
+
+        fn ensure_unique_admins(admins: &[T::AccountId]) -> DispatchResult {
+            let mut seen = BTreeSet::new();
+            for admin in admins {
+                ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
+            }
+            Ok(())
+        }
+
+        fn ensure_subject_kind_matches_org(kind: AdminSubjectKind, org: u8) -> DispatchResult {
+            match kind {
+                AdminSubjectKind::BuiltinInstitution => {
+                    ensure!(
+                        matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
+                        Error::<T>::InvalidSubjectKind
+                    );
+                }
+                AdminSubjectKind::SfidInstitution | AdminSubjectKind::PersonalDuoqian => {
+                    ensure!(org == ORG_DUOQIAN, Error::<T>::InvalidSubjectKind);
+                }
+            }
+            Ok(())
+        }
+
+        fn validate_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
+            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
             ensure!(
-                admins_len == expected as usize,
-                Error::<T>::InvalidAdminCount
+                threshold >= min_threshold && threshold <= admin_count,
+                Error::<T>::InvalidThreshold
             );
             Ok(())
+        }
+
+        /// 写入 Pending 管理员主体。创建多签机构/个人多签时先调用本方法，
+        /// 让投票引擎能在创建提案时锁定管理员快照。
+        pub fn create_pending_subject(
+            institution: InstitutionPalletId,
+            org: u8,
+            kind: AdminSubjectKind,
+            admins: Vec<T::AccountId>,
+            threshold: u32,
+            creator: T::AccountId,
+        ) -> DispatchResult {
+            ensure!(
+                !Institutions::<T>::contains_key(institution),
+                Error::<T>::InstitutionAlreadyExists
+            );
+            Self::ensure_subject_kind_matches_org(kind, org)?;
+            Self::validate_admin_count_for_subject(kind, org, admins.len())?;
+            Self::ensure_unique_admins(&admins)?;
+            Self::validate_threshold(admins.len() as u32, threshold)?;
+
+            let bounded: AdminsOf<T> = admins
+                .try_into()
+                .map_err(|_| Error::<T>::InvalidAdminCount)?;
+            let now = frame_system::Pallet::<T>::block_number();
+            let admin_count = bounded.len() as u32;
+            Institutions::<T>::insert(
+                institution,
+                AdminInstitution {
+                    org,
+                    kind,
+                    admins: bounded,
+                    threshold,
+                    creator: creator.clone(),
+                    created_at: now,
+                    updated_at: now,
+                    status: AdminSubjectStatus::Pending,
+                },
+            );
+            Self::deposit_event(Event::<T>::AdminSubjectPendingCreated {
+                institution,
+                org,
+                kind,
+                creator,
+                admin_count,
+                threshold,
+            });
+            Ok(())
+        }
+
+        /// 将 Pending 管理员主体激活。
+        pub fn activate_subject(institution: InstitutionPalletId) -> DispatchResult {
+            Institutions::<T>::try_mutate(institution, |maybe| -> DispatchResult {
+                let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
+                ensure!(
+                    subject.status == AdminSubjectStatus::Pending,
+                    Error::<T>::SubjectNotPending
+                );
+                subject.status = AdminSubjectStatus::Active;
+                subject.updated_at = frame_system::Pallet::<T>::block_number();
+                Ok(())
+            })?;
+            Self::deposit_event(Event::<T>::AdminSubjectActivated { institution });
+            Ok(())
+        }
+
+        /// 清理尚未激活的 Pending 管理员主体。
+        pub fn remove_pending_subject(institution: InstitutionPalletId) -> DispatchResult {
+            if let Some(subject) = Institutions::<T>::get(institution) {
+                ensure!(
+                    subject.status == AdminSubjectStatus::Pending,
+                    Error::<T>::SubjectNotPending
+                );
+                Institutions::<T>::remove(institution);
+                Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved { institution });
+            }
+            Ok(())
+        }
+
+        /// 关闭已激活管理员主体。
+        pub fn close_subject(institution: InstitutionPalletId) -> DispatchResult {
+            Institutions::<T>::try_mutate(institution, |maybe| -> DispatchResult {
+                let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
+                ensure!(
+                    subject.status == AdminSubjectStatus::Active,
+                    Error::<T>::SubjectNotActive
+                );
+                subject.status = AdminSubjectStatus::Closed;
+                subject.updated_at = frame_system::Pallet::<T>::block_number();
+                Ok(())
+            })?;
+            Self::deposit_event(Event::<T>::AdminSubjectClosed { institution });
+            Ok(())
+        }
+
+        pub fn is_subject_admin(
+            org: u8,
+            institution: InstitutionPalletId,
+            who: &T::AccountId,
+        ) -> bool {
+            let Some(subject) = Institutions::<T>::get(institution) else {
+                return false;
+            };
+            if subject.org != org || subject.status == AdminSubjectStatus::Closed {
+                return false;
+            }
+            subject.admins.iter().any(|admin| admin == who)
+        }
+
+        pub fn subject_admins(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<Vec<T::AccountId>> {
+            let subject = Institutions::<T>::get(institution)?;
+            if subject.org != org || subject.status == AdminSubjectStatus::Closed {
+                return None;
+            }
+            Some(subject.admins.into_inner())
+        }
+
+        pub fn subject_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            let subject = Institutions::<T>::get(institution)?;
+            if subject.org != org || subject.status == AdminSubjectStatus::Closed {
+                return None;
+            }
+            Some(subject.threshold)
+        }
+
+        pub fn subject_admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            let subject = Institutions::<T>::get(institution)?;
+            if subject.org != org || subject.status == AdminSubjectStatus::Closed {
+                return None;
+            }
+            Some(subject.admins.len() as u32)
         }
 
         /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
@@ -365,9 +663,14 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let subject =
+                Institutions::<T>::get(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                subject.status == AdminSubjectStatus::Active,
+                Error::<T>::SubjectNotActive
+            );
             let mut admins = Self::admins_for_institution(action.institution)?;
-            Self::validate_admin_count(org, admins.len())?;
+            Self::validate_admin_count_for_subject(subject.kind, subject.org, admins.len())?;
 
             let old_pos = admins
                 .iter()
@@ -384,7 +687,12 @@ pub mod pallet {
             let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> = admins
                 .try_into()
                 .map_err(|_| Error::<T>::InvalidAdminCount)?;
-            CurrentAdmins::<T>::insert(action.institution, bounded);
+            Institutions::<T>::mutate(action.institution, |maybe| {
+                if let Some(subject) = maybe {
+                    subject.admins = bounded;
+                    subject.updated_at = frame_system::Pallet::<T>::block_number();
+                }
+            });
 
             Self::deposit_event(Event::<T>::AdminReplaced {
                 proposal_id,
@@ -429,10 +737,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action = AdminReplacementAction::<T::AccountId>::decode(
-            &mut &raw[crate::MODULE_TAG.len()..],
-        )
-        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action =
+            AdminReplacementAction::<T::AccountId>::decode(&mut &raw[crate::MODULE_TAG.len()..])
+                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         // Step 3:打业务执行时间戳(首次进入 PASSED)。
         voting_engine_system::Pallet::<T>::set_proposal_passed(
@@ -443,9 +750,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         // Step 4:执行替换。失败发事件,不回滚 — 提案保留 PASSED 状态,
         //         任何签名账户可通过 execute_admin_replacement 重试。
         if pallet::Pallet::<T>::try_execute_replacement_from_action(proposal_id, action).is_err() {
-            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::AdminReplacementExecutionFailed {
-                proposal_id,
-            });
+            pallet::Pallet::<T>::deposit_event(
+                pallet::Event::<T>::AdminReplacementExecutionFailed { proposal_id },
+            );
         }
         Ok(())
     }
@@ -454,7 +761,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codec::Encode;
     use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
     use frame_system as system;
     use primitives::china::china_cb::{
@@ -551,35 +857,14 @@ mod tests {
             if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
                 return false;
             }
-            if let Some(admins) = pallet::CurrentAdmins::<Test>::get(institution) {
-                return admins.into_inner().iter().any(|admin| admin == who);
-            }
-            let who_arr = who.encode();
-            if who_arr.len() != 32 {
-                return false;
-            }
-            let mut who_raw = [0u8; 32];
-            who_raw.copy_from_slice(&who_arr);
-            match org {
-                ORG_NRC | ORG_PRC => CHINA_CB
-                    .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_raw))
-                    .unwrap_or(false),
-                ORG_PRB => CHINA_CH
-                    .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                    .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_raw))
-                    .unwrap_or(false),
-                _ => false,
-            }
+            pallet::Pallet::<Test>::is_subject_admin(org, institution, who)
         }
 
         fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
             if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
                 return None;
             }
-            pallet::CurrentAdmins::<Test>::get(institution).map(|admins| admins.into_inner())
+            pallet::Pallet::<Test>::subject_admins(org, institution)
         }
     }
 
@@ -663,6 +948,13 @@ mod tests {
         voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
+    fn current_admins(institution: InstitutionPalletId) -> Vec<AccountId32> {
+        Institutions::<Test>::get(institution)
+            .expect("admin subject should be stored")
+            .admins
+            .into_inner()
+    }
+
     /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 后的统一入口)。
     ///
     /// 替代旧的 `AdminsOriginGov::vote_admin_replacement`——业务模块不再持有投票 call,
@@ -696,9 +988,7 @@ mod tests {
                 assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should be stored after execution")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
         });
@@ -791,9 +1081,7 @@ mod tests {
                 assert_ok!(cast_vote(prc_admin(i), pid, true));
             }
 
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should be stored after execution")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
         });
@@ -820,9 +1108,7 @@ mod tests {
                 assert_ok!(cast_vote(prb_admin(i), pid, true));
             }
 
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should be stored after execution")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
         });
@@ -908,8 +1194,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            CurrentAdmins::<Test>::mutate(institution, |maybe| {
-                let admins = maybe.as_mut().expect("institution should exist");
+            Institutions::<Test>::mutate(institution, |maybe| {
+                let subject = maybe.as_mut().expect("institution should exist");
+                let admins = &mut subject.admins;
                 let pos = admins
                     .iter()
                     .position(|a| a == &old_admin)
@@ -974,9 +1261,7 @@ mod tests {
 
             assert_ok!(cast_vote(nrc_admin(2), pid, false));
 
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should remain stored")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
             assert!(
@@ -1101,8 +1386,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            CurrentAdmins::<Test>::mutate(institution, |maybe| {
-                let admins = maybe.as_mut().expect("institution should exist");
+            Institutions::<Test>::mutate(institution, |maybe| {
+                let subject = maybe.as_mut().expect("institution should exist");
+                let admins = &mut subject.admins;
                 let old_pos = admins
                     .iter()
                     .position(|a| a == &old_admin)
@@ -1122,8 +1408,9 @@ mod tests {
             );
             assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
 
-            CurrentAdmins::<Test>::mutate(institution, |maybe| {
-                let admins = maybe.as_mut().expect("institution should exist");
+            Institutions::<Test>::mutate(institution, |maybe| {
+                let subject = maybe.as_mut().expect("institution should exist");
+                let admins = &mut subject.admins;
                 let restore_pos = admins
                     .iter()
                     .position(|a| a == &nrc_admin(18))
@@ -1135,9 +1422,7 @@ mod tests {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should be stored")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
         });
@@ -1161,9 +1446,7 @@ mod tests {
 
             assert_ok!(cast_vote(nrc_admin(2), pid, true));
 
-            let admins = CurrentAdmins::<Test>::get(institution)
-                .expect("current admins should remain stored")
-                .into_inner();
+            let admins = current_admins(institution);
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
             assert!(

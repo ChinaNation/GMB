@@ -3,14 +3,9 @@
 use serde::Deserialize;
 use std::time::Duration;
 
-/// SFID 服务默认地址（与 wuminapp 生产环境一致）。
-/// 可通过环境变量 `SFID_BASE_URL` 覆盖。
-const DEFAULT_SFID_BASE_URL: &str = "http://147.224.14.117:8899";
-const SFID_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+use crate::ui::sfid_config;
 
-fn sfid_base_url() -> String {
-    std::env::var("SFID_BASE_URL").unwrap_or_else(|_| DEFAULT_SFID_BASE_URL.to_string())
-}
+const SFID_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// 人口快照数据，用于联合投票提案创建时附带人口证明。
 #[derive(Debug, Clone)]
@@ -46,7 +41,7 @@ pub fn fetch_population_snapshot(pubkey_hex: &str) -> Result<PopulationSnapshot,
 
     let url = format!(
         "{}/api/v1/app/voters/count?account_pubkey={}",
-        sfid_base_url(),
+        sfid_config::sfid_base_url(),
         pubkey_clean
     );
 
