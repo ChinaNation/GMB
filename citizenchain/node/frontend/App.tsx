@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { NrcSection } from './governance/NrcSection';
 import { PrcSection } from './governance/PrcSection';
 import { PrbSection } from './governance/PrbSection';
-import { ClearingBankSection } from './clearing-bank/ClearingBankSection';
+import { ClearingBankSection } from './offchain/section';
 import { HomeNodeSection } from './home/home-node';
 import { TransactionPanel } from './transaction/TransactionPanel';
 import { MiningDashboardSection } from './mining/mining-dashboard';

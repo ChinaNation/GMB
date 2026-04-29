@@ -21,7 +21,7 @@ event_listener(本步) → ledger.on_payment_settled → pending 移除
 ```
 
 **明确不做**(Step 2b-iii-b / 2b-iii-c / 2b-iv):
-- `reserve_monitor.rs`:周期性 `available_balance vs total_deposits` 对账告警(2b-iii-b)
+- `offchain/reserve.rs`:周期性 `available_balance vs total_deposits` 对账告警(2b-iii-b)
 - `gossip.rs`:libp2p `NotificationService` + 协议名 `/gmb/offchain/1`(2b-iii-c)
 - 删除旧 `offchain_{ledger,packer,gossip}.rs` 及 runtime 老 calls(2b-iv)
 
@@ -29,7 +29,7 @@ event_listener(本步) → ledger.on_payment_settled → pending 移除
 
 ## 2. 改动清单
 
-### 2.1 `offchain/event_listener.rs`
+### 2.1 `offchain/settlement/listener.rs`
 
 | 变更 | 内容 |
 |---|---|
@@ -157,7 +157,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 ## 7. 后续
 
 **Step 2b-iii-b**(下一步):
-- `offchain/reserve_monitor.rs` 新增:周期性 `ledger.total_deposits() vs chain.storage(DepositBalance)` 对账告警
+- `offchain/reserve.rs` 新增:周期性 `ledger.total_deposits() vs chain.storage(DepositBalance)` 对账告警
 - 触发阈值超过 1 分钟 → log error + 指标上报
 
 **Step 2b-iii-c**:
@@ -171,4 +171,4 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 
 ## 8. 变更记录
 
-- 2026-04-19:Step 2b-iii-a 完整落地,event_listener 真实订阅 `import_notification_stream`,清算行节点闭环打通(wuminapp RPC → ledger → packer → pool → extrinsic → runtime event → listener → ledger.pending 清理)。event_listener.rs + service.rs + ledger.rs 可见性修复,零编译错误;新增 3 个 convert_event 单测 + 保留原 3 个 handle 单测。
+- 2026-04-19:Step 2b-iii-a 完整落地,`settlement/listener.rs` 真实订阅 `import_notification_stream`,清算行节点闭环打通(wuminapp RPC → ledger → packer → pool → extrinsic → runtime event → listener → ledger.pending 清理)。listener + service.rs + ledger.rs 可见性修复,零编译错误;新增 3 个 convert_event 单测 + 保留原 3 个 handle 单测。

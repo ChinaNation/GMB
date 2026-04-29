@@ -1,14 +1,15 @@
 # 链下清算打包器（OffchainPacker）接入 service worker
 
 - **日期**: 2026-04-04
-- **模块**: Blockchain Agent — node/src/service.rs, offchain_packer.rs
+- **模块**: Blockchain Agent — node/src/offchain, node/src/service.rs
 - **优先级**: 中（链下清算功能完整性）
 
 ## 背景
 
 链下清算的收单链路已通：RPC 收交易 → 账本记账 → gossip 广播防双花。但"打包上链"环节缺失——`OffchainPacker` 代码已写好，未在 service.rs 中创建实例和启动 worker。
 
-导致 offchain_packer.rs / offchain_keystore.rs / offchain_ledger.rs 共 12 个 dead_code warning。
+历史上该任务指向根级 offchain 文件；2026-04-29 目录收口后,对应实现统一迁入
+`node/src/offchain/` 功能域。
 
 ## 目标
 
@@ -23,10 +24,10 @@
 
 ## 涉及文件
 
-- `node/src/service.rs` — 创建 OffchainPacker 实例，启动 essential task
-- `node/src/offchain_packer.rs` — 已实现，接���后 12 个 warning 自动消除
-- `node/src/offchain_keystore.rs` — `pair` 字段和 `remove_signing_key` 方法在 packer 接入后被使用
-- `node/src/offchain_ledger.rs` — `take_all_pending`、`remove_settled`、`save_to_disk` 在 packer 接入后被调用
+- `node/src/service.rs` — 委托 `offchain/bootstrap.rs` 启动清算行 worker
+- `node/src/offchain/settlement/packer.rs` — 清算行批量打包器
+- `node/src/offchain/keystore.rs` — 加密私钥存储
+- `node/src/offchain/ledger.rs` — 清算行本地账本
 
 ## 前置依赖
 

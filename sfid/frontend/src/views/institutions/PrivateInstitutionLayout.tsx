@@ -15,7 +15,7 @@
 //   FFR 所属法人:输入后点搜索图标触发模糊搜索(/institution/search-parents)
 //
 // 账户列表(AccountList)每家机构自带"主账户"/"费用账户"两条默认账户,
-// 创建时为 INACTIVE 状态,管理员显式"激活"才推链(见 AccountList 组件)。
+// 创建后只登记在 SFID;链上状态由区块链软件同步回来。
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -63,6 +63,13 @@ const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   KEY_ADMIN: '密钥管理员',
   SHENG_ADMIN: '省级管理员',
   SHI_ADMIN: '市级管理员',
+};
+
+const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
+  NOT_REGISTERED: '未上链',
+  PENDING_REGISTER: '注册中',
+  REGISTERED: '已上链',
+  REVOKED_ON_CHAIN: '已注销',
 };
 
 interface Props {
@@ -369,6 +376,9 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
               <Descriptions.Item label="机构代码">
                 {inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}
               </Descriptions.Item>
+              <Descriptions.Item label="链上状态">
+                <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
+              </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {new Date(inst.created_at).toLocaleString('zh-CN')}
               </Descriptions.Item>
@@ -579,13 +589,10 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
         style={{ marginBottom: 16 }}
       >
         <AccountList
-          auth={auth}
-          sfidId={inst.sfid_id}
           accounts={accounts}
           loading={loading}
           canDelete={canWrite}
           onDelete={onDeleteAccount}
-          onActivated={onReload}
         />
       </Card>
 

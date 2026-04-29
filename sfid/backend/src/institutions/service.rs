@@ -9,7 +9,7 @@ use chrono::Utc;
 
 use crate::institutions::model::{MultisigAccount, MultisigInstitution};
 use crate::institutions::store;
-use crate::models::Store;
+use crate::models::{InstitutionChainStatus, MultisigChainStatus, Store};
 use crate::sfid::{
     classify, generate_sfid_code, province::PROVINCES, GenerateSfidInput, InstitutionCategory,
     InstitutionCode, A3, PUBLIC_SECURITY_INSTITUTION_NAME,
@@ -35,6 +35,20 @@ pub const MAX_ACCOUNT_NAME_CHARS: usize = 30;
 pub const MAX_ACCOUNT_NAME_BYTES: usize = 128;
 pub const MAX_INSTITUTION_NAME_CHARS: usize = 30;
 pub const MAX_INSTITUTION_NAME_BYTES: usize = 128;
+
+pub fn is_default_account_name(account_name: &str) -> bool {
+    DEFAULT_ACCOUNT_NAMES
+        .iter()
+        .any(|name| *name == account_name)
+}
+
+pub fn can_delete_account(account: &MultisigAccount) -> bool {
+    !is_default_account_name(&account.account_name)
+        && matches!(
+            account.chain_status,
+            MultisigChainStatus::NotOnChain | MultisigChainStatus::RevokedOnChain
+        )
+}
 
 /// 机构 / 账户 service 层错误。
 #[derive(Debug, Clone)]
@@ -277,13 +291,13 @@ pub struct ReconcileReport {
 /// 规则:
 /// - 增:sfid 工具里有但 multisig_institutions 没有 → 生成新机构
 /// - 删:multisig_institutions 有但 sfid 工具没有的 city_code → 删除机构
-///      (不触链,multisig_accounts 孤儿记录保留)
+///      (不触链,账户记录由后续清理任务统一处理)
 /// - 改:city_code 相同但 city 字符串不同 → 更新 city + institution_name
 ///      sfid_id 不变
 ///
 /// 特殊处理:
 /// - 跳过 city_code == "000" 的保留占位
-/// - 跳过 legacy 已有但 city_code 为空的记录(会被 backfill 函数修复)
+/// - 跳过全局 store 已有但 city_code 为空的记录(会被 backfill 函数修复)
 pub fn reconcile_public_security_for_province(
     store: &mut Store,
     province_name: &str,
@@ -371,12 +385,16 @@ pub fn reconcile_public_security_for_province(
                 sub_type: None,
                 parent_sfid_id: None,
                 sfid_finalized: false,
+                chain_status: InstitutionChainStatus::NotRegistered,
+                chain_tx_hash: None,
+                chain_block_number: None,
+                chain_synced_at: None,
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };
             store.multisig_institutions.insert(sfid_id.clone(), inst);
-            // 2026-04-21:公安局 reconcile 同步插入 2 条默认 Inactive 账户
-            insert_default_accounts_into_legacy(store, &sfid_id, actor);
+            // 公安局 reconcile 同步插入 2 条默认未上链账户。
+            insert_default_accounts_into_global_store(store, &sfid_id, actor);
             report.inserted += 1;
         }
     }
@@ -414,15 +432,13 @@ pub fn reconcile_public_security_for_province(
     report
 }
 
-/// 给指定机构写入 2 条默认 Inactive 账户(legacy store)。
+/// 给指定机构写入 2 条默认未上链账户(全局 store)。
 ///
 /// 幂等:已存在账户不覆盖;仅在该 `(sfid_id, account_name)` 缺失时补齐。
-/// 只写 legacy store(reconcile 本身就持 legacy 写锁);sharded_store 的同步由
-/// `sync_legacy_to_sharded` 启动时一次性对齐,或在 handler 层二次写入。
-pub fn insert_default_accounts_into_legacy(store: &mut Store, sfid_id: &str, actor: &str) {
+/// reconcile 本身持全局 store 写锁;sharded_store 的同步由启动后的分片同步流程补齐。
+pub fn insert_default_accounts_into_global_store(store: &mut Store, sfid_id: &str, actor: &str) {
     use crate::institutions::derive::derive_duoqian_address;
     use crate::institutions::model::{account_key_to_string, MultisigAccount};
-    use crate::models::MultisigChainStatus;
     let now = Utc::now();
     for name in DEFAULT_ACCOUNT_NAMES {
         let key = account_key_to_string(sfid_id, name);
@@ -436,7 +452,8 @@ pub fn insert_default_accounts_into_legacy(store: &mut Store, sfid_id: &str, act
                 sfid_id: sfid_id.to_string(),
                 account_name: (*name).to_string(),
                 duoqian_address: addr,
-                chain_status: MultisigChainStatus::Inactive,
+                chain_status: MultisigChainStatus::NotOnChain,
+                chain_synced_at: None,
                 chain_tx_hash: None,
                 chain_block_number: None,
                 created_by: actor.to_string(),
@@ -531,6 +548,10 @@ mod tests {
             sub_type: sub_type.map(|s| s.to_string()),
             parent_sfid_id: parent_sfid_id.map(|s| s.to_string()),
             sfid_finalized: true,
+            chain_status: InstitutionChainStatus::NotRegistered,
+            chain_tx_hash: None,
+            chain_block_number: None,
+            chain_synced_at: None,
             created_by: "test".to_string(),
             created_at: Utc::now(),
         }

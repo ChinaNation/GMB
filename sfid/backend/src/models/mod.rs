@@ -1060,31 +1060,41 @@ pub(crate) struct BindCallbackPayload {
 
 // ── 多签管理 ──────────────────────────────────────────
 
-/// 多签账户链上状态。
+/// 机构链上注册状态。
 ///
-/// 流转(2026-04-21 统一两步模式):
-/// ```text
-///   Inactive  ──点"激活"──▶  Pending  ──成功──▶  Registered
-///                                     └──失败──▶  Failed ──点"重试激活"──▶  Pending
-/// ```
+/// 中文注释:SFID 系统只记录链上同步回来的机构状态,不主动创建或注销链上机构。
+/// 创建 SFID 时默认为 `NotRegistered`;链上注册/注销成功后由受信任同步接口更新。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum InstitutionChainStatus {
+    NotRegistered,
+    PendingRegister,
+    Registered,
+    RevokedOnChain,
+}
+
+impl Default for InstitutionChainStatus {
+    fn default() -> Self {
+        Self::NotRegistered
+    }
+}
+
+/// 机构账户链上状态。
 ///
-/// - `Inactive`:本地已创建账户记录,**尚未推链**。默认状态。
-///   创建机构(含公安局 reconcile)时自动写入 2 条默认账户(主账户/费用账户)→ Inactive;
-///   管理员手工建账户也走同一条路径 → Inactive。等待显式"激活"触发上链。
-/// - `Pending`:激活请求已提交,正在推链中。
-/// - `Registered`:链上已注册,`duoqian_address` + `chain_tx_hash` 已填入。
-/// - `Failed`:上链失败,允许再次点击"重试激活"。
+/// 中文注释:账户是否激活只以链上事实为准。SFID 创建账户时只是登记
+/// `(sfid_id, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
+/// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum MultisigChainStatus {
-    Inactive,
-    Pending,
-    Registered,
-    Failed,
+    NotOnChain,
+    PendingOnChain,
+    ActiveOnChain,
+    RevokedOnChain,
 }
 
 impl Default for MultisigChainStatus {
     fn default() -> Self {
-        Self::Inactive
+        Self::NotOnChain
     }
 }

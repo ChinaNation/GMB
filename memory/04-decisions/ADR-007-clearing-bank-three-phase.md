@@ -74,7 +74,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 #### 2.2 node Tauri 后端改动
 
-新增 Tauri command（`citizenchain/node/src/ui/clearing_bank/`）：
+新增 Tauri command（`citizenchain/node/src/offchain/commands.rs`，具体能力拆在 `offchain/{sfid,chain,health,signing,decrypt}.rs`）：
 
 - `search_eligible_clearing_banks(query, limit)`：转发 SFID `/clearing-banks/eligible-search`
 - `query_clearing_bank_node_info(sfid_id)`：链上查 `ClearingBankNodes[sfid_id]`
@@ -88,7 +88,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 #### 2.3 node 前端改动（清算行 tab）
 
 - `App.tsx` TabKey 加 `'clearing-bank'`，顶部 nav 9 tab：首页 / 挖矿 / 国储会 / 省储会 / 省储行 / **清算行** / 白皮书 / 公民宪法 / 设置
-- 新建 `clearing-bank/ClearingBankSection.tsx`，状态机 8 视图：
+- 新建 `offchain/section.tsx`，状态机 8 视图：
   ```
   empty → add-input-sfid → check-status →
     ├─ register-sfid (链上未注册地址)
@@ -144,6 +144,9 @@ PeerId 由节点 `base_path/node-key/secret_ed25519` 确定性生成，重启不
 - 跨行支付：A 在 X、B 在 Y，**Y 主导**链上原子 2 次 Currency::transfer（X主→Y主 本金 + X主→Y费用 fee）+ DepositBalance 双向同步
 - 用户单笔签名：sr25519 签 PaymentIntent 的 `blake2_256("GMB_L3_PAY_V1" || SCALE(intent))`
 - 链上 `submit_offchain_batch_v2` 整批原子（with_transaction），失败全回滚
+- 2026-04-28 补齐：批次入口必须同时满足清算行管理员 batch 签名有效、
+  `batch_seq == LastClearingBatchSeq[recipient_bank] + 1`、付款/收款双方
+  `UserBank` 与 item 声明一致；成功 settlement 后才推进 `LastClearingBatchSeq`
 - gas：**自定义 OnChargeTransaction 让 fee_account_of(institution_main) 直接付**，管理员个人钱包不参与
 - 经济模型自洽：fee 量级 0.01%~0.1% × 交易金额，gas 量级约 fee × 0.1%，盈余约 99.9%
 

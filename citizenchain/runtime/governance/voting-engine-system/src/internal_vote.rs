@@ -24,7 +24,7 @@ use crate::{
 pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
 pub const ORG_PRB: u8 = 2;
-/// 注册多签机构（duoqian-manage-pow），阈值从链上 DuoqianAccounts 动态读取。
+/// 注册多签/个人多签主体，管理员与阈值由 admins-origin-gov 统一主体表提供。
 pub const ORG_DUOQIAN: u8 = 3;
 
 pub fn is_valid_org(org: u8) -> bool {
@@ -61,7 +61,7 @@ fn is_valid_internal_institution<T: Config>(org: u8, institution: InstitutionPal
             .iter()
             .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
             .any(|pid| pid == institution),
-        // 注册多签机构：由 InternalThresholdProvider 判断是否存在
+        // 注册多签/个人多签主体：由 InternalThresholdProvider 判断是否存在
         ORG_DUOQIAN => T::InternalThresholdProvider::pass_threshold(org, institution).is_some(),
         _ => false,
     }

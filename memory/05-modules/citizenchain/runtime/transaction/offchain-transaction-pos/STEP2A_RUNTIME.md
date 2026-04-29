@@ -15,9 +15,12 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 
 - 新增 3 个子模块:`fee_config.rs` / `solvency.rs` / `settlement.rs`
 - 新增 1 个结构:`batch_item::OffchainBatchItemV2`
-- 新增 3 个 Storage:`L2FeeRateBp` / `L2FeeRateProposed` / `MaxL2FeeRateBp`
+- 新增 4 个 Storage:`L2FeeRateBp` / `L2FeeRateProposed` / `MaxL2FeeRateBp` / `LastClearingBatchSeq`
 - 新增 5 个 Event:`L2FeeRateProposed` / `L2FeeRateActivated` / `MaxL2FeeRateUpdated` / `PaymentSettled` / `ClearingBankBatchSettled`
-- 新增 6 个 Error(复用现有 5 个):`InstitutionMismatch` / `ExpiredIntent` / `L2FeeRateNotConfigured` / `InvalidL3Signature` / `InvalidL2FeeRate` / `SolvencyProtected`
+- 新增 Error 覆盖清算行结算、费率、偿付、batch 签名与用户绑定一致性:
+  `InstitutionMismatch` / `ExpiredIntent` / `L2FeeRateNotConfigured` / `InvalidL3Signature` /
+  `InvalidL2FeeRate` / `SolvencyProtected` / `InvalidBatchSignature` / `InvalidBatchSeq` /
+  `UserBankMismatch`
 - 新增 3 个 Call:`submit_offchain_batch_v2`(34)/ `propose_l2_fee_rate`(40)/ `set_max_l2_fee_rate`(41)
 - 新增 trait 方法:`SfidAccountQuery::is_admin_of`
 - 扩展 `on_initialize`:激活到期费率提案
@@ -54,7 +57,7 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 
 清算行批次的新 execute 路径:
 - `execute_clearing_bank_batch(submitter, institution_main, batch)`:批次级执行入口
-  - 批次级预检:submitter 管理员身份 / payer_bank 一致性 / 费率正确性 / 偿付充足
+  - 批次级预检:submitter 管理员身份 / batch_signature / batch_seq / UserBank 绑定一致性 / 费率正确性 / 偿付充足
   - 逐笔 `execute_single_item`:L3 签名验证 / nonce / 分账(同行 vs 跨行)/ 防重放
 - 费率按 **收款方清算行** `L2FeeRateBp[recipient_bank]` 计算
 - 手续费**全部归收款方清算行的费用账户**,无省储行分成
@@ -81,17 +84,23 @@ pub struct OffchainBatchItemV2<AccountId, BlockNumber> {
 
 ### 2.5 `bank_check::SfidAccountQuery::is_admin_of`
 
-trait 新增方法,`()` 默认返回 false;runtime 侧 `DuoqianSfidAccountQuery` 委托给 `duoqian_manage_pow::DuoqianAccounts` 的 `admins` 列表。
+trait 新增方法,`()` 默认返回 false。runtime 侧 `DuoqianSfidAccountQuery` 先通过 `duoqian_manage_pow::Pallet::resolve_admin_subject_for_account` 找到机构或个人多签对应的管理员主体，再委托 `admins_origin_gov::Pallet::is_subject_admin` 校验。
+
+2026-04-29 补齐：清算行管理员真源不再是 `DuoqianAccounts.duoqian_admins`，所有内部投票和清算权限统一读取 `admins-origin-gov::Institutions`。
 
 ## 3. lib.rs 扩展
 
-### 3.1 Storage(3 个新)
+### 3.1 Storage
 
 ```rust
 L2FeeRateBp<Bank, u32>                           // 当前生效费率
 L2FeeRateProposed<Bank, (u32, BlockNumber)>      // 待生效提案
 MaxL2FeeRateBp: StorageValue<u32>                // 全局上限
+LastClearingBatchSeq<Bank, u64>                  // 已成功落账的最新批次序号
 ```
+
+2026-04-28 补齐:`LastClearingBatchSeq` 与 batch 级签名一起启用。`submit_offchain_batch_v2`
+要求 `batch_seq == LastClearingBatchSeq[bank] + 1`,并只在 settlement 成功后推进序号。
 
 ### 3.2 Call(3 个新)
 
@@ -116,6 +125,9 @@ MaxL2FeeRateBp: StorageValue<u32>                // 全局上限
 | `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank`(30~33) | 保留,依然工作 |
 | `UserBank` / `DepositBalance` / `BankTotalDeposits` / `L3PaymentNonce` | 保留,被 V2 清算路径正式使用 |
 
+2026-04-28 补齐:V2 settlement 现在显式要求 `UserBank[payer] == item.payer_bank`
+且 `UserBank[recipient] == item.recipient_bank`,防止移动端或节点绕过 UI 构造出绑定漂移的批次。
+
 ## 5. 编译验证
 
 ```
@@ -129,7 +141,7 @@ $ cargo check -p offchain-transaction-pos
 ## 6. 后续 Step 2b / 2c / 2d 清单
 
 **Step 2b · Node**:
-- `offchain/packer.rs.pack_and_submit` 补实现:取 ledger pending → 组 `OffchainBatchItemV2` → 多签 → 调 `submit_offchain_batch_v2`
+- `offchain/settlement/packer.rs::pack_and_submit` 补实现:取 ledger pending → 组 `OffchainBatchItemV2` → 多签 → 调 `submit_offchain_batch_v2`
 - `offchain/ledger.rs.accept_payment` 完整实现(签名验证 + 本地扣款 + 加入 pending)
 - `offchain/gossip.rs` 新建:清算行间 libp2p 协议推送 `{intent, a_sig, sender_ack}`
 - `offchain/rpc.rs` 增补 `offchain_submitPayment` + WS 订阅
@@ -161,3 +173,6 @@ $ cargo check -p offchain-transaction-pos
 ## 8. 变更记录
 
 - 2026-04-19:Step 2a 落地,Runtime 新增 3 子模块 + V2 结构 + 3 Storage + 3 Call + hook 扩展,零编译错误。
+- 2026-04-28:批次级安全补齐:新增 `LastClearingBatchSeq`,严格校验
+  `batch_signature` / `batch_seq`,settlement 增加 `UserBank` 绑定一致性校验;
+  runtime `spec_version` 3 → 4,`transaction_version` 保持 2;单测增至 23 个并通过。

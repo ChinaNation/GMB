@@ -19,8 +19,10 @@ citizenchain/node/src/offchain/
 ├── mod.rs              # 模块聚合 + Step 1/2 范围说明
 ├── ledger.rs           # 清算行本地 L3 存款缓存账本
 ├── rpc.rs              # 对 wuminapp 的 JSON-RPC(Step 1 只读查询)
-├── packer.rs           # 批次打包器骨架(Step 2 启用 submit)
-└── event_listener.rs   # 链上事件 → 本地 ledger 同步器
+├── reserve.rs          # 主账对账
+└── settlement/
+    ├── packer.rs       # 批次打包器骨架(Step 2 启用 submit)
+    └── listener.rs     # 链上事件 → 本地 ledger 同步器
 ```
 
 `citizenchain/node/src/main.rs` 的 `mod` 声明已加入 `mod offchain;`,与旧 3 mod 并存。
@@ -66,7 +68,7 @@ Step 2 起增加:
 - `offchain_submitPayment(intent_hex, payer_sig_hex) -> {tx_id, l2_ack_sig}`
 - `offchain_subscribeNotifications(user)` WebSocket 推送
 
-### 3.3 `offchain/packer.rs`
+### 3.3 `offchain/settlement/packer.rs`
 
 骨架实现:
 - `PACK_TX_THRESHOLD = 100_000`,`PACK_BLOCK_THRESHOLD = 10 块`
@@ -79,7 +81,7 @@ Step 2 补齐:
 - 构造 `offchain_transaction_pos::Call::submit_offchain_batch` extrinsic
 - 通过 `TransactionPool` 提交
 
-### 3.4 `offchain/event_listener.rs`
+### 3.4 `offchain/settlement/listener.rs`
 
 定义抽象 `OffchainChainEvent` 枚举(Step 2 由 `sc-client-api` 事件订阅解码填充):
 - `Deposited { user, bank, amount }`
@@ -89,15 +91,15 @@ Step 2 补齐:
 
 `EventListener::handle(ev)` 按 `my_bank` 过滤,只处理与本清算行相关的事件。
 
-## 4. 旧文件弃用标注
+## 4. 历史文件清理
 
-| 文件 | 头部注释 |
+| 文件 | 当前结论 |
 |---|---|
-| `node/src/offchain_ledger.rs` | ⚠️ Deprecated,指向 `offchain/ledger.rs`,Step 2 删除 |
-| `node/src/offchain_packer.rs` | ⚠️ Deprecated,指向 `offchain/packer.rs`,Step 2 删除 |
-| `node/src/offchain_gossip.rs` | ⚠️ Deprecated,省储行间 gossip 不再需要,Step 2 删除 |
+| `node/src/offchain_ledger.rs` | 已删除,统一使用 `offchain/ledger.rs` |
+| `node/src/offchain_packer.rs` | 已删除,统一使用 `offchain/settlement/packer.rs` |
+| `node/src/offchain_gossip.rs` | 已删除,省储行间 gossip 路线不再作为 node 目录入口 |
 
-注释为 doc comment,不强制 Rust `#[deprecated]` attribute,避免编译 warning 污染。
+清算行业务目录统一收口到 `citizenchain/node/src/offchain`。
 
 ## 5. 与 service.rs / rpc.rs 的接入(Step 2)
 
@@ -120,8 +122,8 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 |---|---|
 | `ledger.rs` | `deposited_then_withdrawn_roundtrip` / `save_load_roundtrip` / `wrong_password_rejected` / `settled_moves_pending_to_confirmed` |
 | `rpc.rs` | `query_balance_returns_zero_for_unknown_user` / `query_balance_reflects_deposited` / `query_next_nonce_starts_at_one` |
-| `packer.rs` | `should_pack_is_false_when_empty` |
-| `event_listener.rs` | `deposited_event_updates_own_bank_ledger` / `deposited_event_ignored_for_other_bank` / `withdrawn_decreases_confirmed` |
+| `settlement/packer.rs` | `should_pack_is_false_when_empty` |
+| `settlement/listener.rs` | `deposited_event_updates_own_bank_ledger` / `deposited_event_ignored_for_other_bank` / `withdrawn_decreases_confirmed` |
 
 Step 2 接入后补齐:`accept_payment` + `submit batch` + WS 推送的端到端测试。
 
