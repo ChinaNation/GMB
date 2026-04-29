@@ -1,6 +1,6 @@
 //! 多签交易模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `voting-engine-system::internal_vote`,本模块不再有
+//! Phase 2 整改后投票统一走 `voting-engine::internal_vote`,本模块不再有
 //! `finalize_create` / `vote_close` extrinsic。对应的 benchmark 已删除。
 
 #![cfg(feature = "runtime-benchmarks")]
@@ -11,7 +11,7 @@ use frame_support::traits::{Currency, Get};
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec;
-use voting_engine_system::STATUS_PASSED;
+use voting_engine::STATUS_PASSED;
 
 use crate::{
     pallet::{
@@ -114,7 +114,7 @@ fn find_safe_beneficiary<T: Config>(
 
 /// Benchmark 辅助:让指定提案通过(绕开投票路径,benchmark 只关心后续业务执行开销)。
 fn pass_proposal<T: Config>(proposal_id: u64) -> Result<(), BenchmarkError> {
-    voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED)
+    voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED)
         .map_err(|_| BenchmarkError::Stop("benchmark: set_status_and_emit PASSED failed"))?;
     Ok(())
 }
@@ -192,7 +192,7 @@ mod benchmarks {
         );
 
         assert!(DuoqianAccounts::<T>::contains_key(&duoqian_address));
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
         Ok(())
     }
 
@@ -238,7 +238,7 @@ mod benchmarks {
             beneficiary,
         );
 
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(1).is_some());
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(1).is_some());
         let _ = admin2; // avoid unused warning for admin2
         Ok(())
     }
@@ -271,7 +271,7 @@ mod benchmarks {
             amount,
         );
 
-        assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
         Ok(())
     }
 }

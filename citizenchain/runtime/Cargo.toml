@@ -67,13 +67,12 @@ sfid-code-auth = { path = "otherpallet/sfid-code-auth", default-features = false
 pow-difficulty-module = { path = "otherpallet/pow-difficulty-module", default-features = false }
 onchain-transaction-pow = { path = "transaction/onchain-transaction-pow", default-features = false }
 duoqian-manage-pow = { path = "transaction/duoqian-manage-pow", default-features = false }
-resolution-issuance-iss = { path = "issuance/resolution-issuance-iss", default-features = false }
-resolution-issuance-gov = { path = "governance/resolution-issuance-gov", default-features = false }
-voting-engine-system = { path = "governance/voting-engine-system", default-features = false }
-admins-origin-gov = { path = "governance/admins-origin-gov", default-features = false }
-grandpa-key-gov = { path = "governance/grandpa-key-gov", default-features = false }
-runtime-root-upgrade = { path = "governance/runtime-root-upgrade", default-features = false }
-resolution-destro-gov = { path = "governance/resolution-destro-gov", default-features = false }
+resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
+voting-engine = { path = "governance/voting-engine", default-features = false }
+admins-change = { path = "governance/admins-change", default-features = false }
+grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
+runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
+resolution-destro = { path = "governance/resolution-destro", default-features = false }
 duoqian-transfer-pow = { path = "transaction/duoqian-transfer-pow", default-features = false }
 institution-asset-guard = { path = "transaction/institution-asset-guard", default-features = false }
 offchain-transaction-pos = { path = "transaction/offchain-transaction-pos", default-features = false }
@@ -103,13 +102,12 @@ std = [
 	"pow-difficulty-module/std",
 	"onchain-transaction-pow/std",
 	"duoqian-manage-pow/std",
-	"resolution-issuance-iss/std",
-	"resolution-issuance-gov/std",
-	"voting-engine-system/std",
-	"admins-origin-gov/std",
-	"grandpa-key-gov/std",
-	"runtime-root-upgrade/std",
-	"resolution-destro-gov/std",
+	"resolution-issuance/std",
+	"voting-engine/std",
+	"admins-change/std",
+	"grandpakey-change/std",
+	"runtime-upgrade/std",
+	"resolution-destro/std",
 	"duoqian-transfer-pow/std",
 	"institution-asset-guard/std",
 	"offchain-transaction-pos/std",
@@ -152,13 +150,12 @@ runtime-benchmarks = [
 	"pow-difficulty-module/runtime-benchmarks",
 	"onchain-transaction-pow/runtime-benchmarks",
 	"duoqian-manage-pow/runtime-benchmarks",
-	"resolution-issuance-iss/runtime-benchmarks",
-	"resolution-issuance-gov/runtime-benchmarks",
-	"voting-engine-system/runtime-benchmarks",
-	"admins-origin-gov/runtime-benchmarks",
-	"grandpa-key-gov/runtime-benchmarks",
-	"runtime-root-upgrade/runtime-benchmarks",
-	"resolution-destro-gov/runtime-benchmarks",
+	"resolution-issuance/runtime-benchmarks",
+	"voting-engine/runtime-benchmarks",
+	"admins-change/runtime-benchmarks",
+	"grandpakey-change/runtime-benchmarks",
+	"runtime-upgrade/runtime-benchmarks",
+	"resolution-destro/runtime-benchmarks",
 	"duoqian-transfer-pow/runtime-benchmarks",
 	"institution-asset-guard/std",
 	"offchain-transaction-pos/runtime-benchmarks",
@@ -181,13 +178,12 @@ try-runtime = [
 	"pow-difficulty-module/try-runtime",
 	"onchain-transaction-pow/try-runtime",
 	"duoqian-manage-pow/try-runtime",
-	"resolution-issuance-iss/try-runtime",
-	"resolution-issuance-gov/try-runtime",
-	"voting-engine-system/try-runtime",
-	"admins-origin-gov/try-runtime",
-	"grandpa-key-gov/try-runtime",
-	"runtime-root-upgrade/try-runtime",
-	"resolution-destro-gov/try-runtime",
+	"resolution-issuance/try-runtime",
+	"voting-engine/try-runtime",
+	"admins-change/try-runtime",
+	"grandpakey-change/try-runtime",
+	"runtime-upgrade/try-runtime",
+	"resolution-destro/try-runtime",
 	"duoqian-transfer-pow/try-runtime",
 	"institution-asset-guard/std",
 	"offchain-transaction-pos/try-runtime",

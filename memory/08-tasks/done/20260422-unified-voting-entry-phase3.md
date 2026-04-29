@@ -9,7 +9,7 @@
 把所有"管理员一人一票"动作收敛到客户端单一入口：
 
 ```
-(pallet=9, call=0)  VotingEngineSystem::internal_vote(proposal_id: u64, approve: bool)
+(pallet=9, call=0)  VotingEngine::internal_vote(proposal_id: u64, approve: bool)
 ```
 
 `joint_vote` / `citizen_vote` 路径保留，但 call_index 同步 Phase 2 新编号
@@ -45,7 +45,7 @@ Explore 扫描确认真实客户端分布:
 
 | 文件 | 改动 |
 |---|---|
-| `lib/signer/pallet_registry.dart` | VotingEngineSystem 新增 `internalVoteCall=0` / `finalizeProposalCall=3`;jointVote 3→1 / citizenVote 4→2;删除业务 pallet 的投票 call 常量(voteAdminReplacementCall / voteDestroyCall / voteCloseCall(17) / voteKeyChangeCall) |
+| `lib/signer/pallet_registry.dart` | VotingEngine 新增 `internalVoteCall=0` / `finalizeProposalCall=3`;jointVote 3→1 / citizenVote 4→2;删除业务 pallet 的投票 call 常量(voteAdminReplacementCall / voteDestroyCall / voteCloseCall(17) / voteKeyChangeCall) |
 | `lib/signer/payload_decoder.dart` | 新增 `_decodeInternalVote`(pallet=9 call=0);重写 `_decodeJointVote`(call 3→1) / `_decodeCitizenVote`(call 4→2);删除 `_decodeVoteProposal` 及其 dispatch 表 |
 | `lib/signer/action_labels.dart` | 删 `vote_admin_replacement / vote_destroy / vote_close / vote_key_change / vote_create / vote_transfer / vote_safety_fund_transfer / vote_sweep_to_main` 标签;新增 `internal_vote` / `finalize_proposal` 标签 |
 
@@ -62,7 +62,7 @@ Explore 扫描确认真实客户端分布:
 
 ## call_index 变更对照(Phase 2 runtime 真值)
 
-pallet=9 VotingEngineSystem:
+pallet=9 VotingEngine:
 - 0 `internal_vote(proposal_id, approve)` ← Phase 3 主入口
 - 1 `joint_vote(proposal_id, institution_id, approve)` ← 原 3
 - 2 `citizen_vote(proposal_id, binding_id, nonce, signature, approve)` ← 原 4
@@ -92,7 +92,7 @@ pallet=9 VotingEngineSystem:
     buildSafetyFundVoteRequest / useSafetyFundVote / useSweepVote /
     voteAdminReplacementCall / voteDestroyCall / voteKeyChangeCall /
     _voteCallIndex / _decodeVoteProposal` 全数清零
-  - Rust 端 `cast_internal_vote(` 调用清零(仅保留 voting-engine-system 测试
+  - Rust 端 `cast_internal_vote(` 调用清零(仅保留 voting-engine 测试
     helper `cast_internal_vote_via_extrinsic`,名称保留但内部走
     `Pallet::internal_vote` extrinsic)
 - ⏭️ 端到端联调(fresh genesis → 5 种提案各投一轮)留给运行时启动时执行

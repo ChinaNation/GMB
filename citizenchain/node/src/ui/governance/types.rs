@@ -1,4 +1,4 @@
-// 治理模块数据类型，对应链上 AdminsOriginGov 等 pallet 的存储结构。
+// 治理模块数据类型，对应链上 AdminsChange 等 pallet 的存储结构。
 
 use serde::Serialize;
 

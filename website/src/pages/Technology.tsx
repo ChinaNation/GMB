@@ -20,7 +20,7 @@ const pallets = [
   },
   {
     name: 'GRANDPA 终局性',
-    module: 'grandpa-key-gov',
+    module: 'grandpakey-change',
     desc: '44 个权威节点参与 GRANDPA 终局性投票，确保区块不可回滚',
   },
   {
@@ -40,17 +40,17 @@ const pallets = [
   },
   {
     name: '治理投票引擎',
-    module: 'voting-engine-system',
+    module: 'voting-engine',
     desc: '三级投票引擎：内部投票、联合投票、公民投票，链上透明计票',
   },
   {
-    name: '发行决议治理',
-    module: 'resolution-issuance-gov',
-    desc: '货币增发提案投票机制，需经多级治理审批通过方可执行',
+    name: '决议发行',
+    module: 'resolution-issuance',
+    desc: '货币增发提案、联合投票与发行执行统一闭环，需经多级治理审批通过方可落账',
   },
   {
     name: '管理员治理',
-    module: 'admins-origin-gov',
+    module: 'admins-change',
     desc: '多签管理员体系，国储 13/19、省储 6/9 签名门槛，保障去中心化决策',
   },
 ]

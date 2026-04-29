@@ -117,7 +117,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 ## institution.rs — 机构查询
 
-- 读取 `AdminsOriginGov::Institutions` 存储
+- 读取 `AdminsChange::Institutions` 存储
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
 

@@ -9,7 +9,7 @@ completed: 2026-04-20
 # 执行结果（2026-04-20）
 
 - primitives/china/ 8 文件完成 `duoqian_address → main_address` + `CHINA_RESERVED_DUOQIAN_ADDRESSES → CHINA_RESERVED_MAIN_ADDRESSES` + `is_reserved_duoqian_address → is_reserved_main_address` + 测试函数 `all_china_ch_duoqian_addresses_are_unique → all_china_ch_main_addresses_are_unique`
-- runtime 调用方：configs/mod.rs（选择性保留 duoqian_manage_pow::propose_close pattern bindings）、genesis_config_presets.rs、runtime/src/lib.rs、resolution-issuance-gov、resolution-destro-gov、shengbank-stake-interest、offchain-transaction-pos、onchain-transaction-pow、duoqian-transfer-pow、institution-asset-guard 全部更新
+- runtime 调用方：configs/mod.rs（选择性保留 duoqian_manage_pow::propose_close pattern bindings）、genesis_config_presets.rs、runtime/src/lib.rs、resolution-issuance-gov、resolution-destro、shengbank-stake-interest、offchain-transaction-pos、onchain-transaction-pow、duoqian-transfer-pow、institution-asset-guard 全部更新
 - 节点 UI：node/src/ui/governance/ mod.rs + types.rs + signing.rs；node/frontend/governance/ 4 份 TS 文件 `duoqianAddress → mainAddress`
 - 文档：11 份 memory/05-modules 技术文档 + GMB_WHITEPAPER + 3 份任务卡注释更新
 - 工具：tools/duoqian.py 扫描正则、生成模板同步；Rust 引用函数名 `derive_duoqian_address_from_sfid_id` 保留
@@ -51,7 +51,7 @@ completed: 2026-04-20
 - [ ] `runtime/src/genesis_config_presets.rs`（全量）
 - [ ] `runtime/src/lib.rs`（2 条注释）
 - [ ] `runtime/governance/resolution-issuance-gov/` lib.rs + benchmarks.rs（全量）
-- [ ] `runtime/governance/resolution-destro-gov/src/lib.rs`（全量）
+- [ ] `runtime/governance/resolution-destro/src/lib.rs`（全量）
 - [ ] `runtime/issuance/shengbank-stake-interest/src/lib.rs`（全量）
 - [ ] `runtime/transaction/offchain-transaction-pos/src/lib.rs`（1 处）
 - [ ] `runtime/transaction/onchain-transaction-pow/src/lib.rs` + benches（全量）
@@ -69,8 +69,8 @@ completed: 2026-04-20
 
 - [ ] memory/05-modules/citizenchain/runtime/primitives/PRIMITIVES_TECHNICAL.md、BLAKE2_ADDRESS_DERIVATION.md
 - [ ] memory/05-modules/citizenchain/runtime/issuance/shengbank-stake-interest/SHENGBANK_TECHNICAL.md
-- [ ] memory/05-modules/citizenchain/runtime/governance/resolution-destro-gov/RESOLUTIONDESTRO_TECHNICAL.md
-- [ ] memory/05-modules/citizenchain/runtime/governance/voting-engine-system/VOTINGENGINE_TECHNICAL.md
+- [ ] memory/05-modules/citizenchain/runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md
+- [ ] memory/05-modules/citizenchain/runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md
 - [ ] memory/05-modules/citizenchain/runtime/transaction/institution-asset-guard/INSTITUTION_ASSET_GUARD_TECHNICAL.md
 - [ ] memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer-pow/DUOQIAN_TRANSFER_TECHNICAL.md + SWEEP_TECHNICAL.md（指向 primitives 的段落）
 - [ ] memory/00-vision/GMB_WHITEPAPER.md

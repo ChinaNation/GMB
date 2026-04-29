@@ -1,6 +1,6 @@
 /// 机构数据模型与静态注册表。
 ///
-/// shenfen_id 与链上 `AdminsOriginGov.CurrentAdmins` 存储的 key 一一对应，
+/// shenfen_id 与链上 `AdminsChange.Institutions` 存储的 key 一一对应，
 /// 来源于 `primitives/china/china_cb.rs`（国储会+省储会）和
 /// `primitives/china/china_ch.rs`（省储行）。
 library;
@@ -215,8 +215,7 @@ List<int> _hexDecode(String hex) {
   final clean = _normalizeHex(hex);
   return List<int>.generate(
     clean.length ~/ 2,
-    (index) =>
-        int.parse(clean.substring(index * 2, index * 2 + 2), radix: 16),
+    (index) => int.parse(clean.substring(index * 2, index * 2 + 2), radix: 16),
     growable: false,
   );
 }

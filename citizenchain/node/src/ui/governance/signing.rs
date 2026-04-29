@@ -118,9 +118,9 @@ pub struct VoteSubmitResult {
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」:
-/// 所有业务 pallet(admins_origin_gov / resolution_destro_gov /
-/// grandpa_key_gov / duoqian_manage_pow / duoqian_transfer_pow)的 vote_X
-/// 已物理删除,管理员一人一票统一走 `VotingEngineSystem::internal_vote`
+/// 所有业务 pallet(admins_change / resolution_destro /
+/// grandpakey_change / duoqian_manage_pow / duoqian_transfer_pow)的 vote_X
+/// 已物理删除,管理员一人一票统一走 `VotingEngine::internal_vote`
 /// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
 /// `InternalVoteExecutor`。
 ///
@@ -150,7 +150,7 @@ pub fn build_vote_sign_request(
 
     // 构建 call data: [pallet=9][call=0][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
-    call_data.push(9u8); // VotingEngineSystem pallet index
+    call_data.push(9u8); // VotingEngine pallet index
     call_data.push(0u8); // internal_vote call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
@@ -245,7 +245,7 @@ pub fn build_joint_vote_sign_request(
 
     // call data: [pallet=9][call=1][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 48 + 1);
-    call_data.push(9u8); // VotingEngineSystem pallet index
+    call_data.push(9u8); // VotingEngine pallet index
     call_data.push(1u8); // joint_vote call index (Phase 2 重排,原 3)
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_id);
@@ -655,10 +655,10 @@ pub fn build_developer_upgrade_sign_request(
     let nonce = fetch_nonce(&pubkey_clean)?;
 
     // call data: [0x0d][0x02][compact_len(wasm)][wasm_bytes]
-    // pallet 13 = RuntimeRootUpgrade, call 2 = developer_direct_upgrade
+    // pallet 13 = RuntimeUpgrade, call 2 = developer_direct_upgrade
     let wasm_len_compact = encode_compact_u32(wasm_code.len() as u32);
     let mut call_data = Vec::with_capacity(2 + wasm_len_compact.len() + wasm_code.len());
-    call_data.push(13u8); // RuntimeRootUpgrade pallet
+    call_data.push(13u8); // RuntimeUpgrade pallet
     call_data.push(2u8); // developer_direct_upgrade call
     call_data.extend_from_slice(&wasm_len_compact);
     call_data.extend_from_slice(&wasm_code);
@@ -878,7 +878,7 @@ pub fn build_propose_runtime_upgrade_call_data(
             + sig_compact.len()
             + sig_bytes.len(),
     );
-    call_data.push(13u8); // RuntimeRootUpgrade pallet
+    call_data.push(13u8); // RuntimeUpgrade pallet
     call_data.push(0u8); // propose_runtime_upgrade call
     call_data.extend_from_slice(&reason_compact);
     call_data.extend_from_slice(reason_bytes);

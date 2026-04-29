@@ -49,7 +49,7 @@ pub type TxPool =
   保持逐字节一致。
 - β-2-a 外层 `SignedPayload`:签**整个 extrinsic** 的 `TxExtension + call + implicit`,构成 `UncheckedExtrinsic.signature`
 
-两签名共用同一 `sr25519::Pair`,所以对应账户必须是该清算行在 `admins-origin-gov::Institutions` 中登记的管理员之一,否则链上 `ensure_signed` 通过后 pallet 内置 `is_admin_of` 检查会拒绝。
+两签名共用同一 `sr25519::Pair`,所以对应账户必须是该清算行在 `admins-change::Institutions` 中登记的管理员之一,否则链上 `ensure_signed` 通过后 pallet 内置 `is_admin_of` 检查会拒绝。
 
 ### 2.3 extrinsic 构造
 
