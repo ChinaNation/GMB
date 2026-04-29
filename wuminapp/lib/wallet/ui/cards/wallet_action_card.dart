@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:wuminapp_mobile/rpc/offchain_clearing.dart';
+import 'package:wuminapp_mobile/trade/offchain/clearing_bank_prefs.dart';
+import 'package:wuminapp_mobile/trade/offchain/deposit_page.dart';
+import 'package:wuminapp_mobile/trade/offchain/withdraw_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -7,16 +11,54 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 布局:Row + 3 个 Expanded,三列等宽,spaceAround 分布。
-/// - 充值列 / 提现列:可点击,SnackBar「功能开发中」,下方用非断空格占位保持和
-///   余额列底部对齐。
-/// - 余额列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调,
-///   下方小字 `0.00 元` 为占位,等清算行功能落地后接真实数据。
-/// - wallet 参数当前未使用,保留作后续业务对接时的入参(充值链路会要用钱包地
-///   址去查清算行余额)。
-class WalletActionCard extends StatelessWidget {
+/// - 充值列 / 提现列:已绑定清算行时进入真实充值 / 提现页;未绑定时提示先绑定。
+/// - 余额列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调。
+/// - 清算行余额来自当前绑定快照中的节点端点,通过 `offchain_queryBalance`
+///   查询;失败时展示节点不可达,不再写死 0.00 元。
+class WalletActionCard extends StatefulWidget {
   const WalletActionCard({super.key, required this.wallet});
 
   final WalletProfile wallet;
+
+  @override
+  State<WalletActionCard> createState() => WalletActionCardState();
+}
+
+class WalletActionCardState extends State<WalletActionCard> {
+  ClearingBankBindingSnapshot? _binding;
+  String _balanceText = '读取中';
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    final binding =
+        await ClearingBankPrefs.loadSnapshot(widget.wallet.walletIndex);
+    if (!mounted) return;
+    setState(() {
+      _binding = binding;
+      _balanceText = binding == null ? '未绑定' : '查询中';
+    });
+    if (binding != null) {
+      await _loadBalance(binding);
+    }
+  }
+
+  Future<void> _loadBalance(ClearingBankBindingSnapshot binding) async {
+    try {
+      final balance = await OffchainClearingNodeRpc(
+        binding.wssUrl,
+      ).queryBalance(widget.wallet.address);
+      if (!mounted) return;
+      setState(() => _balanceText = _fenToYuan(balance));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _balanceText = '节点不可达');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,32 +73,68 @@ class WalletActionCard extends StatelessWidget {
             child: _ClickableAction(
               icon: Icons.arrow_circle_down_outlined,
               label: '充值',
-              onTap: () => _showDevSnackBar(context),
+              onTap: () => _openDeposit(context),
             ),
           ),
           Expanded(
             child: _ClickableAction(
               icon: Icons.arrow_circle_up_outlined,
               label: '提现',
-              onTap: () => _showDevSnackBar(context),
+              onTap: () => _openWithdraw(context),
             ),
           ),
-          const Expanded(
-            child: _StaticBalance(),
+          Expanded(
+            child: _StaticBalance(balanceText: _balanceText),
           ),
         ],
       ),
     );
   }
 
-  /// 统一的「功能开发中」提示。
-  static void _showDevSnackBar(BuildContext context) {
+  Future<void> _openDeposit(BuildContext context) async {
+    final binding = _binding;
+    if (binding == null) {
+      _showNeedBinding(context);
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DepositPage(wallet: widget.wallet)),
+    );
+    await refresh();
+  }
+
+  Future<void> _openWithdraw(BuildContext context) async {
+    final binding = _binding;
+    if (binding == null) {
+      _showNeedBinding(context);
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WithdrawPage(
+          wallet: widget.wallet,
+          wssUrl: binding.wssUrl,
+        ),
+      ),
+    );
+    await refresh();
+  }
+
+  static void _showNeedBinding(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('功能开发中'),
+        content: Text('请先在“清算行”页面绑定清算行'),
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  static String _fenToYuan(int fen) {
+    final yuan = fen ~/ 100;
+    final cents = (fen % 100).abs();
+    return '$yuan.${cents.toString().padLeft(2, '0')} 元';
   }
 }
 
@@ -128,7 +206,9 @@ class _ClickableAction extends StatelessWidget {
 /// - 图标用普通 Container + BoxShape.circle,没有 Material 涟漪,也没有 onTap。
 /// - `0.00 元` 是占位,等清算行功能落地后接真实数据。
 class _StaticBalance extends StatelessWidget {
-  const _StaticBalance();
+  const _StaticBalance({required this.balanceText});
+
+  final String balanceText;
 
   @override
   Widget build(BuildContext context) {
@@ -158,10 +238,9 @@ class _StaticBalance extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // 中文注释:占位文本,等清算行功能落地后接真实数据。
-        const Text(
-          '0.00 元',
-          style: TextStyle(
+        Text(
+          balanceText,
+          style: const TextStyle(
             fontSize: 12,
             color: AppTheme.textTertiary,
           ),

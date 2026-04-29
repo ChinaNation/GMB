@@ -556,7 +556,8 @@ class WalletListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     // 中文注释:钱包图标按冷热区分配色 —— 热=墨绿主色(链上主用),冷=蓝(离线签名设备调性)。
     final isHot = wallet.isHotWallet;
-    final iconBg = isHot ? AppTheme.primary.withAlpha(20) : AppTheme.info.withAlpha(20);
+    final iconBg =
+        isHot ? AppTheme.primary.withAlpha(20) : AppTheme.info.withAlpha(20);
     final iconColor = isHot ? AppTheme.primaryDark : AppTheme.info;
     return Material(
       color: Colors.transparent,
@@ -667,12 +668,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
   /// 中文注释:外层下拉刷新通过此 key 触发链上余额卡的 refresh()。
   final GlobalKey<WalletOnchainBalanceCardState> _balanceCardKey =
       GlobalKey<WalletOnchainBalanceCardState>();
+  final GlobalKey<WalletActionCardState> _actionCardKey =
+      GlobalKey<WalletActionCardState>();
 
   /// 整页下拉刷新:
   /// - 链上余额卡:通过 GlobalKey 调 refresh()
   /// - 交易记录:复用 _loadRecentRecords()
-  /// - 清算行余额(动作卡"余额"列):本轮 0.00 元 写死占位,
-  ///   待清算行功能落地后在此追加刷新调用。TODO(清算行)
+  /// - 清算行余额:通过 WalletActionCard 读取当前绑定清算行节点余额。
   Future<void> _onPullRefresh() async {
     await Future.wait<void>([
       Future(() async {
@@ -680,6 +682,13 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
           await _balanceCardKey.currentState?.refresh();
         } catch (_) {
           // 中文注释:链上余额刷新失败已在卡片内置错误态处理,这里不打断其他刷新
+        }
+      }),
+      Future(() async {
+        try {
+          await _actionCardKey.currentState?.refresh();
+        } catch (_) {
+          // 中文注释:清算行节点可能暂不可达,动作卡内部会展示节点不可达。
         }
       }),
       _loadRecentRecords(),
@@ -772,8 +781,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
         // 中文注释:跳转「设置清算行」占位页。真实搜索/绑定流程等后续任务卡。
         await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) =>
-                ClearingBankSettingsPage(wallet: widget.wallet),
+            builder: (_) => ClearingBankSettingsPage(wallet: widget.wallet),
           ),
         );
       case 'seed':
@@ -935,7 +943,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
               ),
               const SizedBox(height: 16),
               // 第 2 张卡:充值 / 提现 / 余额(3 列,余额为静态展示)。
-              WalletActionCard(wallet: widget.wallet),
+              WalletActionCard(key: _actionCardKey, wallet: widget.wallet),
               const SizedBox(height: 16),
               // 第 3 张卡:链上 total 余额(free + reserved)。
               WalletOnchainBalanceCard(
@@ -977,8 +985,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
               ),
               Spacer(),
-              Icon(Icons.chevron_right,
-                  size: 20, color: AppTheme.textTertiary),
+              Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
             ],
           ),
         ),
@@ -1049,8 +1056,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                   ),
                 ),
               ),
-              if (index < _recentRecords.length - 1)
-                const Divider(height: 1),
+              if (index < _recentRecords.length - 1) const Divider(height: 1),
             ],
           );
         }),

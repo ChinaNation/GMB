@@ -105,8 +105,14 @@ lib/signer/
 | VotingEngine(9) / citizen_vote(4) | `citizen_vote` | 公民投票 |
 | RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | Runtime 升级提案 |
 | RuntimeUpgrade(13) / developer(2) | `developer_upgrade` | 开发者直升 |
-| OffchainTransaction(21) / bind(9) | `bind_clearing` | 绑定清算行 |
-| OffchainTransaction(21) / pay(99) | `offchain_pay` | 链下支付授权 |
+| OffchainTransaction(21) / bind(30) | `bind_clearing_bank` | 绑定清算行 |
+| OffchainTransaction(21) / deposit(31) | `deposit_clearing_bank` | 清算行充值 |
+| OffchainTransaction(21) / withdraw(32) | `withdraw_clearing_bank` | 清算行提现 |
+| OffchainTransaction(21) / switch(33) | `switch_clearing_bank` | 切换清算行 |
+| OffchainTransaction(21) / register(50) | `register_clearing_bank` | 声明清算行节点 |
+| OffchainTransaction(21) / update_endpoint(51) | `update_clearing_bank_endpoint` | 更新清算行节点端点 |
+| OffchainTransaction(21) / unregister(52) | `unregister_clearing_bank` | 注销清算行节点 |
+| `GMB_DECRYPT_V1` 内层 payload | `decrypt_admin` | 管理员解密清算密钥挑战签名 |
 
 交叉验证三态（`DisplayMatchStatus`）：
 
@@ -142,6 +148,10 @@ lib/signer/
 - `issued_at`
 - `expires_at`
 - `display` — **V2 新增**，人可读交易摘要（`Map`），必须包含 `action` 和 `summary`
+
+`GMB_DECRYPT_V1` 不是新的二维码协议。它只是在 `WUMIN_QR_V1` 的
+`payload_hex` 内部给"管理员解密清算密钥"挑战签名使用的业务域前缀,用于让冷钱包
+在人眼确认时把该请求识别为本地密钥解密授权,不把它误判成链上 extrinsic。
 
 ### 5.2 签名回执（外部签名设备 -> 手机）
 

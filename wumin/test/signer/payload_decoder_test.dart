@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,16 @@ import 'package:wumin/signer/payload_decoder.dart';
 
 void main() {
   final spec = PalletRegistry.supportedSpecVersions.first;
+
+  String hexOf(List<int> payload) =>
+      '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+
+  List<int> compactVec(String text) {
+    final bytes = utf8.encode(text);
+    return [bytes.length << 2, ...bytes];
+  }
+
+  List<int> u16Le(int value) => [value & 0xff, (value >> 8) & 0xff];
 
   group('PayloadDecoder', () {
     test('decodes transfer_keep_alive (pallet=2 call=3)', () {
@@ -22,7 +33,8 @@ void main() {
         0xA2, 0x6D, 0x01, 0x00, // Compact(23400)
       ]);
 
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -42,7 +54,8 @@ void main() {
         42, 0, 0, 0, 0, 0, 0, 0,
         1, // approve = true
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -54,11 +67,20 @@ void main() {
 
     test('decodes internal_vote (pallet=9 call=0) approve=false', () {
       final payload = Uint8List.fromList([
-        0x09, 0x00,
-        7, 0, 0, 0, 0, 0, 0, 0,
+        0x09,
+        0x00,
+        7,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         0,
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
       expect(decoded!.action, 'internal_vote');
       expect(decoded.fields['approve'], 'false');
@@ -68,12 +90,21 @@ void main() {
     test('decodes joint_vote (pallet=9 call=1)', () {
       // Phase 2 重排：joint_vote 由原 call=3 迁到 call=1。
       final payload = Uint8List.fromList([
-        0x09, 0x01,
-        7, 0, 0, 0, 0, 0, 0, 0,
+        0x09,
+        0x01,
+        7,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         ...List.filled(48, 0),
         0,
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -93,7 +124,8 @@ void main() {
         0, // Vec sig len=0
         1,
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -104,10 +136,19 @@ void main() {
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
       final payload = Uint8List.fromList([
-        0x09, 0x03,
-        15, 0, 0, 0, 0, 0, 0, 0,
+        0x09,
+        0x03,
+        15,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
       expect(decoded!.action, 'finalize_proposal');
       expect(decoded.fields['proposal_id'], '15');
@@ -133,6 +174,94 @@ void main() {
       expect(PayloadDecoder.decode('0x0900'), isNull);
     });
 
+    test('decodes clearing bank register node call', () {
+      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
+      const domain = 'l2.example.com';
+      final payload = Uint8List.fromList([
+        21,
+        50,
+        ...compactVec(sfidId),
+        ...compactVec(peerId),
+        ...compactVec(domain),
+        ...u16Le(9944),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'register_clearing_bank');
+      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['peer_id'], peerId);
+      expect(decoded.fields['rpc_domain'], domain);
+      expect(decoded.fields['rpc_port'], '9944');
+    });
+
+    test('decodes clearing bank endpoint update call', () {
+      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const domain = 'new-l2.example.com';
+      final payload = Uint8List.fromList([
+        21,
+        51,
+        ...compactVec(sfidId),
+        ...compactVec(domain),
+        ...u16Le(443),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'update_clearing_bank_endpoint');
+      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['new_domain'], domain);
+      expect(decoded.fields['new_port'], '443');
+    });
+
+    test('decodes clearing bank unregister call', () {
+      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      final payload = Uint8List.fromList([
+        21,
+        52,
+        ...compactVec(sfidId),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'unregister_clearing_bank');
+      expect(decoded.fields['sfid_id'], sfidId);
+    });
+
+    test('decodes clearing bank decrypt challenge without specVersion', () {
+      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      final idBytes = List<int>.filled(48, 0);
+      final rawId = ascii.encode(sfidId);
+      for (var i = 0; i < rawId.length; i++) {
+        idBytes[i] = rawId[i];
+      }
+      final payload = Uint8List.fromList([
+        ...ascii.encode('GMB_DECRYPT_V1'),
+        ...idBytes,
+        ...List<int>.filled(32, 0xAA),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...List<int>.filled(16, 0xBB),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'decrypt_admin');
+      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.summary, contains('解密清算行管理员'));
+    });
+
     test('decodes propose_sweep_to_main 国储会 (pallet=19 call=2)', () {
       // Phase 2 重排：propose_sweep_to_main 由原 call=5 迁到 call=2。
       const shenfenId = 'GFR-LN001-CB0C-617776487-20260222';
@@ -147,12 +276,14 @@ void main() {
       amountBytes[1] = (amount >> 8) & 0xff;
 
       final payload = Uint8List.fromList([
-        0x13, 0x02,
+        0x13,
+        0x02,
         ...idBytes,
         ...amountBytes,
       ]);
 
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -172,11 +303,13 @@ void main() {
       amountBytes[0] = 0x10;
 
       final payload = Uint8List.fromList([
-        0x13, 0x02,
+        0x13,
+        0x02,
         ...idBytes,
         ...amountBytes,
       ]);
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -195,7 +328,8 @@ void main() {
         0xA9, 0x03, // Compact(234) two-byte mode
       ]);
 
-      final hex = '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
@@ -232,7 +366,8 @@ void main() {
 
     test('decodes execute_transfer (pallet=19 call=3)', () {
       final payload = buildProposalIdPayload(0x13, 0x03, 100);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_transfer');
       expect(decoded.fields['proposal_id'], '100');
@@ -241,7 +376,8 @@ void main() {
 
     test('decodes execute_safety_fund_transfer (pallet=19 call=4)', () {
       final payload = buildProposalIdPayload(0x13, 0x04, 101);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_safety_fund_transfer');
       expect(decoded.fields['proposal_id'], '101');
@@ -249,7 +385,8 @@ void main() {
 
     test('decodes execute_sweep_to_main (pallet=19 call=5)', () {
       final payload = buildProposalIdPayload(0x13, 0x05, 102);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_sweep_to_main');
       expect(decoded.fields['proposal_id'], '102');
@@ -257,7 +394,8 @@ void main() {
 
     test('decodes execute_destroy (pallet=14 call=1)', () {
       final payload = buildProposalIdPayload(0x0e, 0x01, 200);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_destroy');
       expect(decoded.fields['proposal_id'], '200');
@@ -265,7 +403,8 @@ void main() {
 
     test('decodes execute_admin_replacement (pallet=12 call=1)', () {
       final payload = buildProposalIdPayload(0x0c, 0x01, 300);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_admin_replacement');
       expect(decoded.fields['proposal_id'], '300');
@@ -273,7 +412,8 @@ void main() {
 
     test('decodes execute_replace_grandpa_key (pallet=16 call=1)', () {
       final payload = buildProposalIdPayload(0x10, 0x01, 400);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'execute_replace_grandpa_key');
       expect(decoded.fields['proposal_id'], '400');
@@ -281,7 +421,8 @@ void main() {
 
     test('decodes cancel_failed_replace_grandpa_key (pallet=16 call=2)', () {
       final payload = buildProposalIdPayload(0x10, 0x02, 401);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_failed_replace_grandpa_key');
       expect(decoded.fields['proposal_id'], '401');
@@ -289,7 +430,8 @@ void main() {
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
       final payload = buildProposalIdPayload(0x11, 0x04, 500);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cleanup_rejected_proposal');
       expect(decoded.fields['proposal_id'], '500');
@@ -312,7 +454,8 @@ void main() {
         (wasmLen << 2) & 0xff,
         ...wasmBytes,
       ]);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'developer_direct_upgrade');
       expect(decoded.fields['wasm_size'], '0 KB'); // 4 字节 < 1 KB
@@ -342,7 +485,8 @@ void main() {
         (eligibleTotal >> 24) & 0xff,
         0, 0, 0, 0,
       ]);
-      final decoded = PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_runtime_upgrade');
       expect(decoded.fields['reason'], 'ok');

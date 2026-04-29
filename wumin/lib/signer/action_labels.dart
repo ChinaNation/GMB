@@ -43,7 +43,14 @@ const Map<String, String> actionLabels = {
 
   // 其他
   'activate_admin': '管理员激活',
+  'decrypt_admin': '解密清算行管理员',
   'offchain_pay': '链下支付',
   'bind_clearing_bank': '绑定清算行',
+  'deposit_clearing_bank': '充值到清算行',
+  'withdraw_clearing_bank': '从清算行提现',
+  'switch_clearing_bank': '切换清算行',
   'offchain_clearing_pay': '清算行扫码付款',
+  'register_clearing_bank': '声明清算行节点',
+  'update_clearing_bank_endpoint': '更新清算行端点',
+  'unregister_clearing_bank': '注销清算行节点',
 };

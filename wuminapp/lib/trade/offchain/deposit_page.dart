@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/rpc/onchain_clearing_bank.dart';
+import 'package:wuminapp_mobile/trade/offchain/clearing_bank_prefs.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 扫码支付清算体系 Step 1 新增:**充值** L3 自持账户 → 清算行主账户。
@@ -22,11 +23,25 @@ class DepositPage extends StatefulWidget {
 class _DepositPageState extends State<DepositPage> {
   final TextEditingController _amountCtrl = TextEditingController();
   bool _submitting = false;
+  ClearingBankBindingSnapshot? _binding;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBinding();
+  }
 
   @override
   void dispose() {
     _amountCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBinding() async {
+    final binding =
+        await ClearingBankPrefs.loadSnapshot(widget.wallet.walletIndex);
+    if (!mounted) return;
+    setState(() => _binding = binding);
   }
 
   @override
@@ -38,12 +53,17 @@ class _DepositPageState extends State<DepositPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('从自持账户转入绑定的清算行存款。',
-                style: TextStyle(color: Colors.grey)),
+            Text(
+              _binding == null
+                  ? '请先绑定清算行后再充值。'
+                  : '转入 ${_binding!.institutionName.isEmpty ? _binding!.sfidId : _binding!.institutionName}',
+              style: const TextStyle(color: Colors.grey),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: '充值金额(元)',
                 hintText: '例如 100.00',
@@ -81,6 +101,12 @@ class _DepositPageState extends State<DepositPage> {
     }
 
     final wallet = widget.wallet;
+    if (_binding == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先绑定清算行')),
+      );
+      return;
+    }
     if (!wallet.isHotWallet) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Step 1 暂仅支持热钱包充值;冷钱包路径 Step 2 接入')),
@@ -113,10 +139,12 @@ class _DepositPageState extends State<DepositPage> {
       Navigator.pop(context, true);
     } on WalletAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('充值失败:$e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('充值失败:$e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

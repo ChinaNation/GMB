@@ -84,6 +84,7 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 pub mod pallet {
     use super::*;
     use crate::bank_check::SfidAccountQuery;
+    use crate::weights::WeightInfo;
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -422,7 +423,7 @@ pub mod pallet {
         /// - 未绑定其他清算行
         /// - `bank_main_address` 必须是 SFR/FFR 私权机构 + 多签 Active + 主账户
         #[pallet::call_index(30)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
+        #[pallet::weight(T::WeightInfo::bind_clearing_bank())]
         pub fn bind_clearing_bank(
             origin: OriginFor<T>,
             bank_main_address: T::AccountId,
@@ -433,7 +434,7 @@ pub mod pallet {
 
         /// L3 从自持链上账户充值到绑定的清算行主账户。`amount` 单位分。
         #[pallet::call_index(31)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 3))]
+        #[pallet::weight(T::WeightInfo::deposit())]
         pub fn deposit(origin: OriginFor<T>, amount: u128) -> DispatchResult {
             let user = ensure_signed(origin)?;
             crate::deposit::do_deposit::<T>(user, amount)
@@ -441,7 +442,7 @@ pub mod pallet {
 
         /// L3 从清算行主账户提现到自持链上账户。
         #[pallet::call_index(32)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 3))]
+        #[pallet::weight(T::WeightInfo::withdraw())]
         pub fn withdraw(origin: OriginFor<T>, amount: u128) -> DispatchResult {
             let user = ensure_signed(origin)?;
             crate::deposit::do_withdraw::<T>(user, amount)
@@ -449,7 +450,7 @@ pub mod pallet {
 
         /// L3 切换清算行。前置:当前清算行余额必须为 0。
         #[pallet::call_index(33)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(4, 3))]
+        #[pallet::weight(T::WeightInfo::switch_bank())]
         pub fn switch_bank(origin: OriginFor<T>, new_bank: T::AccountId) -> DispatchResult {
             let user = ensure_signed(origin)?;
             crate::deposit::do_switch_bank::<T>(user, new_bank)
@@ -474,10 +475,7 @@ pub mod pallet {
         /// [`batch`] `OffchainBatchItemV2` 列表(每条带 L3 sr25519 签名 / nonce / 费率)
         /// [`batch_signature`] 清算行多签批次级签名(Step 2b 启用阈值校验)
         #[pallet::call_index(34)]
-        #[pallet::weight(
-            T::DbWeight::get().reads_writes(9, 7)
-                + T::DbWeight::get().reads_writes(7, 6) * batch.len() as u64
-        )]
+        #[pallet::weight(T::WeightInfo::submit_offchain_batch_v2(batch.len() as u32))]
         pub fn submit_offchain_batch_v2(
             origin: OriginFor<T>,
             institution_main: T::AccountId,
@@ -524,7 +522,7 @@ pub mod pallet {
 
         /// 清算行管理员提案新费率,延迟 7 天生效。
         #[pallet::call_index(40)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(5, 2))]
+        #[pallet::weight(T::WeightInfo::propose_l2_fee_rate())]
         pub fn propose_l2_fee_rate(
             origin: OriginFor<T>,
             bank: T::AccountId,
@@ -536,7 +534,7 @@ pub mod pallet {
 
         /// 设置全局费率上限(Root Origin;Step 2b 起改为联合投票回调)。
         #[pallet::call_index(41)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+        #[pallet::weight(T::WeightInfo::set_max_l2_fee_rate())]
         pub fn set_max_l2_fee_rate(origin: OriginFor<T>, new_max: u32) -> DispatchResult {
             ensure_root(origin)?;
             crate::fee_config::do_set_max_l2_fee_rate::<T>(new_max)
@@ -557,7 +555,7 @@ pub mod pallet {
         ///
         /// 单签即可,不走内部投票(节点声明影响小,损失可逆)。
         #[pallet::call_index(50)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 3))]
+        #[pallet::weight(T::WeightInfo::register_clearing_bank())]
         pub fn register_clearing_bank(
             origin: OriginFor<T>,
             sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
@@ -579,7 +577,7 @@ pub mod pallet {
         ///
         /// 不重新校验资格白名单(注册时已校验,后续无需重复)。
         #[pallet::call_index(51)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 1))]
+        #[pallet::weight(T::WeightInfo::update_clearing_bank_endpoint())]
         pub fn update_clearing_bank_endpoint(
             origin: OriginFor<T>,
             sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,
@@ -601,7 +599,7 @@ pub mod pallet {
         /// `app_search_clearing_banks` 过滤会去掉该 sfid_id)。
         /// 已绑定到该机构的用户需要主动 switch_bank 切换或继续使用直到迁移完成。
         #[pallet::call_index(52)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(3, 2))]
+        #[pallet::weight(T::WeightInfo::unregister_clearing_bank())]
         pub fn unregister_clearing_bank(
             origin: OriginFor<T>,
             sfid_id: BoundedVec<u8, sp_core::ConstU32<64>>,

@@ -1174,7 +1174,7 @@ impl offchain_transaction::Config for Runtime {
     type MaxBatchSignatureLength = ConstU32<128>;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type SfidAccountQuery = DuoqianSfidAccountQuery;
-    type WeightInfo = ();
+    type WeightInfo = offchain_transaction::weights::SubstrateWeight<Runtime>;
 }
 
 pub struct EnsureJointVoteFinalizeOrigin;

@@ -72,5 +72,18 @@ void main() {
       expect(PalletRegistry.supportedSpecVersions, isNotEmpty);
       expect(PalletRegistry.supportedSpecVersions, contains(10));
     });
+
+    test('清算行 OffchainTransaction call_index 与 runtime 对齐', () {
+      expect(PalletRegistry.bindClearingBankCall, 30);
+      expect(PalletRegistry.depositCall, 31);
+      expect(PalletRegistry.withdrawCall, 32);
+      expect(PalletRegistry.switchBankCall, 33);
+      expect(PalletRegistry.submitOffchainBatchV2Call, 34);
+      expect(PalletRegistry.proposeL2FeeRateCall, 40);
+      expect(PalletRegistry.setMaxL2FeeRateCall, 41);
+      expect(PalletRegistry.registerClearingBankCall, 50);
+      expect(PalletRegistry.updateClearingBankEndpointCall, 51);
+      expect(PalletRegistry.unregisterClearingBankCall, 52);
+    });
   });
 }

@@ -60,9 +60,18 @@ class PayloadDecoder {
     0x56, 0x41, 0x54, 0x45, // VATE
   ];
 
+  /// "GMB_DECRYPT_V1" 前缀（14 字节 ASCII）。
+  ///
+  /// 这是 `WUMIN_QR_V1` 内部 payload 的业务签名域，不是二维码协议版本。
+  static const _decryptPrefix = [
+    0x47, 0x4D, 0x42, 0x5F, // GMB_
+    0x44, 0x45, 0x43, 0x52, // DECR
+    0x59, 0x50, 0x54, 0x5F, // YPT_
+    0x56, 0x31, // V1
+  ];
+
   static DecodedPayload? decode(String payloadHex, {int? specVersion}) {
-    // 先尝试解码非链上交易：管理员激活 payload。
-    // 激活 payload 格式：GMB_ACTIVATE(12B) + shenfen_id(48B) + timestamp(8B) + nonce(16B) = 84B
+    // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
       if (raw.length == 84) {
@@ -77,8 +86,20 @@ class PayloadDecoder {
           return _decodeActivateAdmin(raw);
         }
       }
+      if (raw.length == 118) {
+        bool isDecrypt = true;
+        for (var i = 0; i < _decryptPrefix.length; i++) {
+          if (raw[i] != _decryptPrefix[i]) {
+            isDecrypt = false;
+            break;
+          }
+        }
+        if (isDecrypt) {
+          return _decodeDecryptAdmin(raw);
+        }
+      }
     } catch (_) {
-      // 非激活 payload，继续正常解码
+      // 非 challenge payload，继续正常解码。
     }
 
     // spec_version 不在已知列表中时放弃解码，由调用方走 decodeFailed 路径。
@@ -229,6 +250,49 @@ class PayloadDecoder {
             action: 'cancel_failed_replace_grandpa_key',
             summaryTemplate: '取消失败的 GRANDPA 密钥替换提案 #{id}',
           );
+        }
+      }
+
+      // ── OffchainTransaction(21) · 清算行 L2 体系 ──
+      if (palletIndex == PalletRegistry.offchainTransactionPallet) {
+        if (callIndex == PalletRegistry.bindClearingBankCall) {
+          return _decodeAccountIdCall(
+            bytes,
+            action: 'bind_clearing_bank',
+            summaryPrefix: '绑定清算行',
+            fieldKey: 'bank_main',
+          );
+        }
+        if (callIndex == PalletRegistry.depositCall) {
+          return _decodeAmountOnlyCall(
+            bytes,
+            action: 'deposit_clearing_bank',
+            summaryPrefix: '充值到清算行',
+          );
+        }
+        if (callIndex == PalletRegistry.withdrawCall) {
+          return _decodeAmountOnlyCall(
+            bytes,
+            action: 'withdraw_clearing_bank',
+            summaryPrefix: '从清算行提现',
+          );
+        }
+        if (callIndex == PalletRegistry.switchBankCall) {
+          return _decodeAccountIdCall(
+            bytes,
+            action: 'switch_clearing_bank',
+            summaryPrefix: '切换清算行',
+            fieldKey: 'new_bank',
+          );
+        }
+        if (callIndex == PalletRegistry.registerClearingBankCall) {
+          return _decodeRegisterClearingBank(bytes);
+        }
+        if (callIndex == PalletRegistry.updateClearingBankEndpointCall) {
+          return _decodeUpdateClearingBankEndpoint(bytes);
+        }
+        if (callIndex == PalletRegistry.unregisterClearingBankCall) {
+          return _decodeUnregisterClearingBank(bytes);
         }
       }
 
@@ -565,6 +629,31 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
+  // 清算行管理员解密（非链上交易）
+  // 格式：GMB_DECRYPT_V1(14B) + sfid_id(48B, 右补零) + pubkey(32B)
+  //      + timestamp(8B, u64 LE) + nonce(16B)
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
+    if (bytes.length < 118) return null;
+
+    final idBytes = bytes.sublist(14, 62);
+    var endIndex = 48;
+    while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
+      endIndex--;
+    }
+    if (endIndex == 0) return null;
+    final sfidId = String.fromCharCodes(idBytes.sublist(0, endIndex));
+
+    return DecodedPayload(
+      action: 'decrypt_admin',
+      summary: '解密清算行管理员 - $sfidId',
+      fields: {
+        'sfid_id': sfidId,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // DuoqianManage(17) / propose_create(0)
   // 格式：[17][0][BoundedVec sfid_id][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
   // ---------------------------------------------------------------------------
@@ -873,6 +962,122 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
+  // OffchainTransaction(21) / bind_clearing_bank(30), switch_bank(33)
+  // 格式：[21][call][AccountId32]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeAccountIdCall(
+    Uint8List bytes, {
+    required String action,
+    required String summaryPrefix,
+    required String fieldKey,
+  }) {
+    if (bytes.length < 34) return null;
+    final accountId = bytes.sublist(2, 34);
+    final address = Keyring().encodeAddress(accountId.toList(), _ss58Prefix);
+    return DecodedPayload(
+      action: action,
+      summary: '$summaryPrefix ${_truncateAddress(address)}',
+      fields: {
+        fieldKey: address,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransaction(21) / deposit(31), withdraw(32)
+  // 格式：[21][call][Compact<u128> amount]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeAmountOnlyCall(
+    Uint8List bytes, {
+    required String action,
+    required String summaryPrefix,
+  }) {
+    if (bytes.length < 3) return null;
+    final (amountFen, size) = _decodeCompactBigInt(bytes, 2);
+    if (amountFen == null || size == 0) return null;
+    final amountYuan = _fenToYuan(amountFen);
+    return DecodedPayload(
+      action: action,
+      summary: '$summaryPrefix $amountYuan GMB',
+      fields: {
+        'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransaction(21) / register_clearing_bank(50)
+  // 格式：[21][50][Vec sfid_id][Vec peer_id][Vec rpc_domain][u16 rpc_port]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
+    var offset = 2;
+    final (sfidId, sfidNext) = _readUtf8Vec(bytes, offset);
+    if (sfidId == null) return null;
+    offset = sfidNext;
+    final (peerId, peerNext) = _readUtf8Vec(bytes, offset);
+    if (peerId == null) return null;
+    offset = peerNext;
+    final (rpcDomain, domainNext) = _readUtf8Vec(bytes, offset);
+    if (rpcDomain == null) return null;
+    offset = domainNext;
+    if (offset + 2 > bytes.length) return null;
+    final rpcPort = bytes[offset] | (bytes[offset + 1] << 8);
+
+    return DecodedPayload(
+      action: 'register_clearing_bank',
+      summary: '声明清算行节点 $sfidId @ $rpcDomain:$rpcPort',
+      fields: {
+        'sfid_id': sfidId,
+        'peer_id': peerId,
+        'rpc_domain': rpcDomain,
+        'rpc_port': rpcPort.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransaction(21) / update_clearing_bank_endpoint(51)
+  // 格式：[21][51][Vec sfid_id][Vec new_domain][u16 new_port]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
+    var offset = 2;
+    final (sfidId, sfidNext) = _readUtf8Vec(bytes, offset);
+    if (sfidId == null) return null;
+    offset = sfidNext;
+    final (newDomain, domainNext) = _readUtf8Vec(bytes, offset);
+    if (newDomain == null) return null;
+    offset = domainNext;
+    if (offset + 2 > bytes.length) return null;
+    final newPort = bytes[offset] | (bytes[offset + 1] << 8);
+
+    return DecodedPayload(
+      action: 'update_clearing_bank_endpoint',
+      summary: '更新清算行 $sfidId 端点 → $newDomain:$newPort',
+      fields: {
+        'sfid_id': sfidId,
+        'new_domain': newDomain,
+        'new_port': newPort.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // OffchainTransaction(21) / unregister_clearing_bank(52)
+  // 格式：[21][52][Vec sfid_id]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
+    final (sfidId, _) = _readUtf8Vec(bytes, 2);
+    if (sfidId == null) return null;
+    return DecodedPayload(
+      action: 'unregister_clearing_bank',
+      summary: '注销清算行节点 $sfidId',
+      fields: {
+        'sfid_id': sfidId,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // 工具方法
   // ---------------------------------------------------------------------------
 
@@ -942,6 +1147,20 @@ class PayloadDecoder {
   static (int, int) _decodeCompactU32(Uint8List bytes, int offset) {
     final (value, size) = _decodeCompactBigInt(bytes, offset);
     return (value?.toInt() ?? 0, size);
+  }
+
+  /// 解码 SCALE Vec<u8> 并按 UTF-8 转字符串。
+  static (String?, int) _readUtf8Vec(Uint8List bytes, int offset) {
+    if (offset >= bytes.length) return (null, offset);
+    final (len, lenSize) = _decodeCompactU32(bytes, offset);
+    if (lenSize == 0) return (null, offset);
+    offset += lenSize;
+    if (offset + len > bytes.length) return (null, offset);
+    final text = utf8.decode(
+      bytes.sublist(offset, offset + len),
+      allowMalformed: true,
+    );
+    return (text, offset + len);
   }
 
   /// 机构代号映射。

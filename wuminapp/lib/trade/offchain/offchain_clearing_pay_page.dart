@@ -16,9 +16,8 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 /// 中文注释:
 /// - 入口:`onchain_trade_page.dart::_openOffchainPay` 扫商户码成功后跳转过来
 ///   (商户码 `UserTransferBody` 的 `bank` 字段是收款方清算行 `shenfen_id`)。
-/// - Step 2c-i 范围:**同行**扫码付款(`payer_bank == recipient_bank`)。跨行
-///   (Step 3)在校验步弹"暂不支持"提示并拒绝提交。
-/// - 冷钱包(Step 2c-iii)本步**不做**;热钱包之外直接拦截。
+/// - Step 3 范围:同行 / 跨行都提交到**收款方清算行节点**,与 runtime
+///   `submit_offchain_batch_v2` 的收款方主导模型对齐。
 /// - 流程:
 ///   1. 连清算行节点 RPC,查 `offchain_queryUserBank(user)` 得付款方清算行
 ///      `payer_bank` SS58(未绑定 → 结束);
@@ -53,7 +52,7 @@ class OffchainClearingPayPage extends StatefulWidget {
   /// 商户 QR `UserTransferBody.bank` 收款方清算行 `shenfen_id`。
   final String recipientBankShenfenId;
 
-  /// 付款方绑定的清算行节点 WSS URL(由调用方传入,已知绑定才进得了本页)。
+  /// 收款方清算行节点 WSS URL。
   final String clearingNodeWssUrl;
 
   /// SFID 后端 baseUrl(用于按 `shenfen_id` 查收款方清算行主账户地址)。
@@ -65,7 +64,8 @@ class OffchainClearingPayPage extends StatefulWidget {
   final String? memo;
 
   @override
-  State<OffchainClearingPayPage> createState() => _OffchainClearingPayPageState();
+  State<OffchainClearingPayPage> createState() =>
+      _OffchainClearingPayPageState();
 }
 
 enum _PageState { loading, ready, submitting, done, error }
@@ -80,6 +80,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   String? _payerBankSs58;
   // 预取:QR 收款方 shenfen_id 解析出的清算行主账户 hex
   String? _recipientBankHex;
+  String? _recipientBankSs58;
   // 预取:费率
   int _rateBp = 0;
   int _minFeeFen = 1;
@@ -125,7 +126,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         );
         final match = search.items.firstWhere(
           (b) => b.sfidId == widget.recipientBankShenfenId,
-          orElse: () => throw Exception('收款方清算行 ${widget.recipientBankShenfenId} 未在 SFID 系统查到'),
+          orElse: () => throw Exception(
+              '收款方清算行 ${widget.recipientBankShenfenId} 未在 SFID 系统查到'),
         );
         final recHex = match.mainAccount;
         if (recHex == null || recHex.isEmpty) {
@@ -137,16 +139,14 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         sfid.close();
       }
 
-      // 3. 同行校验
-      final payerHex = _ss58ToHex(payerBank);
-      if (_normalizeHex(payerHex) != _normalizeHex(_recipientBankHex!)) {
-        _setError('收款方清算行与您绑定的清算行不同,Step 1 仅支持同行扫码支付');
-        return;
-      }
       _payerBankSs58 = payerBank;
+      _recipientBankSs58 = Keyring().encodeAddress(
+        hexToBytes(_ensure0x(_recipientBankHex!)).toList(),
+        2027,
+      );
 
-      // 4. 费率
-      final rate = await _nodeRpc.queryFeeRate(payerBank);
+      // 3. 费率按收款方清算行计算;同行 / 跨行都由收款方清算行拿 fee 并付 gas。
+      final rate = await _nodeRpc.queryFeeRate(_recipientBankSs58!);
       if (rate.rateBp <= 0) {
         _setError('清算行费率未配置(rate_bp=${rate.rateBp}),请联系清算行运维');
         return;
@@ -324,7 +324,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+            const Icon(Icons.check_circle_outline,
+                size: 48, color: Colors.green),
             const SizedBox(height: 16),
             const Text('支付已受理,清算行会在下一批次上链'),
             const SizedBox(height: 8),
@@ -344,16 +345,21 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
   Widget _confirmView() {
     final amountFen = _parseAmountFen();
     final feeFen = (amountFen != null) ? _computeFeeFen(amountFen) : null;
-    final totalFen = (amountFen != null && feeFen != null)
-        ? amountFen + feeFen
-        : null;
+    final totalFen =
+        (amountFen != null && feeFen != null) ? amountFen + feeFen : null;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _kv('收款方地址', widget.toAddress),
+          if (_payerBankSs58 != null) _kv('付款方清算行', _payerBankSs58!),
           _kv('收款方清算行', widget.recipientBankShenfenId),
+          if (_payerBankSs58 != null && _recipientBankSs58 != null)
+            _kv(
+              '清算类型',
+              _payerBankSs58 == _recipientBankSs58 ? '同行' : '跨行',
+            ),
           if (widget.memo != null && widget.memo!.isNotEmpty)
             _kv('备注', widget.memo!),
           const Divider(height: 32),
@@ -407,12 +413,6 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
 
   // ─── 地址编解码工具 ───
 
-  /// 把 SS58 地址转成 `0x` 前缀的 hex(小写)。
-  String _ss58ToHex(String ss58) {
-    final bytes = Keyring().decodeAddress(ss58);
-    return bytesToHex(Uint8List.fromList(bytes));
-  }
-
   /// 把 SS58 地址转成 32 字节。
   Uint8List _ss58ToBytes(String ss58) {
     final bytes = Keyring().decodeAddress(ss58);
@@ -422,14 +422,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     return Uint8List.fromList(bytes);
   }
 
-  /// 归一 hex(去 0x 前缀 + 小写)用于比较。
-  String _normalizeHex(String hex) {
-    final t = hex.startsWith('0x') ? hex.substring(2) : hex;
-    return t.toLowerCase();
-  }
-
-  String _ensure0x(String hex) =>
-      hex.startsWith('0x') ? hex : '0x$hex';
+  String _ensure0x(String hex) => hex.startsWith('0x') ? hex : '0x$hex';
 
   /// 热钱包 / 冷钱包统一签名入口。
   ///

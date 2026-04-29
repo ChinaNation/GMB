@@ -112,4 +112,7 @@ class PalletRegistry {
   static const int submitOffchainBatchV2Call = 34;
   static const int proposeL2FeeRateCall = 40;
   static const int setMaxL2FeeRateCall = 41;
+  static const int registerClearingBankCall = 50;
+  static const int updateClearingBankEndpointCall = 51;
+  static const int unregisterClearingBankCall = 52;
 }
