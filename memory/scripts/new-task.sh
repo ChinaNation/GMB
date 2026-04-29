@@ -3,6 +3,8 @@ set -euo pipefail
 
 # 中文注释：创建新的 AI 任务卡。
 
+TASK_FILENAME_MAX_BYTES=160
+
 TITLE=""
 MODULE=""
 GOAL=""
@@ -24,6 +26,36 @@ slugify() {
     slug="task"
   fi
   printf '%s' "$slug"
+}
+
+filename_bytes() {
+  LC_ALL=C printf '%s' "$1" | wc -c | tr -d ' '
+}
+
+fit_slug_to_task_filename() {
+  local timestamp="$1"
+  local slug="$2"
+  local suffix_bytes
+  local max_slug_bytes
+
+  # 中文注释：任务卡文件名要兼容 Linux checkout 的单文件名字节限制。
+  suffix_bytes=$(filename_bytes "${timestamp}-.md")
+  max_slug_bytes=$((TASK_FILENAME_MAX_BYTES - suffix_bytes))
+  if (( max_slug_bytes < 4 )); then
+    printf '%s' "task"
+    return
+  fi
+
+  SLUG="$slug" MAX_BYTES="$max_slug_bytes" perl -MEncode -e '
+    my $s = decode("UTF-8", $ENV{SLUG} // "task");
+    my $max = int($ENV{MAX_BYTES} // 4);
+    while (length(encode("UTF-8", $s)) > $max) {
+      chop $s;
+    }
+    $s =~ s/-+$//;
+    $s = "task" if $s eq "";
+    print encode("UTF-8", $s);
+  '
 }
 
 append_line() {
@@ -218,12 +250,20 @@ fi
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 slug="$(slugify "$TITLE")"
 task_dir="memory/08-tasks/open"
+slug="$(fit_slug_to_task_filename "$timestamp" "$slug")"
 task_file="${task_dir}/${timestamp}-${slug}.md"
 template_file="$(template_file_for_module "$MODULE")"
 checklist_file="$(checklist_file_for_module "$MODULE")"
 dod_file="$(dod_file_for_module "$MODULE")"
 
 mkdir -p "$task_dir"
+
+task_basename="$(basename "$task_file")"
+task_basename_bytes="$(filename_bytes "$task_basename")"
+if (( task_basename_bytes > TASK_FILENAME_MAX_BYTES )); then
+  echo "任务卡文件名超过 ${TASK_FILENAME_MAX_BYTES} 字节：${task_basename}" >&2
+  exit 1
+fi
 
 cat > "$task_file" <<EOF
 # 任务卡：${TITLE}

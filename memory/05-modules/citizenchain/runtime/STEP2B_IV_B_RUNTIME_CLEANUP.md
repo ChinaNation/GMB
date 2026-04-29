@@ -68,26 +68,25 @@ Step 3 再补。
 
 ---
 
-## 2. 升级策略(开发期)
+## 2. 重新创世策略(开发期)
 
-按 `feedback_no_chain_restart.md` 铁律,runtime 变更不走 fresh genesis,而是
-链上 setCode。但由于本步为 **"开发期 dev 链清理"**,用户已授权不做
-`on_runtime_upgrade` migration,采用以下步骤:
+当前链处于开发期,本轮按"彻底改造 + 重新创世"处理,不再为旧 dev 链保留
+`on_runtime_upgrade` migration 或 setCode 升级路径。
 
-1. `spec_version: 10` + 新 WASM 编译
-2. dev 链管理员 `developer_direct_upgrade`(或等价 sudo/Root setCode)
-3. setCode 生效块起:
-   - 老 Call enum 槽位不再存在,pool 中 in-flight 老 Call tx 会在解码时被拒
-   - 老 Storage 键在链上**保留**物理数据,但无 Rust 类型读取(相当于垃圾字节,
-     runtime 不再访问),下个 Step 3 的独立 migration 单独清理(或任其随
-     chain data 生命周期自然消亡)
-4. 新 Call 34(`submit_offchain_batch_v2`)在 spec_version=9 下仍然可用,
-   wuminapp + 清算行节点 packer 不需要任何配合改动
+1. runtime wasm 版本整体归零:
+   - `authoring_version = 0`
+   - `spec_version = 0`
+   - `impl_version = 0`
+   - `transaction_version = 0`
+   - `system_version = 0`
+2. 重新编译 WASM 后使用新的 genesis 启动链。
+3. 旧 dev 链上的 Call enum、Storage 残留和 in-flight 交易不进入兼容范围。
+4. wumin 冷钱包只接受当前 fresh genesis 的 `spec_version = 0`,旧 spec 离线签名请求
+   直接拒绝解码。
 
-**不迁移 / 不 migration 的代价**:
-- 老 Storage 残留物理字节在 state trie 中(影响 state 快照大小),但不访问
-- 历史块(spec_version ≤ 8 产生)重新同步需要旧 WASM,polkadot-sdk runtime code
-  历史回放机制保留(不影响 sync)
+**开发期代价**:
+- 旧 dev 链数据不再作为兼容目标。
+- 需要清理旧链数据后重新创世启动节点。
 
 ---
 

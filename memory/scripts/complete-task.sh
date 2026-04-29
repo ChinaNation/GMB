@@ -3,6 +3,7 @@ set -euo pipefail
 
 # 中文注释：把进行中的任务卡归档到 done 目录，并补充完成信息。
 
+TASK_FILENAME_MAX_BYTES=160
 TASK_FILE="${1:-}"
 SUMMARY="${2:-}"
 
@@ -20,6 +21,17 @@ fi
 
 if [[ ! -f "$TASK_FILE" ]]; then
   echo "任务卡不存在：$TASK_FILE" >&2
+  exit 1
+fi
+
+filename_bytes() {
+  LC_ALL=C printf '%s' "$1" | wc -c | tr -d ' '
+}
+
+task_basename="$(basename "$TASK_FILE")"
+task_basename_bytes="$(filename_bytes "$task_basename")"
+if (( task_basename_bytes > TASK_FILENAME_MAX_BYTES )); then
+  echo "任务卡文件名超过 ${TASK_FILENAME_MAX_BYTES} 字节，禁止归档：${task_basename}" >&2
   exit 1
 fi
 
