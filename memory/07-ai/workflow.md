@@ -41,21 +41,17 @@
 - `.github/workflows/ai-guardrails.yml`
 - `.github/workflows/claude-pr-review.yml`
 - `.github/workflows/claude-on-comment.yml`
-- `.github/workflows/citizenchain-node.yml`
-- `.github/workflows/citizenchain-nodeui.yml`
-- `.github/workflows/citizenchain-runtime-governance.yml`
-- `.github/workflows/citizenchain-runtime-issuance.yml`
-- `.github/workflows/citizenchain-runtime-otherpallet.yml`
-- `.github/workflows/citizenchain-runtime-primitives.yml`
-- `.github/workflows/citizenchain-runtime-src.yml`
-- `.github/workflows/citizenchain-runtime-transaction.yml`
+- `.github/workflows/citizenchain-wasm.yml`
+- `.github/workflows/citizenchain-linux.yml`
+- `.github/workflows/citizenchain-macos.yml`
+- `.github/workflows/citizenchain-windows.yml`
 - `.github/workflows/sfid-ci.yml`
 - `.github/workflows/cpms-ci.yml`
 - `.github/workflows/wuminapp-ci.yml`
 
 ## 4. 路径分流执行原则
 
-- `citizenchain/node`、`citizenchain/nodeui`、`citizenchain/runtime/*` 分开执行
+- `citizenchain/runtime/**` 先产出统一 WASM，`citizenchain/node/**` 通过 Linux / macOS / Windows 桌面安装包流水线执行
 - 共享 Rust 目录变更时，允许多侧联动执行
 - `sfid`、`cpms`、`wuminapp` 分别独立执行
 - 纯文档、Pages 等目录按各自规则触发

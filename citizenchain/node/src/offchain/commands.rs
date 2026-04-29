@@ -15,9 +15,9 @@ use serde_json::Value;
 use std::time::Duration;
 use tauri::AppHandle;
 
-use crate::ui::governance::signing as gov_signing;
-use crate::ui::home;
-use crate::ui::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
+use crate::governance::signing as gov_signing;
+use crate::home;
+use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
 use super::decrypt::VerifyDecryptAdminInput;
 use super::types::{
@@ -71,7 +71,7 @@ pub async fn query_clearing_bank_node_info(
 
 // ══════════════════ B3. 本机 PeerId ══════════════════
 
-/// 通过 RPC `system_localPeerId` 拿本机 libp2p PeerId。NodeUI 注册清算行时,
+/// 通过 RPC `system_localPeerId` 拿本机 libp2p PeerId。节点桌面端注册清算行时,
 /// 自动把本字段填到"节点 PeerId"输入框,避免人工输入错误。
 #[tauri::command]
 pub async fn query_local_peer_id(app: AppHandle) -> Result<String, String> {

@@ -13,8 +13,8 @@
 
 ## 2.1 当前技术栈口径
 
-- `citizenchain/node` 与 `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
-- `citizenchain/nodeui`：Rust + Tauri + React + TypeScript + Vite
+- `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
+- `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL；当前仓库只有预留前端目录，没有独立前端实现落地
 - `wuminapp`：Flutter + Dart + Isar
@@ -31,8 +31,7 @@
 
 - 由当前主聊天入口在任务涉及 `citizenchain` 时按需调度
 - 负责 `citizenchain` 全域
-- 包括 `node/`
-- 包括 `nodeui/`
+- 包括 `node/` 原生节点、桌面端 Rust 后端、`frontend/` 前端与打包配置
 - 包括 `runtime/`
 - 包括区块链相关文档和打包流程
 

@@ -11,9 +11,9 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
-use crate::ui::governance::signing::pubkey_to_ss58;
-use crate::ui::governance::storage_keys;
-use crate::ui::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
+use crate::governance::signing::pubkey_to_ss58;
+use crate::governance::storage_keys;
+use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
 use super::types::ClearingBankNodeOnChainInfo;
 

@@ -11,10 +11,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../../api';
-import { hexToSs58 } from '../../format';
-import { QrScanner } from '../../governance/QrScanner';
-import type { ActivatedAdmin, InstitutionListItem, VoteSignRequestResult } from '../../governance/governance-types';
+import { sanitizeError } from '../../core/tauri';
+import { governanceApi as api } from '../../governance/api';
+import { hexToSs58 } from '../../shared/ss58';
+import { QrScanner } from '../../shared/qr/QrScanner';
+import type { ActivatedAdmin, InstitutionListItem, VoteSignRequestResult } from '../../governance/types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 type JointProposerAdmin = ActivatedAdmin & { institutionName: string };

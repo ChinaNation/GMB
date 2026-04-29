@@ -59,4 +59,4 @@
 - Registry:`memory/05-architecture/qr-action-registry.md`
 - decoder:`wumin/lib/signer/payload_decoder.dart` `_decodeJointVote`
 - UI 入口:`wuminapp/lib/governance/runtime_upgrade_detail_page.dart` +
-  `citizenchain/node/src/ui/governance/signing.rs`
+  `citizenchain/node/src/governance/signing.rs`

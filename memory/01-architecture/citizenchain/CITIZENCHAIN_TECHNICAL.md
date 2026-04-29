@@ -13,14 +13,13 @@
 - 模块技术文档：位于 `memory/05-modules/citizenchain/`，描述单模块需求与实现细节。
 
 ### 2.2 本文范围内
-- `node/`：区块链节点原生程序。
+- `node/`：区块链节点原生程序、桌面节点 UI、内嵌节点管理与打包入口。
 - `runtime/`：链上运行时与统一状态机。
 - `runtime/governance/`：治理类 pallet。
 - `runtime/issuance/`：发行类 pallet。
 - `runtime/transaction/`：交易与手续费类 pallet。
 - `runtime/otherpallet/`：其他链上基础能力 pallet。
 - `runtime/primitives/`：运行时共享常量、基础类型与制度数据。
-- `nodeui/`：当前桌面节点 UI、内嵌节点管理与打包入口。
 
 ### 2.3 本文范围外
 - `SFID` 的链外网站、签名服务与数据库内部实现。
@@ -34,8 +33,8 @@
 - `citizenchain` 是 `GMB` 仓库中的主权区块链产品，负责链上状态、共识、治理、发行、交易结算与节点运行。
 - 原生链名称为 `CitizenChain`，原生数字货币为 `GMB`。
 - 产品同时包含两部分：
-  - 区块链节点程序：`node/`
-  - 桌面节点软件：`nodeui/`
+  - 区块链节点程序：`node/src/service.rs`、`node/src/command.rs` 等原生节点模块
+  - 桌面节点软件：`node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend`
 
 ### 3.2 对外协作边界
 - 对 `SFID`：提供绑定、资格校验、人口快照、公民投票凭证等链侧接口承载能力。
@@ -46,14 +45,13 @@
 
 ```text
 citizenchain/
-├── node/            # 原生节点程序（CLI、service、RPC、chain spec）
+├── node/            # 原生节点、桌面端 Rust 后端、React 前端与 Tauri 打包入口
 ├── runtime/         # 运行时 wasm 与 runtime API
 │   ├── governance/  # 治理 pallet 与治理文档
 │   ├── issuance/    # 发行 pallet 与发行文档
 │   ├── transaction/ # 交易 pallet 与手续费文档
 │   ├── otherpallet/ # 其他链上基础能力 pallet
 │   └── primitives/  # 运行时共享常量、基础类型与制度数据
-├── nodeui/          # 当前桌面节点 UI、节点壳与打包入口
 └── scripts/         # 本产品脚本
 ```
 
@@ -63,7 +61,7 @@ citizenchain/
 - Native Node 层：负责 CLI、网络、数据库、共识服务编排、RPC 服务、chain spec 加载。
 - Runtime 层：负责所有链上状态转换、交易校验、治理规则、发行规则、手续费规则。
 - Pallet 层：按治理、发行、交易、其他能力拆分功能模块。
-- Desktop UI 层：由 `nodeui/` 负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付。
+- Desktop UI 层：由 `node/src/desktop.rs`、`node/src/<功能名>` 与 `node/frontend` 负责本地节点进程生命周期管理、参数设置、状态展示与安装包交付。
 
 ### 5.2 关键共享依赖
 - `runtime/primitives/`：提供链常量、机构常量、SS58 参数、发行与人口基础常量。
@@ -165,21 +163,21 @@ citizenchain/
 - `pow-difficulty`
 - `sfid-system`
 
-## 10. 桌面节点软件（`nodeui/`）
+## 10. 桌面节点软件（`node/`）
 
 ### 10.1 定位
-- `nodeui` 是当前唯一桌面节点产品壳。
-- 历史 `nodeuitauri` 目录中的桌面职责已经收口到 `nodeui`，旧目录已删除。
+- `citizenchain/node` 是当前唯一桌面节点产品壳与原生节点实现目录。
+- 历史 `nodeuitauri` 与独立 `nodeui` 目录中的桌面职责已经收口到 `citizenchain/node`，旧目录已删除。
 - 对最终用户仍然提供“安装即用”的节点软件，而不是要求用户手工管理原生 node 命令。
 
 ### 10.2 当前职责
-- `nodeui` 负责启动 / 停止内嵌节点进程。
-- `nodeui` 负责管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置。
-- `nodeui` 负责展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
-- `nodeui` 负责桌面节点产品的当前前后端实现与后续迭代。
+- `node/src/desktop.rs` 负责 Tauri 桌面入口与 command 注册。
+- `node/src/<功能名>` 负责桌面端 Rust 后端能力，不再保留 `node/src/ui` 目录层。
+- `node/frontend/<功能名>` 负责 React 前端页面与交互。
+- `citizenchain/node` 负责启动 / 停止内嵌节点进程，管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置，并展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
 
 ### 10.3 打包边界
-- `nodeui` 通过 sidecar 方式内嵌节点二进制。
+- 桌面端与原生节点在同一个 `node` crate 中构建，Tauri 打包从 `node/frontend/dist` 读取前端产物。
 - 对用户交付形态始终保持单个桌面安装包；对工程实现来说仍是“UI 壳 + 内嵌 node 二进制”。
 
 ## 11. 变更与发布边界
@@ -191,7 +189,7 @@ citizenchain/
 
 ### 11.2 不需要 runtime 升级的改动
 - `node/` 中的 CLI、RPC、服务编排、网络与本地运行逻辑。
-- `nodeui/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
+- `node/` 的桌面 UI、设置页、Tauri 命令与安装包逻辑。
 - 构建脚本、CI/CD、前端界面、说明文档。
 
 ### 11.3 特殊情况
@@ -226,14 +224,14 @@ citizenchain/
 - `runtime/otherpallet/sfid-system/SFID_SYSTEM_TECHNICAL.md`
 
 ### 12.5 桌面节点 UI
-- `memory/05-modules/citizenchain/nodeui/home/HOME_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/other/other-tabs/OTHER_TABS_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
-- `memory/05-modules/citizenchain/nodeui/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/mining/mining-dashboard/MINING_DASHBOARD_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/network/network-overview/NETWORK_OVERVIEW_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/other/other-tabs/OTHER_TABS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/bootnodes-address/BOOTNODES_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
 
 ## 13. 维护要求
 - `citizenchain` 发生架构级、边界级、发布级改动时，必须同步更新本文档。

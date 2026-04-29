@@ -6,7 +6,7 @@
 //    返回候选机构列表,点击进入综合判定
 
 import { useEffect, useState } from 'react';
-import { sanitizeError } from '../api';
+import { sanitizeError } from '../core/tauri';
 import { offchainApi } from './api';
 import type { EligibleClearingBankCandidate } from './types';
 

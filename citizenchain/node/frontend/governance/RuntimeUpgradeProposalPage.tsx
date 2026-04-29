@@ -2,10 +2,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
-import { QrScanner } from './QrScanner';
-import type { AdminWalletMatch, ProposeUpgradeRequestResult } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { hexToSs58 } from '../shared/ss58';
+import { QrScanner } from '../shared/qr/QrScanner';
+import { governanceApi as api } from './api';
+import type { AdminWalletMatch, ProposeUpgradeRequestResult } from './types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 

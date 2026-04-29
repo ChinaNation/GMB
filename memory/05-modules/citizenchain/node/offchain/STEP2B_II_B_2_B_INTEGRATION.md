@@ -14,7 +14,7 @@
 
 - **B-1** · `settlement/submitter.rs` 替换占位为真实 `pool.submit_one` + `account_nonce` 查询
 - **B-2** · `cli.rs` 加 `--clearing-bank <SS58>` + `--clearing-bank-password <STR>`
-- **B-3** · `service.rs` 启动清算行组件 + `spawn` packer worker;`command.rs` / `ui/node_runner.rs` 透传 CLI
+- **B-3** · `service.rs` 启动清算行组件 + `spawn` packer worker;`command.rs` / `node_runner.rs` 透传 CLI
 - **B-4** · `rpc.rs` 的 `FullDeps` 加字段 + `create_full` 合并 `OffchainClearingRpcServer::into_rpc`;`OffchainClearingRpcImpl` 派生 `Clone`
 
 **明确不做**(Step 2b-iii / 2b-iv):
@@ -75,7 +75,7 @@ pub fn new_full(
 
 `runner.run_node_until_exit` 闭包调用 `new_full` 时透传 `cli.clearing_bank.clone()` + `cli.clearing_bank_password.clone()`。
 
-### 2.5 `ui/node_runner.rs`
+### 2.5 `node_runner.rs`
 
 Tauri UI 路径调用 `new_full` 时透传 `None, None`(GUI 启动暂不支持清算行角色,生产用无头 CLI)。
 
@@ -161,7 +161,7 @@ every 30s (spawned task)
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 (offchain / service / rpc / cli / command / node_runner 全部零 error;
- 链接阶段仅剩 ui/mod.rs:91 tauri proc macro `frontend/dist` 门禁,与本步无关)
+ 链接阶段仅剩 desktop.rs tauri proc macro `frontend/dist` 门禁,与本步无关)
 ```
 
 ---

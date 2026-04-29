@@ -11,7 +11,7 @@
 //! 语义是**清算行管理员身份标识**(CLI 启动时外部传入,链上不存)。字段 rename
 //! 待 Step 3 清算行 UI 引入完整 keystore 管理功能时一并收敛。
 //!
-//! **老省储行"签名管理员"UI 功能**(原 `ui/settings/cold-wallets/set_signing_admin`
+//! **老省储行"签名管理员"UI 功能**(原 `settings/cold-wallets/set_signing_admin`
 //! Tauri 命令 + AdminListPage"设为验证者"按钮)已在清理轮次彻底删除,本文件
 //! **仅作为 Rust lib** 被 CLI 路径调用。未来清算行 Tab 新 UI 会复用本模块的
 //! `save_signing_key` / `load_signing_key` 公开 API。

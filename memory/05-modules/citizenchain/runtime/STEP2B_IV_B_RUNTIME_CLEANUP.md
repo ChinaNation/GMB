@@ -3,7 +3,7 @@
 - **日期**:2026-04-20
 - **范围**:物理删除 `offchain-transaction` pallet 内所有老省储行清算体系的
   Call / Storage / Events / Errors / helper / types,以及 `configs/mod.rs` 和
-  `node/src/ui/governance/` 里的所有老分支/入口。dev 链统一 setCode 升级,不做
+  `node/src/governance/` 里的所有老分支/入口。dev 链统一 setCode 升级,不做
   `on_runtime_upgrade` migration。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2B_IV_A_CLEANUP.md`(节点侧老省储行 .rs 清理)+ `STEP2C_III_COLD_WALLET.md`
@@ -53,7 +53,7 @@ Step 3 再补。
 - `spec_version: 8 → 9`。注释说明 Step 2b-iv-b 清理老 Storage + pallet
   `storage_version` 从 1 → 2,dev 链 setCode 升级路径。
 
-### 1.4 Node UI governance(`node/src/ui/`)
+### 1.4 Node UI governance(`node/src/`)
 
 删除 4 个老 Tauri 命令:
 
@@ -120,10 +120,10 @@ No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)
 | `offchain-transaction/src/benchmarks.rs` | **-61** 行(74→13) |
 | `offchain-transaction/src/weights.rs` | **-38** 行(55→17) |
 | `runtime/src/configs/mod.rs` | **-60** 行(OnchainTxAmount + FeePayer + ProtectedSourceChecker impl) |
-| `node/src/ui/governance/mod.rs` | **-99** 行(4 个 Tauri 命令) |
-| `node/src/ui/governance/signing.rs` | **-160** 行(2 个签名构造函数) |
-| `node/src/ui/governance/proposal.rs` | **-75** 行(2 个查询 + 1 个分支) |
-| `node/src/ui/mod.rs` | **-4** 行(handler 注册) |
+| `node/src/governance/mod.rs` | **-99** 行(4 个 Tauri 命令) |
+| `node/src/governance/signing.rs` | **-160** 行(2 个签名构造函数) |
+| `node/src/governance/proposal.rs` | **-75** 行(2 个查询 + 1 个分支) |
+| `node/src/mod.rs` | **-4** 行(handler 注册) |
 | **合计** | **~2900+ 行代码删除** |
 
 ---

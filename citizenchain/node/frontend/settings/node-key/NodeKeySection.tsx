@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, sanitizeError } from '../../api';
-import type { BootnodeKey } from '../../types';
+import { sanitizeError } from '../../core/tauri';
+import { settingsApi as api } from '../api';
+import type { BootnodeKey } from '../types';
 
 type Props = {
   nodeKey: BootnodeKey;

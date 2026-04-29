@@ -34,7 +34,7 @@ use sp_storage::StorageKey;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::service::FullClient;
+use crate::core::service::FullClient;
 
 use super::ledger::OffchainLedger;
 

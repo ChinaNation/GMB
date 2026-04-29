@@ -59,8 +59,8 @@ GitHub PR / Actions
 
 ## 4.1 当前技术语言基线
 
-- `citizenchain/node` 与 `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
-- `citizenchain/nodeui`：Rust + Tauri + React + TypeScript + Vite
+- `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
+- `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - `cpms`：Rust + Axum + SQLx + PostgreSQL；`frontend/` 当前仅为预留目录
 - `wuminapp`：Flutter + Dart + Isar
