@@ -22,7 +22,7 @@
 - 从结构化机构清单 `settings/institution-catalog.json` 读取 GRANDPA authority 公钥清单。
 - 将投票私钥推导公钥与 authority 清单匹配，确认机构归属。
 - 将 GRANDPA 私钥同步写入本地节点 keystore（`gran` key type）。
-- 清理历史遗留的 `gran` 密钥文件，保证节点只保留当前机构对应的 GRANDPA 密钥。
+- 清理多余的 `gran` 密钥文件，保证节点只保留当前机构对应的 GRANDPA 密钥。
 - 与节点启动流程协同：存在投票私钥时以 `--validator` 模式启动并校验生效。
 
 ## 3. 存储设计

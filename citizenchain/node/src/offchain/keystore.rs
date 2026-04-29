@@ -7,14 +7,9 @@
 //! `--clearing-bank` / `--clearing-bank-password` flag)在此加密存取管理员
 //! sr25519 seed,`offchain::settlement::{signer, submitter}` 消费。
 //!
-//! **历史遗留**:`SigningKey.shenfen_id` 字段名保留以避免 blast radius;
-//! 语义是**清算行管理员身份标识**(CLI 启动时外部传入,链上不存)。字段 rename
-//! 待 Step 3 清算行 UI 引入完整 keystore 管理功能时一并收敛。
-//!
-//! **老省储行"签名管理员"UI 功能**(原 `settings/cold-wallets/set_signing_admin`
-//! Tauri 命令 + AdminListPage"设为验证者"按钮)已在清理轮次彻底删除,本文件
-//! **仅作为 Rust lib** 被 CLI 路径调用。未来清算行 Tab 新 UI 会复用本模块的
-//! `save_signing_key` / `load_signing_key` 公开 API。
+//! `SigningKey.shenfen_id` 表示清算行管理员身份标识，由 CLI 启动参数传入，
+//! 链上不存储该字段。本模块通过 `save_signing_key` / `load_signing_key`
+//! 向清算行签名链路提供加密密钥读写能力。
 
 use sp_core::{sr25519, Pair};
 use std::fs;

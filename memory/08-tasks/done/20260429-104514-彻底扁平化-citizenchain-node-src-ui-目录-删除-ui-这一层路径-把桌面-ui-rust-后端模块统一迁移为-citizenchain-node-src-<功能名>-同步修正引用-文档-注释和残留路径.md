@@ -90,7 +90,7 @@
 - 已将 `governance`、`home`、`mining`、`network`、`node_runner.rs`、`other`、`settings`、`sfid_config.rs`、`shared`、`transaction` 从 `citizenchain/node/src/ui/` 上移到 `citizenchain/node/src/`。
 - 已删除空的 `citizenchain/node/src/ui` 目录。
 - 已将 Rust 引用从 `crate::ui::...` 改为 crate 根层模块引用，并将桌面启动入口改为 `desktop::run_desktop()`。
-- 已将模块文档从 `memory/05-modules/citizenchain/nodeui/` 并入 `memory/05-modules/citizenchain/node/`。
+- 已将模块文档从 `memory/05-modules/citizenchain/node/` 并入 `memory/05-modules/citizenchain/node/`。
 - 已同步更新架构文档、AI 路由文档、模块文档和开放任务中的当前路径口径。
 - 已执行 `cargo fmt -p node`。
 - 已执行 `cargo metadata --no-deps --format-version 1`，workspace/manifest 解析通过。

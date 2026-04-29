@@ -12,7 +12,7 @@
 - `memory/08-tasks/open/20260331-step2-node-offchain-rpc-链下待结算账本.md`
 - `memory/08-tasks/open/20260331-step3-runtime-offchain-transaction-适配验证.md`
 - `memory/08-tasks/open/20260401-step2a-offchain-pallet-简化密钥机制.md`
-- `memory/08-tasks/open/20260401-step2b-nodeui-签名管理员配置.md`
+- `memory/08-tasks/open/20260401-step2b-node-签名管理员配置.md`
 - `memory/08-tasks/open/20260402-offchain-batch-fee-from-fee-address.md`
 - `memory/08-tasks/open/20260404-admin-replacement-proposal-mutex.md`
 - `memory/08-tasks/open/20260404-offchain-packer-worker-接入.md`
@@ -35,7 +35,7 @@
 - `memory/08-tasks/open/20260422-offchain-clearing-pay-two-color.md`
 - `memory/08-tasks/open/20260428-115654-sfid-修复-clearing-bank-watcher-启动崩溃.md`
 - `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-sfid-侧资格搜索-clearingbankwatcher-联调验收与文档收口.md`
-- `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-区块链侧技术闭环-包括-runtime-node-nodeui-验收与文档.md`
+- `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-区块链侧技术闭环-包括-runtime-node-验收与文档.md`
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wumin-冷钱包清算行管理类扫码签名-decoder-文案与测试.md`
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wuminapp-用户侧设置清算行-绑定-跨行支付配置与端到端验收.md`
 - `memory/08-tasks/open/20260429-095603-rename-transaction-modules.md`
@@ -43,10 +43,11 @@
 
 ## done
 
+- `memory/08-tasks/done/20260429-step3-runtime-node-rename-cleanup.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
-- `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-nodeuitauri-目录-并将桌面节点功能统一收口到.md`
-- `memory/08-tasks/done/20260320-220031-修复-citizenchain-nodeui-backend-对-runtime-primitives-的错误路径引用.md`
-- `memory/08-tasks/done/20260320-221924-更新-ai-编程系统中的技术语言基线-citizenchain-区块链与-nodeui-使用-rust-tauri.md`
+- `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
+- `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
+- `memory/08-tasks/done/20260320-221924-更新-ai-编程系统中的技术语言基线-citizenchain-区块链与-node-使用-rust-tauri.md`
 - `memory/08-tasks/done/20260320-223441-调整-citizenchain-启动脚本语义-run-sh-改为不清库继续启动开发链-clean-dev-sh.md`
 - `memory/08-tasks/done/20260320-225846-把-codex-主窗口自动调度-blockchain-agent-sfid-agent-cpms-agent.md`
 - `memory/08-tasks/done/20260320-231550-修复手机端-runtime-升级联合投票提案在投票列表和投票事件列表不显示的问题.md`
@@ -65,11 +66,11 @@
 - `memory/08-tasks/done/20260322-smoldot-步骤1-集成smoldot替换chainrpc底层provider.md`
 - `memory/08-tasks/done/20260322-smoldot-步骤2-重写区块订阅用smoldot原生订阅替换websocket.md`
 - `memory/08-tasks/done/20260322-smoldot-步骤3-适配服务层和交易提交移除rpc节点残留.md`
-- `memory/08-tasks/done/20260323-094248-修复-nodeui-挖矿页面收益统计口径-按区块当时的真实到账规则显示矿工实际收益.md`
+- `memory/08-tasks/done/20260323-094248-修复-node-挖矿页面收益统计口径-按区块当时的真实到账规则显示矿工实际收益.md`
 - `memory/08-tasks/done/20260323-102718-制定-wuminapp-轻节点模式在-citizenchain-保持-pow-不改前提下的长期落地方案-不保留-http.md`
 - `memory/08-tasks/done/20260323-173653-将-tools-zhujichi-py-从输出-json-改为输出-txt-并验证生成结果.md`
 - `memory/08-tasks/done/20260324-chain-phase-control.md`
-- `memory/08-tasks/done/20260324-nodeui-governance-tab.md`
+- `memory/08-tasks/done/20260324-node-governance-tab.md`
 - `memory/08-tasks/done/20260324-skip-empty-blocks.md`
 - `memory/08-tasks/done/20260325-125830-runtime-wuminapp-wumin-双端联动强制规则.md`
 - `memory/08-tasks/done/20260325-130439-新增-institution-asset-公共模块-并接入机构账户资金操作白名单边界.md`
@@ -100,7 +101,7 @@
 - `memory/08-tasks/done/20260328-124050-全面仔细检查-voting-engine-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-130310-全面仔细检查-duoqian-transfer-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-131513-全面仔细检查-genesis-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
-- `memory/08-tasks/done/20260328-132030-审查-nodeui.md`
+- `memory/08-tasks/done/20260328-132030-审查-node.md`
 - `memory/08-tasks/done/20260328-140327-全面仔细检查-node-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-141519-审查-primitives-模块安全与质量.md`
 - `memory/08-tasks/done/20260328-145337-审查-runtime-src.md`
@@ -145,7 +146,7 @@
 - `memory/08-tasks/done/20260422-unified-voting-entry-phase2.md`
 - `memory/08-tasks/done/20260422-unified-voting-entry-phase3.md`
 - `memory/08-tasks/done/20260423-wuminapp-wallet-detail-redesign.md`
-- `memory/08-tasks/done/20260424-nodeui-tab-restructure.md`
+- `memory/08-tasks/done/20260424-node-tab-restructure.md`
 - `memory/08-tasks/done/20260424-step1-sfid-clearing-bank-eligibility.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v2.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-detail-redesign-v3.md`
@@ -153,7 +154,7 @@
 - `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign-v6.md`
 - `memory/08-tasks/done/20260424-wuminapp-wallet-list-redesign.md`
 - `memory/08-tasks/done/20260425-083200-ui-app.md`
-- `memory/08-tasks/done/20260425-nodeui-cleanup-preview-html-and-identity-doc.md`
+- `memory/08-tasks/done/20260425-node-cleanup-preview-html-and-identity-doc.md`
 - `memory/08-tasks/done/20260427-step2-citizenchain-clearing-bank-nodes.md`
 - `memory/08-tasks/done/20260428-123621-检查清算行功能完成度并输出完成度报告.md`
 - `memory/08-tasks/done/20260428-135057-本地开发节点默认查询本机sfid服务正式节点默认查询147正式sfid服务.md`

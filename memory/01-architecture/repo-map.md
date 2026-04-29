@@ -78,11 +78,11 @@ citizenchain/
 - 原仓库根目录 `primitives/` 已迁入 `citizenchain/runtime/primitives`
 - 原生节点、桌面节点 UI、Tauri 壳与打包入口统一收口到 `citizenchain/node`
 - 桌面端 Rust 后端模块已经扁平化到 `citizenchain/node/src/<功能名>`，不再保留 `src/ui` 目录层
-- 历史旧目录 `citizenchain/nodeuitauri` 与独立 `citizenchain/nodeui` 均不再作为当前实现
+- 历史旧目录 `citizenchain/node` 与独立 `citizenchain/node` 均不再作为当前实现
 
 ## 6. 当前落地策略
 
-当前结构已经完成物理整合，后续新增 node 桌面端 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
+当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
 
 ## 7. GitHub Actions 路径分流原则
 

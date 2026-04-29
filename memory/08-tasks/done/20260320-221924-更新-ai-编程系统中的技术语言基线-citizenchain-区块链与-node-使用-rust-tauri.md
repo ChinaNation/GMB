@@ -1,4 +1,4 @@
-# 任务卡：更新 AI 编程系统中的技术语言基线：citizenchain 区块链与 nodeui 使用 Rust + Tauri + React + TypeScript + Vite，wuminapp 使用 Flutter，补充查明并写明 sfid 与 cpms 当前技术栈
+# 任务卡：更新 AI 编程系统中的技术语言基线：citizenchain 区块链与 node 使用 Rust + Tauri + React + TypeScript + Vite，wuminapp 使用 Flutter，补充查明并写明 sfid 与 cpms 当前技术栈
 
 - 任务编号：20260320-221924
 - 状态：done
@@ -8,7 +8,7 @@
 
 ## 任务需求
 
-更新 AI 编程系统中的技术语言基线：citizenchain 区块链与 nodeui 使用 Rust + Tauri + React + TypeScript + Vite，wuminapp 使用 Flutter，补充查明并写明 sfid 与 cpms 当前技术栈
+更新 AI 编程系统中的技术语言基线：citizenchain 区块链与 node 使用 Rust + Tauri + React + TypeScript + Vite，wuminapp 使用 Flutter，补充查明并写明 sfid 与 cpms 当前技术栈
 
 ## 必读上下文
 
@@ -103,7 +103,7 @@
 ## 实施记录
 
 - 任务卡已创建
-- 已核对 `citizenchain/nodeui` 当前实现为 Rust + Tauri + React + TypeScript + Vite，不是 Flutter
+- 已核对 `citizenchain/node` 当前实现为 Rust + Tauri + React + TypeScript + Vite，不是 Flutter
 - 已核对 `sfid` 当前实现为 React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
 - 已核对 `cpms` 当前落地代码为 Rust + Axum + SQLx + PostgreSQL，`frontend/` 目录仅为预留结构
 - 已开始同步更新 AI 系统与仓库级技术文档中的过期技术栈口径
@@ -114,6 +114,6 @@
 ## 完成信息
 
 - 完成时间：2026-03-20 22:21:18
-- 完成摘要：已将 citizenchain/nodeui、wuminapp、sfid、cpms 的当前技术栈写入 AI 系统与仓库级文档，并清理 nodeui Flutter 化等过期口径。
+- 完成摘要：已将 citizenchain/node、wuminapp、sfid、cpms 的当前技术栈写入 AI 系统与仓库级文档，并清理 node Flutter 化等过期口径。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

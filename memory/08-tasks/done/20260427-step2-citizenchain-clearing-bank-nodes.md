@@ -10,7 +10,7 @@
 5. **链上节点声明 storage + extrinsic**：`ClearingBankNodes` + `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank`
 6. **InstitutionMetadata 上链**：register_sfid_institution 等创建路径增加 a3/sub_type/parent 参数（Required，开发期彻底切换，无 backfill）
 7. **节点 UI 新增清算行 tab**：8 视图状态机 + "解密"管理员密钥（仅清算行 tab 用，不动 NRC/PRC/PRB）
-8. **NodeUI 连通性自测强制**：DNS + wss + 链 ID + PeerId 匹配，全过才允许提交
+8. **桌面节点 连通性自测强制**：DNS + wss + 链 ID + PeerId 匹配，全过才允许提交
 9. **SFID 端 Step 2 末尾联动**：`/clearing-banks/search` 加 `AND sfid_id ∈ ClearingBankNodes` 过滤；新建 ClearingBankWatcher 订阅链上事件 + SQLite 缓存
 
 所属模块：**Architect 主入口跨模块协调**——Blockchain Agent（runtime + node）+ SFID Agent（推链字段 + watcher）；不动 wumin/wuminapp（留 Step 3）。
@@ -35,7 +35,7 @@
 - [feedback_no_compatibility.md](../../feedback_no_compatibility.md)
 - [memory/08-tasks/templates/citizenchain-runtime.md](../templates/citizenchain-runtime.md)
 - [memory/08-tasks/templates/citizenchain-node.md](../templates/citizenchain-node.md)
-- [memory/08-tasks/templates/citizenchain-nodeui.md](../templates/citizenchain-nodeui.md)
+- [memory/08-tasks/templates/citizenchain-node.md](../templates/citizenchain-node.md)
 - [memory/08-tasks/templates/sfid-backend.md](../templates/sfid-backend.md)
 
 ## 变更范围（文件级）
@@ -163,7 +163,7 @@
   - submit_offchain_batch_v2 同行 / 跨行：fee 进 recipient_bank 费用账户、gas 从 fee_account 扣、管理员个人钱包余额不变
   - 用 SFR-JOINT_STOCK 机构成功提交跨行 batch，X 主账户净流出 = 本金 + fee + 0 gas（gas 从 Y 费用账户扣，X 不参与）
   - "解密"按钮仅在清算行 tab 显示；NRC/PRC/PRB 的"激活"按钮文案保持不变
-- NodeUI 连通性自测：填入错误 domain/port 提交按钮置灰
+- 桌面节点 连通性自测：填入错误 domain/port 提交按钮置灰
 - 残留扫描通过
 
 ## 落地顺序（4 阶段）

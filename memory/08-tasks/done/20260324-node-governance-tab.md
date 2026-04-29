@@ -1,16 +1,16 @@
-# 任务卡：nodeui 增加治理 Tab（方案 A：Rust 后端 + React 前端）
+# 任务卡：node 增加治理 Tab（方案 A：Rust 后端 + React 前端）
 
-- 任务编号：20260324-nodeui-governance-tab
+- 任务编号：20260324-node-governance-tab
 - 状态：open
-- 所属模块：citizenchain-nodeui
+- 所属模块：citizenchain-node
 - 当前负责人：Claude
 - 创建时间：2026-03-24
 
 ## 任务需求
 
-在 nodeui 的"挖矿"和"网络"Tab 之间增加"治理"按钮，实现 wuminapp 中已有的机构浏览和提案投票治理功能，使桌面端和手机端拥有相同的治理能力。
+在 node 的"挖矿"和"网络"Tab 之间增加"治理"按钮，实现 wuminapp 中已有的机构浏览和提案投票治理功能，使桌面端和手机端拥有相同的治理能力。
 
-采用方案 A：nodeui Rust 后端通过本地 RPC 查询全节点链上存储，React 前端渲染治理 UI。
+采用方案 A：node Rust 后端通过本地 RPC 查询全节点链上存储，React 前端渲染治理 UI。
 
 ## 必读上下文
 
@@ -20,24 +20,24 @@
 - memory/03-security/security-rules.md
 - memory/07-ai/agent-rules.md
 - memory/07-ai/context-loading-order.md
-- memory/05-modules/citizenchain/nodeui/
+- memory/05-modules/citizenchain/node/
 
 ### 关键参考源码
 
 - wuminapp/lib/governance/ — 手机端治理完整实现
 - citizenchain/runtime/governance/ — 链上治理 pallet（存储结构、extrinsic 格式）
-- citizenchain/nodeui/backend/src/shared/rpc.rs — 现有 RPC 封装
-- citizenchain/nodeui/frontend/App.tsx — Tab 导航定义
-- citizenchain/nodeui/frontend/api.ts — Tauri IPC 封装
+- citizenchain/node/backend/src/shared/rpc.rs — 现有 RPC 封装
+- citizenchain/node/frontend/App.tsx — Tab 导航定义
+- citizenchain/node/frontend/api.ts — Tauri IPC 封装
 
 ## 模块模板
 
-- 模板来源：memory/08-tasks/templates/citizenchain-nodeui.md
+- 模板来源：memory/08-tasks/templates/citizenchain-node.md
 
 ### 默认改动范围
 
-- `citizenchain/nodeui`
-- `memory/05-modules/citizenchain/nodeui`
+- `citizenchain/node`
+- `memory/05-modules/citizenchain/node`
 
 ### 先沟通条件
 
@@ -127,7 +127,7 @@ GovernanceSection 内部使用子 Tab 切换"机构"和"提案"视图。
 ## 待确认问题
 
 1. ~~技术方案选择~~ → 已确认采用方案 A
-2. nodeui 钱包管理目前只有 fee-address 和 node-key，P2 阶段的投票签名需要冷钱包支持——是否在 P0 阶段先只做只读浏览？→ 按 P0 先实施只读
+2. node 钱包管理目前只有 fee-address 和 node-key，P2 阶段的投票签名需要冷钱包支持——是否在 P0 阶段先只做只读浏览？→ 按 P0 先实施只读
 3. 机构静态数据是否与 wuminapp 的 institution_data.dart 完全一致？→ 需从 Dart 源文件迁移
 
 ## 实施记录
@@ -136,7 +136,7 @@ GovernanceSection 内部使用子 Tab 切换"机构"和"提案"视图。
 
 #### 已解决的关键问题
 
-1. **QR 协议字段名格式**：wumin 使用 snake_case（`request_id`），nodeui 最初用了 camelCase → 修正为 snake_case
+1. **QR 协议字段名格式**：wumin 使用 snake_case（`request_id`），node 最初用了 camelCase → 修正为 snake_case
 2. **wumin 盲签校验不通过**（"交易内容与摘要不符"）：`display.fields` 的 key/value 需要与 wumin PayloadDecoder 解码结果严格一致 → 对齐 wumin 的字段格式
 3. **Extrinsic 编码错误导致链卡住**（block 1559）：
    - 缺少 `CheckMetadataHash` 的 mode 字节（0x00）和 implicit 字节（0x00）
