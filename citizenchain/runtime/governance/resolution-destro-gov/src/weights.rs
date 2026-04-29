@@ -56,8 +56,8 @@ pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::NextProposalId` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::ProposalsByExpiry` (r:1 w:1)
@@ -109,8 +109,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 impl WeightInfo for () {
 	/// Storage: `ResolutionDestroGov::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `ResolutionDestroGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::NextProposalId` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::ProposalsByExpiry` (r:1 w:1)

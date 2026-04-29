@@ -60,9 +60,9 @@
 - `citizenchain/nodeui/` — 签名管理员 UI
 - `citizenchain/node/src/rpc.rs` — 新增链下 RPC
 - `citizenchain/node/src/service.rs` — 依赖注入
-- 新建 `citizenchain/node/src/offchain_ledger.rs` — 链下账本
-- 新建 `citizenchain/node/src/offchain_packer.rs` — 批量打包器
-- 新建 `citizenchain/node/src/offchain_keystore.rs` — 加密私钥存储
+- `citizenchain/node/src/offchain/ledger.rs` — 清算行本地账本
+- `citizenchain/node/src/offchain/settlement/packer.rs` — 批量打包器
+- `citizenchain/node/src/offchain/keystore.rs` — 加密私钥存储
 
 ## 验收标准
 

@@ -36,6 +36,12 @@ print_risk_points() {
   done < <(risk_points_for_module "$module")
 }
 
+is_error_diagnosis_request() {
+  # 中文注释：包含固定短语时按只读报错诊断处理，不自动创建任务卡。
+  local text="$1"
+  [[ "$text" == *"检查为什么报错"* ]]
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --title)
@@ -95,8 +101,13 @@ fi
 
 reason="$(clarification_reason_for_module "$MODULE")"
 needs_clarify="false"
+error_diagnosis="false"
 
-if [[ "$MODULE" == "unknown" || "$FORCE_CLARIFY" == "true" || -n "$reason" ]]; then
+if is_error_diagnosis_request "$TITLE $GOAL"; then
+  error_diagnosis="true"
+fi
+
+if [[ "$error_diagnosis" != "true" && ( "$MODULE" == "unknown" || "$FORCE_CLARIFY" == "true" || -n "$reason" ) ]]; then
   needs_clarify="true"
 fi
 
@@ -104,6 +115,9 @@ echo "=== 需求分析 ==="
 echo "任务需求：$GOAL"
 echo "建议模块：$MODULE"
 echo "当前负责人：$OWNER"
+if [[ "$error_diagnosis" == "true" ]]; then
+  echo "任务类型：只读报错诊断（不创建任务卡、不修改代码）"
+fi
 echo "影响范围："
 print_impact_scope "$MODULE"
 echo "主要风险点："
@@ -127,8 +141,19 @@ if [[ "$EXECUTE" != "true" ]]; then
   echo "=== 需求分析完成 ==="
   echo "建议先在 Codex 聊天窗口确认以上分析。"
   echo "建议下一步："
-  echo "- 如果分析正确，继续执行：bash memory/scripts/architect-entry.sh --requirement \"$GOAL\" --module \"$MODULE\" --execute"
+  if [[ "$error_diagnosis" == "true" ]]; then
+    echo "- 直接读取相关上下文，检查为什么报错，并输出检查结果；不要创建任务卡"
+  else
+    echo "- 如果分析正确，继续执行：bash memory/scripts/architect-entry.sh --requirement \"$GOAL\" --module \"$MODULE\" --execute"
+  fi
   echo "- 如果边界不清，先参考：memory/07-ai/clarification-template.md"
+  exit 0
+fi
+
+if [[ "$error_diagnosis" == "true" ]]; then
+  echo ""
+  echo "=== 只读报错诊断 ==="
+  echo "该请求包含“检查为什么报错”，不创建任务卡。请直接读取相关上下文、检查错误原因并输出检查结果。"
   exit 0
 fi
 

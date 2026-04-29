@@ -35,7 +35,7 @@ use crate::batch_item::OffchainBatchItemV2;
 use crate::{
     bank_check::{self, SfidAccountQuery},
     fee_config, nonce, solvency, BankTotalDeposits, Config, DepositBalance, Error, Event, Pallet,
-    ProcessedOffchainTx, ProcessedOffchainTxAt,
+    ProcessedOffchainTx, ProcessedOffchainTxAt, UserBank,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 
@@ -100,6 +100,14 @@ pub fn execute_clearing_bank_batch<T: Config>(
             Error::<T>::SelfTransferNotAllowed
         );
         ensure!(now <= item.expires_at, Error::<T>::ExpiredIntent);
+        ensure!(
+            UserBank::<T>::get(&item.payer).as_ref() == Some(&item.payer_bank),
+            Error::<T>::UserBankMismatch
+        );
+        ensure!(
+            UserBank::<T>::get(&item.recipient).as_ref() == Some(&item.recipient_bank),
+            Error::<T>::UserBankMismatch
+        );
 
         // 付款方清算行必须合法(跨行时必要;同行时即 institution_main 自身,已知合法)
         if item.payer_bank != item.recipient_bank {

@@ -18,6 +18,7 @@
 - `memory/AGENTS.md` 必须保留“第一轮必须先做需求分析”
 - `memory/AGENTS.md` 必须保留“Codex 主窗口按需自动调度专业工作线程”
 - `memory/CODEX.md` 必须保留“进入真实开发前必须创建任务卡”
+- `memory/AGENTS.md`、`memory/CODEX.md`、`memory/07-ai/chat-protocol.md` 必须保留 `检查为什么报错` 只读报错诊断例外
 - `memory/07-ai/chat-protocol.md` 必须保留“以 `需求分析` 开头”
 
 ## 3. 手工验收步骤
@@ -47,6 +48,8 @@
 - 已完成需求分析
 - 已得到继续信号或边界已明确
 - 已创建 `memory/08-tasks/` 下的任务卡
+
+例外：当用户在修复报错语境中输入内容包含 `检查为什么报错` 时，属于只读报错诊断；AI 直接检查并输出检查结果，不创建任务卡、不修改代码。
 
 ## 6. 自动检查入口
 

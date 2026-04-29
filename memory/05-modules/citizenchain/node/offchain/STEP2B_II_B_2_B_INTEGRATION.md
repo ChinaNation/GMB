@@ -12,7 +12,7 @@
 
 原本 β-2-b 内部分 B-1/B-2/B-3/B-4 四步,全部在本轮顺序完成:
 
-- **B-1** · `pool_submitter.rs` 替换占位为真实 `pool.submit_one` + `account_nonce` 查询
+- **B-1** · `settlement/submitter.rs` 替换占位为真实 `pool.submit_one` + `account_nonce` 查询
 - **B-2** · `cli.rs` 加 `--clearing-bank <SS58>` + `--clearing-bank-password <STR>`
 - **B-3** · `service.rs` 启动清算行组件 + `spawn` packer worker;`command.rs` / `ui/node_runner.rs` 透传 CLI
 - **B-4** · `rpc.rs` 的 `FullDeps` 加字段 + `create_full` 合并 `OffchainClearingRpcServer::into_rpc`;`OffchainClearingRpcImpl` 派生 `Clone`
@@ -26,7 +26,7 @@
 
 ## 2. 改动清单
 
-### 2.1 `offchain/pool_submitter.rs`
+### 2.1 `offchain/settlement/submitter.rs`
 
 | 变更 | 内容 |
 |---|---|
@@ -126,6 +126,19 @@ every 30s (spawned task)
 
 **Step 2b-iii 起** `event_listener` 订阅 `PaymentSettled` 事件后清理 `ledger.pending`,闭环最终完成。本步已经能让扫码付款的 extrinsic 成功进链上交易池并被出块节点打包。
 
+### 3.1 2026-04-28 安全补齐
+
+本轮把原先的占位字段接成可验收闭环:
+
+- `submit_payment` 不再返回 `[0u8;64]` ACK,而是复用 `KeystoreBatchSigner` 对
+  `GMB_L2_ACK_V1 || bank_main || SCALE(intent) || payer_sig || accepted_at` 签名。
+- RPC 入 pending 前会读链上 `UserBank[payer]`、`UserBank[recipient]` 与
+  `L2FeeRateBp[recipient_bank]`,提前拒绝错路由、绑定漂移、未配置费率和手续费不一致。
+- `OffchainPacker` 启动时读取链上 `LastClearingBatchSeq[bank]`,下一批从 `last + 1`
+  续跑,避免节点重启后重复提交 batch_seq=1。
+- runtime 入口严格校验 batch 级 sr25519 签名和 batch_seq,并在 settlement 成功后写
+  `LastClearingBatchSeq`;失败批次不推进序号。
+
 ---
 
 ## 4. 启动命令示例
@@ -167,8 +180,8 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 ## 7. 后续
 
 **Step 2b-iii**(建议下一步):
-- `offchain/event_listener.rs` 接 `sc-client-api::BlockchainEvents`:订阅 `PaymentSettled` 事件清理 pending,订阅 `Deposited` / `Withdrawn` 同步 confirmed 余额
-- `offchain/reserve_monitor.rs` 新增:周期性 `available_balance vs total_deposits` 对账告警
+- `offchain/settlement/listener.rs` 接 `sc-client-api::BlockchainEvents`:订阅 `PaymentSettled` 事件清理 pending,订阅 `Deposited` / `Withdrawn` 同步 confirmed 余额
+- `offchain/reserve.rs` 新增:周期性 `available_balance vs total_deposits` 对账告警
 - `offchain/gossip.rs`:libp2p `NotificationService` + 协议名 `/gmb/offchain/1`(清算行间推送 pending 意图)
 
 **Step 2b-iv**(清理):

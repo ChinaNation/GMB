@@ -1,7 +1,7 @@
 # 任务索引
 
 ## open
-
+- `memory/08-tasks/open/20260429-runtime-step2-admins-origin-unified-subjects.md`
 - `memory/08-tasks/open/20260321-084304-统一本地调试时-sfid-后端监听地址与手机访问地址-修复提交升级提案时人口快照接口连接超时问题.md`
 - `memory/08-tasks/open/20260321-095406-检查区块链所需的人口快照数据与sfid实际提供的人口快照数据是否对齐.md`
 - `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
@@ -34,9 +34,19 @@
 - `memory/08-tasks/open/20260422-cold-wallet-two-color-recognition.md`
 - `memory/08-tasks/open/20260422-joint-vote-institution-id-display.md`
 - `memory/08-tasks/open/20260422-offchain-clearing-pay-two-color.md`
+- `memory/08-tasks/open/20260428-115654-sfid-修复-clearing-bank-watcher-启动崩溃.md`
+- `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-sfid-侧资格搜索-clearingbankwatcher-联调验收与文档收口.md`
+- `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-区块链侧技术闭环-包括-runtime-node-nodeui-验收与文档.md`
+- `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wumin-冷钱包清算行管理类扫码签名-decoder-文案与测试.md`
+- `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wuminapp-用户侧设置清算行-绑定-跨行支付配置与端到端验收.md`
 
 ## done
 
+- `memory/08-tasks/done/20260429-duoqian-manage-pow-step1-institution-refactor.md`
+- `memory/08-tasks/done/20260429-node-offchain-dir-align.md`
+- `memory/08-tasks/done/20260429-node-offchain-second-consolidation.md`
+- `memory/08-tasks/done/20260429-ai-frontend-backend-same-feature-path-rule.md`
+- `memory/08-tasks/done/20260429-sfid-chain-state-source.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-nodeuitauri-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-nodeui-backend-对-runtime-primitives-的错误路径引用.md`
@@ -151,3 +161,5 @@
 - `memory/08-tasks/done/20260425-083200-ui-app.md`
 - `memory/08-tasks/done/20260425-nodeui-cleanup-preview-html-and-identity-doc.md`
 - `memory/08-tasks/done/20260427-step2-citizenchain-clearing-bank-nodes.md`
+- `memory/08-tasks/done/20260428-123621-检查清算行功能完成度并输出完成度报告.md`
+- `memory/08-tasks/done/20260428-135057-本地开发节点默认查询本机sfid服务正式节点默认查询147正式sfid服务.md`

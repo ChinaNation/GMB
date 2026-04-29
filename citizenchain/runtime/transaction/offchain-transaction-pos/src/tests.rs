@@ -14,15 +14,15 @@
 //! - `submit_batch_same_bank_end_to_end`     单笔同行支付完整结算 + PaymentSettled 事件
 //!
 //! Mock 约束(与 `settlement.rs::pubkey_from_accountid` 对齐):`AccountId` 的
-//! 32 字节 = sr25519 公钥;因此 fixture 里用 `Pair::generate()` 派生 L3 账户,
-//! 清算行主账户 / 费用账户 / 管理员则用固定字节数组。
+//! 32 字节 = sr25519 公钥;因此 fixture 里用 `Pair::from_seed()` 派生 L3 与
+//! 清算行管理员账户,清算行主账户 / 费用账户用固定字节数组。
 
 #![cfg(test)]
 
 use crate as offchain_transaction_pos;
 use crate::{
     batch_item::OffchainBatchItemV2, pallet::*, BankTotalDeposits, DepositBalance, L2FeeRateBp,
-    L3PaymentNonce, UserBank,
+    L3PaymentNonce, LastClearingBatchSeq, UserBank,
 };
 use codec::Encode;
 use frame_support::{
@@ -67,7 +67,7 @@ impl pallet_balances::Config for Test {
 
 const BANK_MAIN_BYTES: [u8; 32] = [0xAA; 32];
 const BANK_FEE_BYTES: [u8; 32] = [0xAB; 32];
-const BANK_ADMIN_BYTES: [u8; 32] = [0xAC; 32];
+const BANK_ADMIN_SEED: [u8; 32] = [0xAC; 32];
 const OTHER_BANK_BYTES: [u8; 32] = [0xBA; 32];
 const BANK_SFID: &[u8] = b"SFR-GD-SZ01-CB01-N9-D8";
 
@@ -77,12 +77,15 @@ fn bank_main() -> AccountId32 {
 fn bank_fee() -> AccountId32 {
     AccountId32::new(BANK_FEE_BYTES)
 }
+fn bank_admin_pair() -> sr25519::Pair {
+    sr25519::Pair::from_seed(&BANK_ADMIN_SEED)
+}
 fn bank_admin() -> AccountId32 {
-    AccountId32::new(BANK_ADMIN_BYTES)
+    AccountId32::new(bank_admin_pair().public().0)
 }
 
 /// Mock `SfidAccountQuery`:把 `BANK_MAIN_BYTES` 注册为 SFR 主账户 Active,
-/// `BANK_FEE_BYTES` 注册为 SFR 费用账户 Active;`BANK_ADMIN_BYTES` 是主账户唯一
+/// `BANK_FEE_BYTES` 注册为 SFR 费用账户 Active;`bank_admin()` 是主账户唯一
 /// 管理员。`OTHER_BANK_BYTES` 故意不注册,用于负路径。
 pub struct MockSfid;
 
@@ -118,8 +121,7 @@ impl crate::bank_check::SfidAccountQuery<AccountId32> for MockSfid {
 
     fn is_admin_of(bank: &AccountId32, who: &AccountId32) -> bool {
         let bank_bytes: &[u8; 32] = bank.as_ref();
-        let who_bytes: &[u8; 32] = who.as_ref();
-        *bank_bytes == BANK_MAIN_BYTES && *who_bytes == BANK_ADMIN_BYTES
+        *bank_bytes == BANK_MAIN_BYTES && who == &bank_admin()
     }
 
     /// Step 2 mock:测试场景默认 BANK_MAIN 满足资格白名单,负路径单测自行覆盖。
@@ -303,6 +305,23 @@ fn sign_intent(
     bytes
 }
 
+/// 用清算行管理员密钥对 `(institution_main, batch_seq, batch.encode())` 签名。
+fn sign_batch(
+    institution_main: &AccountId32,
+    batch_seq: u64,
+    batch: &BoundedVec<OffchainBatchItemV2<AccountId32, u64>, <Test as Config>::MaxBatchSize>,
+) -> BatchSignatureOf<Test> {
+    use sp_core::crypto::Pair as _;
+    let message =
+        crate::batch_item::batch_signing_hash(institution_main, batch_seq, &batch.encode());
+    bank_admin_pair()
+        .sign(&message)
+        .0
+        .to_vec()
+        .try_into()
+        .unwrap()
+}
+
 #[test]
 fn submit_batch_rejects_non_admin() {
     new_test_ext().execute_with(|| {
@@ -355,10 +374,125 @@ fn submit_batch_rejects_non_admin() {
                 RuntimeOrigin::signed(alice.clone()),
                 bank_main(),
                 1,
-                batch,
-                Default::default()
+                batch.clone(),
+                sign_batch(&bank_main(), 1, &batch)
             ),
             Error::<Test>::UnauthorizedAdmin
+        );
+    });
+}
+
+#[test]
+fn submit_batch_rejects_invalid_batch_signature() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_main(), 5);
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            100_000
+        ));
+
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x31),
+            payer: alice.clone(),
+            payer_bank: bank_main(),
+            recipient: bob.clone(),
+            recipient_bank: bank_main(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let item = OffchainBatchItemV2::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank: intent.payer_bank.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank: intent.recipient_bank.clone(),
+            transfer_amount: intent.amount,
+            fee_amount: intent.fee,
+            payer_sig: sign_intent(&alice_pair, &intent),
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+        let bad_batch_sig: BatchSignatureOf<Test> = sp_std::vec![0u8; 64].try_into().unwrap();
+
+        assert_noop!(
+            OffchainPos::submit_offchain_batch_v2(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_main(),
+                1,
+                batch,
+                bad_batch_sig
+            ),
+            Error::<Test>::InvalidBatchSignature
+        );
+    });
+}
+
+#[test]
+fn submit_batch_rejects_wrong_batch_seq() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_main(), 5);
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            100_000
+        ));
+
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x32),
+            payer: alice.clone(),
+            payer_bank: bank_main(),
+            recipient: bob.clone(),
+            recipient_bank: bank_main(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let item = OffchainBatchItemV2::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank: intent.payer_bank.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank: intent.recipient_bank.clone(),
+            transfer_amount: intent.amount,
+            fee_amount: intent.fee,
+            payer_sig: sign_intent(&alice_pair, &intent),
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        assert_noop!(
+            OffchainPos::submit_offchain_batch_v2(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_main(),
+                2,
+                batch.clone(),
+                sign_batch(&bank_main(), 2, &batch)
+            ),
+            Error::<Test>::InvalidBatchSeq
         );
     });
 }
@@ -423,8 +557,8 @@ fn submit_batch_same_bank_end_to_end() {
             RuntimeOrigin::signed(bank_admin()),
             bank_main(),
             1,
-            batch,
-            Default::default()
+            batch.clone(),
+            sign_batch(&bank_main(), 1, &batch)
         ));
 
         // 付款方 DepositBalance 扣 (transfer + fee)
@@ -453,6 +587,8 @@ fn submit_batch_same_bank_end_to_end() {
         );
         // nonce 已消费
         assert_eq!(L3PaymentNonce::<Test>::get(&alice), 1);
+        // 批次序号只在 settlement 成功后推进。
+        assert_eq!(LastClearingBatchSeq::<Test>::get(bank_main()), 1);
 
         // 事件断言:最后几条里应有 PaymentSettled + ClearingBankBatchSettled
         let events = frame_system::Pallet::<Test>::events();
@@ -497,10 +633,69 @@ fn submit_batch_same_bank_end_to_end() {
                 RuntimeOrigin::signed(bank_admin()),
                 bank_main(),
                 2,
-                replay_batch,
-                Default::default()
+                replay_batch.clone(),
+                sign_batch(&bank_main(), 2, &replay_batch)
             ),
             Error::<Test>::TxAlreadyProcessed
+        );
+    });
+}
+
+#[test]
+fn submit_batch_rejects_user_bank_mismatch() {
+    new_test_ext().execute_with(|| {
+        seed_fee_rate(&bank_main(), 5);
+        let (alice, alice_pair) = new_l3_user(&[1u8; 32], 1_000_000);
+        let (bob, _) = new_l3_user(&[2u8; 32], 1_000_000);
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(alice.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::bind_clearing_bank(
+            RuntimeOrigin::signed(bob.clone()),
+            bank_main()
+        ));
+        assert_ok!(OffchainPos::deposit(
+            RuntimeOrigin::signed(alice.clone()),
+            100_000
+        ));
+        // 直接制造链上绑定与 item 声明不一致的状态,验证 settlement 会早拒。
+        UserBank::<Test>::insert(&bob, AccountId32::new(OTHER_BANK_BYTES));
+
+        let intent = crate::batch_item::PaymentIntent::<AccountId32, u64> {
+            tx_id: H256::repeat_byte(0x33),
+            payer: alice.clone(),
+            payer_bank: bank_main(),
+            recipient: bob.clone(),
+            recipient_bank: bank_main(),
+            amount: 10_000,
+            fee: 5,
+            nonce: 1,
+            expires_at: 100,
+        };
+        let item = OffchainBatchItemV2::<AccountId32, u64> {
+            tx_id: intent.tx_id,
+            payer: intent.payer.clone(),
+            payer_bank: intent.payer_bank.clone(),
+            recipient: intent.recipient.clone(),
+            recipient_bank: intent.recipient_bank.clone(),
+            transfer_amount: intent.amount,
+            fee_amount: intent.fee,
+            payer_sig: sign_intent(&alice_pair, &intent),
+            payer_nonce: intent.nonce,
+            expires_at: intent.expires_at,
+        };
+        let batch: BoundedVec<_, _> = sp_std::vec![item].try_into().unwrap();
+
+        assert_noop!(
+            OffchainPos::submit_offchain_batch_v2(
+                RuntimeOrigin::signed(bank_admin()),
+                bank_main(),
+                1,
+                batch.clone(),
+                sign_batch(&bank_main(), 1, &batch)
+            ),
+            Error::<Test>::UserBankMismatch
         );
     });
 }
@@ -558,8 +753,8 @@ fn submit_batch_expired_intent_rejected() {
                 RuntimeOrigin::signed(bank_admin()),
                 bank_main(),
                 1,
-                batch,
-                Default::default()
+                batch.clone(),
+                sign_batch(&bank_main(), 1, &batch)
             ),
             Error::<Test>::ExpiredIntent
         );

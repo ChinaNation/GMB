@@ -50,8 +50,8 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyGov::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyGov::PendingProposalByNewKey` (r:1 w:1)
@@ -82,8 +82,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `Grandpa::PendingChange` (r:1 w:1)
@@ -116,8 +116,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	}
 	/// Storage: `VotingEngineSystem::ProposalData` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::ProposalData` (`max_values`: None, `max_size`: Some(266), added: 2741, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `Grandpa::PendingChange` (r:1 w:0)
@@ -137,8 +137,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyGov::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyGov::PendingProposalByNewKey` (r:1 w:1)
@@ -169,8 +169,8 @@ impl WeightInfo for () {
 	}
 	/// Storage: `GrandpaKeyGov::ProposalActions` (r:1 w:1)
 	/// Proof: `GrandpaKeyGov::ProposalActions` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:1)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `Grandpa::PendingChange` (r:1 w:1)
@@ -203,8 +203,8 @@ impl WeightInfo for () {
 	}
 	/// Storage: `VotingEngineSystem::ProposalData` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::ProposalData` (`max_values`: None, `max_size`: Some(266), added: 2741, mode: `MaxEncodedLen`)
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngineSystem::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngineSystem::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
 	/// Storage: `Grandpa::PendingChange` (r:1 w:0)

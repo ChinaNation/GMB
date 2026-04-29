@@ -404,9 +404,9 @@ pub fn new_full(
     gpu_device: Option<usize>,
     // 扫码支付 Step 2b-ii-β-2-b 新增:清算行主账户 SS58(None=本节点不做清算行角色)
     clearing_bank: Option<String>,
-    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 offchain_keystore 的密码
+    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::keystore` 的密码
     clearing_bank_password: Option<String>,
-    // 扫码支付 Step 2b-iii-b 新增:reserve_monitor 对账周期(秒),None=默认 300,Some(0)=关闭
+    // 扫码支付 Step 2b-iii-b 新增:offchain::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
     clearing_reserve_monitor_interval_secs: Option<u64>,
 ) -> Result<TaskManager, ServiceError> {
     // 生成或加载 TLS 自签证书，注入到网络配置中。
@@ -525,157 +525,16 @@ pub fn new_full(
         }
     };
 
-    // ─── 扫码支付 Step 2b-ii-β-2-b:清算行组件启动 ───────────────────────
-    // 若 CLI 设了 --clearing-bank 且 SS58 合法,启动清算行 offchain 组件
-    // (ledger + packer + rpc_impl + event_listener),并挂一个 30 秒 tick 的
-    // packer worker 到 `task_manager`。启动失败/地址非法时 log warning 但
-    // 不中断 PoW + GRANDPA 启动(基础节点职能优先)。
-    let clearing_rpc_impl: Option<Arc<crate::offchain::rpc::OffchainClearingRpcImpl>> =
-        if let Some(bank_ss58) = clearing_bank.as_deref() {
-            use sp_core::crypto::Ss58Codec;
-            match sp_runtime::AccountId32::from_ss58check(bank_ss58) {
-                Ok(bank_main) => {
-                    let password = clearing_bank_password.as_deref().unwrap_or("");
-                    let keystore_path = config.base_path.path();
-                    let offchain_keystore =
-                        crate::offchain_keystore::OffchainKeystore::new(keystore_path);
-                    let signing_key_slot: Arc<
-                        std::sync::RwLock<Option<crate::offchain_keystore::SigningKey>>,
-                    > = Arc::new(std::sync::RwLock::new(None));
-                    if offchain_keystore.has_signing_key() && !password.is_empty() {
-                        match offchain_keystore.load_signing_key(password) {
-                            Ok(key) => {
-                                *signing_key_slot.write().expect("lock") = Some(key);
-                                log::info!("[ClearingBank] 签名密钥已解锁");
-                            }
-                            Err(e) => log::warn!(
-                                "[ClearingBank] 签名密钥解锁失败:{e},packer 将拒绝提交 extrinsic"
-                            ),
-                        }
-                    } else {
-                        log::warn!(
-                            "[ClearingBank] 签名密钥未加载(密码或密钥文件缺失),\
-                             packer 会在有 pending 时 rollback"
-                        );
-                    }
-
-                    let signer: Arc<dyn crate::offchain::packer::BatchSigner> = Arc::new(
-                        crate::offchain::KeystoreBatchSigner::new(signing_key_slot.clone()),
-                    );
-                    let submitter: Arc<dyn crate::offchain::packer::BatchSubmitter> =
-                        Arc::new(crate::offchain::pool_submitter::PoolBatchSubmitter::new(
-                            client.clone(),
-                            transaction_pool.clone(),
-                            signing_key_slot,
-                        ));
-
-                    match crate::offchain::start_clearing_bank_components(
-                        keystore_path,
-                        bank_main.clone(),
-                        password,
-                        signer,
-                        submitter,
-                        client.clone(),
-                    ) {
-                        Ok(components) => {
-                            let packer = components.packer.clone();
-                            let client_for_loop = client.clone();
-                            task_manager.spawn_handle().spawn(
-                                "offchain-clearing-packer",
-                                Some("offchain"),
-                                async move {
-                                    // 闭包内需要显式引入 HeaderBackend trait 才能调 `info()`。
-                                    use sp_blockchain::HeaderBackend as _;
-                                    use sp_runtime::traits::SaturatedConversion as _;
-                                    let mut interval =
-                                        tokio::time::interval(Duration::from_secs(30));
-                                    loop {
-                                        interval.tick().await;
-                                        let info = client_for_loop.info();
-                                        let current_block: u64 = info.best_number.saturated_into();
-                                        if packer.should_pack(current_block).await {
-                                            match packer.pack_and_submit(current_block).await {
-                                                Ok(Some(hash)) => log::info!(
-                                                    "[ClearingPacker] batch ok tx=0x{:x}",
-                                                    hash
-                                                ),
-                                                Ok(None) => {}
-                                                Err(e) => {
-                                                    log::warn!("[ClearingPacker] {e}")
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                            );
-
-                            // 扫码支付 Step 2b-iii-a:启动链上事件监听 worker。
-                            // 订阅 import_notification_stream,每个新块读 `System::Events`
-                            // → 解码 → 过滤本 pallet 事件 → 分发到 ledger。
-                            // packer 提交 extrinsic 后,runtime 发 `PaymentSettled` 事件,
-                            // 本 worker 捕获后调 `ledger.on_payment_settled` 清理 pending,
-                            // 从而形成 wuminapp RPC → ledger → pool → runtime → 事件回写
-                            // 的完整闭环。
-                            let listener = components.event_listener.clone();
-                            let client_for_events = client.clone();
-                            task_manager.spawn_handle().spawn(
-                                "offchain-clearing-event-listener",
-                                Some("offchain"),
-                                async move {
-                                    listener.run(client_for_events).await;
-                                },
-                            );
-
-                            // 扫码支付 Step 2b-iii-b:启动主账对账 worker(可选)。
-                            // 周期对比本地 `Σ confirmed` 与链上 `BankTotalDeposits`,
-                            // 偏差触发 log::error!。interval=0 时跳过 spawn(关闭对账,仅
-                            // 排障用;生产部署必须保留)。缺省 300 秒。
-                            let monitor_interval_secs =
-                                clearing_reserve_monitor_interval_secs.unwrap_or(300);
-                            if monitor_interval_secs > 0 {
-                                let monitor = components.reserve_monitor.clone();
-                                let client_for_monitor = client.clone();
-                                task_manager.spawn_handle().spawn(
-                                    "offchain-clearing-reserve-monitor",
-                                    Some("offchain"),
-                                    async move {
-                                        monitor
-                                            .run(
-                                                client_for_monitor,
-                                                Duration::from_secs(monitor_interval_secs),
-                                            )
-                                            .await;
-                                    },
-                                );
-                            } else {
-                                log::warn!(
-                                    "[ClearingBank] reserve_monitor 已关闭(interval=0),\
-                                     仅用于排障,生产环境请保留默认 300 秒"
-                                );
-                            }
-
-                            log::info!(
-                                "[ClearingBank] 清算行组件已启动,bank_main={}",
-                                bank_main.to_ss58check()
-                            );
-                            Some(components.rpc_impl.clone())
-                        }
-                        Err(e) => {
-                            log::warn!("[ClearingBank] 组件启动失败:{e}");
-                            None
-                        }
-                    }
-                }
-                Err(e) => {
-                    log::warn!(
-                        "[ClearingBank] --clearing-bank SS58 解析失败:{e:?},清算行组件不启动"
-                    );
-                    None
-                }
-            }
-        } else {
-            None
-        };
+    // 清算行启动细节归入 `offchain::bootstrap`,service.rs 只做节点通用接线。
+    let clearing_rpc_impl = crate::offchain::bootstrap::start_from_cli(
+        clearing_bank.as_deref(),
+        clearing_bank_password.as_deref(),
+        clearing_reserve_monitor_interval_secs,
+        config.base_path.path(),
+        client.clone(),
+        transaction_pool.clone(),
+        &task_manager,
+    );
 
     let rpc_extensions_builder = {
         let client = client.clone();

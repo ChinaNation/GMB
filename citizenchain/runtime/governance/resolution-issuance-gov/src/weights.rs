@@ -69,8 +69,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::AllowedRecipients` (r:1 w:0)
 	/// Proof: `ResolutionIssuanceGov::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::NextProposalId` (r:1 w:1)
@@ -182,8 +182,8 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(1))
 	}
-	/// Storage: `AdminsOriginGov::CurrentAdmins` (r:1 w:0)
-	/// Proof: `AdminsOriginGov::CurrentAdmins` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsOriginGov::Institutions` (r:1 w:0)
+	/// Proof: `AdminsOriginGov::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::AllowedRecipients` (r:1 w:0)
 	/// Proof: `ResolutionIssuanceGov::AllowedRecipients` (`max_values`: Some(1), `max_size`: Some(1377), added: 1872, mode: `MaxEncodedLen`)
 	/// Storage: `ResolutionIssuanceGov::NextProposalId` (r:1 w:1)

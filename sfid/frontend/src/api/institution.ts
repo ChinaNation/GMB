@@ -12,20 +12,18 @@ export const InstitutionCategoryLabel: Record<InstitutionCategory, string> = {
   PRIVATE_INSTITUTION: '私权机构',
 };
 
-/**
- * 多签账户链上状态。
- *
- * 流转(2026-04-21 统一两步激活模式):
- *   INACTIVE  ──点"激活"──▶  PENDING  ──成功──▶  REGISTERED
- *                                     └──失败──▶  FAILED ──点"重试激活"──▶  PENDING
- *
- * - `INACTIVE`:本地已登记账户,未推链。所有账户(含机构创建时自动生成的 2 条默认账户、
- *   管理员手工创建的其他账户)默认都是这个状态。
- * - `PENDING`:激活请求已提交,正在上链确认。
- * - `REGISTERED`:链上已注册,`duoqian_address` + `chain_tx_hash` 已填。
- * - `FAILED`:上链失败,可点"重试激活"重推。
- */
-export type MultisigChainStatus = 'INACTIVE' | 'PENDING' | 'REGISTERED' | 'FAILED';
+// 中文注释:SFID 只显示链上同步回来的状态,不提供后台手动激活入口。
+export type InstitutionChainStatus =
+  | 'NOT_REGISTERED'
+  | 'PENDING_REGISTER'
+  | 'REGISTERED'
+  | 'REVOKED_ON_CHAIN';
+
+export type MultisigChainStatus =
+  | 'NOT_ON_CHAIN'
+  | 'PENDING_ON_CHAIN'
+  | 'ACTIVE_ON_CHAIN'
+  | 'REVOKED_ON_CHAIN';
 
 export interface MultisigInstitution {
   sfid_id: string;
@@ -44,6 +42,10 @@ export interface MultisigInstitution {
   sub_type?: string | null;
   /** 所属法人 sfid_id(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
   parent_sfid_id?: string | null;
+  chain_status: InstitutionChainStatus;
+  chain_tx_hash?: string | null;
+  chain_block_number?: number | null;
+  chain_synced_at?: string | null;
   created_by: string;
   created_at: string;
 }
@@ -61,6 +63,7 @@ export interface MultisigAccount {
   account_name: string;
   duoqian_address: string | null;
   chain_status: MultisigChainStatus;
+  chain_synced_at?: string | null;
   chain_tx_hash: string | null;
   chain_block_number: number | null;
   created_by: string;
@@ -79,6 +82,7 @@ export interface InstitutionListRow {
   institution_code: string;
   sub_type?: string | null;
   parent_sfid_id?: string | null;
+  chain_status: InstitutionChainStatus;
   account_count: number;
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
@@ -163,6 +167,7 @@ export interface CreateAccountOutput {
   sfid_id: string;
   account_name: string;
   chain_status: MultisigChainStatus;
+  chain_synced_at: string | null;
   chain_tx_hash: string | null;
   chain_block_number: number | null;
   duoqian_address: string | null;
@@ -210,8 +215,8 @@ export async function createInstitution(
 }
 
 /**
- * 在机构下创建账户(**只登记本地 Inactive,不触链**)。
- * 2026-04-21 统一两步模式:创建后需在账户列表点"激活"按钮才推链注册。
+ * 在机构下创建账户(**只登记 SFID 账户名称,不触链**)。
+ * 链上激活状态只能由区块链软件完成注册后同步回来。
  * 同一 sfid_id 下 account_name 必须唯一(后端硬校验)。
  */
 export async function createAccount(
@@ -227,23 +232,6 @@ export async function createAccount(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ account_name: accountName }),
     }
-  );
-}
-
-/**
- * 激活账户(推链注册)。
- * 允许从 INACTIVE / FAILED 触发;PENDING / REGISTERED 会被后端拒绝。
- * 链上派生公式由链端按 account_name 路由到 Role::Main / Role::Fee / Role::Named。
- */
-export async function activateAccount(
-  auth: AdminAuth,
-  sfidId: string,
-  accountName: string,
-): Promise<CreateAccountOutput> {
-  return adminRequest<CreateAccountOutput>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/account/${encodeURIComponent(accountName)}/activate`,
-    auth,
-    { method: 'POST' },
   );
 }
 
@@ -360,7 +348,7 @@ export async function getCpmsSiteByInstitution(
 }
 
 /**
- * 删除账户(软删,不触链)。
+ * 删除新增账户名称。仅允许未上链或链上已注销的非默认账户。
  */
 export async function deleteAccount(
   auth: AdminAuth,

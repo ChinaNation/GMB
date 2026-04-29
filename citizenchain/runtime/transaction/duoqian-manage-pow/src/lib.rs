@@ -4,8 +4,11 @@
 pub const MODULE_TAG: &[u8] = b"dq-mgmt";
 
 pub use pallet::*;
+pub mod address;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod institution;
+pub mod personal;
 pub mod weights;
 
 use codec::{Decode, Encode, MaxEncodedLen};
@@ -19,38 +22,24 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
 use scale_info::TypeInfo;
-use sp_core::sr25519::{Public as Sr25519Public, Signature as Sr25519Signature};
+use sp_core::sr25519::Public as Sr25519Public;
 use sp_runtime::{
     traits::{Hash, Zero},
     SaturatedConversion, TransactionOutcome,
 };
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use voting_engine_system::{
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
-    STATUS_REJECTED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_REJECTED,
+};
+
+pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
+pub use institution::types::{
+    CreateInstitutionAccount, CreateInstitutionAction, InstitutionAccountInfo, InstitutionInfo,
+    InstitutionInitialAccount, InstitutionLifecycleStatus,
 };
 
 type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
-/// SFID 登记机构下的账户角色枚举，决定地址派生走哪个 op_tag：
-/// - `Main`：所有机构的主账户，preimage 不含 account_name，走 `OP_MAIN = 0x00`。
-/// - `Fee`：所有机构的费用账户，preimage 不含 account_name，走 `OP_FEE = 0x01`。
-/// - `Named(account_name)`：SFID 机构自定义命名账户（临时 / 工资 / 运营等），走
-///   `OP_INSTITUTION = 0x05`，account_name 非空且不得为保留名 `"主账户"`/`"费用账户"`。
-///
-/// 见 `primitives::core_const::{OP_MAIN, OP_FEE, OP_INSTITUTION}` 常量定义。
-#[derive(Clone, Copy, Debug)]
-pub enum InstitutionAccountRole<'a> {
-    Main,
-    Fee,
-    Named(&'a [u8]),
-}
-
-/// 机构账户角色保留名：这两个中文字串必须强制走 Role::Main / Role::Fee，
-/// 禁止被误当作 Named 命名账户落到 OP_INSTITUTION。
-const RESERVED_NAME_MAIN: &[u8] = "主账户".as_bytes();
-const RESERVED_NAME_FEE: &[u8] = "费用账户".as_bytes();
 
 /// 账户地址合法性抽象：用于校验 duoqian_address 是否为本链合法哈希地址。
 pub trait DuoqianAddressValidator<AccountId> {
@@ -247,12 +236,13 @@ pub fn account_to_institution_id<AccountId: Encode>(account: &AccountId) -> Inst
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use voting_engine_system::InternalAdminProvider;
     use voting_engine_system::InternalVoteEngine;
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine_system::Config {
+    pub trait Config:
+        frame_system::Config + voting_engine_system::Config + admins_origin_gov::Config
+    {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -307,6 +297,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxAdminSignatureLength: Get<u32>;
 
+        /// 单个机构创建交易最多可携带的账户数量。
+        ///
+        /// SFID 默认包含主账户和费用账户，用户可新增其他账户；这里限制链上
+        /// 初始入金列表长度，避免机构创建提案业务数据过大。
+        #[pallet::constant]
+        type MaxInstitutionAccounts: Get<u32>;
+
         /// 创建时最低入金（默认应设置为 111 分 = 1.11 元）。
         #[pallet::constant]
         type MinCreateAmount: Get<BalanceOf<Self>>;
@@ -337,6 +334,48 @@ pub mod pallet {
     pub type SubTypeOf<T> = BoundedVec<u8, <T as Config>::MaxSubTypeLength>;
     /// Step 2 新增:机构元数据,见 [MetadataInfo]。
     pub type MetadataInfoOf<T> = MetadataInfo<A3Of<T>, SubTypeOf<T>, SfidIdOf<T>>;
+    /// 机构创建时用户输入的账户初始余额列表项。
+    pub type InstitutionInitialAccountOf<T> =
+        InstitutionInitialAccount<AccountNameOf<T>, BalanceOf<T>>;
+    /// 机构创建时用户输入的账户初始余额列表。
+    pub type InstitutionInitialAccountsOf<T> =
+        BoundedVec<InstitutionInitialAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
+    /// 机构创建提案中保存的已派生账户项。
+    pub type CreateInstitutionAccountOf<T> = CreateInstitutionAccount<
+        AccountNameOf<T>,
+        <T as frame_system::Config>::AccountId,
+        BalanceOf<T>,
+    >;
+    /// 机构创建提案中保存的已派生账户列表。
+    pub type CreateInstitutionAccountsOf<T> =
+        BoundedVec<CreateInstitutionAccountOf<T>, <T as Config>::MaxInstitutionAccounts>;
+    /// 机构级多签信息。
+    pub type InstitutionInfoOf<T> = InstitutionInfo<
+        DuoqianAdminsOf<T>,
+        <T as frame_system::Config>::AccountId,
+        BlockNumberFor<T>,
+        AccountNameOf<T>,
+        A3Of<T>,
+        SubTypeOf<T>,
+        SfidIdOf<T>,
+    >;
+    /// 机构账户信息。
+    pub type InstitutionAccountInfoOf<T> = InstitutionAccountInfo<
+        <T as frame_system::Config>::AccountId,
+        BalanceOf<T>,
+        BlockNumberFor<T>,
+    >;
+    /// 机构创建提案业务数据。
+    pub type CreateInstitutionActionOf<T> = CreateInstitutionAction<
+        SfidIdOf<T>,
+        AccountNameOf<T>,
+        <T as frame_system::Config>::AccountId,
+        BalanceOf<T>,
+        DuoqianAdminsOf<T>,
+        CreateInstitutionAccountsOf<T>,
+        A3Of<T>,
+        SubTypeOf<T>,
+    >;
 
     /// 管理员离线 sr25519 签名载体(固定 64 字节)。
     pub type AdminSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxAdminSignatureLength>;
@@ -394,6 +433,34 @@ pub mod pallet {
     #[pallet::getter(fn institution_metadata)]
     pub type InstitutionMetadata<T: Config> =
         StorageMap<_, Blake2_128Concat, SfidIdOf<T>, MetadataInfoOf<T>, OptionQuery>;
+
+    /// 机构级多签信息：key 为 sfid_id。
+    ///
+    /// 第1步起链上创建的是“机构”，机构下账户只保存地址、初始余额与生命周期状态。
+    /// 管理员和阈值的长期真源在 admins-origin-gov；本表保存机构基本信息和创建快照。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_of)]
+    pub type Institutions<T: Config> =
+        StorageMap<_, Blake2_128Concat, SfidIdOf<T>, InstitutionInfoOf<T>, OptionQuery>;
+
+    /// 机构账户表：(sfid_id, account_name) -> 账户地址与激活状态。
+    #[pallet::storage]
+    #[pallet::getter(fn institution_account_of)]
+    pub type InstitutionAccounts<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        SfidIdOf<T>,
+        Blake2_128Concat,
+        AccountNameOf<T>,
+        InstitutionAccountInfoOf<T>,
+        OptionQuery,
+    >;
+
+    /// 正在投票中的机构创建提案，用于通过/拒绝时处理 reserve 资金。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_institution_create)]
+    pub type PendingInstitutionCreate<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, CreateInstitutionActionOf<T>, OptionQuery>;
 
     /// 已消费的机构登记 nonce，防止 proof 重放。
     #[pallet::storage]
@@ -531,6 +598,43 @@ pub mod pallet {
             /// 投票引擎分配的超时区块(投票期最后允许区块)
             expires_at: BlockNumberFor<T>,
         },
+        /// 机构级创建提案已发起：创建者资金已 reserve，等待管理员投票。
+        InstitutionCreateProposed {
+            proposal_id: u64,
+            sfid_id: SfidIdOf<T>,
+            institution_name: AccountNameOf<T>,
+            main_address: T::AccountId,
+            proposer: T::AccountId,
+            accounts: CreateInstitutionAccountsOf<T>,
+            admins: DuoqianAdminsOf<T>,
+            admin_count: u32,
+            threshold: u32,
+            initial_total: BalanceOf<T>,
+            reserve_total: BalanceOf<T>,
+            expires_at: BlockNumberFor<T>,
+        },
+        /// 机构创建成功：机构和账户均已激活。
+        InstitutionCreated {
+            proposal_id: u64,
+            sfid_id: SfidIdOf<T>,
+            main_address: T::AccountId,
+            account_count: u32,
+            initial_total: BalanceOf<T>,
+            fee: BalanceOf<T>,
+        },
+        /// 机构创建执行失败：回滚后释放 pending 占用和 reserve 资金。
+        InstitutionCreateExecutionFailed {
+            proposal_id: u64,
+            sfid_id: SfidIdOf<T>,
+            main_address: T::AccountId,
+        },
+        /// 机构创建提案被否决或超时清理：释放创建者 reserve 资金。
+        InstitutionCreateRejected {
+            proposal_id: u64,
+            sfid_id: SfidIdOf<T>,
+            main_address: T::AccountId,
+            reserve_total: BalanceOf<T>,
+        },
         /// finalize_create 代投完成(不论最终状态):统计接受的签名数 + 投票引擎返回状态。
         /// 便于链下观测 "N 签提交 → 投票引擎状态" 的一一对应。
         CreateFinalized {
@@ -568,6 +672,8 @@ pub mod pallet {
         InsufficientAmount,
         /// 创建金额低于最小门槛
         CreateAmountBelowMinimum,
+        /// 机构账户初始余额低于最小门槛
+        AccountInitialAmountBelowMinimum,
         /// 注销时账户余额低于最小门槛
         CloseBalanceBelowMinimum,
         /// 权限不足
@@ -624,6 +730,24 @@ pub mod pallet {
         UnauthorizedAdmin,
         /// 机构名称为空
         EmptyAccountName,
+        /// 机构级创建缺少主账户
+        MissingMainAccount,
+        /// 机构级创建缺少费用账户
+        MissingFeeAccount,
+        /// 机构级创建账户名重复
+        DuplicateAccountName,
+        /// 机构已经存在
+        InstitutionAlreadyExists,
+        /// 机构账户列表为空
+        EmptyInstitutionAccounts,
+        /// 机构账户数量超过上限
+        TooManyInstitutionAccounts,
+        /// 初始余额累计溢出
+        InitialAmountOverflow,
+        /// 创建者资金 reserve 失败
+        ReserveFailed,
+        /// reserve 释放异常
+        ReserveReleaseFailed,
         /// 手续费扣取失败
         FeeWithdrawFailed,
         /// 注销后转账金额低于 ED
@@ -654,6 +778,7 @@ pub mod pallet {
     /// 提案操作类型标记：存储在 ProposalData 的第一个字节
     pub const ACTION_CREATE: u8 = 1;
     pub const ACTION_CLOSE: u8 = 2;
+    pub const ACTION_CREATE_INSTITUTION: u8 = 3;
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -750,7 +875,15 @@ pub mod pallet {
 
             let now = frame_system::Pallet::<T>::block_number();
 
-            // 预写入 pending 状态的 DuoqianAccounts，使投票引擎可以从中读取阈值和管理员
+            Self::create_pending_admin_subject(
+                &duoqian_address,
+                admins_origin_gov::AdminSubjectKind::SfidInstitution,
+                &duoqian_admins,
+                threshold,
+                &who,
+            )?;
+
+            // 预写入 pending 状态的 DuoqianAccounts，用于账户生命周期和旧入口状态查询。
             DuoqianAccounts::<T>::insert(
                 &duoqian_address,
                 DuoqianAccount {
@@ -763,11 +896,14 @@ pub mod pallet {
                 },
             );
 
-            // 创建投票引擎提案
+            // 创建投票引擎提案。管理员快照由 admins-origin-gov 的 Pending 主体提供。
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine_system::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
+            let proposal_id = <T as Config>::InternalVoteEngine::create_internal_proposal(
+                who.clone(),
+                org,
+                institution,
+            )?;
 
             // 存储业务数据到投票引擎 ProposalData
             let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>> {
@@ -929,6 +1065,51 @@ pub mod pallet {
             Ok(())
         }
 
+        /// 发起机构级创建提案。
+        ///
+        /// 该交易注册的是“机构”而不是单个账户。创建者必须一次性提交主账户、
+        /// 费用账户以及需要初始化的自定义账户余额；交易发起时 reserve 创建者
+        /// 的初始余额合计与手续费，投票通过后再划入机构各账户。
+        #[pallet::call_index(5)]
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_create())]
+        pub fn propose_create_institution(
+            origin: OriginFor<T>,
+            sfid_id: SfidIdOf<T>,
+            institution_name: AccountNameOf<T>,
+            accounts: InstitutionInitialAccountsOf<T>,
+            admin_count: u32,
+            duoqian_admins: DuoqianAdminsOf<T>,
+            threshold: u32,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            signing_province: Option<Vec<u8>>,
+            a3: A3Of<T>,
+            sub_type: Option<SubTypeOf<T>>,
+            parent_sfid_id: Option<SfidIdOf<T>>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            with_transaction(|| {
+                match Self::do_propose_create_institution(
+                    who,
+                    sfid_id,
+                    institution_name,
+                    accounts,
+                    admin_count,
+                    duoqian_admins,
+                    threshold,
+                    register_nonce,
+                    signature,
+                    signing_province,
+                    a3,
+                    sub_type,
+                    parent_sfid_id,
+                ) {
+                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Err(e) => TransactionOutcome::Rollback(Err(e)),
+                }
+            })
+        }
+
         /// 发起"关闭多签账户"提案。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_close())]
@@ -974,9 +1155,15 @@ pub mod pallet {
                 Error::<T>::DuoqianNotActive
             );
 
-            // 发起人必须是管理员之一
+            // 发起人必须是该多签主体的管理员。管理员真源统一在 admins-origin-gov。
+            let subject_id = Self::resolve_admin_subject_for_account(&duoqian_address)
+                .ok_or(Error::<T>::DuoqianNotFound)?;
             ensure!(
-                account.duoqian_admins.iter().any(|admin| admin == &who),
+                admins_origin_gov::Pallet::<T>::is_subject_admin(
+                    voting_engine_system::internal_vote::ORG_DUOQIAN,
+                    subject_id,
+                    &who,
+                ),
                 Error::<T>::PermissionDenied
             );
 
@@ -1010,8 +1197,11 @@ pub mod pallet {
             // 创建投票引擎提案
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine_system::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
+            let proposal_id = <T as Config>::InternalVoteEngine::create_internal_proposal(
+                who.clone(),
+                org,
+                institution,
+            )?;
 
             // 存储业务数据
             let action = CloseDuoqianAction {
@@ -1125,6 +1315,13 @@ pub mod pallet {
 
             // 预写入 DuoqianAccounts（pending 状态）
             let now = frame_system::Pallet::<T>::block_number();
+            Self::create_pending_admin_subject(
+                &duoqian_address,
+                admins_origin_gov::AdminSubjectKind::PersonalDuoqian,
+                &duoqian_admins,
+                threshold,
+                &who,
+            )?;
             DuoqianAccounts::<T>::insert(
                 &duoqian_address,
                 DuoqianAccount {
@@ -1149,8 +1346,11 @@ pub mod pallet {
             // 创建投票引擎提案
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine_system::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
+            let proposal_id = <T as Config>::InternalVoteEngine::create_internal_proposal(
+                who.clone(),
+                org,
+                institution,
+            )?;
 
             // 存储业务数据（复用 ACTION_CREATE + CreateDuoqianAction）
             let action = CreateDuoqianAction {
@@ -1220,6 +1420,12 @@ pub mod pallet {
                     .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     DuoqianAccounts::<T>::remove(&action.duoqian_address);
                     PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                    Self::remove_pending_admin_subject(&action.duoqian_address);
+                }
+                ACTION_CREATE_INSTITUTION => {
+                    let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                        .map_err(|_| Error::<T>::ProposalActionNotFound)?;
+                    Self::cleanup_pending_institution_create(proposal_id, &action, true);
                 }
                 ACTION_CLOSE => {
                     let action =
@@ -1348,13 +1554,514 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        /// 检查 who 是否是某个 duoqian 机构的管理员
-        fn is_duoqian_admin(institution: InstitutionPalletId, who: &T::AccountId) -> bool {
-            <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+        fn ensure_institution_metadata_shape(
+            a3: &A3Of<T>,
+            sub_type: &Option<SubTypeOf<T>>,
+            parent_sfid_id: &Option<SfidIdOf<T>>,
+        ) -> DispatchResult {
+            ensure!(!a3.is_empty(), Error::<T>::EmptyA3);
+            match a3.as_slice() {
+                b"SFR" => {
+                    ensure!(sub_type.is_some(), Error::<T>::MissingSubType);
+                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
+                }
+                b"FFR" => {
+                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
+                    ensure!(parent_sfid_id.is_some(), Error::<T>::MissingParentSfid);
+                }
+                _ => {
+                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
+                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
+                }
+            }
+            Ok(())
+        }
+
+        fn ensure_admin_config(
+            who: &T::AccountId,
+            admin_count: u32,
+            duoqian_admins: &DuoqianAdminsOf<T>,
+            threshold: u32,
+        ) -> DispatchResult {
+            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
+            ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
+            ensure!(
+                duoqian_admins.len() as u32 == admin_count,
+                Error::<T>::AdminCountMismatch
+            );
+            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
+            ensure!(
+                threshold >= min_threshold && threshold <= admin_count,
+                Error::<T>::InvalidThreshold
+            );
+            Self::ensure_unique_admins(duoqian_admins)?;
+            ensure!(
+                duoqian_admins.iter().any(|admin| admin == who),
+                Error::<T>::PermissionDenied
+            );
+            Ok(())
+        }
+
+        fn create_pending_admin_subject(
+            subject_address: &T::AccountId,
+            kind: admins_origin_gov::AdminSubjectKind,
+            admins: &DuoqianAdminsOf<T>,
+            threshold: u32,
+            creator: &T::AccountId,
+        ) -> DispatchResult {
+            admins_origin_gov::Pallet::<T>::create_pending_subject(
+                account_to_institution_id(subject_address),
                 voting_engine_system::internal_vote::ORG_DUOQIAN,
-                institution,
-                who,
+                kind,
+                admins.iter().cloned().collect(),
+                threshold,
+                creator.clone(),
             )
+        }
+
+        fn activate_admin_subject(subject_address: &T::AccountId) -> DispatchResult {
+            admins_origin_gov::Pallet::<T>::activate_subject(account_to_institution_id(
+                subject_address,
+            ))
+        }
+
+        pub(crate) fn remove_pending_admin_subject(subject_address: &T::AccountId) {
+            let _ = admins_origin_gov::Pallet::<T>::remove_pending_subject(
+                account_to_institution_id(subject_address),
+            );
+        }
+
+        fn close_admin_subject(subject_address: &T::AccountId) -> DispatchResult {
+            admins_origin_gov::Pallet::<T>::close_subject(account_to_institution_id(
+                subject_address,
+            ))
+        }
+
+        /// 从任意多签账户反查其管理员主体。
+        ///
+        /// - 个人多签：账户自身就是主体地址。
+        /// - SFID 机构任意账户：统一归属到该机构主账户主体。
+        /// - 旧单账户路径：若找不到机构主账户，则回退到账户自身主体。
+        pub fn resolve_admin_subject_for_account(
+            account: &T::AccountId,
+        ) -> Option<InstitutionPalletId> {
+            if PersonalDuoqianInfo::<T>::contains_key(account) {
+                return Some(account_to_institution_id(account));
+            }
+
+            if let Some(registered) = AddressRegisteredSfid::<T>::get(account) {
+                if let Some(institution) = Institutions::<T>::get(&registered.sfid_id) {
+                    return Some(account_to_institution_id(&institution.main_address));
+                }
+                return Some(account_to_institution_id(account));
+            }
+
+            DuoqianAccounts::<T>::contains_key(account).then(|| account_to_institution_id(account))
+        }
+
+        fn validate_institution_initial_accounts(
+            sfid_id: &SfidIdOf<T>,
+            accounts: &InstitutionInitialAccountsOf<T>,
+        ) -> Result<
+            (
+                CreateInstitutionAccountsOf<T>,
+                T::AccountId,
+                T::AccountId,
+                BalanceOf<T>,
+            ),
+            DispatchError,
+        > {
+            ensure!(!accounts.is_empty(), Error::<T>::EmptyInstitutionAccounts);
+
+            let mut seen = BTreeSet::new();
+            let mut has_main = false;
+            let mut has_fee = false;
+            let mut main_address: Option<T::AccountId> = None;
+            let mut fee_address: Option<T::AccountId> = None;
+            let mut initial_total = BalanceOf::<T>::zero();
+            let mut built: Vec<CreateInstitutionAccountOf<T>> = Vec::with_capacity(accounts.len());
+
+            for item in accounts.iter() {
+                ensure!(!item.account_name.is_empty(), Error::<T>::EmptyAccountName);
+                ensure!(
+                    item.amount >= T::MinCreateAmount::get(),
+                    Error::<T>::AccountInitialAmountBelowMinimum
+                );
+                ensure!(
+                    seen.insert(item.account_name.to_vec()),
+                    Error::<T>::DuplicateAccountName
+                );
+
+                let role = Self::role_from_account_name(item.account_name.as_slice())?;
+                let is_default = matches!(
+                    role,
+                    InstitutionAccountRole::Main | InstitutionAccountRole::Fee
+                );
+                let address = Self::derive_institution_address(sfid_id.as_slice(), role)?;
+
+                ensure!(
+                    !SfidRegisteredAddress::<T>::contains_key(sfid_id, &item.account_name),
+                    Error::<T>::SfidAlreadyRegistered
+                );
+                ensure!(
+                    !AddressRegisteredSfid::<T>::contains_key(&address),
+                    Error::<T>::AddressAlreadyExists
+                );
+                ensure!(
+                    !DuoqianAccounts::<T>::contains_key(&address),
+                    Error::<T>::AddressAlreadyExists
+                );
+                ensure!(
+                    !T::ReservedAddressChecker::is_reserved(&address),
+                    Error::<T>::AddressReserved
+                );
+                ensure!(
+                    T::AddressValidator::is_valid(&address),
+                    Error::<T>::InvalidAddress
+                );
+                ensure!(
+                    !T::ProtectedSourceChecker::is_protected(&address),
+                    Error::<T>::ProtectedSource
+                );
+
+                match role {
+                    InstitutionAccountRole::Main => {
+                        has_main = true;
+                        main_address = Some(address.clone());
+                    }
+                    InstitutionAccountRole::Fee => {
+                        has_fee = true;
+                        fee_address = Some(address.clone());
+                    }
+                    InstitutionAccountRole::Named(_) => {}
+                }
+
+                initial_total = initial_total
+                    .checked_add(&item.amount)
+                    .ok_or(Error::<T>::InitialAmountOverflow)?;
+                built.push(CreateInstitutionAccount {
+                    account_name: item.account_name.clone(),
+                    address,
+                    amount: item.amount,
+                    is_default,
+                });
+            }
+
+            ensure!(has_main, Error::<T>::MissingMainAccount);
+            ensure!(has_fee, Error::<T>::MissingFeeAccount);
+            let bounded: CreateInstitutionAccountsOf<T> = built
+                .try_into()
+                .map_err(|_| Error::<T>::TooManyInstitutionAccounts)?;
+            Ok((
+                bounded,
+                main_address.ok_or(Error::<T>::MissingMainAccount)?,
+                fee_address.ok_or(Error::<T>::MissingFeeAccount)?,
+                initial_total,
+            ))
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn do_propose_create_institution(
+            who: T::AccountId,
+            sfid_id: SfidIdOf<T>,
+            institution_name: AccountNameOf<T>,
+            accounts: InstitutionInitialAccountsOf<T>,
+            admin_count: u32,
+            duoqian_admins: DuoqianAdminsOf<T>,
+            threshold: u32,
+            register_nonce: RegisterNonceOf<T>,
+            signature: RegisterSignatureOf<T>,
+            signing_province: Option<Vec<u8>>,
+            a3: A3Of<T>,
+            sub_type: Option<SubTypeOf<T>>,
+            parent_sfid_id: Option<SfidIdOf<T>>,
+        ) -> DispatchResult {
+            ensure!(
+                !T::ProtectedSourceChecker::is_protected(&who),
+                Error::<T>::ProtectedSource
+            );
+            ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+            ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
+            ensure!(
+                !Institutions::<T>::contains_key(&sfid_id),
+                Error::<T>::InstitutionAlreadyExists
+            );
+            Self::ensure_institution_metadata_shape(&a3, &sub_type, &parent_sfid_id)?;
+            Self::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
+
+            let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
+            ensure!(
+                !UsedRegisterNonce::<T>::get(register_nonce_hash),
+                Error::<T>::RegisterNonceAlreadyUsed
+            );
+            ensure!(
+                T::SfidInstitutionVerifier::verify_institution_registration(
+                    sfid_id.as_slice(),
+                    &institution_name,
+                    &register_nonce,
+                    &signature,
+                    signing_province.as_deref(),
+                ),
+                Error::<T>::InvalidSfidInstitutionSignature
+            );
+
+            let (created_accounts, main_address, fee_address, initial_total) =
+                Self::validate_institution_initial_accounts(&sfid_id, &accounts)?;
+            let amount_u128: u128 = initial_total.saturated_into();
+            let fee_u128 = onchain_transaction_pow::calculate_onchain_fee(amount_u128);
+            let fee: BalanceOf<T> = fee_u128.saturated_into();
+            let reserve_total = initial_total
+                .checked_add(&fee)
+                .ok_or(Error::<T>::InitialAmountOverflow)?;
+            let required = reserve_total
+                .checked_add(&T::Currency::minimum_balance())
+                .ok_or(Error::<T>::InsufficientAmount)?;
+            ensure!(
+                T::Currency::free_balance(&who) >= required,
+                Error::<T>::InsufficientAmount
+            );
+
+            let metadata_was_existing = InstitutionMetadata::<T>::contains_key(&sfid_id);
+            let new_metadata = MetadataInfo {
+                a3: a3.clone(),
+                sub_type: sub_type.clone(),
+                parent_sfid_id: parent_sfid_id.clone(),
+            };
+            if let Some(existing) = InstitutionMetadata::<T>::get(&sfid_id) {
+                ensure!(
+                    existing.a3 == new_metadata.a3
+                        && existing.sub_type == new_metadata.sub_type
+                        && existing.parent_sfid_id == new_metadata.parent_sfid_id,
+                    Error::<T>::InstitutionMetadataMismatch
+                );
+            }
+
+            T::Currency::reserve(&who, reserve_total).map_err(|_| Error::<T>::ReserveFailed)?;
+
+            let now = frame_system::Pallet::<T>::block_number();
+            InstitutionMetadata::<T>::insert(&sfid_id, &new_metadata);
+            Institutions::<T>::insert(
+                &sfid_id,
+                InstitutionInfo {
+                    institution_name: institution_name.clone(),
+                    main_address: main_address.clone(),
+                    fee_address: fee_address.clone(),
+                    admin_count,
+                    threshold,
+                    duoqian_admins: duoqian_admins.clone(),
+                    creator: who.clone(),
+                    created_at: now,
+                    status: InstitutionLifecycleStatus::Pending,
+                    account_count: created_accounts.len() as u32,
+                    a3: a3.clone(),
+                    sub_type: sub_type.clone(),
+                    parent_sfid_id: parent_sfid_id.clone(),
+                },
+            );
+
+            for account in created_accounts.iter() {
+                InstitutionAccounts::<T>::insert(
+                    &sfid_id,
+                    &account.account_name,
+                    InstitutionAccountInfo {
+                        address: account.address.clone(),
+                        initial_balance: account.amount,
+                        status: InstitutionLifecycleStatus::Pending,
+                        is_default: account.is_default,
+                        created_at: now,
+                    },
+                );
+                SfidRegisteredAddress::<T>::insert(
+                    &sfid_id,
+                    &account.account_name,
+                    &account.address,
+                );
+                AddressRegisteredSfid::<T>::insert(
+                    &account.address,
+                    RegisteredInstitution {
+                        sfid_id: sfid_id.clone(),
+                        account_name: account.account_name.clone(),
+                    },
+                );
+            }
+
+            Self::create_pending_admin_subject(
+                &main_address,
+                admins_origin_gov::AdminSubjectKind::SfidInstitution,
+                &duoqian_admins,
+                threshold,
+                &who,
+            )?;
+
+            // 投票引擎当前按 institution_id 反查管理员。机构模型以主账户作为治理索引，
+            // 但主账户不再代表“唯一机构账户”，只是该机构的默认治理入口。
+            DuoqianAccounts::<T>::insert(
+                &main_address,
+                DuoqianAccount {
+                    admin_count,
+                    threshold,
+                    duoqian_admins: duoqian_admins.clone(),
+                    creator: who.clone(),
+                    created_at: now,
+                    status: DuoqianStatus::Pending,
+                },
+            );
+
+            let institution = account_to_institution_id(&main_address);
+            let org = voting_engine_system::internal_vote::ORG_DUOQIAN;
+            let proposal_id = <T as Config>::InternalVoteEngine::create_internal_proposal(
+                who.clone(),
+                org,
+                institution,
+            )?;
+
+            let action = CreateInstitutionAction {
+                sfid_id: sfid_id.clone(),
+                institution_name: institution_name.clone(),
+                main_address: main_address.clone(),
+                fee_address: fee_address.clone(),
+                proposer: who.clone(),
+                admin_count,
+                threshold,
+                duoqian_admins: duoqian_admins.clone(),
+                accounts: created_accounts.clone(),
+                initial_total,
+                fee,
+                reserve_total,
+                a3,
+                sub_type,
+                parent_sfid_id,
+                metadata_was_existing,
+            };
+            let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            data.push(ACTION_CREATE_INSTITUTION);
+            data.extend_from_slice(&action.encode());
+            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, data)?;
+            voting_engine_system::Pallet::<T>::store_proposal_meta(proposal_id, now);
+            PendingInstitutionCreate::<T>::insert(proposal_id, &action);
+            UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
+
+            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+                .map(|p| p.end)
+                .ok_or(Error::<T>::VoteEngineError)?;
+
+            Self::deposit_event(Event::<T>::InstitutionCreateProposed {
+                proposal_id,
+                sfid_id,
+                institution_name,
+                main_address,
+                proposer: who,
+                accounts: created_accounts,
+                admins: duoqian_admins,
+                admin_count,
+                threshold,
+                initial_total,
+                reserve_total,
+                expires_at,
+            });
+
+            Ok(())
+        }
+
+        pub(crate) fn cleanup_pending_institution_create(
+            proposal_id: u64,
+            action: &CreateInstitutionActionOf<T>,
+            emit_event: bool,
+        ) {
+            let _ = T::Currency::unreserve(&action.proposer, action.reserve_total);
+            PendingInstitutionCreate::<T>::remove(proposal_id);
+            Institutions::<T>::remove(&action.sfid_id);
+            if !action.metadata_was_existing {
+                InstitutionMetadata::<T>::remove(&action.sfid_id);
+            }
+            for account in action.accounts.iter() {
+                InstitutionAccounts::<T>::remove(&action.sfid_id, &account.account_name);
+                SfidRegisteredAddress::<T>::remove(&action.sfid_id, &account.account_name);
+                AddressRegisteredSfid::<T>::remove(&account.address);
+            }
+            DuoqianAccounts::<T>::remove(&action.main_address);
+            Self::remove_pending_admin_subject(&action.main_address);
+            if emit_event {
+                Self::deposit_event(Event::<T>::InstitutionCreateRejected {
+                    proposal_id,
+                    sfid_id: action.sfid_id.clone(),
+                    main_address: action.main_address.clone(),
+                    reserve_total: action.reserve_total,
+                });
+            }
+        }
+
+        pub(crate) fn execute_create_institution(
+            proposal_id: u64,
+            action: &CreateInstitutionActionOf<T>,
+        ) -> DispatchResult {
+            ensure!(
+                PendingInstitutionCreate::<T>::contains_key(proposal_id),
+                Error::<T>::ProposalActionNotFound
+            );
+
+            let leftover = T::Currency::unreserve(&action.proposer, action.reserve_total);
+            ensure!(leftover.is_zero(), Error::<T>::ReserveReleaseFailed);
+
+            if !action.fee.is_zero() {
+                let fee_imbalance = T::Currency::withdraw(
+                    &action.proposer,
+                    action.fee,
+                    frame_support::traits::WithdrawReasons::FEE,
+                    ExistenceRequirement::KeepAlive,
+                )
+                .map_err(|_| Error::<T>::FeeWithdrawFailed)?;
+                T::FeeRouter::on_unbalanced(fee_imbalance);
+            }
+
+            for account in action.accounts.iter() {
+                T::Currency::transfer(
+                    &action.proposer,
+                    &account.address,
+                    account.amount,
+                    ExistenceRequirement::KeepAlive,
+                )
+                .map_err(|_| Error::<T>::TransferFailed)?;
+                InstitutionAccounts::<T>::mutate(
+                    &action.sfid_id,
+                    &account.account_name,
+                    |maybe_account| {
+                        if let Some(stored) = maybe_account {
+                            stored.status = InstitutionLifecycleStatus::Active;
+                        }
+                    },
+                );
+            }
+
+            Institutions::<T>::try_mutate(
+                &action.sfid_id,
+                |maybe_institution| -> DispatchResult {
+                    let institution = maybe_institution
+                        .as_mut()
+                        .ok_or(Error::<T>::InstitutionNotRegistered)?;
+                    institution.status = InstitutionLifecycleStatus::Active;
+                    Ok(())
+                },
+            )?;
+            DuoqianAccounts::<T>::mutate(&action.main_address, |maybe_account| {
+                if let Some(account) = maybe_account {
+                    account.status = DuoqianStatus::Active;
+                }
+            });
+            Self::activate_admin_subject(&action.main_address)?;
+            PendingInstitutionCreate::<T>::remove(proposal_id);
+
+            Self::deposit_event(Event::<T>::InstitutionCreated {
+                proposal_id,
+                sfid_id: action.sfid_id.clone(),
+                main_address: action.main_address.clone(),
+                account_count: action.accounts.len() as u32,
+                initial_total: action.initial_total,
+                fee: action.fee,
+            });
+
+            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            Ok(())
         }
 
         /// 执行创建：入金 + 激活 DuoqianAccounts + 更新 nonce
@@ -1394,6 +2101,7 @@ pub mod pallet {
                     account.status = DuoqianStatus::Active;
                 }
             });
+            Self::activate_admin_subject(&action.duoqian_address)?;
 
             Self::deposit_event(Event::<T>::DuoqianCreated {
                 proposal_id,
@@ -1461,6 +2169,7 @@ pub mod pallet {
             DuoqianAccounts::<T>::remove(&action.duoqian_address);
             // 清理个人多签元数据（机构多签无此条目，remove 为 no-op）。
             PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+            Self::close_admin_subject(&action.duoqian_address)?;
             // 清除活跃关闭提案记录。
             PendingCloseProposal::<T>::remove(&action.duoqian_address);
 
@@ -1515,19 +2224,48 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
                     // 事务内执行,失败则清理 Pending 释放地址锁定。
-                    let exec_result = with_transaction(|| {
-                        match pallet::Pallet::<T>::execute_create(proposal_id, &action) {
-                            Ok(()) => TransactionOutcome::Commit(Ok(())),
-                            Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        }
-                    });
+                    let exec_result =
+                        with_transaction(|| {
+                            match pallet::Pallet::<T>::execute_create(proposal_id, &action) {
+                                Ok(()) => TransactionOutcome::Commit(Ok(())),
+                                Err(e) => TransactionOutcome::Rollback(Err(e)),
+                            }
+                        });
                     if exec_result.is_err() {
                         DuoqianAccounts::<T>::remove(&action.duoqian_address);
                         PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                        pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::CreateExecutionFailed {
                                 proposal_id,
                                 duoqian_address: action.duoqian_address,
+                            },
+                        );
+                    }
+                }
+                ACTION_CREATE_INSTITUTION => {
+                    let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+
+                    let exec_result =
+                        with_transaction(|| match pallet::Pallet::<T>::execute_create_institution(
+                            proposal_id,
+                            &action,
+                        ) {
+                            Ok(()) => TransactionOutcome::Commit(Ok(())),
+                            Err(e) => TransactionOutcome::Rollback(Err(e)),
+                        });
+                    if exec_result.is_err() {
+                        pallet::Pallet::<T>::cleanup_pending_institution_create(
+                            proposal_id,
+                            &action,
+                            false,
+                        );
+                        pallet::Pallet::<T>::deposit_event(
+                            pallet::Event::<T>::InstitutionCreateExecutionFailed {
+                                proposal_id,
+                                sfid_id: action.sfid_id,
+                                main_address: action.main_address,
                             },
                         );
                     }
@@ -1537,12 +2275,13 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-                    let exec_result = with_transaction(|| {
-                        match pallet::Pallet::<T>::execute_close(proposal_id, &action) {
-                            Ok(()) => TransactionOutcome::Commit(Ok(())),
-                            Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        }
-                    });
+                    let exec_result =
+                        with_transaction(|| {
+                            match pallet::Pallet::<T>::execute_close(proposal_id, &action) {
+                                Ok(()) => TransactionOutcome::Commit(Ok(())),
+                                Err(e) => TransactionOutcome::Rollback(Err(e)),
+                            }
+                        });
                     if exec_result.is_err() {
                         PendingCloseProposal::<T>::remove(&action.duoqian_address);
                         pallet::Pallet::<T>::deposit_event(
@@ -1564,11 +2303,23 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     ) {
                         DuoqianAccounts::<T>::remove(&action.duoqian_address);
                         PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                        pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::DuoqianCreateRejected {
                                 proposal_id,
                                 duoqian_address: action.duoqian_address,
                             },
+                        );
+                    }
+                }
+                ACTION_CREATE_INSTITUTION => {
+                    if let Ok(action) =
+                        CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                    {
+                        pallet::Pallet::<T>::cleanup_pending_institution_create(
+                            proposal_id,
+                            &action,
+                            true,
                         );
                     }
                 }
@@ -1629,6 +2380,9 @@ mod tests {
 
         #[runtime::pallet_index(3)]
         pub type Duoqian = pallet;
+
+        #[runtime::pallet_index(4)]
+        pub type AdminsOriginGov = admins_origin_gov;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -1756,31 +2510,21 @@ mod tests {
         }
     }
 
-    /// 测试用 InternalAdminProvider：从 DuoqianAccounts 读取管理员
+    /// 测试用 InternalAdminProvider：从 admins-origin-gov 统一主体表读取管理员。
     pub struct TestInternalAdminProvider;
     impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
             if org != ORG_DUOQIAN {
                 return false;
             }
-            let account = AccountId32::decode(&mut &institution[..32]);
-            let Ok(account) = account else {
-                return false;
-            };
-            if let Some(duoqian) = DuoqianAccounts::<Test>::get(&account) {
-                duoqian.duoqian_admins.iter().any(|admin| admin == who)
-            } else {
-                false
-            }
+            admins_origin_gov::Pallet::<Test>::is_subject_admin(org, institution, who)
         }
 
         fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
             if org != ORG_DUOQIAN {
                 return None;
             }
-            let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-            let duoqian = DuoqianAccounts::<Test>::get(&account)?;
-            Some(duoqian.duoqian_admins.into_inner())
+            admins_origin_gov::Pallet::<Test>::subject_admins(org, institution)
         }
     }
 
@@ -1790,22 +2534,18 @@ mod tests {
             if org != ORG_DUOQIAN {
                 return None;
             }
-            let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-            let duoqian = DuoqianAccounts::<Test>::get(&account)?;
-            u32::try_from(duoqian.duoqian_admins.len()).ok()
+            admins_origin_gov::Pallet::<Test>::subject_admin_count(org, institution)
         }
     }
 
-    /// 测试用 InternalThresholdProvider：从 DuoqianAccounts 读取阈值
+    /// 测试用 InternalThresholdProvider：从 admins-origin-gov 统一主体表读取阈值。
     pub struct TestInternalThresholdProvider;
     impl voting_engine_system::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_DUOQIAN {
                 return voting_engine_system::internal_vote::governance_org_pass_threshold(org);
             }
-            let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-            let duoqian = DuoqianAccounts::<Test>::get(&account)?;
-            Some(duoqian.threshold)
+            admins_origin_gov::Pallet::<Test>::subject_threshold(org, institution)
         }
     }
 
@@ -1857,8 +2597,16 @@ mod tests {
         type MaxA3Length = ConstU32<8>;
         type MaxSubTypeLength = ConstU32<32>;
         type MaxAdminSignatureLength = ConstU32<64>;
+        type MaxInstitutionAccounts = ConstU32<8>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<121>;
+        type WeightInfo = ();
+    }
+
+    impl admins_origin_gov::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxAdminsPerInstitution = ConstU32<64>;
+        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1894,7 +2642,6 @@ mod tests {
             accts.try_into().expect("admins bounded vec should fit");
         (bounded, pairs)
     }
-
 
     /// Phase 2 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
     /// 让 `admins` 的前 `take` 个成员各投一张赞成票。
@@ -1980,6 +2727,10 @@ mod tests {
             .assimilate_storage(&mut storage)
             .expect("duoqian genesis build should succeed");
 
+        admins_origin_gov::GenesisConfig::<Test>::default()
+            .assimilate_storage(&mut storage)
+            .expect("admins-origin genesis build should succeed");
+
         // 给管理员余额
         pallet_balances::GenesisConfig::<Test> {
             balances: vec![
@@ -2007,6 +2758,18 @@ mod tests {
             .collect::<Vec<_>>()
             .try_into()
             .expect("admins should fit")
+    }
+
+    fn institution_accounts(items: Vec<(&[u8], u128)>) -> InstitutionInitialAccountsOf<Test> {
+        items
+            .into_iter()
+            .map(|(name, amount)| InstitutionInitialAccount {
+                account_name: name.to_vec().try_into().expect("account name should fit"),
+                amount,
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("institution accounts should fit")
     }
 
     #[test]
@@ -2243,7 +3006,6 @@ mod tests {
             );
         });
     }
-
 
     #[test]
     fn cannot_close_pending_account() {
@@ -2512,6 +3274,237 @@ mod tests {
                 .expect("personal info should exist");
             assert_eq!(meta.creator, admins[0]);
             assert_eq!(meta.account_name, account_name);
+        });
+    }
+
+    #[test]
+    fn institution_create_reserves_and_activates_all_accounts() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"SFR-AH001-ZG1Y-883241719-20260428"
+                .to_vec()
+                .try_into()
+                .expect("sfid should fit");
+            let institution_name: AccountNameOf<Test> = "测试清算行"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("institution name should fit");
+            let accounts = institution_accounts(vec![
+                (RESERVED_NAME_MAIN, 2_000),
+                (RESERVED_NAME_FEE, 500),
+                ("运营账户".as_bytes(), 300),
+            ]);
+            let (admins, pairs) = make_admins_keyed(&[1, 2, 3]);
+            let before_free = Balances::free_balance(&admins[0]);
+
+            assert_ok!(Duoqian::propose_create_institution(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid.clone(),
+                institution_name.clone(),
+                accounts.clone(),
+                3,
+                admins.clone(),
+                2,
+                b"institution-create-1".to_vec().try_into().unwrap(),
+                b"register-ok".to_vec().try_into().unwrap(),
+                None,
+                b"GFR".to_vec().try_into().unwrap(),
+                None,
+                None,
+            ));
+
+            let pid = last_proposal_id();
+            let main_address = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Main,
+            )
+            .expect("main should derive");
+            let fee_address = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Fee,
+            )
+            .expect("fee should derive");
+            let custom_address = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Named("运营账户".as_bytes()),
+            )
+            .expect("custom should derive");
+
+            assert_eq!(Balances::reserved_balance(&admins[0]), 2_810);
+            assert_eq!(
+                Institutions::<Test>::get(&sfid).map(|i| i.status),
+                Some(InstitutionLifecycleStatus::Pending)
+            );
+            assert_eq!(
+                DuoqianAccounts::<Test>::get(&main_address).map(|a| a.status),
+                Some(DuoqianStatus::Pending)
+            );
+
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                pid,
+                &main_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                2_800,
+                2,
+            ));
+
+            assert_eq!(Balances::reserved_balance(&admins[0]), 0);
+            assert_eq!(Balances::free_balance(&admins[0]), before_free - 2_810);
+            assert_eq!(Balances::free_balance(&main_address), 2_000);
+            assert_eq!(Balances::free_balance(&fee_address), 500);
+            assert_eq!(Balances::free_balance(&custom_address), 300);
+            assert_eq!(
+                Institutions::<Test>::get(&sfid).map(|i| i.status),
+                Some(InstitutionLifecycleStatus::Active)
+            );
+            assert_eq!(
+                InstitutionAccounts::<Test>::get(
+                    &sfid,
+                    AccountNameOf::<Test>::try_from(RESERVED_NAME_MAIN.to_vec()).unwrap()
+                )
+                .map(|a| a.status),
+                Some(InstitutionLifecycleStatus::Active)
+            );
+        });
+    }
+
+    #[test]
+    fn institution_create_rejection_unreserves_and_cleans_indexes() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"SFR-AH001-ZG1Y-REJECT-20260428"
+                .to_vec()
+                .try_into()
+                .expect("sfid should fit");
+            let institution_name: AccountNameOf<Test> = "拒绝清算行"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("institution name should fit");
+            let accounts =
+                institution_accounts(vec![(RESERVED_NAME_MAIN, 1_000), (RESERVED_NAME_FEE, 500)]);
+            let admins = make_admins(&[1, 2, 3]);
+            let before_free = Balances::free_balance(&admins[0]);
+
+            assert_ok!(Duoqian::propose_create_institution(
+                RuntimeOrigin::signed(admins[0].clone()),
+                sfid.clone(),
+                institution_name,
+                accounts,
+                3,
+                admins.clone(),
+                2,
+                b"institution-create-2".to_vec().try_into().unwrap(),
+                b"register-ok".to_vec().try_into().unwrap(),
+                None,
+                b"GFR".to_vec().try_into().unwrap(),
+                None,
+                None,
+            ));
+            let pid = last_proposal_id();
+            let main_address = Pallet::<Test>::derive_institution_address(
+                sfid.as_slice(),
+                InstitutionAccountRole::Main,
+            )
+            .expect("main should derive");
+            let main_name: AccountNameOf<Test> = RESERVED_NAME_MAIN.to_vec().try_into().unwrap();
+
+            assert_eq!(Balances::reserved_balance(&admins[0]), 1_510);
+            assert_ok!(VotingEngineSystem::internal_vote(
+                RuntimeOrigin::signed(admins[0].clone()),
+                pid,
+                false
+            ));
+            assert_ok!(VotingEngineSystem::internal_vote(
+                RuntimeOrigin::signed(admins[1].clone()),
+                pid,
+                false
+            ));
+
+            assert_eq!(Balances::reserved_balance(&admins[0]), 0);
+            assert_eq!(Balances::free_balance(&admins[0]), before_free);
+            assert!(PendingInstitutionCreate::<Test>::get(pid).is_none());
+            assert!(Institutions::<Test>::get(&sfid).is_none());
+            assert!(DuoqianAccounts::<Test>::get(&main_address).is_none());
+            assert!(SfidRegisteredAddress::<Test>::get(&sfid, &main_name).is_none());
+            assert!(AddressRegisteredSfid::<Test>::get(&main_address).is_none());
+        });
+    }
+
+    #[test]
+    fn institution_create_requires_main_and_fee_accounts() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"SFR-AH001-ZG1Y-MISSING-20260428"
+                .to_vec()
+                .try_into()
+                .expect("sfid should fit");
+            let institution_name: AccountNameOf<Test> = "缺主账户机构"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("institution name should fit");
+            let accounts =
+                institution_accounts(vec![(RESERVED_NAME_FEE, 500), ("运营账户".as_bytes(), 300)]);
+            let admins = make_admins(&[1, 2, 3]);
+
+            assert_noop!(
+                Duoqian::propose_create_institution(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    sfid,
+                    institution_name,
+                    accounts,
+                    3,
+                    admins,
+                    2,
+                    b"institution-create-3".to_vec().try_into().unwrap(),
+                    b"register-ok".to_vec().try_into().unwrap(),
+                    None,
+                    b"GFR".to_vec().try_into().unwrap(),
+                    None,
+                    None,
+                ),
+                Error::<Test>::MissingMainAccount
+            );
+        });
+    }
+
+    #[test]
+    fn institution_create_rejects_account_initial_amount_below_minimum() {
+        new_test_ext().execute_with(|| {
+            let sfid: SfidIdOf<Test> = b"SFR-AH001-ZG1Y-LOW-20260428"
+                .to_vec()
+                .try_into()
+                .expect("sfid should fit");
+            let institution_name: AccountNameOf<Test> = "低余额机构"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .expect("institution name should fit");
+            let accounts =
+                institution_accounts(vec![(RESERVED_NAME_MAIN, 110), (RESERVED_NAME_FEE, 500)]);
+            let admins = make_admins(&[1, 2, 3]);
+
+            assert_noop!(
+                Duoqian::propose_create_institution(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    sfid,
+                    institution_name,
+                    accounts,
+                    3,
+                    admins,
+                    2,
+                    b"institution-create-4".to_vec().try_into().unwrap(),
+                    b"register-ok".to_vec().try_into().unwrap(),
+                    None,
+                    b"GFR".to_vec().try_into().unwrap(),
+                    None,
+                    None,
+                ),
+                Error::<Test>::AccountInitialAmountBelowMinimum
+            );
         });
     }
 

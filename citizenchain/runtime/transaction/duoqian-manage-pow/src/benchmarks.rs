@@ -274,5 +274,4 @@ mod benchmarks {
         assert!(voting_engine_system::Pallet::<T>::get_proposal_data(0).is_some());
         Ok(())
     }
-
 }

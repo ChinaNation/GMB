@@ -193,13 +193,8 @@ pub mod pallet {
 
     /// 手续费划转提案动作存储（省储行 + 国储会共用）。
     #[pallet::storage]
-    pub type SweepProposalActions<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        SweepAction<T::AccountId, BalanceOf<T>>,
-        OptionQuery,
-    >;
+    pub type SweepProposalActions<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, SweepAction<T::AccountId, BalanceOf<T>>, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -1018,11 +1013,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     if let Some(raw) =
                         voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
                     {
-                        if let Ok(action) = TransferAction::<
-                            T::AccountId,
-                            BalanceOf<T>,
-                            T::MaxRemarkLen,
-                        >::decode(&mut &raw[crate::MODULE_TAG.len()..])
+                        if let Ok(action) =
+                            TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
+                                &mut &raw[crate::MODULE_TAG.len()..],
+                            )
                         {
                             pallet::Pallet::<T>::deposit_event(
                                 pallet::Event::<T>::TransferExecutionFailed {
@@ -1037,9 +1031,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         pallet::Event::<T>::SafetyFundExecutionFailed { proposal_id },
                     );
                 } else if is_sweep {
-                    pallet::Pallet::<T>::deposit_event(
-                        pallet::Event::<T>::SweepExecutionFailed { proposal_id },
-                    );
+                    pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::SweepExecutionFailed {
+                        proposal_id,
+                    });
                 }
             }
         } else {
@@ -1098,6 +1092,9 @@ mod tests {
 
         #[runtime::pallet_index(4)]
         pub type DuoqianTransferPow = super;
+
+        #[runtime::pallet_index(5)]
+        pub type AdminsOriginGov = admins_origin_gov;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -1419,9 +1416,19 @@ mod tests {
         type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
+        type MaxA3Length = ConstU32<8>;
+        type MaxSubTypeLength = ConstU32<32>;
         type MaxAdminSignatureLength = ConstU32<64>;
+        type MaxInstitutionAccounts = ConstU32<8>;
         type MinCreateAmount = ConstU128<111>;
         type MinCloseBalance = ConstU128<111>;
+        type WeightInfo = ();
+    }
+
+    impl admins_origin_gov::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type MaxAdminsPerInstitution = ConstU32<64>;
+        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1504,7 +1511,9 @@ mod tests {
     }
 
     fn registered_duoqian_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
-        (0..count).map(|i| registered_duoqian_pair(i as usize)).collect()
+        (0..count)
+            .map(|i| registered_duoqian_pair(i as usize))
+            .collect()
     }
 
     /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -1560,11 +1569,7 @@ mod tests {
         _proposer: AccountId32,
     ) -> frame_support::dispatch::DispatchResult {
         for (admin, _pair) in pairs.iter().take(n) {
-            VotingEngineSystem::internal_vote(
-                RuntimeOrigin::signed(admin.clone()),
-                pid,
-                true,
-            )?;
+            VotingEngineSystem::internal_vote(RuntimeOrigin::signed(admin.clone()), pid, true)?;
         }
         Ok(())
     }
@@ -1585,6 +1590,9 @@ mod tests {
         }
         .assimilate_storage(&mut storage)
         .expect("balances should assimilate");
+        admins_origin_gov::GenesisConfig::<Test>::default()
+            .assimilate_storage(&mut storage)
+            .expect("admins-origin-gov genesis should assimilate");
 
         let mut ext: sp_io::TestExternalities = storage.into();
         ext.execute_with(|| {
@@ -1782,7 +1790,6 @@ mod tests {
         });
     }
 
-
     #[test]
     fn zero_amount_is_rejected() {
         new_test_ext().execute_with(|| {
@@ -1854,7 +1861,6 @@ mod tests {
             ));
         });
     }
-
 
     #[test]
     fn multiple_proposals_allowed_within_limit() {
@@ -2280,5 +2286,4 @@ mod tests {
             assert_eq!(Balances::free_balance(&dest), 1);
         });
     }
-
 }

@@ -38,6 +38,9 @@ pub struct PaymentIntent<AccountId, BlockNumber> {
 /// L3 签名域分隔符,与 wuminapp 保持**逐字节一致**。
 pub const L3_PAY_SIGNING_DOMAIN: &[u8] = b"GMB_L3_PAY_V1";
 
+/// 清算行批次级签名域分隔符,必须与 node/offchain/packer.rs 保持一致。
+pub const BATCH_SIGNING_DOMAIN: &[u8] = b"GMB_OFFCHAIN_BATCH_V1";
+
 impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumber> {
     /// 生成签名消息哈希:`blake2_256(DOMAIN || SCALE(intent))`。
     ///
@@ -48,6 +51,24 @@ impl<AccountId: Encode, BlockNumber: Encode> PaymentIntent<AccountId, BlockNumbe
         data.extend_from_slice(&self.encode());
         sp_io::hashing::blake2_256(&data)
     }
+}
+
+/// 生成清算行批次签名哈希:
+/// `blake2_256(DOMAIN || SCALE(institution_main) || batch_seq_le || SCALE(batch))`。
+///
+/// node 侧 `AccountId32.as_ref()` 与 SCALE 编码同为 32 字节,这里使用 `Encode`
+/// 是为了让 runtime 维持泛型边界,同时锁定与节点打包器逐字节一致的消息格式。
+pub fn batch_signing_hash<AccountId: Encode>(
+    institution_main: &AccountId,
+    batch_seq: u64,
+    batch_bytes: &[u8],
+) -> [u8; 32] {
+    let mut data = Vec::new();
+    data.extend_from_slice(BATCH_SIGNING_DOMAIN);
+    data.extend_from_slice(&institution_main.encode());
+    data.extend_from_slice(&batch_seq.to_le_bytes());
+    data.extend_from_slice(batch_bytes);
+    sp_io::hashing::blake2_256(&data)
 }
 
 /// 扫码支付清算体系 Step 2 新增:批次上链的**单条 item 结构**(清算行体系)。

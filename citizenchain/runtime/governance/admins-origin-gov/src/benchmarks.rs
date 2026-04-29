@@ -8,7 +8,7 @@
 
 use crate::Pallet as AdminsOriginGov;
 use crate::{
-    reserve_pallet_id_to_bytes, BlockNumberFor, Call, Config, CurrentAdmins, InstitutionPalletId,
+    reserve_pallet_id_to_bytes, BlockNumberFor, Call, Config, InstitutionPalletId, Institutions,
     Pallet, CHINA_CB, ORG_PRC,
 };
 use codec::Decode;
@@ -77,7 +77,7 @@ mod benchmarks {
     /// `execute_admin_replacement` benchmark:
     /// 1. 发起提案 → 自动存入 ProposalData
     /// 2. 手动把提案状态推到 PASSED(模拟投票通过但自动执行失败的场景)
-    /// 3. 手动 mutate CurrentAdmins 模拟"管理员列表被污染"的中间态
+    /// 3. 手动 mutate Institutions 模拟"管理员列表被污染"的中间态
     /// 4. 调 `execute_admin_replacement` 完成补救执行
     #[benchmark]
     fn execute_admin_replacement() {
@@ -98,15 +98,14 @@ mod benchmarks {
         .is_ok());
 
         // 用引擎低级接口直接把提案推到 PASSED(绕开投票;benchmark 只测 execute 路径)。
-        assert!(
-            voting_engine_system::Pallet::<T>::set_status_and_emit(0, STATUS_PASSED).is_ok()
-        );
+        assert!(voting_engine_system::Pallet::<T>::set_status_and_emit(0, STATUS_PASSED).is_ok());
 
         // 模拟中间态:先把 old_admin 换成 temp_admin,execute 时能检测到不一致并 rewrite。
-        CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
-            let admins = maybe_admins
+        Institutions::<T>::mutate(institution, |maybe_subject| {
+            let subject = maybe_subject
                 .as_mut()
                 .expect("benchmark institution should exist");
+            let admins = &mut subject.admins;
             let old_pos = admins
                 .iter()
                 .position(|admin| admin == &old_admin)
@@ -115,10 +114,11 @@ mod benchmarks {
         });
 
         // 再还原 old_admin(让 execute 逻辑有合法 old_admin 可查)。
-        CurrentAdmins::<T>::mutate(institution, |maybe_admins| {
-            let admins = maybe_admins
+        Institutions::<T>::mutate(institution, |maybe_subject| {
+            let subject = maybe_subject
                 .as_mut()
                 .expect("benchmark institution should exist");
+            let admins = &mut subject.admins;
             let temp_pos = admins
                 .iter()
                 .position(|admin| admin == &temp_admin)

@@ -250,57 +250,6 @@ pub(crate) fn build_population_snapshot_credential(
     })
 }
 
-/// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 11：
-/// 用本省 sr25519 Pair 构造业务 payload 并签名，payload 末尾追加 `signing_province`
-/// 以与链端 Phase 1.A 的 RuntimeSfidInstitutionVerifier 对齐。
-///
-/// 返回的 credential 结构复用 `RuntimeInstitutionCredential`，其中 `meta` 字段
-/// 表示的是 SFID MAIN 的 key_id/version/alg（仅用于审计展示），实际推链签名来自
-/// 传入的 `province_pair`。
-pub(crate) fn build_institution_credential_with_province(
-    state: &AppState,
-    sfid_id: &str,
-    name: &str,
-    register_nonce: String,
-    province: &str,
-    province_pair: &sp_core::sr25519::Pair,
-) -> Result<RuntimeInstitutionCredential, String> {
-    if sfid_id.trim().is_empty() {
-        return Err("sfid_id is required".to_string());
-    }
-    if name.trim().is_empty() {
-        return Err("institution name is required".to_string());
-    }
-    if register_nonce.trim().is_empty() {
-        return Err("register_nonce is required".to_string());
-    }
-    if province.trim().is_empty() {
-        return Err("signing_province is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    // 中文注释：链端 verifier（citizenchain/runtime/src/configs/mod.rs 约 770 行）
-    // 在 signing_province 为 Some 时 payload 末尾追加省份字节。必须 6 元组完全一致。
-    let payload = (
-        DUOQIAN_DOMAIN,
-        OP_SIGN_INST,
-        genesis_hash,
-        sfid_id.as_bytes(),
-        name.as_bytes(),
-        register_nonce.as_bytes(),
-        province.as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = province_pair.sign(&payload_digest).0;
-    Ok(RuntimeInstitutionCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        sfid_id: sfid_id.to_string(),
-        name: name.to_string(),
-        register_nonce,
-        signature: hex::encode(signature),
-        meta: runtime_signature_meta(state),
-    })
-}
-
 #[allow(dead_code)]
 pub(crate) fn build_institution_credential(
     state: &AppState,

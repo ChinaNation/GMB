@@ -1,7 +1,7 @@
-# citizenchain/node/src/offchain/keystore_signer.rs · Step 2b-ii-β-1 技术说明
+# citizenchain/node/src/offchain/settlement/signer.rs · Step 2b-ii-β-1 技术说明
 
 - **日期**:2026-04-19
-- **范围**:扫码支付 Step 2b-ii-β-1(真实批次签名器:接 offchain_keystore)
+- **范围**:扫码支付 Step 2b-ii-β-1(真实批次签名器:接 `offchain::keystore`)
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2B_II_A_PACKER.md`(`BatchSigner` trait + Noop 占位)
 - **后续**:`STEP2B_II_B_2_INTEGRATION.md`(`PoolBatchSubmitter` + service.rs + cli.rs + rpc.rs 接入)
@@ -11,7 +11,7 @@
 ## 1. 本步范围
 
 Step 2b-ii-β 再拆成 β-1 / β-2,本次交付 **β-1 · 真实 signer 实现**:
-- 新建 `offchain/keystore_signer.rs`:`KeystoreBatchSigner` 实现 `packer::BatchSigner`,从 `offchain_keystore::SigningKey` 派生 sr25519 签名
+- 新建 `offchain/settlement/signer.rs`:`KeystoreBatchSigner` 实现 `settlement::packer::BatchSigner`,从 `offchain::keystore::SigningKey` 派生 sr25519 签名
 - `offchain/mod.rs` 挂载新子模块并 `pub use` 供 β-2 service.rs 使用
 - 5 个单测覆盖验签通过 / 未加载 Err / 不同消息 / 错误密钥不验过 / 热切换
 
@@ -48,7 +48,7 @@ impl BatchSigner for KeystoreBatchSigner {
 
 ### 2.2 依赖关系
 
-- 依赖 `crate::offchain_keystore::SigningKey`(**旧** Step 1 保留模块,Step 2b-iv 清理时再评估是否迁移;本步**复用**以最小化改动)
+- 依赖 `crate::offchain::keystore::SigningKey`。2026-04-29 二次目录收口后,密钥容器已迁入 `offchain/keystore.rs`,不再保留根级 `offchain_keystore.rs`。
 - 依赖 `super::packer::BatchSigner`(Step 2b-ii-α 定义)
 - **不依赖** substrate client / TransactionPool / runtime,完全本地可测
 
@@ -125,3 +125,4 @@ let components = offchain::start_clearing_bank_components(
 ## 7. 变更记录
 
 - 2026-04-19:Step 2b-ii-β-1 `KeystoreBatchSigner` + 5 个单测,offchain/ 子树零编译错误零警告。
+- 2026-04-29:`SigningKey` 引用随目录收口改为 `crate::offchain::keystore::SigningKey`。

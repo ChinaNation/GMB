@@ -11,7 +11,6 @@
 //! - [`model`]    — 结构体、DTO
 //! - [`store`]    — cache entry 读写层
 //! - [`service`]  — 业务校验、唯一性、分类
-//! - [`chain`]    — 链交互(搬自 sheng-admins/institutions.rs 的 submit 函数)
 //! - [`handler`]  — HTTP handler
 //!
 //! 铁律见 `feedback_institutions_two_layer.md`。
@@ -19,7 +18,6 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-pub mod chain;
 pub mod derive;
 pub mod handler;
 pub mod model;
@@ -27,8 +25,9 @@ pub mod service;
 pub mod store;
 
 pub use model::{
-    account_key_from_string, account_key_to_string, AccountKey, CreateAccountInput,
-    CreateAccountOutput, CreateInstitutionInput, CreateInstitutionOutput, InstitutionDetailOutput,
-    InstitutionDocument, InstitutionListRow, MultisigAccount, MultisigInstitution,
-    ParentInstitutionRow, UpdateInstitutionInput, VALID_DOC_TYPES,
+    account_key_from_string, account_key_to_string, AccountKey, ChainSyncAccountInput,
+    ChainSyncInput, ChainSyncOutput, CreateAccountInput, CreateAccountOutput,
+    CreateInstitutionInput, CreateInstitutionOutput, InstitutionDetailOutput, InstitutionDocument,
+    InstitutionListRow, MultisigAccount, MultisigInstitution, ParentInstitutionRow,
+    UpdateInstitutionInput, VALID_DOC_TYPES,
 };

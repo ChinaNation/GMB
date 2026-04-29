@@ -8,12 +8,34 @@
 
 ---
 
+## 0. 2026-04-29 目录真源
+
+清算行在 node 层统一归入 `offchain` 功能域,前后端目录保持同名:
+
+| 职责 | 后端路径 | 前端路径 |
+|---|---|---|
+| 功能入口/状态机 | `citizenchain/node/src/offchain/commands.rs` | `citizenchain/node/frontend/offchain/section.tsx` |
+| SFID 查询 | `citizenchain/node/src/offchain/sfid.rs` | `citizenchain/node/frontend/offchain/sfid.tsx` |
+| 清算行节点声明 | `citizenchain/node/src/offchain/signing.rs` | `citizenchain/node/frontend/offchain/register.tsx` |
+| 链上节点查询 | `citizenchain/node/src/offchain/chain.rs` | `citizenchain/node/frontend/offchain/detail.tsx` |
+| 管理员解密 | `citizenchain/node/src/offchain/decrypt.rs` | `citizenchain/node/frontend/offchain/admin.tsx` |
+| 节点端点信息 | `citizenchain/node/src/offchain/health.rs` | `citizenchain/node/frontend/offchain/node.tsx` |
+| DTO 类型 | `citizenchain/node/src/offchain/types.rs` | `citizenchain/node/frontend/offchain/types.ts` |
+| 清算行命令 API | `citizenchain/node/src/offchain/commands.rs` | `citizenchain/node/frontend/offchain/api.ts` |
+| 清算行页面样式 | 暂无后端 | `citizenchain/node/frontend/offchain/styles.css` |
+| 清算行密钥容器 | `citizenchain/node/src/offchain/keystore.rs` | 暂无桌面前端页面 |
+| 清算行启动接线 | `citizenchain/node/src/offchain/bootstrap.rs` | 暂无桌面前端页面 |
+| 结算引擎 | `citizenchain/node/src/offchain/settlement/*` | 暂无桌面前端页面 |
+
+历史分散的清算行业务目录已删除,后续只使用上表中的 `offchain` 路径。
+
 ## 1. 本步范围
 
 Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 - `offchain/ledger.rs` 补 **核心扫码支付业务**
 - `offchain/rpc.rs` 补 **submitPayment RPC 入口**
 - `offchain/mod.rs` 补 **组件聚合启动器 `OffchainComponents`**
+- `offchain/commands.rs` 补 **Tauri 清算行管理命令入口**
 
 **明确不做**(后续子步):
 - `packer::pack_and_submit` 真正构造 extrinsic 提交(Step 2b-ii)
@@ -48,13 +70,16 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 - `SubmitPaymentResp { tx_id, l2_ack_sig, accepted_at }`(Serialize/Deserialize)
 - 本地工具 `decode_hex` / `encode_hex`(沿用 wuminapp 端 hex 风格,支持 `0x` 前缀)
 
-### 2.3 `mod.rs`
+### 2.3 `mod.rs` / `commands.rs`
 
 **新增**:
 - `OffchainComponents` 聚合 `Arc<Ledger>` / `Arc<Packer>` / `Arc<EventListener>` / `Arc<RpcImpl>`
 - `start_clearing_bank_components(base_path, bank_main, password)`:一次性组装 + 磁盘恢复
+- `commands.rs`:清算行页面的 SFID 查询、节点查询、端点自测、扫码签名、管理员解密命令。
 
-Step 2b-ii 在 `service.rs` 里调 `start_clearing_bank_components`,存 `Arc<OffchainComponents>` 到上下文,并把 `rpc_impl` 注册到 JSON-RPC。
+Step 2b-ii 之后由 `offchain/bootstrap.rs` 统一处理 CLI 参数、密钥解锁、
+`start_clearing_bank_components` 调用和三个后台 worker spawn；`service.rs`
+只保留节点通用启动接线,并把 `rpc_impl` 注册到 JSON-RPC。
 
 ---
 
@@ -74,13 +99,17 @@ wuminapp(Dart)                   清算行节点(Rust,本步)
                                  → NodePaymentIntent::decode
                                  → intent.signing_hash() 重算
                                  → sr25519_verify(sig, hash, intent.payer)
-                                 → accept_payment(intent, sig, None, [0;64])
+                                 → query UserBank[payer/recipient] + L2FeeRateBp
+                                 → signer.sign_batch(L2_ACK_MESSAGE)
+                                 → accept_payment(intent, sig, Some(block), l2_ack, accepted_at)
                                    │ nonce / 余额 / 防重
                                    └ push pending
                                  ← SubmitPaymentResp { tx_id, l2_ack, accepted_at }
 ```
 
-`l2_ack_sig` 在 Step 2b-i 为 `[0u8; 64]` 占位。Step 2b-ii 接入清算行 keystore 后由 `accept_payment` 调用方传入真签名。
+2026-04-28 补齐: `l2_ack_sig` 已不再是 `[0u8; 64]` 占位。RPC 入口会先拒绝错路由
+`recipient_bank`、`UserBank` 绑定漂移和手续费不一致,再用清算行管理员密钥对
+`GMB_L2_ACK_V1 || bank_main || SCALE(intent) || payer_sig || accepted_at` 的哈希签名。
 
 ## 4. 编译验证
 
@@ -104,11 +133,11 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 ## 6. 后续对接清单
 
 Step 2b-ii 要做:
-1. `service.rs` 加 CLI flag `--clearing-bank <MAIN_ACCOUNT_SS58>`(或从 chainspec 读);启动时调 `start_clearing_bank_components`,把组件存到 `AppCtx`。
+1. `service.rs` 加 CLI flag `--clearing-bank <MAIN_ACCOUNT_SS58>`(或从 chainspec 读);启动时委托 `offchain/bootstrap.rs` 调 `start_clearing_bank_components`,把组件存到 `AppCtx`。
 2. `rpc.rs` 构造 RPC io 时 `io.merge(OffchainClearingRpcServer::into_rpc(ctx.rpc_impl.clone()))`。
 3. `packer::pack_and_submit` 实现:
    - `ledger.take_pending_for_batch(MaxBatchSize)` → 构造 `OffchainBatchItemV2` 列表
-   - 清算行管理员私钥(从 `offchain_keystore::SigningKey`)对 batch 签名
+   - 清算行管理员私钥(从 `offchain::keystore::SigningKey`)对 batch 签名
    - 构造 `offchain_transaction_pos::Call::submit_offchain_batch_v2` extrinsic
    - 通过 `TransactionPool` 提交
    - 成功 → ledger 删除已上链 tx;失败 → ledger.reject_pending
@@ -126,3 +155,6 @@ Step 2b-iv:
 ## 7. 变更记录
 
 - 2026-04-19:Step 2b-i 节点业务逻辑层落地,ledger `accept_payment` / rpc `submitPayment` / mod 启动器就绪,零编译错误。
+- 2026-04-29:二次目录收口。`offchain_keystore.rs` 迁入 `offchain/keystore.rs`,
+  清算行启动逻辑迁入 `offchain/bootstrap.rs`,前端清算行 API 与样式迁入
+  `frontend/offchain/api.ts` / `styles.css`。

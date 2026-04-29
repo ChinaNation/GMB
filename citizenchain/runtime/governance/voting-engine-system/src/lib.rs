@@ -310,7 +310,7 @@ impl InternalAdminCountProvider for () {
 }
 
 /// 内部投票阈值动态提供器。
-/// 治理机构（NRC/PRC/PRB）返回硬编码阈值，注册多签机构（ORG_DUOQIAN）从链上存储动态读取。
+/// 生产 runtime 由 admins-origin-gov 统一主体表提供；默认实现仅供独立测试治理机构使用。
 pub trait InternalThresholdProvider {
     fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32>;
 }
@@ -1689,8 +1689,7 @@ mod tests {
         fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
             // 先记日志,无论成功/失败都记 — 事务回滚会让日志外的状态回退,但
             // thread_local 不参与事务,通过对比"日志有/状态没变"即可验证回滚语义。
-            INTERNAL_CALLBACK_LOG
-                .with(|log| log.borrow_mut().push((proposal_id, approved)));
+            INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().push((proposal_id, approved)));
             if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
                 Err(DispatchError::Other("internal callback failed"))
             } else {
@@ -1933,11 +1932,7 @@ mod tests {
         proposal_id: u64,
         approve: bool,
     ) -> DispatchResult {
-        VotingEngineSystem::internal_vote(
-            RuntimeOrigin::signed(who),
-            proposal_id,
-            approve,
-        )
+        VotingEngineSystem::internal_vote(RuntimeOrigin::signed(who), proposal_id, approve)
     }
 
     fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {

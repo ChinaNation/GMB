@@ -764,7 +764,11 @@ mod tests {
 
     fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
         for admin_index in 0..6 {
-            assert_ok!(cast_vote(cb_admin(node_index, admin_index), proposal_id, true));
+            assert_ok!(cast_vote(
+                cb_admin(node_index, admin_index),
+                proposal_id,
+                true
+            ));
         }
     }
 

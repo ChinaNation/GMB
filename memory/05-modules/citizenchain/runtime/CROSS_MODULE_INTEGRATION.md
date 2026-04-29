@@ -10,8 +10,8 @@
 | `grandpa-key-gov` | `frame_system`, `voting-engine-system`（通过 InternalVoteEngine） |
 | `resolution-issuance-gov` | `frame_system`, `voting-engine-system`（通过 JointVoteEngine） |
 | `runtime-root-upgrade` | `frame_system`, `voting-engine-system`（通过 JointVoteEngine） |
-| `duoqian-manage-pow` | `frame_system`, `voting-engine-system`（通过 InternalVoteEngine） |
-| `duoqian-transfer-pow` | `frame_system`, `voting-engine-system`, `duoqian-manage-pow` |
+| `duoqian-manage-pow` | `frame_system`, `voting-engine-system`（通过 InternalVoteEngine）, `admins-origin-gov` |
+| `duoqian-transfer-pow` | `frame_system`, `voting-engine-system`, `duoqian-manage-pow`, `admins-origin-gov`（测试/runtime 约束） |
 | `offchain-transaction-pos` | `frame_system`, `voting-engine-system`（通过 InternalVoteEngine） |
 | `sfid-code-auth` | `frame_system` |
 | `citizen-lightnode-issuance` | `frame_system`, `pallet_balances`（通过 Currency） |
@@ -42,9 +42,9 @@
 
 | 适配器 | 作用 |
 |--------|------|
-| `RuntimeInternalAdminProvider` | ORG_DUOQIAN → 读 `DuoqianAccounts`; 治理机构 → 读 `admins_origin_gov::CurrentAdmins` |
-| `RuntimeInternalThresholdProvider` | ORG_DUOQIAN → 从链上 `DuoqianAccounts.threshold` 动态读取; 治理机构 → 硬编码阈值 |
-| `RuntimeInternalAdminCountProvider` | ORG_DUOQIAN → `DuoqianAccounts.duoqian_admins.len()`; 治理机构 → `CurrentAdmins.len()` |
+| `RuntimeInternalAdminProvider` | 所有内部投票主体统一读 `admins_origin_gov::Institutions` |
+| `RuntimeInternalThresholdProvider` | 所有内部投票主体统一读 `admins_origin_gov::Institutions.threshold` |
+| `RuntimeInternalAdminCountProvider` | 所有内部投票主体统一读 `admins_origin_gov::Institutions.admins.len()` |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance-gov`，再查 `runtime-root-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `PowOnchainFeeRouter` 80/10/10 分账 |
 | `RuntimeInstitutionAssetGuard` | stake 禁止一切; reserved main 仅允许转账/销户; fee_account 仅允许 sweep; 安全基金仅允许安全基金转账; CB 费用账户仅允许 sweep |

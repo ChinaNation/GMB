@@ -19,6 +19,7 @@ sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 voting-engine-system = { path = "../../governance/voting-engine-system", default-features = false }
+admins-origin-gov = { path = "../../governance/admins-origin-gov", default-features = false }
 duoqian-manage-pow = { path = "../duoqian-manage-pow", default-features = false }
 onchain-transaction-pow = { path = "../onchain-transaction-pow", default-features = false }
 institution-asset-guard = { path = "../institution-asset-guard", default-features = false }
@@ -37,6 +38,7 @@ std = [
     "sp-io/std",
     "primitives/std",
     "voting-engine-system/std",
+    "admins-origin-gov/std",
     "duoqian-manage-pow/std",
     "onchain-transaction-pow/std",
     "institution-asset-guard/std",

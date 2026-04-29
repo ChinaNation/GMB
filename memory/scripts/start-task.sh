@@ -21,6 +21,12 @@ usage() {
 EOF
 }
 
+is_error_diagnosis_request() {
+  # 中文注释：只读报错诊断不进入任务卡流程。
+  local text="$1"
+  [[ "$text" == *"检查为什么报错"* ]]
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --title)
@@ -68,6 +74,11 @@ if [[ -z "$TITLE" || -z "$GOAL" ]]; then
   echo "缺少必要参数：(--title 与 --goal) 或 --requirement" >&2
   usage
   exit 2
+fi
+
+if is_error_diagnosis_request "$TITLE $GOAL"; then
+  echo "只读报错诊断请求：不创建任务卡，请直接检查为什么报错并输出检查结果。"
+  exit 0
 fi
 
 if [[ -z "$MODULE" ]]; then

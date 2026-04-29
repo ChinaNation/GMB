@@ -21,8 +21,7 @@ use crate::key_admins::sheng_signer_cache::ProvinceSigner;
 /// `new_pubkey = None` → 清除该省；`Some` → 写入。
 ///
 /// 注意：本 helper 不从 AppState 拿任何东西；调用方必须先解析 ws_url 并构造
-/// `OnlineClient` 和 `LegacyRpcMethods`，与现有 `submit_register_sfid_institution_extrinsic`
-/// 保持一致的连接策略。
+/// `OnlineClient` 和 `LegacyRpcMethods`，保持 PoW 链提交三件套一致。
 #[allow(dead_code)]
 pub(crate) async fn submit_set_sheng_signing_pubkey_with_client(
     client: &OnlineClient<PolkadotConfig>,

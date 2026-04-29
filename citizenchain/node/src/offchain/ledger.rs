@@ -160,7 +160,7 @@ impl OffchainLedger {
 
     /// 本地 `Σ accounts[*].confirmed`(分)。
     ///
-    /// 用于 Step 2b-iii-b `reserve_monitor` 与链上 `BankTotalDeposits[my_bank]`
+    /// 用于 Step 2b-iii-b `offchain::reserve` 与链上 `BankTotalDeposits[my_bank]`
     /// 主账对账。pending_debit / pending_credit 不计入:扫码支付在 pending 期间
     /// 链上 `DepositBalance` 和本地 `confirmed` 同时保持"未扣"状态,settlement
     /// 上链后由 listener 同步扣减,两边始终保持相等。
@@ -247,6 +247,9 @@ impl OffchainLedger {
     // ---------------- 持久化 ----------------
 
     /// 加密持久化到磁盘。
+    ///
+    /// 当前恢复路径已接好,周期性落盘会在清算行 graceful shutdown / 运维任务中启用。
+    #[allow(dead_code)]
     pub fn save_to_disk(&self, password: &str) -> Result<(), String> {
         let ledger = self.inner.read().map_err(|e| format!("账本锁错误:{e}"))?;
         // 简化持久化:只序列化 accounts 和 pending(accepted_tx_ids 可从 pending 重建)
@@ -347,14 +350,15 @@ impl OffchainLedger {
     /// [`current_block`] 本地已知最新区块高度。传 `None` 则跳过 `expires_at`
     /// 校验(Step 2b-ii 接入 sc-client-api 后切为 `Some`)。
     ///
-    /// [`l2_ack_sig_provider`] 清算行对"我承认这笔意图"的 64 字节签名。Step 2b-i
-    /// 由调用方传 `[0u8; 64]` 占位;Step 2b-ii 接 keystore 后由上层提供真签名。
+    /// [`l2_ack_sig_provider`] 清算行对"我承认这笔意图"的 64 字节签名。
+    /// [`accepted_at`] RPC 层生成 ACK 前确定的 UNIX 秒时间戳,本地 pending 与响应共用。
     pub fn accept_payment(
         &self,
         intent: NodePaymentIntent,
         payer_sig: [u8; 64],
         current_block: Option<u32>,
         l2_ack_sig_provider: [u8; 64],
+        accepted_at: u64,
     ) -> Result<(H256, [u8; 64]), String> {
         // 1. sr25519 验签
         let msg = intent.signing_hash();
@@ -403,11 +407,6 @@ impl OffchainLedger {
         state.pending_debit = state.pending_debit.saturating_add(total_debit);
         state.cached_nonce = intent.nonce;
         ledger.accepted_tx_ids.insert(intent.tx_id);
-
-        let accepted_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
 
         ledger.pending.push(PendingPayment {
             tx_id: intent.tx_id,

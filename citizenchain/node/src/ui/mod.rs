@@ -7,7 +7,6 @@
 //! - macOS 黄色横线为系统原生 minimize，不影响节点和进程，无需拦截
 //! 三平台（macOS / Windows / Linux）行为统一：关窗即退出软件即停节点。
 
-pub(crate) mod clearing_bank;
 pub(crate) mod governance;
 pub(crate) mod home;
 pub(crate) mod mining;
@@ -15,6 +14,7 @@ pub(crate) mod network;
 pub(crate) mod node_runner;
 pub(crate) mod other;
 pub(crate) mod settings;
+pub(crate) mod sfid_config;
 pub(crate) mod shared;
 pub(crate) mod transaction;
 
@@ -81,21 +81,21 @@ pub fn run_desktop() {
             transaction::get_wallet_balance,
             transaction::build_transfer_request,
             transaction::submit_transfer,
-            // ─── 清算行 tab(ADR-007 Step 2 阶段 B) ───
-            clearing_bank::search_eligible_clearing_banks,
-            clearing_bank::query_clearing_bank_node_info,
-            clearing_bank::query_local_peer_id,
-            clearing_bank::test_clearing_bank_endpoint_connectivity,
-            clearing_bank::build_register_clearing_bank_request,
-            clearing_bank::submit_register_clearing_bank,
-            clearing_bank::build_update_clearing_bank_endpoint_request,
-            clearing_bank::submit_update_clearing_bank_endpoint,
-            clearing_bank::build_unregister_clearing_bank_request,
-            clearing_bank::submit_unregister_clearing_bank,
-            clearing_bank::build_decrypt_admin_request,
-            clearing_bank::verify_and_decrypt_admin,
-            clearing_bank::list_decrypted_admins,
-            clearing_bank::lock_decrypted_admin
+            // ─── 清算行 offchain tab(ADR-007 Step 2 阶段 B) ───
+            crate::offchain::commands::search_eligible_clearing_banks,
+            crate::offchain::commands::query_clearing_bank_node_info,
+            crate::offchain::commands::query_local_peer_id,
+            crate::offchain::commands::test_clearing_bank_endpoint_connectivity,
+            crate::offchain::commands::build_register_clearing_bank_request,
+            crate::offchain::commands::submit_register_clearing_bank,
+            crate::offchain::commands::build_update_clearing_bank_endpoint_request,
+            crate::offchain::commands::submit_update_clearing_bank_endpoint,
+            crate::offchain::commands::build_unregister_clearing_bank_request,
+            crate::offchain::commands::submit_unregister_clearing_bank,
+            crate::offchain::commands::build_decrypt_admin_request,
+            crate::offchain::commands::verify_and_decrypt_admin,
+            crate::offchain::commands::list_decrypted_admins,
+            crate::offchain::commands::lock_decrypted_admin
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());

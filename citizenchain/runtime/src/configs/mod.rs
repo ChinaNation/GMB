@@ -37,11 +37,11 @@ use frame_support::{
         ConstU128, ConstU32, ConstU64, ConstU8, Contains, EnsureOrigin, FindAuthor, OnUnbalanced,
         UnfilteredDispatchable, VariantCountOf,
     },
-    BoundedVec,
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         ConstantMultiplier, Weight,
     },
+    BoundedVec,
 };
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain_transaction_pow::NrcAccountProvider as _;
@@ -334,6 +334,21 @@ impl onchain_transaction_pow::CallAmount<AccountId, RuntimeCall, Balance> for Po
                 amount,
                 ..
             }) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_create_personal { amount, .. },
+            ) => onchain_transaction_pow::AmountExtractResult::Amount(*amount),
+            RuntimeCall::DuoqianManagePow(
+                duoqian_manage_pow::pallet::Call::propose_create_institution { accounts, .. },
+            ) => {
+                let mut total: Balance = 0;
+                for account in accounts.iter() {
+                    let Some(next) = total.checked_add(account.amount) else {
+                        return onchain_transaction_pow::AmountExtractResult::Amount(100_000);
+                    };
+                    total = next;
+                }
+                onchain_transaction_pow::AmountExtractResult::Amount(total)
+            }
             RuntimeCall::DuoqianManagePow(duoqian_manage_pow::pallet::Call::propose_close {
                 duoqian_address,
                 ..
@@ -801,6 +816,7 @@ impl duoqian_manage_pow::Config for Runtime {
     // Phase 2 整改后聚合签名 `finalize_create` 已删除,此类型仍保留为 `AdminSignatureOf`
     // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
     type MaxAdminSignatureLength = ConstU32<64>;
+    type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
     type WeightInfo = duoqian_manage_pow::weights::SubstrateWeight<Runtime>;
@@ -1057,9 +1073,8 @@ impl duoqian_transfer_pow::Config for Runtime {
 
 /// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
 ///
-/// 委托给 `duoqian-manage-pow` 的三张 Storage(`AddressRegisteredSfid` /
-/// `SfidRegisteredAddress` / `DuoqianAccounts`),供 `offchain-transaction-pos`
-/// 的 `bank_check` 模块判定清算行合法性用。
+/// 委托给 `duoqian-manage-pow` 的 SFID 地址索引和机构账户表；
+/// 管理员校验再统一转给 `admins-origin-gov::Institutions`。
 pub struct DuoqianSfidAccountQuery;
 
 impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
@@ -1076,6 +1091,17 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
     }
 
     fn is_active(addr: &AccountId) -> bool {
+        if let Some(registered) = duoqian_manage_pow::AddressRegisteredSfid::<Runtime>::get(addr) {
+            return matches!(
+                duoqian_manage_pow::InstitutionAccounts::<Runtime>::get(
+                    &registered.sfid_id,
+                    &registered.account_name,
+                )
+                .map(|a| a.status),
+                Some(duoqian_manage_pow::InstitutionLifecycleStatus::Active)
+            );
+        }
+
         matches!(
             duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(addr).map(|a| a.status),
             Some(duoqian_manage_pow::DuoqianStatus::Active)
@@ -1085,10 +1111,16 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
     /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
-        match duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(bank) {
-            Some(account) => account.duoqian_admins.iter().any(|a| a == who),
-            None => false,
-        }
+        let Some(subject_id) =
+            duoqian_manage_pow::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
+        else {
+            return false;
+        };
+        admins_origin_gov::Pallet::<Runtime>::is_subject_admin(
+            voting_engine_system::internal_vote::ORG_DUOQIAN,
+            subject_id,
+            who,
+        )
     }
 
     /// Step 2(2026-04-27, ADR-007)新增:清算行资格白名单判定。
@@ -1104,11 +1136,11 @@ impl offchain_transaction_pos::bank_check::SfidAccountQuery<AccountId> for Duoqi
             None => return false,
         };
         // 2. 查机构元数据
-        let meta = match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(&registered.sfid_id)
-        {
-            Some(m) => m,
-            None => return false,
-        };
+        let meta =
+            match duoqian_manage_pow::InstitutionMetadata::<Runtime>::get(&registered.sfid_id) {
+                Some(m) => m,
+                None => return false,
+            };
         match meta.a3.as_slice() {
             b"SFR" => meta.sub_type.as_ref().map(|s| s.as_slice()) == Some(&b"JOINT_STOCK"[..]),
             b"FFR" => {
@@ -1222,12 +1254,12 @@ fn is_nrc_admin(who: &AccountId) -> bool {
         .and_then(|n| primitives::china::china_cb::shenfen_id_to_fixed48(n.shenfen_id))
         .expect("NRC shenfen_id must be valid");
 
-    // 中文注释：创世后只信任链上管理员治理模块中的当前管理员名单。
-    if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(nrc_institution) {
-        admins.into_inner().iter().any(|admin| admin == who)
-    } else {
-        false
-    }
+    // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
+    admins_origin_gov::Pallet::<Runtime>::is_subject_admin(
+        voting_engine_system::internal_vote::ORG_NRC,
+        nrc_institution,
+        who,
+    )
 }
 
 /// 联合提案发起权限：国储会（CHINA_CB[0]）+ 43个省储会（CHINA_CB[1..44]）。
@@ -1255,12 +1287,18 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 /// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
 fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
+    let nrc_institution = CHINA_CB
+        .first()
+        .and_then(|n| shenfen_id_to_fixed48(n.shenfen_id));
     for entry in CHINA_CB.iter() {
         if let Some(institution) = shenfen_id_to_fixed48(entry.shenfen_id) {
-            if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution) {
-                if admins.into_inner().iter().any(|admin| admin == who) {
-                    return true;
-                }
+            let org = if Some(institution) == nrc_institution {
+                voting_engine_system::internal_vote::ORG_NRC
+            } else {
+                voting_engine_system::internal_vote::ORG_PRC
+            };
+            if admins_origin_gov::Pallet::<Runtime>::is_subject_admin(org, institution, who) {
+                return true;
             }
         }
     }
@@ -1961,7 +1999,7 @@ mod tests {
                 <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
             );
 
-            admins_origin_gov::pallet::CurrentAdmins::<Runtime>::remove(nrc_id);
+            admins_origin_gov::pallet::Institutions::<Runtime>::remove(nrc_id);
             assert!(!is_nrc_admin(&nrc_admin));
             assert!(!is_nrc_admin(&outsider));
             assert!(!RuntimeInternalAdminProvider::is_internal_admin(
@@ -2044,44 +2082,14 @@ impl voting_engine_system::InternalAdminProvider<AccountId> for RuntimeInternalA
         institution: voting_engine_system::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
-        match org {
-            // 注册多签机构：从 DuoqianAccounts 读取管理员列表
-            voting_engine_system::internal_vote::ORG_DUOQIAN => {
-                let Ok(account) = AccountId::decode(&mut &institution[..32]) else {
-                    return false;
-                };
-                if let Some(duoqian) = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)
-                {
-                    duoqian.duoqian_admins.iter().any(|admin| admin == who)
-                } else {
-                    false
-                }
-            }
-            // 治理机构（NRC/PRC/PRB）：从 admins_origin_gov 读取管理员
-            _ => {
-                if let Some(admins) = admins_origin_gov::CurrentAdmins::<Runtime>::get(institution)
-                {
-                    admins.into_inner().iter().any(|admin| admin == who)
-                } else {
-                    false
-                }
-            }
-        }
+        admins_origin_gov::Pallet::<Runtime>::is_subject_admin(org, institution, who)
     }
 
     fn get_admin_list(
         org: u8,
         institution: voting_engine_system::InstitutionPalletId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
-        match org {
-            voting_engine_system::internal_vote::ORG_DUOQIAN => {
-                let account = AccountId::decode(&mut &institution[..32]).ok()?;
-                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
-                Some(duoqian.duoqian_admins.into_inner())
-            }
-            _ => admins_origin_gov::CurrentAdmins::<Runtime>::get(institution)
-                .map(|admins| admins.into_inner()),
-        }
+        admins_origin_gov::Pallet::<Runtime>::subject_admins(org, institution)
     }
 }
 
@@ -2092,22 +2100,7 @@ impl voting_engine_system::InternalThresholdProvider for RuntimeInternalThreshol
         org: u8,
         institution: voting_engine_system::InstitutionPalletId,
     ) -> Option<u32> {
-        match org {
-            // 治理机构：硬编码阈值
-            voting_engine_system::internal_vote::ORG_NRC
-            | voting_engine_system::internal_vote::ORG_PRC
-            | voting_engine_system::internal_vote::ORG_PRB => {
-                voting_engine_system::internal_vote::governance_org_pass_threshold(org)
-            }
-            // 注册多签机构：从链上 DuoqianAccounts 动态读取阈值
-            voting_engine_system::internal_vote::ORG_DUOQIAN => {
-                // institution 48 字节 → 解码为 AccountId32 → 查 DuoqianAccounts
-                let account = AccountId::decode(&mut &institution[..32]).ok()?;
-                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
-                Some(duoqian.threshold)
-            }
-            _ => None,
-        }
+        admins_origin_gov::Pallet::<Runtime>::subject_threshold(org, institution)
     }
 }
 
@@ -2115,17 +2108,7 @@ pub struct RuntimeInternalAdminCountProvider;
 
 impl voting_engine_system::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
     fn admin_count(org: u8, institution: voting_engine_system::InstitutionPalletId) -> Option<u32> {
-        match org {
-            // 注册多签机构：从 DuoqianAccounts 读取当前管理员人数
-            voting_engine_system::internal_vote::ORG_DUOQIAN => {
-                let account = AccountId::decode(&mut &institution[..32]).ok()?;
-                let duoqian = duoqian_manage_pow::DuoqianAccounts::<Runtime>::get(&account)?;
-                u32::try_from(duoqian.duoqian_admins.len()).ok()
-            }
-            // 治理机构：从 admins_origin_gov 读取当前管理员人数
-            _ => admins_origin_gov::CurrentAdmins::<Runtime>::get(institution)
-                .and_then(|admins| u32::try_from(admins.len()).ok()),
-        }
+        admins_origin_gov::Pallet::<Runtime>::subject_admin_count(org, institution)
     }
 }
 

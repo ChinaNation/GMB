@@ -110,14 +110,14 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 ## sfid_api.rs — 人口快照
 
-- 默认端点：`http://147.224.14.117:8899`
-- 可通过环境变量 `SFID_BASE_URL` 覆盖
+- SFID 地址统一走 [shared/SFID_CONFIG_TECHNICAL.md](../shared/SFID_CONFIG_TECHNICAL.md)
+- `SFID_BASE_URL` 环境变量优先；debug 默认 `http://127.0.0.1:8899`；release 默认 `http://147.224.14.117:8899`
 - 超时：10 秒
 - 返回：`PopulationSnapshot { eligible_total, snapshot_nonce, signature }`
 
 ## institution.rs — 机构查询
 
-- 读取 `AdminsOriginGov::CurrentAdmins` 存储
+- 读取 `AdminsOriginGov::Institutions` 存储
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
 

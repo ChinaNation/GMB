@@ -54,8 +54,11 @@ require_symlink_target "CLAUDE.md" "memory/CLAUDE.md"
 
 require_text "memory/AGENTS.md" "第一轮必须先做需求分析"
 require_text "memory/AGENTS.md" "任务卡"
+require_text "memory/AGENTS.md" "检查为什么报错"
 require_text "memory/CODEX.md" "第一轮必须输出需求分析"
+require_text "memory/CODEX.md" "检查为什么报错"
 require_text "memory/07-ai/chat-protocol.md" "需求分析"
+require_text "memory/07-ai/chat-protocol.md" "检查为什么报错"
 
 if [[ "$MODE" == "--ci" ]]; then
   echo "启动协议检查通过。"
@@ -71,6 +74,7 @@ cat <<'EOF'
 3. 第一轮回复必须以“需求分析”开头。
 4. 回复中必须包含：任务需求、建议模块、影响范围、主要风险点、是否需要先沟通、建议下一步。
 5. 确认继续执行后，真实开发任务必须创建任务卡。
+6. 如果输入包含“检查为什么报错”，必须直接只读检查并输出结果，不创建任务卡。
 
 详细标准见：memory/07-ai/startup-acceptance.md
 EOF

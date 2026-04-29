@@ -34,12 +34,12 @@ mod operate;
 #[allow(dead_code)]
 mod qr;
 mod scope;
-mod store_shards;
-#[path = "shi-admins/mod.rs"]
-mod shi_admins;
 mod sfid;
 #[path = "sheng-admins/mod.rs"]
 mod sheng_admins;
+#[path = "shi-admins/mod.rs"]
+mod shi_admins;
+mod store_shards;
 use business::scope::in_scope_cpms_site;
 use key_admins::chain_keyring::ChainKeyringState;
 
@@ -588,12 +588,7 @@ impl StoreHandle {
     /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     /// 把内部 Postgres 连接池暴露给 store_shards::pg_backend / migration,
     /// 避免新开连接池、也避免把 Phase 1 的 StoreBackend 改成 pub 字段。
-    fn postgres_pool(
-        &self,
-    ) -> Option<(
-        Arc<Vec<Mutex<postgres::Client>>>,
-        Arc<AtomicUsize>,
-    )> {
+    fn postgres_pool(&self) -> Option<(Arc<Vec<Mutex<postgres::Client>>>, Arc<AtomicUsize>)> {
         match &self.backend {
             StoreBackend::Postgres {
                 clients,
@@ -763,7 +758,11 @@ fn main() {
             .read()
             .ok()
             .and_then(|s| s.anon_rsa_private_key_pem.clone());
-        if existing_pem.as_deref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+        if existing_pem
+            .as_deref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+        {
             // 已有密钥，直接加载（不需要 tokio runtime）
             match key_admins::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
                 Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
@@ -949,14 +948,14 @@ fn main() {
                 "/api/v1/admin/chain/balance",
                 get(chain::balance::admin_query_chain_balance),
             )
-            // 中文注释:任务卡 2 新增机构/账户两层模型的 API
+            // 中文注释:机构/账户两层模型的 API
             // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
             // - POST /api/v1/institution/create                          — 生成机构(不上链)
-            // - POST /api/v1/institution/:sfid_id/account/create         — 创建账户并上链
+            // - POST /api/v1/institution/:sfid_id/account/create         — 只登记账户名称,不上链
             // - GET  /api/v1/institution/list                            — 按 scope 过滤的机构列表
             // - GET  /api/v1/institution/:sfid_id                        — 机构详情
             // - GET  /api/v1/institution/:sfid_id/accounts               — 账户列表
-            // - DELETE /api/v1/institution/:sfid_id/account/:account_name — 删除账户(软删)
+            // - DELETE /api/v1/institution/:sfid_id/account/:account_name — 删除未上链/已注销新增账户
             .route(
                 "/api/v1/institution/check-name",
                 get(institutions::handler::check_institution_name),
@@ -973,11 +972,6 @@ fn main() {
             .route(
                 "/api/v1/institution/:sfid_id/account/create",
                 post(institutions::handler::create_account),
-            )
-            // 激活账户(推链):Inactive/Failed → Pending → Registered/Failed
-            .route(
-                "/api/v1/institution/:sfid_id/account/:account_name/activate",
-                post(institutions::handler::activate_account),
             )
             .route(
                 "/api/v1/institution/list",
@@ -1135,12 +1129,24 @@ fn main() {
                 "/api/v1/app/vote-account/status",
                 get(operate::binding::app_vote_account_status),
             )
-            // ── wuminapp 机构/账户公开查询 ──
+            // ── 区块链软件机构/账户公开查询与链上状态同步 ──
             .route(
-                "/api/v1/app/institution/:sfid_id/accounts",
+                "/api/v1/app/institutions/search",
+                get(institutions::handler::app_search_institutions),
+            )
+            .route(
+                "/api/v1/app/institutions/:sfid_id",
+                get(institutions::handler::app_get_institution),
+            )
+            .route(
+                "/api/v1/app/institutions/:sfid_id/accounts",
                 get(institutions::handler::app_list_accounts),
             )
-            // ── 清算行搜索(2026-04-24, ADR-007 收紧):仅返回资格白名单 + 主账户已激活 ──
+            .route(
+                "/api/v1/app/institutions/:sfid_id/chain-sync",
+                post(institutions::handler::sync_institution_chain_state),
+            )
+            // ── 清算行搜索(2026-04-24, ADR-007 收紧):仅返回资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
             // 资格白名单:(SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
             // 用于 wuminapp 绑定清算行前的列表展示。
             .route(
@@ -1148,7 +1154,7 @@ fn main() {
                 get(institutions::handler::app_search_clearing_banks),
             )
             // ── 候选清算行搜索(2026-04-24, ADR-007 Step 1 新增) ──
-            // 用于 NodeUI"添加清算行"搜索:仅按资格白名单过滤,不要求主账户已激活,
+            // 用于 NodeUI"添加清算行"搜索:仅按资格白名单过滤,不要求主账户 ACTIVE_ON_CHAIN,
             // 不分页(单页 limit ≤ 50),无 province/city 过滤(sfid_id 全局唯一)。
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
@@ -1547,18 +1553,31 @@ async fn debug_bootstrap_signer(
     // 先诊断 subxt metadata
     let ws_url = match chain::url::chain_ws_url() {
         Ok(v) => v,
-        Err(e) => return api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("chain_ws_url: {e}")),
+        Err(e) => {
+            return api_error(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                &format!("chain_ws_url: {e}"),
+            )
+        }
     };
-    let diag = match subxt::OnlineClient::<subxt::PolkadotConfig>::from_insecure_url(&ws_url).await {
+    let diag = match subxt::OnlineClient::<subxt::PolkadotConfig>::from_insecure_url(&ws_url).await
+    {
         Ok(client) => {
             let metadata = client.metadata();
             let pallets: Vec<String> = metadata.pallets().map(|p| p.name().to_string()).collect();
-            let sfid_calls: Vec<String> = metadata.pallets()
+            let sfid_calls: Vec<String> = metadata
+                .pallets()
                 .find(|p| p.name() == "SfidCodeAuth")
                 .and_then(|p| p.call_variants())
                 .map(|calls| calls.iter().map(|c| c.name.clone()).collect())
                 .unwrap_or_default();
-            format!("ws_url={} pallets={} sfid_calls={:?}", ws_url, pallets.len(), sfid_calls)
+            format!(
+                "ws_url={} pallets={} sfid_calls={:?}",
+                ws_url,
+                pallets.len(),
+                sfid_calls
+            )
         }
         Err(e) => format!("ws_url={} connect_error={}", ws_url, e),
     };
@@ -1568,7 +1587,12 @@ async fn debug_bootstrap_signer(
             code: 0,
             message: "ok".to_string(),
             data: format!("bootstrap success for {province} | diag: {diag}"),
-        }).into_response(),
-        Err(e) => api_error(axum::http::StatusCode::INTERNAL_SERVER_ERROR, 1004, &format!("{e} | diag: {diag}")),
+        })
+        .into_response(),
+        Err(e) => api_error(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            &format!("{e} | diag: {diag}"),
+        ),
     }
 }

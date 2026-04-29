@@ -5,7 +5,7 @@
 // 修改某类机构的布局只需改对应模块,不影响其他类型。
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Col, Descriptions, message, Row, Typography } from 'antd';
+import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from 'antd';
 import { A3_LABEL, INSTITUTION_CODE_LABEL } from './locks';
 import {
   deleteAccount,
@@ -30,6 +30,13 @@ interface Props {
   canWrite: boolean;
   onBack: () => void;
 }
+
+const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
+  NOT_REGISTERED: '未上链',
+  PENDING_REGISTER: '注册中',
+  REGISTERED: '已上链',
+  REVOKED_ON_CHAIN: '已注销',
+};
 
 export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite, onBack }) => {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
@@ -185,6 +192,9 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                       <Descriptions.Item label="城市">{inst.city}</Descriptions.Item>
                       <Descriptions.Item label="A3 类型">{inst.a3}/{A3_LABEL[inst.a3] || inst.a3}</Descriptions.Item>
                       <Descriptions.Item label="机构代码">{inst.institution_code}/{INSTITUTION_CODE_LABEL[inst.institution_code] || inst.institution_code}</Descriptions.Item>
+                      <Descriptions.Item label="链上状态">
+                        <Tag>{INSTITUTION_CHAIN_STATUS_LABEL[inst.chain_status] || inst.chain_status}</Tag>
+                      </Descriptions.Item>
                       <Descriptions.Item label="创建时间">
                         {new Date(inst.created_at).toLocaleString('zh-CN')}
                       </Descriptions.Item>
@@ -215,13 +225,10 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                 }
               >
                 <AccountList
-                  auth={auth}
-                  sfidId={inst.sfid_id}
                   accounts={accounts}
                   loading={loading}
                   canDelete={canWrite}
                   onDelete={onDeleteAccount}
-                  onActivated={load}
                 />
               </Card>
 

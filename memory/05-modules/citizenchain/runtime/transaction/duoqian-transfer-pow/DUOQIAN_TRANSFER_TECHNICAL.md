@@ -143,7 +143,7 @@ sig = sr25519_sign(admin_key, signing_hash)
 机构主账户地址有两种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构：`InstitutionPalletId(48)` 采用 `duoqian_address(32) + 16 字节 0` 编码，再从 `duoqian-manage-pow::DuoqianAccounts` 读取 Active 账户。
+- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `duoqian-manage-pow::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-origin-gov::Institutions` 读取。
 
 ### 1.3 institution-asset-guard 边界
 
@@ -172,9 +172,9 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. `institution` 必须是有效机构：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 注册型机构：能解码出 `duoqian_address`，且在 `DuoqianAccounts` 中存在并处于 Active。
+   - 注册型机构：能解码出主账户地址，且在 `DuoqianAccounts` 中存在并处于 Active。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
-5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）。
+5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-origin-gov::Institutions`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
