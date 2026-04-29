@@ -104,10 +104,10 @@ address  = BLAKE2-256(preimage)
 - [duoqian-manage](../../../../../citizenchain/runtime/transaction/duoqian-manage/src/lib.rs) — 链上 `derive_institution_address(sfid_id, role)` + `derive_personal_duoqian_address(creator, account_name)` + `role_from_account_name` 辅助
 - [tools/duoqian.py](../../../../../tools/duoqian.py) — 统一生成器
 
-## 历史遗留（已彻底退役）
+## 当前约束
 
-**2026-04-20**：原来分离的 domain 前缀全部退役：`DUOQIAN_SFID_V1` / `DUOQIAN_PERSONAL_V1` / `FEIYONG_SFID_V1` / `ANQUAN_SFID_V1` / `GMB_SFID_V1` / `GMB_SFID_BIND_V3` / `GMB_SFID_VOTE_V3` / `GMB_SFID_POPULATION_V3` / `GMB_SFID_INSTITUTION_V1/V2` 统一合并到 `DUOQIAN_V1 + op_tag`。任务卡：[20260420-unified-DUOQIAN_V1-domain](../../../../08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md)。
+地址派生统一使用 `DUOQIAN_V1 + op_tag`。任务卡：[20260420-unified-DUOQIAN_V1-domain](../../../../08-tasks/done/20260420-unified-DUOQIAN_V1-domain.md)。
 
-**2026-04-21**：消除 `OP_MAIN` 双语义残留（原 `OP_MAIN + sfid_id + name` 对 SFID 机构所有账户通吃）。新增 `OP_INSTITUTION = 0x05` 专供 SFID 机构自定义命名账户，`OP_MAIN` / `OP_FEE` 只走 `preimage = ss58 || sfid_id`，宪法机构和 SFID 登记机构的主/费用账户**派生公式彻底一致**。`derive_duoqian_address_from_sfid_id` 重构为 `derive_institution_address(sfid_id, role)` + `role_from_account_name` 辅助。保留名 `"主账户"`/`"费用账户"` 强制走 `Role::Main`/`Role::Fee`。按 `feedback_no_compatibility.md` 死规则，不留旧方案。任务卡：[20260421-op-institution-role-split](../../../../08-tasks/done/20260421-op-institution-role-split.md)。
+`OP_INSTITUTION = 0x05` 专供 SFID 机构自定义命名账户，`OP_MAIN` / `OP_FEE` 只走 `preimage = ss58 || sfid_id`，宪法机构和 SFID 登记机构的主/费用账户派生公式一致。`derive_institution_address(sfid_id, role)` 与 `role_from_account_name` 是当前辅助接口。保留名 `"主账户"`/`"费用账户"` 强制走 `Role::Main`/`Role::Fee`。任务卡：[20260421-op-institution-role-split](../../../../08-tasks/done/20260421-op-institution-role-split.md)。
 
-**2026-04-21 第二轮**：链端字段名 `name` / `SfidNameOf<T>` / `MaxSfidNameLength` / `EmptySfidName` 同步重命名为 `account_name` / `AccountNameOf<T>` / `MaxAccountNameLength` / `EmptyAccountName`，与 SFID 后端 `MultisigAccount.account_name` 彻底对齐。Dart 侧 `submitProposeCreate({name})` → `({accountName})`，wumin `payload_decoder.dart` JSON key `'name'` → `'account_name'`。字节零影响（SCALE 按位置编码）。任务卡：[20260421-name-to-account-name-rename](../../../../08-tasks/done/20260421-name-to-account-name-rename.md)。
+链端账户名称字段统一为 `account_name` / `AccountNameOf<T>` / `MaxAccountNameLength` / `EmptyAccountName`，与 SFID 后端 `MultisigAccount.account_name` 对齐。任务卡：[20260421-name-to-account-name-rename](../../../../08-tasks/done/20260421-name-to-account-name-rename.md)。

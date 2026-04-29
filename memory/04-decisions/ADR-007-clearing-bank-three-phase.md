@@ -10,8 +10,8 @@
 GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块链软件上注册自己为清算行节点。在多轮需求澄清中明确了三个核心事实：
 
 1. **清算行不是新机构类型**：链上现有机构类型枚举（国储会/省储会/省储行 = orgType 0/1/2）不增加新枚举值
-2. **清算行是视图归类**：以"私法人股份公司 + 从属于私法人股份公司的非法人"作为资格白名单，把符合条件的现有机构在 NodeUI 上归类展示为"清算行"
-3. **省储行的清算业务已废除**：43 个省储行不再做清算，旧 11 个清算 extrinsic（call_index 0/1/2/9/10/11/14-20/23）已在 Step 2b-iv-b 物理删除；清算业务由"注册清算行"的全节点组成清算网络
+2. **清算行是视图归类**：以"私法人股份公司 + 从属于私法人股份公司的非法人"作为资格白名单，把符合条件的现有机构在桌面节点上归类展示为"清算行"
+3. **清算业务由清算行全节点承载**：43 个省储行不承担清算业务，清算网络由已注册清算行的全节点组成
 
 ## 决策
 
@@ -22,7 +22,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 **只动 sfid/backend + sfid/frontend**：
 - 资格白名单判定函数：`is_clearing_bank_eligible(inst, parent) -> bool`
 - 收紧 `GET /api/v1/app/clearing-banks/search` 到资格白名单（已激活的 SFR-JOINT_STOCK 与其下属 FFR）
-- 新增 `GET /api/v1/app/clearing-banks/eligible-search`（NodeUI"添加清算行"用，含未激活机构）
+- 新增 `GET /api/v1/app/clearing-banks/eligible-search`（桌面节点"添加清算行"用，含未激活机构）
 - SFID 前端机构列表 / 详情页显示"可作为清算行"badge
 - PrivateInstitutionLayout 选择 sub_type=JOINT_STOCK 时增加提示文案
 
@@ -50,7 +50,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 - 新增 `InstitutionMetadata: Map<SfidId, MetadataInfo>` storage，包含 `a3 / sub_type / parent_sfid_id`
 - `register_sfid_institution` / `propose_create` 等创建路径增加 a3/sub_type/parent 参数（Required）
-- **不做 backfill_institution_metadata**——开发期无旧数据，按 [feedback_chain_in_dev.md](../feedback_chain_in_dev.md) fresh genesis 重建
+- `InstitutionMetadata` 随机构注册写入，开发期 fresh genesis 重建数据
 
 **D. 资格白名单链上二次校验**
 
@@ -105,7 +105,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
   - 解密后 packer 攒批可直接用内存中密钥签 `submit_offchain_batch_v2`
 - 提案按钮：转账 / 手续费划转启用；换管理员 / 费率设置 disabled "即将上线"
 - 新增"节点信息"长卡片：peer_id / rpc_domain:rpc_port / 注册管理员 + 端点更新/注销入口
-- 提交 register_clearing_bank 前**强制 NodeUI 连通性自测**
+- 提交 register_clearing_bank 前**强制桌面节点连通性自测**
 
 #### 2.4 SFID 端 Step 2 末尾联动
 

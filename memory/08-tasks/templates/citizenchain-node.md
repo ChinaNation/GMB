@@ -1,11 +1,9 @@
 ### 默认改动范围
 
 - `citizenchain/node`
-- 必要时联动 `citizenchain/runtime`
+- `memory/05-modules/citizenchain/node`
 
 ### 先沟通条件
 
-- 修改节点启动方式
-- 修改节点数据库或同步行为
-- 修改安装包或发布形态
-
+- 修改桌面前端与节点后端的交互边界
+- 修改桌面打包、sidecar 或安装包行为

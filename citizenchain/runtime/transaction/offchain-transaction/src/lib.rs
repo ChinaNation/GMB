@@ -52,7 +52,7 @@ use sp_io::crypto::sr25519_verify;
 /// 用于:
 /// - wuminapp 通过 sfid_id 反查清算行节点的 wss URL
 /// - wuminapp 校验对端 PeerId 防 DNS 劫持
-/// - NodeUI 网络面板统计 clearing_nodes 数量
+/// - node 网络面板统计 clearing_nodes 数量
 #[derive(
     Encode,
     Decode,
@@ -691,7 +691,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// RPC 域名字节串校验:仅允许小写字母 / 数字 / 点 / 横杠;
-    /// 不解析 DNS,真实可达性由 NodeUI 提交前自测保证。
+    /// 不解析 DNS,真实可达性由桌面节点提交前自测保证。
     fn validate_rpc_domain_bytes(domain: &[u8]) -> Result<(), pallet::Error<T>> {
         if domain.is_empty() {
             return Err(pallet::Error::<T>::EmptyRpcDomain);

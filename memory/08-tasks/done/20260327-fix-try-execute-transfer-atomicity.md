@@ -54,4 +54,4 @@ fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
 
 ## 关联发现
 
-同次审查中发现的前端状态映射 Bug（STATUS_EXECUTED=3 显示为"执行失败"）已在 nodeui 侧直接修复，不涉及 runtime。
+同次审查中发现的前端状态映射 Bug（STATUS_EXECUTED=3 显示为"执行失败"）已在 node 侧直接修复，不涉及 runtime。

@@ -26,7 +26,7 @@ home/
 当前约束说明：
 1. 仓库当前真实目录结构已经统一到 `citizenchain/runtime/primitives`
 2. 桌面端启动脚本依赖 `cargo tauri dev` 先成功读取 workspace 与 `node/Cargo.toml`
-3. 因此 node 对 `primitives` 的路径引用必须跟随仓库结构同步维护，不能保留历史迁移前的相对路径
+3. 因此 node 对 `primitives` 的路径引用必须指向当前仓库结构
 4. `node/build.rs` 只负责 Substrate cargo keys 与 Tauri 构建入口，不再维护历史 sidecar 复制逻辑
 5. Tauri 编译期会校验 `tauri.conf.json` 中的 `frontendDist = "frontend/dist"` 是否存在，因此前端构建产物必须由 `node/frontend` 生成
 

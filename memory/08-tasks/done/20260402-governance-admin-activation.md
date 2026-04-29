@@ -276,7 +276,7 @@ GMB/
 - 方案：wuminapp 的激活状态也需要独立存储在 Isar 本地数据库中
 
 **`institution_detail_page.dart` 改造：**
-- 同 nodeui：管理员列表行内激活按钮 + 提案按钮灰色/可操作
+- 同 node：管理员列表行内激活按钮 + 提案按钮灰色/可操作
 - 激活流程：生成激活 payload → 跳转 wumin 扫码 → 返回签名 → 本地验证 → 写入 Isar
 
 **`admin_list_page.dart` 改造：**
@@ -318,7 +318,7 @@ Step 2: [Blockchain Agent] wumin 冷钱包端
   - payload_decoder.dart 新增 "GMB_ACTIVATE" 前缀识别
   - offline_sign_service.dart 新增 activate_admin 白名单
 
-Step 3: [Blockchain Agent] nodeui React 前端
+Step 3: [Blockchain Agent] node React 前端
   - 改造 InstitutionDetailPage.tsx（管理员行内激活 + 提案按钮灰色/可操作）
   - 改造 GovernanceSection.tsx（删除钱包管理 Tab）
   - 新增激活签名流程弹窗（复用 QrScanner + VoteSigningFlow 模式）
@@ -326,7 +326,7 @@ Step 3: [Blockchain Agent] nodeui React 前端
   - 删除 ColdWalletManager.tsx
 
 Step 4: [Mobile Agent] wuminapp Flutter
-  - 改造 institution_detail_page.dart（同 nodeui 逻辑）
+  - 改造 institution_detail_page.dart（同 node 逻辑）
   - 改造 proposal_context.dart（读取激活状态替代冷钱包匹配）
   - 改造 admin_list_page.dart
   - 新增 Isar 激活状态存储

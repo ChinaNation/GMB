@@ -31,7 +31,7 @@ completed: 2026-04-20
 - [runtime/src/lib.rs](citizenchain/runtime/src/lib.rs)：struct 定义 + `IDENTIFIER` 常量字符串 + `TxExtension` 元组位置 + impl
 - [node/src/rpc.rs](citizenchain/node/src/rpc.rs) + [offchain/pool_submitter.rs](citizenchain/node/src/offchain/pool_submitter.rs) + [benchmarking.rs](citizenchain/node/src/benchmarking.rs)：扩展元组引用
 - [node/src/ui/governance/signing.rs](citizenchain/node/src/ui/governance/signing.rs)：5 条 SCALE 编码顺序注释
-- [RPC_TECHNICAL.md](memory/05-modules/wuminapp/rpc/RPC_TECHNICAL.md) + [STEP2B_II_B_2_A_SUBMITTER.md](memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_2_A_SUBMITTER.md) + [20260324-nodeui-governance-tab.md](memory/08-tasks/done/20260324-nodeui-governance-tab.md)：文档
+- [RPC_TECHNICAL.md](memory/05-modules/wuminapp/rpc/RPC_TECHNICAL.md) + [STEP2B_II_B_2_A_SUBMITTER.md](memory/05-modules/citizenchain/node/offchain/STEP2B_II_B_2_A_SUBMITTER.md) + [20260324-node-governance-tab.md](memory/08-tasks/done/20260324-node-governance-tab.md)：文档
 
 共 15 处跨 8 文件。Metadata IDENTIFIER 字符串同步变更（`feedback_chain_in_dev` + `feedback_no_compatibility`，无需兼容旧值）。
 

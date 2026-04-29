@@ -22,7 +22,7 @@ use voting_engine::JointVoteResultCallback;
 
 /// 模块标识前缀，用于在投票引擎 ProposalData 中识别决议发行提案。
 ///
-/// 中文注释：保留旧值 `res-iss`，避免 nodeui / wuminapp 的提案展示识别逻辑无谓变化。
+/// 中文注释：该值是跨端识别决议发行提案的稳定业务标签。
 pub const MODULE_TAG: &[u8] = b"res-iss";
 
 #[frame_support::pallet]

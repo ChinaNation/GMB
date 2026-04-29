@@ -13,7 +13,7 @@
 
 ## 1. 目标与范围
 
-Step C 把老 pallet 代码压缩到 434 行,但也把原来的 20+ 个 pallet 测试(大多测
+Step C 把 pallet 代码压缩到 434 行,但也把 20+ 个 pallet 测试(大多测
 老 Call 行为)一并删了。Layer A 锁死了协议字节,Layer B(本步)补回 **新 Call
 的运行时级回归**,跑的是真实 extrinsic 调度 + Storage 读写 + 事件 + sr25519 验签。
 

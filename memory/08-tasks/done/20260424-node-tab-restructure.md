@@ -1,4 +1,4 @@
-# nodeui 顶部 tab 重构与网络内容下沉挖矿页
+# node 顶部 tab 重构与网络内容下沉挖矿页
 
 任务需求：
 重构 citizenchain 节点 UI（Tauri 桌面端）的顶部 tab 布局和页面归属。
@@ -29,8 +29,8 @@
 - `memory/07-ai/agent-rules.md`
 - `memory/07-ai/chat-protocol.md`
 - `memory/07-ai/task-card-template.md`
-- `memory/08-tasks/templates/citizenchain-nodeui.md`
-- `memory/08-tasks/done/20260324-nodeui-governance-tab.md`（治理 tab 引入历史，本次反向整改参考）
+- `memory/08-tasks/templates/citizenchain-node.md`
+- `memory/08-tasks/done/20260324-node-governance-tab.md`（治理 tab 引入历史，本次反向整改参考）
 
 ## 变更范围（文件级）
 
@@ -112,7 +112,7 @@
 - 文档已更新
 - 残留已清理（Grep 无 `'governance'` / `'network'` 顶级 tab 字面量、无 `ProposalListView` 引用、无 `dev-upgrade-hint` 残留）
 - Review 问题已处理
-- 模块级完成标准已对照（`memory/08-tasks/templates/citizenchain-nodeui.md`）
+- 模块级完成标准已对照（`memory/08-tasks/templates/citizenchain-node.md`）
 
 ## 开工状态
 

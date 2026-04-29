@@ -48,7 +48,7 @@
 
 # CitizenChain 模块执行清单
 
-- 开工前先确认任务属于 `runtime`、`node`、`nodeui` 或 `primitives`
+- 开工前先确认任务属于 `runtime`、`node`、`node` 或 `primitives`
 - 关键 Rust 或前端逻辑必须补中文注释
 - 改动链规则、存储或发布行为前必须先沟通
 - 如果改动 `runtime` 且会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性，必须先暂停单边修改，转为跨模块任务
@@ -91,20 +91,20 @@
 ## 实施记录
 
 - 任务卡已创建
-- 已读取启动协议要求文档、模块代码、weights、benchmarks、runtime 配置、node RPC、nodeui 绑定与挖矿面板代码。
+- 已读取启动协议要求文档、模块代码、weights、benchmarks、runtime 配置、node RPC、node 绑定与挖矿面板代码。
 - 已执行验证：
   - `cargo test -p fullnode-issuance`
   - `cargo test -p onchain-transaction`
   - `cargo check -p node`
-  - `cargo check -p nodeui-desktop-shell`
+  - `cargo check -p node`
 
 ## 审查结论
 
 ### 主要发现
 
 1. 协议层作者身份缺少强约束，`fullnode-issuance` 当前把 PoW pre-runtime digest 中的 `AccountId` 直接当作矿工身份使用，但 `citizenchain/node/src/service.rs` 中的 `SimplePow::verify` 只校验该字段“能解码为账户”，并未校验它与实际出块实体存在密码学绑定；`citizenchain/runtime/src/configs/mod.rs` 中 `PowDigestAuthor` 也只是直接解码该 digest。结果是：奖励与手续费分账依赖“诚实 node 会把本地 keystore 公钥写进 digest”这一实现约定，而不是链上协议保证，制度上要求的“矿工身份账户 / 奖励钱包分离”可以被定制矿工程序绕过。
-2. `nodeui/backend/src/settings/fee-address/mod.rs` 的 `set_reward_wallet` 没有在本地保存前拒绝“奖励钱包等于矿工账户”，而是先写入 `reward-wallet.json` 再异步调用 `sync_saved_reward_wallet_inner`；同时该命令会先返回成功，再通过事件异步回传链上绑定失败或超时。这与技术文档中“本地直接拒绝矿工自身账户”“链上绑定失败时命令返回错误”的功能需求不一致，也会留下一个本地已保存但链上永远无法绑定的错误配置。
-3. `nodeui/backend/src/settings/fee-address/mod.rs` 中 `local_powr_miner_account_hex` 会扫描 `node-data/chains/*/keystore` 下所有 `powr` 文件并返回排序后的第一个；但 node 侧 `reward_bindWallet/reward_rebindWallet` 实际使用的是当前链 keystore 中的第一个 `powr` 密钥。若本机存在旧链目录或陈旧 `powr` 文件，nodeui 查询绑定状态、拒绝自绑定校验、挖矿收益归属判断都可能与 node 的真实签名矿工身份不一致。
+2. `node/backend/src/settings/fee-address/mod.rs` 的 `set_reward_wallet` 没有在本地保存前拒绝“奖励钱包等于矿工账户”，而是先写入 `reward-wallet.json` 再异步调用 `sync_saved_reward_wallet_inner`；同时该命令会先返回成功，再通过事件异步回传链上绑定失败或超时。这与技术文档中“本地直接拒绝矿工自身账户”“链上绑定失败时命令返回错误”的功能需求不一致，也会留下一个本地已保存但链上永远无法绑定的错误配置。
+3. `node/backend/src/settings/fee-address/mod.rs` 中 `local_powr_miner_account_hex` 会扫描 `node-data/chains/*/keystore` 下所有 `powr` 文件并返回排序后的第一个；但 node 侧 `reward_bindWallet/reward_rebindWallet` 实际使用的是当前链 keystore 中的第一个 `powr` 密钥。若本机存在旧链目录或陈旧 `powr` 文件，node 查询绑定状态、拒绝自绑定校验、挖矿收益归属判断都可能与 node 的真实签名矿工身份不一致。
 
 ### 需求实现与文档判断
 
@@ -112,17 +112,17 @@
 - 中文注释在 pallet、runtime 配置、node RPC 关键路径上基本完整，没有看到明显调试残留进入正式逻辑。
 - 技术文档不算完整：
   - `memory/05-modules/citizenchain/runtime/issuance/fullnode-issuance/FULLNODE_TECHNICAL.md` 第 10 节把“出块身份与绑定身份一致”描述成既成事实，但现状更接近 node 约定而非协议保证。
-  - `memory/05-modules/citizenchain/nodeui/settings/fee-address/FEE_ADDRESS_TECHNICAL.md` 仍描述了“失败直接返回错误”“确保 miner-suri/清理旧 powr key 文件”等旧口径，与当前实现不完全一致。
+  - `memory/05-modules/citizenchain/node/settings/fee-address/FEE_ADDRESS_TECHNICAL.md` 仍描述了“失败直接返回错误”“确保 miner-suri/清理旧 powr key 文件”等旧口径，与当前实现不完全一致。
 - 权重侧还存在工程改进空间：`bind/rebind` 已 benchmark，`on_finalize` 仍依赖 `on_initialize` 手工预申报 `reads_writes(3,3)`，当前未看到专门的最坏路径计重验证。
 
 ### 残留判断
 
 - 未发现明显临时调试逻辑、废弃分支或无用事件残留。
-- 但 nodeui 奖励钱包链路存在“旧密钥目录/陈旧本地配置”带来的状态残留风险，属于后续应收口的问题。
+- 但 node 奖励钱包链路存在“旧密钥目录/陈旧本地配置”带来的状态残留风险，属于后续应收口的问题。
 
 ## 完成信息
 
 - 完成时间：2026-03-28 07:56:33
-- 完成摘要：完成 fullnode-issuance 审查；确认 pallet 核心功能与测试基本成立，但发现 3 个需要后续处理的问题：PoW 作者身份仅靠 digest 约定、nodeui 奖励钱包保存/失败反馈不符合文档口径、旧 powr 密钥可能导致 nodeui 与 node 身份错位。
+- 完成摘要：完成 fullnode-issuance 审查；确认 pallet 核心功能与测试基本成立，但发现 3 个需要后续处理的问题：PoW 作者身份仅靠 digest 约定、node 奖励钱包保存/失败反馈不符合文档口径、旧 powr 密钥可能导致 node 与 node 身份错位。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

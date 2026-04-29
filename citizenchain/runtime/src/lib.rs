@@ -79,51 +79,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
     //   the compatible custom types.
     //
-    // Phase 3「投票引擎统一入口整改」(2026-04-22):
-    //   - 业务 pallet 的 vote_X / finalize_X 全部物理删除,所有管理员投票一律走
-    //     `VotingEngine::internal_vote`(9.0)。
-    //   - 投票引擎内部 call_index 重排:
-    //     0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal。
-    //   - 多个业务 pallet 的 call_index 连续重排(见 Phase 2 任务卡),
-    //     与历史版本不可向后兼容。
-    //   - 链仍处于开发期(feedback_chain_in_dev),走 fresh genesis,不做链上 setCode。
-    //
-    // 注意:`.github/workflows/citizenchain-wasm.yml` 原先有 "spec_version 自增"
-    // 自动 bump step 已同步删除,spec_version 从此纯手动管理,避免 CI 打乱
-    // "重新创世 + 钉死某个版本"的语义。
-    // Step 2(2026-04-27, ADR-007)清算行节点声明 + 收款方主导清算 + InstitutionMetadata
-    // 上链 → spec_version 2 → 3,transaction_version 1 → 2(register_sfid_institution
-    // 等 extrinsic 签名变化)。开发期 fresh genesis,不主网升级。
-    //
-    // 2026-04-29:管理员治理与 GRANDPA 密钥治理模块彻底更名为
-    // admins-change / grandpakey-change,runtime pallet 名同步变为
-    // AdminsChange / GrandpaKeyChange。Call 编码索引保持不变,但 metadata
-    // 与 storage prefix 变化,故 spec_version 4 → 5。
-    //
-    // 2026-04-29:治理销毁与运行时升级模块统一新名称:
-    // resolution-destro / runtime-upgrade,runtime pallet 名同步变为
-    // ResolutionDestro / RuntimeUpgrade。Call 编码索引保持不变,但 metadata
-    // 与 storage prefix 变化,故 spec_version 5 → 6。
-    //
-    // 2026-04-29:决议发行治理/执行彻底合并为 resolution-issuance,
-    // runtime 只保留 ResolutionIssuance(index 8),删除旧 index 7 的执行 pallet。
-    // 新增维护 call 到 8.3/8.4,旧 7.x 执行入口下线,故 spec_version 6 → 7,
-    // transaction_version 2 → 3。
-    //
-    // 2026-04-29:治理投票引擎彻底更名为 voting-engine,
-    // runtime pallet 名同步变为 VotingEngine。pallet index 与 call index 保持不变,
-    // 但 metadata 与 storage prefix 变化,故 spec_version 7 → 8。
-    //
-    // 2026-04-29:三类发行 pallet 统一新名称:
-    // citizen-issuance / fullnode-issuance / shengbank-interest,runtime pallet
-    // 名同步变为 CitizenIssuance / FullnodeIssuance / ShengBankInterest。
-    // pallet index 与 call index 保持不变,但 metadata 与 storage prefix 变化,
-    // 故 spec_version 8 → 9。
-    //
-    // 2026-04-29:多签管理与多签转账 pallet 统一新名称:
-    // duoqian-manage / duoqian-transfer,runtime pallet 名同步变为
-    // DuoqianManage / DuoqianTransfer。pallet index 与 call index 保持不变,
-    // 但 metadata 与 storage prefix 变化,故 spec_version 9 → 10。
+    // 当前 runtime 采用统一模块命名：
+    // admins-change / voting-engine / duoqian-manage / duoqian-transfer /
+    // offchain-transaction / onchain-transaction / institution-asset。
+    // spec_version 仅手动维护，开发期 fresh genesis 不走历史链上兼容迁移。
     spec_version: 10,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,

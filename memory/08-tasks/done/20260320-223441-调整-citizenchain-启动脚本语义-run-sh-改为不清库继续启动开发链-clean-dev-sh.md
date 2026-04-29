@@ -2,7 +2,7 @@
 
 - 任务编号：20260320-223441
 - 状态：done
-- 所属模块：citizenchain/nodeui
+- 所属模块：citizenchain/node
 - 当前负责人：Codex
 - 创建时间：2026-03-20 22:34:41
 
@@ -23,12 +23,12 @@
 
 ## 模块模板
 
-- 模板来源：memory/08-tasks/templates/citizenchain-nodeui.md
+- 模板来源：memory/08-tasks/templates/citizenchain-node.md
 
 ### 默认改动范围
 
-- `citizenchain/nodeui`
-- `memory/05-modules/citizenchain/nodeui`
+- `citizenchain/node`
+- `memory/05-modules/citizenchain/node`
 
 ### 先沟通条件
 
@@ -41,7 +41,7 @@
 
 # CitizenChain 模块执行清单
 
-- 开工前先确认任务属于 `runtime`、`node`、`nodeui` 或 `primitives`
+- 开工前先确认任务属于 `runtime`、`node`、`node` 或 `primitives`
 - 关键 Rust 或前端逻辑必须补中文注释
 - 改动链规则、存储或发布行为前必须先沟通
 - 文档与残留必须一起收口
@@ -83,12 +83,12 @@
 - 任务卡已创建
 - 已确认当前问题根因：`run.sh` 未传 `dev-chain` feature，导致它启动默认链而不是继续使用开发链数据
 - 已将 `run.sh` 调整为“不清库，继续启动开发链”
-- 已补充 nodeui 模块文档，记录 `run.sh` 与 `clean-dev.sh` 的开发脚本语义差异
+- 已补充 node 模块文档，记录 `run.sh` 与 `clean-dev.sh` 的开发脚本语义差异
 - 已执行 `bash -n citizenchain/scripts/run.sh citizenchain/scripts/clean-dev.sh`，脚本语法通过
 
 ## 完成信息
 
 - 完成时间：2026-03-20 22:35:49
-- 完成摘要：已将 run.sh 调整为不清库继续启动开发链，clean-dev.sh 保持清库后启动开发链，并同步更新 nodeui 模块文档说明。
+- 完成摘要：已将 run.sh 调整为不清库继续启动开发链，clean-dev.sh 保持清库后启动开发链，并同步更新 node 模块文档说明。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

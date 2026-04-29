@@ -10,7 +10,7 @@ SFID 系统只负责机构身份和账户名称:
 
 SFID 系统不负责链上注册、链上注销、管理员阈值签名和账户激活。链上事实由 `runtime/node` 产生,再通过链路签名接口同步回 SFID。
 
-开发期按彻底改造执行,不保留旧激活入口、旧状态机或过渡分支。
+开发期按彻底改造执行，当前文档只描述现行接口和状态机。
 
 ## 地址规则
 
@@ -91,7 +91,7 @@ SFID 不能单方面删除仍在链上的账户名称。
 | GET | `/api/v1/app/institutions/:sfid_id/accounts` | 读取账户列表、地址、链上状态、删除许可 |
 | POST | `/api/v1/app/institutions/:sfid_id/chain-sync` | 受信任链路同步链上注册/注销结果 |
 | GET | `/api/v1/app/clearing-banks/search` | wuminapp 搜索已上链且已加入清算网络的清算行 |
-| GET | `/api/v1/app/clearing-banks/eligible-search` | NodeUI 搜索具备清算行资格的 SFID 机构 |
+| GET | `/api/v1/app/clearing-banks/eligible-search` | 桌面节点搜索具备清算行资格的 SFID 机构 |
 
 `chain-sync` 必须携带链路签名头:
 
@@ -158,7 +158,7 @@ backend/src/institutions/
 
 - 文档更新:本文件记录 SFID 链上状态真源、API 和删除规则。
 - 注释完善:`handler.rs` / `service.rs` / `model.rs` 已补充状态同步和删除规则中文注释。
-- 残留清理:移除后台手动激活路由、前端激活按钮、后端直接推链文件和旧 `Inactive/Pending/Registered/Failed` 状态机。
+- 残留清理:移除后台手动激活路由、前端激活按钮、后端直接推链文件和无效状态机。
 
 ## 历史
 

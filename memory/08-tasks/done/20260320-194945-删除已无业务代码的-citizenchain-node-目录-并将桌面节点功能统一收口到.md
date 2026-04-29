@@ -1,14 +1,14 @@
-# 任务卡：删除已无业务代码的 citizenchain/nodeuitauri 目录，并将桌面节点功能统一收口到 citizenchain/nodeui，同步更新脚本与 memory 文档引用。
+# 任务卡：删除已无业务代码的 citizenchain/node 目录，并将桌面节点功能统一收口到 citizenchain/node，同步更新脚本与 memory 文档引用。
 
 - 任务编号：20260320-194945
 - 状态：done
-- 所属模块：citizenchain/nodeui
+- 所属模块：citizenchain/node
 - 当前负责人：Codex
 - 创建时间：2026-03-20 19:49:45
 
 ## 任务需求
 
-删除已无业务代码的 citizenchain/nodeuitauri 目录，并将桌面节点功能统一收口到 citizenchain/nodeui，同步更新脚本与 memory 文档引用。
+删除已无业务代码的 citizenchain/node 目录，并将桌面节点功能统一收口到 citizenchain/node，同步更新脚本与 memory 文档引用。
 
 ## 必读上下文
 
@@ -23,12 +23,12 @@
 
 ## 模块模板
 
-- 模板来源：memory/08-tasks/templates/citizenchain-nodeui.md
+- 模板来源：memory/08-tasks/templates/citizenchain-node.md
 
 ### 默认改动范围
 
-- `citizenchain/nodeui`
-- `memory/05-modules/citizenchain/nodeui`
+- `citizenchain/node`
+- `memory/05-modules/citizenchain/node`
 
 ### 先沟通条件
 
@@ -42,7 +42,7 @@
 
 # CitizenChain 模块执行清单
 
-- 开工前先确认任务属于 `runtime`、`node`、`nodeui` 或 `primitives`
+- 开工前先确认任务属于 `runtime`、`node`、`node` 或 `primitives`
 - 关键 Rust 或前端逻辑必须补中文注释
 - 改动链规则、存储或发布行为前必须先沟通
 - 文档与残留必须一起收口
@@ -87,6 +87,6 @@
 ## 完成信息
 
 - 完成时间：2026-03-20 19:53:37
-- 完成摘要：已删除空的 citizenchain/nodeuitauri 目录，并完成 nodeui 当前实现口径、任务模板、上下文脚本与模块路由的同步收口。
+- 完成摘要：已删除空的 citizenchain/node 目录，并完成 node 当前实现口径、任务模板、上下文脚本与模块路由的同步收口。
 - 对照清单：memory/07-ai/pre-submit-checklist.md
 - 对照总标准：memory/07-ai/definition-of-done.md

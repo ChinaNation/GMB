@@ -24,7 +24,7 @@
 
 命名说明：
 - 2026-04-29 起，本模块统一使用 `resolution-destro` / `resolution_destro` / `ResolutionDestro`。
-- 模块仍位于 `citizenchain/runtime/governance/`，不保留旧模块兼容别名。
+- 模块位于 `citizenchain/runtime/governance/resolution-destro/`。
 - `pallet_index = 14`、call index 与 `MODULE_TAG = b"res-dst"` 保持不变。
 
 ---
