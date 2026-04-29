@@ -9,9 +9,9 @@
 
 ## 0. v3 实施后实际架构总结
 
-### 0.1 链端实际落地(`citizenchain/runtime/otherpallet/sfid-code-auth` + 相关 pallet)
+### 0.1 链端实际落地(`citizenchain/runtime/otherpallet/sfid-system` + 相关 pallet)
 
-- `sfid-code-auth` pallet:
+- `sfid-system` pallet:
   - 新增 storage `ShengSigningPubkey: map Province → [u8;32]`
   - 新增 storage `ProvinceBySigningPubkey: map [u8;32] → Province`(O(1) 反向索引)
   - 新增 extrinsic `set_sheng_signing_pubkey(province, new_pubkey: Option<[u8;32]>)`:
@@ -19,7 +19,7 @@
   - 新增 getter `sheng_signing_pubkey(province) -> Option<[u8;32]>`
   - 新增 Error:`NotKeyAdmin`、`PubkeyAlreadyUsed`(等同实施细则命名)
   - 新增 Event:`ShengSigningPubkeyUpdated { province, new_pubkey }`
-- `duoqian-manage-pow` pallet:
+- `duoqian-manage` pallet:
   - `register_sfid_institution` 追加参数 `signing_province: Option<Vec<u8>>`,
     `SfidInstitutionVerifier` trait 同步加该字段
   - `None` → 回退到 SFID MAIN 验签(向后兼容);`Some(province)` → 要求
@@ -748,7 +748,7 @@ pub(crate) async fn submit_set_sheng_signing_pubkey(
         ),
     };
     let call = tx(
-        "SfidCodeAuth",
+        "SfidSystem",
         "set_sheng_signing_pubkey",
         vec![province_arg, pub_arg],
     );

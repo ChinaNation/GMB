@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 扫码支付 Step 2c-ii-a:**用户绑定的清算行 `shenfen_id` 本地缓存**。
 ///
 /// 中文注释:
-/// - 链上 `OffchainTransactionPos::UserBank[user]` 存的是**主账户** `AccountId32`
+/// - 链上 `OffchainTransaction::UserBank[user]` 存的是**主账户** `AccountId32`
 ///   (32 字节),**不是** SFID `shenfen_id` 字符串。但 wuminapp 在收款 QR 里需要
 ///   的是 `shenfen_id`(付款方付款时会通过 SFID 公开 API 反查主账户做同行校验)。
 /// - 链上 → `shenfen_id` 的反向映射在 SFID 后端存,公开搜索 API 只支持 keyword

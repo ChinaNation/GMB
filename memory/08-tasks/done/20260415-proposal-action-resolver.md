@@ -25,9 +25,9 @@ if raw.is_empty() {
 该函数只读 `VotingEngine::ProposalData` 一个存储项。
 手续费划转/安全基金/费率提案的业务 detail 存储在各自独立的 pallet storage：
 
-- `DuoqianTransferPow::SweepProposalActions`
-- `DuoqianTransferPow::SafetyFundProposalActions`
-- `OffchainTransactionPos::RateProposalActions`
+- `DuoqianTransfer::SweepProposalActions`
+- `DuoqianTransfer::SafetyFundProposalActions`
+- `OffchainTransaction::RateProposalActions`
 
 `ProposalData` 对它们为 None/空 → 直接早返回 "（无详情数据）" →
 后续**死代码** `fetch_sweep_proposal_action` / `fetch_safety_fund_proposal_action`

@@ -52,7 +52,7 @@ cargo build --release --bin citizenchain
 [ClearingBank] 签名密钥已解锁
 [ClearingBank] 清算行组件已启动,bank_main=<SS58>
 [ReserveMonitor] 启动主账对账 interval=60s bank=...
-[EventListener] 开始订阅 offchain_transaction_pos 事件
+[EventListener] 开始订阅 offchain_transaction 事件
 ```
 
 **故障排查**
@@ -103,8 +103,8 @@ flutter run -d <device> \
 - 屏幕 SnackBar:`绑定已提交,tx=0x...,等待链上确认`
 - 清算行节点日志:
   - `[EventListener] ... BankBound { user: <A 的 pubkey>, bank: ... }`
-- A 钱包 `Balance` 减少约 1 元(`PowTxAmountExtractor` 对 `bind_clearing_bank` 定为付费调用)
-- 链上查询 `OffchainTransactionPos::UserBank[A]` = `<bank_main>` 主账户
+- A 钱包 `Balance` 减少约 1 元(`OnchainTxAmountExtractor` 对 `bind_clearing_bank` 定为付费调用)
+- 链上查询 `OffchainTransaction::UserBank[A]` = `<bank_main>` 主账户
 - `SharedPreferences` 写入 `clearing_bank_shenfen_id_<A.walletIndex>` = 机构 `shenfen_id`
 
 **故障排查**

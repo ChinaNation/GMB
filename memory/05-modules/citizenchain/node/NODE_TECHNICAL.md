@@ -118,7 +118,7 @@
 - `seal` 中附带 `(nonce, 签名)`
 - `SimplePow::verify` 同时验证难度和矿工对 `pre_hash` 的签名
 
-但 `pow-difficulty-module` 仍在 `on_finalize` 中对空块执行 `assert!(extrinsic_count > 1)`。
+但 `pow-difficulty` 仍在 `on_finalize` 中对空块执行 `assert!(extrinsic_count > 1)`。
 - **影响**：节点层虽然已经在交易池为空时停止挖矿，但 runtime 仍把“运营策略兜底”实现成 panic 型链规则；一旦有空块漏过节点侧门控，可能直接触发拒块甚至停链风险。
 - **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
 - **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。

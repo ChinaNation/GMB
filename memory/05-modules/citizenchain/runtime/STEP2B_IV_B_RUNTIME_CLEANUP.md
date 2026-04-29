@@ -1,7 +1,7 @@
 # 清算行 Runtime · Step 2b-iv-b 老省储行代码彻底清除
 
 - **日期**:2026-04-20
-- **范围**:物理删除 `offchain-transaction-pos` pallet 内所有老省储行清算体系的
+- **范围**:物理删除 `offchain-transaction` pallet 内所有老省储行清算体系的
   Call / Storage / Events / Errors / helper / types,以及 `configs/mod.rs` 和
   `node/src/ui/governance/` 里的所有老分支/入口。dev 链统一 setCode 升级,不做
   `on_runtime_upgrade` migration。
@@ -13,7 +13,7 @@
 
 ## 1. 本步触及的代码面
 
-### 1.1 Runtime pallet(`runtime/transaction/offchain-transaction-pos/src/`)
+### 1.1 Runtime pallet(`runtime/transaction/offchain-transaction/src/`)
 
 **lib.rs 整体重写**:从 2873 行 → 434 行。删除如下全部符号:
 
@@ -39,13 +39,13 @@ Step 3 再补。
 
 ### 1.2 Runtime configs(`runtime/src/configs/mod.rs`)
 
-- `PowTxAmountExtractor` 删除 5 处老分支(`submit_offchain_batch` / `enqueue_offchain_batch`
+- `OnchainTxAmountExtractor` 删除 5 处老分支(`submit_offchain_batch` / `enqueue_offchain_batch`
   / `process_queued_batch` / 及其引用 `QueuedBatches` 的 `FeePayer` 分支)。老 Call 删了
   Pattern 永远不命中,但保留的 `_ => Amount(100000)` 兜底仍对未来扩展安全。
 - `RuntimeFeePayerExtractor` 清理后只剩 `submit_offchain_batch_v2 → fee_account_of(institution_main)`
   一条,其余 Call 走 `_ => None` 个人付费。
-- 删除 `impl offchain_transaction_pos::ProtectedSourceChecker for RuntimeProtectedSourceChecker`(ProtectedSourceChecker trait 已从 pallet 移除)。
-- `offchain_transaction_pos::Config for Runtime` 移除 `InternalVoteEngine` / `ProtectedSourceChecker`
+- 删除 `impl offchain_transaction::ProtectedSourceChecker for RuntimeProtectedSourceChecker`(ProtectedSourceChecker trait 已从 pallet 移除)。
+- `offchain_transaction::Config for Runtime` 移除 `InternalVoteEngine` / `ProtectedSourceChecker`
   两个 type;`WeightInfo` 改为 `()`(pallet weights.rs 简化后 SubstrateWeight 不再存在)。
 
 ### 1.3 Runtime 外层(`runtime/src/lib.rs`)
@@ -74,7 +74,7 @@ Step 3 再补。
 链上 setCode。但由于本步为 **"开发期 dev 链清理"**,用户已授权不做
 `on_runtime_upgrade` migration,采用以下步骤:
 
-1. `spec_version: 9` + 新 WASM 编译
+1. `spec_version: 10` + 新 WASM 编译
 2. dev 链管理员 `developer_direct_upgrade`(或等价 sudo/Root setCode)
 3. setCode 生效块起:
    - 老 Call enum 槽位不再存在,pool 中 in-flight 老 Call tx 会在解码时被拒
@@ -98,13 +98,13 @@ $ cd citizenchain
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 (仅 Tauri `frontend/dist` proc macro 门禁未通过,与本步无关)
 
-$ cargo test -p offchain-transaction-pos --lib
+$ cargo test -p offchain-transaction --lib
 test result: ok. 10 passed; 0 failed
 (5 个 golden vectors + 2 个 signing_hash 基础 + 3 个 bank_check 测试;原 lib.rs
  内老 Call 测试 13 个随代码一并删除)
 
 $ cargo check --workspace --exclude node
-(citizenchain runtime / institution-asset-guard / sfid-backend / 其他 crate 全绿)
+(citizenchain runtime / institution-asset / sfid-backend / 其他 crate 全绿)
 
 $ cd ../wuminapp && flutter analyze
 No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)
@@ -116,10 +116,10 @@ No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)
 
 | 项目 | 删除行数(约) |
 |---:|---:|
-| `offchain-transaction-pos/src/lib.rs` | **-2439** 行(2873→434) |
-| `offchain-transaction-pos/src/benchmarks.rs` | **-61** 行(74→13) |
-| `offchain-transaction-pos/src/weights.rs` | **-38** 行(55→17) |
-| `runtime/src/configs/mod.rs` | **-60** 行(PowTxAmount + FeePayer + ProtectedSourceChecker impl) |
+| `offchain-transaction/src/lib.rs` | **-2439** 行(2873→434) |
+| `offchain-transaction/src/benchmarks.rs` | **-61** 行(74→13) |
+| `offchain-transaction/src/weights.rs` | **-38** 行(55→17) |
+| `runtime/src/configs/mod.rs` | **-60** 行(OnchainTxAmount + FeePayer + ProtectedSourceChecker impl) |
 | `node/src/ui/governance/mod.rs` | **-99** 行(4 个 Tauri 命令) |
 | `node/src/ui/governance/signing.rs` | **-160** 行(2 个签名构造函数) |
 | `node/src/ui/governance/proposal.rs` | **-75** 行(2 个查询 + 1 个分支) |
@@ -153,5 +153,5 @@ No issues found!  (Dart 端不依赖 Rust 枚举,不受影响)
 
 - 2026-04-20:Step 2b-iv-b 彻底完成。删除约 2900 行老省储行清算代码;pallet
   从 2873 行精简到 434 行;`spec_version` 8 → 9,`storage_version` 1 → 2;
-  `cargo test -p offchain-transaction-pos --lib` 10 ok;`cargo check -p node --tests`
+  `cargo test -p offchain-transaction --lib` 10 ok;`cargo check -p node --tests`
   零 error(仅 Tauri 门禁);`flutter analyze` 零 issue。

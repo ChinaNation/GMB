@@ -42,14 +42,14 @@
 
 ### A. citizenchain/runtime
 
-#### A.1 duoqian-manage-pow pallet
+#### A.1 duoqian-manage pallet
 - `MetadataInfo` 结构体新增（a3 / sub_type / parent_sfid_id）
 - `InstitutionMetadata: StorageMap<SfidId, MetadataInfo>` 新建
 - `register_sfid_institution`：参数追加 a3 / sub_type / parent_sfid_id（Required）
 - `propose_create`：参数追加 a3 / sub_type / parent_sfid_id（在 institution 元数据未存时写入 InstitutionMetadata）
 - `SfidAccountQuery` trait 扩展：暴露 `institution_a3` / `institution_sub_type` / `institution_parent` 三个查询方法
 
-#### A.2 offchain-transaction-pos pallet
+#### A.2 offchain-transaction pallet
 - `bank_check::ensure_can_be_bound`：4 重校验扩展到 6 重（加资格白名单 + sfid ∈ ClearingBankNodes）
 - `ClearingBankNodes: StorageMap<SfidId, ClearingBankNodeInfo>` 新建
   - `ClearingBankNodeInfo { peer_id, rpc_domain, rpc_port, registered_at, registered_by }`
@@ -212,9 +212,9 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 **runtime 改动全部完成,验证通过**:
 
 - ✅ A1 SfidAccountQuery trait 加 `is_clearing_bank_eligible` + `is_registered_clearing_node` 两个方法
-- ✅ A2 duoqian-manage-pow `MetadataInfo` 类型 + `InstitutionMetadata` storage + 6 个新错误码
+- ✅ A2 duoqian-manage `MetadataInfo` 类型 + `InstitutionMetadata` storage + 6 个新错误码
 - ✅ A3 `register_sfid_institution` 加 `a3` / `sub_type` / `parent_sfid_id` 三个 Required 参数 + 元数据写入/校验逻辑
-- ✅ A4 offchain-transaction-pos `ClearingBankNodeInfo` 结构体 + `ClearingBankNodes` storage + `NodePeerToInstitution` 反向索引
+- ✅ A4 offchain-transaction `ClearingBankNodeInfo` 结构体 + `ClearingBankNodes` storage + `NodePeerToInstitution` 反向索引
 - ✅ A5 `register_clearing_bank` / `update_clearing_bank_endpoint` / `unregister_clearing_bank` 三个 extrinsic(call_index 50/51/52)+ 9 重校验链 + PeerId 字符集 / RPC 域名字符集校验辅助函数
 - ✅ A6 `bank_check::ensure_can_be_bound` 由 4 重收紧到 6 重(加资格白名单 + 已声明节点)
 - ✅ A7 `submit_offchain_batch_v2` 校验改为 `recipient_bank == institution_main`(收款方主导)+ 完整中文注释说明设计变化
@@ -224,20 +224,20 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 - ✅ A10 spec_version 2→3, transaction_version 1→2
 
 **验证结果**:
-- cargo check -p offchain-transaction-pos: ✅ 通过
-- cargo check -p duoqian-manage-pow: ✅ 通过(5 warnings 全部预存)
+- cargo check -p offchain-transaction: ✅ 通过
+- cargo check -p duoqian-manage: ✅ 通过(5 warnings 全部预存)
 - cargo check -p citizenchain (runtime): ✅ 通过
 - cargo check -p node: ✅ 通过(42 warnings 全部预存,不增不减)
-- cargo test -p offchain-transaction-pos: ✅ 20/20 全绿
-- cargo test -p duoqian-manage-pow: ✅ 17/17 全绿
+- cargo test -p offchain-transaction: ✅ 20/20 全绿
+- cargo test -p duoqian-manage: ✅ 17/17 全绿
 - cargo test -p node: 108/109 通过(1 个预存 bug `compact_u128_big_integer` 与本次无关,已 spawn 独立修复任务)
 
 **新增/修改的关键文件**:
-- runtime/transaction/duoqian-manage-pow/src/lib.rs(MetadataInfo + InstitutionMetadata + register 参数 + 测试更新)
-- runtime/transaction/offchain-transaction-pos/src/lib.rs(ClearingBankNodeInfo + ClearingBankNodes + NodePeerToInstitution + 3 extrinsic + 4 events + 6 errors + 4 helper fn)
-- runtime/transaction/offchain-transaction-pos/src/bank_check.rs(SfidAccountQuery 加 2 方法 + ensure_can_be_bound 6 重校验)
-- runtime/transaction/offchain-transaction-pos/src/settlement.rs(收款方主导校验 + 多 payer_bank 偿付预检)
-- runtime/transaction/offchain-transaction-pos/src/tests.rs(MockSfid 补两个方法实现)
+- runtime/transaction/duoqian-manage/src/lib.rs(MetadataInfo + InstitutionMetadata + register 参数 + 测试更新)
+- runtime/transaction/offchain-transaction/src/lib.rs(ClearingBankNodeInfo + ClearingBankNodes + NodePeerToInstitution + 3 extrinsic + 4 events + 6 errors + 4 helper fn)
+- runtime/transaction/offchain-transaction/src/bank_check.rs(SfidAccountQuery 加 2 方法 + ensure_can_be_bound 6 重校验)
+- runtime/transaction/offchain-transaction/src/settlement.rs(收款方主导校验 + 多 payer_bank 偿付预检)
+- runtime/transaction/offchain-transaction/src/tests.rs(MockSfid 补两个方法实现)
 - runtime/src/configs/mod.rs(DuoqianSfidAccountQuery 扩展 + MaxA3Length / MaxSubTypeLength + RuntimeFeePayerExtractor 注释)
 - runtime/src/lib.rs(spec_version 2→3, transaction_version 1→2)
 
@@ -250,7 +250,7 @@ Step 3 wumin/wuminapp 完成后再走主网升级
 - ✅ B1 新建 `citizenchain/node/src/ui/clearing_bank/` 模块,7 个文件:
   - `mod.rs` — 14 个 Tauri command 注册入口
   - `types.rs` — DTO(EligibleClearingBankCandidate / ClearingBankNodeOnChainInfo / ConnectivityTestReport / DecryptedAdminInfo / DecryptAdminRequestResult)
-  - `chain.rs` — `OffchainTransactionPos::ClearingBankNodes` storage 读取 + storage prefix 计数(state_getKeysPaged 分页)
+  - `chain.rs` — `OffchainTransaction::ClearingBankNodes` storage 读取 + storage prefix 计数(state_getKeysPaged 分页)
   - `connectivity.rs` — DNS / 远端 RPC / 链 ID(ss58Format=2027) / PeerId 4 重自测
   - `signing.rs` — register/update_endpoint/unregister 三个 extrinsic 的 call_data + WUMIN_QR_V1 sign request
   - `sfid_proxy.rs` — HTTP 转发 SFID `/api/v1/app/clearing-banks/eligible-search`

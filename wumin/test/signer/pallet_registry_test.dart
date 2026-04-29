@@ -11,7 +11,7 @@ void main() {
 
     test('不支持的 specVersion 返回 false', () {
       expect(PalletRegistry.isSupported(0), isFalse);
-      expect(PalletRegistry.isSupported(1), isFalse); // 开发期当前已升至 spec=8
+      expect(PalletRegistry.isSupported(1), isFalse); // 开发期当前已升至 spec=10
       expect(PalletRegistry.isSupported(999), isFalse);
       expect(PalletRegistry.isSupported(-1), isFalse);
     });
@@ -23,15 +23,15 @@ void main() {
     test('pallet 索引常量已定义且互不相同', () {
       final pallets = {
         PalletRegistry.balancesPallet,
-        PalletRegistry.duoqianTransferPowPallet,
-        PalletRegistry.duoqianManagePowPallet,
+        PalletRegistry.duoqianTransferPallet,
+        PalletRegistry.duoqianManagePallet,
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,
         PalletRegistry.adminsChangePallet,
         PalletRegistry.grandpaKeyChangePallet,
         PalletRegistry.resolutionIssuancePallet,
-        PalletRegistry.offchainTransactionPosPallet,
+        PalletRegistry.offchainTransactionPallet,
       };
       expect(pallets.length, 10);
     });
@@ -68,9 +68,9 @@ void main() {
       expect(PalletRegistry.cleanupRejectedProposalCall, 4);
     });
 
-    test('supportedSpecVersions 非空 + 当前为 spec=8', () {
+    test('supportedSpecVersions 非空 + 当前为 spec=10', () {
       expect(PalletRegistry.supportedSpecVersions, isNotEmpty);
-      expect(PalletRegistry.supportedSpecVersions, contains(8));
+      expect(PalletRegistry.supportedSpecVersions, contains(10));
     });
   });
 }

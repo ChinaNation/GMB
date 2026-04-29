@@ -10,7 +10,7 @@ import 'nonce_manager.dart';
 /// 扫码支付清算体系:**清算行(L2)** 体系的链上 extrinsic 构造(唯一路径)。
 ///
 /// 中文注释:
-/// - 对应 `offchain-transaction-pos` pallet 的 4 个 call(call_index 30/31/32/33):
+/// - 对应 `offchain-transaction` pallet 的 4 个 call(call_index 30/31/32/33):
 ///   `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank`。原省储行
 ///   `bind_clearing_institution` (call_index 9) 已在 Step 2b-iv-b 随老 pallet
 ///   删除。
@@ -25,7 +25,7 @@ class OnchainClearingBankRpc {
   /// Mortal era 周期(区块数),与 `OnchainRpc._eraPeriod` 对齐。
   static const int _eraPeriod = 64;
 
-  /// `OffchainTransactionPos` pallet index(citizenchain runtime 定义)。
+  /// `OffchainTransaction` pallet index(citizenchain runtime 定义)。
   static const int _palletIndex = 21;
 
   /// 4 个新 call_index(对应 lib.rs:586+ 中 call_index 30~33)。

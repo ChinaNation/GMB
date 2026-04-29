@@ -7,7 +7,7 @@ on:
       - ".github/workflows/wumin-ci.yml"
       - "wumin/**"
       - "citizenchain/runtime/src/lib.rs"
-      - "citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs"
+      - "citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs"
       - "citizenchain/runtime/governance/voting-engine/src/lib.rs"
   workflow_dispatch:
 
@@ -32,18 +32,18 @@ jobs:
         run: |
           RUNTIME_LIB=citizenchain/runtime/src/lib.rs
           REGISTRY=wumin/lib/signer/pallet_registry.dart
-          TRANSFER_PALLET=citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs
+          TRANSFER_PALLET=citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs
           VOTING_PALLET=citizenchain/runtime/governance/voting-engine/src/lib.rs
 
           SPEC=$(grep 'spec_version:' "$RUNTIME_LIB" | grep -o '[0-9]*')
           sed -i "s/supportedSpecVersions = {[^}]*}/supportedSpecVersions = {$SPEC}/" "$REGISTRY"
 
           BALANCES_IDX=$(grep -B1 'pub type Balances' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-          DUOQIAN_IDX=$(grep -B1 'pub type DuoqianTransferPow' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+          DUOQIAN_IDX=$(grep -B1 'pub type DuoqianTransfer' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
           VOTING_IDX=$(grep -B1 'pub type VotingEngine' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 
           sed -i "s/balancesPallet = [0-9]*/balancesPallet = $BALANCES_IDX/" "$REGISTRY"
-          sed -i "s/duoqianTransferPowPallet = [0-9]*/duoqianTransferPowPallet = $DUOQIAN_IDX/" "$REGISTRY"
+          sed -i "s/duoqianTransferPallet = [0-9]*/duoqianTransferPallet = $DUOQIAN_IDX/" "$REGISTRY"
           sed -i "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$REGISTRY"
 
           # Step 2 · 离线聚合改造后 vote_transfer 已删除,冷钱包不盲签 finalize_X,本段只同步 propose_transfer

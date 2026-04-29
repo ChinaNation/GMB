@@ -172,7 +172,7 @@ class OnchainRpc {
 
   /// 预估转账手续费（元）。
   ///
-  /// 与链上 `onchain_transaction_pow` 计算逻辑一致：
+  /// 与链上 `onchain_transaction` 计算逻辑一致：
   /// `fee = max(amount_fen * Perbill(1_000_000), 10 fen)`
   ///
   /// - 费率 0.1%（`Perbill::from_parts(1_000_000)`）

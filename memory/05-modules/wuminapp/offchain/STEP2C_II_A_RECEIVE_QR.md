@@ -24,7 +24,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 
 ## 2. 关键决策:`shenfen_id` 从哪里来?
 
-链上 `OffchainTransactionPos::UserBank[user]` 存的是清算行**主账户** `AccountId32`
+链上 `OffchainTransaction::UserBank[user]` 存的是清算行**主账户** `AccountId32`
 (32 字节),**不是** SFID `shenfen_id` 字符串。但收款 QR 里写的是 `shenfen_id`
 (付款方用 SFID 公开 API 反查主账户做同行校验)。从 `AccountId32` 反查
 `shenfen_id` 需要 SFID 后端配一个 "按主账户 hex 精确查" 端点,SFID 公开

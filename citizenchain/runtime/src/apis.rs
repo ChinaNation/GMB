@@ -272,7 +272,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pow_difficulty_module::PowDifficultyApi<Block> for Runtime {
+    impl pow_difficulty::PowDifficultyApi<Block> for Runtime {
         fn current_pow_difficulty() -> u64 {
             PowDifficulty::current_difficulty()
         }

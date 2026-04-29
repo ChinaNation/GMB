@@ -988,7 +988,7 @@ async fn submit_bind_sfid_extrinsic(
         hex::decode(&credential.signature).map_err(|e| format!("signature hex decode: {e}"))?;
 
     let payload = tx(
-        "SfidCodeAuth",
+        "SfidSystem",
         "bind_sfid",
         vec![Value::named_composite([
             ("binding_id", Value::from_bytes(binding_id_bytes)),
@@ -1086,7 +1086,7 @@ async fn submit_unbind_sfid_extrinsic(
 
     // unbind_sfid(target: AccountId) — call_index 1
     let payload = tx(
-        "SfidCodeAuth",
+        "SfidSystem",
         "unbind_sfid",
         vec![Value::from_bytes(target_arr.to_vec())],
     );

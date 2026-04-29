@@ -51,4 +51,4 @@
 
 ## 验收备注
 
-- `WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmarks` 当前在 wasm 子构建中触发上游 `byte-slice-cast`/`parity-scale-codec` 的 `std` 特性问题；改用 `SKIP_WASM_BUILD=1 WASM_BUILD_FROM_SOURCE=1` 后，继续卡在既有 `offchain-transaction-pos` 与 `duoqian-manage-pow` benchmark 签名问题。新模块自身的 benchmark 默认特性编译已通过。
+- `WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmarks` 当前在 wasm 子构建中触发上游 `byte-slice-cast`/`parity-scale-codec` 的 `std` 特性问题；改用 `SKIP_WASM_BUILD=1 WASM_BUILD_FROM_SOURCE=1` 后，继续卡在既有 `offchain-transaction` 与 `duoqian-manage` benchmark 签名问题。新模块自身的 benchmark 默认特性编译已通过。

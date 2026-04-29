@@ -4,7 +4,7 @@
 - **范围**:扫码支付清算体系 Step 1 在 **Node 层**的已落地代码
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **总任务卡**:`memory/08-tasks/open/20260419-扫码支付-step1-同行MVP.md`
-- **Runtime 对应文档**:`memory/05-modules/citizenchain/runtime/transaction/offchain-transaction-pos/STEP1_TECHNICAL.md`
+- **Runtime 对应文档**:`memory/05-modules/citizenchain/runtime/transaction/offchain-transaction/STEP1_TECHNICAL.md`
 
 ---
 
@@ -78,7 +78,7 @@ Step 2 起增加:
 Step 2 补齐:
 - 从 `ledger.pending` 取 batch
 - 清算行多签签批次
-- 构造 `offchain_transaction_pos::Call::submit_offchain_batch` extrinsic
+- 构造 `offchain_transaction::Call::submit_offchain_batch` extrinsic
 - 通过 `TransactionPool` 提交
 
 ### 3.4 `offchain/settlement/listener.rs`

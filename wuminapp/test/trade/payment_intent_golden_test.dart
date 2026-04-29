@@ -5,7 +5,7 @@ import 'package:wuminapp_mobile/trade/offchain/payment_intent.dart';
 
 /// 扫码支付 Step 2c-ii-a 新增:**跨端 golden vectors**。
 ///
-/// 本测试与 `citizenchain/runtime/transaction/offchain-transaction-pos/src/batch_item.rs::tests`
+/// 本测试与 `citizenchain/runtime/transaction/offchain-transaction/src/batch_item.rs::tests`
 /// 中的 `golden_fixture1/2/3` 三组 fixture **逐字节同步**:相同输入 → 相同
 /// SCALE 编码 → 相同 `signing_hash`。任一端实现漂移(字段顺序 / 字节序 /
 /// 签名域前缀 / 哈希算法)都会立即断言失败,两端 CI 同时报红。

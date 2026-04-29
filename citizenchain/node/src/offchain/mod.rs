@@ -124,7 +124,7 @@ pub fn start_clearing_bank_components(
     })
 }
 
-const PALLET_NAME: &[u8] = b"OffchainTransactionPos";
+const PALLET_NAME: &[u8] = b"OffchainTransaction";
 
 /// 构造 `LastClearingBatchSeq[bank]` 的 storage key。
 fn last_clearing_batch_seq_key(bank: &AccountId32) -> StorageKey {

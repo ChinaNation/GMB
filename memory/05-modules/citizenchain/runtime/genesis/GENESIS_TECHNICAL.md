@@ -81,7 +81,7 @@ pub trait DeveloperUpgradeCheck {
 ### 被读取方
 | 模块 | 读取内容 |
 |------|----------|
-| `pow-difficulty-module` | `target_block_time_ms()` — 每 600 块调整难度 |
+| `pow-difficulty` | `target_block_time_ms()` — 每 600 块调整难度 |
 | `runtime-upgrade` | `DeveloperUpgradeCheck::is_enabled()` — 判断升级路径 |
 | 节点层（矿工） | `GenesisPalletApi::target_block_time_ms()` — 出块间隔 |
 

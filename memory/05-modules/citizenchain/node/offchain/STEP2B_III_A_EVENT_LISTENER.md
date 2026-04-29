@@ -37,7 +37,7 @@ event_listener(本步) → ledger.on_payment_settled → pending 移除
 | `run(self: Arc<Self>, client: Arc<FullClient>)` | 新增 async 长循环:订阅 `client.import_notification_stream()`,只处理 `is_new_best` 的 notification,把 `notification.hash` 交给 `process_block` |
 | `process_block(&self, client: &FullClient, block_hash: H256)` | 新增:`client.storage(block_hash, &system_events_storage_key())` 读 `System::Events` 原始字节 → `Vec<EventRecord<runtime::RuntimeEvent, H256>>` SCALE 解码 → 遍历 `convert_event` → `self.handle(ev)` |
 | `system_events_storage_key()` | 新增工具函数:`StorageKey(twox_128("System") ++ twox_128("Events"))` |
-| `convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent>` | 新增 `pub` 函数:pattern-match `RuntimeEvent::OffchainTransactionPos(inner)` 的 5 个变体(`Deposited` / `Withdrawn` / `PaymentSettled` / `BankBound` / `BankSwitched`);其他事件(费率治理、批次级别)返回 `None` |
+| `convert_event(ev: runtime::RuntimeEvent) -> Option<OffchainChainEvent>` | 新增 `pub` 函数:pattern-match `RuntimeEvent::OffchainTransaction(inner)` 的 5 个变体(`Deposited` / `Withdrawn` / `PaymentSettled` / `BankBound` / `BankSwitched`);其他事件(费率治理、批次级别)返回 `None` |
 
 `handle()` 保持原样:已经写好的 `PaymentSettled` 分支会自动调 `ledger.on_payment_settled(tx_id, &payer, &recipient, amount, fee)`,本步只负责把链上事件喂进来。
 
@@ -104,7 +104,7 @@ new_best block  ← import_notification_stream
 ### 4.1 为何订 `import_notification_stream` 而非 `finality_notification_stream`
 
 - **延迟**:扫码支付要求端到端 ≤30 秒。等 GRANDPA finality(~1-2 分钟)会让用户/商户长期看到"待确认"状态,体验差。
-- **reorg 安全**:runtime 层已在 `OffchainTransactionPos::submit_offchain_batch_v2` 里通过 `BatchNonce` + `accepted_tx_ids` 防重;reorg 时同一 `tx_id` 的 `on_payment_settled` 即使被重复调用,`ledger.pending` 中找不到(已被前次清理)就是 no-op。
+- **reorg 安全**:runtime 层已在 `OffchainTransaction::submit_offchain_batch_v2` 里通过 `BatchNonce` + `accepted_tx_ids` 防重;reorg 时同一 `tx_id` 的 `on_payment_settled` 即使被重复调用,`ledger.pending` 中找不到(已被前次清理)就是 no-op。
 - **简洁**:只处理 `notification.is_new_best` 过滤掉 reorg 出去的分支 block,避免把已回滚块里的事件再次分发。
 
 ### 4.2 为何直接读 `System::Events` storage 而非用 Substrate 的 `EventProvider`
@@ -115,7 +115,7 @@ new_best block  ← import_notification_stream
 
 ### 4.3 为何 `convert_event` 里对其他事件返回 `None` 而非 panic
 
-runtime 的 `OffchainTransactionPos::Event` 还有(或将有)费率治理、批次级别通知等事件,这些不影响本地 ledger 状态。用 `_ => None` 是"显式忽略但保留 match 完整性"的标准 pattern;未来加新事件变体时,想接入的话 explicit 加分支,不想接入的留给 `_`。
+runtime 的 `OffchainTransaction::Event` 还有(或将有)费率治理、批次级别通知等事件,这些不影响本地 ledger 状态。用 `_ => None` 是"显式忽略但保留 match 完整性"的标准 pattern;未来加新事件变体时,想接入的话 explicit 加分支,不想接入的留给 `_`。
 
 ---
 
@@ -167,7 +167,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 - 删除 `node/src/offchain_{ledger,packer,gossip}.rs`
 - 删除 `main.rs` 里对应 mod 声明
 - 删除 `rpc.rs::FullDeps` 中 `offchain_ledger` / `offchain_shenfen_id` / `offchain_gossip_tx`(老省储行清算字段)
-- runtime `offchain-transaction-pos` 删除 call_index 0 旧 `submit_offchain_batch` / 9 旧 `bind_clearing_institution` / 1/2 旧 `propose_institution_rate`
+- runtime `offchain-transaction` 删除 call_index 0 旧 `submit_offchain_batch` / 9 旧 `bind_clearing_institution` / 1/2 旧 `propose_institution_rate`
 
 ## 8. 变更记录
 

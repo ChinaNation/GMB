@@ -61,7 +61,7 @@
   - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/ci-wasm/citizenchain.compact.compressed.wasm cargo test --offline --manifest-path citizenchain/Cargo.toml -p citizenchain governance_module_tags_are_globally_unique`
   - `flutter test test/signer/pallet_registry_test.dart`（在 `wumin/` 下）
 - 2026-04-29 复查补充：
-  - 已修复额外 runtime 单测编译挡板：`duoqian_manage_pow::propose_create` 测试构造补 `account_name`，`verify_institution_registration` 测试调用补 `signing_province = None`。
+  - 已修复额外 runtime 单测编译挡板：`duoqian_manage::propose_create` 测试构造补 `account_name`，`verify_institution_registration` 测试调用补 `signing_province = None`。
   - 已补 `citizenchain/scripts/benchmark.sh` 中两个旧 benchmark 映射残留，统一为 `resolution_destro` / `runtime_upgrade`。
   - 主工作树以 `rg --hidden --no-ignore` 复扫旧模块名、旧 crate 标识、旧 runtime pallet 类型名、旧 Dart camelCase 常量名、旧技术文档文件名，均为 0 命中；`.claude/` 为 gitignore 忽略的本地工具目录，未纳入可提交源码/文档改名范围。
 - 外部验证受阻（非本次两个模块改名范围）：

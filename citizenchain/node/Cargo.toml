@@ -82,13 +82,13 @@ frame-benchmarking-cli = { workspace = true, default-features = true }
 
 # Local Dependencies
 citizenchain = { workspace = true }
-pow-difficulty-module = { path = "../runtime/otherpallet/pow-difficulty-module", default-features = true }
+pow-difficulty = { path = "../runtime/otherpallet/pow-difficulty", default-features = true }
 genesis-pallet = { path = "../runtime/genesis", default-features = true }
-fullnode-pow-reward = { path = "../runtime/issuance/fullnode-pow-reward", default-features = true }
-onchain-transaction-pow = { path = "../runtime/transaction/onchain-transaction-pow", default-features = true }
+fullnode-issuance = { path = "../runtime/issuance/fullnode-issuance", default-features = true }
+onchain-transaction = { path = "../runtime/transaction/onchain-transaction", default-features = true }
 # 扫码支付 Step 2b-ii-β-2-a 新增:node 端 pool_submitter 需要直接 use
-# offchain-transaction-pos 的 batch_item / pallet::Call 类型构造 extrinsic。
-offchain-transaction-pos = { path = "../runtime/transaction/offchain-transaction-pos", default-features = true }
+# offchain-transaction 的 batch_item / pallet::Call 类型构造 extrinsic。
+offchain-transaction = { path = "../runtime/transaction/offchain-transaction", default-features = true }
 frame-support = { workspace = true, default-features = true }
 frame-system-rpc-runtime-api = { workspace = true, default-features = true }
 

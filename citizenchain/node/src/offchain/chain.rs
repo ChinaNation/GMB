@@ -1,6 +1,6 @@
 // 链上 ClearingBankNodes / NodePeerToInstitution storage 查询。
 //
-// pallet 名 = "OffchainTransactionPos"(runtime 注册的实例名,见 runtime/src/lib.rs:366)。
+// pallet 名 = "OffchainTransaction"(runtime 注册的实例名,见 runtime/src/lib.rs:366)。
 // storage 名 = "ClearingBankNodes" / "NodePeerToInstitution"。
 // key 哈希器 = Blake2_128Concat(blake2_128 + raw_key)。
 // key 数据 = SCALE 编码的 BoundedVec<u8, ConstU32<64>>:[compact_u32_len][bytes]。
@@ -21,7 +21,7 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// 链上 `ClearingBankNodeInfo<AccountId, BlockNumber>` 在 node 端的 SCALE 镜像。
 ///
-/// runtime 端定义见 [citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs:65]。
+/// runtime 端定义见 [citizenchain/runtime/transaction/offchain-transaction/src/lib.rs:65]。
 /// 字段顺序 / 边界长度必须与 runtime 严格一致,SCALE 解码才能成功。
 #[derive(Decode, Encode)]
 struct OnChainNodeInfo {
@@ -57,11 +57,11 @@ fn encode_sfid_key_data(sfid_id: &str) -> Result<Vec<u8>, String> {
     Ok(bv.encode())
 }
 
-/// 构造 `OffchainTransactionPos::ClearingBankNodes(sfid_id)` 的 storage key(hex 含 0x 前缀)。
+/// 构造 `OffchainTransaction::ClearingBankNodes(sfid_id)` 的 storage key(hex 含 0x 前缀)。
 pub fn clearing_bank_nodes_key(sfid_id: &str) -> Result<String, String> {
     let key_data = encode_sfid_key_data(sfid_id)?;
     Ok(storage_keys::map_key(
-        "OffchainTransactionPos",
+        "OffchainTransaction",
         "ClearingBankNodes",
         &key_data,
     ))
@@ -107,13 +107,13 @@ pub fn fetch_clearing_bank_node(
 
 /// 用 `state_getKeysPaged` 估算当前已声明节点的总数,供网络面板"清算节点"指标。
 ///
-/// 实现策略:用 `OffchainTransactionPos::ClearingBankNodes` 的 storage 前缀
+/// 实现策略:用 `OffchainTransaction::ClearingBankNodes` 的 storage 前缀
 /// (twox_128(pallet) || twox_128(storage))分页拉 key,每次最多 1000 条;
 /// 一直拉到返回长度 < 1000 即代表全部取完。
 pub fn count_clearing_bank_nodes() -> Result<u64, String> {
     let prefix = format!(
         "0x{}{}",
-        hex::encode(storage_keys::twox_128(b"OffchainTransactionPos")),
+        hex::encode(storage_keys::twox_128(b"OffchainTransaction")),
         hex::encode(storage_keys::twox_128(b"ClearingBankNodes")),
     );
 
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn clearing_bank_nodes_key_starts_with_pallet_prefix() {
         let key = clearing_bank_nodes_key("SFR-12345-AAAA-678901234-20260101").unwrap();
-        let pallet_hex = hex::encode(storage_keys::twox_128(b"OffchainTransactionPos"));
+        let pallet_hex = hex::encode(storage_keys::twox_128(b"OffchainTransaction"));
         let storage_hex = hex::encode(storage_keys::twox_128(b"ClearingBankNodes"));
         let prefix = format!("0x{pallet_hex}{storage_hex}");
         assert!(key.starts_with(&prefix), "实际 key:{key}");

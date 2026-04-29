@@ -87,7 +87,7 @@ virtual_balance = onchain_balance - local_pending - remote_pending
 
 ### 打包签名
 
-batch 签名消息构造：shenfen_id（补零到 48 字节）+ batch_seq（LE u64）+ 每笔交易的 tx_id/payer/recipient/transfer_amount/fee_amount 拼接后取 BLAKE2-256 哈希，使用省储行管理员 sr25519 密钥签名。与链上 `offchain-transaction-pos` 的验证逻辑保持一致。
+batch 签名消息构造：shenfen_id（补零到 48 字节）+ batch_seq（LE u64）+ 每笔交易的 tx_id/payer/recipient/transfer_amount/fee_amount 拼接后取 BLAKE2-256 哈希，使用省储行管理员 sr25519 密钥签名。与链上 `offchain-transaction` 的验证逻辑保持一致。
 
 ### 结算生命周期
 

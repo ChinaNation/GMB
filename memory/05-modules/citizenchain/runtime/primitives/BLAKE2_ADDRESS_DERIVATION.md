@@ -101,7 +101,7 @@ address  = BLAKE2-256(preimage)
 - [primitives/china/china_cb.rs](../../../../../citizenchain/runtime/primitives/china/china_cb.rs) — 国储会 + 省储会常量（含 `NRC_ANQUAN_ADDRESS`）
 - [primitives/china/china_ch.rs](../../../../../citizenchain/runtime/primitives/china/china_ch.rs) — 省储行常量（含 `stake_address`）
 - [primitives/china/china_zb.rs](../../../../../citizenchain/runtime/primitives/china/china_zb.rs) — 汇总保留名单 + `is_reserved_main_address()`
-- [duoqian-manage-pow](../../../../../citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs) — 链上 `derive_institution_address(sfid_id, role)` + `derive_personal_duoqian_address(creator, account_name)` + `role_from_account_name` 辅助
+- [duoqian-manage](../../../../../citizenchain/runtime/transaction/duoqian-manage/src/lib.rs) — 链上 `derive_institution_address(sfid_id, role)` + `derive_personal_duoqian_address(creator, account_name)` + `role_from_account_name` 辅助
 - [tools/duoqian.py](../../../../../tools/duoqian.py) — 统一生成器
 
 ## 历史遗留（已彻底退役）

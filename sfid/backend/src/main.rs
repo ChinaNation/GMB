@@ -1568,7 +1568,7 @@ async fn debug_bootstrap_signer(
             let pallets: Vec<String> = metadata.pallets().map(|p| p.name().to_string()).collect();
             let sfid_calls: Vec<String> = metadata
                 .pallets()
-                .find(|p| p.name() == "SfidCodeAuth")
+                .find(|p| p.name() == "SfidSystem")
                 .and_then(|p| p.call_variants())
                 .map(|calls| calls.iter().map(|c| c.name.clone()).collect())
                 .unwrap_or_default();
