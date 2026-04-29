@@ -39,5 +39,28 @@ void main() {
       await ClearingBankPrefs.save(0, 'NEW');
       expect(await ClearingBankPrefs.load(0), 'NEW');
     });
+
+    test('saveSnapshot stores endpoint data', () async {
+      await ClearingBankPrefs.saveSnapshot(
+        0,
+        const ClearingBankBindingSnapshot(
+          sfidId: 'SFR-GD-SZ01-CB01-N9-D8',
+          institutionName: '测试清算行',
+          mainAccount: 'aa',
+          feeAccount: 'bb',
+          peerId: '12D3KooWTest',
+          rpcDomain: '127.0.0.1',
+          rpcPort: 9944,
+          boundAtMs: 1,
+          lastVerifiedAtMs: 2,
+        ),
+      );
+
+      final snapshot = await ClearingBankPrefs.loadSnapshot(0);
+      expect(snapshot, isNotNull);
+      expect(snapshot!.sfidId, 'SFR-GD-SZ01-CB01-N9-D8');
+      expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
+      expect(await ClearingBankPrefs.load(0), 'SFR-GD-SZ01-CB01-N9-D8');
+    });
   });
 }

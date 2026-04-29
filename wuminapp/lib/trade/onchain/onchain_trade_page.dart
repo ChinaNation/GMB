@@ -23,6 +23,7 @@ import 'package:wuminapp_mobile/user/user.dart' show ContactBookPage;
 import 'package:wuminapp_mobile/user/user_service.dart' show UserContact;
 import 'package:wuminapp_mobile/trade/duoqian/duoqian_trade_page.dart';
 import 'package:wuminapp_mobile/trade/offchain/offchain_clearing_pay_page.dart';
+import 'package:wuminapp_mobile/rpc/clearing_bank_directory.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
 import 'package:wuminapp_mobile/wallet/ui/transaction_history_page.dart';
@@ -172,10 +173,9 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
   /// 扫码支付入口(Step 2c-i):扫商户收款码,解析 bank 字段后跳转到
   /// `OffchainClearingPayPage` 走新清算行体系支付。
   ///
-  /// - 商户码 `UserTransferBody.bank` 为 `shenfen_id`,`OffchainClearingPayPage`
-  ///   内部再用 SFID API 反查主账户地址并做同行校验。
-  /// - 未绑定钱包 / 扫码结果无 bank 字段 / 未配置清算行节点 WSS,均在此短路
-  ///   并提示用户。
+  /// - 商户码 `UserTransferBody.bank` 为收款方清算行 `shenfen_id`。
+  /// - 本入口先从链上 `ClearingBankNodes` 解析收款方清算行节点端点,再把支付
+  ///   意图提交给收款方清算行节点,与 runtime 的收款方主导模型对齐。
   Future<void> _openOffchainPay() async {
     if (_currentWallet == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -183,6 +183,7 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       );
       return;
     }
+    final wallet = _currentWallet!;
     final result = await Navigator.of(context).push<QrScanTransferResult>(
       MaterialPageRoute(
           builder: (_) => const QrScanPage(mode: QrScanMode.transfer)),
@@ -196,20 +197,17 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
       return;
     }
 
-    // 清算行扫码配置注入占位。打包时以 `--dart-define` 传入生产地址;
-    // dev 模式用 localhost。
     const sfidBaseUrl = String.fromEnvironment(
       'SFID_BASE_URL',
       defaultValue: 'http://127.0.0.1:8080',
     );
-    const clearingNodeWss = String.fromEnvironment(
-      'CLEARING_NODE_WSS',
-      defaultValue: '',
-    );
-    if (clearingNodeWss.isEmpty) {
+    final directory = ClearingBankDirectory(sfidBaseUrl: sfidBaseUrl);
+    final endpoint = await directory.fetchEndpoint(result.bank!);
+    if (!mounted) return;
+    if (endpoint == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('未配置清算行节点 WSS,请先在启动参数中设置 CLEARING_NODE_WSS'),
+          content: Text('收款方清算行尚未声明节点,无法扫码支付'),
         ),
       );
       return;
@@ -218,10 +216,10 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => OffchainClearingPayPage(
-          wallet: _currentWallet!,
+          wallet: wallet,
           toAddress: result.toAddress,
           recipientBankShenfenId: result.bank!,
-          clearingNodeWssUrl: clearingNodeWss,
+          clearingNodeWssUrl: endpoint.wssUrl,
           sfidBaseUrl: sfidBaseUrl,
           initialAmountYuan: result.amount,
           memo: result.memo,
@@ -311,9 +309,11 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('转账金额：${AmountFormat.format(amount, symbol: _selectedSymbol)}'),
+            Text(
+                '转账金额：${AmountFormat.format(amount, symbol: _selectedSymbol)}'),
             const SizedBox(height: 4),
-            Text('预估手续费：${AmountFormat.format(estimatedFee, symbol: _selectedSymbol)}'),
+            Text(
+                '预估手续费：${AmountFormat.format(estimatedFee, symbol: _selectedSymbol)}'),
             const Divider(height: 16),
             Text(
               '合计：${AmountFormat.format(amount + estimatedFee, symbol: _selectedSymbol)}',
@@ -348,8 +348,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
         final walletManager = WalletManager();
         await walletManager.authenticateForSigning();
         // 验证通过后，签名回调跳过二次验证
-        signCallback = (payload) => walletManager.signWithWalletNoAuth(
-            wallet.walletIndex, payload);
+        signCallback = (payload) =>
+            walletManager.signWithWalletNoAuth(wallet.walletIndex, payload);
       } else {
         // 冷钱包：扫码签名。
         signCallback = (Uint8List payload) async {
@@ -358,8 +358,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
           final toAddr = _toController.text.trim();
           // 千分位格式化，与 PayloadDecoder._fenToYuan 对齐
           final amountFormatted = AmountFormat.format(
-              AmountFormat.tryParse(_amountController.text) ?? 0,
-              symbol: '')
+                  AmountFormat.tryParse(_amountController.text) ?? 0,
+                  symbol: '')
               .trim();
           final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
@@ -560,7 +560,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                 Expanded(
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [ThousandSeparatorFormatter()],
                     style: const TextStyle(color: AppTheme.textPrimary),
                     decoration: const InputDecoration(
@@ -620,9 +621,12 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                     spacing: 16,
                     runSpacing: 8,
                     children: [
-                      _buildStatusText('待确认', _countByStatus('pending'), _statusColor('pending')),
-                      _buildStatusText('已确认', _countByStatus('confirmed'), _statusColor('confirmed')),
-                      _buildStatusText('失败', _countByStatus('failed'), _statusColor('failed')),
+                      _buildStatusText('待确认', _countByStatus('pending'),
+                          _statusColor('pending')),
+                      _buildStatusText('已确认', _countByStatus('confirmed'),
+                          _statusColor('confirmed')),
+                      _buildStatusText('失败', _countByStatus('failed'),
+                          _statusColor('failed')),
                     ],
                   ),
                 ),
@@ -738,7 +742,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         },
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
                           child: Row(
                             children: [
                               Container(
@@ -779,7 +784,8 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
                         onTap: _openOffchainPay,
                         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
                           child: Row(
                             children: [
                               Container(
@@ -876,7 +882,6 @@ class _OnchainTradePageState extends State<OnchainTradePage> {
     return null;
   }
 }
-
 
 String _toHex(List<int> bytes) {
   const chars = '0123456789abcdef';

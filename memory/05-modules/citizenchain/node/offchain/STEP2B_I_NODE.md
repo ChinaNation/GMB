@@ -55,6 +55,9 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 - `L3_PAY_SIGNING_DOMAIN = b"GMB_L3_PAY_V1"` 常量,与 runtime 端严格一致。
 - `NodePaymentIntent::signing_hash()`:重算签名哈希,用于 `sr25519_verify`。
 - `OffchainLedger::accept_payment(intent, sig, current_block, l2_ack_sig)`:完整扫码支付入账(验签 + nonce + 余额 + pending 入账)。
+- `OffchainLedger::accept_payment_with_chain_state(...)`:Step 3 跨行收款方节点入口。同行/本行付款继续用本地 `accounts`;跨行收款时使用链上
+  `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]` 加本地 pending
+  做早拒,不创建付款方 ghost 账户。
 - `OffchainLedger::reject_pending(tx_id)`:packer 失败回滚。
 - `OffchainLedger::take_pending_for_batch(max)`:按 `accepted_at` 升序取 pending,供 packer 上链。
 
@@ -62,6 +65,8 @@ Step 2b 拆成 4 个子步,本次交付 **2b-i · 业务逻辑**:
 - `cached_nonce[payer] + 1 == intent.nonce`(严格单调)
 - `confirmed - pending_debit >= amount + fee`(本地可用余额充足)
 - `!accepted_tx_ids.contains(tx_id)`(节点级防重)
+- 跨行收款方节点不写 `accounts[payer]`;连续跨行 pending 的 nonce 由
+  `max(chain_nonce, local_pending_nonce) + 1` 推进。
 
 ### 2.2 `rpc.rs`
 
@@ -158,3 +163,7 @@ Step 2b-iv:
 - 2026-04-29:二次目录收口。`offchain_keystore.rs` 迁入 `offchain/keystore.rs`,
   清算行启动逻辑迁入 `offchain/bootstrap.rs`,前端清算行 API 与样式迁入
   `frontend/offchain/api.ts` / `styles.css`。
+- 2026-04-29:Step 3 跨行 pending 补齐。`rpc.rs` 新增 `DepositBalance` /
+  `L3PaymentNonce` storage 读取,`submitPayment` 在跨行时把链上余额和 nonce
+  注入 ledger;`queryNextNonce` 取链上与本地 pending 最大值。`cargo test -p node
+  offchain` 65 个测试通过。

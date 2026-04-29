@@ -48,9 +48,9 @@ class SfidPublicApi {
     final uri = Uri.parse('$baseUrl/api/v1/app/clearing-banks/search')
         .replace(queryParameters: params);
 
-    final resp = await _http
-        .get(uri, headers: const {'accept': 'application/json'})
-        .timeout(const Duration(seconds: 10));
+    final resp = await _http.get(uri, headers: const {
+      'accept': 'application/json'
+    }).timeout(const Duration(seconds: 10));
     if (resp.statusCode != 200) {
       throw Exception(
         'SFID 清算行搜索失败:HTTP ${resp.statusCode} ${resp.reasonPhrase}',
@@ -76,6 +76,10 @@ class ClearingBankInfo {
     required this.sfidId,
     required this.institutionName,
     required this.a3,
+    required this.subType,
+    required this.parentSfidId,
+    required this.parentInstitutionName,
+    required this.parentA3,
     required this.province,
     required this.city,
     required this.mainAccount,
@@ -91,6 +95,14 @@ class ClearingBankInfo {
   /// 主体属性:`SFR`(私法人)或 `FFR`(非法人)。
   final String a3;
 
+  /// 私法人子类型,清算行白名单要求 `JOINT_STOCK`。
+  final String? subType;
+
+  /// FFR 所属法人信息,用于手机端展示父子结构。
+  final String? parentSfidId;
+  final String? parentInstitutionName;
+  final String? parentA3;
+
   final String province;
   final String city;
 
@@ -105,6 +117,10 @@ class ClearingBankInfo {
       sfidId: (json['sfid_id'] as String?) ?? '',
       institutionName: (json['institution_name'] as String?) ?? '',
       a3: (json['a3'] as String?) ?? '',
+      subType: json['sub_type'] as String?,
+      parentSfidId: json['parent_sfid_id'] as String?,
+      parentInstitutionName: json['parent_institution_name'] as String?,
+      parentA3: json['parent_a3'] as String?,
       province: (json['province'] as String?) ?? '',
       city: (json['city'] as String?) ?? '',
       mainAccount: json['main_account'] as String?,

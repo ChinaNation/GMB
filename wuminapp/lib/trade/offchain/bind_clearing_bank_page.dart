@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:wuminapp_mobile/rpc/clearing_bank_directory.dart';
 import 'package:wuminapp_mobile/rpc/onchain_clearing_bank.dart';
 import 'package:wuminapp_mobile/rpc/sfid_public.dart';
 import 'package:wuminapp_mobile/trade/offchain/clearing_bank_prefs.dart';
@@ -22,10 +23,14 @@ class BindClearingBankPage extends StatefulWidget {
     super.key,
     required this.wallet,
     required this.bank,
+    this.endpoint,
+    this.switchMode = false,
   });
 
   final WalletProfile wallet;
   final ClearingBankInfo bank;
+  final ClearingBankNodeEndpoint? endpoint;
+  final bool switchMode;
 
   @override
   State<BindClearingBankPage> createState() => _BindClearingBankPageState();
@@ -39,7 +44,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
     final b = widget.bank;
     final name = b.institutionName.isEmpty ? '(未命名机构)' : b.institutionName;
     return Scaffold(
-      appBar: AppBar(title: const Text('绑定清算行')),
+      appBar: AppBar(title: Text(widget.switchMode ? '切换清算行' : '绑定清算行')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -82,7 +87,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('确认绑定'),
+                : Text(widget.switchMode ? '确认切换' : '确认绑定'),
           ),
         ],
       ),
@@ -122,30 +127,64 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
       await walletManager.authenticateForSigning();
 
       final rpc = OnchainClearingBankRpc();
-      final result = await rpc.bindClearingBank(
-        fromAddress: wallet.address,
-        signerPubkey: Uint8List.fromList(pubkeyBytes),
-        bankMainAccount: Uint8List.fromList(mainAccountBytes),
-        sign: (payload) =>
-            walletManager.signWithWalletNoAuth(wallet.walletIndex, payload),
-      );
+      final result = widget.switchMode
+          ? await rpc.switchBank(
+              fromAddress: wallet.address,
+              signerPubkey: Uint8List.fromList(pubkeyBytes),
+              newBankMainAccount: Uint8List.fromList(mainAccountBytes),
+              sign: (payload) => walletManager.signWithWalletNoAuth(
+                  wallet.walletIndex, payload),
+            )
+          : await rpc.bindClearingBank(
+              fromAddress: wallet.address,
+              signerPubkey: Uint8List.fromList(pubkeyBytes),
+              bankMainAccount: Uint8List.fromList(mainAccountBytes),
+              sign: (payload) => walletManager.signWithWalletNoAuth(
+                  wallet.walletIndex, payload),
+            );
 
-      // 扫码支付 Step 2c-ii-a:绑定成功同步持久化 `shenfen_id`,供后续收款码页面
-      // `bank` 字段回填。链上 `UserBank` 只存主账户,没 `shenfen_id`,不在这里落盘
-      // 将无法在本地重建收款码。
-      await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId);
+      // 中文注释:绑定成功后写入完整清算行快照。链上仍是最终权威,本地快照只用于
+      // 手机端页面展示、充值提现和扫码付款时快速定位清算行节点端点。
+      final endpoint = widget.endpoint;
+      if (endpoint != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await ClearingBankPrefs.saveSnapshot(
+          wallet.walletIndex,
+          ClearingBankBindingSnapshot(
+            sfidId: widget.bank.sfidId,
+            institutionName: widget.bank.institutionName,
+            mainAccount: _normalizeHex(widget.bank.mainAccount ?? ''),
+            feeAccount: widget.bank.feeAccount == null
+                ? null
+                : _normalizeHex(widget.bank.feeAccount!),
+            peerId: endpoint.peerId,
+            rpcDomain: endpoint.rpcDomain,
+            rpcPort: endpoint.rpcPort,
+            boundAtMs: now,
+            lastVerifiedAtMs: now,
+          ),
+        );
+      } else {
+        await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('绑定已提交,tx=${_short(result.txHash)},等待链上确认')),
+        SnackBar(
+          content: Text(
+            '${widget.switchMode ? '切换' : '绑定'}已提交,tx=${_short(result.txHash)},等待链上确认',
+          ),
+        ),
       );
       Navigator.pop(context, true);
     } on WalletAuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('绑定失败:$e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('绑定失败:$e')));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -159,6 +198,11 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
       out.add(int.parse(text.substring(i, i + 2), radix: 16));
     }
     return out;
+  }
+
+  static String _normalizeHex(String input) {
+    final text = input.startsWith('0x') ? input.substring(2) : input;
+    return text.toLowerCase();
   }
 
   static String _short(String h) {
