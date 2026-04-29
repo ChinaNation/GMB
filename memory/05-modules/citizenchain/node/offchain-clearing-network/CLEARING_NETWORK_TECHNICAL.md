@@ -61,9 +61,9 @@ T=0.5s  上海省储行查虚拟余额：链上 1500 - 远程 1000 = 500 → 不
 |------|------|
 | `node/src/offchain_gossip.rs` | P2P 广播协议定义、消息收发 worker |
 | `node/src/offchain_ledger.rs` | 账本扩展（remote_pending_by_payer、remote_pending_txs） |
-| `node/src/rpc.rs` | 支付确认后发送 PendingDebit 广播 |
+| `node/src/core/rpc.rs` | 支付确认后发送 PendingDebit 广播 |
 | `node/src/offchain_packer.rs` | 结算成功后发送 Settled 广播 |
-| `node/src/service.rs` | 注册 P2P 协议、启动 gossip worker |
+| `node/src/core/service.rs` | 注册 P2P 协议、启动 gossip worker |
 
 ## 8. 节点角色
 

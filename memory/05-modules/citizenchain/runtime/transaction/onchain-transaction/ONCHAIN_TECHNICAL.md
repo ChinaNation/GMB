@@ -210,7 +210,7 @@
 
 ### 外部依赖方
 - **node RPC `fee_blockFees`**（`node/src/rpc.rs`）：累加指定区块内所有 `FeePaid.fee`，返回该区块的手续费总额。
-- **nodeui mining-dashboard**（`nodeui/backend/src/mining/mining-dashboard/mod.rs`）：读取 `fee_blockFees` 统计矿工收益。
+- **节点桌面端 mining-dashboard**（`node/src/mining/mining-dashboard/mod.rs`）：读取 `fee_blockFees` 统计矿工收益。
 - **runtime 注册**（`runtime/src/lib.rs` pallet_index 4）：`OnchainTransaction` 发出事件。
 
 ### 注意

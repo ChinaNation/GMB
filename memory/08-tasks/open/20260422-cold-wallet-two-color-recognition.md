@@ -77,7 +77,7 @@ make_transfer_sigs
 
 ### citizenchain/node Tauri UI 对齐 Registry
 
-`src/ui/governance/signing.rs` + `src/ui/transaction/mod.rs` 全部 `build_X_sign_request`:
+`src/governance/signing.rs` + `src/transaction/mod.rs` 全部 `build_X_sign_request`:
 - `display.action` 字面对齐 Registry
 - `display.fields` 每个 `key` 字面对齐 Registry
 - 顺序和 Registry 一致
@@ -164,7 +164,7 @@ make_transfer_sigs
 ---
 
 ### PR-D ✅ citizenchain 节点 UI 对齐(2026-04-22 完成, Blockchain Agent)
-- 默认范围:`citizenchain/node/src/ui/` + `citizenchain/node/frontend/`
+- 默认范围:`citizenchain/node/src/` + `citizenchain/node/frontend/`
 - ✅ 审计 `signing.rs` 全部 8 个 `build_X_sign_request` 的 display.fields
   key 逐条对齐 Registry(internal_vote / joint_vote / propose_transfer /
   propose_safety_fund_transfer / propose_sweep_to_main /

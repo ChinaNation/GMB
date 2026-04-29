@@ -208,7 +208,7 @@ should_skip_residual_scan() {
       return 0
       ;;
     # 中文注释：Flutter 生成目录里的 CMake 文件带默认模板注释，属于框架产物，不应拦截 PR。
-    citizenchain/nodeui/linux/flutter/CMakeLists.txt|citizenchain/nodeui/windows/flutter/CMakeLists.txt)
+    citizenchain/node/linux/flutter/CMakeLists.txt|citizenchain/node/windows/flutter/CMakeLists.txt)
       return 0
       ;;
     *)

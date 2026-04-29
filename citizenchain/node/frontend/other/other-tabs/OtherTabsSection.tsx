@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, sanitizeError } from '../../api';
-import type { OtherTabsPayload } from '../../types';
+import { sanitizeError } from '../../core/tauri';
+import { otherTabsApi as api } from './api';
+import type { OtherTabsPayload } from './types';
 
 type Props = {
   activeKey: 'whitepaper' | 'party' | 'constitution';

@@ -7,26 +7,24 @@
 
 #![warn(missing_docs)]
 
-mod benchmarking;
-mod chain_spec;
-mod cli;
-mod command;
-#[cfg(feature = "gpu-mining")]
-mod gpu_miner;
+mod core;
+mod desktop;
+mod governance;
+mod home;
+mod mining;
+mod other;
 // 扫码支付清算体系 清算行节点组件。
 // Step 2b-iv-a 清理:删除旧 offchain_{ledger,packer,gossip}.rs(省储行清算模型
 mod offchain;
-mod rpc;
-mod service;
-mod tls_cert;
-mod ui;
+mod settings;
+mod shared;
 
 fn main() {
     // 有子命令（build-spec、purge-chain 等）→ CLI 工具模式
     let args: Vec<String> = std::env::args().collect();
     let has_subcommand = args.len() > 1 && !args[1].starts_with('-');
     if has_subcommand {
-        if let Err(e) = command::run() {
+        if let Err(e) = crate::core::command::run() {
             eprintln!("{e}");
             std::process::exit(1);
         }
@@ -37,7 +35,7 @@ fn main() {
     // 用来在另一个端口/数据目录跑诊断节点，不影响桌面 GUI 实例。
     if std::env::var("CITIZENCHAIN_HEADLESS").is_ok() {
         eprintln!("CITIZENCHAIN_HEADLESS 已设置，以无头模式运行节点...");
-        if let Err(e) = command::run() {
+        if let Err(e) = crate::core::command::run() {
             eprintln!("{e}");
             std::process::exit(1);
         }
@@ -47,11 +45,11 @@ fn main() {
     // 检测是否有显示环境（Linux 看 DISPLAY/WAYLAND_DISPLAY，macOS/Windows 始终有）
     if has_display() {
         // 有显示器 → 桌面窗口 + 内嵌节点
-        ui::run_desktop();
+        desktop::run_desktop();
     } else {
         // 无显示器（服务器）→ 直接运行节点
         eprintln!("未检测到显示环境，以无窗口模式运行节点...");
-        if let Err(e) = command::run() {
+        if let Err(e) = crate::core::command::run() {
             eprintln!("{e}");
             std::process::exit(1);
         }

@@ -1,10 +1,11 @@
 // 手续费划转提案页面：金额输入 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
-import { QrScanner } from './QrScanner';
-import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { hexToSs58 } from '../shared/ss58';
+import { QrScanner } from '../shared/qr/QrScanner';
+import { governanceApi as api } from './api';
+import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   shenfenId: string;

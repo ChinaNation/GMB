@@ -110,7 +110,7 @@ frame-system-rpc-runtime-api = { workspace = true, default-features = true }
 
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
-(offchain/ 子树 grep 0 命中,pool_submitter 无 error/warning;链接阶段 ui/mod.rs:91 tauri proc macro 受 frontend/dist 门禁,与本步无关)
+(offchain/ 子树 grep 0 命中,pool_submitter 无 error/warning;链接阶段 desktop.rs tauri proc macro 受 frontend/dist 门禁,与本步无关)
 ```
 
 ## 6. Step 2b-ii-β-2-b 对接清单

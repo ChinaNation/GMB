@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::ui::governance::signing::{
+use crate::governance::signing::{
     pubkey_to_ss58, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
 };
 

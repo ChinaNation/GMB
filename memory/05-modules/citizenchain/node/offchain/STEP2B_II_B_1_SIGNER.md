@@ -89,7 +89,7 @@ impl BatchSigner for KeystoreBatchSigner {
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
   offchain/ 子树零错误零警告
-  节点链接阶段在 ui/mod.rs:91 tauri proc macro 受 frontend/dist 门禁(项目固有)
+  节点链接阶段在 desktop.rs tauri proc macro 受 frontend/dist 门禁(项目固有)
 ```
 
 ## 6. Step 2b-ii-β-2 对接清单

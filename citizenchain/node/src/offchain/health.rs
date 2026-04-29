@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::net::ToSocketAddrs;
 use std::time::Duration;
 
-use crate::ui::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
+use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 
 use super::types::{ConnectivityCheck, ConnectivityTestReport};
 
@@ -43,7 +43,7 @@ pub fn run_endpoint_connectivity_test(
         return finalize(checks);
     }
 
-    // 远端 HTTP RPC URL(NodeUI 这里探测的是 wss/RPC 是否上线;HTTP 9944 与 wss 共用 substrate
+    // 远端 HTTP RPC URL(节点桌面端这里探测的是 wss/RPC 是否上线;HTTP 9944 与 wss 共用 substrate
     // jsonrpsee server,达到任一即代表节点 Listen 正常。SS58 prefix 校验也借这条链路完成)。
     let url = format!("http://{domain}:{port}/");
 

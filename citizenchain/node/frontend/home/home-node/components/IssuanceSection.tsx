@@ -1,5 +1,5 @@
-import { formatAmount } from '../../../format';
-import type { TotalIssuance, TotalStake } from '../../../types';
+import { formatAmount } from '../../../shared/format';
+import type { TotalIssuance, TotalStake } from '../types';
 
 type Props = {
   issuance: TotalIssuance;

@@ -12,77 +12,26 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 ## 2. citizenchain 当前规则
 
-### 2.1 node
+### 2.1 runtime WASM
 
-- workflow：`.github/workflows/citizenchain-node.yml`
+- workflow：`.github/workflows/citizenchain-wasm.yml`
 - 主要命中目录：
+  - `citizenchain/runtime/**`
+  - `.github/workflows/citizenchain-wasm.yml`
+
+### 2.2 node 桌面安装包
+
+- workflow：
+  - `.github/workflows/citizenchain-linux.yml`
+  - `.github/workflows/citizenchain-macos.yml`
+  - `.github/workflows/citizenchain-windows.yml`
+- 主要命中目录：
+  - 当前三端打包 workflow 由 `CitizenChain WASM` 成功完成后触发
+  - 手动触发时同样从最新 `citizenchain-wasm` artifact 读取统一 WASM
+- 代码目录：
   - `citizenchain/node/**`
-  - `citizenchain/runtime/primitives/**`
-  - `citizenchain/runtime/src/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.2 nodeui
-
-- workflow：`.github/workflows/citizenchain-nodeui.yml`
-- 主要命中目录：
-  - `citizenchain/nodeui/**`
-  - `.github/scripts/prepare-nodeui-sidecar.sh`
-
-### 2.3 runtime/governance
-
-- workflow：`.github/workflows/citizenchain-runtime-governance.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/governance/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.4 runtime/issuance
-
-- workflow：`.github/workflows/citizenchain-runtime-issuance.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/issuance/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.5 runtime/otherpallet
-
-- workflow：`.github/workflows/citizenchain-runtime-otherpallet.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/otherpallet/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.6 runtime/primitives
-
-- workflow：`.github/workflows/citizenchain-runtime-primitives.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/primitives/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.7 runtime/src
-
-- workflow：`.github/workflows/citizenchain-runtime-src.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/src/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
-
-### 2.8 runtime/transaction
-
-- workflow：`.github/workflows/citizenchain-runtime-transaction.yml`
-- 主要命中目录：
-  - `citizenchain/runtime/transaction/**`
-  - `citizenchain/runtime/Cargo.toml`
-  - `citizenchain/Cargo.toml`
-  - `citizenchain/Cargo.lock`
+  - `citizenchain/node/frontend/**`
+  - `citizenchain/node/src/<功能名>/**`
 
 ## 3. 其他模块的分流方向
 

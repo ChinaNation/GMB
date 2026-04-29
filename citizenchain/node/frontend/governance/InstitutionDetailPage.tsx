@@ -1,15 +1,17 @@
 // 机构详情页：机构信息 → 管理员入口 → 发起提案 → 提案列表（分页）。
 // 管理员列表折叠到独立的 AdminListPage，点击入口卡片右箭头进入。
 import { useEffect, useState, useCallback } from 'react';
-import { api, sanitizeError } from '../api';
-import { formatBalance, hexToSs58 } from '../format';
+import { sanitizeError } from '../core/tauri';
+import { formatBalance } from '../shared/format';
+import { hexToSs58 } from '../shared/ss58';
+import { governanceApi as api } from './api';
 import type {
   ActivatedAdmin,
   AdminWalletMatch,
   InstitutionBalanceUpdate,
   InstitutionDetail,
   ProposalListItem,
-} from './governance-types';
+} from './types';
 
 type Props = {
   shenfenId: string;

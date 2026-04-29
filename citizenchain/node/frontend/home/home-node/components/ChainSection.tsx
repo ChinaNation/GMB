@@ -1,4 +1,4 @@
-import type { ChainStatus } from '../../../types';
+import type { ChainStatus } from '../types';
 
 type Props = {
   chain: ChainStatus;

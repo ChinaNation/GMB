@@ -90,7 +90,7 @@ pub fn start_clearing_bank_components(
     password: &str,
     signer: Arc<dyn BatchSigner>,
     submitter: Arc<dyn BatchSubmitter>,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
 ) -> Result<OffchainComponents, String> {
     let ledger = Arc::new(OffchainLedger::new(base_path));
     // 若磁盘有上次加密持久化的 ledger,尝试恢复;首次启动(文件不存在)返回 Ok(0)。
@@ -139,7 +139,7 @@ fn last_clearing_batch_seq_key(bank: &AccountId32) -> StorageKey {
 
 /// 读取链上已成功落账的最新 batch_seq。storage 不存在时按 `ValueQuery` 映射为 0。
 fn read_last_clearing_batch_seq(
-    client: &crate::service::FullClient,
+    client: &crate::core::service::FullClient,
     bank: &AccountId32,
 ) -> Result<u64, String> {
     let best = client.info().best_hash;
@@ -185,7 +185,7 @@ pub fn start_clearing_bank_components_with_noop(
     base_path: &Path,
     bank_main: AccountId32,
     password: &str,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
 ) -> Result<OffchainComponents, String> {
     start_clearing_bank_components(
         base_path,

@@ -153,7 +153,7 @@ pub fn start_clearing_bank_components_with_noop(
 
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
-(offchain/ 子树零错误;grep offchain 0 命中;ui/mod.rs:91 tauri macro 受 frontend/dist 门禁,与本步无关)
+(offchain/ 子树零错误;grep offchain 0 命中;desktop.rs tauri macro 受 frontend/dist 门禁,与本步无关)
 ```
 
 ---

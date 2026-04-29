@@ -6,11 +6,7 @@
 
 ## citizenchain/node
 
-- 关键词：节点、出块、同步、CLI、矿工、挖矿
-
-## citizenchain/nodeui
-
-- 关键词：节点 UI、桌面端、节点状态、挖矿界面、设置页
+- 关键词：节点、出块、同步、CLI、矿工、挖矿、节点 UI、桌面端、节点状态、设置页、Tauri、React 前端
 
 ## sfid/backend
 
@@ -27,4 +23,3 @@
 ## primitives
 
 - 关键词：常量、基础类型、通用 primitive、共享类型
-

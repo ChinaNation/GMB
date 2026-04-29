@@ -9,7 +9,7 @@ import { CreateProposalPage } from './CreateProposalPage';
 import { SafetyFundProposalPage } from './SafetyFundProposalPage';
 import { SweepProposalPage } from './SweepProposalPage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
-import type { AdminWalletMatch } from './governance-types';
+import type { AdminWalletMatch } from './types';
 
 // 国储会 shenfenId（全链唯一，直接进入详情）。
 const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
