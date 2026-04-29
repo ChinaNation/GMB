@@ -1,4 +1,4 @@
-// 链上存储 key 构造工具，用于查询 AdminsOriginGov 等 pallet 的存储。
+// 链上存储 key 构造工具，用于查询 AdminsChange 等 pallet 的存储。
 //
 // 格式：twox_128(pallet_name) + twox_128(storage_name) + blake2_128(key) + key
 
@@ -44,11 +44,11 @@ pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> [u8; 48] {
     out
 }
 
-/// 构造 `AdminsOriginGov::CurrentAdmins(institution_id)` 的存储 key（hex 字符串含 0x 前缀）。
-pub fn current_admins_key(shenfen_id: &str) -> String {
+/// 构造 `AdminsChange::Institutions(institution_id)` 的存储 key（hex 字符串含 0x 前缀）。
+pub fn admin_institutions_key(shenfen_id: &str) -> String {
     let institution_id = shenfen_id_to_fixed48(shenfen_id);
-    let pallet_hash = twox_128(b"AdminsOriginGov");
-    let storage_hash = twox_128(b"CurrentAdmins");
+    let pallet_hash = twox_128(b"AdminsChange");
+    let storage_hash = twox_128(b"Institutions");
     let blake2_hash = blake2b_128(&institution_id);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + 48);
@@ -143,8 +143,8 @@ mod tests {
     }
 
     #[test]
-    fn current_admins_key_has_correct_length() {
-        let key = current_admins_key("GFR-LN001-CB0C-617776487-20260222");
+    fn admin_institutions_key_has_correct_length() {
+        let key = admin_institutions_key("GFR-LN001-CB0C-617776487-20260222");
         // 0x 前缀 + (16+16+16+48)*2 hex 字符 = 2 + 192 = 194
         assert_eq!(key.len(), 194);
         assert!(key.starts_with("0x"));

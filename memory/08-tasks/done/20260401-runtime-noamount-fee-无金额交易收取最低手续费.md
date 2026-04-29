@@ -14,13 +14,13 @@
 
 - DuoqianManagePow：vote_create、vote_close、propose_create_personal、cleanup_rejected_proposal、兜底
 - DuoqianTransferPow：propose_transfer、vote_transfer、propose_safety_fund_transfer、vote_safety_fund_transfer、propose_sweep_to_main、vote_sweep_to_main
-- VotingEngineSystem：joint_vote、citizen_vote
+- VotingEngine：joint_vote、citizen_vote
 - SfidCodeAuth：bind_sfid、unbind_sfid、rotate_sfid_keys
-- AdminsOriginGov：propose_admin_replacement、vote_admin_replacement
+- AdminsChange：propose_admin_replacement、vote_admin_replacement
 - ResolutionIssuanceGov：propose_resolution_issuance
-- RuntimeRootUpgrade：propose_runtime_upgrade、developer_direct_upgrade
-- ResolutionDestroGov：propose_destroy、vote_destroy
-- GrandpaKeyGov：propose_replace_grandpa_key、vote_replace_grandpa_key
+- RuntimeUpgrade：propose_runtime_upgrade、developer_direct_upgrade
+- ResolutionDestro：propose_destroy、vote_destroy
+- GrandpaKeyChange：propose_replace_grandpa_key、vote_replace_grandpa_key
 - FullnodePowReward：bind_reward_wallet、rebind_reward_wallet
 - OffchainTransactionPos 兜底：bind_clearing_institution、费率提案/投票、运维操作等
 
@@ -30,13 +30,13 @@
 - ShengBankStakeInterest（Root 运维）
 - ResolutionIssuanceIss（治理执行 + 运维）
 - ResolutionIssuanceGov：finalize_joint_vote、set_allowed_recipients
-- VotingEngineSystem：create_internal_proposal、create_joint_proposal、internal_vote、finalize_proposal
-- RuntimeRootUpgrade：finalize_joint_vote
+- VotingEngine：create_internal_proposal、create_joint_proposal、internal_vote、finalize_proposal
+- RuntimeUpgrade：finalize_joint_vote
 - DuoqianManagePow：register_sfid_institution
 - DuoqianTransferPow：execute_transfer
-- AdminsOriginGov：execute_admin_replacement
-- ResolutionDestroGov：execute_destroy
-- GrandpaKeyGov：execute_replace_grandpa_key、cancel_failed_replace_grandpa_key
+- AdminsChange：execute_admin_replacement
+- ResolutionDestro：execute_destroy
+- GrandpaKeyChange：execute_replace_grandpa_key、cancel_failed_replace_grandpa_key
 - CitizenLightnodeIssuance（无 extrinsic）
 
 ## 涉及文件

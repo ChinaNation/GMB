@@ -1,7 +1,7 @@
 # 任务索引
 
 ## open
-- `memory/08-tasks/open/20260429-runtime-step2-admins-origin-unified-subjects.md`
+
 - `memory/08-tasks/open/20260321-084304-统一本地调试时-sfid-后端监听地址与手机访问地址-修复提交升级提案时人口快照接口连接超时问题.md`
 - `memory/08-tasks/open/20260321-095406-检查区块链所需的人口快照数据与sfid实际提供的人口快照数据是否对齐.md`
 - `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
@@ -16,11 +16,10 @@
 - `memory/08-tasks/open/20260402-offchain-batch-fee-from-fee-address.md`
 - `memory/08-tasks/open/20260404-admin-replacement-proposal-mutex.md`
 - `memory/08-tasks/open/20260404-offchain-packer-worker-接入.md`
-- `memory/08-tasks/open/20260405-105452-结合全仓库实现复查-voting-engine-system-投票引擎模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
-- `memory/08-tasks/open/20260405-111030-结合全仓库实现复查-resolution-issuance-gov-投票引擎链路-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
-- `memory/08-tasks/open/20260405-114311-结合全仓库实现复查-resolution-destro-gov-投票引擎模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
+- `memory/08-tasks/open/20260405-105452-结合全仓库实现复查-voting-engine-投票引擎模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
+- `memory/08-tasks/open/20260405-114311-结合全仓库实现复查-resolution-destro-投票引擎模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-122920-结合全仓库实现复查-shengbank-stake-interest-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留-本轮只负责检查.md`
-- `memory/08-tasks/open/20260405-123821-结合全仓库实现复查-resolution-destro-gov-grandpa-key-gov-admins-origin-gov-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
+- `memory/08-tasks/open/20260405-123821-结合全仓库实现复查-resolution-destro-grandpakey-change-admins-change-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-124627-结合全仓库实现复查-pow-difficulty-module-与-sfid-code-auth-模块-检查是否存在安全漏洞-改进点-实现与文档偏差-中文注释缺失-文档更新需求和需要清理的残留.md`
 - `memory/08-tasks/open/20260405-offchain-deposit-model-redesign.md`
 - `memory/08-tasks/open/20260405-sfid-多签地址派生加入name字段.md`
@@ -39,14 +38,10 @@
 - `memory/08-tasks/open/20260428-124931-清算行功能完成度补齐-区块链侧技术闭环-包括-runtime-node-nodeui-验收与文档.md`
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wumin-冷钱包清算行管理类扫码签名-decoder-文案与测试.md`
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wuminapp-用户侧设置清算行-绑定-跨行支付配置与端到端验收.md`
+- `memory/08-tasks/open/20260429-runtime-step2-admins-change-unified-subjects.md`
 
 ## done
 
-- `memory/08-tasks/done/20260429-duoqian-manage-pow-step1-institution-refactor.md`
-- `memory/08-tasks/done/20260429-node-offchain-dir-align.md`
-- `memory/08-tasks/done/20260429-node-offchain-second-consolidation.md`
-- `memory/08-tasks/done/20260429-ai-frontend-backend-same-feature-path-rule.md`
-- `memory/08-tasks/done/20260429-sfid-chain-state-source.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-nodeuitauri-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-nodeui-backend-对-runtime-primitives-的错误路径引用.md`
@@ -93,17 +88,15 @@
 - `memory/08-tasks/done/20260328-075127-审查-fullnode-pow-reward-模块安全与质量.md`
 - `memory/08-tasks/done/20260328-095223-全面仔细检查-citizen-lightnode-issuance-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-100300-审查-pow-difficulty-module-模块安全与质量.md`
-- `memory/08-tasks/done/20260328-100500-审查-resolution-issuance-iss-模块安全与质量.md`
 - `memory/08-tasks/done/20260328-101548-全面仔细检查-sfid-code-auth-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
-- `memory/08-tasks/done/20260328-112224-全面仔细检查-grandpa-key-gov-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
-- `memory/08-tasks/done/20260328-112311-审查-admins-origin-gov-模块安全与质量.md`
-- `memory/08-tasks/done/20260328-113654-审查-resolution-destro-gov.md`
-- `memory/08-tasks/done/20260328-120407-审查-runtime-root-upgrade.md`
+- `memory/08-tasks/done/20260328-112224-全面仔细检查-grandpakey-change-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/done/20260328-112311-审查-admins-change-模块安全与质量.md`
+- `memory/08-tasks/done/20260328-113654-审查-resolution-destro.md`
+- `memory/08-tasks/done/20260328-120407-审查-runtime-upgrade.md`
 - `memory/08-tasks/done/20260328-121809-审查-duoqian-manage-pow.md`
-- `memory/08-tasks/done/20260328-122100-全面仔细检查-resolution-issuance-gov-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-123104-全面仔细检查-institution-asset-guard-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-123709-审查-onchain-transaction-pow.md`
-- `memory/08-tasks/done/20260328-124050-全面仔细检查-voting-engine-system-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
+- `memory/08-tasks/done/20260328-124050-全面仔细检查-voting-engine-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-130310-全面仔细检查-duoqian-transfer-pow-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-131513-全面仔细检查-genesis-模块是否存在安全漏洞-改进点-功能需求实现偏差-中文注释-技术文档缺失-以及需要清理的残留.md`
 - `memory/08-tasks/done/20260328-132030-审查-nodeui.md`
@@ -163,3 +156,13 @@
 - `memory/08-tasks/done/20260427-step2-citizenchain-clearing-bank-nodes.md`
 - `memory/08-tasks/done/20260428-123621-检查清算行功能完成度并输出完成度报告.md`
 - `memory/08-tasks/done/20260428-135057-本地开发节点默认查询本机sfid服务正式节点默认查询147正式sfid服务.md`
+- `memory/08-tasks/done/20260429-082049-治理模块改名-admins-change-grandpakey-change.md`
+- `memory/08-tasks/done/20260429-084207-将-resolution-issuance-gov-与-resolution-issuance-iss-彻底合并为-resolution-issuance-模块-保留-runtime-pallet-index-8-并完成代码-文档-联动端与残留清理.md`
+- `memory/08-tasks/done/20260429-085144-修复-admins-change-grandpakey-change-改名残留.md`
+- `memory/08-tasks/done/20260429-ai-frontend-backend-same-feature-path-rule.md`
+- `memory/08-tasks/done/20260429-duoqian-manage-pow-step1-institution-refactor.md`
+- `memory/08-tasks/done/20260429-governance-rename-resolution-runtime.md`
+- `memory/08-tasks/done/20260429-node-offchain-dir-align.md`
+- `memory/08-tasks/done/20260429-node-offchain-second-consolidation.md`
+- `memory/08-tasks/done/20260429-sfid-chain-state-source.md`
+- `memory/08-tasks/done/20260429-voting-engine-rename.md`

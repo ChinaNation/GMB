@@ -173,7 +173,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   // ──── 工具方法 ────
 
   Uint8List _buildProposalDataStorageKey(int proposalId) {
-    final palletHash = Hasher.twoxx128.hashString('VotingEngineSystem');
+    final palletHash = Hasher.twoxx128.hashString('VotingEngine');
     final storageHash = Hasher.twoxx128.hashString('ProposalData');
     final idBytes = _u64ToLeBytes(proposalId);
     final keyHash = _blake2128Concat(idBytes);
@@ -277,7 +277,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // Phase 3: 创建/关闭多签的投票都走 VotingEngineSystem::internal_vote(9.0),
+      // Phase 3: 创建/关闭多签的投票都走 VotingEngine::internal_vote(9.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,

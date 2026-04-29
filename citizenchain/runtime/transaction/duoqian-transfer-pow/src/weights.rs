@@ -1,7 +1,7 @@
 //! 占位 weights,后续由 benchmark 生成替换。
 //!
 //! Phase 2 整改后:聚合签名 `finalize_X` 统一删除,投票改走
-//! `voting-engine-system::internal_vote`;本 pallet 只保留 `propose_X` / `execute_X`
+//! `voting-engine::internal_vote`;本 pallet 只保留 `propose_X` / `execute_X`
 //! 两类 extrinsic。
 
 #![cfg_attr(rustfmt, rustfmt_skip)]

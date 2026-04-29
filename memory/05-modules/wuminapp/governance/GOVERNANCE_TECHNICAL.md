@@ -17,7 +17,7 @@
 
 ### 2.1 关键约束（必须遵守）
 
-- `voting-engine-system` 的 `create_internal_proposal`、`create_joint_proposal` 和 `internal_vote` 外部调用被禁用，直接调用会返回 `NoPermission`。
+- `voting-engine` 的 `create_internal_proposal`、`create_joint_proposal` 和 `internal_vote` 外部调用被禁用，直接调用会返回 `NoPermission`。
 - 联合提案必须由业务治理 pallet 通过 `JointVoteEngine` trait 发起。
 - 内部投票必须由业务治理 pallet 通过 `InternalVoteEngine` trait 转发。
 
@@ -221,7 +221,7 @@ message = blake2_256(SCALE.encode(payload))
 - `RuntimeUpgradeDetailPage` 从机构页进入时必须带上：
   - `institution`
   - `adminWallets`
-- 页面会先按链上 `AdminsOriginGov.CurrentAdmins` 过滤当前仍有效的管理员钱包。
+- 页面会先按链上 `AdminsChange.Institutions` 过滤当前仍有效的管理员钱包。
 - 联合投票按钮只在以下条件全部满足时启用：
   - 提案仍处于 `joint` 阶段且状态为 `voting`
   - 当前机构尚未投票
@@ -296,16 +296,16 @@ message = blake2_256(SCALE.encode(payload))
 - 所有模块的 `ProposalActions`、`ProposalCreatedAt`、`ProposalPassedAt`、`ActiveProposalByInstitution` 等 Storage 已删除
 - 所有 `cancel_stale_*` extrinsic 已删除
 - 所有 `cleanup_inactive_proposal` 函数已删除
-- `resolution-issuance-gov` 和 `runtime-root-upgrade` 的独立 ID 体系（`NextProposalId`、`GovToJointVote`、`JointVoteToGov`）已删除，直接使用投票引擎 proposal_id
+- `resolution-issuance` 和 `runtime-upgrade` 的独立 ID 体系（`NextProposalId`、`GovToJointVote`、`JointVoteToGov`）已删除，直接使用投票引擎 proposal_id
 
 关键文件：
-- `voting-engine-system/src/proposal_cleanup.rs`（清理逻辑）
-- `voting-engine-system/src/active_proposal_limit.rs`（活跃提案限制）
-- `voting-engine-system/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
+- `voting-engine/src/proposal_cleanup.rs`（清理逻辑）
+- `voting-engine/src/active_proposal_limit.rs`（活跃提案限制）
+- `voting-engine/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
 
 ### 6.4.1 Runtime 升级提案的摘要 / 对象分层
 
-- `runtime-root-upgrade` 现在只把 `proposer + reason + code_hash + status` 编进 `ProposalData`
+- `runtime-upgrade` 现在只把 `proposer + reason + code_hash + status` 编进 `ProposalData`
 - 原始 wasm 不再塞进摘要层，而是统一进入 `ProposalObject(kind=runtime_wasm)`
 - App 列表与详情页默认只读取摘要层，不主动拉取大对象
 - App 展示 runtime 升级提案真实结果时，应优先解码摘要层里的业务 `status`：
@@ -319,8 +319,8 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1 管理员身份检测流程
 
 1. 用户打开机构详情页，App 并行加载管理员列表和当前钱包信息。
-2. 通过 `state_getStorage` 查询链上 `AdminsOriginGov.CurrentAdmins(institution_id)` 存储。
-3. Storage key 格式：`twox_128("AdminsOriginGov") + twox_128("CurrentAdmins") + blake2_128(institution_48bytes) + institution_48bytes`。
+2. 通过 `state_getStorage` 查询链上 `AdminsChange.Institutions(institution_id)` 存储。
+3. Storage key 格式：`twox_128("AdminsChange") + twox_128("Institutions") + blake2_128(institution_48bytes) + institution_48bytes`。
 4. 返回 SCALE 编码的 `BoundedVec<AccountId32, MaxAdminsPerInstitution>`（Compact 长度前缀 + N×32 字节公钥）。
 5. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在列表中，确定管理员身份。
 6. 查询结果内存缓存，下拉刷新时清除缓存重新查询。
@@ -386,13 +386,13 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.3.1 活跃提案数量限制
 
-每个机构（`InstitutionPalletId`）同时最多允许 **10 个活跃提案**，不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine-system::active_proposal_limit`）统一管控。
+每个机构（`InstitutionPalletId`）同时最多允许 **10 个活跃提案**，不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine::active_proposal_limit`）统一管控。
 
 - 创建提案时：`try_add_active_proposal()` 检查并添加
 - 提案完成时：`remove_active_proposal()` 在 `set_status_and_emit` 中立即释放（提案通过/拒绝/过期时）
 - App 端发起提案前异步查询活跃数，达上限弹窗提示"提案数量已达上限"
 
-关键文件：`voting-engine-system/src/active_proposal_limit.rs`
+关键文件：`voting-engine/src/active_proposal_limit.rs`
 
 ### 7.4 提案类型页面
 
@@ -527,7 +527,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 | 项目 | 治理机构（NRC/PRC/PRB） | 注册多签机构（DUOQIAN） |
 | --- | --- | --- |
-| 管理员来源 | `admins_origin_gov::CurrentAdmins`（创世/治理替换） | `DuoqianAccounts.duoqian_admins`（注册时设定） |
+| 管理员来源 | `admins_change::Institutions`（创世/治理替换） | `DuoqianAccounts.duoqian_admins`（注册时设定） |
 | 阈值来源 | 硬编码（13/6/6） | `DuoqianAccounts.threshold`（注册时设定） |
 | 管理员存储类型 | `AccountId` | `AccountId` |
 
@@ -562,7 +562,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
   - 治理机构：`shenfen_id` UTF-8 右补零到 48 字节
   - 注册型机构：`duoqian_address(32) + 16 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `ShengAdminService` 对注册型机构不再查 `AdminsOriginGov.CurrentAdmins`，而是直接读取 `DuoqianManagePow.DuoqianAccounts`，从中解码管理员列表和动态阈值。
+- `ShengAdminService` 对注册型机构不再查 `AdminsChange.Institutions`，而是直接读取 `DuoqianManagePow.DuoqianAccounts`，从中解码管理员列表和动态阈值。
 - 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
 
 ### 8.8 关键文件
@@ -571,8 +571,8 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 | --- | --- |
 | `duoqian-manage-pow/src/lib.rs` | 注册、创建、关闭业务逻辑 |
 | `duoqian-transfer-pow/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
-| `voting-engine-system/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
-| `voting-engine-system/src/lib.rs` | InternalThresholdProvider trait |
+| `voting-engine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
+| `voting-engine/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
 
 ## 9. 源码对齐基线
@@ -588,17 +588,17 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs`
 - `citizenchain/runtime/transaction/duoqian-manage-pow/src/lib.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/lib.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/internal_vote.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/joint_vote.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/citizen_vote.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/proposal_cleanup.rs`
-- `citizenchain/runtime/governance/voting-engine-system/src/active_proposal_limit.rs`
-- `citizenchain/runtime/governance/resolution-issuance-gov/src/lib.rs`
-- `citizenchain/runtime/governance/runtime-root-upgrade/src/lib.rs`
-- `citizenchain/runtime/governance/admins-origin-gov/src/lib.rs`
-- `citizenchain/runtime/governance/resolution-destro-gov/src/lib.rs`
-- `citizenchain/runtime/governance/grandpa-key-gov/src/lib.rs`
+- `citizenchain/runtime/governance/voting-engine/src/lib.rs`
+- `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`
+- `citizenchain/runtime/governance/voting-engine/src/joint_vote.rs`
+- `citizenchain/runtime/governance/voting-engine/src/citizen_vote.rs`
+- `citizenchain/runtime/governance/voting-engine/src/proposal_cleanup.rs`
+- `citizenchain/runtime/governance/voting-engine/src/active_proposal_limit.rs`
+- `citizenchain/runtime/issuance/resolution-issuance/src/lib.rs`
+- `citizenchain/runtime/governance/runtime-upgrade/src/lib.rs`
+- `citizenchain/runtime/governance/admins-change/src/lib.rs`
+- `citizenchain/runtime/governance/resolution-destro/src/lib.rs`
+- `citizenchain/runtime/governance/grandpakey-change/src/lib.rs`
 - `citizenchain/runtime/transaction/offchain-transaction-pos/src/lib.rs`
 - `citizenchain/runtime/src/configs/mod.rs`
 - `primitives/src/count_const.rs`

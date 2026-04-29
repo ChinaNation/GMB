@@ -32,8 +32,8 @@
 | # | 文件 | 改什么 |
 |---|------|--------|
 | 1 | `genesis_config_presets.rs` | 主网创世 GRANDPA 从 44 个改为 1 个（只放第 1 个国储会） |
-| 2 | `grandpa-key-gov/src/lib.rs` | 创世初始化只写 1 个 key，与 pallet_grandpa 保持一致 |
-| 3 | `runtime-root-upgrade/src/lib.rs` | 新增 `developer_direct_upgrade` extrinsic + 开关控制 |
+| 2 | `grandpakey-change/src/lib.rs` | 创世初始化只写 1 个 key，与 pallet_grandpa 保持一致 |
+| 3 | `runtime-upgrade/src/lib.rs` | 新增 `developer_direct_upgrade` extrinsic + 开关控制 |
 | 4 | `configs/mod.rs` | 新增 `DeveloperUpgradeOrigin`；phase-control pallet Config |
 | 5 | `pow_const.rs` | 去掉 `dev-chain` 编译特性，目标时间改为从链上读取 |
 | 6 | `pow-difficulty-module/src/lib.rs` | 难度目标窗口从链上 `TargetBlockTimeMs` 读取 |
@@ -50,7 +50,7 @@
 2. `TargetBlockTimeMs = 360000`
 3. `Phase = Production`
 4. `pallet_grandpa::schedule_change(44 个权威)`
-5. 同步 `grandpa-key-gov` 的 `CurrentGrandpaKeys` / `GrandpaKeyOwnerByKey` 为 44 个
+5. 同步 `grandpakey-change` 的 `CurrentGrandpaKeys` / `GrandpaKeyOwnerByKey` 为 44 个
 
 ## 前置依赖
 

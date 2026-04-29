@@ -6,13 +6,13 @@
 - 存储链的当前运行阶段（创世期 Genesis / 运行期 Operation）及对应参数。
 - 存储创世常量（创世宣言、国名宣言、创世人口），在创世区块中初始化。
 - 为节点层（矿工门控、难度调整）提供 Runtime API 读取链上动态出块时间。
-- 为 `runtime-root-upgrade` 提供开发者直升开关的 trait 查询接口。
+- 为 `runtime-upgrade` 提供开发者直升开关的 trait 查询接口。
 
 ## 1. 设计边界
 
 - 本模块是 pallet，但**不暴露任何 extrinsic**。
 - 阶段切换仅通过 `OnRuntimeUpgrade` 迁移一次性写入，不设链上调用。
-- 其他模块（难度调整、runtime-root-upgrade）各自读本模块的链上值。
+- 其他模块（难度调整、runtime-upgrade）各自读本模块的链上值。
 - 创世常量在创世区块写入后不再变更。
 
 ## 2. 核心类型
@@ -50,7 +50,7 @@ pub trait DeveloperUpgradeCheck {
     fn is_enabled() -> bool;
 }
 ```
-供 `runtime-root-upgrade` 通过关联类型读取开发者直升开关。
+供 `runtime-upgrade` 通过关联类型读取开发者直升开关。
 
 ## 5. 创世配置
 
@@ -82,7 +82,7 @@ pub trait DeveloperUpgradeCheck {
 | 模块 | 读取内容 |
 |------|----------|
 | `pow-difficulty-module` | `target_block_time_ms()` — 每 600 块调整难度 |
-| `runtime-root-upgrade` | `DeveloperUpgradeCheck::is_enabled()` — 判断升级路径 |
+| `runtime-upgrade` | `DeveloperUpgradeCheck::is_enabled()` — 判断升级路径 |
 | 节点层（矿工） | `GenesisPalletApi::target_block_time_ms()` — 出块间隔 |
 
 ## 8. Events

@@ -28,15 +28,15 @@ extract_pallet_index() {
 }
 BALANCES_IDX=$(grep -B1 'pub type Balances' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 DUOQIAN_IDX=$(grep -B1 'pub type DuoqianTransferPow' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
-VOTING_IDX=$(grep -B1 'pub type VotingEngineSystem' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
+VOTING_IDX=$(grep -B1 'pub type VotingEngine' "$RUNTIME_LIB" | grep -o 'pallet_index([0-9]*)' | grep -o '[0-9]*')
 
 sed -i '' "s/balancesPallet = [0-9]*/balancesPallet = $BALANCES_IDX/" "$REGISTRY"
 sed -i '' "s/duoqianTransferPowPallet = [0-9]*/duoqianTransferPowPallet = $DUOQIAN_IDX/" "$REGISTRY"
-sed -i '' "s/votingEngineSystemPallet = [0-9]*/votingEngineSystemPallet = $VOTING_IDX/" "$REGISTRY"
+sed -i '' "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$REGISTRY"
 
 # 从各 pallet crate 提取 call_index
 TRANSFER_PALLET="$REPO_ROOT/citizenchain/runtime/transaction/duoqian-transfer-pow/src/lib.rs"
-VOTING_PALLET="$REPO_ROOT/citizenchain/runtime/governance/voting-engine-system/src/lib.rs"
+VOTING_PALLET="$REPO_ROOT/citizenchain/runtime/governance/voting-engine/src/lib.rs"
 
 # Step 2 · 离线聚合改造后 vote_transfer 已删除(→ finalize_transfer),冷钱包不盲签 finalize_X
 PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')

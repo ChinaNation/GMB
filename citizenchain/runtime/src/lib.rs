@@ -81,7 +81,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //
     // Phase 3「投票引擎统一入口整改」(2026-04-22):
     //   - 业务 pallet 的 vote_X / finalize_X 全部物理删除,所有管理员投票一律走
-    //     `VotingEngineSystem::internal_vote`(9.0)。
+    //     `VotingEngine::internal_vote`(9.0)。
     //   - 投票引擎内部 call_index 重排:
     //     0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal。
     //   - 多个业务 pallet 的 call_index 连续重排(见 Phase 2 任务卡),
@@ -95,13 +95,28 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // 上链 → spec_version 2 → 3,transaction_version 1 → 2(register_sfid_institution
     // 等 extrinsic 签名变化)。开发期 fresh genesis,不主网升级。
     //
-    // Step 2 hardening(2026-04-28):submit_offchain_batch_v2 启用 batch 级签名校验、
-    // LastClearingBatchSeq 防重与 UserBank 绑定一致性校验。Call 编码不变,
-    // transaction_version 保持 2;runtime 语义变更,故 spec_version 3 → 4。
-    spec_version: 4,
+    // 2026-04-29:管理员治理与 GRANDPA 密钥治理模块彻底更名为
+    // admins-change / grandpakey-change,runtime pallet 名同步变为
+    // AdminsChange / GrandpaKeyChange。Call 编码索引保持不变,但 metadata
+    // 与 storage prefix 变化,故 spec_version 4 → 5。
+    //
+    // 2026-04-29:治理销毁与运行时升级模块统一新名称:
+    // resolution-destro / runtime-upgrade,runtime pallet 名同步变为
+    // ResolutionDestro / RuntimeUpgrade。Call 编码索引保持不变,但 metadata
+    // 与 storage prefix 变化,故 spec_version 5 → 6。
+    //
+    // 2026-04-29:决议发行治理/执行彻底合并为 resolution-issuance,
+    // runtime 只保留 ResolutionIssuance(index 8),删除旧 index 7 的执行 pallet。
+    // 新增维护 call 到 8.3/8.4,旧 7.x 执行入口下线,故 spec_version 6 → 7,
+    // transaction_version 2 → 3。
+    //
+    // 2026-04-29:治理投票引擎彻底更名为 voting-engine,
+    // runtime pallet 名同步变为 VotingEngine。pallet index 与 call index 保持不变,
+    // 但 metadata 与 storage prefix 变化,故 spec_version 7 → 8。
+    spec_version: 8,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
-    transaction_version: 2,
+    transaction_version: 3,
     system_version: 1,
 };
 
@@ -313,17 +328,13 @@ mod runtime {
     #[runtime::pallet_index(6)]
     pub type FullnodePowReward = fullnode_pow_reward;
 
-    // 决议发行执行模块：仅执行，不负责提案/投票
-    #[runtime::pallet_index(7)]
-    pub type ResolutionIssuanceIss = resolution_issuance_iss;
-
-    // 决议发行治理模块：负责提案与联合投票流程
+    // 决议发行模块：完整承载提案、联合投票回调、发行执行与维护审计
     #[runtime::pallet_index(8)]
-    pub type ResolutionIssuanceGov = resolution_issuance_gov;
+    pub type ResolutionIssuance = resolution_issuance;
 
     // 投票引擎模块：提供联合投票/内部投票/公民投票
     #[runtime::pallet_index(9)]
-    pub type VotingEngineSystem = voting_engine_system;
+    pub type VotingEngine = voting_engine;
 
     // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]
@@ -335,19 +346,19 @@ mod runtime {
 
     // 管理员治理模块：本机构管理员更换事项（走内部投票）
     #[runtime::pallet_index(12)]
-    pub type AdminsOriginGov = admins_origin_gov;
+    pub type AdminsChange = admins_change;
 
     // 运行时升级治理模块：提案与联合投票通过后触发 set_code。
     #[runtime::pallet_index(13)]
-    pub type RuntimeRootUpgrade = runtime_root_upgrade;
+    pub type RuntimeUpgrade = runtime_upgrade;
 
     // 决议销毁治理模块：本机构内部投票通过后销毁本机构交易地址余额
     #[runtime::pallet_index(14)]
-    pub type ResolutionDestroGov = resolution_destro_gov;
+    pub type ResolutionDestro = resolution_destro;
 
     // GRANDPA 密钥治理模块：国储会/省储会内部投票通过后替换 GRANDPA 投票公钥
     #[runtime::pallet_index(16)]
-    pub type GrandpaKeyGov = grandpa_key_gov;
+    pub type GrandpaKeyChange = grandpakey_change;
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验（注册型多签，非宪法保留主账户）
     #[runtime::pallet_index(17)]
@@ -421,14 +432,11 @@ mod tests {
     fn governance_module_tags_are_globally_unique() {
         use std::collections::HashSet;
         let tags: [(&str, &[u8]); 7] = [
-            ("admins_origin_gov", admins_origin_gov::MODULE_TAG),
-            ("grandpa_key_gov", grandpa_key_gov::MODULE_TAG),
-            ("resolution_destro_gov", resolution_destro_gov::MODULE_TAG),
-            (
-                "resolution_issuance_gov",
-                resolution_issuance_gov::MODULE_TAG,
-            ),
-            ("runtime_root_upgrade", runtime_root_upgrade::MODULE_TAG),
+            ("admins_change", admins_change::MODULE_TAG),
+            ("grandpakey_change", grandpakey_change::MODULE_TAG),
+            ("resolution_destro", resolution_destro::MODULE_TAG),
+            ("resolution_issuance", resolution_issuance::MODULE_TAG),
+            ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
             ("duoqian_manage_pow", duoqian_manage_pow::MODULE_TAG),
             ("duoqian_transfer_pow", duoqian_transfer_pow::MODULE_TAG),
         ];

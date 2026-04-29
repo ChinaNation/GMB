@@ -33,7 +33,7 @@ void main() {
 
     // Phase 3(2026-04-22)「投票引擎统一入口整改」:
     // 所有业务 pallet 的 vote_X 已物理删除,所有管理员投票统一走
-    // VotingEngineSystem::internal_vote(9.0)。
+    // VotingEngine::internal_vote(9.0)。
 
     test('decodes internal_vote (pallet=9 call=0) approve=true', () {
       // [0x09, 0x00, u64_le proposal_id=42, bool approve=true]

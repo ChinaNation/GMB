@@ -68,9 +68,9 @@
 | 数据 | Storage 路径 | 说明 |
 |---|---|---|
 | 提案动作 | `DuoqianTransferPow::ProposalActions(proposal_id)` | 机构、收款地址、金额、备注、发起人 |
-| 提案状态 | `VotingEngineSystem::Proposals(proposal_id)` | status(0=投票中/1=通过/2=拒绝)、start、end |
-| 投票计数 | `VotingEngineSystem::InternalTallies(proposal_id)` | yes_count、no_count |
-| 投票记录 | `VotingEngineSystem::InternalVotesByAccount(proposal_id, admin_pubkey)` | bool(赞成/反对) |
+| 提案状态 | `VotingEngine::Proposals(proposal_id)` | status(0=投票中/1=通过/2=拒绝)、start、end |
+| 投票计数 | `VotingEngine::InternalTallies(proposal_id)` | yes_count、no_count |
+| 投票记录 | `VotingEngine::InternalVotesByAccount(proposal_id, admin_pubkey)` | bool(赞成/反对) |
 | 活跃提案ID | `DuoqianTransferPow::ActiveProposalByInstitution(institution_id)` | u64 proposal_id |
 
 ## 4. 链上 Extrinsic 编码
@@ -158,13 +158,13 @@ class TransferProposalService {
 | `ProposalActions` | `twox128("DuoqianTransferPow") + twox128("ProposalActions") + blake2_128_concat(u64_le)` |
 | `ActiveProposalByInstitution` | `twox128("DuoqianTransferPow") + twox128("ActiveProposalByInstitution") + blake2_128_concat(institution_48bytes)` |
 
-### 6.2 VotingEngineSystem 存储
+### 6.2 VotingEngine 存储
 
 | 存储项 | Key 格式 |
 |---|---|
-| `Proposals` | `twox128("VotingEngineSystem") + twox128("Proposals") + blake2_128_concat(u64_le)` |
-| `InternalTallies` | `twox128("VotingEngineSystem") + twox128("InternalTallies") + blake2_128_concat(u64_le)` |
-| `InternalVotesByAccount` | `twox128("VotingEngineSystem") + twox128("InternalVotesByAccount") + blake2_128_concat(u64_le) + blake2_128_concat(account_32bytes)` |
+| `Proposals` | `twox128("VotingEngine") + twox128("Proposals") + blake2_128_concat(u64_le)` |
+| `InternalTallies` | `twox128("VotingEngine") + twox128("InternalTallies") + blake2_128_concat(u64_le)` |
+| `InternalVotesByAccount` | `twox128("VotingEngine") + twox128("InternalVotesByAccount") + blake2_128_concat(u64_le) + blake2_128_concat(account_32bytes)` |
 
 注：`blake2_128_concat` = `blake2_128(data) + data`。
 

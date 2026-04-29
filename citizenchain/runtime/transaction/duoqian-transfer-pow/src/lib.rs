@@ -25,7 +25,7 @@ use primitives::china::china_cb::{
 use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
-use voting_engine_system::{
+use voting_engine::{
     internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
 };
@@ -150,12 +150,12 @@ pub mod pallet {
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
     use institution_asset_guard::{InstitutionAssetAction, InstitutionAssetGuard};
-    use voting_engine_system::InternalAdminProvider;
-    use voting_engine_system::InternalVoteEngine;
+    use voting_engine::InternalAdminProvider;
+    use voting_engine::InternalVoteEngine;
 
     #[pallet::config]
     pub trait Config:
-        frame_system::Config + voting_engine_system::Config + duoqian_manage_pow::Config
+        frame_system::Config + voting_engine::Config + duoqian_manage_pow::Config
     {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -178,8 +178,8 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    // 活跃提案数限制已移至 voting-engine-system::active_proposal_limit 全局管控。
-    // 提案业务数据和元数据已统一存储到 voting-engine-system（ProposalData / ProposalMeta）。
+    // 活跃提案数限制已移至 voting-engine::active_proposal_limit 全局管控。
+    // 提案业务数据和元数据已统一存储到 voting-engine（ProposalData / ProposalMeta）。
 
     /// 安全基金转账提案动作存储。
     #[pallet::storage]
@@ -395,7 +395,7 @@ pub mod pallet {
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
-            // 活跃提案数由 voting-engine-system 在 create_internal_proposal 中统一检查
+            // 活跃提案数由 voting-engine 在 create_internal_proposal 中统一检查
 
             // 预检余额（含手续费，与执行时检查一致，避免创建必定无法执行的提案）
             let amount_u128: u128 = amount.saturated_into();
@@ -428,14 +428,14 @@ pub mod pallet {
             };
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
-            voting_engine_system::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
-            voting_engine_system::Pallet::<T>::store_proposal_meta(
+            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
+            voting_engine::Pallet::<T>::store_proposal_meta(
                 proposal_id,
                 frame_system::Pallet::<T>::block_number(),
             );
 
             // 从投票引擎回读 proposal.end 作为 expires_at,供 wuminapp 倒计时。
-            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
 
@@ -472,7 +472,7 @@ pub mod pallet {
             let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
-                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                <T as voting_engine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_NRC,
                     nrc_institution,
                     &who,
@@ -525,7 +525,7 @@ pub mod pallet {
             );
 
             // 从投票引擎回读 proposal.end 作为 expires_at。
-            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
@@ -555,7 +555,7 @@ pub mod pallet {
             // 动态判断 org 类型
             let org = Self::resolve_sweep_org(institution)?;
             ensure!(
-                <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+                <T as voting_engine::Config>::InternalAdminProvider::is_internal_admin(
                     org,
                     institution,
                     &who,
@@ -581,7 +581,7 @@ pub mod pallet {
 
             let fee_account = Self::resolve_fee_account(institution)?;
             let main_account = Self::resolve_main_account(institution)?;
-            let expires_at = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
@@ -599,7 +599,7 @@ pub mod pallet {
 
         /// 任意人触发"已通过转账提案"的执行(自动执行失败后的补救重试)。
         ///
-        /// Phase 2 整改后投票一律走 `VotingEngineSystem::internal_vote` 公开 call;
+        /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
         /// 通过后由本模块的 `InternalVoteExecutor` 自动触发 `try_execute_transfer`。
         /// 执行失败会发 `TransferExecutionFailed` 事件且保留 PASSED 状态,
         /// 任何签名账户(不一定是管理员)可调用本 call 重试。
@@ -669,7 +669,7 @@ pub mod pallet {
             institution: InstitutionPalletId,
             who: &T::AccountId,
         ) -> bool {
-            <T as voting_engine_system::Config>::InternalAdminProvider::is_internal_admin(
+            <T as voting_engine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
                 who,
@@ -734,7 +734,7 @@ pub mod pallet {
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
             ensure!(
                 proposal.status == STATUS_PASSED,
@@ -804,7 +804,7 @@ pub mod pallet {
                 fee: tx_fee,
                 reserve_left,
             });
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
             Ok(())
         }
 
@@ -813,7 +813,7 @@ pub mod pallet {
             let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
             ensure!(
                 proposal.status == STATUS_PASSED,
@@ -868,7 +868,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
 
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
@@ -880,17 +880,17 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 从 voting-engine-system 读取提案数据并执行转账。
+        /// 从 voting-engine 读取提案数据并执行转账。
         /// vote_transfer（自动执行）和 execute_transfer（手动重试）共用此逻辑。
         pub(crate) fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
-            let proposal = voting_engine_system::Pallet::<T>::proposals(proposal_id)
+            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
                 proposal.status == STATUS_PASSED,
                 Error::<T>::ProposalNotPassed
             );
 
-            let raw = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
             ensure!(
@@ -960,7 +960,7 @@ pub mod pallet {
             exec_result?;
 
             // ── 标记为已执行，防止双重执行 ──
-            voting_engine_system::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
@@ -977,7 +977,7 @@ pub mod pallet {
 // ──── 投票终态回调:把已通过的 3 组业务提案(转账/安全基金/手续费划转)落地到链上 ────
 //
 // Phase 2 整改后业务模块不再持有 `finalize_X` 聚合签名 call,提案通过(或否决)
-// 由投票引擎通过 [`voting_engine_system::InternalVoteResultCallback`] 广播回来。
+// 由投票引擎通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀 + 独立存储键认领对应业务:
 // - `MODULE_TAG` 前缀 `dq-xfer` → transfer
 // - `SafetyFundProposalActions[id]` 存在 → safety_fund
@@ -989,7 +989,7 @@ pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
     fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        let is_transfer = voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+        let is_transfer = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
             .map(|raw| raw.starts_with(crate::MODULE_TAG))
             .unwrap_or(false);
         let is_safety_fund = SafetyFundProposalActions::<T>::contains_key(proposal_id);
@@ -1011,7 +1011,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 // 执行失败:发事件,提案保留 PASSED,供 execute_X 重试。
                 if is_transfer {
                     if let Some(raw) =
-                        voting_engine_system::Pallet::<T>::get_proposal_data(proposal_id)
+                        voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
                     {
                         if let Ok(action) =
                             TransferAction::<T::AccountId, BalanceOf<T>, T::MaxRemarkLen>::decode(
@@ -1056,7 +1056,7 @@ mod tests {
     use frame_system as system;
     use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine_system::STATUS_REJECTED;
+    use voting_engine::STATUS_REJECTED;
 
     type Balance = u128;
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -1085,7 +1085,7 @@ mod tests {
         pub type Balances = pallet_balances;
 
         #[runtime::pallet_index(2)]
-        pub type VotingEngineSystem = voting_engine_system;
+        pub type VotingEngine = voting_engine;
 
         #[runtime::pallet_index(3)]
         pub type DuoqianManagePow = duoqian_manage_pow;
@@ -1094,7 +1094,7 @@ mod tests {
         pub type DuoqianTransferPow = super;
 
         #[runtime::pallet_index(5)]
-        pub type AdminsOriginGov = admins_origin_gov;
+        pub type AdminsChange = admins_change;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -1156,7 +1156,7 @@ mod tests {
     }
 
     pub struct TestSfidEligibility;
-    impl voting_engine_system::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
     {
         fn is_eligible(
@@ -1179,17 +1179,17 @@ mod tests {
 
     pub struct TestPopulationSnapshotVerifier;
     impl
-        voting_engine_system::PopulationSnapshotVerifier<
+        voting_engine::PopulationSnapshotVerifier<
             AccountId32,
-            voting_engine_system::pallet::VoteNonceOf<Test>,
-            voting_engine_system::pallet::VoteSignatureOf<Test>,
+            voting_engine::pallet::VoteNonceOf<Test>,
+            voting_engine::pallet::VoteSignatureOf<Test>,
         > for TestPopulationSnapshotVerifier
     {
         fn verify_population_snapshot(
             _who: &AccountId32,
             _eligible_total: u64,
-            _nonce: &voting_engine_system::pallet::VoteNonceOf<Test>,
-            _signature: &voting_engine_system::pallet::VoteSignatureOf<Test>,
+            _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
+            _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
         ) -> bool {
             true
         }
@@ -1231,7 +1231,7 @@ mod tests {
     }
 
     pub struct TestInternalAdminProvider;
-    impl voting_engine_system::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    impl voting_engine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
             // 优先:测试注入的 sr25519 派生 admin
             if let Some(admins) = get_extra_admins(org, institution) {
@@ -1307,7 +1307,7 @@ mod tests {
     }
 
     pub struct TestInternalAdminCountProvider;
-    impl voting_engine_system::InternalAdminCountProvider for TestInternalAdminCountProvider {
+    impl voting_engine::InternalAdminCountProvider for TestInternalAdminCountProvider {
         fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
@@ -1329,7 +1329,7 @@ mod tests {
     }
 
     pub struct TestInternalThresholdProvider;
-    impl voting_engine_system::InternalThresholdProvider for TestInternalThresholdProvider {
+    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             // 优先:测试注入的阈值覆盖(用于把 NRC/PRC/PRB 的大阈值降到 2,方便 finalize 测试)
             if let Some(t) = get_extra_threshold(org, institution) {
@@ -1337,7 +1337,7 @@ mod tests {
             }
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
-                    voting_engine_system::internal_vote::governance_org_pass_threshold(org)
+                    voting_engine::internal_vote::governance_org_pass_threshold(org)
                 }
                 ORG_DUOQIAN => {
                     let account = AccountId32::decode(&mut &institution[..32]).ok()?;
@@ -1378,7 +1378,7 @@ mod tests {
         }
     }
 
-    impl voting_engine_system::Config for Test {
+    impl voting_engine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
@@ -1404,7 +1404,7 @@ mod tests {
     impl duoqian_manage_pow::pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
+        type InternalVoteEngine = voting_engine::Pallet<Test>;
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
@@ -1425,10 +1425,10 @@ mod tests {
         type WeightInfo = ();
     }
 
-    impl admins_origin_gov::Config for Test {
+    impl admins_change::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<64>;
-        type InternalVoteEngine = voting_engine_system::Pallet<Test>;
+        type InternalVoteEngine = voting_engine::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1471,7 +1471,7 @@ mod tests {
     }
 
     // Phase 2 整改:聚合签名 helper `make_transfer_sigs` 已删除,投票统一走
-    // `VotingEngineSystem::internal_vote`;`finalize_transfer_n` 直接用 admin
+    // `VotingEngine::internal_vote`;`finalize_transfer_n` 直接用 admin
     // 账户调公开 call 逐个投票。
 
     fn nrc_pallet_id() -> InstitutionPalletId {
@@ -1523,7 +1523,7 @@ mod tests {
 
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
     fn last_proposal_id() -> u64 {
-        voting_engine_system::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+        voting_engine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
     /// 返回 (org, institution) 对应的前 `count` 个 sr25519 admin keypair。
@@ -1569,7 +1569,7 @@ mod tests {
         _proposer: AccountId32,
     ) -> frame_support::dispatch::DispatchResult {
         for (admin, _pair) in pairs.iter().take(n) {
-            VotingEngineSystem::internal_vote(RuntimeOrigin::signed(admin.clone()), pid, true)?;
+            VotingEngine::internal_vote(RuntimeOrigin::signed(admin.clone()), pid, true)?;
         }
         Ok(())
     }
@@ -1590,9 +1590,9 @@ mod tests {
         }
         .assimilate_storage(&mut storage)
         .expect("balances should assimilate");
-        admins_origin_gov::GenesisConfig::<Test>::default()
+        admins_change::GenesisConfig::<Test>::default()
             .assimilate_storage(&mut storage)
-            .expect("admins-origin-gov genesis should assimilate");
+            .expect("admins-change genesis should assimilate");
 
         let mut ext: sp_io::TestExternalities = storage.into();
         ext.execute_with(|| {
@@ -1653,8 +1653,8 @@ mod tests {
             // 转账已执行（含手续费 10）
             assert_eq!(Balances::free_balance(&inst_account), 8_990);
             assert_eq!(Balances::free_balance(&dest), 1_000);
-            // 提案数据仍保留（由 voting-engine-system 延迟清理）
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+            // 提案数据仍保留（由 voting-engine 延迟清理）
+            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -1690,7 +1690,7 @@ mod tests {
 
             assert_eq!(Balances::free_balance(&inst_account), 7_990);
             assert_eq!(Balances::free_balance(&dest), 2_000);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -1726,7 +1726,7 @@ mod tests {
 
             assert_eq!(Balances::free_balance(&inst_account), 6_990);
             assert_eq!(Balances::free_balance(&dest), 3_000);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
         });
     }
 
@@ -1782,7 +1782,7 @@ mod tests {
             assert_eq!(Balances::free_balance(&inst_account), 8_490);
             assert_eq!(Balances::free_balance(&dest), 1_500);
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(pid)
+                voting_engine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTED
@@ -1877,7 +1877,7 @@ mod tests {
                 BoundedVec::default(),
             ));
 
-            // 活跃提案数限制由 voting-engine-system 全局管控（上限 10），第二个提案可以成功
+            // 活跃提案数限制由 voting-engine 全局管控（上限 10），第二个提案可以成功
             assert_ok!(DuoqianTransferPow::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
@@ -1947,16 +1947,16 @@ mod tests {
             ));
             let pid1 = last_proposal_id();
 
-            let end = voting_engine_system::Pallet::<Test>::proposals(pid1)
+            let end = voting_engine::Pallet::<Test>::proposals(pid1)
                 .expect("proposal should exist")
                 .end;
             System::set_block_number(end + 1);
-            assert_ok!(voting_engine_system::Pallet::<Test>::finalize_proposal(
+            assert_ok!(voting_engine::Pallet::<Test>::finalize_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid1
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(pid1)
+                voting_engine::Pallet::<Test>::proposals(pid1)
                     .expect("proposal should exist")
                     .status,
                 STATUS_REJECTED
@@ -2056,13 +2056,13 @@ mod tests {
                 nrc_admin(0),
             ));
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(pid)
+                voting_engine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_PASSED
             );
             assert_eq!(Balances::free_balance(&dest), 0);
-            assert!(voting_engine_system::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
 
             // 补充余额后手动执行
             let _ = Balances::deposit_creating(&inst_account, 9_000);
@@ -2188,7 +2188,7 @@ mod tests {
 
             // 自动执行成功，状态变为 EXECUTED
             assert_eq!(
-                voting_engine_system::Pallet::<Test>::proposals(pid)
+                voting_engine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTED

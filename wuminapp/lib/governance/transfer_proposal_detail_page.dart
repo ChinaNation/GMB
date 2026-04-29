@@ -20,7 +20,7 @@ import 'proposal_vote_widgets.dart';
 /// 详情页展示/投票的三种提案类型。
 ///
 /// 决定：读哪个 storage map 与 QR 签名如何展示。
-/// Phase 3(2026-04-22)起,投票动作统一走 `VotingEngineSystem::internal_vote`
+/// Phase 3(2026-04-22)起,投票动作统一走 `VotingEngine::internal_vote`
 /// (9.0),不再按 kind 区分 call_index;`kind` 仅影响"创建提案"路径与
 /// 详情展示逻辑。
 enum TransferProposalKind {
@@ -144,7 +144,7 @@ class _TransferProposalDetailPageState
     try {
       // 根据 kind 选择对应的详情查询方法。
       // 不同 kind 写在不同的 storage map：
-      //   transfer   → VotingEngineSystem.ProposalData（带 dq-xfer tag）
+      //   transfer   → VotingEngine.ProposalData（带 dq-xfer tag）
       //   safetyFund → DuoqianTransferPow.SafetyFundProposalActions
       //   sweep      → DuoqianTransferPow.SweepProposalActions
       final Future<dynamic> detailFuture;
@@ -348,7 +348,7 @@ class _TransferProposalDetailPageState
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // Phase 3: 所有管理员投票统一走 VotingEngineSystem::internal_vote(9.0)。
+      // Phase 3: 所有管理员投票统一走 VotingEngine::internal_vote(9.0)。
       // 业务 kind 仅用于 QR 展示的文案与 storage 读取,不再分派 call_index。
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
