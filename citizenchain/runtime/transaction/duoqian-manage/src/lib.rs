@@ -76,7 +76,7 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
 
 /// SFID 机构登记验签抽象：链上按省分流验签。
 /// - `signing_province = Some(p)`：runtime 查该省的省级签名公钥（`ShengSigningPubkey[p]`）验签；
-/// - `signing_province = None`：fallback 用 `SfidMainAccount` 当前主公钥验签（兼容旧调用）。
+/// - `signing_province = None`：使用 `SfidMainAccount` 当前主公钥验签。
 pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
@@ -434,7 +434,7 @@ pub mod pallet {
 
     /// 机构级多签信息：key 为 sfid_id。
     ///
-    /// 第1步起链上创建的是“机构”，机构下账户只保存地址、初始余额与生命周期状态。
+    /// 链上创建的是“机构”，机构下账户只保存地址、初始余额与生命周期状态。
     /// 管理员和阈值的长期真源在 admins-change；本表保存机构基本信息和创建快照。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
@@ -881,7 +881,7 @@ pub mod pallet {
                 &who,
             )?;
 
-            // 预写入 pending 状态的 DuoqianAccounts，用于账户生命周期和旧入口状态查询。
+            // 预写入 pending 状态的 DuoqianAccounts，用于账户生命周期状态查询。
             DuoqianAccounts::<T>::insert(
                 &duoqian_address,
                 DuoqianAccount {
@@ -958,7 +958,7 @@ pub mod pallet {
             account_name: AccountNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传走 SfidMainAccount 兼容路径。
+            // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传则使用 SfidMainAccount。
             signing_province: Option<Vec<u8>>,
             // Step 2 新增:机构元数据(SFID 后端推链时一并上链)。
             a3: A3Of<T>,
@@ -1635,7 +1635,7 @@ pub mod pallet {
         ///
         /// - 个人多签：账户自身就是主体地址。
         /// - SFID 机构任意账户：统一归属到该机构主账户主体。
-        /// - 旧单账户路径：若找不到机构主账户，则回退到账户自身主体。
+        /// - SFID 账户缺少机构记录时，账户自身就是主体地址。
         pub fn resolve_admin_subject_for_account(
             account: &T::AccountId,
         ) -> Option<InstitutionPalletId> {
@@ -2637,14 +2637,11 @@ mod tests {
         (bounded, pairs)
     }
 
-    /// Phase 2 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
+    /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
     /// 让 `admins` 的前 `take` 个成员各投一张赞成票。
     ///
-    /// 替代旧的 `finalize_with` 聚合签名 helper——业务模块不再持有投票 call,
-    /// 通过后由投票引擎通过 [`InternalVoteExecutor`] 自动触发 execute_create。
-    ///
-    /// - 参数 `_submitter` / `_duoqian_address` / `_creator` / `_pairs` /
-    ///   `_threshold` / `_amount` 保留占位,让调用端旧语义透明迁移(已实际无用)。
+    /// 业务模块不持有投票 call，通过后由投票引擎通过
+    /// [`InternalVoteExecutor`] 自动触发 execute_create。
     fn finalize_with(
         _submitter: AccountId32,
         proposal_id: u64,

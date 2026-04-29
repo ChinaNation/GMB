@@ -18,7 +18,7 @@
 
 - 触发条件：任务涉及 `citizenchain/node`、`citizenchain/runtime`、链脚本或链文档
 - 负责 `citizenchain` 全域
-- 包括 `runtime`、`node` 原生节点、node 桌面端、node 前端与打包流程
+- 包括 `runtime`、`node` 原生节点、桌面节点、node 前端与打包流程
 - 若 `runtime` 变更会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性，必须联动 `Mobile Agent`；不得只改单侧 runtime
 
 ## SFID Agent

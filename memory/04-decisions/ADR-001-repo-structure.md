@@ -46,7 +46,7 @@ citizenchain/
     primitives/
 ```
 
-5. 历史 `citizenchain/nodeuitauri` 与独立 `citizenchain/nodeui` 已清理，不再作为当前实现目录。
+5. 历史 `citizenchain/node` 与独立 `citizenchain/node` 已清理，不再作为当前实现目录。
 6. 当前 `citizenchain/node` 同时承载原生节点与桌面节点端，使用 Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite。
 7. 桌面端 Rust 后端模块固定扁平化放在 `citizenchain/node/src/<功能名>`，不再保留 `src/ui` 目录层。
 8. 运行时共享常量 crate 统一放在 `citizenchain/runtime/primitives/`。
@@ -57,7 +57,7 @@ citizenchain/
 
 - 明确 CitizenChain 是一个完整产品
 - 明确 runtime 内部的目标组织方式
-- 为 node 桌面端当前实现提供稳定目录与技术栈口径
+- 为 桌面节点当前实现提供稳定目录与技术栈口径
 - 便于 AI 在统一结构下工作
 
 注意事项：

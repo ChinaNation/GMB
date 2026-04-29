@@ -1,4 +1,4 @@
-# nodeui 历史遗留同步：删除 preview html + 修正 identity 文档
+# node 历史遗留同步：删除 preview html + 修正 identity 文档
 
 - 时间:2026-04-25
 - 状态:done
@@ -11,7 +11,7 @@
 但仓库内仍有两处历史遗留与现状不符：
 
 1. `citizenchain/node/frontend/ui-preview-a.html` / `ui-preview-b.html` / `ui-preview-c.html` 三份早期 UI 设计稿仍含 "启动节点" / "btn-start" 按钮。这些 preview html 不在 vite 入口、不影响生产，但作为设计参考已与现状不符。
-2. `memory/05-modules/citizenchain/nodeui/home/HOME_TECHNICAL.md` 第 73-78 行 identity/mod.rs 段提到 `set_node_name` Tauri command（"节点名称管理：set_node_name（需设备密码验证）"），但 `grep "set_node_name" citizenchain/node/src` 零命中——该 command 早已删除，属预先存在的文档遗留。
+2. `memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md` 第 73-78 行 identity/mod.rs 段提到 `set_node_name` Tauri command（"节点名称管理：set_node_name（需设备密码验证）"），但 `grep "set_node_name" citizenchain/node/src` 零命中——该 command 早已删除，属预先存在的文档遗留。
 
 ## 现状（执行前）
 
@@ -46,6 +46,6 @@
 
 ## 关联
 
-- 文档：`memory/05-modules/citizenchain/nodeui/home/HOME_TECHNICAL.md`
+- 文档：`memory/05-modules/citizenchain/node/home/HOME_TECHNICAL.md`
 - 源码：`citizenchain/node/src/ui/home/identity/mod.rs`
 - 历史：`memory/08-tasks/done/20260425-083200-ui-app.md`（App 生命周期托管整改任务）

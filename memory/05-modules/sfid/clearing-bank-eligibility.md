@@ -91,7 +91,7 @@ GFR / SF 等其他 a3 一律 ❌。
 
 ### `GET /api/v1/app/clearing-banks/eligible-search`（本次新增）
 
-返回**资格候选**：仅用资格白名单过滤，不要求主账户已经 `ACTIVE_ON_CHAIN`（NodeUI"添加清算行"用，因为可能正在创建中）。
+返回**资格候选**：仅用资格白名单过滤，不要求主账户已经 `ACTIVE_ON_CHAIN`（桌面节点"添加清算行"用，因为可能正在创建中）。
 
 响应在 `app_search_clearing_banks` 基础上增加：
 ```json
@@ -104,9 +104,9 @@ GFR / SF 等其他 a3 一律 ❌。
 
 参数：仅 `q`（关键字模糊匹配 sfid_id 或机构名）+ `limit`（最大 50，默认 20）。**无 province/city 过滤**（sfid_id 全局唯一，精确定位）。
 
-## NodeUI 调用地址规则
+## 桌面节点调用地址规则
 
-NodeUI 的"添加清算行"页通过 `citizenchain/node/src/offchain/sfid.rs`
+桌面节点的"添加清算行"页通过 `citizenchain/node/src/offchain/sfid.rs`
 转发调用 `/api/v1/app/clearing-banks/eligible-search`。
 
 SFID 基地址由 `citizenchain/node/src/sfid_config.rs` 统一决定：
@@ -115,12 +115,12 @@ SFID 基地址由 `citizenchain/node/src/sfid_config.rs` 统一决定：
 - 本地 debug 构建默认访问 `http://127.0.0.1:8899`
 - 正式 release 构建默认访问 `http://147.224.14.117:8899`
 
-本地局域网 IP 只用于手机或其他设备联调，NodeUI 本机开发不依赖局域网 IP，
+本地局域网 IP 只用于手机或其他设备联调，桌面节点本机开发不依赖局域网 IP，
 避免 Wi-Fi 地址变化导致清算行搜索请求失败。
 
 ## 不在 Step 1 范围
 
 - 链上 ClearingBankNodes storage / register_clearing_bank extrinsic → Step 2
 - bank_check::ensure_can_be_bound 收紧 → Step 2
-- NodeUI 清算行 tab → Step 2
+- 桌面节点清算行页 → Step 2
 - wumin decoder / wuminapp UI → Step 3

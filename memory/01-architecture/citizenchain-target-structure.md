@@ -36,7 +36,7 @@ citizenchain/
 - 负责节点启停、本地设置、状态展示与桌面打包
 - 对外发布的桌面节点产品入口
 - 桌面端 Rust 后端模块放在 `node/src/<功能名>`，不再保留 `node/src/ui` 目录层
-- 历史 `nodeuitauri/` 与独立 `nodeui/` 能力已统一收口到此目录
+- 历史 `node/` 与独立 `node/` 能力已统一收口到此目录
 
 ### `runtime/`
 

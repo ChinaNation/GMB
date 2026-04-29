@@ -47,7 +47,7 @@
 
 命名说明：
 - 2026-04-29 起，本模块统一使用 `runtime-upgrade` / `runtime_upgrade` / `RuntimeUpgrade`。
-- 模块仍位于 `citizenchain/runtime/governance/`，不保留旧模块兼容别名。
+- 模块位于 `citizenchain/runtime/governance/runtime-upgrade/`。
 - `pallet_index = 13`、call index 与 `MODULE_TAG = b"rt-upg"` 保持不变。
 
 ## 2. 运行时接线

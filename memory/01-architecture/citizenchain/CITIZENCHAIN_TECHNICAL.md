@@ -167,7 +167,7 @@ citizenchain/
 
 ### 10.1 定位
 - `citizenchain/node` 是当前唯一桌面节点产品壳与原生节点实现目录。
-- 历史 `nodeuitauri` 与独立 `nodeui` 目录中的桌面职责已经收口到 `citizenchain/node`，旧目录已删除。
+- 历史 `node` 与独立 `node` 目录中的桌面职责已经收口到 `citizenchain/node`，旧目录已删除。
 - 对最终用户仍然提供“安装即用”的节点软件，而不是要求用户手工管理原生 node 命令。
 
 ### 10.2 当前职责

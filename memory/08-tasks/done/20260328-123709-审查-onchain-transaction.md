@@ -58,7 +58,7 @@
 - 已检查 `citizenchain/runtime/transaction/onchain-transaction/benches/transaction_fee_paths.rs`
 - 已检查 `memory/05-modules/citizenchain/runtime/transaction/onchain-transaction/ONCHAIN_TECHNICAL.md`
 - 已检查 `citizenchain/node/src/rpc.rs`
-- 已检查 `citizenchain/nodeui/backend/src/mining/mining-dashboard/mod.rs`
+- 已检查 `citizenchain/node/backend/src/mining/mining-dashboard/mod.rs`
 - 已完成 `cargo test -p onchain-transaction`
 - 已完成 `cargo check -p citizenchain`
 - 已完成 `cargo bench -p onchain-transaction --bench transaction_fee_paths --no-run`
@@ -75,13 +75,13 @@
 
 2. `FeePaid` 事件不包含 tip，但外部链路把它当成“真实手续费”
    - 事件里写入的是 `base_fee = fee_with_tip - tip`
-   - 但 runtime 注释、node RPC 和 nodeui 注释都把 `FeePaid` 当成“真实手续费”来源
+   - 但 runtime 注释、node RPC 和 node 注释都把 `FeePaid` 当成“真实手续费”来源
    - 只要出现非零 tip，`fee_blockFees` 和依赖它的展示都会少算
    - 位置：
      - `citizenchain/runtime/transaction/onchain-transaction/src/lib.rs:164`
      - `citizenchain/runtime/src/lib.rs:284`
      - `citizenchain/node/src/rpc.rs:333`
-     - `citizenchain/nodeui/backend/src/mining/mining-dashboard/mod.rs:595`
+     - `citizenchain/node/backend/src/mining/mining-dashboard/mod.rs:595`
 
 3. 全节点手续费分成继承了 PoW 作者身份信任风险
    - `OnchainFeeRouter` 通过 `FindAuthor` + `RewardWalletByMiner` 把全节点份额打给作者绑定钱包
@@ -93,7 +93,7 @@
 
 4. 技术文档对事件口径不完整
    - 文档没有写 `FeePaid` 事件只记录基础费，不含 tip
-   - 文档也没有写 node RPC / nodeui 对 `FeePaid` 的依赖关系，难以支撑后续审计和客户端联调
+   - 文档也没有写 node RPC / node 对 `FeePaid` 的依赖关系，难以支撑后续审计和客户端联调
    - 位置：
      - `memory/05-modules/citizenchain/runtime/transaction/onchain-transaction/ONCHAIN_TECHNICAL.md`
 

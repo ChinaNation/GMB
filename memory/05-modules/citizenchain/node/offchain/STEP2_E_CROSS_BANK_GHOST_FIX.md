@@ -138,7 +138,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo test -p node --no-run
 
 $ cargo test -p offchain-transaction --lib
 test result: ok. 20 passed; 0 failed
-(本修复未涉及 pallet 层,仅 node 侧 ledger;保持原先 D 阶段建立的 20 个测试全绿)
+(本修复未涉及 pallet 层,仅 node 侧 ledger;保持 D 阶段建立的 20 个测试全绿)
 ```
 
 **节点侧 ledger 测试执行暂卡 Tauri 门禁**(与本修复无关,预存在):

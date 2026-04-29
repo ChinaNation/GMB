@@ -162,7 +162,7 @@ where
         // 这样可以保留 tip 语义，同时复用统一分账路径。
         let (tip_credit, inclusion_fee) = credit.split(tip);
 
-        // 发出链上手续费事件，供手机端 / 浏览器 / nodeui 读取真实手续费。
+        // 发出链上手续费事件，供手机端 / 浏览器 / node 读取真实手续费。
         let base_fee: u128 = fee_with_tip.saturating_sub(tip).saturated_into();
         pallet::Pallet::<T>::deposit_event(pallet::Event::FeePaid {
             who: payer.clone(),

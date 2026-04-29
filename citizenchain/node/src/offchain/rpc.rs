@@ -33,7 +33,7 @@ const PALLET_NAME: &[u8] = b"OffchainTransaction";
 
 /// 清算行节点暴露给 wuminapp 的查询 RPC。
 ///
-/// 命名空间 `offchain`,方法名与 Step 2 扫码支付协议保持一致,避免后续重命名。
+/// 命名空间 `offchain`,方法名与扫码支付协议保持一致。
 #[rpc(server, namespace = "offchain")]
 pub trait OffchainClearingRpc {
     /// 查询 L3 在本清算行的**可用存款余额**(分)。

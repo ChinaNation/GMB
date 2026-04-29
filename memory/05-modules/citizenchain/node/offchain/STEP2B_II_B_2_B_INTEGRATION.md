@@ -128,7 +128,7 @@ every 30s (spawned task)
 
 ### 3.1 2026-04-28 安全补齐
 
-本轮把原先的占位字段接成可验收闭环:
+本轮把占位字段接成可验收闭环:
 
 - `submit_payment` 不再返回 `[0u8;64]` ACK,而是复用 `KeystoreBatchSigner` 对
   `GMB_L2_ACK_V1 || bank_main || SCALE(intent) || payer_sig || accepted_at` 签名。
