@@ -10,8 +10,8 @@ void main() {
     });
 
     test('不支持的 specVersion 返回 false', () {
-      expect(PalletRegistry.isSupported(0), isFalse);
-      expect(PalletRegistry.isSupported(1), isFalse); // 开发期当前已升至 spec=10
+      expect(PalletRegistry.isSupported(1), isFalse); // 重新创世后当前 spec 已归零
+      expect(PalletRegistry.isSupported(10), isFalse);
       expect(PalletRegistry.isSupported(999), isFalse);
       expect(PalletRegistry.isSupported(-1), isFalse);
     });
@@ -68,9 +68,9 @@ void main() {
       expect(PalletRegistry.cleanupRejectedProposalCall, 4);
     });
 
-    test('supportedSpecVersions 非空 + 当前为 spec=10', () {
+    test('supportedSpecVersions 非空 + 当前为 spec=0', () {
       expect(PalletRegistry.supportedSpecVersions, isNotEmpty);
-      expect(PalletRegistry.supportedSpecVersions, contains(10));
+      expect(PalletRegistry.supportedSpecVersions, contains(0));
     });
 
     test('清算行 OffchainTransaction call_index 与 runtime 对齐', () {

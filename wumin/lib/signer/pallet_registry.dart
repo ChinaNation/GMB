@@ -17,10 +17,10 @@ class PalletRegistry {
 
   /// 当前注册表适配的链 spec_version 集合。
   ///
-  /// 2026-04-29 多签管理与多签转账 pallet 完成新命名后升级到
-  /// `spec_version = 10`，冷钱包同步仅接受当前开发期版本。
-  /// 遇到 spec=1 的离线请求（旧版在线端）视为过期，拒绝解码。
-  static const Set<int> supportedSpecVersions = {10};
+  /// 2026-04-29 重新创世前 runtime wasm 版本整体归零,冷钱包同步仅接受
+  /// 当前 fresh genesis 版本。
+  /// 遇到旧 spec 的离线请求视为过期，拒绝解码。
+  static const Set<int> supportedSpecVersions = {0};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
   ///

@@ -40,6 +40,7 @@
 
 - Codex 开工前先按此模板整理任务
 - 真实开发任务必须至少对应一张 `memory/08-tasks/` 下的任务卡
+- 任务卡文件名（含 `.md` 扩展名）不得超过 160 个 UTF-8 字节，长标题必须写入文件内容
 - Claude Review 时也按此模板检查是否缺项
 - 若任务影响多个产品，必须补充影响范围说明
 - 若需求不清，先使用 `memory/07-ai/clarification-template.md`

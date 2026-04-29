@@ -72,22 +72,18 @@ pub mod opaque {
 pub const VERSION: RuntimeVersion = RuntimeVersion {
     spec_name: alloc::borrow::Cow::Borrowed("citizenchain"),
     impl_name: alloc::borrow::Cow::Borrowed("citizenchain"),
-    authoring_version: 1,
+    authoring_version: 0,
     // The version of the runtime specification. A full node will not attempt to use its native
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
-    // This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
-    //   the compatible custom types.
-    //
     // 当前 runtime 采用统一模块命名：
     // admins-change / voting-engine / duoqian-manage / duoqian-transfer /
     // offchain-transaction / onchain-transaction / institution-asset。
-    // spec_version 仅手动维护，开发期 fresh genesis 不走历史链上兼容迁移。
-    spec_version: 10,
-    impl_version: 1,
+    spec_version: 0,
+    impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
-    transaction_version: 3,
-    system_version: 1,
+    transaction_version: 0,
+    system_version: 0,
 };
 
 mod block_times {
@@ -422,7 +418,11 @@ mod tests {
     fn runtime_version_and_block_types_are_sane() {
         assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
         assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
-        assert!(VERSION.spec_version >= 1);
+        assert_eq!(VERSION.authoring_version, 0);
+        assert_eq!(VERSION.spec_version, 0);
+        assert_eq!(VERSION.impl_version, 0);
+        assert_eq!(VERSION.transaction_version, 0);
+        assert_eq!(VERSION.system_version, 0);
 
         let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
         let _runtime_block_id: BlockId = generic::BlockId::Number(0);
