@@ -4,8 +4,8 @@
 //! - Step 1 仅暴露**只读查询**:余额、下一个 nonce、待上链笔数。
 //! - Step 2 起启用 `offchain_submit_payment(intent, sig)`(扫码支付入口)
 //!   和 WebSocket 推送(`offchain_subscribe_notifications`)。
-//! - 本文件定义 **JSON-RPC trait 与纯 Rust 实现**,`citizenchain/node/src/rpc.rs`
-//!   在 Step 2 起委托到这里(本步不集成,保持现有 rpc.rs 不动)。
+//! - 本文件定义 **JSON-RPC trait 与纯 Rust 实现**,`citizenchain/node/src/core/rpc.rs`
+//!   在 Step 2 起委托到这里。
 
 #![allow(dead_code)]
 
@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use super::ledger::{NodePaymentIntent, OffchainLedger};
 use super::settlement::packer::BatchSigner;
-use crate::service::FullClient;
+use crate::core::service::FullClient;
 
 /// 扫码支付 pallet 在 runtime `construct_runtime!` 中的实例名。与
 /// `reserve.rs` 保持一致,storage key 前缀计算 `twox_128(PALLET_NAME)` 依赖它。
@@ -307,7 +307,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     } else {
         quotient
     };
-    Ok(core::cmp::max(rounded, MIN_FEE_FEN))
+    Ok(std::cmp::max(rounded, MIN_FEE_FEN))
 }
 
 /// 构造 L2 ACK 签名消息:

@@ -49,7 +49,7 @@
 
 # CitizenChain 模块执行清单
 
-- 开工前先确认任务属于 `runtime`、`node`、`nodeui` 或 `primitives`
+- 开工前先确认任务属于 `runtime`、`node`、`节点桌面端` 或 `primitives`
 - 关键 Rust 或前端逻辑必须补中文注释
 - 改动链规则、存储或发布行为前必须先沟通
 - 如果改动 `runtime` 且会影响 `wuminapp` 在线端或 `wumin` 冷钱包二维码签名/验签兼容性，必须先暂停单边修改，转为跨模块任务

@@ -93,10 +93,10 @@
   - 在 `wuminapp/lib/wallet/capabilities/api_client.dart` 增加 `chain_status` 归一化逻辑，兼容旧值并统一折叠到 `INACTIVE/PENDING/REGISTERED/FAILED`
   - 在 `wuminapp/lib/governance/duoqian_create_proposal_page.dart` 改为使用归一化后的 `isRegistered` 判定
 - 已继续修复 `citizenchain/node` 治理页机构账户显示链路：
-  - 删除 `node/src/ui/governance/mod.rs` 中过期的主账户静态地址表，治理首页和详情页统一改为直接读取 `runtime/primitives/china/china_cb.rs`、`china_ch.rs`、`NRC_ANQUAN_ADDRESS`
-  - 新增 `node/src/ui/governance/registry.rs`，把 `国储会 / 省储会 / 省储行` 的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 地址统一收口到 runtime 常量真源
+  - 删除 `node/src/governance/mod.rs` 中过期的主账户静态地址表，治理首页和详情页统一改为直接读取 `runtime/primitives/china/china_cb.rs`、`china_ch.rs`、`NRC_ANQUAN_ADDRESS`
+  - 新增 `node/src/governance/registry.rs`，把 `国储会 / 省储会 / 省储行` 的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 地址统一收口到 runtime 常量真源
   - `get_institution_detail()` 改为先取同一个 finalized block hash，再按该块高查询当前页面全部账户余额，避免一页内混入不同块高金额
-  - 新增 `node/src/ui/governance/balance_watch.rs`，详情页打开后会持续监听 finalized 新块，并通过 Tauri 事件 `governance-balance-updated` 只刷新链上金额与告警
+  - 新增 `node/src/governance/balance_watch.rs`，详情页打开后会持续监听 finalized 新块，并通过 Tauri 事件 `governance-balance-updated` 只刷新链上金额与告警
   - 前端 `InstitutionDetailPage.tsx` 仅补监听和 state 覆盖逻辑，页面 UI、卡片布局、显示顺序保持不变
 - 本轮验证：
   - `npm run build`（`citizenchain/node/frontend`）通过

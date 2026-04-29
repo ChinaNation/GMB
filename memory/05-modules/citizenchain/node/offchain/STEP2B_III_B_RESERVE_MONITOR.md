@@ -130,7 +130,7 @@ if monitor_interval_secs > 0 {
 
 `runner.run_node_until_exit` 闭包加 `clearing_reserve_monitor_interval_secs` 透传。
 
-### 3.7 `ui/node_runner.rs`
+### 3.7 `node_runner.rs`
 
 Tauri UI 入口 `new_full(..., None, None, None)`:UI 暂不支持清算行角色,对账参数也透传 `None`。
 
@@ -189,7 +189,7 @@ WARN  [ReserveMonitor] 对账失败:storage 读取失败:...
 ```
 $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 (offchain / service / rpc / cli / command / node_runner 全部零 error;
- 链接阶段仅剩 ui/mod.rs:91 tauri proc macro `frontend/dist` 门禁,与本步无关)
+ 链接阶段仅剩 desktop.rs tauri proc macro `frontend/dist` 门禁,与本步无关)
 ```
 
 ---
@@ -225,4 +225,4 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node --tests
 
 ## 9. 变更记录
 
-- 2026-04-19:Step 2b-iii-b 完整落地。`reserve.rs` 新建;ledger.rs 加 `confirmed_sum_snapshot`;mod.rs / cli.rs / service.rs / command.rs / ui/node_runner.rs 全链路透传 interval 参数;5 个单测(snapshot 3 + storage key 2)。零编译错误。
+- 2026-04-19:Step 2b-iii-b 完整落地。`reserve.rs` 新建;ledger.rs 加 `confirmed_sum_snapshot`;mod.rs / cli.rs / service.rs / command.rs / node_runner.rs 全链路透传 interval 参数;5 个单测(snapshot 3 + storage key 2)。零编译错误。

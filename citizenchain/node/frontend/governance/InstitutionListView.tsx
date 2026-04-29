@@ -1,7 +1,8 @@
 // 机构列表：按 orgTypeFilter 过滤显示省储会或省储行，点击进入详情。
 import { useEffect, useState } from 'react';
-import { api, sanitizeError } from '../api';
-import type { GovernanceOverview, InstitutionListItem } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { governanceApi as api } from './api';
+import type { GovernanceOverview, InstitutionListItem } from './types';
 
 type Props = {
   onSelect: (shenfenId: string) => void;

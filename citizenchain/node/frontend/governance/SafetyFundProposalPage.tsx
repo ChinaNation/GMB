@@ -1,11 +1,12 @@
 // 安全基金转账提案页面：表单 + QR 签名流程。
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
-import { QrScanner } from './QrScanner';
-import { AddressScanModal } from './AddressScanModal';
-import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { hexToSs58 } from '../shared/ss58';
+import { QrScanner } from '../shared/qr/QrScanner';
+import { AddressScanModal } from '../shared/qr/AddressScanModal';
+import { governanceApi as api } from './api';
+import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   adminWallets: AdminWalletMatch[];

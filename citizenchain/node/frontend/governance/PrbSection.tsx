@@ -8,7 +8,7 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
 import { SweepProposalPage } from './SweepProposalPage';
-import type { AdminWalletMatch } from './governance-types';
+import type { AdminWalletMatch } from './types';
 
 type PrbView =
   | { page: 'list' }

@@ -96,7 +96,7 @@ citizenchain/runtime/issuance/resolution-issuance/
 
 - `sfid/backend/src/indexer/event_parser.rs` 需要按 `ResolutionIssuance / ResolutionIssuanceExecuted` 解析治理发行事件。
 - `wumin/lib/signer/pallet_registry.dart` 需要把 spec_version 更新到当前 runtime 版本，并使用 `resolutionIssuancePallet = 8`。
-- `wuminapp` 与 nodeui 继续可通过 `b"res-iss"` 识别联合提案类型。
+- `wuminapp` 与节点桌面端继续可通过 `b"res-iss"` 识别联合提案类型。
 
 ## 9. 验证命令
 

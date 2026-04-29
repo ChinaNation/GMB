@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use citizenchain as runtime;
 
-use crate::service::FullClient;
+use crate::core::service::FullClient;
 
 use crate::offchain::ledger::OffchainLedger;
 

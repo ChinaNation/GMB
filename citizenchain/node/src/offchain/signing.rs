@@ -12,7 +12,7 @@
 //   BoundedVec<u8, ConstU32<N>> 等价 Vec<u8> = Compact<u32>(len) || bytes
 //   u16 = 2 字节 little-endian
 
-use crate::ui::governance::signing::{
+use crate::governance::signing::{
     build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,
 };
 

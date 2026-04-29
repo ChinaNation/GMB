@@ -28,7 +28,7 @@ pub(crate) fn start_from_cli(
     clearing_bank_password: Option<&str>,
     reserve_monitor_interval_secs: Option<u64>,
     base_path: &Path,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
     transaction_pool: Arc<TxPool>,
     task_manager: &TaskManager,
 ) -> Option<Arc<OffchainClearingRpcImpl>> {
@@ -108,7 +108,7 @@ pub(crate) fn start_from_cli(
 
 fn spawn_packer_worker(
     task_manager: &TaskManager,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
     packer: Arc<super::settlement::packer::OffchainPacker>,
 ) {
     task_manager
@@ -136,7 +136,7 @@ fn spawn_packer_worker(
 
 fn spawn_listener_worker(
     task_manager: &TaskManager,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
     listener: Arc<super::settlement::listener::EventListener>,
 ) {
     task_manager.spawn_handle().spawn(
@@ -150,7 +150,7 @@ fn spawn_listener_worker(
 
 fn spawn_reserve_worker(
     task_manager: &TaskManager,
-    client: Arc<crate::service::FullClient>,
+    client: Arc<crate::core::service::FullClient>,
     monitor: Arc<super::reserve::ReserveMonitor>,
     reserve_monitor_interval_secs: Option<u64>,
 ) {

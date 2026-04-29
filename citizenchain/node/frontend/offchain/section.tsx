@@ -12,7 +12,7 @@
 // 已添加的清算行(本机已用过的 sfid_id)缓存在 localStorage,empty 视图列出。
 
 import { useEffect, useState, useCallback } from 'react';
-import { sanitizeError } from '../api';
+import { sanitizeError } from '../core/tauri';
 import { offchainApi } from './api';
 import type {
   ClearingBankNodeOnChainInfo,

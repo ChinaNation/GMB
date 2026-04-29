@@ -32,8 +32,8 @@ use std::sync::{Arc, RwLock};
 use citizenchain as runtime;
 use offchain_transaction::batch_item::OffchainBatchItemV2;
 
+use crate::core::service::FullClient;
 use crate::offchain::keystore::SigningKey;
-use crate::service::FullClient;
 
 use super::packer::BatchSubmitter;
 

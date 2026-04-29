@@ -163,6 +163,11 @@
 - `memory/08-tasks/done/20260429-093954-rename-issuance-modules.md`
 - `memory/08-tasks/done/20260429-094308-rename-pow-difficulty-and-sfid-system.md`
 - `memory/08-tasks/done/20260429-100032-duoqian-modules-full-rename.md`
+- `memory/08-tasks/done/20260429-104102-重命名本地-libp2p-websocket-patch-目录.md`
+- `memory/08-tasks/done/20260429-104514-彻底扁平化-citizenchain-node-src-ui-目录-删除-ui-这一层路径-把桌面-ui-rust-后端模块统一迁移为-citizenchain-node-src-<功能名>-同步修正引用-文档-注释和残留路径.md`
+- `memory/08-tasks/done/20260429-111541-继续收敛-citizenchain-node-前后端功能目录-mining-与-network-前后端合并到-mining-transaction-前后端移动到-home-transaction-gpu-miner-rs-移入-mining-src-根层节点核心文件收口到-core-桌面入口收口到-desktop-并同步修正引用-文档-注释与残留路径.md`
+- `memory/08-tasks/done/20260429-113130-收敛-citizenchain-node-frontend-前端目录结构.md`
+- `memory/08-tasks/done/20260429-114553-禁止-node-frontend-根层-vite-配置生成物产出.md`
 - `memory/08-tasks/done/20260429-ai-frontend-backend-same-feature-path-rule.md`
 - `memory/08-tasks/done/20260429-duoqian-manage-step1-institution-refactor.md`
 - `memory/08-tasks/done/20260429-governance-rename-resolution-runtime.md`

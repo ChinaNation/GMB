@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../../api';
+import { governanceApi } from '../../governance/api';
+import { homeNodeApi } from '../../home/home-node/api';
+import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
 import { DeveloperUpgradePage } from '../developer-upgrade';
-import type { BootnodeKey, ChainStatus, RewardWallet } from '../../types';
+import type { ChainStatus } from '../../home/home-node/types';
+import type { BootnodeKey, RewardWallet } from '../types';
 
 export function SettingsSection() {
   const [wallet, setWallet] = useState<RewardWallet>({ address: null });
@@ -17,10 +20,10 @@ export function SettingsSection() {
 
   const loadSettings = useCallback(async () => {
     const [w, k, c, a] = await Promise.allSettled([
-      api.getRewardWallet(),
-      api.getBootnodeKey(),
-      api.getChainStatus(),
-      api.hasAnyActivatedAdmin(),
+      settingsApi.getRewardWallet(),
+      settingsApi.getBootnodeKey(),
+      homeNodeApi.getChainStatus(),
+      governanceApi.hasAnyActivatedAdmin(),
     ]);
     if (w.status === 'fulfilled') setWallet(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);

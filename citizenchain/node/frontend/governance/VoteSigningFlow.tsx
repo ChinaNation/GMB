@@ -1,9 +1,10 @@
 // 投票签名流程：选钱包 → 显示 QR → 摄像头扫描响应 → 提交。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { QrScanner } from './QrScanner';
-import type { AdminWalletMatch, VoteSignRequestResult } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { QrScanner } from '../shared/qr/QrScanner';
+import { governanceApi as api } from './api';
+import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
   proposalId: number;

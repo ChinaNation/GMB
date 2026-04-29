@@ -120,7 +120,7 @@ $ WASM_FILE=/tmp/dummy_wasm.wasm cargo check -p node
 
 - `offchain-transaction`:**零 warning / 零 error**
 - `node` 的 `offchain/` 子树:**零 warning / 零 error**(grep offchain 0 命中)
-- 链接阶段在 `ui/mod.rs:91` tauri proc macro(frontend/dist 缺失)受 CI 门禁拦截,与本步无关
+- 链接阶段在 `desktop.rs` tauri proc macro(frontend/dist 缺失)受 CI 门禁拦截,与本步无关
 
 ## 5. 关键兼容性
 

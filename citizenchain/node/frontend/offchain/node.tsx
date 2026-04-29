@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { sanitizeError } from '../api';
-import { QrScanner } from '../governance/QrScanner';
-import type { AdminWalletMatch, VoteSignRequestResult } from '../governance/governance-types';
+import { sanitizeError } from '../core/tauri';
+import { QrScanner } from '../shared/qr/QrScanner';
+import type { AdminWalletMatch, VoteSignRequestResult } from '../governance/types';
 import { offchainApi } from './api';
 import type { ClearingBankNodeOnChainInfo } from './types';
 

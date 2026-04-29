@@ -5,7 +5,7 @@
 - 范围:所有 `kind = sign_request` 的 `body.display.action` + `body.display.fields`
 - 依赖:`memory/05-architecture/qr-signing-recognition.md` § 识别方案
 
-任何一端(`wumin/lib/signer/payload_decoder.dart` / `citizenchain/node/src/ui/` / `wuminapp/lib/`)新增或修改 action / field key,**必须先改本文件,再改代码**。CI 门禁扫本文件 vs 三端实现。
+任何一端(`wumin/lib/signer/payload_decoder.dart` / `citizenchain/node/src/` / `wuminapp/lib/`)新增或修改 action / field key,**必须先改本文件,再改代码**。CI 门禁扫本文件 vs 三端实现。
 
 ## 一、Action 清单(按 pallet 分组)
 
@@ -79,7 +79,7 @@
 
 | action | payload 结构 | fields | 签发方 | 用途 |
 |---|---|---|---|---|
-| `activate_admin` | `GMB_ACTIVATE`(12B) + `shenfen_id`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `shenfen_id` | node_ui(`citizenchain/node/src/ui/governance/activation.rs`) / sfid 后端 | 管理员激活,sfid 后端验签。decoder 检测 `GMB_ACTIVATE` 前缀走专用分支。 |
+| `activate_admin` | `GMB_ACTIVATE`(12B) + `shenfen_id`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `shenfen_id` | node_ui(`citizenchain/node/src/governance/activation.rs`) / sfid 后端 | 管理员激活,sfid 后端验签。decoder 检测 `GMB_ACTIVATE` 前缀走专用分支。 |
 
 ## 二、字段渲染规则
 
@@ -113,7 +113,7 @@
 1. 修改本文件,加入新行(pallet_index + call_index + fields + 签发方),**PR 单独提交**
 2. 修改 `wumin/lib/signer/payload_decoder.dart` 加对应 decode 分支,返回的 action / fields key **逐字对齐本表**
 3. 修改 `wumin/lib/signer/pallet_registry.dart` 补 pallet_index / call_index 常量
-4. 修改签发方代码(`citizenchain/node/src/ui/` 或 `wuminapp/lib/`),`display.action` + `SignDisplayField.key` 逐字对齐
+4. 修改签发方代码(`citizenchain/node/src/` 或 `wuminapp/lib/`),`display.action` + `SignDisplayField.key` 逐字对齐
 5. 补 `wumin/test/` 单测 + `memory/05-architecture/qr-protocol-fixtures/` golden fixture
 6. 端到端 Flutter / Rust 测试覆盖
 7. PR 标题包含 `[qr-registry]`,CI 门禁扫本文件 vs 三端

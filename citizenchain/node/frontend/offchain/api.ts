@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import type { VoteSignRequestResult, VoteSubmitResult } from '../governance/governance-types';
+import { invoke } from '../core/tauri';
+import type { VoteSignRequestResult, VoteSubmitResult } from '../governance/types';
 import type {
   ClearingBankNodeOnChainInfo,
   ConnectivityTestReport,

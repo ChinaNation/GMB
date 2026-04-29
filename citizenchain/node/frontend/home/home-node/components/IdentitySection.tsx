@@ -1,5 +1,5 @@
 // 身份信息展示：节点角色 + P2P 地址。
-import type { NodeIdentity } from '../../../types';
+import type { NodeIdentity } from '../types';
 
 type Props = {
   identity: NodeIdentity;

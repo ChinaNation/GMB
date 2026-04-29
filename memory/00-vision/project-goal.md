@@ -34,8 +34,8 @@ GMB 的 AI 开发体系必须满足以下要求：
 
 ## 4. 技术总原则
 
-- `citizenchain/node` 与 `citizenchain/runtime` 使用 Rust
-- `citizenchain/nodeui` 使用 Rust + Tauri + React + TypeScript + Vite
+- `citizenchain/node` 使用 Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
+- `citizenchain/runtime` 使用 Rust + Substrate / Polkadot SDK
 - `wuminapp` 使用 Flutter + Dart，并继续使用 Isar 做端上本地存储
 - `sfid` 当前使用 React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL 持久化
 - `cpms` 当前落地代码使用 Rust + Axum + SQLx + PostgreSQL；`frontend/` 目录仅保留预留结构，尚无独立前端实现

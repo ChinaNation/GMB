@@ -1,9 +1,11 @@
 // 提案详情页：提案元数据 + 业务详情（转账/升级）+ 投票进度 + 管理员投票状态列表。
 // 从提案列表和机构页面进入时行为一致：自动检测管理员钱包权限。
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, sanitizeError } from '../api';
-import { formatBalance, hexToSs58 } from '../format';
-import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './governance-types';
+import { sanitizeError } from '../core/tauri';
+import { formatBalance } from '../shared/format';
+import { hexToSs58 } from '../shared/ss58';
+import { governanceApi as api } from './api';
+import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
 
 type Props = {

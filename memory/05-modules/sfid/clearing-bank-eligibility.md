@@ -109,7 +109,7 @@ GFR / SF 等其他 a3 一律 ❌。
 NodeUI 的"添加清算行"页通过 `citizenchain/node/src/offchain/sfid.rs`
 转发调用 `/api/v1/app/clearing-banks/eligible-search`。
 
-SFID 基地址由 `citizenchain/node/src/ui/sfid_config.rs` 统一决定：
+SFID 基地址由 `citizenchain/node/src/sfid_config.rs` 统一决定：
 
 - `SFID_BASE_URL` 环境变量优先
 - 本地 debug 构建默认访问 `http://127.0.0.1:8899`

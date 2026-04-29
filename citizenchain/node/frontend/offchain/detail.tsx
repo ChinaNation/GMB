@@ -11,14 +11,16 @@
 //  - 读取 institution detail 仍走 api.getInstitutionDetail 复用后端实现。
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58, formatBalance } from '../format';
+import { sanitizeError } from '../core/tauri';
+import { governanceApi as api } from '../governance/api';
+import { formatBalance } from '../shared/format';
+import { hexToSs58 } from '../shared/ss58';
 import type {
   ActivatedAdmin,
   AdminWalletMatch,
   InstitutionDetail,
   ProposalListItem,
-} from '../governance/governance-types';
+} from '../governance/types';
 import { offchainApi } from './api';
 import type { ClearingBankNodeOnChainInfo } from './types';
 import { ClearingBankNodeInfoPanel } from './node';

@@ -111,4 +111,4 @@ confirm_tx → PendingDebit 广播 → should_pack 检查阈值
 - `citizenchain/node/src/offchain_gossip.rs` - P2P 广播协议
 - `citizenchain/node/src/offchain_ledger.rs` - 待结算账本
 - `citizenchain/node/src/offchain_packer.rs` - 批量打包器
-- `citizenchain/node/src/rpc.rs` - 链下 RPC 接口
+- `citizenchain/node/src/core/rpc.rs` - 链下 RPC 接口

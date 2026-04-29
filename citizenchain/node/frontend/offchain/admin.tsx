@@ -9,13 +9,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58, formatBalance } from '../format';
-import { QrScanner } from '../governance/QrScanner';
+import { sanitizeError } from '../core/tauri';
+import { governanceApi as api } from '../governance/api';
+import { formatBalance } from '../shared/format';
+import { hexToSs58 } from '../shared/ss58';
+import { QrScanner } from '../shared/qr/QrScanner';
 import type {
   ActivatedAdmin,
   InstitutionDetail,
-} from '../governance/governance-types';
+} from '../governance/types';
 import { offchainApi } from './api';
 import type { DecryptAdminRequestResult, DecryptedAdminInfo } from './types';
 

@@ -180,7 +180,7 @@ nickname      (作为字段名)
 
 ## 已知残留(不影响功能)
 
-- `citizenchain/node/src/ui/governance/signing.rs`:sign_request display JSON 中仍有 `action_label` 和 `key` 冗余字段。`SignDisplay.fromJson` 解析时自动忽略多余字段，不影响功能。需在下次 citizenchain 代码变更时一并清理。
+- `citizenchain/node/src/governance/signing.rs`:sign_request display JSON 中仍有 `action_label` 和 `key` 冗余字段。`SignDisplay.fromJson` 解析时自动忽略多余字段，不影响功能。需在下次 citizenchain 代码变更时一并清理。
 
 ## 验收标准
 

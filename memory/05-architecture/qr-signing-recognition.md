@@ -160,7 +160,7 @@ Registry 增补 `wasm_hash` + `eligible_total` 字段,三端共用 **sha256(wasm
 
 ### 6.3 citizenchain/node Tauri UI 对齐 Registry
 
-审计 `src/ui/governance/signing.rs` + `src/ui/transaction/mod.rs` 全部 `build_X_sign_request` 函数,与 Registry 逐条对齐:
+审计 `src/governance/signing.rs` + `src/transaction/mod.rs` 全部 `build_X_sign_request` 函数,与 Registry 逐条对齐:
 
 - `display.action` 字面相等
 - `display.fields` 每个 `key` 字面相等
@@ -188,7 +188,7 @@ Registry 增补 `wasm_hash` + `eligible_total` 字段,三端共用 **sha256(wasm
 - 合并前 Grep 扫 §5.3 的 15 个残留字符串
 
 ### PR-D 节点 UI 对齐(Blockchain Agent)
-- `src/ui/governance/signing.rs` + `src/ui/transaction/mod.rs` 对齐 Registry
+- `src/governance/signing.rs` + `src/transaction/mod.rs` 对齐 Registry
 - 必要时补漏项
 - 合并前 Grep 扫残留
 

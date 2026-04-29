@@ -2,7 +2,7 @@
 //
 // 校验序列:
 //   1. 用户填 RPC 域名 + 端口
-//   2. 点"自测连通性",NodeUI 跑 DNS/wss/链ID/PeerId 4 重检查
+//   2. 点"自测连通性",节点桌面端跑 DNS/wss/链ID/PeerId 4 重检查
 //   3. 全部通过才解锁"扫码签名提交"按钮
 //   4. wumin 冷钱包扫请求 QR → 摄像头扫响应 QR → 链上 register_clearing_bank
 //
@@ -11,10 +11,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, sanitizeError } from '../api';
-import { hexToSs58 } from '../format';
-import { QrScanner } from '../governance/QrScanner';
-import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../governance/governance-types';
+import { sanitizeError } from '../core/tauri';
+import { governanceApi as api } from '../governance/api';
+import { hexToSs58 } from '../shared/ss58';
+import { QrScanner } from '../shared/qr/QrScanner';
+import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../governance/types';
 import { offchainApi } from './api';
 import type { ConnectivityTestReport } from './types';
 

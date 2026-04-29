@@ -21,6 +21,12 @@
 - Justification 周期：64 块
 - vendor 目录：`sc-consensus-grandpa` v0.40.0（独立 GPL-3.0 许可）
 
+### 1.3 libp2p WebSocket 本地覆盖
+- 本地目录：`citizenchain/node/libp2p-websocket/`
+- 覆盖方式：`citizenchain/Cargo.toml` 通过 `[patch.crates-io]` 将 crates.io 的 `libp2p-websocket` 指向该本地目录。
+- 包名约束：本地 crate 的 `name` 必须继续保持 `libp2p-websocket`，否则 Cargo patch 无法覆盖上游同名包。
+- 当前改动点：公开 `tls::Config` 的 `client` 字段，支持节点在 WSS transport 中注入自定义 TLS 客户端。TLS 层只负责传输加密，P2P 身份认证仍由 Noise 协议通过 peer ID 保证。
+
 ## 2. 挖矿子系统
 
 ### 2.1 CPU 挖矿
@@ -76,14 +82,14 @@
 ## 6. 治理桌面页账户数据链路
 
 - 地址真源：
-  - `node/src/ui/governance/registry.rs` 直接读取 `runtime/primitives/china/china_cb.rs`、`runtime/primitives/china/china_ch.rs` 和 `NRC_ANQUAN_ADDRESS`
+  - `node/src/governance/registry.rs` 直接读取 `runtime/primitives/china/china_cb.rs`、`runtime/primitives/china/china_ch.rs` 和 `NRC_ANQUAN_ADDRESS`
   - `治理 -> 国储会 / 省储会 / 省储行` 页面的 `主账户 / 费用账户 / 安全基金账户 / 永久质押账户` 不再允许 node 侧手抄第二份地址表
 - 金额真源：
-  - `node/src/ui/governance/institution.rs` 先取 `chain_getFinalizedHead`
+  - `node/src/governance/institution.rs` 先取 `chain_getFinalizedHead`
   - 再用同一个 `block_hash` 调 `state_getStorage(System::Account)` 读取 `free` 余额
   - 同一详情页内所有账户金额必须来自同一个 finalized 快照
 - 实时刷新：
-  - `node/src/ui/governance/balance_watch.rs` 在详情页打开时启动 watcher
+  - `node/src/governance/balance_watch.rs` 在详情页打开时启动 watcher
   - watcher 每秒检查一次 finalized hash，哈希变化后重新查询当前页面全部账户余额
   - 查询结果通过 Tauri 事件 `governance-balance-updated` 推给前端
 - 前端约束：
@@ -94,23 +100,43 @@
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
-| `src/service.rs` | 695 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择 |
-| `src/rpc.rs` | 382 | RPC 模块、钱包绑定签名、哈希率查询、轻节点同步 |
-| `src/gpu_miner.rs` | 322 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
-| `src/command.rs` | 242 | CLI 子命令路由 |
-| `src/chain_spec.rs` | 95 | Chain spec、44 个 bootnode、token 属性 |
-| `src/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
-| `src/cli.rs` | 64 | CLI 参数定义 |
-| `src/main.rs` | 15 | 入口 |
+| `src/core/service.rs` | 830 | 服务工厂、PoW 算法、CPU 挖矿、GRANDPA 角色选择 |
+| `src/core/rpc.rs` | 419 | 节点核心 RPC、钱包绑定签名、哈希率查询、轻节点同步 |
+| `src/mining/gpu_miner.rs` | 392 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
+| `src/core/command.rs` | 237 | CLI 子命令路由 |
+| `src/core/chain_spec.rs` | 97 | Chain spec、44 个 bootnode、token 属性 |
+| `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
+| `src/core/cli.rs` | 83 | CLI 参数定义 |
+| `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
+| `src/desktop/mod.rs` | 120 | 桌面端 Tauri 入口与命令注册 |
+| `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
+| `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |
+| `src/main.rs` | 67 | CLI / 桌面入口分发 |
 | `vendor/` | ~13,854 | sc-consensus-grandpa v0.40.0（GPL-3.0） |
+| `libp2p-websocket/` | 6 files | 本地覆盖 crates.io `libp2p-websocket`，用于 WSS TLS 客户端配置扩展 |
+
+目录收敛约定：
+- 节点核心能力统一在 `src/core/`，避免根层散落 CLI、service、RPC、chain spec 等基础文件。
+- 桌面壳入口统一在 `src/desktop/`，只负责 Tauri 启动、命令注册和进程内节点运行器。
+- 挖矿页后端统一在 `src/mining/`，包含收益看板、资源监控、网络概览、出块记录与 GPU 挖矿。
+- 首页交易能力统一在 `src/home/transaction/`，与前端 `node/frontend/home/transaction/` 保持一致。
+- 跨功能复用能力统一在 `src/shared/`，例如 RPC 客户端、keystore、安全路径与 SFID 服务地址配置。
+
+前端目录收敛约定：
+- `frontend/app/`：React/Tauri 前端入口，包含 `App.tsx`、`main.tsx` 与全局样式。
+- `frontend/core/`：前端基础适配层，目前统一封装 Tauri `invoke` 与错误消息清理。
+- `frontend/shared/`：跨功能复用能力，包含金额格式化、SS58 编解码与 `shared/qr/` 扫码协议组件。
+- `frontend/home/`、`frontend/mining/`、`frontend/governance/`、`frontend/offchain/`、`frontend/settings/`、`frontend/other/`：与后端 `src/<功能名>` 保持同名边界。
+- 各功能目录自持 `api.ts` 与 `types.ts`；根层不再保留全局 `api.ts`、`types.ts`、`format.ts`，避免新功能继续污染前端根层。
+- 前端构建脚本使用 `tsc --noEmit && vite build`；`vite.config.ts` 由主 `tsconfig.json` 直接类型检查，不再通过 `tsconfig.node.json` 产出 `vite.config.js` / `vite.config.d.ts` 或 `*.tsbuildinfo`。
 
 ## 8. 安全风险（已知）
 
 ### 7.1 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
 - **当前缓解**：默认 `--rpc-methods Safe` 限制为本地调用。
-- **风险场景**：nodeui 启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
-- **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为 nodeui 本地签名后提交。
+- **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
+- **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为节点桌面端本地签名后提交。
 
 ### 7.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：

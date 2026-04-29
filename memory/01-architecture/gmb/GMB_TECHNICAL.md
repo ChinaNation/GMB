@@ -111,8 +111,8 @@
 4. 对应管理后台生成会话并授权。
 
 ### 5.4 节点部署与使用主流程
-1. `citizenchain/node` 提供原生节点程序。
-2. `citizenchain/nodeui` 将节点程序以内嵌 sidecar 方式打包为桌面应用。
+1. `citizenchain/node` 提供原生节点程序、桌面端 Rust 后端、React 前端与 Tauri 打包入口。
+2. `citizenchain/node` 将节点程序与桌面界面打包为同一个桌面应用。
 3. 用户安装桌面节点软件后可直接启动本地节点。
 4. `wuminapp` 与其他产品通过 RPC、链侧接口或间接服务读取链状态。
 
@@ -197,8 +197,7 @@ GMB/
 ### 8.2 Native Node / 安装包发布
 - 适用产品：`citizenchain`
 - 触发条件：
-  - 修改 `node/`
-  - 修改 `nodeui/`
+  - 修改 `node/` 原生节点、桌面端后端、前端或 Tauri 配置
   - 修改安装包脚本、打包流水线
 - 影响：
   - 一般不要求 runtime 升级
