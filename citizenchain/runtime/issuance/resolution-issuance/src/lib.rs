@@ -47,7 +47,7 @@ pub mod pallet {
     pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
 
-    /// 中文注释：联合投票终结后的业务执行结果，用于决定 post-dispatch 退费和状态覆盖。
+    /// 中文注释：联合投票终结后的业务执行结果，用于决定 post-dispatch 退费和投票引擎状态写入。
     pub(crate) enum FinalizeOutcome {
         ApprovedExecutionSucceeded,
         ApprovedExecutionFailed,
@@ -200,7 +200,7 @@ pub mod pallet {
             proposal_id: u64,
             total_amount: BalanceOf<T>,
         },
-        /// 投票通过但发行执行失败，提案状态会覆盖为 STATUS_EXECUTION_FAILED。
+        /// 投票通过但发行执行失败，投票引擎状态会写为 STATUS_EXECUTION_FAILED。
         IssuanceExecutionFailed { proposal_id: u64 },
         /// 合法收款账户集合已更新。
         AllowedRecipientsUpdated { count: u32 },
@@ -332,13 +332,23 @@ pub mod pallet {
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
         let outcome = pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
-        if matches!(outcome, pallet::FinalizeOutcome::ApprovedExecutionFailed) {
-            // 中文注释：本回调运行在投票引擎 set_status_and_emit 的事务中；
-            // 执行失败时覆盖 PASSED，保证“投票通过但业务失败”有独立终态。
-            voting_engine::Pallet::<T>::override_proposal_status(
-                vote_proposal_id,
-                voting_engine::STATUS_EXECUTION_FAILED,
-            )?;
+        match outcome {
+            pallet::FinalizeOutcome::ApprovedExecutionSucceeded => {
+                // 中文注释：本回调运行在投票引擎 set_status_and_emit 的事务中；
+                // 执行成功时静默写入 EXECUTED，最终事件由投票引擎外层统一发一次。
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    vote_proposal_id,
+                    voting_engine::STATUS_EXECUTED,
+                )?;
+            }
+            pallet::FinalizeOutcome::ApprovedExecutionFailed => {
+                // 中文注释：执行失败时静默写入失败终态，最终事件由投票引擎外层统一发一次。
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    vote_proposal_id,
+                    voting_engine::STATUS_EXECUTION_FAILED,
+                )?;
+            }
+            pallet::FinalizeOutcome::Rejected => {}
         }
         Ok(())
     }

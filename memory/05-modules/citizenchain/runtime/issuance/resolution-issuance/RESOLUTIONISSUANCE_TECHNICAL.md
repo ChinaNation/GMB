@@ -81,7 +81,8 @@ citizenchain/runtime/issuance/resolution-issuance/
 5. 投票引擎终结联合投票后回调 `ResolutionIssuance`。
 6. 如果投票通过，模块在同一事务内执行发行、记录防重放、清理 ProposalData 并递减计数。
 7. 如果投票否决，模块只清理提案数据并递减计数。
-8. 如果投票通过但执行失败，模块发出失败事件，并由回调把提案状态覆盖为 `STATUS_EXECUTION_FAILED`。
+8. 如果投票通过且执行成功，模块发出执行事件，并由回调把投票引擎状态静默写为 `STATUS_EXECUTED`。
+9. 如果投票通过但执行失败，模块发出失败事件，并由回调把投票引擎状态静默写为 `STATUS_EXECUTION_FAILED`。
 
 ## 7. 安全边界
 

@@ -105,7 +105,7 @@ Runtime 配置位置：
 约束：
 - 仅该机构内部管理员可清理
 - 仅可清理“已通过但当前确定不可执行”的提案
-- 用于解除机构被 ActiveProposal 长期锁死的问题
+- 清理时将投票引擎状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`，用于解除机构被 ActiveProposal 长期锁死的问题
 
 ## 6. 执行路径与 GRANDPA 交互
 `try_execute_from_action` 关键步骤：
@@ -118,8 +118,8 @@ Runtime 配置位置：
 7. 成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 标记为已执行终态，防止重复执行
 8. 同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
 
-提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）。
-注：`cancel_failed_replace_grandpa_key` 会将已通过但不可执行的提案设置为 `STATUS_REJECTED` 后清理。
+提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）/ `VOTING → PASSED → EXECUTION_FAILED`（已通过但确认不可执行）。
+注：`cancel_failed_replace_grandpa_key` 会将已通过但不可执行的提案设置为 `STATUS_EXECUTION_FAILED` 后清理。
 
 ## 7. 关键错误与语义
 - `GrandpaChangePending`：当前已有待生效 authority set 变更

@@ -58,6 +58,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `VotingEngine::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::Proposals` (r:0 w:1)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngine::InternalThresholdSnapshot` (r:0 w:1)
 	fn create_internal_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `74`
@@ -66,18 +67,19 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		Weight::from_parts(7_955_000, 0)
 			.saturating_add(Weight::from_parts(0, 1493))
 			.saturating_add(T::DbWeight::get().reads(1))
-			.saturating_add(T::DbWeight::get().writes(2))
+			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// 内部投票(占位:与 `joint_vote` 同量级);Phase 2 业务模块改造完成后由
 	/// benchmark-cli 重跑生成精确值。
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Storage: `VotingEngine::InternalVotesByAccount` (r:1 w:1)
 	/// Storage: `VotingEngine::InternalTallies` (r:1 w:1)
-	/// Storage: `VotingEngine::SnapshotAdmins` (r:1 w:0)
+	/// Storage: `VotingEngine::AdminSnapshot` (r:1 w:0)
+	/// Storage: `VotingEngine::InternalThresholdSnapshot` (r:1 w:0)
 	fn internal_vote() -> Weight {
 		Weight::from_parts(30_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(T::DbWeight::get().reads(6))
+			.saturating_add(T::DbWeight::get().reads(7))
 			.saturating_add(T::DbWeight::get().writes(3))
 	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
@@ -165,6 +167,7 @@ impl WeightInfo for () {
 	/// Proof: `VotingEngine::NextProposalId` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `VotingEngine::Proposals` (r:0 w:1)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
+	/// Storage: `VotingEngine::InternalThresholdSnapshot` (r:0 w:1)
 	fn create_internal_proposal() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `74`
@@ -173,13 +176,13 @@ impl WeightInfo for () {
 		Weight::from_parts(7_955_000, 0)
 			.saturating_add(Weight::from_parts(0, 1493))
 			.saturating_add(RocksDbWeight::get().reads(1))
-			.saturating_add(RocksDbWeight::get().writes(2))
+			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// 内部投票(占位;Phase 2 后由 benchmark-cli 重跑精确值)。
 	fn internal_vote() -> Weight {
 		Weight::from_parts(30_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(RocksDbWeight::get().reads(6))
+			.saturating_add(RocksDbWeight::get().reads(7))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)

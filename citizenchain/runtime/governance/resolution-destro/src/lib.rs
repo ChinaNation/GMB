@@ -15,8 +15,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_EXECUTION_FAILED,
-    STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -241,12 +240,19 @@ pub mod pallet {
             proposal_id: u64,
             action: DestroyAction<BalanceOf<T>>,
         ) -> DispatchResult {
+            Self::try_execute_destroy_from_action_with_finalizer(proposal_id, action, false)
+        }
+
+        pub(crate) fn try_execute_destroy_from_action_with_finalizer(
+            proposal_id: u64,
+            action: DestroyAction<BalanceOf<T>>,
+            callback_context: bool,
+        ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
-            // 中文注释：允许 STATUS_PASSED 和 STATUS_EXECUTION_FAILED 状态执行，
-            // 后者是自动执行失败后手动重试的入口。
+            // 中文注释：PASSED 是可执行/可重试态；终态进入后不允许再执行。
             ensure!(
-                proposal.status == STATUS_PASSED || proposal.status == STATUS_EXECUTION_FAILED,
+                proposal.status == STATUS_PASSED,
                 Error::<T>::ProposalNotPassed
             );
 
@@ -269,8 +275,15 @@ pub mod pallet {
                 T::Currency::slash(&institution_account, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
 
-            // 标记为已执行，防止双重执行
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
+            if callback_context {
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    proposal_id,
+                    STATUS_EXECUTED,
+                )?;
+            } else {
+                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            }
 
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
@@ -307,13 +320,15 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             frame_system::Pallet::<T>::block_number(),
         );
 
-        // 执行销毁;失败则覆写状态为 EXECUTION_FAILED + 发事件,
+        // 执行销毁;失败只发事件并保留 PASSED,等待余额恢复后手动重试。
         // 投票不回滚(票已投完,回滚会造成票数丢失)。
-        if pallet::Pallet::<T>::try_execute_destroy_from_action(proposal_id, action).is_err() {
-            let _ = voting_engine::Pallet::<T>::override_proposal_status(
-                proposal_id,
-                STATUS_EXECUTION_FAILED,
-            );
+        if pallet::Pallet::<T>::try_execute_destroy_from_action_with_finalizer(
+            proposal_id,
+            action,
+            true,
+        )
+        .is_err()
+        {
             pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::DestroyExecutionFailed {
                 proposal_id,
             });
@@ -332,7 +347,7 @@ mod tests {
     };
     use frame_system as system;
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine::STATUS_REJECTED;
+    use voting_engine::{STATUS_PASSED, STATUS_REJECTED};
 
     type Balance = u128;
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -710,13 +725,13 @@ mod tests {
                 assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
-            // 第 13 票应被记录，自动执行失败不回滚投票，状态覆写为 EXECUTION_FAILED。
+            // 第 13 票应被记录，自动执行失败不回滚投票，提案保留 PASSED 供后续重试。
             assert_ok!(cast_vote(nrc_admin(12), pid, true));
             assert_eq!(
                 voting_engine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
-                STATUS_EXECUTION_FAILED
+                STATUS_PASSED
             );
             assert_eq!(
                 Balances::free_balance(institution_account(institution)),
@@ -814,12 +829,12 @@ mod tests {
                 assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
 
-            // 自动执行失败后状态为 STATUS_EXECUTION_FAILED
+            // 自动执行失败后状态保留为 PASSED，补充余额后可手动重试。
             assert_eq!(
                 voting_engine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
-                STATUS_EXECUTION_FAILED
+                STATUS_PASSED
             );
             assert_eq!(Balances::free_balance(&account), 1_000);
             assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());

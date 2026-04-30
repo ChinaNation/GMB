@@ -1,7 +1,7 @@
 # DUOQIAN_TECHNICAL
 
 模块：`duoqian-manage`  
-最新更新：2026-04-29
+最新更新：2026-04-30
 
 ## 1. 当前边界
 
@@ -50,6 +50,8 @@
 - 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，写入 `admins-change::Institutions` 的 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后激活主体；创建拒绝或执行失败后清理主体；多签关闭后关闭主体。
+- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal`，由 Pending 快照 API 锁定管理员和阈值。
+- 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal`，只接受 Active 主体。
 
 ## 5. 机构创建入口
 
@@ -121,6 +123,8 @@ propose_create_institution(
 runtime 适配：
 
 - `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
+- 普通业务路径读取 `admins-change` 的 Active-only API。
+- 创建多签主体路径读取 `admins-change` 的 Pending 快照 API。
 - `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_subject_for_account` 映射到账户所属管理员主体。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
 

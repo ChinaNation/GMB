@@ -26,8 +26,8 @@ use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use voting_engine::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
-    STATUS_REJECTED,
+    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_EXECUTION_FAILED,
+    STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -358,8 +358,8 @@ pub mod pallet {
                 proposal_id,
                 institution: action.institution,
             });
-            // 标记为已取消，防止重复取消或重复执行
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
+            // 中文注释：投票已经通过，取消不可执行提案应进入执行失败终态，而不是改写为否决。
+            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTION_FAILED)?;
             Ok(())
         }
     }
@@ -408,6 +408,14 @@ pub mod pallet {
             proposal_id: u64,
             action: GrandpaKeyReplacementAction,
         ) -> DispatchResult {
+            Self::try_execute_from_action_with_finalizer(proposal_id, action, false)
+        }
+
+        pub(crate) fn try_execute_from_action_with_finalizer(
+            proposal_id: u64,
+            action: GrandpaKeyReplacementAction,
+            callback_context: bool,
+        ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
@@ -435,8 +443,15 @@ pub mod pallet {
                 old_key: action.old_key,
                 new_key: action.new_key,
             });
-            // 标记为已执行，防止双重执行
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
+            if callback_context {
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    proposal_id,
+                    STATUS_EXECUTED,
+                )?;
+            } else {
+                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            }
             Ok(())
         }
 
@@ -505,7 +520,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-        if pallet::Pallet::<T>::try_execute_from_action(proposal_id, action).is_err() {
+        if pallet::Pallet::<T>::try_execute_from_action_with_finalizer(proposal_id, action, true)
+            .is_err()
+        {
             pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
                 proposal_id,
             });
@@ -957,6 +974,12 @@ mod tests {
                 RuntimeOrigin::signed(prc_admin(0)),
                 pid,
             ));
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(pid)
+                    .expect("cancelled proposal should remain until cleanup")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
 
             assert!(System::events().iter().any(|record| {
                 matches!(

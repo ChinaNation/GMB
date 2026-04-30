@@ -182,7 +182,7 @@ impl<T: Config> Pallet<T> {
                     ));
                 }
 
-                // 中文注释：执行失败不保留重试分支；统一清理提案并交由回调覆盖为失败终态。
+                // 中文注释：执行失败不保留重试分支；统一清理提案并交由回调写入失败终态。
                 T::JointVoteEngine::cleanup_joint_proposal(proposal_id);
                 if let Err(err) = Self::decrement_voting_proposal_count() {
                     return TransactionOutcome::Rollback(Err(err));
