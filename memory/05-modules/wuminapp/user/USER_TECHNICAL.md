@@ -25,7 +25,7 @@
 
 相关协作模块：
 
-- `lib/wallet/ui/wallet_page.dart`
+- `lib/wallet/pages/wallet_page.dart`
   - 在选择通信账户/投票账户时提供钱包选择
   - 钱包改名时同步更新用户资料中的通信钱包名称
 - `lib/wallet/capabilities/sfid_binding_service.dart`

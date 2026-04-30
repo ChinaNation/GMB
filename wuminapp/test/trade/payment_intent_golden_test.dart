@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/trade/offchain/payment_intent.dart';
+import 'package:wuminapp_mobile/offchain/models/payment_intent.dart';
 
 /// 扫码支付 Step 2c-ii-a 新增:**跨端 golden vectors**。
 ///
@@ -33,14 +33,14 @@ void main() {
         'fixture1 encoded',
         intent.scaleEncode(),
         '0000000000000000000000000000000000000000000000000000000000000000'
-        '0101010101010101010101010101010101010101010101010101010101010101'
-        '0202020202020202020202020202020202020202020202020202020202020202'
-        '0303030303030303030303030303030303030303030303030303030303030303'
-        '0202020202020202020202020202020202020202020202020202020202020202'
-        '10270000000000000000000000000000'
-        '05000000000000000000000000000000'
-        '0100000000000000'
-        '64000000',
+            '0101010101010101010101010101010101010101010101010101010101010101'
+            '0202020202020202020202020202020202020202020202020202020202020202'
+            '0303030303030303030303030303030303030303030303030303030303030303'
+            '0202020202020202020202020202020202020202020202020202020202020202'
+            '10270000000000000000000000000000'
+            '05000000000000000000000000000000'
+            '0100000000000000'
+            '64000000',
       );
       _assertHexEq(
         'fixture1 signing_hash',
@@ -65,14 +65,14 @@ void main() {
         'fixture2 encoded',
         intent.scaleEncode(),
         'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
-        '1111111111111111111111111111111111111111111111111111111111111111'
-        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-        '2222222222222222222222222222222222222222222222222222222222222222'
-        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-        'ffffffffffffffffffffffffffffffff'
-        'ffffffffffffffffffffffffffffffff'
-        'ffffffffffffffff'
-        'ffffffff',
+            '1111111111111111111111111111111111111111111111111111111111111111'
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            '2222222222222222222222222222222222222222222222222222222222222222'
+            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+            'ffffffffffffffffffffffffffffffff'
+            'ffffffffffffffffffffffffffffffff'
+            'ffffffffffffffff'
+            'ffffffff',
       );
       _assertHexEq(
         'fixture2 signing_hash',
@@ -101,14 +101,14 @@ void main() {
         'fixture3 encoded',
         intent.scaleEncode(),
         '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f'
-        '5555555555555555555555555555555555555555555555555555555555555555'
-        '7777777777777777777777777777777777777777777777777777777777777777'
-        '6666666666666666666666666666666666666666666666666666666666666666'
-        '7777777777777777777777777777777777777777777777777777777777777777'
-        '00000000000000000000000000000000'
-        '00000000000000000000000000000000'
-        '0000000000000000'
-        '00000000',
+            '5555555555555555555555555555555555555555555555555555555555555555'
+            '7777777777777777777777777777777777777777777777777777777777777777'
+            '6666666666666666666666666666666666666666666666666666666666666666'
+            '7777777777777777777777777777777777777777777777777777777777777777'
+            '00000000000000000000000000000000'
+            '00000000000000000000000000000000'
+            '0000000000000000'
+            '00000000',
       );
       _assertHexEq(
         'fixture3 signing_hash',
@@ -122,8 +122,19 @@ void main() {
         NodePaymentIntent.signingDomain,
         // "GMB_L3_PAY_V1" in ASCII
         equals(const [
-          0x47, 0x4D, 0x42, 0x5F, 0x4C, 0x33, 0x5F,
-          0x50, 0x41, 0x59, 0x5F, 0x56, 0x31,
+          0x47,
+          0x4D,
+          0x42,
+          0x5F,
+          0x4C,
+          0x33,
+          0x5F,
+          0x50,
+          0x41,
+          0x59,
+          0x5F,
+          0x56,
+          0x31,
         ]),
       );
     });

@@ -579,8 +579,9 @@
 - 已接入页面：
   - `wuminapp/lib/governance/transfer_proposal_page.dart`
   - `wuminapp/lib/governance/runtime_upgrade_page.dart`
-  - `wuminapp/lib/governance/duoqian_create_proposal_page.dart`
-  - `wuminapp/lib/governance/duoqian_close_proposal_page.dart`
+  - `wuminapp/lib/duoqian/institution/institution_duoqian_create_page.dart`
+  - `wuminapp/lib/duoqian/institution/institution_duoqian_close_page.dart`
+  - `wuminapp/lib/duoqian/personal/personal_duoqian_close_page.dart`
 
 - 统一改动：
   - 页面顶部接入 `ChainProgressBanner`
@@ -604,8 +605,9 @@
   - `chain_progress_banner.dart`
   - `transfer_proposal_page.dart`
   - `runtime_upgrade_page.dart`
-  - `duoqian_create_proposal_page.dart`
-  - `duoqian_close_proposal_page.dart`
+  - `institution_duoqian_create_page.dart`
+  - `institution_duoqian_close_page.dart`
+  - `personal_duoqian_close_page.dart`
   - `proposal_types_page.dart`
   - `onchain_trade_page.dart`
   - `wallet_page.dart`

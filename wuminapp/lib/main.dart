@@ -5,22 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:wuminapp_mobile/governance/all_proposals_view.dart';
-import 'package:wuminapp_mobile/governance/institution_data.dart';
-import 'package:wuminapp_mobile/governance/institution_detail_page.dart';
-import 'package:wuminapp_mobile/governance/proposal_context.dart';
+import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
+import 'package:wuminapp_mobile/onchain/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/util/screenshot_guard.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
 import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/user/user.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 
 import 'ui/app_theme.dart';
-import 'ui/page_transitions.dart';
-import 'ui/widgets/pressable_card.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,11 +24,13 @@ void main() async {
   // 默认 ErrorWidget 在某些场景下表现为空白方块（白屏），这里换成显眼的红框 + 文字。
   FlutterError.onError = (details) {
     FlutterError.dumpErrorToConsole(details);
-    debugPrint('[FlutterError-Diag] library=${details.library} ctx=${details.context} '
+    debugPrint(
+        '[FlutterError-Diag] library=${details.library} ctx=${details.context} '
         'exception=${details.exception}');
   };
   ErrorWidget.builder = (FlutterErrorDetails details) {
-    debugPrint('[ErrorWidget-Diag] exception=${details.exception}\nstack=${details.stack}');
+    debugPrint(
+        '[ErrorWidget-Diag] exception=${details.exception}\nstack=${details.stack}');
     return Material(
       color: const Color(0xFFFFEEEE),
       child: Padding(
@@ -355,13 +352,13 @@ class _AppShellState extends State<AppShell> {
   }
 
   late final List<Widget> _pages = [
-    VotingPage(onPendingVoteCountChanged: (count) {
+    CitizenTabPage(onPendingVoteCountChanged: (count) {
       if (mounted && count != _pendingVoteCount) {
         setState(() => _pendingVoteCount = count);
       }
     }),
     const MessagePage(),
-    const OnchainTradePage(),
+    const OnchainPaymentPage(),
     const ProfilePage(),
   ];
 
@@ -538,112 +535,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class VotingPage extends StatefulWidget {
-  const VotingPage({super.key, this.onPendingVoteCountChanged});
-
-  final ValueChanged<int>? onPendingVoteCountChanged;
-
-  @override
-  State<VotingPage> createState() => _VotingPageState();
-}
-
-class _VotingPageState extends State<VotingPage> {
-  int _selectedTab = 1;
-  static const List<String> _tabs = ['投票', '治理', '机构'];
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 10),
-          _StyledTabs(
-            tabs: _tabs,
-            selectedIndex: _selectedTab,
-            onSelected: (index) {
-              setState(() {
-                _selectedTab = index;
-              });
-            },
-          ),
-          Expanded(child: _buildVotingTabContent()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVotingTabContent() {
-    assert(kProvincialCouncils.length == 43);
-    assert(kProvincialBanks.length == 43);
-
-    switch (_selectedTab) {
-      case 0:
-        return const Stack(
-          children: [
-            // 背景层：宪法引言，投票功能上线后保留
-            Positioned.fill(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '一个国家/社会是由每个公民组成的，'
-                        '每个公民都应该有投票权，'
-                        '"公民"App致力于让所有公权力在阳光下产生、'
-                        '让所有公权力接受公民的监督、'
-                        '让所有公权力由公民票选产生！',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15,
-                          height: 1.8,
-                          color: AppTheme.textSecondary,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      SizedBox(
-                        width: 160,
-                        child: Divider(
-                          color: AppTheme.textTertiary,
-                          thickness: 0.8,
-                        ),
-                      ),
-                      SizedBox(height: 14),
-                      Text(
-                        '《公民宪法》撰写人 \u00B7 程伟',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppTheme.textTertiary,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            // 前景层：投票功能上线后在此添加内容
-          ],
-        );
-      case 1:
-        return AllProposalsView(
-          onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
-        );
-      case 2:
-        return const _InstitutionCategoryView(
-          nationalCouncil: kNationalCouncil,
-          provincialCouncils: kProvincialCouncils,
-          provincialBanks: kProvincialBanks,
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-}
-
 class MessagePage extends StatefulWidget {
   const MessagePage({super.key});
 
@@ -761,245 +652,6 @@ class _MessagePageState extends State<MessagePage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _InstitutionCategoryView extends StatefulWidget {
-  const _InstitutionCategoryView({
-    required this.nationalCouncil,
-    required this.provincialCouncils,
-    required this.provincialBanks,
-  });
-
-  final List<InstitutionInfo> nationalCouncil;
-  final List<InstitutionInfo> provincialCouncils;
-  final List<InstitutionInfo> provincialBanks;
-
-  @override
-  State<_InstitutionCategoryView> createState() =>
-      _InstitutionCategoryViewState();
-}
-
-class _InstitutionCategoryViewState extends State<_InstitutionCategoryView> {
-  /// 对列表按"管理员机构优先"排序。
-  List<InstitutionInfo> _sorted(List<InstitutionInfo> list) {
-    final sorted = List<InstitutionInfo>.from(list);
-    sorted.sort((a, b) {
-      final aAdmin = ProposalContextResolver.isAdminInstitution(a.shenfenId);
-      final bAdmin = ProposalContextResolver.isAdminInstitution(b.shenfenId);
-      if (aAdmin && !bAdmin) return -1;
-      if (!aAdmin && bAdmin) return 1;
-      return 0;
-    });
-    return sorted;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: [
-        const Text(
-          '机构分类',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          '查看各级机构信息与治理提案',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 20),
-        _InstitutionSection(
-          title: '国储会',
-          icon: Icons.account_balance,
-          badgeColor: AppTheme.primaryDark,
-          institutions: widget.nationalCouncil,
-          onReturnFromDetail: () => setState(() {}),
-        ),
-        _InstitutionSection(
-          title: '省储会',
-          icon: Icons.groups_2_outlined,
-          badgeColor: AppTheme.primary,
-          institutions: _sorted(widget.provincialCouncils),
-          onReturnFromDetail: () => setState(() {}),
-        ),
-        _InstitutionSection(
-          title: '省储行',
-          icon: Icons.account_balance_wallet_outlined,
-          badgeColor: AppTheme.accent,
-          institutions: _sorted(widget.provincialBanks),
-          onReturnFromDetail: () => setState(() {}),
-        ),
-      ],
-    );
-  }
-}
-
-class _InstitutionSection extends StatelessWidget {
-  const _InstitutionSection({
-    required this.title,
-    required this.icon,
-    required this.badgeColor,
-    required this.institutions,
-    this.onReturnFromDetail,
-  });
-
-  final String title;
-  final IconData icon;
-  final Color badgeColor;
-  final List<InstitutionInfo> institutions;
-  final VoidCallback? onReturnFromDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: badgeColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Icon(icon, size: 16, color: badgeColor),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '$title（${institutions.length}）',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth <= 0) {
-              return const SizedBox.shrink();
-            }
-            // 机构列表固定一行两列，避免不同 Android 机型出现列数漂移。
-            const crossAxisCount = 2;
-            final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: institutions.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: childAspectRatio,
-              ),
-              itemBuilder: (context, index) {
-                final inst = institutions[index];
-                final isAdmin = ProposalContextResolver.isAdminInstitution(
-                  inst.shenfenId,
-                );
-                return _InstitutionCard(
-                  institution: inst,
-                  icon: icon,
-                  badgeColor: badgeColor,
-                  isAdmin: isAdmin,
-                  onReturnFromDetail: onReturnFromDetail,
-                );
-              },
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-}
-
-class _InstitutionCard extends StatelessWidget {
-  const _InstitutionCard({
-    required this.institution,
-    required this.icon,
-    required this.badgeColor,
-    this.isAdmin = false,
-    this.onReturnFromDetail,
-  });
-
-  final InstitutionInfo institution;
-  final IconData icon;
-  final Color badgeColor;
-  final bool isAdmin;
-  final VoidCallback? onReturnFromDetail;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor = isAdmin ? AppTheme.success : badgeColor;
-    return PressableCard(
-      child: Container(
-        decoration: AppTheme.cardDecoration(selected: isAdmin),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () async {
-              await Navigator.of(context).push(
-                FadeSlideRoute(
-                  page: InstitutionDetailPage(
-                    institution: institution,
-                    icon: icon,
-                    badgeColor: effectiveColor,
-                  ),
-                ),
-              );
-              onReturnFromDetail?.call();
-            },
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: effectiveColor.withAlpha(20),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Icon(icon, size: 14, color: effectiveColor),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      institution.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 16,
-                    color: AppTheme.textTertiary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

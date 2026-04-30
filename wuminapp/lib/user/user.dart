@@ -11,11 +11,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import 'package:wuminapp_mobile/governance/duoqian_institution_list_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
-import 'package:wuminapp_mobile/trade/onchain/onchain_trade_page.dart';
+import 'package:wuminapp_mobile/onchain/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
@@ -23,7 +22,7 @@ import 'package:wuminapp_mobile/user/user_service.dart';
 import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/wallet/ui/wallet_page.dart';
+import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 import 'package:wuminapp_mobile/user/vote_sign_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -69,8 +68,7 @@ class _ProfilePageState extends State<ProfilePage> {
         maxHeight: 1600,
       );
       if (picked == null) return;
-      final saved =
-          await _userProfileService.updateBackgroundPath(picked.path);
+      final saved = await _userProfileService.updateBackgroundPath(picked.path);
       if (!mounted) return;
       setState(() {
         _userProfile = saved;
@@ -308,8 +306,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   'assets/icons/wallet.svg',
                   width: 22,
                   height: 22,
-                  colorFilter: const ColorFilter.mode(
-                      AppTheme.danger, BlendMode.srcIn),
+                  colorFilter:
+                      const ColorFilter.mode(AppTheme.danger, BlendMode.srcIn),
                 ),
                 title: '钱包',
                 onTap: () {
@@ -327,31 +325,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   'assets/icons/contact-round.svg',
                   width: 22,
                   height: 22,
-                  colorFilter: const ColorFilter.mode(
-                      AppTheme.primary, BlendMode.srcIn),
+                  colorFilter:
+                      const ColorFilter.mode(AppTheme.primary, BlendMode.srcIn),
                 ),
                 title: '通讯录',
                 onTap: _openContacts,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildEntryCard(
-                leading: const Icon(
-                  Icons.groups_outlined,
-                  color: AppTheme.info,
-                  size: 22,
-                ),
-                title: '多签账户',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const DuoqianInstitutionListPage(
-                          mode: InstitutionListMode.manage),
-                    ),
-                  );
-                },
               ),
             ),
             const SizedBox(height: 12),
@@ -453,8 +431,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null || !mounted) return;
       final result = await SaverGallery.saveImage(
         byteData.buffer.asUint8List(),
@@ -546,8 +523,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     final walletManager = WalletManager();
     await walletManager.renameWallet(
         _profile.communicationWalletIndex!, nickname);
-    final saved =
-        await _profileService.updateCommunicationWalletName(nickname);
+    final saved = await _profileService.updateCommunicationWalletName(nickname);
     if (!mounted) return;
     setState(() {
       _profile = saved;
@@ -590,8 +566,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     try {
       // 构造签名消息：CITIZEN_VOTE_REGISTER|{SS58地址}|{unix_timestamp}
       final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final signMessage =
-          'CITIZEN_VOTE_REGISTER|${wallet.address}|$timestamp';
+      final signMessage = 'CITIZEN_VOTE_REGISTER|${wallet.address}|$timestamp';
       final messageBytes = Uint8List.fromList(utf8.encode(signMessage));
 
       // 2026-04-22 两色识别整改:删除投票账户注册的冷钱包 QR 签名分支
@@ -720,7 +695,8 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               trailing,
             ],
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 20, color: AppTheme.textTertiary),
+            const Icon(Icons.chevron_right,
+                size: 20, color: AppTheme.textTertiary),
           ],
         ),
       ),
@@ -772,8 +748,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                           child: IconButton(
                             constraints: const BoxConstraints(),
                             padding: EdgeInsets.zero,
-                            onPressed:
-                                _isSavingQr ? null : _saveQrToGallery,
+                            onPressed: _isSavingQr ? null : _saveQrToGallery,
                             icon: _isSavingQr
                                 ? const SizedBox(
                                     width: 14,
@@ -782,8 +757,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                                         strokeWidth: 2),
                                   )
                                 : const Icon(Icons.download,
-                                    size: 18,
-                                    color: AppTheme.textSecondary),
+                                    size: 18, color: AppTheme.textSecondary),
                           ),
                         ),
                       ],
@@ -810,8 +784,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           InkWell(
             onTap: _pickAvatar,
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
                   _SquareAvatar(path: _profile.avatarPath, size: 44),
@@ -906,6 +879,7 @@ class ContactBookPage extends StatefulWidget {
   });
 
   final String selfAccountPubkeyHex;
+
   /// 为 true 时，点击联系人直接返回该联系人（而非弹窗修改昵称）。
   final bool selectForTrade;
 
@@ -1099,8 +1073,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
           _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null || !mounted) return;
       final result = await SaverGallery.saveImage(
         byteData.buffer.asUint8List(),
@@ -1176,8 +1149,7 @@ class _MyQrCodePageState extends State<_MyQrCodePage> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download,
                           size: 20, color: AppTheme.textSecondary),
@@ -1342,7 +1314,7 @@ class _ContactDetailPage extends StatelessWidget {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => OnchainTradePage(
+                        builder: (_) => OnchainPaymentPage(
                           initialToAddress: contact.accountPubkeyHex,
                         ),
                       ),
@@ -1584,12 +1556,10 @@ class _SettingsPageState extends State<_SettingsPage> {
                       _buildSettingTile(
                         icon: Icons.fingerprint_rounded,
                         title: '设备锁',
-                        subtitle: _pinLockEnabled
-                            ? '请先关闭应用锁'
-                            : '启动应用时需要生物识别或设备密码',
+                        subtitle:
+                            _pinLockEnabled ? '请先关闭应用锁' : '启动应用时需要生物识别或设备密码',
                         value: _deviceLockEnabled,
-                        onChanged:
-                            _pinLockEnabled ? null : _toggleDeviceLock,
+                        onChanged: _pinLockEnabled ? null : _toggleDeviceLock,
                       ),
                       const Divider(height: 1, indent: 56, endIndent: 16),
                       _buildSettingTile(
@@ -1599,8 +1569,7 @@ class _SettingsPageState extends State<_SettingsPage> {
                             ? '请先关闭设备锁'
                             : '启动应用时需要输入 6 位数字密码',
                         value: _pinLockEnabled,
-                        onChanged:
-                            _deviceLockEnabled ? null : _togglePinLock,
+                        onChanged: _deviceLockEnabled ? null : _togglePinLock,
                       ),
                     ],
                   ),
@@ -1653,8 +1622,7 @@ class _SettingsPageState extends State<_SettingsPage> {
                           const Spacer(),
                           const Text('v1.0.0',
                               style: TextStyle(
-                                  color: AppTheme.textTertiary,
-                                  fontSize: 13)),
+                                  color: AppTheme.textTertiary, fontSize: 13)),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -1701,9 +1669,7 @@ class _SettingsPageState extends State<_SettingsPage> {
             ),
             child: Icon(icon,
                 size: 20,
-                color: disabled
-                    ? AppTheme.textTertiary
-                    : AppTheme.primary),
+                color: disabled ? AppTheme.textTertiary : AppTheme.primary),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1715,9 +1681,8 @@ class _SettingsPageState extends State<_SettingsPage> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: disabled
-                        ? AppTheme.textTertiary
-                        : AppTheme.textPrimary,
+                    color:
+                        disabled ? AppTheme.textTertiary : AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1791,4 +1756,3 @@ class _HollowQrPainter extends CustomPainter {
     return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
 }
-

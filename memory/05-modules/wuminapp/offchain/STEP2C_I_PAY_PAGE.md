@@ -1,6 +1,8 @@
 # 扫码支付 Step 2c-i 技术说明 · wuminapp 付款端新版
 
 - **日期**:2026-04-20；2026-04-29 补齐 Step 3 跨行与清算行目录
+- **目录更新**:2026-04-30 起,wuminapp 链下扫码支付业务统一收口到
+  `wuminapp/lib/offchain/`,不再使用 `wuminapp/lib/trade/offchain/`。
 - **范围**:wuminapp 扫码付款页重写;对接清算行节点
   `offchain_submitPayment` RPC、清算行目录查询、绑定缓存与跨行收款方主导支付。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
@@ -56,33 +58,34 @@ storage key 布局稳定性 + 不同 bank 不同 key + hex 编解码 roundtrip +
 
 | 文件 | 内容 |
 |---|---|
-| `lib/trade/offchain/payment_intent.dart` | `NodePaymentIntent` 数据类 + SCALE 编码(固定 204 字节)+ `signingHash()` + 随机 tx_id + `calcFeeFen` 本地费用计算(与 runtime 四舍五入对齐)+ hex 编解码 |
-| `lib/trade/offchain/offchain_clearing_pay_page.dart` | **新付款确认页**。5 阶段状态机:loading → ready → submitting → done/error。流程见第 3 节 |
+| `lib/offchain/models/payment_intent.dart` | `NodePaymentIntent` 数据类 + SCALE 编码(固定 204 字节)+ `signingHash()` + 随机 tx_id + `calcFeeFen` 本地费用计算(与 runtime 四舍五入对齐)+ hex 编解码 |
+| `lib/offchain/pages/offchain_pay_page.dart` | **新付款确认页**。5 阶段状态机:loading → ready → submitting → done/error。流程见第 3 节 |
+| `lib/offchain/services/offchain_scan_flow.dart` | 2026-04-30 迁移后新增:扫码支付独立入口调用本流程,扫码、校验 `bank`、查收款方清算节点并跳转付款页 |
 
 #### 修改
 
 | 文件 | 变更 |
 |---|---|
-| `lib/rpc/offchain_clearing.dart` | 追加 `queryUserBank` / `queryFeeRate` / `submitPayment` 3 个方法(WSS over JSON-RPC 的 record 返回值) |
-| `lib/rpc/clearing_bank_directory.dart` | 新增清算行目录服务:SFID 后端搜索候选机构,链上读取 `ClearingBankNodes` 端点、`UserBank` 绑定 |
-| `lib/trade/onchain/onchain_trade_page.dart` | 扫码后按收款方 `bank` 查询链上端点,跳转到新付款页;不再依赖固定启动参数配置清算节点 |
-| `lib/trade/offchain/clearing_bank_settings_page.dart` | 设置页从占位页变成真实搜索/当前绑定/绑定或切换入口 |
-| `lib/trade/offchain/clearing_bank_prefs.dart` | 本地缓存从单一 sfid 字符串升级为 `ClearingBankBindingSnapshot`,记录 sfid、机构名、主/费用账户与节点端点 |
-| `lib/wallet/ui/cards/wallet_action_card.dart` | 钱包卡读取清算行缓存并查询节点余额;未绑定时充值/提现提示先绑定 |
+| `lib/offchain/rpc/offchain_clearing_rpc.dart` | 追加 `queryUserBank` / `queryFeeRate` / `submitPayment` 3 个方法(WSS over JSON-RPC 的 record 返回值) |
+| `lib/offchain/services/clearing_bank_directory.dart` | 新增清算行目录服务:SFID 后端搜索候选机构,链上读取 `ClearingBankNodes` 端点、`UserBank` 绑定 |
+| `lib/offchain/services/offchain_scan_flow.dart` | 扫码后按收款方 `bank` 查询链上端点,跳转到新付款页;不再依赖固定启动参数配置清算节点 |
+| `lib/offchain/pages/clearing_bank_settings_page.dart` | 设置页从占位页变成真实搜索/当前绑定/绑定或切换入口 |
+| `lib/offchain/services/clearing_bank_prefs.dart` | 本地缓存从单一 sfid 字符串升级为 `ClearingBankBindingSnapshot`,记录 sfid、机构名、主/费用账户与节点端点 |
+| `lib/wallet/widgets/wallet_action_card.dart` | 钱包卡读取清算行缓存并查询节点余额;未绑定时充值/提现提示先绑定 |
 
 #### 删除(老省储行清算遗留)
 
 | 文件 | 原因 |
 |---|---|
 | `lib/rpc/offchain.dart` | 老 `submitSignedTx` / `queryTxStatus` / `queryInstitutionRate` 客户端,节点侧 Step 2b-iv-a 已删对应 RPC |
-| `lib/trade/offchain/offchain_pay_page.dart` | 老付款页,已由 `offchain_clearing_pay_page.dart` 替代 |
+| `lib/offchain/pages/offchain_pay_page.dart` | 老付款页,已由 `offchain_clearing_pay_page.dart` 替代 |
 
 ---
 
 ## 3. 付款页运行时流程
 
 ```
-用户扫商户 QR → onchain_trade_page._openOffchainPay
+用户扫商户 QR → offchain_scan_flow.openOffchainScanPaymentFlow
   ├─ 校验:未选钱包 / 无 bank 字段 / 收款方未声明节点 → SnackBar 并返回
   └─ 跳转 OffchainClearingPayPage
 
@@ -189,9 +192,13 @@ No issues found!  (全项目)
   `queryFeeRate`)+ `OffchainClearingRpcImpl` 持 `client`;wuminapp 新增
   `payment_intent.dart`(SCALE 编码 + 签名哈希)+ `offchain_clearing_pay_page.dart`
   (5 阶段状态机)+ `offchain_clearing.dart` 3 方法;删除 `lib/rpc/offchain.dart`
-  和 `lib/trade/offchain/offchain_pay_page.dart` 两个老文件;`onchain_trade_page`
-  恢复扫码跳转。`cargo check -p node --tests` 零 error;`flutter analyze` 零 issue。
+  和 `lib/offchain/pages/offchain_pay_page.dart` 两个老文件;扫码支付入口通过
+  offchain 独立流程跳转。`cargo check -p node --tests` 零 error;`flutter analyze` 零 issue。
 - 2026-04-29:Step 3 补齐收款方主导跨行支付。新增
   `clearing_bank_directory.dart`,设置页真实搜索并缓存节点端点;扫码付款按收款方
   `ClearingBankNodes` 选择节点,付款页放开跨行并按收款方费率计费;钱包卡接入
   绑定余额、充值、提现入口。`flutter analyze` 与清算行相关 widget/prefs 测试通过。
+- 2026-04-30:目录收口。wuminapp 链下扫码支付完整业务域迁入
+  `lib/offchain/`,包括付款页、PaymentIntent、清算行设置、绑定、充值、提现、
+  清算行 RPC、链上清算行 extrinsic、清算行目录与绑定快照。扫码支付不再依赖
+  错误聚合页,由独立入口通过 `offchain_scan_flow.dart` 调用 offchain 业务流程。

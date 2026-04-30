@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/trade/offchain/clearing_bank_prefs.dart';
+import 'package:wuminapp_mobile/offchain/services/clearing_bank_prefs.dart';
 
 void main() {
   setUp(() {
