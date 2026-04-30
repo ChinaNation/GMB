@@ -33,6 +33,24 @@ class MyWalletPage extends StatefulWidget {
   State<MyWalletPage> createState() => _MyWalletPageState();
 }
 
+/// 中文注释：拖拽排序需要改变列表长度，必须先复制成可变列表；
+/// `WalletManager.getWallets()` 返回 fixed-length list，不能直接 removeAt/insert。
+@visibleForTesting
+List<WalletProfile> reorderWalletProfiles(
+  List<WalletProfile> wallets,
+  int oldIndex,
+  int newIndex,
+) {
+  final next = List<WalletProfile>.of(wallets);
+  var targetIndex = newIndex;
+  if (targetIndex > oldIndex) {
+    targetIndex -= 1;
+  }
+  final wallet = next.removeAt(oldIndex);
+  next.insert(targetIndex, wallet);
+  return next;
+}
+
 /// v6 改版（2026-04-24）：
 /// - 卡片样式抄 wumin/lib/ui/home_page.dart 的钱包卡片，单列横向布局；
 /// - 无 active 视觉，点击卡片直接进详情(已删「当前」小标签)；
@@ -219,14 +237,13 @@ class _MyWalletPageState extends State<MyWalletPage> {
   Future<void> _onReorder(int oldIdx, int newIdx) async {
     final wallets = _wallets;
     if (wallets == null) return;
-    if (newIdx > oldIdx) newIdx -= 1;
+    final next = reorderWalletProfiles(wallets, oldIdx, newIdx);
     setState(() {
-      final w = wallets.removeAt(oldIdx);
-      wallets.insert(newIdx, w);
+      _wallets = next;
     });
     try {
       await _walletService.reorderWallets(
-        wallets.map((w) => w.walletIndex).toList(),
+        next.map((w) => w.walletIndex).toList(),
       );
     } catch (e) {
       if (!mounted) return;

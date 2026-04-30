@@ -148,4 +148,17 @@ void main() {
         wallet: makeWallet(signMode: 'local'), showActions: false);
     expect(find.byIcon(Icons.more_vert), findsNothing);
   });
+
+  test('reorderWalletProfiles 支持 fixed-length 钱包列表', () {
+    final source = List<WalletProfile>.unmodifiable([
+      makeWallet(signMode: 'local', walletIndex: 1),
+      makeWallet(signMode: 'local', walletIndex: 2),
+      makeWallet(signMode: 'local', walletIndex: 3),
+    ]);
+
+    final reordered = reorderWalletProfiles(source, 0, 3);
+
+    expect(reordered.map((wallet) => wallet.walletIndex), [2, 3, 1]);
+    expect(source.map((wallet) => wallet.walletIndex), [1, 2, 3]);
+  });
 }
