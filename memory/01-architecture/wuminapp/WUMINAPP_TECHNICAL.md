@@ -29,6 +29,7 @@ wuminapp/
 │   ├── main.dart
 │   ├── Isar/
 │   ├── rpc/                ← 链上 RPC 公共模块
+│   ├── ui/                 ← App 级 UI、底部 Tab 入口壳与通用组件
 │   ├── onchain/            ← 普通链上转账 / 纯链上支付
 │   ├── trade/              ← 本地交易记录与 pending 对账共用能力（非功能入口）
 │   ├── offchain/           ← 扫码支付 / 清算行能力
@@ -96,7 +97,17 @@ proposal/
 ### 4.3 交易 Tab
 
 - 底部第 3 个按钮文案仍为"交易"，不因目录拆分改名
-- 当前 `交易` Tab 直接进入 `lib/onchain/onchain_payment_page.dart`
+- 当前 `交易` Tab 进入 `lib/ui/transaction_tab_page.dart`
+- `transaction_tab_page.dart` 复用 `lib/onchain/onchain_payment_page.dart` 中的 `OnchainPaymentPanel`，交易页直接展示原链上支付表单
+- 交易页顶部保持原结构：
+  - 左上角：我的通讯录
+  - 中间标题：交易
+  - 右上角：选择交易钱包
+- `ChainProgressBanner` 保留在交易页内容顶部
+- 交易页在链上支付表单上方保留/插入三个独立入口：
+  - 个人多签 → `lib/duoqian/personal/personal_duoqian_list_page.dart`
+  - 机构多签 → `lib/duoqian/institution/institution_duoqian_list_page.dart`
+  - 扫码支付 → `lib/offchain/services/offchain_scan_flow.dart`
 - `lib/onchain/` 只处理普通链上转账 / 纯链上支付
 - 扫码支付、机构多签、个人多签均为独立功能域，不通过链上支付页或 `trade_page.dart` 聚合页分流
 
