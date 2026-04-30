@@ -39,6 +39,7 @@
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wumin-冷钱包清算行管理类扫码签名-decoder-文案与测试.md`
 - `memory/08-tasks/open/20260428-124932-清算行功能完成度补齐-wuminapp-用户侧设置清算行-绑定-跨行支付配置与端到端验收.md`
 - `memory/08-tasks/open/20260429-095603-rename-transaction-modules.md`
+- `memory/08-tasks/open/20260429-guochuhui-node-deploy.md`
 - `memory/08-tasks/open/20260429-runtime-step2-admins-change-unified-subjects.md`
 
 ## done
