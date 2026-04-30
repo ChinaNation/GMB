@@ -406,7 +406,7 @@ pub enum Error<T> {
    e. with_transaction(|| {
         Currency::transfer(from, beneficiary, amount, KeepAlive)
         Currency::withdraw(from, fee, FEE, KeepAlive) → FeeRouter 分账
-        set_status_and_emit(STATUS_EXECUTED)
+        set_callback_execution_result(STATUS_EXECUTED)
         deposit_event(TransferExecuted)
       })
    f. 若事务失败:deposit_event(TransferExecutionFailed),提案保留供 execute_transfer 重试

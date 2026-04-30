@@ -727,6 +727,13 @@ pub mod pallet {
 
         /// 执行手续费划转。
         pub(crate) fn try_execute_sweep(proposal_id: u64) -> DispatchResult {
+            Self::try_execute_sweep_with_finalizer(proposal_id, false)
+        }
+
+        pub(crate) fn try_execute_sweep_with_finalizer(
+            proposal_id: u64,
+            callback_context: bool,
+        ) -> DispatchResult {
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
 
@@ -799,12 +806,27 @@ pub mod pallet {
                 fee: tx_fee,
                 reserve_left,
             });
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
+            if callback_context {
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    proposal_id,
+                    STATUS_EXECUTED,
+                )?;
+            } else {
+                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            }
             Ok(())
         }
 
         /// 执行安全基金转账（投票通过后自动调用）。
         pub(crate) fn try_execute_safety_fund(proposal_id: u64) -> DispatchResult {
+            Self::try_execute_safety_fund_with_finalizer(proposal_id, false)
+        }
+
+        pub(crate) fn try_execute_safety_fund_with_finalizer(
+            proposal_id: u64,
+            callback_context: bool,
+        ) -> DispatchResult {
             let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
 
@@ -862,7 +884,15 @@ pub mod pallet {
             .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
+            if callback_context {
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    proposal_id,
+                    STATUS_EXECUTED,
+                )?;
+            } else {
+                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            }
 
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
@@ -877,6 +907,13 @@ pub mod pallet {
         /// 从 voting-engine 读取提案数据并执行转账。
         /// vote_transfer（自动执行）和 execute_transfer（手动重试）共用此逻辑。
         pub(crate) fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
+            Self::try_execute_transfer_with_finalizer(proposal_id, false)
+        }
+
+        pub(crate) fn try_execute_transfer_with_finalizer(
+            proposal_id: u64,
+            callback_context: bool,
+        ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
@@ -952,8 +989,15 @@ pub mod pallet {
             });
             exec_result?;
 
-            // ── 标记为已执行，防止双重执行 ──
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
+            if callback_context {
+                voting_engine::Pallet::<T>::set_callback_execution_result(
+                    proposal_id,
+                    STATUS_EXECUTED,
+                )?;
+            } else {
+                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
+            }
 
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
@@ -994,11 +1038,11 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 
         if approved {
             let exec_result = if is_transfer {
-                pallet::Pallet::<T>::try_execute_transfer(proposal_id)
+                pallet::Pallet::<T>::try_execute_transfer_with_finalizer(proposal_id, true)
             } else if is_safety_fund {
-                pallet::Pallet::<T>::try_execute_safety_fund(proposal_id)
+                pallet::Pallet::<T>::try_execute_safety_fund_with_finalizer(proposal_id, true)
             } else {
-                pallet::Pallet::<T>::try_execute_sweep(proposal_id)
+                pallet::Pallet::<T>::try_execute_sweep_with_finalizer(proposal_id, true)
             };
             if let Err(_e) = exec_result {
                 // 执行失败:发事件,提案保留 PASSED,供 execute_X 重试。

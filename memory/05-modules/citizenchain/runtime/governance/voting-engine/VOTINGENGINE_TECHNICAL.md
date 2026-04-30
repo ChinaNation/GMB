@@ -3,7 +3,7 @@
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
 `voting-engine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
-- `InternalVoteEngine`：创建内部提案、代理内部投票、清理内部提案（清理方法已废弃，由引擎自动注册）
+- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案、清理内部提案（清理方法已废弃，由引擎自动注册）
 - `JointVoteEngine`：创建联合提案、清理联合/公民投票状态（清理方法已废弃，由引擎自动注册）
 - `JointVoteResultCallback`：联合提案终局后把结果回传给具体治理模块
 
@@ -11,7 +11,11 @@
 - 内部提案只能由业务治理模块通过 `InternalVoteEngine` trait 创建，不能直接通过外部 extrinsic 创建。
 - 仅允许合法机构管理员为本机构创建内部提案。
 - 仅允许同机构管理员参与内部投票，禁止跨机构投票。
-- 按机构类型（NRC/PRC/PRB）使用不同通过阈值。
+- 普通内部提案只能读取 Active 管理员主体。
+- Pending 主体只能通过 `create_pending_subject_internal_proposal` 创建自身激活投票。
+- 管理员集合变更只能通过 `create_admin_set_mutation_internal_proposal` 创建，并与同一治理主体下的普通活跃提案互斥。
+- 创建提案时必须锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
+- 按机构类型（NRC/PRC/PRB/ORG_DUOQIAN）使用对应通过阈值。
 - 达阈值时立即通过；到期未达阈值时自动否决。
 
 ### 0.3 联合投票功能需求
@@ -21,6 +25,7 @@
 - 链上必须按机构当前管理员阈值自动形成机构结果，不再依赖机构多签地址或线下 approvals proof。
 - 联合阶段全票通过时立即通过；未全票但已收齐全部机构票权时转入公民投票。
 - 联合阶段超时后，若未全票通过，必须自动进入公民投票阶段。
+- 联合投票在 `STAGE_JOINT` 管理员参与阶段占用所有参与治理主体的普通互斥锁，进入 `STAGE_CITIZEN` 后释放。
 
 ### 0.4 公民投票功能需求
 - 仅允许具备资格的 SFID 哈希参与公民投票。
@@ -30,9 +35,13 @@
 
 ### 0.5 状态机与安全需求
 - 提案 ID 必须单调递增且不可溢出覆盖旧提案。
+- 提案状态必须走显式状态机，只允许 `VOTING -> PASSED / REJECTED` 与 `PASSED -> EXECUTED / EXECUTION_FAILED`。
+- `REJECTED / EXECUTED / EXECUTION_FAILED` 是不可再变化的终态。
+- `PASSED` 是可执行/可重试态；需要重试的业务自动执行失败不得写成 `EXECUTION_FAILED`。
 - 自动超时结算必须受单块上限约束，避免 `on_initialize` 无界增长。
 - 联合投票终结时，投票引擎状态变更与业务模块回调必须保持原子一致。
 - 自动结算若遇到回调失败，必须保留重试索引，不能让提案卡在 `Voting` 且丢失后续处理入口。
+- 同一 `org + institution` 下，管理员集合变更提案与普通活跃提案互斥；普通提案之间默认允许并行。
 - 所有清理入口必须能释放对应提案的计票状态与对象层存储，避免存储长期累积。
 
 ## 1. 模块定位
@@ -42,7 +51,7 @@
 - 公民投票（`CITIZEN`）
 
 它通过 trait 为上层治理模块提供标准化能力：
-- `InternalVoteEngine`：创建内部提案、内部投票、内部提案清理（清理方法已废弃 no-op）
+- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案、内部提案清理（清理方法已废弃 no-op）
 - `JointVoteEngine`：创建联合提案、联合提案清理（清理方法已废弃 no-op）
 - `JointVoteResultCallback`：联合提案终结后回调目标治理模块
 
@@ -55,8 +64,8 @@
   - `STATUS_VOTING = 0`：投票进行中
   - `STATUS_PASSED = 1`：投票已通过
   - `STATUS_REJECTED = 2`：投票被否决
-  - `STATUS_EXECUTED = 3`：提案已执行完成（终态）。消费模块在业务逻辑成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 设置。
-  - `STATUS_EXECUTION_FAILED = 4`：投票通过但业务执行失败（终态）。由消费模块回调在 `set_status_and_emit` 事务内覆盖。
+  - `STATUS_EXECUTED = 3`：提案已执行完成（终态）。消费模块在回调内通过 `set_callback_execution_result(STATUS_EXECUTED)` 静默写入；手动补偿执行路径仍可通过 `set_status_and_emit(STATUS_EXECUTED)` 推进。
+  - `STATUS_EXECUTION_FAILED = 4`：投票通过但业务执行失败（终态）。由消费模块回调通过 `set_callback_execution_result(STATUS_EXECUTION_FAILED)` 在同一事务内静默写入。
 
 状态流转：
 ```
@@ -64,6 +73,17 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
          → PASSED(1) → EXECUTION_FAILED(4)（投票通过但执行失败）
          → REJECTED(2)（投票超时/否决）
 ```
+
+严格禁止：
+
+```text
+VOTING  → EXECUTED / EXECUTION_FAILED / VOTING
+PASSED  → VOTING / REJECTED / PASSED
+REJECTED / EXECUTED / EXECUTION_FAILED → any
+unknown → any
+any → unknown
+```
+
 - `internal_org`、`internal_institution`：内部提案专用字段
 - `start`、`end`：当前阶段起止区块
 - `citizen_eligible_total`：公民投票总分母
@@ -76,22 +96,48 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
+- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值
 - `JointVotesByAdmin` / `JointInstitutionTallies`
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesByBindingId` / `CitizenTallies`
 - `UsedPopulationSnapshotNonce`：人口快照 nonce 防重放
 - `ProposalData`：提案摘要层存储（默认上限 100KB）
 - `ProposalObjectMeta` / `ProposalObject`：提案对象层存储（默认上限 10MB）
+- `CallbackExecutionScopes`：回调执行临时作用域，只在 `set_status_and_emit` 调用业务回调期间存在，用于限制 `set_callback_execution_result` 的使用位置。
+- `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
+- `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放。
+
+### 2.3 内部提案互斥
+互斥 key：
+
+```text
+(org, institution)
+```
+
+互斥类型：
+
+- `Regular`：普通内部治理事项，允许同一主体多个普通事项并行。
+- `AdminSetMutationExclusive`：管理员集合变更事项，同一主体下必须独占。
+
+规则：
+
+- 创建 `Regular` 时，如果同一主体已有 `AdminSetMutationExclusive`，拒绝创建。
+- 创建 `AdminSetMutationExclusive` 时，如果同一主体已有管理员集合变更提案或 `regular_active_count > 0`，拒绝创建。
+- `STATUS_PASSED` 不释放内部管理员集合变更锁；只有执行成功、否决或执行失败终态才释放。
+- 联合提案在 `STAGE_JOINT` 锁定所有参与机构的 `Regular` 锁；进入 `STAGE_CITIZEN` 后释放这些锁。
 
 ## 3. 流程设计
 ### 3.1 内部提案
-1. 通过 `do_create_internal_proposal` 创建提案，阶段为 `STAGE_INTERNAL`。
-2. `do_internal_vote` 由机构管理员投票，按组织阈值判定是否通过。
-3. 达阈值时立即 `Passed`（`set_status_and_emit`）。
-4. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
+1. 普通业务通过 `do_create_internal_proposal` 创建提案，阶段为 `STAGE_INTERNAL`，只接受 Active 管理员主体，并登记 `Regular` 锁。
+2. 创建多签主体的业务通过 `do_create_pending_subject_internal_proposal` 创建提案，只接受 Pending 管理员主体，并登记 `Regular` 锁。
+3. 管理员集合变更通过 `do_create_admin_set_mutation_internal_proposal` 创建提案，并登记 `AdminSetMutationExclusive` 锁。
+4. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。
+5. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过。
+6. 达阈值时立即 `Passed`（`set_status_and_emit`）。
+7. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
 
 ### 3.2 联合提案
-1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`。
+1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`，并为所有参与机构登记 `Regular` 锁。
 2. `joint_vote` 由机构当前管理员个人钱包直接上链投票：
    - `proposal_id + institution + who` 只能投一次
    - 仅允许当前机构管理员投票
@@ -101,10 +147,10 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
    - `yes + remaining_admins < institution_threshold` 时，自动把该机构结果记为 `rejected`
 4. 机构结果形成后写入 `JointVotesByInstitution`，并按机构权重累计到 `JointTallies`。
 5. 联合全票通过则立即 `Passed`。
-6. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`。
+6. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`，并释放管理员阶段互斥锁。
 7. 联合阶段到期后，`on_initialize` 自动走 `do_finalize_joint_timeout`：
    - 全票：`Passed`
-   - 非全票：自动进入 `STAGE_CITIZEN`
+   - 非全票：自动进入 `STAGE_CITIZEN`，并释放管理员阶段互斥锁
 
 ### 3.3 公民投票
 1. `citizen_vote` 入口参数为：`(proposal_id, binding_id, nonce, signature, approve)`。
@@ -121,15 +167,20 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 5. 若自动结算时下游回调失败，提案会重新写回过期桶，等待后续区块继续重试。
 
 ## 4. 状态终结与回调
-统一通过 `set_status_and_emit`（`pub`，允许消费模块直接调用）完成终结：
+投票结果统一通过 `set_status_and_emit` 完成终结；回调内的业务执行结果通过 `set_callback_execution_result` 静默写入：
 1. 原子更新 `Proposals.status`
-2. 对联合提案触发 `JointVoteResultCallback`
-3. 若联合回调失败，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
-4. 联合回调成功后，再发送 `ProposalFinalized` 事件；若业务模块在回调中覆盖了最终状态，事件里的 `status` 也会使用覆盖后的值
-5. 消费模块在业务执行成功后，可调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将提案标记为已执行终态，防止重复执行
-6. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
+2. 对联合提案触发 `JointVoteResultCallback`，对内部提案触发 `InternalVoteResultCallback`
+3. 若回调返回错误，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
+4. 回调成功后，再由外层发送一次 `ProposalFinalized` 事件；若业务模块在回调中用 `set_callback_execution_result` 写入 `EXECUTED / EXECUTION_FAILED`，事件里的 `status` 使用该最终状态
+5. 回调内不得调用 `set_status_and_emit(STATUS_EXECUTED)`，否则会形成嵌套终结事件；只能调用 `set_callback_execution_result`
+6. `set_callback_execution_result` 必须处于 `CallbackExecutionScopes[proposal_id]` 作用域内，否则返回 `InvalidProposalStatus`
+7. 手动补偿执行路径不在回调事务内，仍可调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将提案标记为已执行终态，防止重复执行
+8. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
+9. 内部提案互斥锁在 `STATUS_REJECTED / STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 时释放；联合提案在 `STAGE_JOINT` 直接 `STATUS_PASSED` 时也释放。
 
 注：`set_status_and_emit` 可见性已从 `pub(crate)` 提升为 `pub`，以便上层治理模块直接调用设置 `STATUS_EXECUTED`。
+
+旧低级覆盖 API `override_proposal_status` 已删除，不再允许业务模块绕过状态机直接写状态。
 
 `finalize_proposal` extrinsic 仍保留，作为手动补偿入口（例如诊断/运维场景），但正常超时路径由 `on_initialize` 自动结算。
 
@@ -157,23 +208,37 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 `cleanup_joint_proposal` / `cleanup_internal_proposal` 改为”统一注册、分阶段清理”：
 - 摘要层：`ProposalData` / `ProposalMeta`
 - 对象层：`ProposalObjectMeta` / `ProposalObject`
-- 核心层：`Proposals` / `JointTallies` / `CitizenTallies` / `InternalTallies`
+- 核心层：`Proposals` / `JointTallies` / `CitizenTallies` / `InternalTallies` / `InternalThresholdSnapshot` / `ProposalMutexBindings`
 - 大体量前缀（`JointVotesByAdmin` / `JointVotesByInstitution` / `JointInstitutionTallies` / `CitizenVotesByBindingId` / `InternalVotesByAccount` / vote credential nonce）写入 `PendingProposalCleanups`
 - `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
 
-**自动清理注册**：`set_status_and_emit` 在终态转换（`STATUS_VOTING` → `PASSED` / `REJECTED` / `EXECUTED`）时自动调用 `schedule_cleanup` 注册 90 天延迟清理。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。同一提案的多次终态转换（如 `PASSED` → `EXECUTED`）通过 `try_push` 保持幂等，不会导致重复清理。
+**自动清理注册**：`set_status_and_emit` 在终态转换（`STATUS_VOTING` → `PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时自动调用 `schedule_cleanup` 注册 90 天延迟清理。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。同一提案的多次终态转换（如 `PASSED` → `EXECUTED`）通过 `try_push` 保持幂等，不会导致重复清理。
 
 **清理阶段顺序**：
 - `InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
-- 其中 `ProposalObject` 专门负责删除对象层存储；`FinalCleanup` 只删除摘要层、提案主表与 tally。
+- 其中 `ProposalObject` 专门负责删除对象层存储；`FinalCleanup` 释放残留互斥锁并删除摘要层、提案主表与 tally。
 
 **`schedule_cleanup` 返回 `DispatchResult`**：该函数在目标区块队列已满时自动顺延到下一个区块（最多尝试 100 个连续区块）。如果连续 100 个区块队列均满（极端情况），使用 `defensive!` 宏在 debug/test 模式下发出警告，但仍返回 `Ok(())`，不阻塞主流程。
 
-### 5.6 联合回调一致性
+### 5.6 回调一致性与最终事件收口
 `set_status_and_emit` 现已使用存储事务包裹：
-- 若 `JointVoteResultCallback` 返回错误，则回滚 `Proposal.status` 与 `ProposalFinalized` 事件。
-- `ProposalFinalized` 在联合回调完成后才发出，避免事件状态与回调内覆盖后的最终状态不一致。
-- 避免联合提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
+- 若 `JointVoteResultCallback` 或 `InternalVoteResultCallback` 返回错误，则回滚 `Proposal.status` 与 `ProposalFinalized` 事件。
+- `ProposalFinalized` 在回调完成后由外层统一发出一次，避免业务模块成功执行时出现重复最终事件。
+- `set_callback_execution_result` 只允许回调在 `CallbackExecutionScopes` 内把 `STATUS_PASSED` 静默推进到 `STATUS_EXECUTED / STATUS_EXECUTION_FAILED`，不发事件、不登记清理、不释放互斥锁。
+- 避免提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
+
+### 5.6.1 状态机强约束
+`set_status_and_emit` 写状态前会校验旧状态和目标状态：
+
+- 允许：`VOTING -> PASSED`
+- 允许：`VOTING -> REJECTED`
+- 允许：`PASSED -> EXECUTED`
+- 允许：`PASSED -> EXECUTION_FAILED`
+- 禁止：终态继续变化
+- 禁止：`PASSED -> REJECTED`
+- 禁止：同状态重复写入
+
+当前无存量链、无存量提案，因此本次不包含存储迁移。
 
 ### 5.7 自动结算失败重试
 `auto_finalize_expiry_bucket` 现会把终结失败的提案重新写回 `ProposalsByExpiry`：
@@ -192,6 +257,15 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 - 赞成票达到机构阈值时，自动形成该机构 `approved`
 - 剩余管理员已不足以让赞成达到阈值时，自动形成该机构 `rejected`
 - 任一机构 `rejected` 后，联合阶段立即结束并进入公民投票
+
+### 5.10 管理员集合变更互斥
+已新增内部提案互斥机制：
+
+- 同一治理主体下，管理员集合变更与普通活跃提案互斥。
+- 普通提案之间默认不互斥。
+- 联合投票在管理员参与阶段占用所有参与机构的普通锁。
+- 联合投票进入公民投票阶段后释放管理员互斥锁，避免长期公民投票阻塞管理员更换。
+- `STATUS_PASSED` 的管理员集合变更提案不会释放独占锁，必须进入 `STATUS_EXECUTED / STATUS_REJECTED / STATUS_EXECUTION_FAILED` 后释放。
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
@@ -215,9 +289,12 @@ VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
 ## 8. 运行与集成注意事项
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. ~~上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`。~~ **已废弃**：`set_status_and_emit` 在终态转换时自动注册 90 天延迟清理，消费模块无需手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`（这两个 trait 方法现为空实现 no-op）。
-3. `create_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
-4. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
-5. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
+3. `create_internal_proposal` / `create_pending_subject_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
+4. 普通业务模块必须调用 `create_internal_proposal`；只有 `duoqian-manage` 创建机构多签/个人多签主体时可调用 `create_pending_subject_internal_proposal`。
+5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_set_mutation_internal_proposal`。
+6. 当前生产链已确认无活跃未终态提案，新增互斥存储以空状态启用；若未来在有存量活跃提案的链上升级，需要先补一次性锁重建迁移。
+7. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
+8. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
 
 ## 9. 文件索引
 - 入口与存储定义：`src/lib.rs`
