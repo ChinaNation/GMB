@@ -25,7 +25,7 @@ Step 2c-i 付款页对冷钱包 `isColdWallet` 直接 SnackBar 拒绝,MVP 只覆
 
 ## 2. 改动清单
 
-### 2.1 `lib/trade/offchain/offchain_clearing_pay_page.dart`
+### 2.1 `lib/offchain/pages/offchain_pay_page.dart`
 
 | 变更 | 说明 |
 |---|---|
@@ -37,7 +37,7 @@ Step 2c-i 付款页对冷钱包 `isColdWallet` 直接 SnackBar 拒绝,MVP 只覆
 
 ### 2.2 不改动
 
-- `offchain_clearing_receive_page.dart`:收款端无需冷钱包签名
+- `offchain_receive_page.dart`:收款端无需冷钱包签名
 - wumin 冷钱包 app:盲签字节流,无需适配新 payload 格式
 
 ---

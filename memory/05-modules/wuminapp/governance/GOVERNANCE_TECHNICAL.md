@@ -2,7 +2,7 @@
 
 ## 1. 模块目标
 
-`lib/governance/` 负责 WuminApp 的链上治理能力规范，覆盖：
+`lib/citizen/` 负责 WuminApp 底部“公民”Tab 及链上治理能力，覆盖：
 
 - 提案（proposal）发起
 - 投票（vote）提交
@@ -12,6 +12,27 @@
 
 - 本文档定义的是“链上字段/格式/标准/流程”。
 - 当前 App 已接入 runtime 升级、转账等主要治理路径，本文同时作为现有实现与后续扩展的对齐基线。
+
+当前实现目录已经按公民域重排：
+
+```text
+lib/citizen/
+  citizen_tab_page.dart
+  vote/
+  governance/
+  institution/
+  shared/
+  proposal/
+    shared/
+    transfer/
+    runtime_upgrade/
+    admin_change/
+    resolution_issuance/
+    resolution_destroy/
+    grandpakey_change/
+```
+
+`duoqian_manage` 代表注册个人/机构多签账户的多钱业务能力，归属 `lib/duoqian/`，不作为公民提案三级目录预留。
 
 ## 2. 链上入口与权限边界
 
@@ -345,7 +366,7 @@ message = blake2_256(SCALE.encode(payload))
 | 层 | 说明 | 文件 |
 | --- | --- | --- |
 | WebSocket 订阅 | `chain_subscribeNewHeads` 监听新区块，自动检测新提案插入列表顶部 | `lib/rpc/chain_event_subscription.dart` |
-| 本地内存缓存 | ProposalMeta / TransferProposalInfo / RuntimeUpgradeProposalInfo 缓存，避免重复 RPC | `lib/governance/proposal_cache.dart` |
+| 本地内存缓存 | ProposalMeta / TransferProposalInfo / RuntimeUpgradeProposalInfo 缓存，避免重复 RPC | `lib/citizen/governance/proposal_cache.dart` |
 | 批量查询 | `state_queryStorageAt` 一次 RPC 查多个 key，减少网络往返 | `chain_rpc.dart::fetchStorageBatch` |
 | 分页加载 | 首屏 10 个，ScrollController 滚动触底加载更多 | `all_proposals_view.dart` |
 
@@ -373,7 +394,7 @@ message = blake2_256(SCALE.encode(payload))
 | 公民投票 | 钱包绑定了 SFID | ⏭️ 后期 |
 | 机构联合投票 | 钱包是当前省级管理员，且该管理员尚未对本机构投票 | ✅ 已实现 |
 
-关键文件：`lib/governance/all_proposals_view.dart`
+关键文件：`lib/citizen/governance/all_proposals_view.dart`
 
 ### 7.3 权限控制规则
 
@@ -495,21 +516,33 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
-| `lib/governance/proposal_cache.dart` | 提案内存缓存（Meta + Transfer Detail + Runtime Upgrade Detail） |
+| `lib/citizen/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
+| `lib/citizen/governance/proposal_cache.dart` | 提案内存缓存（Meta + Transfer Detail + Runtime Upgrade Detail） |
+| `lib/citizen/citizen_tab_page.dart` | 公民 Tab 二级导航入口（投票 / 治理 / 机构） |
+| `lib/citizen/vote/vote_page.dart` | 投票二级页，当前保留公民投票扩展占位 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
-| `lib/governance/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
-| `lib/governance/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
-| `lib/governance/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI + 投票事件列表） |
-| `lib/governance/proposal_types_page.dart` | 提案类型选择页（转账已接入真实页面） |
-| `lib/governance/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
-| `lib/governance/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
-| `lib/governance/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
-| `lib/governance/transfer_proposal_page.dart` | 转账提案创建页（表单 + 校验 + 签名提交） |
-| `lib/governance/transfer_proposal_detail_page.dart` | 转账提案详情页（投票进度 + 管理员明细 + 投票操作） |
-| `lib/governance/transfer_proposal_service.dart` | 提案列表装配服务（转账提案 + 联合提案查询、分页与机构页事件聚合） |
+| `lib/citizen/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
+| `lib/citizen/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
+| `lib/citizen/institution/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
+| `lib/citizen/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI + 投票事件列表） |
+| `lib/citizen/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
+| `lib/citizen/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
+| `lib/citizen/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
+| `lib/citizen/proposal/shared/pending_vote_store.dart` | 多提案共用待确认投票记录 |
+| `lib/citizen/proposal/shared/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
+| `lib/citizen/proposal/proposal_types_page.dart` | 提案类型选择页（转账已接入真实页面） |
+| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
+| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
+| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
+| `lib/citizen/institution/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
+| `lib/citizen/proposal/transfer/transfer_proposal_page.dart` | 转账提案创建页（表单 + 校验 + 签名提交） |
+| `lib/citizen/proposal/transfer/transfer_proposal_detail_page.dart` | 转账提案详情页（投票进度 + 管理员明细 + 投票操作） |
+| `lib/citizen/proposal/transfer/transfer_proposal_service.dart` | 提案列表装配服务（转账提案 + 联合提案查询、分页与机构页事件聚合） |
+| `lib/duoqian/shared` | 纯多签共享层（单类型列表、账户详情、管理服务、关闭提案、二维码、管理提案详情） |
+| `lib/duoqian/institution` | 机构多签层（机构列表入口、机构创建表单） |
+| `lib/duoqian/personal` | 个人多签层（个人列表入口、个人创建表单） |
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
-| `lib/main.dart` | 机构列表结构化（`InstitutionInfo`）+ 卡片点击跳转 |
+| `lib/main.dart` | App 壳、应用锁与底部导航；不再内联公民 Tab 业务页面 |
 
 ## 8. 注册多签机构（duoqian-manage）
 
@@ -539,21 +572,21 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 | --- | --- | --- | --- |
 | `register_sfid_institution(sfid_id)` | 2 | SFID 系统登记机构，派生多签地址 | 不需要 |
 | `propose_create(sfid_id, admin_count, admins, threshold, amount)` | 0 | 发起"创建多签账户"提案 | 投票引擎 |
-| `vote_create(proposal_id, approve)` | 3 | 创建提案投票，达标自动激活账户并转入资金 | 投票引擎 |
 | `propose_close(duoqian_address, beneficiary)` | 1 | 发起"关闭多签账户"提案 | 投票引擎 |
-| `vote_close(proposal_id, approve)` | 4 | 关闭提案投票，达标自动转出余额并删除账户 | 投票引擎 |
+| `propose_create_personal(account_name, admin_count, admins, threshold, amount)` | 3 | 发起个人多签账户创建提案 | 投票引擎 |
+| `VotingEngine::internal_vote(proposal_id, approve)` | 9.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）
 
 1. 管理员调用 `propose_create` → 写入 `DuoqianAccounts`（status=Pending）+ 投票引擎创建提案
-2. 其他管理员调用 `vote_create` → 投票引擎记票
+2. 其他管理员调用 `VotingEngine::internal_vote` → 投票引擎记票
 3. 达到 threshold → 自动执行：`Currency::transfer` 转入资金 + `DuoqianAccounts.status` 改为 Active
 4. 投票超时/否决 → 删除 Pending 状态的 `DuoqianAccounts`
 
 ### 8.6 关闭流程
 
 1. 管理员调用 `propose_close` → 投票引擎创建提案
-2. 其他管理员调用 `vote_close` → 投票引擎记票
+2. 其他管理员调用 `VotingEngine::internal_vote` → 投票引擎记票
 3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 删除 `DuoqianAccounts`
 
 ### 8.7 转账接入
@@ -565,10 +598,45 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 - `ShengAdminService` 对注册型机构不再查 `AdminsChange.Institutions`，而是直接读取 `DuoqianManage.DuoqianAccounts`，从中解码管理员列表和动态阈值。
 - 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
 
-### 8.8 关键文件
+### 8.8 手机端入口分流
+
+2026-04-30 起，`wuminapp` 将多签账户入口从“我的”页迁入交易页，并拆成
+两个单类型入口：
+
+- `机构多签`：只读取 `DuoqianInstitutionEntity`，右上角只提供“创建机构多签账户”
+  和“扫码加入多签账户”。
+- `个人多签`：只读取 `PersonalDuoqianEntity`，右上角只提供“创建个人多签账户”
+  和“扫码加入多签账户”。
+
+旧的 `lib/trade/duoqian/duoqian_trade_page.dart` 聚合页已删除。发起转账提案不删除，
+入口改为放在每个多签账户详情页，进入后仍使用
+`lib/citizen/proposal/transfer/transfer_proposal_page.dart` 构造 `DuoqianTransfer::propose_transfer`。
+
+2026-04-30 第二轮收口只迁移纯多签文件：账户管理模型/服务、账户详情、创建、
+关闭、账户二维码与多签管理提案详情归入 `lib/duoqian`；QR 协议、Isar schema、
+钱包流水、治理聚合页、机构通用服务、内部投票通用服务与转账提案通用文件仍留在
+原模块目录。
+
+2026-04-30 第三轮收口删除治理提案类型页中的“创建多签/关闭多签”入口。多签创建
+只能从 `机构多签` 或 `个人多签` 列表右上角进入；多签关闭只能从具体多签账户详情
+页进入。机构多签关闭与个人多签关闭分别使用独立页面，不能再共用一个关闭入口。
+
+### 8.9 关键文件
 
 | 文件 | 说明 |
 | --- | --- |
+| `lib/duoqian/shared/duoqian_account_list_page.dart` | 单类型多签账户列表页 |
+| `lib/duoqian/shared/duoqian_account_info_page.dart` | 多签账户详情页 |
+| `lib/duoqian/shared/duoqian_manage_models.dart` | 多签管理提案模型与账户状态模型 |
+| `lib/duoqian/shared/duoqian_manage_service.dart` | `DuoqianManage` 链上交互服务 |
+| `lib/duoqian/shared/duoqian_manage_detail_page.dart` | 多签创建/关闭管理提案详情页 |
+| `lib/duoqian/shared/duoqian_qr_sheet.dart` | 多签账户二维码弹窗 |
+| `lib/duoqian/institution/institution_duoqian_list_page.dart` | 机构多签入口页 |
+| `lib/duoqian/institution/institution_duoqian_create_page.dart` | 机构多签创建表单 |
+| `lib/duoqian/institution/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
+| `lib/duoqian/personal/personal_duoqian_list_page.dart` | 个人多签入口页 |
+| `lib/duoqian/personal/personal_duoqian_create_page.dart` | 个人多签创建表单 |
+| `lib/duoqian/personal/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
 | `duoqian-manage/src/lib.rs` | 注册、创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
 | `voting-engine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
@@ -577,14 +645,26 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 ## 9. 源码对齐基线
 
-- `lib/governance/institution_data.dart`
-- `lib/governance/institution_admin_service.dart`
-- `lib/governance/institution_detail_page.dart`
-- `lib/governance/proposal_types_page.dart`
-- `lib/governance/admin_list_page.dart`
-- `lib/governance/transfer_proposal_page.dart`
-- `lib/governance/transfer_proposal_detail_page.dart`
-- `lib/governance/transfer_proposal_service.dart`
+- `lib/citizen/institution/institution_data.dart`
+- `lib/citizen/institution/institution_admin_service.dart`
+- `lib/citizen/institution/institution_detail_page.dart`
+- `lib/citizen/proposal/proposal_types_page.dart`
+- `lib/citizen/institution/admin_list_page.dart`
+- `lib/citizen/proposal/transfer/transfer_proposal_page.dart`
+- `lib/citizen/proposal/transfer/transfer_proposal_detail_page.dart`
+- `lib/citizen/proposal/transfer/transfer_proposal_service.dart`
+- `lib/duoqian/shared/duoqian_account_list_page.dart`
+- `lib/duoqian/shared/duoqian_account_info_page.dart`
+- `lib/duoqian/shared/duoqian_manage_models.dart`
+- `lib/duoqian/shared/duoqian_manage_service.dart`
+- `lib/duoqian/shared/duoqian_manage_detail_page.dart`
+- `lib/duoqian/shared/duoqian_qr_sheet.dart`
+- `lib/duoqian/institution/institution_duoqian_list_page.dart`
+- `lib/duoqian/institution/institution_duoqian_create_page.dart`
+- `lib/duoqian/institution/institution_duoqian_close_page.dart`
+- `lib/duoqian/personal/personal_duoqian_list_page.dart`
+- `lib/duoqian/personal/personal_duoqian_create_page.dart`
+- `lib/duoqian/personal/personal_duoqian_close_page.dart`
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
 - `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`

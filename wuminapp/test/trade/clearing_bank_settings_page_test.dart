@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/trade/offchain/clearing_bank_settings_page.dart';
+import 'package:wuminapp_mobile/offchain/pages/clearing_bank_settings_page.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 中文注释:`ClearingBankSettingsPage` 基础渲染测试。

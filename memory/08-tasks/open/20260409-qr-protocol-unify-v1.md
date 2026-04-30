@@ -104,14 +104,14 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<address 或 pubkey>
 - [ ] `cpms/backend/src/qr/envelope.rs`:同上
 
 ### Step 5:所有生成点切 envelope
-- [x] wuminapp:`signer/qr_signer.dart`(sign_request)、`wallet/ui/receive_qr_page.dart`(user_transfer)、`user/user.dart:425,1042`(user_contact)、`governance/duoqian_qr_sheet.dart`(user_duoqian)
-- [x] wuminapp 治理 8 页面修复(2026-04-10):fee_rate_detail / duoqian_close_proposal / personal_duoqian_create / runtime_upgrade / transfer_proposal / runtime_upgrade_detail / transfer_proposal_detail / duoqian_manage_detail — 全部从 Map display + `account:` 切换为 `SignDisplay` + `address:`
+- [x] wuminapp:`signer/qr_signer.dart`(sign_request)、`wallet/ui/receive_qr_page.dart`(user_transfer)、`user/user.dart:425,1042`(user_contact)、`duoqian/shared/duoqian_qr_sheet.dart`(user_duoqian)
+- [x] wuminapp 治理/多签 8 页面修复(2026-04-10):fee_rate_detail / duoqian_close_proposal / personal_duoqian_create / runtime_upgrade / transfer_proposal / runtime_upgrade_detail / transfer_proposal_detail / duoqian_manage_detail — 全部从 Map display + `account:` 切换为 `SignDisplay` + `address:`
 - [ ] wumin:`login/login_qr_handler.dart`(login_receipt)、`signer/qr_signer.dart`(sign_response)
 - [ ] sfid backend:`login/mod.rs`(login_challenge)
 - [ ] cpms backend:`login/mod.rs`(login_challenge)
 
 ### Step 6:所有解析点切 envelope
-- [ ] wuminapp:`qr/qr_router.dart`、`signer/qr_signer.dart`(sign_response 解析)、`qr/pages/qr_scan_page.dart`、`governance/duoqian_institution_list_page.dart`
+- [ ] wuminapp:`qr/qr_router.dart`、`signer/qr_signer.dart`(sign_response 解析)、`qr/pages/qr_scan_page.dart`、`duoqian/shared/duoqian_account_list_page.dart`
 - [ ] wumin:`login/login_qr_handler.dart`(login_challenge 解析)、`signer/qr_signer.dart`(sign_request 解析)、`signer/offline_sign_service.dart`、`qr/offline_sign_page.dart`
 - [ ] citizenchain:`node/frontend/governance/parseAddressQr.ts`(删 WUMINAPP_USER_CARD_V1 分支,改读 envelope.body.address)、`AddressScanModal.tsx` + 3 个使用页
 - [ ] sfid frontend:`components/ScanAccountModal.tsx`、`views/auth/LoginView.tsx`、`api/client.ts`(删字段别名)

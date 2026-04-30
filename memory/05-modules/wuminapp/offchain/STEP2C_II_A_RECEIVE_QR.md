@@ -1,6 +1,9 @@
 # 扫码支付 Step 2c-ii-a 技术说明 · wuminapp 收款端基础
 
 - **日期**:2026-04-20
+- **目录说明**:本文记录收款端基础设计。2026-04-30 后 offchain 业务目录统一为
+  `wuminapp/lib/offchain/`;若恢复/补齐收款码页面,应落在
+  `lib/offchain/pages/offchain_receive_page.dart`。
 - **范围**:新建清算行**收款 QR 页**(与老 `ReceiveQrPage` 并存),`bind_clearing_bank_page`
   绑定成功写本地 shenfen_id 缓存,收款页读缓存并轮询余额。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
@@ -33,7 +36,7 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 **本步务实方案**:`ClearingBankPrefs`(`SharedPreferences` 封装,key:
 `clearing_bank_shenfen_id_{walletIndex}`):
 - **写入**:`bind_clearing_bank_page` 链上绑定成功后立即 `save(walletIndex, sfidId)`
-- **读取**:`offchain_clearing_receive_page` 初始化时 `load(walletIndex)`,为
+- **读取**:`offchain_receive_page` 初始化时 `load(walletIndex)`,为
   `null` 时提示"请先绑定"
 - **失去缓存的处置**(重装 / 清数据 / CLI 或别机绑定):提示重新从"选择/绑定
   清算行"入口走一遍(即使链上已绑,重走到确认步会同步写回缓存)
@@ -49,22 +52,22 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 
 | 文件 | 内容 |
 |---|---|
-| `lib/trade/offchain/clearing_bank_prefs.dart` | 4 个静态方法 `save` / `load` / `clear`(按 walletIndex 隔离);空串等价于清除 |
-| `lib/trade/offchain/offchain_clearing_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `WUMIN_QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=shenfen_id`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
+| `lib/offchain/services/clearing_bank_prefs.dart` | 4 个静态方法 `save` / `load` / `clear`(按 walletIndex 隔离);空串等价于清除 |
+| `lib/offchain/pages/offchain_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `WUMIN_QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=shenfen_id`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
 | `test/trade/clearing_bank_prefs_test.dart` | 5 个单测(空 load / 双 walletIndex roundtrip / 空串等价清除 / 选择性 clear / 覆盖写入)。全部通过 |
 
 ### 3.2 修改
 
 | 文件 | 变更 |
 |---|---|
-| `lib/trade/offchain/bind_clearing_bank_page.dart` | 绑定成功后 `await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId)`,紧接 SnackBar 提示 |
-| `lib/trade/offchain/clearing_payment_entry_page.dart` | 追加"生成收款码"入口,落 `OffchainClearingReceivePage`;提示文本同步更新(付款入口仍在主页扫码;老省储行页面 ADR-006 已退出) |
+| `lib/offchain/pages/bind_clearing_bank_page.dart` | 绑定成功后 `await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId)`,紧接 SnackBar 提示 |
+| `lib/offchain/pages/offchain_home_page.dart` | 追加"生成收款码"入口,落 `OffchainReceivePage`;提示文本同步更新(付款入口仍在主页扫码;老省储行页面 ADR-006 已退出) |
 
 ### 3.3 不动(保留老路径)
 
 - `lib/wallet/ui/receive_qr_page.dart`:老省储行 `ReceiveQrPage`,`bankShenfenId`
   从 `OnchainRpc.queryClearingInstitution`(老 `bind_clearing_institution` call_index 9)
-  取。与新 `offchain_clearing_receive_page` 并存,不冲突。Step 2b-iv-b runtime
+  取。与新 `offchain_receive_page` 并存,不冲突。Step 2b-iv-b runtime
   老 Calls 清理时再下架老页面 + 老 `wallet_page._openReceiveQr` 入口重写。
 
 ---
@@ -160,7 +163,7 @@ All tests passed!  (5 个)
 ## 9. 变更记录
 
 - 2026-04-20:Step 2c-ii-a 完整落地。新增 `clearing_bank_prefs.dart` 小工具 +
-  5 个单测(全绿);新增 `offchain_clearing_receive_page.dart`(QR 生成 + 5s 轮询
-  余额);`bind_clearing_bank_page` 绑定成功后写缓存;`clearing_payment_entry_page`
+  5 个单测(全绿);新增 `offchain_receive_page.dart`(QR 生成 + 5s 轮询
+  余额);`bind_clearing_bank_page` 绑定成功后写缓存;`offchain_home_page`
   追加"生成收款码"入口。`flutter analyze` 零 issue;单测全通过;wuminapp 其他
   路径不变。

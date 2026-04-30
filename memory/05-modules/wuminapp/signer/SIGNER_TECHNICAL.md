@@ -11,7 +11,7 @@
 
 - `wallet` 管钱包与密钥材料生命周期
 - `signer` 管签名算法与签名协议
-- `login`、`trade/onchain` 只编排流程，不直接写签名细节
+- `login`、`onchain` 只编排流程，不直接写签名细节
 
 ## 2. 目录结构
 
@@ -175,7 +175,7 @@ lib/signer/
   - 负责挑战解析、防重放、系统签名验证、签名前确认
   - 热钱包通过 `WalletManager.signUtf8WithWallet()` 本机签名
   - 冷钱包通过 `QrSigner + OfflineSignService` 完成外部签名
-- `trade/onchain`：
+- `onchain`：
   - 负责交易草稿校验、prepare/submit/status 编排
   - 热钱包通过 `WalletManager.signWithWallet()` 本机签名
   - 冷钱包通过 `QrSigner + QrSignSessionPage + OfflineSignService` 完成外部签名

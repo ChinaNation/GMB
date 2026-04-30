@@ -65,12 +65,13 @@ make_transfer_sigs
 
 按 Registry 字段表补齐:
 - `lib/trade/onchain/onchain_trade_page.dart`
-- `lib/governance/duoqian_manage_detail_page.dart`
+- `lib/duoqian/shared/duoqian_manage_detail_page.dart`
 - `lib/governance/runtime_upgrade_detail_page.dart`
 - `lib/governance/transfer_proposal_page.dart`
-- `lib/governance/duoqian_create_proposal_page.dart`
-- `lib/governance/personal_duoqian_create_page.dart`
-- `lib/governance/duoqian_close_proposal_page.dart`
+- `lib/duoqian/institution/institution_duoqian_create_page.dart`
+- `lib/duoqian/personal/personal_duoqian_create_page.dart`
+- `lib/duoqian/institution/institution_duoqian_close_page.dart`
+- `lib/duoqian/personal/personal_duoqian_close_page.dart`
 - `lib/governance/runtime_upgrade_page.dart`(fields 整块缺失,一并补齐)
 - `lib/governance/activation_service.dart`
 - 其他 Grep `SignDisplayField\(` 命中点
@@ -119,7 +120,7 @@ make_transfer_sigs
   display.fields 里移除(`transfer_proposal_detail_page` 删除整个
   `_buildSignDisplayFields` 函数,`duoqian_manage_detail_page` 删
   createInfo/closeInfo 辅助字段,`runtime_upgrade_detail_page` 删
-  proposalInfo 辅助字段,`duoqian_close_proposal_page` 删"当前余额",
+  proposalInfo 辅助字段,机构/个人多签关闭页删"当前余额",
   `activation_service` 删"管理员公钥")
 - ✅ `amount_yuan` 字段格式全局对齐 wumin decoder `_fenToYuan` 输出
   "X.XX GMB"(千分位)

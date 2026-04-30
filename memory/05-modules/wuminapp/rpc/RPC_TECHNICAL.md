@@ -182,7 +182,7 @@ fullKey    = prefix + accountKey                            // 80 字节
 
 ### 7.1 OnchainRpc 类
 
-onchain 模块所有需要 RPC 的功能集中于此，供 `trade/onchain` 和未来的 `governance` 模块使用。
+onchain 模块所有需要 RPC 的功能集中于此，供 `lib/onchain` 普通链上支付和 `governance` 等业务模块使用。
 
 ### 7.2 转账
 
@@ -272,12 +272,12 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 - 轻节点未同步完成：等待同步完成后再读链上状态；超时则抛出异常
 - `smoldot` 返回 JSON-RPC error：直接抛出异常，禁止吞成空结果
 - 账户不存在（`System.Account` / storage proof 返回空值）：返回余额 `0.0`，不报错
-- 交易提交失败（`smoldot_submit_extrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainTradeException`
+- 交易提交失败（`smoldot_submit_extrinsic` 返回错误）：抛出异常，由 service 层包装为 `OnchainPaymentException`
 
 ## 11. 调用方
 
 | 模块 | 用途 | 状态 |
 | --- | --- | --- |
 | `wallet` | 余额查询（`ChainRpc.fetchBalance`） | 已实现 |
-| `trade/onchain` | 转账（`OnchainRpc.transferKeepAlive`） | 已实现 |
+| `onchain` | 普通链上转账（`OnchainRpc.transferKeepAlive`） | 已实现 |
 | `governance` | 提案/投票 | 规划中 |
