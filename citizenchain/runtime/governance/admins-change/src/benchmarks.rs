@@ -1,7 +1,7 @@
 //! 管理员治理模块 Benchmark 定义。
 //!
 //! Phase 2 整改后投票统一由 `voting-engine::internal_vote` 公开 call 承担,
-//! 本模块不再有 `vote_admin_replacement` extrinsic。Benchmark 只覆盖提案创建和
+//! 本模块不再保留独立投票 extrinsic。Benchmark 只覆盖提案创建和
 //! 执行重试两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
@@ -29,6 +29,10 @@ fn prc_admin<T: Config>(index: usize) -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
 }
 
+fn last_proposal_id<T: Config>() -> u64 {
+    voting_engine::Pallet::<T>::next_proposal_id().saturating_sub(1)
+}
+
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -51,14 +55,15 @@ mod benchmarks {
         )
         .is_ok());
 
-        let end = voting_engine::Pallet::<T>::proposals(0)
+        let stale_proposal_id = last_proposal_id::<T>();
+        let end = voting_engine::Pallet::<T>::proposals(stale_proposal_id)
             .expect("stale benchmark proposal should exist")
             .end;
         let one: BlockNumberFor<T> = 1u32.saturated_into();
         frame_system::Pallet::<T>::set_block_number(end.saturating_add(one));
         assert!(voting_engine::Pallet::<T>::finalize_proposal(
             RawOrigin::Signed(proposer.clone()).into(),
-            0,
+            stale_proposal_id,
         )
         .is_ok());
 
@@ -71,13 +76,14 @@ mod benchmarks {
             new_admin,
         );
 
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(1).is_some());
+        let proposal_id = last_proposal_id::<T>();
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
 
     /// `execute_admin_replacement` benchmark:
     /// 1. 发起提案 → 自动存入 ProposalData
-    /// 2. 手动把提案状态推到 PASSED(模拟投票通过但自动执行失败的场景)
-    /// 3. 手动 mutate Institutions 模拟"管理员列表被污染"的中间态
+    /// 2. 手动 mutate Institutions 模拟"管理员列表被污染"的中间态
+    /// 3. 手动把提案状态推到 PASSED,触发回调但让自动执行失败
     /// 4. 调 `execute_admin_replacement` 完成补救执行
     #[benchmark]
     fn execute_admin_replacement() {
@@ -96,11 +102,9 @@ mod benchmarks {
             new_admin,
         )
         .is_ok());
+        let proposal_id = last_proposal_id::<T>();
 
-        // 用引擎低级接口直接把提案推到 PASSED(绕开投票;benchmark 只测 execute 路径)。
-        assert!(voting_engine::Pallet::<T>::set_status_and_emit(0, STATUS_PASSED).is_ok());
-
-        // 模拟中间态:先把 old_admin 换成 temp_admin,execute 时能检测到不一致并 rewrite。
+        // 模拟中间态:先把 old_admin 换成 temp_admin,让投票通过回调里的自动执行失败。
         Institutions::<T>::mutate(institution, |maybe_subject| {
             let subject = maybe_subject
                 .as_mut()
@@ -112,6 +116,11 @@ mod benchmarks {
                 .expect("benchmark old_admin should exist");
             admins[old_pos] = temp_admin.clone();
         });
+
+        // 用引擎低级接口直接把提案推到 PASSED(绕开投票;benchmark 只测 execute 路径)。
+        assert!(
+            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok()
+        );
 
         // 再还原 old_admin(让 execute 逻辑有合法 old_admin 可查)。
         Institutions::<T>::mutate(institution, |maybe_subject| {
@@ -126,9 +135,9 @@ mod benchmarks {
             admins[temp_pos] = old_admin.clone();
         });
 
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(voting_engine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
 
         #[extrinsic_call]
-        execute_admin_replacement(RawOrigin::Signed(caller), 0);
+        execute_admin_replacement(RawOrigin::Signed(caller), proposal_id);
     }
 }

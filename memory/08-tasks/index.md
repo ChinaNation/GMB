@@ -1,7 +1,6 @@
 # 任务索引
 
 ## open
-
 - `memory/08-tasks/open/20260321-084304-统一本地调试时-sfid-后端监听地址与手机访问地址-修复提交升级提案时人口快照接口连接超时问题.md`
 - `memory/08-tasks/open/20260321-095406-检查区块链所需的人口快照数据与sfid实际提供的人口快照数据是否对齐.md`
 - `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
@@ -48,6 +47,11 @@
 
 ## done
 
+- `memory/08-tasks/done/20260430-161713-p1-voting-status-state-machine.md`
+- `memory/08-tasks/done/20260430-154307-p2-p3-voting-finalized-transaction.md`
+- `memory/08-tasks/done/20260430-145704-p1-admins-change-mutex.md`
+- `memory/08-tasks/done/20260430-140612-p2-admins-change-proposal-consistency.md`
+- `memory/08-tasks/done/20260430-132721-p2-pending-api-active-snapshot.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -187,4 +191,10 @@
 - `memory/08-tasks/done/20260430-095017-wuminapp-duoqian-pure-migration.md`
 - `memory/08-tasks/done/20260430-100427-wuminapp-duoqian-create-close-only-from-account.md`
 - `memory/08-tasks/done/20260430-111018-梳理-wuminapp-公民-公民治理机构-治理-投票-提案等功能的实现目录与关键文件.md`
+- `memory/08-tasks/done/20260430-115117-删除公民提案多钱管理预留目录.md`
+- `memory/08-tasks/done/20260430-115508-清理管理员更换模块旧投票残留并修复-admins-change-benchmark-中硬编码-proposal-id-的问题-暂不实现-pending-主体-ap.md`
+- `memory/08-tasks/done/20260430-120456-修复我的钱包拖拽排序松手后回到原位置的问题-原因是-ui-层对-fixed-length-钱包列表执行-removeat-insert-需改为.md`
+- `memory/08-tasks/done/20260430-120900-把官网的更新部署到服务器-64-181-239-233.md`
+- `memory/08-tasks/done/20260430-124640-恢复-wuminapp-交易-tab-四个独立入口.md`
+- `memory/08-tasks/done/20260430-131327-修复交易页恢复原-ui-仅新增个人多签和机构多签入口.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`

@@ -8,6 +8,7 @@
 - `sfid` 模块文档
 - `cpms` 模块文档
 - `wuminapp` 模块文档
+- `website` 官网模块文档
 
 ## 规则
 
@@ -22,3 +23,4 @@
 - `memory/05-modules/sfid/`
 - `memory/05-modules/cpms/`
 - `memory/05-modules/wuminapp/`
+- `memory/05-modules/website/`
