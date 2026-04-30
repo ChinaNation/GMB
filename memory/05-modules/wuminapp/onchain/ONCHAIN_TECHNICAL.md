@@ -39,7 +39,7 @@ wuminapp/lib/trade/
 
 ## 3. 关键流程
 
-1. `OnchainPaymentPage` 收集 `toAddress / amount / symbol`
+1. `OnchainPaymentPanel` 收集 `toAddress / amount / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
 2. 页面校验 SS58 前缀、金额、余额、ED 和预估手续费
 3. 页面根据钱包类型注入签名回调：
    - 热钱包：先调用 `WalletManager.authenticateForSigning()`，再用 `signWithWalletNoAuth()` 签名
@@ -97,6 +97,7 @@ fee = max(amount_fen * 0.001, 10 fen)
 
 ## 8. 边界规则
 
+- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/ui/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付/多签入口；onchain 模块自身不 import `offchain` 或 `duoqian`
 - `lib/onchain/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/onchain/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块
