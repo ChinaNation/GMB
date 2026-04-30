@@ -8,7 +8,7 @@
 
 - 区块链 Runtime/共识逻辑不在本仓库实现（由 `citizenchain` 提供）
 - SFID 与链交互由外部服务系统承载
-- `wuminapp` 负责端上钱包、登录签名、链上交易入口、绑定指令发起、状态展示
+- `wuminapp` 负责端上钱包、登录签名、纯链上支付入口、绑定指令发起、状态展示
 
 ## 2. 当前技术栈
 
@@ -29,12 +29,15 @@ wuminapp/
 │   ├── main.dart
 │   ├── Isar/
 │   ├── rpc/                ← 链上 RPC 公共模块
-│   ├── governance/
+│   ├── onchain/            ← 普通链上转账 / 纯链上支付
+│   ├── trade/              ← 本地交易记录与 pending 对账共用能力（非功能入口）
+│   ├── offchain/           ← 扫码支付 / 清算行能力
+│   ├── duoqian/            ← 机构多签 / 个人多签能力
+│   ├── citizen/            ← 公民 Tab：投票 / 治理 / 机构 / 提案
 │   ├── qr/                 ← 二维码统一模块（登录/收款/用户码）
 │   ├── signer/
 │   ├── user/
-│   ├── wallet/
-│   └── trade/
+│   └── wallet/
 └── test/
 ```
 
@@ -48,28 +51,54 @@ wuminapp/
 
 ### 4.1 主导航
 
-底部 5 Tab：
+底部 4 Tab：
 
-- `广场`
-- `治理`
+- `公民`
 - `消息`
-- `金融`
+- `交易`
 - `我的`
 
-### 4.2 治理页
+### 4.2 公民 Tab
+
+`lib/citizen/` 是底部“公民”Tab 的唯一实现入口：
+
+- `citizen_tab_page.dart`：公民 Tab 二级导航（投票 / 治理 / 机构）
+- `vote/`：投票页，当前保留原公民宪法引言占位，后续扩展公民投票聚合能力
+- `governance/`：治理页，负责全局提案列表、分页、缓存、红点待投票统计
+- `institution/`：机构页，负责机构分类、机构详情、管理员列表与管理员激活
+- `proposal/`：提案域，按具体提案类型继续拆三级目录
+- `shared/`：公民模块跨二级目录共用能力
+
+`lib/citizen/proposal/` 下的具体结构：
+
+```text
+proposal/
+  shared/           ← 多种提案共用模型、内部投票、待确认投票、投票组件
+  transfer/         ← 转账 / 安全基金转账 / 手续费划转提案
+  runtime_upgrade/  ← Runtime 升级提案
+  admin_change/
+  resolution_issuance/
+  resolution_destroy/
+  grandpakey_change/
+```
+
+多钱账户注册/关闭与多钱管理提案详情归属 `lib/duoqian/`，不在公民提案三级目录下预留。
+
+### 4.2.1 机构页
 
 - 机构分类卡片已内置：
   - 国储会 1
   - 省储会 43
   - 省储行 43
 - 机构分类列表固定为一行两列展示，避免因不同 Android 机型逻辑宽度差异出现单列大卡或列数漂移
-- 提案/投票链上交互仍在治理模块开发阶段（规范已落文档）
+- 提案列表、管理员投票、转账提案和 Runtime 升级主要路径已接入；公民投票提交仍待后续补齐
 
-### 4.3 金融页
+### 4.3 交易 Tab
 
-- 入口页标题为"金融"
-- 已接入"链上交易"页面
-- 链下交易仍为开发中占位
+- 底部第 3 个按钮文案仍为"交易"，不因目录拆分改名
+- 当前 `交易` Tab 直接进入 `lib/onchain/onchain_payment_page.dart`
+- `lib/onchain/` 只处理普通链上转账 / 纯链上支付
+- 扫码支付、机构多签、个人多签均为独立功能域，不通过链上支付页或 `trade_page.dart` 聚合页分流
 
 ### 4.4 钱包与签名
 
@@ -77,7 +106,8 @@ wuminapp/
 
 - `core/`：钱包生命周期、Isar、机密 key 规范、生物识别守卫
 - `capabilities/`：登录签名编排、API（SFID 绑定/管理员目录）、证明态
-- `ui/`：钱包页面
+- `pages/`：钱包页面
+- `widgets/`：钱包专用组件
 
 余额查询由 `lib/rpc/` 模块直连链上节点完成，不经过外部网关。
 
@@ -250,7 +280,7 @@ lib/rpc/
 ├── onchain.dart     ← onchain 模块 RPC 功能（extrinsic 构造、转账、状态查询）
 └── rpc.dart         ← barrel export
      ↑          ↑          ↑
-  wallet/    trade/    governance/
+  wallet/    onchain/   citizen/
  （余额查询）（转账）  （提案/投票）
 ```
 
@@ -261,9 +291,9 @@ lib/rpc/
 | 能力 | RPC 方法 | 模块 | 状态 |
 | --- | --- | --- | --- |
 | 余额查询 | `state_getStorage`（`System.Account`） | `wallet` | 已实现 |
-| 转账 | 直连节点构造/提交 extrinsic | `trade/onchain` | 已实现 |
-| 提案 | 直连节点提交治理 extrinsic | `governance` | 规划中 |
-| 投票 | 直连节点提交投票 extrinsic | `governance` | 规划中 |
+| 转账 | 直连节点构造/提交 extrinsic | `onchain` | 已实现 |
+| 提案 | 直连节点提交治理 extrinsic | `citizen/proposal` | 已部分实现 |
+| 投票 | 直连节点提交投票 extrinsic | `citizen/proposal` | 管理员投票已实现，公民投票待补齐 |
 
 ## 7. 外部 API 对接（当前）
 
@@ -277,9 +307,9 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 
 | 能力 | 链上入口 | 手机端模块 | 签名域 | 当前状态 |
 | --- | --- | --- | --- | --- |
-| 转账 | `Balances::transfer_keep_alive` extrinsic（直连 RPC 节点） | `lib/trade/onchain` | `onchain_tx` | 已实现（本机签名主链路） |
-| 提案 | 业务治理 pallet `propose_*` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ SFID 快照签名字段 | 待开发 |
-| 投票 | 业务治理 `vote_*` / 投票引擎 `submit_joint_institution_vote` / `citizen_vote` | `lib/governance`（规范已定） | `onchain_tx`（交易签名）+ 联合投票管理员门限 proof + SFID 投票凭证签名字段 | 待开发 |
+| 转账 | `Balances::transfer_keep_alive` extrinsic（直连 RPC 节点） | `lib/onchain` | `onchain_tx` | 已实现（本机签名主链路） |
+| 提案 | 业务治理 pallet `propose_*` | `lib/citizen/proposal` | `onchain_tx`（交易签名）+ SFID 快照签名字段 | 转账、Runtime 升级已接入 |
+| 投票 | 业务治理内部投票 / 投票引擎 `joint_vote` / `citizen_vote` | `lib/citizen/proposal` | `onchain_tx`（交易签名）+ SFID 投票凭证签名字段 | 管理员内部/联合投票已接入，公民投票待补齐 |
 
 ### 7.2 区块链字段与格式标准（总则）
 
@@ -295,8 +325,8 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 
 详细字段与流程见：
 
-- `lib/trade/onchain/ONCHAIN_TECHNICAL.md`（转账）
-- `lib/governance/GOVERNANCE_TECHNICAL.md`（提案/投票）
+- `memory/05-modules/wuminapp/onchain/ONCHAIN_TECHNICAL.md`（普通链上转账）
+- `memory/05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md`（公民治理 / 提案 / 投票）
 
 ## 8. 安全基线（当前）
 
@@ -334,7 +364,7 @@ flutter run \
 - RPC 模块：`lib/rpc/RPC_TECHNICAL.md`
 - 二维码模块：`lib/qr/QR_TECHNICAL.md`
 - 签名模块：`lib/signer/SIGNER_TECHNICAL.md`
-- 治理模块：`lib/governance/GOVERNANCE_TECHNICAL.md`
+- 公民治理模块：`memory/05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md`
 - 用户模块：`lib/user/USER_TECHNICAL.md`
 - 钱包模块：`lib/wallet/WALLET_TECHNICAL.md`
-- 链上交易模块：`lib/trade/onchain/ONCHAIN_TECHNICAL.md`
+- 链上支付模块：`memory/05-modules/wuminapp/onchain/ONCHAIN_TECHNICAL.md`

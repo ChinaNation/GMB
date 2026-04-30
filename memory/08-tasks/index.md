@@ -41,6 +41,10 @@
 - `memory/08-tasks/open/20260429-095603-rename-transaction-modules.md`
 - `memory/08-tasks/open/20260429-guochuhui-node-deploy.md`
 - `memory/08-tasks/open/20260429-runtime-step2-admins-change-unified-subjects.md`
+- `memory/08-tasks/open/20260430-102248-分析-citizenchain-runtime-governance-下每个模块的功能边界-并重点明确-admins-change-与-voting-engine-的功能边界.md`
+- `memory/08-tasks/open/20260430-110243-重构-wallet-目录为一层子目录结构-ui-页面迁移到-pages-ui-cards-组件迁移到-widgets-同步引用-测试和文档.md`
+- `memory/08-tasks/open/20260430-110408-只读审查管理员更换模块-admins-change-是否存在漏洞-需要改进的地方和残留.md`
+- `memory/08-tasks/open/20260430-wuminapp-onchain-move.md`
 
 ## done
 
@@ -179,3 +183,8 @@
 - `memory/08-tasks/done/20260429-task-card-filename-byte-limit.md`
 - `memory/08-tasks/done/20260429-voting-engine-rename.md`
 - `memory/08-tasks/done/20260429-wasm-ci-checkout-and-version-zero.md`
+- `memory/08-tasks/done/20260430-092239-wuminapp-duoqian-split.md`
+- `memory/08-tasks/done/20260430-095017-wuminapp-duoqian-pure-migration.md`
+- `memory/08-tasks/done/20260430-100427-wuminapp-duoqian-create-close-only-from-account.md`
+- `memory/08-tasks/done/20260430-111018-梳理-wuminapp-公民-公民治理机构-治理-投票-提案等功能的实现目录与关键文件.md`
+- `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`

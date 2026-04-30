@@ -275,7 +275,7 @@ WUMIN_QR_V1|system|challenge|expires_at
 - `wallet/`：
   - `WalletManager` 提供钱包密钥材料
   - `capabilities/sign_service.dart` 已重构为 re-export `qr/login/` 的兼容层
-- `trade/onchain/`：
+- `onchain/`：
   - 使用 `QrScanTransferResult` 预填转账表单
 - `user/`：
   - `UserQrPayload` 已迁移到 `WUMIN_QR_V1` 格式

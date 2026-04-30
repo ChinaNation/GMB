@@ -58,7 +58,7 @@ void main() {
     // 等待异步锁检查完成并渲染主界面。
     await tester.pumpAndSettle();
 
-    // 底部导航栏应包含 '交易' 标签。
+    // 中文注释：目录拆分不改变底部导航文案，第 3 个按钮仍叫“交易”。
     expect(find.text('交易'), findsWidgets);
   });
 }
