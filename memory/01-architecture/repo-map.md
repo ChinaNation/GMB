@@ -14,6 +14,7 @@ GMB/
   sfid/
   cpms/
   wuminapp/
+  website/
 ```
 
 ## 2. 目录职责
@@ -24,6 +25,7 @@ GMB/
 - `sfid/`：在线身份系统
 - `cpms/`：离线实名系统
 - `wuminapp/`：手机 App
+- `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
 
 ## 3. 文档集中管理规则
 
@@ -110,6 +112,8 @@ GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
   - `.github/workflows/cpms-ci.yml`
 - `wuminapp`
   - `.github/workflows/wuminapp-ci.yml`
+- `website`
+  - 当前暂无专用 GitHub Actions，官网发布前需在本地执行 `npm run build` 并部署 `website/dist/`
 
 补充说明：
 
