@@ -65,10 +65,42 @@ pub const STAGE_CITIZEN: u8 = 2;
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
 pub const STATUS_REJECTED: u8 = 2;
-/// 提案已执行完成（终态）。消费模块在业务逻辑成功后调用 set_status_and_emit 设置。
+/// 提案已执行完成（终态）。消费模块在业务逻辑成功后推进到该状态。
 pub const STATUS_EXECUTED: u8 = 3;
-/// 投票通过但业务执行失败（终态）。由消费模块回调在 set_status_and_emit 事务内覆盖。
+/// 投票通过但业务执行失败（终态）。由消费模块回调在 set_status_and_emit 事务内静默写入。
 pub const STATUS_EXECUTION_FAILED: u8 = 4;
+
+/// 内部提案互斥类型。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub enum InternalProposalMutexKind {
+    /// 普通内部治理事项，允许同主体多个普通事项并行。
+    Regular,
+    /// 管理员集合变更，同主体下必须独占。
+    AdminSetMutationExclusive,
+}
+
+/// 同一治理主体下的互斥状态。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct InternalProposalMutexState {
+    /// 当前占用管理员集合变更独占锁的提案。
+    pub admin_set_mutation_proposal: Option<u64>,
+    /// 当前普通活跃提案数量。
+    pub regular_active_count: u32,
+}
+
+impl InternalProposalMutexState {
+    fn is_empty(&self) -> bool {
+        self.admin_set_mutation_proposal.is_none() && self.regular_active_count == 0
+    }
+}
+
+/// proposal_id 到互斥锁的反向绑定，用于终态/阶段切换时释放锁。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct InternalProposalMutexBinding {
+    pub org: u8,
+    pub institution: InstitutionPalletId,
+    pub kind: InternalProposalMutexKind,
+}
 
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
 pub trait JointVoteEngine<AccountId> {
@@ -84,7 +116,8 @@ pub trait JointVoteEngine<AccountId> {
 
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
 ///
-/// 业务模块只通过 `create_internal_proposal` 将提案注册到投票引擎,
+/// 业务模块通过 `create_internal_proposal` 将普通 Active 主体提案注册到投票引擎,
+/// 仅创建/激活 Pending 主体时使用 `create_pending_subject_internal_proposal`。
 /// 投票动作不再经此 trait 转发——所有管理员直接调公开的
 /// `VotingEngine::internal_vote(proposal_id, approve)` extrinsic 投票,
 /// 由投票引擎的 `InternalVoteResultCallback` 广播回调业务模块执行业务。
@@ -94,6 +127,26 @@ pub trait InternalVoteEngine<AccountId> {
         org: u8,
         institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError>;
+
+    fn create_pending_subject_internal_proposal(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "PendingSubjectVoteEngineNotConfigured",
+        ))
+    }
+
+    fn create_admin_set_mutation_internal_proposal(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "AdminSetMutationVoteEngineNotConfigured",
+        ))
+    }
 
     fn cleanup_internal_proposal(_proposal_id: u64) {}
 }
@@ -269,6 +322,23 @@ pub trait InternalAdminProvider<AccountId> {
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
+
+    /// 查询 Pending 主体管理员权限。仅供创建/激活该主体的投票入口使用。
+    fn is_pending_internal_admin(
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _who: &AccountId,
+    ) -> bool {
+        false
+    }
+
+    /// 获取 Pending 主体管理员列表。仅供创建/激活该主体时锁定快照。
+    fn get_pending_admin_list(
+        _org: u8,
+        _institution: InstitutionPalletId,
+    ) -> Option<sp_std::vec::Vec<AccountId>> {
+        None
+    }
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
@@ -313,6 +383,11 @@ impl InternalAdminCountProvider for () {
 /// 生产 runtime 由 admins-change 统一主体表提供；默认实现仅供独立测试治理机构使用。
 pub trait InternalThresholdProvider {
     fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32>;
+
+    /// Pending 主体创建投票使用的阈值。普通业务不得通过此方法授权。
+    fn pending_pass_threshold(_org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+        None
+    }
 }
 
 /// 默认实现：仅支持治理机构的硬编码阈值。
@@ -498,6 +573,14 @@ pub mod pallet {
     pub type Proposals<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, Proposal<BlockNumberFor<T>>, OptionQuery>;
 
+    /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
+    ///
+    /// 中文注释：消费模块只能在这个作用域内通过 `set_callback_execution_result`
+    /// 静默写入业务执行结果，避免非回调路径绕过最终事件和互斥锁释放逻辑。
+    #[pallet::storage]
+    pub type CallbackExecutionScopes<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, (), OptionQuery>;
+
     /// 以“阶段截止区块”索引提案，用于 on_initialize 自动超时结算。
     #[pallet::storage]
     #[pallet::getter(fn proposals_by_expiry)]
@@ -602,6 +685,11 @@ pub mod pallet {
         OptionQuery,
     >;
 
+    /// 内部投票阈值快照：提案创建时锁定阈值，投票期间不受主体状态变化影响。
+    #[pallet::storage]
+    pub type InternalThresholdSnapshot<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
+
     /// 中文注释：总人口快照 nonce 防重放（全局维度，防止跨提案重放）。
     #[pallet::storage]
     #[pallet::getter(fn used_population_snapshot_nonce)]
@@ -650,6 +738,30 @@ pub mod pallet {
         Blake2_128Concat,
         InstitutionPalletId,
         BoundedVec<u64, ConstU32<{ crate::active_proposal_limit::MAX_ACTIVE_PROPOSALS }>>,
+        ValueQuery,
+    >;
+
+    /// 同一治理主体的内部提案互斥状态：(org, institution) → 锁状态。
+    #[pallet::storage]
+    #[pallet::getter(fn internal_proposal_mutex)]
+    pub type InternalProposalMutexes<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        u8,
+        Blake2_128Concat,
+        InstitutionPalletId,
+        InternalProposalMutexState,
+        OptionQuery,
+    >;
+
+    /// 提案持有的互斥锁列表，用于终态或联合投票进入公民阶段时释放。
+    #[pallet::storage]
+    #[pallet::getter(fn proposal_mutex_bindings)]
+    pub type ProposalMutexBindings<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        u64,
+        BoundedVec<InternalProposalMutexBinding, ConstU32<128>>,
         ValueQuery,
     >;
 
@@ -737,6 +849,16 @@ pub mod pallet {
         TooManyProposalsAtExpiry,
         /// 中文注释：该机构活跃提案数已达上限（10 个），需等待现有提案完成后再发起。
         ActiveProposalLimitReached,
+        /// 中文注释：同一治理主体已有管理员集合变更提案活跃，普通提案需等待其结束。
+        AdminSetMutationProposalActive,
+        /// 中文注释：同一治理主体已有普通提案活跃，管理员更换需等待普通提案结束。
+        RegularInternalProposalActive,
+        /// 中文注释：内部提案互斥计数溢出。
+        InternalProposalMutexOverflow,
+        /// 中文注释：单个提案持有的互斥锁数量超出上限。
+        TooManyInternalProposalMutexBindings,
+        /// 中文注释：管理员更换提案不是当前治理主体的独占锁 owner。
+        InternalProposalMutexOwnerMismatch,
     }
 
     #[pallet::hooks]
@@ -1002,18 +1124,155 @@ pub mod pallet {
             Ok(proposal)
         }
 
-        /// 更新提案状态，并在联合回调完成后发出最终 ProposalFinalized 事件。
-        /// 消费模块在执行成功后调用此方法设置 STATUS_EXECUTED。
+        pub(crate) fn acquire_internal_proposal_mutex(
+            proposal_id: u64,
+            org: u8,
+            institution: InstitutionPalletId,
+            kind: InternalProposalMutexKind,
+        ) -> DispatchResult {
+            InternalProposalMutexes::<T>::try_mutate_exists(
+                org,
+                institution,
+                |maybe| -> DispatchResult {
+                    let state = maybe.get_or_insert_with(InternalProposalMutexState::default);
+                    match kind {
+                        InternalProposalMutexKind::Regular => {
+                            ensure!(
+                                state.admin_set_mutation_proposal.is_none(),
+                                Error::<T>::AdminSetMutationProposalActive
+                            );
+                            state.regular_active_count = state
+                                .regular_active_count
+                                .checked_add(1)
+                                .ok_or(Error::<T>::InternalProposalMutexOverflow)?;
+                        }
+                        InternalProposalMutexKind::AdminSetMutationExclusive => {
+                            ensure!(
+                                state.admin_set_mutation_proposal.is_none(),
+                                Error::<T>::AdminSetMutationProposalActive
+                            );
+                            ensure!(
+                                state.regular_active_count == 0,
+                                Error::<T>::RegularInternalProposalActive
+                            );
+                            state.admin_set_mutation_proposal = Some(proposal_id);
+                        }
+                    }
+                    Ok(())
+                },
+            )?;
+
+            ProposalMutexBindings::<T>::try_mutate(proposal_id, |bindings| {
+                bindings
+                    .try_push(InternalProposalMutexBinding {
+                        org,
+                        institution,
+                        kind,
+                    })
+                    .map_err(|_| Error::<T>::TooManyInternalProposalMutexBindings)?;
+                Ok(())
+            })
+        }
+
+        pub(crate) fn release_internal_proposal_mutexes(proposal_id: u64) {
+            let bindings = ProposalMutexBindings::<T>::take(proposal_id);
+            for binding in bindings {
+                InternalProposalMutexes::<T>::mutate_exists(
+                    binding.org,
+                    binding.institution,
+                    |maybe| {
+                        let Some(state) = maybe.as_mut() else {
+                            return;
+                        };
+                        match binding.kind {
+                            InternalProposalMutexKind::Regular => {
+                                state.regular_active_count =
+                                    state.regular_active_count.saturating_sub(1);
+                            }
+                            InternalProposalMutexKind::AdminSetMutationExclusive => {
+                                if state.admin_set_mutation_proposal == Some(proposal_id) {
+                                    state.admin_set_mutation_proposal = None;
+                                }
+                            }
+                        }
+                        if state.is_empty() {
+                            *maybe = None;
+                        }
+                    },
+                );
+            }
+        }
+
+        pub fn ensure_admin_set_mutation_lock_owner(
+            org: u8,
+            institution: InstitutionPalletId,
+            proposal_id: u64,
+        ) -> DispatchResult {
+            let state = InternalProposalMutexes::<T>::get(org, institution)
+                .ok_or(Error::<T>::InternalProposalMutexOwnerMismatch)?;
+            ensure!(
+                state.admin_set_mutation_proposal == Some(proposal_id),
+                Error::<T>::InternalProposalMutexOwnerMismatch
+            );
+            Ok(())
+        }
+
+        fn should_release_internal_proposal_mutexes(kind: u8, stage: u8, final_status: u8) -> bool {
+            matches!(
+                final_status,
+                STATUS_REJECTED | STATUS_EXECUTED | STATUS_EXECUTION_FAILED
+            ) || (kind == PROPOSAL_KIND_JOINT
+                && stage == STAGE_JOINT
+                && final_status == STATUS_PASSED)
+        }
+
+        fn ensure_valid_status_transition(old_status: u8, new_status: u8) -> DispatchResult {
+            ensure!(
+                matches!(
+                    (old_status, new_status),
+                    (STATUS_VOTING, STATUS_PASSED)
+                        | (STATUS_VOTING, STATUS_REJECTED)
+                        | (STATUS_PASSED, STATUS_EXECUTED)
+                        | (STATUS_PASSED, STATUS_EXECUTION_FAILED)
+                ),
+                Error::<T>::InvalidProposalStatus
+            );
+            Ok(())
+        }
+
+        fn with_callback_execution_scope<F>(proposal_id: u64, callback: F) -> DispatchResult
+        where
+            F: FnOnce() -> DispatchResult,
+        {
+            CallbackExecutionScopes::<T>::insert(proposal_id, ());
+            let result = callback();
+            CallbackExecutionScopes::<T>::remove(proposal_id);
+            result
+        }
+
+        /// 更新提案状态，并在业务回调完成后发出最终 ProposalFinalized 事件。
+        /// 手动补偿执行路径可调用此方法设置 STATUS_EXECUTED。
         pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
-                let (kind, institution) = match Proposals::<T>::try_mutate(
+                let (kind, stage, institution, should_run_callback) = match Proposals::<
+                    T,
+                >::try_mutate(
                     proposal_id,
-                    |maybe| -> Result<(u8, Option<InstitutionPalletId>), DispatchError> {
+                    |maybe| -> Result<(u8, u8, Option<InstitutionPalletId>, bool), DispatchError> {
                         let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                        let old_status = proposal.status;
+                        Self::ensure_valid_status_transition(old_status, status)?;
                         let kind = proposal.kind;
+                        let stage = proposal.stage;
                         let inst = proposal.internal_institution;
                         proposal.status = status;
-                        Ok((kind, inst))
+                        Ok((
+                            kind,
+                            stage,
+                            inst,
+                            old_status == STATUS_VOTING
+                                && matches!(status, STATUS_PASSED | STATUS_REJECTED),
+                        ))
                     },
                 ) {
                     Ok(v) => v,
@@ -1027,16 +1286,16 @@ pub mod pallet {
                     }
                 }
 
-                // 中文注释:callback 只在"投票中 → PASSED/REJECTED"首次进入终态时触发,
-                // 不覆盖 PASSED→EXECUTED / PASSED→EXECUTION_FAILED 的二次推进。
+                // 中文注释:callback 只在"投票中 → PASSED/REJECTED"首次进入投票终态时触发,
+                // 不触发 PASSED→EXECUTED / PASSED→EXECUTION_FAILED 的二次推进。
                 // 后者是业务执行结果,业务自己清楚,不需要再次回调(否则会被错误解读为"否决"清理存储)。
-                let first_terminal = matches!(status, STATUS_PASSED | STATUS_REJECTED);
-
-                if kind == PROPOSAL_KIND_JOINT && first_terminal {
-                    if let Err(err) = T::JointVoteResultCallback::on_joint_vote_finalized(
-                        proposal_id,
-                        status == STATUS_PASSED,
-                    ) {
+                if kind == PROPOSAL_KIND_JOINT && should_run_callback {
+                    if let Err(err) = Self::with_callback_execution_scope(proposal_id, || {
+                        T::JointVoteResultCallback::on_joint_vote_finalized(
+                            proposal_id,
+                            status == STATUS_PASSED,
+                        )
+                    }) {
                         // 中文注释：联合投票结果必须由业务模块成功消费后，
                         // 才允许投票引擎把提案标记为最终状态。
                         return TransactionOutcome::Rollback(Err(err));
@@ -1046,11 +1305,13 @@ pub mod pallet {
                 // 中文注释:内部投票终态回调(对称于上面 joint 回调)。
                 // 业务模块在回调内执行具体业务动作(转账 / 替换管理员 / 销毁 / ...),
                 // 失败则整个状态转换事务回滚,票数 + 状态都保持原样。
-                if kind == PROPOSAL_KIND_INTERNAL && first_terminal {
-                    if let Err(err) = T::InternalVoteResultCallback::on_internal_vote_finalized(
-                        proposal_id,
-                        status == STATUS_PASSED,
-                    ) {
+                if kind == PROPOSAL_KIND_INTERNAL && should_run_callback {
+                    if let Err(err) = Self::with_callback_execution_scope(proposal_id, || {
+                        T::InternalVoteResultCallback::on_internal_vote_finalized(
+                            proposal_id,
+                            status == STATUS_PASSED,
+                        )
+                    }) {
                         return TransactionOutcome::Rollback(Err(err));
                     }
                 }
@@ -1075,18 +1336,32 @@ pub mod pallet {
                     let now = frame_system::Pallet::<T>::block_number();
                     let _ = proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
                 }
+                if Self::should_release_internal_proposal_mutexes(kind, stage, final_status) {
+                    Self::release_internal_proposal_mutexes(proposal_id);
+                }
 
                 TransactionOutcome::Commit(Ok(()))
             })
         }
 
-        /// 低级状态覆盖:仅供 `on_joint_vote_finalized` / `on_internal_vote_finalized`
-        /// 回调在同一事务内纠正状态(如"PASSED → EXECUTION_FAILED")。
-        /// 不发事件、不注册清理——这些由外层 set_status_and_emit 统一处理。
-        pub fn override_proposal_status(proposal_id: u64, new_status: u8) -> DispatchResult {
+        /// 回调专用执行结果写入。
+        ///
+        /// 中文注释：业务回调运行在 `set_status_and_emit(PASSED/REJECTED)` 的同一事务内。
+        /// 回调只静默写入执行结果，不发 `ProposalFinalized`、不登记清理、不释放互斥锁；
+        /// 这些收口动作统一由外层 `set_status_and_emit` 在读取最终状态后执行一次。
+        pub fn set_callback_execution_result(proposal_id: u64, final_status: u8) -> DispatchResult {
+            ensure!(
+                CallbackExecutionScopes::<T>::contains_key(proposal_id),
+                Error::<T>::InvalidProposalStatus
+            );
+            ensure!(
+                matches!(final_status, STATUS_EXECUTED | STATUS_EXECUTION_FAILED),
+                Error::<T>::InvalidProposalStatus
+            );
             Proposals::<T>::try_mutate(proposal_id, |maybe| {
                 let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                proposal.status = new_status;
+                Self::ensure_valid_status_transition(proposal.status, final_status)?;
+                proposal.status = final_status;
                 Ok(())
             })
         }
@@ -1241,13 +1516,15 @@ pub mod pallet {
                 }
                 PendingCleanupStage::FinalCleanup => {
                     // 清理核心数据 + 业务数据（单次完成）
+                    Self::release_internal_proposal_mutexes(proposal_id);
                     Proposals::<T>::remove(proposal_id);
                     InternalTallies::<T>::remove(proposal_id);
+                    InternalThresholdSnapshot::<T>::remove(proposal_id);
                     JointTallies::<T>::remove(proposal_id);
                     CitizenTallies::<T>::remove(proposal_id);
                     ProposalData::<T>::remove(proposal_id);
                     ProposalMeta::<T>::remove(proposal_id);
-                    let weight = db_weight.writes(6);
+                    let weight = db_weight.writes(9);
                     (None, weight) // 全部完成
                 }
             }
@@ -1282,17 +1559,25 @@ pub mod pallet {
             proposal_id: u64,
             org: u8,
             institution: InstitutionPalletId,
-        ) {
-            if let Some(admins) = T::InternalAdminProvider::get_admin_list(org, institution) {
-                match BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(admins) {
-                    Ok(bounded) => {
-                        AdminSnapshot::<T>::insert(proposal_id, institution, bounded);
-                    }
-                    Err(_) => {
-                        frame_support::defensive!(
-                            "snapshot_institution_admins: admin list exceeds MaxAdminsPerInstitution, snapshot not written"
-                        );
-                    }
+            pending_subject: bool,
+        ) -> DispatchResult {
+            let admins = if pending_subject {
+                T::InternalAdminProvider::get_pending_admin_list(org, institution)
+            } else {
+                T::InternalAdminProvider::get_admin_list(org, institution)
+            }
+            .ok_or(Error::<T>::InvalidInstitution)?;
+
+            match BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(admins) {
+                Ok(bounded) => {
+                    AdminSnapshot::<T>::insert(proposal_id, institution, bounded);
+                    Ok(())
+                }
+                Err(_) => {
+                    frame_support::defensive!(
+                        "snapshot_institution_admins: admin list exceeds MaxAdminsPerInstitution, snapshot not written"
+                    );
+                    Err(Error::<T>::InvalidInstitution.into())
                 }
             }
         }
@@ -1422,6 +1707,22 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
     }
 
+    fn create_pending_subject_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_pending_subject_internal_proposal(who, org, institution)
+    }
+
+    fn create_admin_set_mutation_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_admin_set_mutation_internal_proposal(who, org, institution)
+    }
+
     fn cleanup_internal_proposal(_proposal_id: u64) {
         // 清理现在由 set_status_and_emit 在终态转换时自动注册。
         // 保留空实现以兼容 trait 定义。
@@ -1495,7 +1796,7 @@ mod tests {
         type InternalVoteResultCallback = TestInternalVoteResultCallback;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalAdminCountProvider = ();
-        type InternalThresholdProvider = ();
+        type InternalThresholdProvider = TestInternalThresholdProvider;
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
@@ -1527,6 +1828,19 @@ mod tests {
     pub struct TestJointVoteResultCallback;
     pub struct TestInternalVoteResultCallback;
     pub struct TestInternalAdminProvider;
+    pub struct TestInternalThresholdProvider;
+
+    fn pending_subject_institution() -> InstitutionPalletId {
+        [77u8; 48]
+    }
+
+    fn pending_subject_admin(index: usize) -> AccountId32 {
+        match index {
+            0 => AccountId32::new([91u8; 32]),
+            1 => AccountId32::new([92u8; 32]),
+            _ => AccountId32::new([93u8; 32]),
+        }
+    }
 
     impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
@@ -1579,6 +1893,44 @@ mod tests {
                     }),
                 _ => None,
             }
+        }
+
+        fn is_pending_internal_admin(
+            org: u8,
+            institution: InstitutionPalletId,
+            who: &AccountId32,
+        ) -> bool {
+            org == internal_vote::ORG_DUOQIAN
+                && institution == pending_subject_institution()
+                && [pending_subject_admin(0), pending_subject_admin(1)]
+                    .iter()
+                    .any(|admin| admin == who)
+        }
+
+        fn get_pending_admin_list(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> Option<sp_std::vec::Vec<AccountId32>> {
+            if org != internal_vote::ORG_DUOQIAN || institution != pending_subject_institution() {
+                return None;
+            }
+            Some(sp_std::vec![
+                pending_subject_admin(0),
+                pending_subject_admin(1)
+            ])
+        }
+    }
+
+    impl InternalThresholdProvider for TestInternalThresholdProvider {
+        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+            internal_vote::governance_org_pass_threshold(org)
+        }
+
+        fn pending_pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            if org != internal_vote::ORG_DUOQIAN || institution != pending_subject_institution() {
+                return None;
+            }
+            Some(2)
         }
     }
 
@@ -1678,7 +2030,7 @@ mod tests {
                 Err(DispatchError::Other("joint callback failed"))
             } else {
                 if let Some(status) = JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow()) {
-                    VotingEngine::override_proposal_status(vote_proposal_id, status)?;
+                    VotingEngine::set_callback_execution_result(vote_proposal_id, status)?;
                 }
                 Ok(())
             }
@@ -1923,6 +2275,32 @@ mod tests {
         .expect("internal proposal should be created")
     }
 
+    fn create_pending_subject_proposal_via_engine(
+        who: AccountId32,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> u64 {
+        <VotingEngine as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal(
+            who,
+            org,
+            institution,
+        )
+        .expect("pending subject proposal should be created")
+    }
+
+    fn create_admin_set_mutation_proposal_via_engine(
+        who: AccountId32,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> u64 {
+        <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+            who,
+            org,
+            institution,
+        )
+        .expect("admin-set mutation proposal should be created")
+    }
+
     /// 测试辅助:走公开 `internal_vote` extrinsic 投票。
     ///
     /// Phase 1 改造后,管理员投票只能通过公开 call(不再经 trait 转发),
@@ -1988,6 +2366,270 @@ mod tests {
                     .expect("proposal exists")
                     .stage,
                 STAGE_INTERNAL
+            );
+        });
+    }
+
+    #[test]
+    fn active_internal_proposal_rejects_pending_subject() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    pending_subject_admin(0),
+                    internal_vote::ORG_DUOQIAN,
+                    pending_subject_institution(),
+                ),
+                pallet::Error::<Test>::InvalidInstitution
+            );
+        });
+    }
+
+    #[test]
+    fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_pending_subject_proposal_via_engine(
+                pending_subject_admin(0),
+                internal_vote::ORG_DUOQIAN,
+                pending_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
+            assert!(VotingEngine::is_admin_in_snapshot(
+                proposal_id,
+                pending_subject_institution(),
+                &pending_subject_admin(0)
+            ));
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                pending_subject_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                pending_subject_admin(1),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_admin_set_mutation_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            let state = VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    nrc_admin(1),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+        });
+    }
+
+    #[test]
+    fn regular_mutex_blocks_same_subject_admin_set_mutation() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            let state = VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.regular_active_count, 1);
+            assert_eq!(state.admin_set_mutation_proposal, None);
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::RegularInternalProposalActive
+            );
+
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+        });
+    }
+
+    #[test]
+    fn regular_internal_proposals_can_coexist_under_same_subject() {
+        new_test_ext().execute_with(|| {
+            let first = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            let second = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ne!(first, second);
+            let state = VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.regular_active_count, 2);
+            assert_eq!(state.admin_set_mutation_proposal, None);
+        });
+    }
+
+    #[test]
+    fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_admin_set_mutation_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid()).is_some()
+            );
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    nrc_admin(1),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_EXECUTION_FAILED
+            ));
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid()).is_none()
+            );
+        });
+    }
+
+    #[test]
+    fn proposal_status_transition_state_machine_is_strict() {
+        new_test_ext().execute_with(|| {
+            let voting_to_passed = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTION_FAILED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_VOTING),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                voting_to_passed,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_REJECTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_VOTING),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                voting_to_passed,
+                STATUS_EXECUTED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_PASSED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+
+            let passed_to_failed = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                passed_to_failed,
+                STATUS_PASSED
+            ));
+            assert_ok!(VotingEngine::set_status_and_emit(
+                passed_to_failed,
+                STATUS_EXECUTION_FAILED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(passed_to_failed, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+
+            let rejected = create_internal_proposal_via_engine(
+                nrc_admin(2),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(rejected, STATUS_REJECTED));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(rejected, STATUS_PASSED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+        });
+    }
+
+    #[test]
+    fn callback_execution_result_requires_callback_scope() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::set_callback_execution_result(proposal_id, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
             );
         });
     }
@@ -2244,6 +2886,59 @@ mod tests {
             assert_eq!(
                 JointTallies::<Test>::get(proposal_id).no,
                 primitives::count_const::NRC_JOINT_VOTE_WEIGHT
+            );
+        });
+    }
+
+    #[test]
+    fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                )
+                .expect("joint proposal should be created");
+
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid()).is_some()
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_PRC, prc_pid()).is_some()
+            );
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::RegularInternalProposalActive
+            );
+
+            cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .stage,
+                STAGE_CITIZEN
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_NRC, nrc_pid()).is_none()
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(internal_vote::ORG_PRC, prc_pid()).is_none()
+            );
+
+            assert_ok!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    internal_vote::ORG_NRC,
+                    nrc_pid(),
+                )
             );
         });
     }
@@ -2855,6 +3550,19 @@ mod tests {
                 })
                 .expect("proposal finalized event should exist");
             assert_eq!(finalized, STATUS_EXECUTION_FAILED);
+            let finalized_count = System::events()
+                .into_iter()
+                .filter(|record| {
+                    matches!(
+                        &record.event,
+                        RuntimeEvent::VotingEngine(Event::ProposalFinalized {
+                            proposal_id: event_id,
+                            ..
+                        }) if *event_id == proposal_id
+                    )
+                })
+                .count();
+            assert_eq!(finalized_count, 1);
         });
     }
 

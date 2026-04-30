@@ -22,8 +22,9 @@ use crate::{
         Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
         JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
-    InstitutionPalletId, InternalAdminProvider, InternalThresholdProvider,
-    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    InternalThresholdProvider, PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT,
+    STAGE_JOINT, STATUS_PASSED,
 };
 
 use crate::nrc_pallet_id_bytes;
@@ -195,18 +196,48 @@ impl<T: Config> Pallet<T> {
             // 中文注释：锁定所有参与机构的管理员快照，投票期间只认快照内的管理员。
             // 国储会
             if let Some(nrc) = nrc_pallet_id_bytes() {
-                Self::snapshot_institution_admins(id, ORG_NRC, nrc);
+                if let Err(err) = Self::acquire_internal_proposal_mutex(
+                    id,
+                    ORG_NRC,
+                    nrc,
+                    InternalProposalMutexKind::Regular,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+                if let Err(err) = Self::snapshot_institution_admins(id, ORG_NRC, nrc, false) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
             }
             // 43个省储会
             for entry in CHINA_CB.iter().skip(1) {
                 if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
-                    Self::snapshot_institution_admins(id, ORG_PRC, prc);
+                    if let Err(err) = Self::acquire_internal_proposal_mutex(
+                        id,
+                        ORG_PRC,
+                        prc,
+                        InternalProposalMutexKind::Regular,
+                    ) {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
+                    if let Err(err) = Self::snapshot_institution_admins(id, ORG_PRC, prc, false) {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
                 }
             }
             // 省储行
             for entry in CHINA_CH.iter() {
                 if let Some(prb) = shengbank_pallet_id_to_bytes(entry.shenfen_id) {
-                    Self::snapshot_institution_admins(id, ORG_PRB, prb);
+                    if let Err(err) = Self::acquire_internal_proposal_mutex(
+                        id,
+                        ORG_PRB,
+                        prb,
+                        InternalProposalMutexKind::Regular,
+                    ) {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
+                    if let Err(err) = Self::snapshot_institution_admins(id, ORG_PRB, prb, false) {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
                 }
             }
 
@@ -400,6 +431,8 @@ impl<T: Config> Pallet<T> {
             if let Err(err) = Self::schedule_proposal_expiry(proposal_id, citizen_end) {
                 return TransactionOutcome::Rollback(Err(err));
             }
+            // 中文注释：进入公民投票后不再依赖管理员集合，释放联合阶段的管理员互斥锁。
+            Self::release_internal_proposal_mutexes(proposal_id);
 
             Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
                 proposal_id,

@@ -256,7 +256,7 @@ pub mod pallet {
 
         /// 从投票引擎 ProposalData 中读取并解码本模块的提案摘要。
         /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
+        pub(crate) fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
             let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalNotFound)?;
             let tag = crate::MODULE_TAG;
@@ -289,8 +289,8 @@ pub mod pallet {
         /// 联合投票结果回调（由 voting-engine 的 set_status_and_emit 在事务内调用）。
         ///
         /// 状态处理模式与 resolution-issuance 对齐：
-        /// - approved + 执行成功 → 不覆盖投票引擎状态，保持 set_status_and_emit 设置的 STATUS_PASSED
-        /// - approved + 执行失败 → override_proposal_status(STATUS_EXECUTION_FAILED)
+        /// - approved + 执行成功 → 业务状态记为 Passed，投票引擎回调外层再写 STATUS_EXECUTED
+        /// - approved + 执行失败 → 业务状态记为 ExecutionFailed，投票引擎回调外层再写 STATUS_EXECUTION_FAILED
         /// - rejected → 不覆盖投票引擎状态，保持 set_status_and_emit 设置的 STATUS_REJECTED
         pub(crate) fn apply_joint_vote_result(proposal_id: u64, approved: bool) -> DispatchResult {
             let mut proposal = Self::load_proposal(proposal_id)?;
@@ -311,16 +311,6 @@ pub mod pallet {
                     proposal.status = ProposalStatus::ExecutionFailed;
                 }
                 Self::save_proposal(proposal_id, &proposal)?;
-
-                // 执行失败时覆盖投票引擎状态为 STATUS_EXECUTION_FAILED，
-                // 本回调运行在 set_status_and_emit 的 with_transaction 内，修改是原子的。
-                // 执行成功时不覆盖，保持 STATUS_PASSED。
-                if !exec_ok {
-                    voting_engine::Pallet::<T>::override_proposal_status(
-                        proposal_id,
-                        voting_engine::STATUS_EXECUTION_FAILED,
-                    )?;
-                }
 
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
@@ -356,7 +346,26 @@ pub mod pallet {
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
         // 中文注释：统一使用 voting engine 的 proposal_id，不再需要反查映射。
-        pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)
+        pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
+        if approved {
+            let proposal = pallet::Pallet::<T>::load_proposal(vote_proposal_id)?;
+            match proposal.status {
+                pallet::ProposalStatus::Passed => {
+                    voting_engine::Pallet::<T>::set_callback_execution_result(
+                        vote_proposal_id,
+                        voting_engine::STATUS_EXECUTED,
+                    )?;
+                }
+                pallet::ProposalStatus::ExecutionFailed => {
+                    voting_engine::Pallet::<T>::set_callback_execution_result(
+                        vote_proposal_id,
+                        voting_engine::STATUS_EXECUTION_FAILED,
+                    )?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
 
@@ -596,7 +605,7 @@ mod tests {
         ));
     }
 
-    /// 在投票引擎中插入一个 Voting 状态的 Proposal，使 override_proposal_status 可用。
+    /// 在投票引擎中插入一个 PASSED 状态的 Proposal，使回调执行结果写入可用。
     /// 测试 mock 的 TestJointVoteEngine 不创建真实 Proposals 条目，
     /// 需手工补一个以模拟真实回调上下文。
     fn insert_engine_proposal(proposal_id: u64) {
@@ -605,7 +614,7 @@ mod tests {
             voting_engine::Proposal {
                 kind: voting_engine::PROPOSAL_KIND_JOINT,
                 stage: voting_engine::STAGE_JOINT,
-                status: voting_engine::STATUS_VOTING,
+                status: voting_engine::STATUS_PASSED,
                 internal_org: None,
                 internal_institution: None,
                 start: 0u64,
@@ -613,6 +622,13 @@ mod tests {
                 citizen_eligible_total: 10,
             },
         );
+    }
+
+    fn call_joint_callback(proposal_id: u64, approved: bool) -> DispatchResult {
+        voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+        let result = RuntimeUpgrade::on_joint_vote_finalized(proposal_id, approved);
+        voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+        result
     }
 
     #[test]
@@ -682,7 +698,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             propose_ok();
             // proposal_id == joint_vote_id == 100
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, false));
+            assert_ok!(call_joint_callback(100, false));
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
         });
@@ -692,7 +708,8 @@ mod tests {
     fn approved_joint_vote_executes_runtime_upgrade() {
         new_test_ext().execute_with(|| {
             propose_ok();
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, true));
+            insert_engine_proposal(100);
+            assert_ok!(call_joint_callback(100, true));
 
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Passed));
@@ -712,7 +729,7 @@ mod tests {
             insert_engine_proposal(100);
             EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = true);
 
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, true));
+            assert_ok!(call_joint_callback(100, true));
 
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::ExecutionFailed));
@@ -734,7 +751,7 @@ mod tests {
     fn rejected_joint_vote_retains_object_for_unified_cleanup() {
         new_test_ext().execute_with(|| {
             propose_ok();
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, false));
+            assert_ok!(call_joint_callback(100, false));
 
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Rejected));
@@ -755,18 +772,18 @@ mod tests {
     }
 
     #[test]
-    fn approved_success_does_not_override_engine_status() {
+    fn approved_success_marks_engine_status_executed() {
         new_test_ext().execute_with(|| {
             propose_ok();
             insert_engine_proposal(100);
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, true));
+            assert_ok!(call_joint_callback(100, true));
 
-            // 执行成功时不覆盖投票引擎状态（保持 STATUS_VOTING 因为单测没走 set_status_and_emit）
+            // 执行成功时在回调作用域内静默写入 EXECUTED，最终事件由投票引擎外层发出。
             let engine_proposal = voting_engine::pallet::Proposals::<Test>::get(100).unwrap();
             assert_eq!(
                 engine_proposal.status,
-                voting_engine::STATUS_VOTING,
-                "success path should not override engine status"
+                voting_engine::STATUS_EXECUTED,
+                "success path should mark engine status executed"
             );
         });
     }
@@ -775,11 +792,12 @@ mod tests {
     fn finalize_joint_vote_requires_voting_status() {
         new_test_ext().execute_with(|| {
             propose_ok();
+            insert_engine_proposal(100);
             // First finalize
-            assert_ok!(RuntimeUpgrade::on_joint_vote_finalized(100, true));
+            assert_ok!(call_joint_callback(100, true));
             // Second finalize should fail - no longer voting
             assert_noop!(
-                RuntimeUpgrade::on_joint_vote_finalized(100, true),
+                call_joint_callback(100, true),
                 pallet::Error::<Test>::ProposalNotVoting
             );
         });
@@ -789,7 +807,7 @@ mod tests {
     fn finalize_nonexistent_proposal_fails() {
         new_test_ext().execute_with(|| {
             assert_noop!(
-                RuntimeUpgrade::on_joint_vote_finalized(999, true),
+                call_joint_callback(999, true),
                 pallet::Error::<Test>::ProposalNotFound
             );
         });

@@ -16,9 +16,13 @@ use primitives::count_const::{
 };
 
 use crate::{
-    pallet::{Config, Error, Event, InternalTallies, InternalVotesByAccount, Pallet, Proposals},
-    InstitutionPalletId, InternalAdminProvider, InternalThresholdProvider, Proposal,
-    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED, STATUS_REJECTED,
+    pallet::{
+        Config, Error, Event, InternalTallies, InternalThresholdSnapshot, InternalVotesByAccount,
+        Pallet, Proposals,
+    },
+    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    InternalThresholdProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
+    STATUS_REJECTED,
 };
 
 pub const ORG_NRC: u8 = 0;
@@ -43,25 +47,41 @@ pub fn governance_org_pass_threshold(org: u8) -> Option<u32> {
 
 use crate::nrc_pallet_id_bytes;
 
-fn is_valid_internal_institution<T: Config>(org: u8, institution: InstitutionPalletId) -> bool {
+fn is_valid_internal_institution<T: Config>(
+    org: u8,
+    institution: InstitutionPalletId,
+    pending_subject: bool,
+) -> bool {
     // 中文注释：内部投票里的 institution 必须与 org 类型严格对应，避免伪造”跨组织机构”。
     match org {
         // 国储会只有一个机构
-        ORG_NRC => nrc_pallet_id_bytes()
-            .map(|nrc| institution == nrc)
-            .unwrap_or(false),
+        ORG_NRC => {
+            !pending_subject
+                && nrc_pallet_id_bytes()
+                    .map(|nrc| institution == nrc)
+                    .unwrap_or(false)
+        }
         // 省储会从 CHINA_CB 中排除国储会
-        ORG_PRC => CHINA_CB
-            .iter()
-            .skip(1)
-            .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
-            .any(|pid| pid == institution),
+        ORG_PRC => {
+            !pending_subject
+                && CHINA_CB
+                    .iter()
+                    .skip(1)
+                    .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                    .any(|pid| pid == institution)
+        }
         // 省储行从 CHINA_CH 获取
-        ORG_PRB => CHINA_CH
-            .iter()
-            .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
-            .any(|pid| pid == institution),
-        // 注册多签/个人多签主体：由 InternalThresholdProvider 判断是否存在
+        ORG_PRB => {
+            !pending_subject
+                && CHINA_CH
+                    .iter()
+                    .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+                    .any(|pid| pid == institution)
+        }
+        // 注册多签/个人多签主体：按入口语义分别查询 Active 或 Pending 阈值。
+        ORG_DUOQIAN if pending_subject => {
+            T::InternalThresholdProvider::pending_pass_threshold(org, institution).is_some()
+        }
         ORG_DUOQIAN => T::InternalThresholdProvider::pass_threshold(org, institution).is_some(),
         _ => false,
     }
@@ -71,7 +91,12 @@ fn is_internal_admin<T: Config>(
     org: u8,
     institution: InstitutionPalletId,
     who: &T::AccountId,
+    pending_subject: bool,
 ) -> bool {
+    if pending_subject {
+        return T::InternalAdminProvider::is_pending_internal_admin(org, institution, who);
+    }
+
     // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
     #[cfg(not(test))]
     {
@@ -107,6 +132,18 @@ fn is_internal_admin<T: Config>(
     }
 }
 
+fn internal_threshold<T: Config>(
+    org: u8,
+    institution: InstitutionPalletId,
+    pending_subject: bool,
+) -> Option<u32> {
+    if pending_subject {
+        T::InternalThresholdProvider::pending_pass_threshold(org, institution)
+    } else {
+        T::InternalThresholdProvider::pass_threshold(org, institution)
+    }
+}
+
 impl<T: Config> Pallet<T> {
     fn internal_stage_duration() -> frame_system::pallet_prelude::BlockNumberFor<T> {
         // 中文注释：内部投票与联合/公民投票共用统一治理时长常量，便于链上运维校准。
@@ -118,16 +155,62 @@ impl<T: Config> Pallet<T> {
         org: u8,
         institution: InstitutionPalletId,
     ) -> Result<u64, sp_runtime::DispatchError> {
+        Self::do_create_internal_proposal_with_subject_status(
+            who,
+            org,
+            institution,
+            false,
+            InternalProposalMutexKind::Regular,
+        )
+    }
+
+    pub(crate) fn do_create_pending_subject_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, sp_runtime::DispatchError> {
+        Self::do_create_internal_proposal_with_subject_status(
+            who,
+            org,
+            institution,
+            true,
+            InternalProposalMutexKind::Regular,
+        )
+    }
+
+    pub(crate) fn do_create_admin_set_mutation_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, sp_runtime::DispatchError> {
+        Self::do_create_internal_proposal_with_subject_status(
+            who,
+            org,
+            institution,
+            false,
+            InternalProposalMutexKind::AdminSetMutationExclusive,
+        )
+    }
+
+    fn do_create_internal_proposal_with_subject_status(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        pending_subject: bool,
+        mutex_kind: InternalProposalMutexKind,
+    ) -> Result<u64, sp_runtime::DispatchError> {
         ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
         ensure!(
-            is_valid_internal_institution::<T>(org, institution),
+            is_valid_internal_institution::<T>(org, institution, pending_subject),
             Error::<T>::InvalidInstitution
         );
         // 中文注释：内部投票仅允许该机构管理员发起
         ensure!(
-            is_internal_admin::<T>(org, institution, &who),
+            is_internal_admin::<T>(org, institution, &who, pending_subject),
             Error::<T>::NoPermission
         );
+        let threshold = internal_threshold::<T>(org, institution, pending_subject)
+            .ok_or(Error::<T>::InvalidInternalOrg)?;
         // 全局活跃提案数限制（每机构最多 10 个）
         // 注意：此处只做预检，实际插入在 allocate_proposal_id 之后
 
@@ -158,9 +241,20 @@ impl<T: Config> Pallet<T> {
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
+            // 中文注释：管理员集合变更与同一主体下的普通活跃提案互斥。
+            if let Err(err) =
+                Self::acquire_internal_proposal_mutex(id, org, institution, mutex_kind)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
 
-            // 中文注释：锁定该机构当前管理员快照，投票期间只认快照内的管理员。
-            Self::snapshot_institution_admins(id, org, institution);
+            // 中文注释：锁定该机构当前管理员与阈值快照，投票期间不再实时读取主体状态。
+            if let Err(err) =
+                Self::snapshot_institution_admins(id, org, institution, pending_subject)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            InternalThresholdSnapshot::<T>::insert(id, threshold);
 
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = Self::schedule_proposal_expiry(id, end) {
@@ -195,7 +289,7 @@ impl<T: Config> Pallet<T> {
             !InternalVotesByAccount::<T>::contains_key(proposal_id, &who),
             Error::<T>::AlreadyVoted
         );
-        let org = proposal
+        let _org = proposal
             .internal_org
             .ok_or(Error::<T>::InvalidInternalOrg)?;
         let institution = proposal
@@ -223,7 +317,7 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
+        let threshold = InternalThresholdSnapshot::<T>::get(proposal_id)
             .ok_or(Error::<T>::InvalidInternalOrg)?;
         if tally.yes >= threshold {
             // 中文注释：赞成票达到阈值，提前通过。

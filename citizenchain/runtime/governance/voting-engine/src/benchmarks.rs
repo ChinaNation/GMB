@@ -95,7 +95,13 @@ mod benchmarks {
         );
         JointInstitutionTallies::<T>::insert(1u64, institution, VoteCountU32 { yes: 0, no: 0 });
         // 写入管理员快照，否则 do_joint_vote 权限校验会失败。
-        Pallet::<T>::snapshot_institution_admins(1u64, crate::internal_vote::ORG_NRC, institution);
+        Pallet::<T>::snapshot_institution_admins(
+            1u64,
+            crate::internal_vote::ORG_NRC,
+            institution,
+            false,
+        )
+        .map_err(|_| BenchmarkError::Stop("admin snapshot should succeed"))?;
 
         #[block]
         {

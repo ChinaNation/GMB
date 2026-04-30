@@ -19,7 +19,7 @@ const orgStructure = [
     color: 'gold',
   },
   {
-    level: '省级储备委员会',
+    level: '省储备委员会',
     count: '43',
     admins: '9 位委员/省',
     threshold: '6/9 多签管理',
@@ -27,11 +27,11 @@ const orgStructure = [
     color: 'blue',
   },
   {
-    level: '省级银行',
+    level: '省储备银行',
     count: '43',
     admins: '9 位董事/行',
     threshold: '6/9 多签管理',
-    desc: '执行省级金融服务与公民币流通',
+    desc: '执行省级金融服务与公民币的省域流通',
     color: 'blue',
   },
 ]

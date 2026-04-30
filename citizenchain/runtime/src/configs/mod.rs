@@ -1105,7 +1105,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         else {
             return false;
         };
-        admins_change::Pallet::<Runtime>::is_subject_admin(
+        admins_change::Pallet::<Runtime>::is_active_subject_admin(
             voting_engine::internal_vote::ORG_DUOQIAN,
             subject_id,
             who,
@@ -1227,7 +1227,7 @@ fn is_nrc_admin(who: &AccountId) -> bool {
         .expect("NRC shenfen_id must be valid");
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
-    admins_change::Pallet::<Runtime>::is_subject_admin(
+    admins_change::Pallet::<Runtime>::is_active_subject_admin(
         voting_engine::internal_vote::ORG_NRC,
         nrc_institution,
         who,
@@ -1269,7 +1269,7 @@ fn is_joint_proposer(who: &AccountId) -> bool {
             } else {
                 voting_engine::internal_vote::ORG_PRC
             };
-            if admins_change::Pallet::<Runtime>::is_subject_admin(org, institution, who) {
+            if admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who) {
                 return true;
             }
         }
@@ -2049,14 +2049,33 @@ impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminPro
         institution: voting_engine::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
-        admins_change::Pallet::<Runtime>::is_subject_admin(org, institution, who)
+        admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who)
     }
 
     fn get_admin_list(
         org: u8,
         institution: voting_engine::InstitutionPalletId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
-        admins_change::Pallet::<Runtime>::subject_admins(org, institution)
+        admins_change::Pallet::<Runtime>::active_subject_admins(org, institution)
+    }
+
+    fn is_pending_internal_admin(
+        org: u8,
+        institution: voting_engine::InstitutionPalletId,
+        who: &AccountId,
+    ) -> bool {
+        admins_change::Pallet::<Runtime>::is_pending_subject_admin_for_snapshot(
+            org,
+            institution,
+            who,
+        )
+    }
+
+    fn get_pending_admin_list(
+        org: u8,
+        institution: voting_engine::InstitutionPalletId,
+    ) -> Option<alloc::vec::Vec<AccountId>> {
+        admins_change::Pallet::<Runtime>::pending_subject_admins_for_snapshot(org, institution)
     }
 }
 
@@ -2064,7 +2083,14 @@ pub struct RuntimeInternalThresholdProvider;
 
 impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
     fn pass_threshold(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::subject_threshold(org, institution)
+        admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
+    }
+
+    fn pending_pass_threshold(
+        org: u8,
+        institution: voting_engine::InstitutionPalletId,
+    ) -> Option<u32> {
+        admins_change::Pallet::<Runtime>::pending_subject_threshold_for_snapshot(org, institution)
     }
 }
 
@@ -2072,7 +2098,7 @@ pub struct RuntimeInternalAdminCountProvider;
 
 impl voting_engine::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
     fn admin_count(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::subject_admin_count(org, institution)
+        admins_change::Pallet::<Runtime>::active_subject_admin_count(org, institution)
     }
 }
 

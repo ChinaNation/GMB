@@ -208,6 +208,29 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
+fn insert_engine_proposal(proposal_id: u64) {
+    voting_engine::pallet::Proposals::<Test>::insert(
+        proposal_id,
+        voting_engine::Proposal {
+            kind: voting_engine::PROPOSAL_KIND_JOINT,
+            stage: voting_engine::STAGE_JOINT,
+            status: voting_engine::STATUS_PASSED,
+            internal_org: None,
+            internal_institution: None,
+            start: 0u64,
+            end: 100u64,
+            citizen_eligible_total: 10,
+        },
+    );
+}
+
+fn call_joint_callback(proposal_id: u64, approved: bool) -> DispatchResult {
+    voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+    let result = ResolutionIssuance::on_joint_vote_finalized(proposal_id, approved);
+    voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+    result
+}
+
 fn reason_ok() -> pallet::ReasonOf<Test> {
     b"issuance".to_vec().try_into().expect("reason should fit")
 }
@@ -299,7 +322,14 @@ fn approved_callback_executes_issuance() {
             sig_ok()
         ));
 
-        assert_ok!(ResolutionIssuance::on_joint_vote_finalized(100, true));
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
+        assert_eq!(
+            voting_engine::pallet::Proposals::<Test>::get(100)
+                .expect("engine proposal should exist")
+                .status,
+            voting_engine::STATUS_EXECUTED
+        );
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(pallet::Executed::<Test>::get(100).is_some());
         assert!(pallet::EverExecuted::<Test>::contains_key(100));
@@ -320,7 +350,7 @@ fn rejected_callback_does_not_issue() {
             sig_ok()
         ));
 
-        assert_ok!(ResolutionIssuance::on_joint_vote_finalized(100, false));
+        assert_ok!(call_joint_callback(100, false));
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(!pallet::Executed::<Test>::contains_key(100));
         assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
@@ -339,7 +369,8 @@ fn clear_executed_does_not_allow_replay() {
             nonce_ok(),
             sig_ok()
         ));
-        assert_ok!(ResolutionIssuance::on_joint_vote_finalized(100, true));
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
         assert_ok!(ResolutionIssuance::clear_executed(
             RuntimeOrigin::root(),
             100
@@ -417,7 +448,8 @@ fn issuance_event_comes_from_unified_pallet() {
             nonce_ok(),
             sig_ok()
         ));
-        assert_ok!(ResolutionIssuance::on_joint_vote_finalized(100, true));
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
 
         assert!(frame_system::Pallet::<Test>::events().iter().any(|record| {
             matches!(

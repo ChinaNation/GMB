@@ -17,7 +17,7 @@
 ### 0.3 联合投票回调需求
 - 联合投票拒绝时，提案必须进入 `Rejected`。
 - 联合投票通过时，模块必须尝试执行 runtime code。
-- 联合投票结束后，投票引擎侧状态保持真实治理结果：通过保持 `STATUS_PASSED`，否决保持 `STATUS_REJECTED`，仅执行失败时覆写为 `STATUS_EXECUTION_FAILED`。
+- 联合投票结束后，投票引擎侧状态保持真实业务结果：执行成功写为 `STATUS_EXECUTED`，否决保持 `STATUS_REJECTED`，执行失败写为 `STATUS_EXECUTION_FAILED`。
 - 回调直接使用投票引擎的 `proposal_id`，无需映射反查。
 
 ### 0.4 执行失败处理
@@ -126,8 +126,8 @@ Runtime 配置位置：
 4. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
-   - 成功：标记 `Passed`，保持投票引擎状态为 `STATUS_PASSED`
-   - 失败：标记 `ExecutionFailed`，并覆写投票引擎状态为 `STATUS_EXECUTION_FAILED`
+   - 成功：标记 `Passed`，在投票引擎回调作用域内静默写为 `STATUS_EXECUTED`
+   - 失败：标记 `ExecutionFailed`，在投票引擎回调作用域内静默写为 `STATUS_EXECUTION_FAILED`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
 5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
@@ -148,18 +148,19 @@ Runtime 配置位置：
 
 ### 5.4 投票引擎状态协同
 
-本模块不再把所有终态统一收口到 `STATUS_EXECUTED`。当前实现与 `voting-engine` 的协作关系如下：
+当前实现与 `voting-engine` 的协作关系如下：
 
 - 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`
 - 联合投票拒绝时，投票引擎保持 `STATUS_REJECTED`
-- 只有“联合投票已通过，但 runtime code 执行失败”这一条路径，本模块才会调用 `override_proposal_status` 原子覆写成 `STATUS_EXECUTION_FAILED`
+- runtime code 执行成功时，本模块通过 `set_callback_execution_result(STATUS_EXECUTED)` 静默写入执行成功终态
+- runtime code 执行失败时，本模块通过 `set_callback_execution_result(STATUS_EXECUTION_FAILED)` 静默写入执行失败终态
 
-原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。执行失败时只需最小化覆写状态字段，不应在回调内部再次触发一轮状态机和事件链，以避免重入和双重事件问题。
+原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只静默写执行结果，最终 `ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
 
 提案状态流转（投票引擎侧）：
-- `VOTING → PASSED`（联合投票通过且 runtime code 执行成功）
+- `VOTING → PASSED → EXECUTED`（联合投票通过且 runtime code 执行成功）
 - `VOTING → REJECTED`（联合投票拒绝）
-- `VOTING → PASSED → EXECUTION_FAILED`（联合投票通过，但 runtime code 执行失败并在回调内被覆写）
+- `VOTING → PASSED → EXECUTION_FAILED`（联合投票通过，但 runtime code 执行失败）
 
 说明：
 - 本模块自身的 `ProposalStatus`（`Passed`/`ExecutionFailed`/`Rejected`）与投票引擎侧通用状态并非一一等价，前者表达业务结果，后者表达投票引擎主状态机结果。
@@ -202,9 +203,9 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 旧实现/旧文档把投票引擎终态过度抽象成统一的 `STATUS_EXECUTED`，无法准确表达“联合投票已通过，但 runtime code 执行失败”的差异，也容易让查询层误判真实业务结果。
 
 现已修复：
-- 联合投票通过且执行成功时保持 `STATUS_PASSED`
+- 联合投票通过且执行成功时写入 `STATUS_EXECUTED`
 - 联合投票拒绝时保持 `STATUS_REJECTED`
-- 联合投票通过但执行失败时覆写为 `STATUS_EXECUTION_FAILED`
+- 联合投票通过但执行失败时写入 `STATUS_EXECUTION_FAILED`
 - 查询层文档已明确：展示真实升级结果时优先解码业务 `ProposalStatus`
 
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
@@ -222,7 +223,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `RuntimeCodeExecutor` 职责边界
 - `ProposalStatus` 各状态语义
 - 联合投票通过后的执行/失败分叉
-- `STATUS_EXECUTION_FAILED` 覆写投票引擎状态的原因
+- `STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 静默写入投票引擎状态的原因
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
@@ -232,7 +233,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 联合投票拒绝进入 `Rejected`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 `Passed`
 - 联合投票通过但执行失败进入 `ExecutionFailed`
-- 联合投票通过成功时不额外覆写投票引擎状态
+- 联合投票通过成功时投票引擎状态进入 `STATUS_EXECUTED`
 - `owns_proposal` 能正确识别本模块提案
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
