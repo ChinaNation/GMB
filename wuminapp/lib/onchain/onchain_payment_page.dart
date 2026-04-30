@@ -24,17 +24,48 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 import 'package:wuminapp_mobile/wallet/pages/transaction_history_page.dart';
 
-class OnchainPaymentPage extends StatefulWidget {
+typedef OnchainPaymentExtraEntriesBuilder = List<Widget> Function(
+  BuildContext context,
+  WalletProfile? currentWallet,
+);
+
+class OnchainPaymentPage extends StatelessWidget {
   const OnchainPaymentPage({super.key, this.initialToAddress});
 
   /// 预填收款地址（从通讯录等入口跳转时使用）。
   final String? initialToAddress;
 
   @override
-  State<OnchainPaymentPage> createState() => _OnchainPaymentPageState();
+  Widget build(BuildContext context) {
+    return OnchainPaymentPanel(
+      title: '链上支付',
+      initialToAddress: initialToAddress,
+    );
+  }
 }
 
-class _OnchainPaymentPageState extends State<OnchainPaymentPage> {
+class OnchainPaymentPanel extends StatefulWidget {
+  const OnchainPaymentPanel({
+    super.key,
+    required this.title,
+    this.initialToAddress,
+    this.extraEntriesBuilder,
+  });
+
+  final String title;
+
+  /// 预填收款地址（从通讯录等入口跳转时使用）。
+  final String? initialToAddress;
+
+  /// 中文注释：交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
+  /// onchain 模块不直接 import offchain / duoqian，跨功能编排留在 ui 层。
+  final OnchainPaymentExtraEntriesBuilder? extraEntriesBuilder;
+
+  @override
+  State<OnchainPaymentPanel> createState() => _OnchainPaymentPanelState();
+}
+
+class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   /// 链的 SS58 地址前缀。
   static const int _ss58Prefix = 2027;
 
@@ -614,11 +645,11 @@ class _OnchainPaymentPageState extends State<OnchainPaymentPage> {
                       height: 22,
                     ),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Center(
                       child: Text(
-                        '链上支付',
-                        style: TextStyle(
+                        widget.title,
+                        style: const TextStyle(
                             fontSize: 20, fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -644,6 +675,8 @@ class _OnchainPaymentPageState extends State<OnchainPaymentPage> {
                     onProgressChanged: _handleChainProgressChanged,
                     onErrorChanged: _handleChainProgressErrorChanged,
                   ),
+                  if (widget.extraEntriesBuilder != null)
+                    ...widget.extraEntriesBuilder!(context, _currentWallet),
                   if (_currentWallet == null && !_loadingWallet)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
