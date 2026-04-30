@@ -81,7 +81,7 @@ lib/
 ### 3.3 `pages`
 
 - `wallet_page.dart`
-  - 钱包列表（带热/冷标识）、创建、导入、删除、激活、地址复制
+  - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`）
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchBalance()` 直连节点）
@@ -142,6 +142,14 @@ lib/
 5. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
 6. 刷新 UI 显示；若轻节点不可用，则页面显示统一提示，而不是把失败误判为 0 余额
 
+### 4.5.1 钱包卡片拖拽排序
+
+1. `MyWalletPage` 使用 `ReorderableListView` 承载钱包卡片，长按拖拽触发 `_onReorder(oldIndex, newIndex)`。
+2. `WalletManager.getWallets()` 返回 fixed-length list，UI 层不能直接对 `_wallets` 执行 `removeAt/insert`。
+3. UI 层统一通过 `reorderWalletProfiles()` 先复制成可变列表，再按 Flutter `onReorder` 规则修正目标下标。
+4. 页面先 `setState` 展示新顺序，再调用 `WalletManager.reorderWallets()` 把 walletIndex 顺序写入 Isar `sortOrder`。
+5. `getWallets()` 查询时按 `sortOrder` 升序返回，相同值再用 `walletIndex` 兜底，保证重启后顺序稳定。
+
 ### 4.6 登录签名
 
 - **热钱包**：`LoginService` 解析挑战 → `LoginSystemSignatureVerifier` 验证系统签名 → `WalletManager.signUtf8WithWallet()` 完成 sr25519 签名（seed 不出 `WalletManager`）
@@ -187,7 +195,7 @@ lib/
 集合定义（`Isar/wallet_isar.dart`）：
 
 - `WalletProfileEntity`
-  - `walletIndex, walletName, walletIcon, balance, address, pubkeyHex, alg, ss58, createdAtMillis, source, signMode`
+  - `walletIndex, walletName, walletIcon, balance, address, pubkeyHex, alg, ss58, createdAtMillis, source, signMode, sortOrder`
 - `WalletSettingsEntity`
   - `activeWalletIndex, updatedAtMillis`
 - `TxRecordEntity`
@@ -271,6 +279,12 @@ lib/
   - attestation 元信息落 Isar
 - `test/wallet/sign_service_test.dart`
   - 挑战解析、签名、防重放、钱包匹配
+- `test/wallet/wallet_manager_reorder_test.dart`
+  - `reorderWallets()` 写入 `sortOrder` 后，`getWallets()` 按新顺序返回
+  - 旧钱包首次进入时按原 `walletIndex` 顺序初始化 `sortOrder`
+- `test/wallet/pages/wallet_list_tile_test.dart`
+  - 钱包卡片 UI 渲染契约
+  - `reorderWalletProfiles()` 支持 fixed-length 钱包列表，且不改写原列表
 
 ## 10. 钱包模式规范
 
