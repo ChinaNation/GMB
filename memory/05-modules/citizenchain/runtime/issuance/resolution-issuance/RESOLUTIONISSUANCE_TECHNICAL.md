@@ -121,5 +121,6 @@ WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmar
 ## 10. 权重状态
 
 - `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口。
+- Cargo feature：`runtime-benchmarks` 会向 `pallet-balances` 与 `voting-engine` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 - 当前本地尝试生成正式 `weights.rs` 时，普通 CI WASM 缺少 Benchmark Runtime API；`WASM_BUILD_FROM_SOURCE=1` 又被 `wasm32v1-none` 下 `serde_core` / `byte-slice-cast` 的 `std` feature 问题阻塞。
 - 因此 `weights.rs` 暂时采用偏高保守 fallback，发布前必须准备 benchmark runtime WASM 后重新生成。

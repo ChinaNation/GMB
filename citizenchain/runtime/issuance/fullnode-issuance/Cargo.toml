@@ -19,9 +19,11 @@ primitives = { path = "../../primitives", default-features = false }
 [features]
 default = ["std"]
 runtime-benchmarks = [
+    # 中文注释：benchmark/test runtime 使用 pallet-balances，feature 链路需显式传播。
     "frame-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks",
     "frame-system/runtime-benchmarks",
+    "pallet-balances/runtime-benchmarks",
 ]
 try-runtime = []
 std = [

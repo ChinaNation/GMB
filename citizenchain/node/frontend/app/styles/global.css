@@ -2579,6 +2579,31 @@ select option:checked {
   word-break: break-all;
 }
 
+.transfer-signing-password {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transfer-signing-password label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.transfer-signing-password input {
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.transfer-signing-password input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+
 .transfer-signing-actions {
   display: flex;
   gap: 10px;

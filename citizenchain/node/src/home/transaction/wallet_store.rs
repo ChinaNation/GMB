@@ -1,4 +1,4 @@
-// 冷钱包 JSON 持久化。
+// 钱包 JSON 持久化。
 //
 // 冷钱包仅保存 SS58 地址和公钥，不存储任何私钥或助记词。
 // 签名通过 QR 码协议由外部离线设备完成。
@@ -8,12 +8,38 @@ use serde::{Deserialize, Serialize};
 use std::{fs, io::ErrorKind, path::PathBuf};
 use tauri::AppHandle;
 
-/// 单个冷钱包。
+/// 钱包类型。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WalletKind {
+    /// 本机 powr 矿工密钥派生的热钱包，不写入 cold-wallets.json。
+    MinerHot,
+    /// 用户手动添加的冷钱包，只保存地址和公钥。
+    Cold,
+}
+
+impl Default for WalletKind {
+    fn default() -> Self {
+        Self::Cold
+    }
+}
+
+fn default_deletable() -> bool {
+    true
+}
+
+/// 单个钱包条目。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColdWallet {
     pub id: String,
     pub name: String,
+    /// 前端签名路径选择：冷钱包走 QR，矿工热钱包走本地 powr 签名。
+    #[serde(default)]
+    pub kind: WalletKind,
+    /// 是否允许从钱包管理列表删除。
+    #[serde(default = "default_deletable")]
+    pub deletable: bool,
     /// SS58 地址（prefix 2027）。
     pub address: String,
     /// 从 SS58 解出的 32 字节公钥（64 位 hex，无 0x 前缀）。

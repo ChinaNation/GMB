@@ -141,6 +141,7 @@ Runtime 接线：
 - `weights.rs` 当前为 `frame-benchmarking` 生成产物。
 - `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（单年结算路径 + 年度边界无待结算路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
 - 若 benchmark 组件范围、执行路径或常量边界发生变化，需要重新生成 `weights.rs`，不是历史上跑过一次就可以永久沿用。
+- Cargo feature：`runtime-benchmarks` 会向测试/benchmark runtime 使用的 `pallet-balances` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 
 ## 9. try-runtime 支持
 Cargo.toml 已启用 `try-runtime` feature，依赖链：

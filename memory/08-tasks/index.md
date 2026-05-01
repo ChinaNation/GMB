@@ -52,9 +52,11 @@
 - `memory/08-tasks/open/20260501-091353-检查-onchain-transaction-fee-修正分账与-feepaid-tip-文档假设是否存在-l1-l4-问题.md`
 - `memory/08-tasks/open/20260501-091854-修复-onchain-transaction-l1-l2-l4-明确-no-refund-协议-fee-percent-保底日志-feepaid-tip-源码说明.md`
 - `memory/08-tasks/open/20260501-092408-准备-benchmark-runtime-wasm-并重新生成-resolution-权重.md`
+- `memory/08-tasks/open/20260501-093040-修复-onchain-transaction-l3-安全基金账户热路径重复-decode-改为-runtime-provider-注入.md`
 
 ## done
 
+- `memory/08-tasks/done/20260501-094149-新增首页交易矿工热钱包.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
