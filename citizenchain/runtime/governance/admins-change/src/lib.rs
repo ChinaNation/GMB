@@ -40,7 +40,8 @@ mod benchmarks;
 pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-pub const MODULE_TAG: &[u8] = b"adm-rep";
+/// 中文注释：tag 带 schema 版本号；开发期不兼容旧 `adm-rep` 提案数据。
+pub const MODULE_TAG: &[u8] = b"adm-rep-v1";
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
@@ -625,6 +626,11 @@ pub mod pallet {
             Some(subject)
         }
 
+        /// 查询 Active 主体是否存在。普通业务主体合法性判断只使用 Active 主体。
+        pub fn active_subject_exists(org: u8, institution: InstitutionPalletId) -> bool {
+            Self::subject_with_status(org, institution, AdminSubjectStatus::Active).is_some()
+        }
+
         /// 查询 Active 主体管理员权限。普通业务授权只能使用 Active 主体。
         pub fn is_active_subject_admin(
             org: u8,
@@ -661,6 +667,14 @@ pub mod pallet {
         ) -> Option<u32> {
             let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
             Some(subject.admins.len() as u32)
+        }
+
+        /// 查询 Pending 主体是否存在。仅用于创建/激活该主体时判断主体合法性。
+        pub fn pending_subject_exists_for_snapshot(
+            org: u8,
+            institution: InstitutionPalletId,
+        ) -> bool {
+            Self::subject_with_status(org, institution, AdminSubjectStatus::Pending).is_some()
         }
 
         /// 查询 Pending 主体管理员权限。仅用于创建/激活该主体时锁定投票快照。
@@ -939,6 +953,13 @@ mod tests {
         }
     }
 
+    pub struct TestInternalThresholdProvider;
+    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+        }
+    }
+
     pub struct TestTimeProvider;
     impl frame_support::traits::UnixTime for TestTimeProvider {
         fn now() -> core::time::Duration {
@@ -952,6 +973,8 @@ mod tests {
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
@@ -967,7 +990,7 @@ mod tests {
         // 否则内部提案通过后业务执行回调不会触发,端到端测试失败。
         type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
-        type InternalThresholdProvider = ();
+        type InternalThresholdProvider = TestInternalThresholdProvider;
         type InternalAdminCountProvider = ();
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;

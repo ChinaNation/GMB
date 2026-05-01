@@ -205,4 +205,7 @@
 - `memory/08-tasks/done/20260430-185906-检查-governance-proposal-cleanup-schedule-cleanup-连续队列满后是否导致提案存储永久不清理.md`
 - `memory/08-tasks/done/20260430-200621-修复-voting-engine-权限和重试残留.md`
 - `memory/08-tasks/done/20260430-204134-修复-admins-change-close-subject-禁止关闭内置治理机构.md`
+- `memory/08-tasks/done/20260430-213218-修复-voting-engine-m4-m5-与-admins-change-module-tag-版本化问题.md`
+- `memory/08-tasks/done/20260430-213345-只读分析-voting-engine-internal-vote-与-active-proposal-limit-以及-admins-change-回调中的-l1-l5-审查问题是否存在.md`
+- `memory/08-tasks/done/20260430-215740-修复-voting-engine-internal-vote-provider-fallback-threshold-provider-默认实现-active-proposal-上限硬编码与主体合法性语义.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`
