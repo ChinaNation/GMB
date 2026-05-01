@@ -110,8 +110,9 @@ any → unknown
 - `ProposalExecutionRetryStates`：自动执行失败后的可重试状态，记录手动失败次数、首次失败区块、重试截止区块和最近手动尝试区块。
 - `ExecutionRetryDeadlines`：按区块索引待过期的 retry proposal，用于 `on_initialize` 到期转 `STATUS_EXECUTION_FAILED`。
 - `CallbackExecutionScopes`：回调执行临时作用域，仅保护单测兼容辅助接口；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
+- `ActiveProposalsByInstitution`：每机构当前活跃提案 ID 列表，容量由 `MaxActiveProposals` 配置，生产 runtime 当前为 10。
 - `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
-- `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放。
+- `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放；单提案 binding 上限由 `MaxInternalProposalMutexBindings` 配置，生产 runtime 当前为 256。
 
 ### 2.3 内部提案互斥
 互斥 key：
@@ -138,7 +139,7 @@ any → unknown
 2. 创建多签主体的业务通过 `do_create_pending_subject_internal_proposal` 创建提案，只接受 Pending 管理员主体，并登记 `Regular` 锁。
 3. 管理员集合变更通过 `do_create_admin_set_mutation_internal_proposal` 创建提案，并登记 `AdminSetMutationExclusive` 锁。
 4. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。NRC/PRC/PRB 的快照值来自固定治理常量；ORG_DUOQIAN 的快照值来自 Active/Pending 注册多签主体。
-5. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过。
+5. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过；缺少阈值快照返回 `MissingThresholdSnapshot`，缺少管理员快照返回 `MissingAdminSnapshot`，不再混用 `InvalidInternalOrg`。
 6. 达阈值时立即 `Passed`（`set_status_and_emit`）。
 7. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
 
@@ -312,7 +313,9 @@ any → unknown
 - 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
 - 联合投票不调用 `InternalThresholdProvider::pass_threshold`，避免把注册多签主体阈值误用于治理联合投票。
 - NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
+- ORG_DUOQIAN 注册个人多签/机构多签主体合法性通过 `is_known_subject` / `is_known_pending_subject` 显式判断，不再把 `pass_threshold(...).is_some()` 当作存在性判断。
 - ORG_DUOQIAN 注册个人多签/机构多签的阈值由注册主体配置提供；创建 Active/Pending 内部提案时写入 `InternalThresholdSnapshot`，投票期间只读快照。
+- `InternalThresholdProvider for ()` 不提供任何默认阈值，runtime 与 mock runtime 必须显式注入 provider，避免漏配置时仍误走固定阈值。
 - 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 
 ### 5.10 Proposal ID 年份边界

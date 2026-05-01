@@ -1379,6 +1379,8 @@ impl voting_engine::Config for Runtime {
     type MaxVoteSignatureLength = ConstU32<64>;
     type MaxAutoFinalizePerBlock = ConstU32<2_048>;
     type MaxProposalsPerExpiry = ConstU32<2_048>;
+    type MaxInternalProposalMutexBindings = ConstU32<256>;
+    type MaxActiveProposals = ConstU32<10>;
     type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 * 1024 }>;
     type MaxModuleTagLen = ConstU32<32>;
@@ -2116,6 +2118,20 @@ impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminPro
 pub struct RuntimeInternalThresholdProvider;
 
 impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
+    fn is_known_subject(org: u8, institution: voting_engine::InstitutionPalletId) -> bool {
+        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+            return false;
+        }
+        admins_change::Pallet::<Runtime>::active_subject_exists(org, institution)
+    }
+
+    fn is_known_pending_subject(org: u8, institution: voting_engine::InstitutionPalletId) -> bool {
+        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+            return false;
+        }
+        admins_change::Pallet::<Runtime>::pending_subject_exists_for_snapshot(org, institution)
+    }
+
     fn pass_threshold(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
         match org {
             voting_engine::internal_vote::ORG_NRC

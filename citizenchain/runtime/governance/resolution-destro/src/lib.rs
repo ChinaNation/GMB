@@ -458,6 +458,13 @@ mod tests {
     }
 
     pub struct TestTimeProvider;
+    pub struct TestInternalThresholdProvider;
+    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+        }
+    }
+
     impl frame_support::traits::UnixTime for TestTimeProvider {
         fn now() -> core::time::Duration {
             core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
@@ -471,6 +478,8 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<32>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
@@ -485,7 +494,7 @@ mod tests {
         // Phase 2 整改:挂上本模块 Executor,让提案通过后自动触发销毁执行。
         type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
-        type InternalThresholdProvider = ();
+        type InternalThresholdProvider = TestInternalThresholdProvider;
         type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();

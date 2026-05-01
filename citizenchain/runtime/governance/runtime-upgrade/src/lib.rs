@@ -517,12 +517,24 @@ mod tests {
         }
     }
 
+    pub struct TestInternalThresholdProvider;
+    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn pass_threshold(
+            org: u8,
+            _institution: voting_engine::InstitutionPalletId,
+        ) -> Option<u32> {
+            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+        }
+    }
+
     impl voting_engine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
@@ -536,7 +548,7 @@ mod tests {
         type JointVoteResultCallback = ();
         type InternalVoteResultCallback = ();
         type InternalAdminProvider = ();
-        type InternalThresholdProvider = ();
+        type InternalThresholdProvider = TestInternalThresholdProvider;
         type InternalAdminCountProvider = ();
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;

@@ -1,6 +1,6 @@
 # ADMINS_ORIGIN_GOV Technical Notes
 
-最新更新：2026-04-30，新增管理员更换互斥、执行失败终态、创建事务回滚、回调最终事件收口，并固化内置治理机构不可关闭规则。
+最新更新：2026-04-30，新增管理员更换互斥、执行失败终态、创建事务回滚、回调最终事件收口，固化内置治理机构不可关闭规则，并将管理员替换提案 `MODULE_TAG` 升级为 `adm-rep-v1`。
 
 ## 1. 模块定位
 
@@ -68,6 +68,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 Active-only 公共业务 API：
 
 - `is_active_subject_admin(org, institution, who)`
+- `active_subject_exists(org, institution)`
 - `active_subject_admins(org, institution)`
 - `active_subject_threshold(org, institution)`
 - `active_subject_admin_count(org, institution)`
@@ -75,6 +76,7 @@ Active-only 公共业务 API：
 Pending 快照专用 API：
 
 - `is_pending_subject_admin_for_snapshot(org, institution, who)`
+- `pending_subject_exists_for_snapshot(org, institution)`
 - `pending_subject_admins_for_snapshot(org, institution)`
 - `pending_subject_threshold_for_snapshot(org, institution)`
 - `pending_subject_admin_count_for_snapshot(org, institution)`
@@ -97,6 +99,12 @@ Pending 快照专用 API：
 4. 校验 `old_admin` 存在、`new_admin` 不存在。
 5. 在同一个 `with_transaction` 中调 `voting-engine` 的管理员集合变更内部提案入口创建投票（只接受 Active 主体，并申请同主体独占锁）。
 6. 在同一事务中将 `AdminReplacementAction` 写入投票引擎 `ProposalData`，写入 `ProposalMeta`，并发出 `AdminReplacementProposed`。
+
+提案数据格式：
+
+- `MODULE_TAG = b"adm-rep-v1"`。
+- `ProposalData = MODULE_TAG + AdminReplacementAction(SCALE)`。
+- 开发期不兼容旧 `adm-rep` 提案数据；如果未来升级 action schema，必须继续增加版本后缀。
 
 创建事务语义：
 
@@ -133,8 +141,8 @@ Pending 快照专用 API：
 
 - `RuntimeInternalAdminProvider` 普通路径从 `is_active_subject_admin / active_subject_admins` 读取。
 - `RuntimeInternalAdminProvider` Pending 快照路径从 `is_pending_subject_admin_for_snapshot / pending_subject_admins_for_snapshot` 读取。
-- `RuntimeInternalThresholdProvider` 普通路径从 `active_subject_threshold` 读取。
-- `RuntimeInternalThresholdProvider` Pending 快照路径从 `pending_subject_threshold_for_snapshot` 读取。
+- `RuntimeInternalThresholdProvider` 普通主体存在性从 `active_subject_exists` 读取，阈值从 `active_subject_threshold` 读取。
+- `RuntimeInternalThresholdProvider` Pending 主体存在性从 `pending_subject_exists_for_snapshot` 读取，阈值从 `pending_subject_threshold_for_snapshot` 读取。
 - `RuntimeInternalAdminCountProvider` 从 `active_subject_admin_count` 读取。
 - `EnsureNrcAdmin` 与联合治理发起人校验也从统一主体表读取。
 

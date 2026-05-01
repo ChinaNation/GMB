@@ -277,7 +277,7 @@ message = blake2_256(SCALE.encode(payload))
 | `ProposalMeta` | 辅助元数据（创建时间、通过时间） | 业务模块通过 `store_proposal_meta()` |
 | `InternalTallies` / `JointInstitutionTallies` / `JointTallies` / `CitizenTallies` | 投票计数 | 投票引擎 |
 | `InternalVotesByAccount` / `JointVotesByAdmin` / `JointVotesByInstitution` / `CitizenVotesByBindingId` | 投票记录 | 投票引擎 |
-| `ActiveProposalsByInstitution` | 每机构活跃提案列表（上限 10） | 投票引擎 |
+| `ActiveProposalsByInstitution` | 每机构活跃提案列表（上限由 runtime 配置，当前生产值 10） | 投票引擎 |
 
 **自动清理策略（统一清理路径）：**
 - 提案完成（通过/拒绝/过期）时注册延迟清理：`schedule_cleanup(proposal_id, current_block)`
@@ -409,7 +409,7 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.3.1 活跃提案数量限制
 
-每个机构（`InstitutionPalletId`）同时最多允许 **10 个活跃提案**，不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine::active_proposal_limit`）统一管控。
+每个机构（`InstitutionPalletId`）同时最多允许 runtime 配置数量的活跃提案（当前生产值为 **10**），不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine::active_proposal_limit`）统一管控。
 
 - 创建提案时：`try_add_active_proposal()` 检查并添加
 - 提案完成时：`remove_active_proposal()` 在 `set_status_and_emit` 中立即释放（提案通过/拒绝/过期时）

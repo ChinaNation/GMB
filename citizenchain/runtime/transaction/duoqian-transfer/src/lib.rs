@@ -1289,6 +1289,16 @@ mod tests {
 
     pub struct TestInternalThresholdProvider;
     impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
+            match org {
+                ORG_DUOQIAN => AccountId32::decode(&mut &institution[..32])
+                    .ok()
+                    .and_then(|account| duoqian_manage::DuoqianAccounts::<Test>::get(&account))
+                    .is_some(),
+                _ => false,
+            }
+        }
+
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
@@ -1339,6 +1349,8 @@ mod tests {
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;

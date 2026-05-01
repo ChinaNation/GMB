@@ -1,5 +1,3 @@
-#[cfg(test)]
-use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
@@ -84,11 +82,11 @@ fn is_valid_internal_institution<T: Config>(
                     .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
                     .any(|pid| pid == institution)
         }
-        // 注册多签/个人多签主体：按入口语义分别查询 Active 或 Pending 阈值。
+        // 注册多签/个人多签主体：按入口语义分别查询 Active 或 Pending 主体是否存在。
         ORG_DUOQIAN if pending_subject => {
-            T::InternalThresholdProvider::pending_pass_threshold(org, institution).is_some()
+            T::InternalThresholdProvider::is_known_pending_subject(org, institution)
         }
-        ORG_DUOQIAN => T::InternalThresholdProvider::pass_threshold(org, institution).is_some(),
+        ORG_DUOQIAN => T::InternalThresholdProvider::is_known_subject(org, institution),
         _ => false,
     }
 }
@@ -104,38 +102,7 @@ fn is_internal_admin<T: Config>(
     }
 
     // 中文注释：生产环境仅信任动态管理员来源（链上治理替换后的最终状态）。
-    #[cfg(not(test))]
-    {
-        T::InternalAdminProvider::is_internal_admin(org, institution, who)
-    }
-    // 中文注释：单测环境允许回退到常量管理员，便于独立测试本 pallet。
-    #[cfg(test)]
-    {
-        if T::InternalAdminProvider::is_internal_admin(org, institution, who) {
-            return true;
-        }
-
-        let who_bytes = who.encode();
-        if who_bytes.len() != 32 {
-            return false;
-        }
-        let mut who_arr = [0u8; 32];
-        who_arr.copy_from_slice(&who_bytes);
-
-        match org {
-            ORG_NRC | ORG_PRC => CHINA_CB
-                .iter()
-                .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            ORG_PRB => CHINA_CH
-                .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
-                .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
+    T::InternalAdminProvider::is_internal_admin(org, institution, who)
 }
 
 fn internal_threshold<T: Config>(
@@ -334,7 +301,7 @@ impl<T: Config> Pallet<T> {
         });
 
         let threshold = InternalThresholdSnapshot::<T>::get(proposal_id)
-            .ok_or(Error::<T>::InvalidInternalOrg)?;
+            .ok_or(Error::<T>::MissingThresholdSnapshot)?;
         if tally.yes >= threshold {
             // 中文注释：赞成票达到阈值，提前通过。
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
@@ -343,7 +310,7 @@ impl<T: Config> Pallet<T> {
             // 30 天超时只是兜底，不应让注定失败的提案空等。
             // admin_count 从快照取，保证阈值计算不受管理员更换影响。
             let admin_count = Self::snapshot_admin_count(proposal_id, institution)
-                .ok_or(Error::<T>::InvalidInternalOrg)?;
+                .ok_or(Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
             let remaining = admin_count.saturating_sub(casted);
             if tally.yes.saturating_add(remaining) < threshold {
@@ -358,8 +325,9 @@ impl<T: Config> Pallet<T> {
         proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
-        // 中文注释：内部投票超时兜底否决。正常情况下提案会在投票期内提前通过或提前否决，
-        // 此处仅处理极端情况（如恰好卡在边界、管理员数量变动等）。
+        // 中文注释：内部投票超时兜底否决。正常情况下提案会在投票期内提前通过或提前否决；
+        // 此处仅处理投票人数不足、长期未完成或恰好卡在边界区块的情况。
+        // 管理员名单与人数已在提案创建时快照，后续管理员更换不影响已有提案。
         ensure!(
             proposal.stage == STAGE_INTERNAL,
             Error::<T>::InvalidProposalStage
