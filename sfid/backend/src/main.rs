@@ -1,5 +1,5 @@
 use axum::{
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     middleware,
     response::IntoResponse,
     routing::{delete, get, post, put},
@@ -71,10 +71,6 @@ struct AppState {
     /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
     #[allow(dead_code)]
     pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
-    /// ADR-007 Step 2 阶段 D 新增:链上 ClearingBankNodes 内存缓存。
-    /// 启动时 spawn `chain::clearing_bank_watcher::spawn_watcher` 并把 Arc 句柄存这里,
-    /// `app_search_clearing_banks` 第 2 轮过滤通过 `contains(sfid_id)` 判断"已加入清算网络"。
-    pub(crate) clearing_bank_node_cache: Arc<chain::clearing_bank_watcher::ClearingBankNodeCache>,
 }
 
 #[derive(Clone)]
@@ -722,11 +718,6 @@ fn main() {
             .unwrap_or(true);
         Arc::new(store_shards::ShardedStore::new(backend, double_write))
     };
-    // ADR-007 Step 2 阶段 D:先构造空 cache 放进 AppState。
-    // watcher 的 tokio task 必须等 runtime 建好后再启动,否则会在同步 main() 阶段 panic。
-    let clearing_bank_node_cache =
-        std::sync::Arc::new(chain::clearing_bank_watcher::ClearingBankNodeCache::new());
-
     let state = AppState {
         store,
         signing_seed_hex: Arc::new(RwLock::new(main_seed)),
@@ -739,7 +730,6 @@ fn main() {
         public_key_hex: Arc::new(RwLock::new(public_key_hex)),
         sheng_signer_cache,
         sharded_store,
-        clearing_bank_node_cache,
     };
     seed_sheng_admins(&state);
     sync_builtin_sheng_admins(&state);
@@ -778,21 +768,6 @@ fn main() {
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
-        // ADR-007 Step 2 阶段 D:进入 Tokio runtime 后再启动 ClearingBankNodes watcher。
-        // 链 URL 不可达时跳过 watcher,仅保留空 cache,不阻塞 backend 启动。
-        match chain::url::chain_http_url() {
-            Ok(http_url) => chain::clearing_bank_watcher::start_watcher(
-                http_url,
-                Arc::clone(&state.clearing_bank_node_cache),
-            ),
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "SFID_CHAIN_WS_URL 未配置,ClearingBankNodes watcher 跳过启动"
-                );
-            }
-        }
-
         // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
         if key_admins::rsa_blind::get_public_key_pem().is_err() {
             info!("generating RSA anon cert keypair...");
@@ -943,7 +918,7 @@ fn main() {
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
                 put(sheng_admins::revoke_cpms_keys),
             )
-            // ── 链上余额查询 ──
+            // ── 链上余额查询(admin keyring 视图主账户行) ──
             .route(
                 "/api/v1/admin/chain/balance",
                 get(chain::balance::admin_query_chain_balance),
@@ -1075,28 +1050,9 @@ fn main() {
                 login::require_admin_session_middleware,
             ));
 
-        let chain_routes = Router::new()
-            .route(
-                "/api/v1/vote/verify",
-                post(chain::vote::verify_vote_eligibility),
-            )
-            .route(
-                "/api/v1/chain/voters/count",
-                get(chain::voters::chain_voters_count),
-            )
-            .route(
-                "/api/v1/chain/binding/validate",
-                post(chain::binding::chain_binding_validate),
-            )
-            .route(
-                "/api/v1/chain/reward/ack",
-                post(chain::binding::chain_reward_ack),
-            )
-            .route(
-                "/api/v1/chain/reward/state",
-                get(chain::binding::chain_reward_state),
-            )
-            .route("/api/v1/attestor/public-key", get(attestor_public_key));
+        // 中文注释:历史 chain_routes(/vote/verify、/chain/voters/count、/chain/binding/validate、
+        // /chain/reward/ack、/chain/reward/state、/attestor/public-key)0 caller,
+        // 2026-05-01 chain/ 重构一并下架。链端 pull 通道全部走 app_routes 命名空间。
 
         let public_routes = Router::new()
             .route("/", get(root))
@@ -1106,21 +1062,27 @@ fn main() {
                 get(business::query::public_identity_search),
             );
 
-        // App routes（手机 App 专用，x-app-token 认证）
+        // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
+        //
+        // 全部端点都汇集在 chain/ 子目录(institution_info / joint_vote / citizen_vote)。
+        // wuminapp 自有功能(钱包交易索引、投票账户绑定)继续留 indexer / operate 模块。
         let app_routes = Router::new()
+            // ── 联合投票:获取公民人数快照凭证 ──
             .route(
                 "/api/v1/app/voters/count",
-                get(chain::app_api::app_voters_count),
+                get(chain::joint_vote::app_voters_count),
             )
+            // ── 公民投票凭证签发 ──
             .route(
                 "/api/v1/app/vote/credential",
-                post(chain::app_api::app_vote_credential),
+                post(chain::citizen_vote::app_vote_credential),
             )
+            // ── 钱包交易索引(wuminapp 自有,与链交互无关) ──
             .route(
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
             )
-            // ── wuminapp 投票账户注册/查询 ──
+            // ── wuminapp 投票账户注册/查询(wuminapp 自有) ──
             .route(
                 "/api/v1/app/vote-account/register",
                 post(operate::binding::app_vote_account_register),
@@ -1129,36 +1091,28 @@ fn main() {
                 "/api/v1/app/vote-account/status",
                 get(operate::binding::app_vote_account_status),
             )
-            // ── 区块链软件机构/账户公开查询与链上状态同步 ──
+            // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
                 "/api/v1/app/institutions/search",
-                get(institutions::handler::app_search_institutions),
+                get(chain::institution_info::app_search_institutions),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_id",
-                get(institutions::handler::app_get_institution),
+                get(chain::institution_info::app_get_institution),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_id/accounts",
-                get(institutions::handler::app_list_accounts),
+                get(chain::institution_info::app_list_accounts),
             )
-            .route(
-                "/api/v1/app/institutions/:sfid_id/chain-sync",
-                post(institutions::handler::sync_institution_chain_state),
-            )
-            // ── 清算行搜索(2026-04-24, ADR-007 收紧):仅返回资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
-            // 资格白名单:(SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
-            // 用于 wuminapp 绑定清算行前的列表展示。
+            // ── 清算行搜索(已激活,wuminapp 绑定清算行用):资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
             .route(
                 "/api/v1/app/clearing-banks/search",
-                get(institutions::handler::app_search_clearing_banks),
+                get(chain::institution_info::app_search_clearing_banks),
             )
-            // ── 候选清算行搜索(2026-04-24, ADR-007 Step 1 新增) ──
-            // 用于 NodeUI"添加清算行"搜索:仅按资格白名单过滤,不要求主账户 ACTIVE_ON_CHAIN,
-            // 不分页(单页 limit ≤ 50),无 province/city 过滤(sfid_id 全局唯一)。
+            // ── 候选清算行搜索(可未激活,节点桌面"添加清算行"用):仅资格白名单过滤 ──
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
-                get(institutions::handler::app_search_eligible_clearing_banks),
+                get(chain::institution_info::app_search_eligible_clearing_banks),
             );
 
         let app_state = state.clone();
@@ -1166,7 +1120,6 @@ fn main() {
             .merge(public_routes)
             .merge(auth_routes)
             .merge(admin_routes)
-            .merge(chain_routes)
             .merge(app_routes)
             .layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -1205,106 +1158,10 @@ fn main() {
     });
 }
 
-fn ensure_chain_request_db(
-    state: &AppState,
-    route_key: &str,
-    auth: &ChainRequestAuth,
-    fingerprint: &str,
-) -> Result<(), axum::response::Response> {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return Ok(());
-    };
-    let insert = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        conn.execute(
-            "INSERT INTO chain_idempotency_requests(route_key, request_id, nonce, request_timestamp, fingerprint, created_at)
-             VALUES ($1,$2,$3,$4,$5, now())",
-            &[&route_key, &auth.request_id, &auth.nonce, &auth.timestamp, &fingerprint],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    });
-    match insert {
-        Ok(_) => Ok(()),
-        Err(err) if err.contains("uq_chain_idempotency_route_nonce") => Err(api_error(
-            StatusCode::CONFLICT,
-            1016,
-            "duplicate chain nonce (db)",
-        )),
-        Err(err) if err.contains("uq_chain_idempotency_route_request") => Err(api_error(
-            StatusCode::CONFLICT,
-            1017,
-            "duplicate chain request (db)",
-        )),
-        Err(err) => {
-            warn!("chain idempotency db insert failed: {err}");
-            Err(api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1500,
-                "chain idempotency persistence failed",
-            ))
-        }
-    }
-}
-
-pub(crate) fn prepare_chain_request(
-    state: &AppState,
-    headers: &HeaderMap,
-    route_key: &str,
-    fingerprint: &str,
-) -> Result<ChainRequestAuth, axum::response::Response> {
-    let chain_auth = match parse_chain_request_auth(headers, route_key, fingerprint) {
-        Ok(v) => v,
-        Err(resp) => {
-            match state.store.write() {
-                Ok(mut store) => {
-                    store.metrics.chain_request_total += 1;
-                    store.metrics.chain_auth_failures += 1;
-                    store.metrics.chain_request_failed_total += 1;
-                }
-                Err(err) => {
-                    warn!(
-                        error = %err,
-                        route_key = route_key,
-                        "failed to record chain auth failure metrics"
-                    );
-                }
-            }
-            return Err(resp);
-        }
-    };
-
-    {
-        let mut store = store_write_or_500(state)?;
-        store.metrics.chain_request_total += 1;
-        if let Err(resp) = track_chain_request(&mut store, route_key, &chain_auth, fingerprint) {
-            return Err(resp);
-        }
-    }
-
-    if let Err(resp) = ensure_chain_request_db(state, route_key, &chain_auth, fingerprint) {
-        match state.store.write() {
-            Ok(mut store) => {
-                rollback_chain_request_tracking(&mut store, route_key, &chain_auth);
-                store.metrics.chain_request_failed_total += 1;
-            }
-            Err(err) => {
-                warn!(
-                    error = %err,
-                    route_key = route_key,
-                    request_id = chain_auth.request_id,
-                    "failed to rollback chain request tracking after db error"
-                );
-            }
-        }
-        return Err(resp);
-    }
-
-    Ok(chain_auth)
-}
+// 中文注释:历史 ensure_chain_request_db / prepare_chain_request 与已下架的
+// /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,2026-05-01 一并下架。
+// 链端 chain pull 端点(institution_info / joint_vote / citizen_vote)无 attestor
+// 鉴权需求,全局 rate limiter 已防滥用,凭证签名本身就是反伪造保护。
 
 #[allow(dead_code)]
 fn ensure_binding_lock_db(
@@ -1397,6 +1254,7 @@ fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
     });
 }
 
+#[allow(dead_code)]
 fn persist_reward_state_db(
     state: &AppState,
     reward: &RewardStateRecord,

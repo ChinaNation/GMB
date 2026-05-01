@@ -5,10 +5,9 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::Utc;
 use redis::Script;
 use reqwest::Url;
-use serde::Serialize;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::OnceLock,
@@ -18,15 +17,11 @@ use tracing::warn;
 use uuid::Uuid;
 
 use blake2::digest::consts::U32;
-use blake2::digest::Mac;
-use blake2::Blake2bMac;
 use blake2::{Blake2b, Digest};
 
-use crate::key_admins::chain_proof::build_public_key_output;
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
-type Blake2bMac256 = Blake2bMac<U32>;
 
 static TRUSTED_PROXY_IPS: OnceLock<Vec<IpAddr>> = OnceLock::new();
 static RATE_LIMIT_SCRIPT: OnceLock<Script> = OnceLock::new();
@@ -251,29 +246,10 @@ pub(crate) async fn health(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
-pub(crate) async fn attestor_public_key(State(state): State<AppState>) -> impl IntoResponse {
-    let public_key_hex = match state.public_key_hex.read() {
-        Ok(v) => v.clone(),
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "public key unavailable",
-            )
-        }
-    };
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: build_public_key_output(
-            &state.key_id,
-            &state.key_version,
-            &state.key_alg,
-            &public_key_hex,
-        ),
-    })
-    .into_response()
-}
+// 中文注释:历史 attestor_public_key endpoint(`GET /api/v1/attestor/public-key`)
+// 0 caller,2026-05-01 chain/ 重构一并下架。链端验证 SFID 凭证用的公钥已经
+// 通过链上 SfidSystem::SfidMainAccount storage 维护(创世写入 + 链上 rotate
+// extrinsic 维护),不需要再走 HTTP pull。
 
 pub(crate) fn constant_time_eq(left: &str, right: &str) -> bool {
     let l = left.as_bytes();
@@ -322,32 +298,12 @@ pub(crate) fn require_public_search_auth(
     Ok(())
 }
 
-pub(crate) fn require_chain_auth(headers: &HeaderMap) -> Result<(), axum::response::Response> {
-    let incoming = headers
-        .get("x-chain-token")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if incoming.is_empty() {
-        return Err(api_error(
-            StatusCode::UNAUTHORIZED,
-            1002,
-            "chain auth required",
-        ));
-    }
-    let Some(expected) = optional_env("SFID_CHAIN_TOKEN") else {
-        return Err(api_error(
-            StatusCode::SERVICE_UNAVAILABLE,
-            1004,
-            "chain auth not configured",
-        ));
-    };
-    if !constant_time_eq(incoming.as_str(), expected.as_str()) {
-        return Err(api_error(StatusCode::FORBIDDEN, 1008, "chain auth invalid"));
-    }
-    Ok(())
-}
+// 中文注释:历史 require_chain_auth + 整套 chain HMAC 鉴权(x-chain-token /
+// x-chain-request-id / x-chain-nonce / x-chain-timestamp / x-chain-signature)
+// 与已下架的 /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,
+// 2026-05-01 一并下架。chain pull 端点(institution_info / joint_vote /
+// citizen_vote)的安全模型是"返回签名凭证只对请求者 account_pubkey 有效",
+// 不需要请求侧 HMAC。
 
 pub(crate) fn env_flag_enabled(key: &str) -> bool {
     std::env::var(key)
@@ -503,279 +459,6 @@ pub(crate) fn chain_header_value(headers: &HeaderMap, key: &str) -> Option<Strin
         .and_then(|v| v.to_str().ok())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-}
-
-pub(crate) fn chain_request_signing_secret() -> Result<String, axum::response::Response> {
-    let secret = std::env::var("SFID_CHAIN_SIGNING_SECRET")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| {
-            api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "SFID_CHAIN_SIGNING_SECRET must be configured",
-            )
-        })?;
-    if secret.len() < 32 {
-        return Err(api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "SFID_CHAIN_SIGNING_SECRET must be at least 32 chars",
-        ));
-    }
-    Ok(secret)
-}
-
-pub(crate) fn chain_signature_payload(
-    route_key: &str,
-    request_id: &str,
-    nonce: &str,
-    timestamp: i64,
-    fingerprint: &str,
-) -> String {
-    format!(
-        "route={route_key}\nrequest_id={request_id}\nnonce={nonce}\ntimestamp={timestamp}\nfingerprint={fingerprint}"
-    )
-}
-
-pub(crate) fn chain_signature_hex(secret: &str, payload: &str) -> String {
-    let key_digest = Blake2b256::digest(secret.as_bytes());
-    let mut mac =
-        Blake2bMac256::new_from_slice(&key_digest).expect("Blake2bMac256 accepts any key length");
-    mac.update(payload.as_bytes());
-    hex::encode(mac.finalize().into_bytes())
-}
-
-pub(crate) fn constant_time_eq_hex(a: &str, b: &str) -> bool {
-    let left = a.as_bytes();
-    let right = b.as_bytes();
-    let max_len = left.len().max(right.len());
-    let mut diff = left.len() ^ right.len();
-    for idx in 0..max_len {
-        let lb = left.get(idx).copied().unwrap_or(0);
-        let rb = right.get(idx).copied().unwrap_or(0);
-        diff |= usize::from(lb ^ rb);
-    }
-    diff == 0
-}
-
-pub(crate) fn require_chain_signature(
-    headers: &HeaderMap,
-    route_key: &str,
-    request_id: &str,
-    nonce: &str,
-    timestamp: i64,
-    fingerprint: &str,
-) -> Result<(), axum::response::Response> {
-    let secret = chain_request_signing_secret()?;
-    let Some(incoming_sig) = chain_header_value(headers, "x-chain-signature") else {
-        return Err(api_error(
-            StatusCode::UNAUTHORIZED,
-            1020,
-            "x-chain-signature is required",
-        ));
-    };
-    let payload = chain_signature_payload(route_key, request_id, nonce, timestamp, fingerprint);
-    let expected = chain_signature_hex(secret.as_str(), payload.as_str());
-    let incoming_norm = incoming_sig.to_ascii_lowercase();
-    if !constant_time_eq_hex(incoming_norm.as_str(), expected.as_str()) {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1021,
-            "chain signature invalid",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn request_fingerprint<T: Serialize>(input: &T) -> Result<String, Response> {
-    let payload = serde_json::to_vec(input).map_err(|_| {
-        api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            "fingerprint serialization failed",
-        )
-    })?;
-    Ok(hex::encode(Blake2b256::digest(&payload)))
-}
-
-pub(crate) fn cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>) {
-    store
-        .chain_requests_by_key
-        .retain(|_, record| record.received_at > now - Duration::hours(24));
-    store
-        .chain_nonce_seen
-        .retain(|_, seen_at| *seen_at > now - Duration::hours(24));
-}
-
-fn chain_auth_cleanup_interval_seconds() -> i64 {
-    std::env::var("SFID_CHAIN_AUTH_CLEANUP_INTERVAL_SECONDS")
-        .ok()
-        .and_then(|v| v.trim().parse::<i64>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(60)
-}
-
-pub(crate) fn maybe_cleanup_chain_auth_tracking(store: &mut Store, now: DateTime<Utc>) {
-    let interval = Duration::seconds(chain_auth_cleanup_interval_seconds());
-    let should_cleanup = store
-        .chain_auth_last_cleanup_at
-        .map(|last| now - last >= interval)
-        .unwrap_or(true);
-    if should_cleanup {
-        cleanup_chain_auth_tracking(store, now);
-        store.chain_auth_last_cleanup_at = Some(now);
-    }
-}
-
-pub(crate) fn parse_chain_request_auth(
-    headers: &HeaderMap,
-    route_key: &str,
-    fingerprint: &str,
-) -> Result<ChainRequestAuth, axum::response::Response> {
-    require_chain_auth(headers)?;
-    let Some(request_id) = chain_header_value(headers, "x-chain-request-id") else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1011,
-            "x-chain-request-id is required",
-        ));
-    };
-    let Some(nonce) = chain_header_value(headers, "x-chain-nonce") else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1012,
-            "x-chain-nonce is required",
-        ));
-    };
-    let Some(ts_text) = chain_header_value(headers, "x-chain-timestamp") else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1013,
-            "x-chain-timestamp is required",
-        ));
-    };
-    let Ok(ts) = ts_text.parse::<i64>() else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1014,
-            "x-chain-timestamp must be unix timestamp seconds",
-        ));
-    };
-    let now = Utc::now();
-    if (now.timestamp() - ts).abs() > 300 {
-        return Err(api_error(
-            StatusCode::UNAUTHORIZED,
-            1015,
-            "chain request timestamp expired",
-        ));
-    }
-    require_chain_signature(headers, route_key, &request_id, &nonce, ts, fingerprint)?;
-
-    Ok(ChainRequestAuth {
-        request_id,
-        nonce,
-        timestamp: ts,
-    })
-}
-
-pub(crate) fn track_chain_request(
-    store: &mut Store,
-    route_key: &str,
-    auth: &ChainRequestAuth,
-    fingerprint: &str,
-) -> Result<(), axum::response::Response> {
-    let now = Utc::now();
-    maybe_cleanup_chain_auth_tracking(store, now);
-    let nonce_key = format!("{route_key}:{}", auth.nonce);
-    if store.chain_nonce_seen.contains_key(&nonce_key) {
-        store.metrics.chain_replay_rejects += 1;
-        store.metrics.chain_request_failed_total += 1;
-        return Err(api_error(
-            StatusCode::CONFLICT,
-            1016,
-            "duplicate chain nonce (memory)",
-        ));
-    }
-    let request_key = format!("{route_key}:{}", auth.request_id);
-    if let Some(existing) = store.chain_requests_by_key.get(&request_key) {
-        store.metrics.chain_replay_rejects += 1;
-        store.metrics.chain_request_failed_total += 1;
-        if existing.fingerprint == fingerprint {
-            return Err(api_error(
-                StatusCode::CONFLICT,
-                1017,
-                "duplicate chain request (memory)",
-            ));
-        }
-        return Err(api_error(
-            StatusCode::CONFLICT,
-            1018,
-            "chain request id conflict (memory)",
-        ));
-    }
-
-    insert_bounded_map(
-        &mut store.chain_nonce_seen,
-        nonce_key,
-        now,
-        bounded_cache_limit("SFID_CHAIN_NONCE_CACHE_MAX", 50_000),
-    );
-    insert_bounded_map(
-        &mut store.chain_requests_by_key,
-        request_key,
-        ChainRequestReceipt {
-            route_key: route_key.to_string(),
-            request_id: auth.request_id.clone(),
-            nonce: auth.nonce.clone(),
-            fingerprint: fingerprint.to_string(),
-            received_at: now,
-        },
-        bounded_cache_limit("SFID_CHAIN_REQUEST_CACHE_MAX", 50_000),
-    );
-    Ok(())
-}
-
-pub(crate) fn rollback_chain_request_tracking(
-    store: &mut Store,
-    route_key: &str,
-    auth: &ChainRequestAuth,
-) {
-    let nonce_key = format!("{route_key}:{}", auth.nonce);
-    store.chain_nonce_seen.remove(&nonce_key);
-    let request_key = format!("{route_key}:{}", auth.request_id);
-    store.chain_requests_by_key.remove(&request_key);
-}
-
-#[cfg(test)]
-pub(crate) fn require_chain_request(
-    store: &mut Store,
-    headers: &HeaderMap,
-    route_key: &str,
-    fingerprint: &str,
-) -> Result<ChainRequestAuth, axum::response::Response> {
-    store.metrics.chain_request_total += 1;
-    let auth = match parse_chain_request_auth(headers, route_key, fingerprint) {
-        Ok(v) => v,
-        Err(resp) => {
-            store.metrics.chain_auth_failures += 1;
-            store.metrics.chain_request_failed_total += 1;
-            return Err(resp);
-        }
-    };
-    track_chain_request(store, route_key, &auth, fingerprint)?;
-    Ok(auth)
-}
-
-pub(crate) fn record_chain_latency(store: &mut Store, started_at: DateTime<Utc>) {
-    let elapsed_ms = (Utc::now() - started_at).num_milliseconds().max(0) as u32;
-    let samples = &mut store.metrics.chain_latency_samples;
-    samples.push(elapsed_ms);
-    if samples.len() > 1024 {
-        let drop_count = samples.len() - 1024;
-        samples.drain(0..drop_count);
-    }
 }
 
 pub(crate) fn latency_p95_p99_ms(samples: &[u32]) -> (u32, u32) {
