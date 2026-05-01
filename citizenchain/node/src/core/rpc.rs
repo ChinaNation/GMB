@@ -5,7 +5,10 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
@@ -25,6 +28,40 @@ use substrate_frame_rpc_system::AccountNonceApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。
 const POW_AUTHOR_KEY_TYPE: KeyTypeId = KeyTypeId(*b"powr");
+static MINER_TRANSFER_TOKENS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+/// 签发一次性矿工热钱包转账令牌。
+///
+/// 令牌只在当前进程内保存，供 Tauri 命令在完成设备密码校验后调用本机 RPC。
+pub(crate) fn issue_miner_transfer_token() -> Result<String, String> {
+    let token = hex::encode(rand::random::<[u8; 32]>());
+    let tokens = MINER_TRANSFER_TOKENS.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut guard = tokens
+        .lock()
+        .map_err(|_| "矿工热钱包令牌状态异常".to_string())?;
+    guard.insert(token.clone());
+    Ok(token)
+}
+
+/// 回收尚未被 RPC 消费的一次性矿工热钱包转账令牌。
+pub(crate) fn revoke_miner_transfer_token(token: &str) {
+    let Some(tokens) = MINER_TRANSFER_TOKENS.get() else {
+        return;
+    };
+    if let Ok(mut guard) = tokens.lock() {
+        guard.remove(token);
+    }
+}
+
+fn consume_miner_transfer_token(token: &str) -> bool {
+    let Some(tokens) = MINER_TRANSFER_TOKENS.get() else {
+        return false;
+    };
+    tokens
+        .lock()
+        .map(|mut guard| guard.remove(token))
+        .unwrap_or(false)
+}
 
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
@@ -32,7 +69,7 @@ pub struct FullDeps<C, P> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
-    /// Keystore（用于签名奖励钱包绑定交易）。
+    /// Keystore（用于签名奖励钱包绑定交易和矿工热钱包交易）。
     pub keystore: sp_keystore::KeystorePtr,
     /// CPU 哈希率查询函数（hashes/sec）。
     pub cpu_hashrate_fn: fn() -> f64,
@@ -45,13 +82,13 @@ pub struct FullDeps<C, P> {
     pub offchain_clearing_rpc: Option<Arc<crate::offchain::rpc::OffchainClearingRpcImpl>>,
 }
 
-/// 构造并签名一笔交易，提交到交易池。
-fn submit_reward_wallet_tx<C, P>(
+/// 构造并签名一笔 powr 矿工交易，提交到交易池。
+fn submit_powr_signed_tx<C, P>(
     client: &Arc<C>,
     pool: &Arc<P>,
     keystore: &sp_keystore::KeystorePtr,
     call: runtime::RuntimeCall,
-) -> Result<(), jsonrpsee::types::ErrorObjectOwned>
+) -> Result<String, jsonrpsee::types::ErrorObjectOwned>
 where
     C: ProvideRuntimeApi<Block>,
     C: HeaderBackend<Block> + 'static,
@@ -155,10 +192,11 @@ where
         .map_err(|_| ErrorObject::owned(-1, "交易编码失败", None::<()>))?;
 
     // submit_one 是 async，但我们在同步上下文中，使用 futures::executor::block_on
-    futures::executor::block_on(pool.submit_one(best_hash, TransactionSource::Local, opaque))
-        .map_err(|e| ErrorObject::owned(-1, format!("提交交易到交易池失败: {e}"), None::<()>))?;
+    let tx_hash =
+        futures::executor::block_on(pool.submit_one(best_hash, TransactionSource::Local, opaque))
+            .map_err(|e| ErrorObject::owned(-1, format!("提交交易到交易池失败: {e}"), None::<()>))?;
 
-    Ok(())
+    Ok(format!("{tx_hash:?}"))
 }
 
 /// 从 SS58 地址解析 AccountId。
@@ -335,7 +373,7 @@ where
             let call = runtime::RuntimeCall::FullnodeIssuance(
                 fullnode_issuance::pallet::Call::bind_reward_wallet { wallet },
             );
-            submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
+            let _tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
         })?;
     }
@@ -352,8 +390,38 @@ where
             let call = runtime::RuntimeCall::FullnodeIssuance(
                 fullnode_issuance::pallet::Call::rebind_reward_wallet { new_wallet },
             );
-            submit_reward_wallet_tx(&client, &pool, &keystore, call)?;
+            let _tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
             Ok::<&str, jsonrpsee::types::ErrorObjectOwned>("ok")
+        })?;
+    }
+
+    // transaction_submitMinerTransfer(to_ss58: String, amount_fen: String, token: String) -> tx_hash
+    // 由 node 端使用本机 powr 矿工密钥签名并提交 Balances::transfer_keep_alive。
+    {
+        let client = client.clone();
+        let pool = pool.clone();
+        let keystore = keystore.clone();
+        module.register_method("transaction_submitMinerTransfer", move |params, _, _| {
+            use jsonrpsee::types::error::ErrorObject;
+
+            let (to_ss58, amount_fen_raw, auth_token): (String, String, String) = params.parse()?;
+            if !consume_miner_transfer_token(&auth_token) {
+                return Err(ErrorObject::owned(-1, "矿工热钱包提交令牌无效", None::<()>));
+            }
+            let dest = parse_ss58_account(&to_ss58)?;
+            let amount_fen: Balance = amount_fen_raw.parse().map_err(|e| {
+                ErrorObject::owned(-1, format!("转账金额解析失败: {e}"), None::<()>)
+            })?;
+            if amount_fen == 0 {
+                return Err(ErrorObject::owned(-1, "转账金额不能为零", None::<()>));
+            }
+
+            let call = runtime::RuntimeCall::Balances(runtime::BalancesCall::transfer_keep_alive {
+                dest: dest.into(),
+                value: amount_fen,
+            });
+            let tx_hash = submit_powr_signed_tx(&client, &pool, &keystore, call)?;
+            Ok::<String, jsonrpsee::types::ErrorObjectOwned>(tx_hash)
         })?;
     }
 

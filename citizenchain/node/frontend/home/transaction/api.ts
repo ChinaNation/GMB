@@ -14,6 +14,8 @@ export const transactionApi = {
     invoke<string | null>('get_wallet_balance', { pubkeyHex }),
   buildTransferRequest: (pubkeyHex: string, toAddress: string, amountYuan: number) =>
     invoke<TransferSignRequestResult>('build_transfer_request', { pubkeyHex, toAddress, amountYuan }),
+  submitMinerTransfer: (toAddress: string, amountYuan: number, unlockPassword: string) =>
+    invoke<TransferSubmitResult>('submit_miner_transfer', { toAddress, amountYuan, unlockPassword }),
   submitTransfer: (
     requestId: string,
     expectedPubkeyHex: string,

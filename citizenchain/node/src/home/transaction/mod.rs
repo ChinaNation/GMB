@@ -5,10 +5,18 @@
 
 pub(crate) mod wallet_store;
 
-use crate::governance::{institution, signing};
+use crate::{
+    governance::{institution, signing},
+    settings::{device_password, fee_address},
+    shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc, security},
+};
 use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
-use wallet_store::{ColdWallet, WalletStore};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use wallet_store::{ColdWallet, WalletKind, WalletStore};
+
+const LOCAL_MINER_WALLET_ID: &str = "local-miner-hot-wallet";
+const TRANSFER_RPC_TIMEOUT: Duration = Duration::from_secs(45);
+const EXISTENTIAL_DEPOSIT_FEN: u128 = 111; // 1.11 元
 
 /// 转账签名请求结果（前端用于显示 QR 码）。
 #[derive(Debug, Serialize)]
@@ -32,11 +40,115 @@ pub struct TransferSubmitResult {
     pub tx_hash: String,
 }
 
+fn normalize_pubkey_hex(pubkey_hex: &str, field_name: &str) -> Result<String, String> {
+    let clean = pubkey_hex
+        .strip_prefix("0x")
+        .unwrap_or(pubkey_hex)
+        .to_ascii_lowercase();
+    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("{field_name}格式无效"));
+    }
+    Ok(clean)
+}
+
+fn amount_yuan_to_fen(amount_yuan: f64) -> Result<u128, String> {
+    if !amount_yuan.is_finite() {
+        return Err("转账金额格式无效".to_string());
+    }
+    if amount_yuan < 0.01 {
+        return Err("转账金额不能小于 0.01 元".to_string());
+    }
+    let amount_fen = (amount_yuan * 100.0).round() as u128;
+    if amount_fen == 0 {
+        return Err("转账金额不能为零".to_string());
+    }
+    Ok(amount_fen)
+}
+
+fn calculate_transfer_fee(amount_fen: u128) -> u128 {
+    onchain_transaction::calculate_onchain_fee(amount_fen)
+}
+
+fn ensure_spendable_balance(
+    sender_clean: &str,
+    amount_fen: u128,
+    fee_fen: u128,
+) -> Result<(), String> {
+    let balance_fen =
+        institution::fetch_balance(sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
+    let total_needed = amount_fen + fee_fen;
+    if balance_fen < total_needed + EXISTENTIAL_DEPOSIT_FEN {
+        let available = if balance_fen > EXISTENTIAL_DEPOSIT_FEN {
+            (balance_fen - EXISTENTIAL_DEPOSIT_FEN) as f64 / 100.0
+        } else {
+            0.0
+        };
+        return Err(format!(
+            "余额不足：可用 {} 元，需要 {} 元（含手续费 {} 元）",
+            signing::format_amount(available),
+            signing::format_amount(total_needed as f64 / 100.0),
+            signing::format_amount(fee_fen as f64 / 100.0),
+        ));
+    }
+    Ok(())
+}
+
+fn local_miner_wallet(app: &tauri::AppHandle) -> Result<Option<ColdWallet>, String> {
+    let Some(miner_hex) = fee_address::local_powr_miner_account_hex(app)? else {
+        return Ok(None);
+    };
+    let pubkey_hex = normalize_pubkey_hex(&miner_hex, "矿工公钥")?;
+    let pubkey = hex::decode(&pubkey_hex).map_err(|e| format!("矿工公钥解码失败: {e}"))?;
+    let address = signing::pubkey_to_ss58(&pubkey)?;
+
+    Ok(Some(ColdWallet {
+        id: LOCAL_MINER_WALLET_ID.to_string(),
+        name: "矿工热钱包".to_string(),
+        kind: WalletKind::MinerHot,
+        deletable: false,
+        address,
+        pubkey_hex,
+        created_at: 0,
+    }))
+}
+
+fn normalize_cold_wallets(store: &mut WalletStore) {
+    for wallet in &mut store.wallets {
+        wallet.kind = WalletKind::Cold;
+        wallet.deletable = true;
+    }
+}
+
+fn wallet_store_for_frontend(
+    app: &tauri::AppHandle,
+    mut store: WalletStore,
+) -> Result<WalletStore, String> {
+    // 中文注释：冷钱包文件只保存用户添加的钱包；矿工热钱包每次从 powr keystore 动态注入。
+    normalize_cold_wallets(&mut store);
+
+    let miner_wallet = local_miner_wallet(app)?;
+    let has_miner_wallet = miner_wallet.is_some();
+    let mut wallets = Vec::with_capacity(store.wallets.len() + usize::from(has_miner_wallet));
+    if let Some(wallet) = miner_wallet {
+        wallets.push(wallet);
+    }
+    wallets.extend(store.wallets.clone());
+
+    let active_id = match store.active_id.as_deref() {
+        Some(LOCAL_MINER_WALLET_ID) if has_miner_wallet => Some(LOCAL_MINER_WALLET_ID.to_string()),
+        Some(id) if store.wallets.iter().any(|w| w.id == id) => Some(id.to_string()),
+        _ => wallets.first().map(|w| w.id.clone()),
+    };
+
+    Ok(WalletStore { wallets, active_id })
+}
+
 // ──── 钱包管理命令 ────
 
 #[tauri::command]
 pub fn get_wallets(app: tauri::AppHandle) -> Result<WalletStore, String> {
-    wallet_store::load(&app)
+    let store = wallet_store::load(&app)?;
+    wallet_store_for_frontend(&app, store)
 }
 
 #[tauri::command]
@@ -54,6 +166,13 @@ pub fn add_wallet(
     let pubkey_hex = hex::encode(pubkey_bytes);
 
     let mut store = wallet_store::load(&app)?;
+    normalize_cold_wallets(&mut store);
+
+    if let Some(miner_wallet) = local_miner_wallet(&app)? {
+        if miner_wallet.pubkey_hex == pubkey_hex {
+            return Err("矿工热钱包已在列表中，无需重复添加".to_string());
+        }
+    }
 
     // 查重：同一公钥不能重复添加
     if store.wallets.iter().any(|w| w.pubkey_hex == pubkey_hex) {
@@ -63,14 +182,16 @@ pub fn add_wallet(
     let wallet = ColdWallet {
         id: generate_uuid(),
         name,
+        kind: WalletKind::Cold,
+        deletable: true,
         address,
         pubkey_hex,
         created_at: now_secs(),
     };
 
     store.wallets.push(wallet.clone());
-    // 若是第一个钱包，自动激活
-    if store.active_id.is_none() {
+    // 若本机尚无矿工热钱包且这是第一个钱包，保持旧行为自动激活。
+    if store.active_id.is_none() && local_miner_wallet(&app)?.is_none() {
         store.active_id = Some(wallet.id.clone());
     }
     wallet_store::save(&app, &store)?;
@@ -79,7 +200,11 @@ pub fn add_wallet(
 
 #[tauri::command]
 pub fn remove_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
+    if wallet_id == LOCAL_MINER_WALLET_ID {
+        return Err("矿工热钱包不能删除".to_string());
+    }
     let mut store = wallet_store::load(&app)?;
+    normalize_cold_wallets(&mut store);
     let before_len = store.wallets.len();
     store.wallets.retain(|w| w.id != wallet_id);
     if store.wallets.len() == before_len {
@@ -87,32 +212,37 @@ pub fn remove_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletS
     }
     // 若删除的是激活钱包，清空激活状态
     if store.active_id.as_deref() == Some(&wallet_id) {
-        store.active_id = store.wallets.first().map(|w| w.id.clone());
+        store.active_id = if local_miner_wallet(&app)?.is_some() {
+            Some(LOCAL_MINER_WALLET_ID.to_string())
+        } else {
+            store.wallets.first().map(|w| w.id.clone())
+        };
     }
     wallet_store::save(&app, &store)?;
-    Ok(store)
+    wallet_store_for_frontend(&app, store)
 }
 
 #[tauri::command]
 pub fn set_active_wallet(app: tauri::AppHandle, wallet_id: String) -> Result<WalletStore, String> {
     let mut store = wallet_store::load(&app)?;
+    normalize_cold_wallets(&mut store);
+    if wallet_id == LOCAL_MINER_WALLET_ID {
+        local_miner_wallet(&app)?.ok_or("未找到矿工热钱包，请先启动节点生成矿工密钥")?;
+        store.active_id = Some(LOCAL_MINER_WALLET_ID.to_string());
+        wallet_store::save(&app, &store)?;
+        return wallet_store_for_frontend(&app, store);
+    }
     if !store.wallets.iter().any(|w| w.id == wallet_id) {
         return Err("钱包不存在".to_string());
     }
     store.active_id = Some(wallet_id);
     wallet_store::save(&app, &store)?;
-    Ok(store)
+    wallet_store_for_frontend(&app, store)
 }
 
 #[tauri::command]
 pub fn get_wallet_balance(pubkey_hex: String) -> Result<Option<String>, String> {
-    let clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(&pubkey_hex)
-        .to_ascii_lowercase();
-    if clean.len() != 64 || !clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("公钥格式无效".to_string());
-    }
+    let clean = normalize_pubkey_hex(&pubkey_hex, "公钥")?;
     match institution::fetch_balance(&clean)? {
         Some(fen) => Ok(Some(fen.to_string())),
         None => Ok(None),
@@ -131,13 +261,7 @@ pub fn build_transfer_request(
     amount_yuan: f64,
 ) -> Result<TransferSignRequestResult, String> {
     // 校验发送方公钥
-    let sender_clean = pubkey_hex
-        .strip_prefix("0x")
-        .unwrap_or(&pubkey_hex)
-        .to_ascii_lowercase();
-    if sender_clean.len() != 64 || !sender_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("发送方公钥格式无效".to_string());
-    }
+    let sender_clean = normalize_pubkey_hex(&pubkey_hex, "发送方公钥")?;
     let sender_bytes =
         hex::decode(&sender_clean).map_err(|e| format!("发送方公钥解码失败: {e}"))?;
 
@@ -148,37 +272,14 @@ pub fn build_transfer_request(
         return Err("收款地址不能与发送方相同".to_string());
     }
 
-    // 校验金额
-    if amount_yuan < 0.01 {
-        return Err("转账金额不能小于 0.01 元".to_string());
-    }
-    let amount_fen = (amount_yuan * 100.0).round() as u128;
-    if amount_fen == 0 {
-        return Err("转账金额不能为零".to_string());
-    }
+    let amount_fen = amount_yuan_to_fen(amount_yuan)?;
 
-    // 计算手续费：max(amount * 0.1%, 10 fen) = max(amount_fen / 1000, 10)
-    let fee_fen = (amount_fen / 1000).max(10);
+    // 中文注释：前端预估费和链上实扣费统一复用 runtime 手续费公式。
+    let fee_fen = calculate_transfer_fee(amount_fen);
     let fee_yuan = fee_fen as f64 / 100.0;
 
     // 校验余额
-    let balance_fen =
-        institution::fetch_balance(&sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
-    let existential_deposit: u128 = 111; // 1.11 元
-    let total_needed = amount_fen + fee_fen;
-    if balance_fen < total_needed + existential_deposit {
-        let available = if balance_fen > existential_deposit {
-            (balance_fen - existential_deposit) as f64 / 100.0
-        } else {
-            0.0
-        };
-        return Err(format!(
-            "余额不足：可用 {} 元，需要 {} 元（含手续费 {} 元）",
-            signing::format_amount(available),
-            signing::format_amount(total_needed as f64 / 100.0),
-            signing::format_amount(fee_yuan),
-        ));
-    }
+    ensure_spendable_balance(&sender_clean, amount_fen, fee_fen)?;
 
     // 构建 call_data: Balances::transfer_keep_alive
     // pallet_index=2, call_index=3, MultiAddress::Id(0x00) + 32 bytes, Compact<u128>(amount_fen)
@@ -245,6 +346,86 @@ pub fn submit_transfer(
     Ok(TransferSubmitResult {
         tx_hash: result.tx_hash,
     })
+}
+
+/// 使用本机矿工热钱包直接签名并提交转账。
+#[tauri::command]
+pub async fn submit_miner_transfer(
+    app: tauri::AppHandle,
+    to_address: String,
+    amount_yuan: f64,
+    unlock_password: String,
+) -> Result<TransferSubmitResult, String> {
+    if let Err(e) = security::append_audit_log(&app, "submit_miner_transfer", "attempt") {
+        eprintln!("[审计] submit_miner_transfer attempt 日志写入失败: {e}");
+    }
+
+    let unlock = security::ensure_unlock_password(&unlock_password)?;
+    device_password::verify_device_login_password(&app, unlock)?;
+    drop(unlock_password);
+
+    let app_for_task = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        submit_miner_transfer_inner(&app_for_task, to_address, amount_yuan)
+    })
+    .await
+    .map_err(|e| format!("矿工热钱包签名任务失败: {e}"))?;
+
+    match &result {
+        Ok(_) => {
+            if let Err(e) = security::append_audit_log(&app, "submit_miner_transfer", "success") {
+                eprintln!("[审计] submit_miner_transfer success 日志写入失败: {e}");
+            }
+        }
+        Err(err) => {
+            if let Err(e) = security::append_audit_log(&app, "submit_miner_transfer", "failed") {
+                eprintln!("[审计] submit_miner_transfer failed 日志写入失败: {e}");
+            }
+            eprintln!("[交易] 矿工热钱包签名提交失败: {err}");
+        }
+    }
+
+    result
+}
+
+fn submit_miner_transfer_inner(
+    app: &tauri::AppHandle,
+    to_address: String,
+    amount_yuan: f64,
+) -> Result<TransferSubmitResult, String> {
+    let miner_wallet =
+        local_miner_wallet(app)?.ok_or("未找到矿工热钱包，请先启动节点生成矿工密钥")?;
+    let to_address = to_address.trim().to_string();
+    let dest_pubkey = signing::decode_ss58_to_pubkey(&to_address)?;
+    let dest_hex = hex::encode(dest_pubkey);
+    if dest_hex == miner_wallet.pubkey_hex {
+        return Err("收款地址不能与矿工热钱包相同".to_string());
+    }
+
+    let amount_fen = amount_yuan_to_fen(amount_yuan)?;
+    let fee_fen = calculate_transfer_fee(amount_fen);
+    ensure_spendable_balance(&miner_wallet.pubkey_hex, amount_fen, fee_fen)?;
+
+    // 中文注释：真正的私钥签名只发生在节点 RPC 内部；一次性令牌避免外部本机 RPC 直接花费矿工余额。
+    let auth_token = crate::core::rpc::issue_miner_transfer_token()?;
+    let result = rpc::rpc_post(
+        "transaction_submitMinerTransfer",
+        serde_json::json!([to_address, amount_fen.to_string(), auth_token.clone()]),
+        TRANSFER_RPC_TIMEOUT,
+        RPC_RESPONSE_LIMIT_SMALL,
+    );
+    if result.is_err() {
+        crate::core::rpc::revoke_miner_transfer_token(&auth_token);
+    }
+    let result = result?;
+    let tx_hash = result
+        .as_str()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .ok_or("节点未返回交易哈希")?
+        .to_string();
+
+    Ok(TransferSubmitResult { tx_hash })
 }
 
 // ──── 编码工具 ────

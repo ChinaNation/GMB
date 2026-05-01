@@ -93,7 +93,7 @@
 - 公式：`max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
 - 返回值单位为"分"
 
-说明：`custom_fee_with_tip` 与 `duoqian-*` 预扣逻辑共用 `calculate_onchain_fee`，避免 transaction-payment 实扣规则与业务 pallet 预扣规则漂移。
+说明：`custom_fee_with_tip` 与 `duoqian-*` 预扣逻辑共用 `calculate_onchain_fee`，避免 transaction-payment 实扣规则与业务 pallet 预扣规则漂移。`mul_perbill_round` 会先拆分整分量和尾量，避免直接执行 `amount * parts`；整分量乘法使用 `saturating_mul` 作为防御性保护，实际按 `Perbill` 约束不会改变结果。
 
 `transfer_all` 特殊说明：
 `OnchainTxAmountExtractor` 对 `transfer_all` 按扣费前的 `reducible_balance` 提取金额。这是有意设计——按用户"转出全部"的意图金额收费，实际转出额 = 可用余额 - 手续费。如果改为按扣费后金额收费会产生循环依赖（手续费取决于转出额，转出额取决于手续费）。
@@ -203,8 +203,8 @@
 - 全节点奖励钱包 resolve 失败路径及对应 `FeeShareBurnt` 事件
 - NRC 账户缺失、NRC resolve 失败路径及对应 `FeeShareBurnt` 事件
 - 安全基金 resolve 失败路径及对应 `FeeShareBurnt` 事件
-- `correct_and_deposit_fee` 不退款语义和 `liquidity_info=None` no-op 语义
-- tip 与 fee 合并后按同一比例分配
+- `correct_and_deposit_fee` 不退款语义和 `liquidity_info=None` no-op 语义；不退款测试同时断言 `AuthorMissing` / `NrcMissing` 两类销毁事件
+- tip 与 fee 合并后按同一比例分配；成功分账路径断言不产生 `FeeShareBurnt`
 
 说明：安全基金账户现在由 `SafetyFundAccountProvider` 注入，Router 热路径不再执行 `NRC_ANQUAN_ADDRESS` decode，也不再保留 decode 失败事件分支。
 

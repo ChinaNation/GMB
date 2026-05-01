@@ -136,6 +136,7 @@ Runtime 注入配置：
 - `rebind_reward_wallet` 当前路径对应 1 次读取 + 1 次写入。
 - `on_finalize` 的预算通过 `on_initialize` 的 `reads_writes(3,4)` 预申报。
 - `src/weights.rs` 已按新增读取做保守补偿；后续重新跑 benchmark 时应以最新结果覆盖。
+- Cargo feature：`runtime-benchmarks` 会向测试/benchmark runtime 使用的 `pallet-balances` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 
 ---
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AddressScanModal } from '../../shared/qr/AddressScanModal';
+import { calculateTransferFeeYuan } from './fee';
 import type { ColdWallet } from './types';
 
 type Props = {
@@ -55,7 +56,7 @@ export function TransferForm({ activeWallet, balance, onSubmit, disabled }: Prop
   const [showScan, setShowScan] = useState(false);
 
   const amount = parseAmount(amountText);
-  const fee = Math.max(amount * 0.001, 0.10);
+  const fee = calculateTransferFeeYuan(amount);
   const total = amount + fee;
   const formDisabled = disabled || !activeWallet;
   const canSubmit = amount > 0 && toAddress.trim().length > 0 && !formDisabled;

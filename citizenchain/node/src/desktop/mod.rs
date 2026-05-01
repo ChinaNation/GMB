@@ -77,6 +77,7 @@ pub fn run_desktop() {
             home::transaction::get_wallet_balance,
             home::transaction::build_transfer_request,
             home::transaction::submit_transfer,
+            home::transaction::submit_miner_transfer,
             // ─── 清算行 offchain tab(ADR-007 Step 2 阶段 B) ───
             crate::offchain::commands::search_eligible_clearing_banks,
             crate::offchain::commands::query_clearing_bank_node_info,

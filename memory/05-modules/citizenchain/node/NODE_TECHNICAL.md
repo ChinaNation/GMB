@@ -55,6 +55,7 @@
 | `mining_gpuHashrate` | GPU 哈希率（仅 gpu-mining feature） |
 | `reward_bindWallet(ss58)` | 节点端签名提交 bind_reward_wallet 交易 |
 | `reward_rebindWallet(ss58)` | 节点端签名提交 rebind_reward_wallet 交易 |
+| `transaction_submitMinerTransfer(ss58, amount_fen, token)` | 节点端使用 `powr` 密钥提交矿工热钱包转账，要求进程内一次性令牌 |
 | `fee_blockFees(block_hash_hex)` | 读取指定区块的 FeePaid 事件累计手续费 |
 | `sync_state_genSyncSpec` | 返回 lightSyncState（自定义实现，替代 BABE 依赖的标准 RPC） |
 
@@ -62,6 +63,7 @@
 - 使用 `powr` keystore 密钥签名
 - spec_version 从链上 WASM 运行时读取（非 native 编译时常量），防止升级后 BadProof
 - TxExtension 与 benchmarking.rs 保持一致
+- 矿工热钱包转账 RPC 额外要求一次性令牌；令牌由桌面 Tauri 命令在设备密码校验通过后生成并由 RPC 消费
 
 ## 4. Chain Spec
 
@@ -132,11 +134,13 @@
 
 ## 8. 安全风险（已知）
 
-### 7.1 RPC 代签无鉴权
+### 7.1 奖励钱包 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
-- **当前缓解**：默认 `--rpc-methods Safe` 限制为本地调用。
+- **当前缓解**：桌面内嵌节点只面向本机端口使用，奖励钱包 RPC 不转移余额。
 - **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
 - **建议**：生产部署必须限制 RPC 绑定地址或加鉴权中间件；或改为节点桌面端本地签名后提交。
+
+矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 
 ### 7.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：

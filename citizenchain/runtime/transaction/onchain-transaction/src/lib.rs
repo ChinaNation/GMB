@@ -441,7 +441,9 @@ fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
 
     // 中文注释：先拆成"整分量"和"小数尾量"分别计算，避免 `amount * parts`
     // 在极大金额下先溢出再饱和，导致费率结果被错误压扁。
-    let whole_component = whole * parts;
+    // 中文注释：按 Perbill 约束 parts 不超过分母，因此 whole * parts <= amount；
+    // 这里仍用饱和乘法防御未来改动破坏该约束。
+    let whole_component = whole.saturating_mul(parts);
     let remainder_component =
         (remainder * parts).saturating_add(PERBILL_DENOMINATOR / 2) / PERBILL_DENOMINATOR;
     whole_component.saturating_add(remainder_component)
@@ -641,15 +643,34 @@ mod tests {
     }
 
     fn has_fee_share_burn_event(reason: pallet::BurnReason, amount: u128) -> bool {
-        System::events().iter().any(|r| {
-            matches!(
-                &r.event,
-                RuntimeEvent::OnchainTransaction(pallet::Event::FeeShareBurnt {
-                    reason: event_reason,
-                    amount: event_amount,
-                }) if *event_reason == reason && *event_amount == amount
-            )
-        })
+        fee_share_burn_event_count(reason, amount) > 0
+    }
+
+    fn fee_share_burn_event_count(reason: pallet::BurnReason, amount: u128) -> usize {
+        System::events()
+            .iter()
+            .filter(|r| {
+                matches!(
+                    &r.event,
+                    RuntimeEvent::OnchainTransaction(pallet::Event::FeeShareBurnt {
+                        reason: event_reason,
+                        amount: event_amount,
+                    }) if *event_reason == reason && *event_amount == amount
+                )
+            })
+            .count()
+    }
+
+    fn fee_share_burn_event_total() -> usize {
+        System::events()
+            .iter()
+            .filter(|r| {
+                matches!(
+                    &r.event,
+                    RuntimeEvent::OnchainTransaction(pallet::Event::FeeShareBurnt { .. })
+                )
+            })
+            .count()
     }
 
     fn has_fee_paid_event() -> bool {
@@ -1308,6 +1329,14 @@ mod tests {
             assert_eq!(Balances::free_balance(&who), 945);
             assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert_eq!(
+                fee_share_burn_event_count(pallet::BurnReason::AuthorMissing, expected_fullnode),
+                1
+            );
+            assert_eq!(
+                fee_share_burn_event_count(pallet::BurnReason::NrcMissing, expected_nrc_split),
+                1
+            );
         });
     }
 
@@ -1413,6 +1442,7 @@ mod tests {
             assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
             assert_eq!(Balances::free_balance(&nrc), expected_nrc);
             assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
+            assert_eq!(fee_share_burn_event_total(), 0);
         });
     }
 }
