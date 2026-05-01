@@ -15,14 +15,14 @@
 - Pending 主体只能通过 `create_pending_subject_internal_proposal` 创建自身激活投票。
 - 管理员集合变更只能通过 `create_admin_set_mutation_internal_proposal` 创建，并与同一治理主体下的普通活跃提案互斥。
 - 创建提案时必须锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
-- 按机构类型（NRC/PRC/PRB/ORG_DUOQIAN）使用对应通过阈值。
+- 国储会、省储会、省储行使用永久固定治理阈值；注册个人多签/机构多签使用主体配置阈值，并在创建提案时写入快照。
 - 达阈值时立即通过；到期未达阈值时自动否决。
 
 ### 0.3 联合投票功能需求
 - 仅允许国储会管理员创建联合提案。
 - 创建提案时必须一次性锁定公民投票总分母及人口快照凭证。
-- 每个机构只能由自己的当前管理员直接参与联合投票，禁止跨机构代投。
-- 链上必须按机构当前管理员阈值自动形成机构结果，不再依赖机构多签地址或线下 approvals proof。
+- 每个机构只能由提案创建时管理员快照中的本机构管理员直接参与联合投票，禁止跨机构代投。
+- 链上必须按治理机构固定阈值自动形成机构结果，不再依赖机构多签地址、注册多签主体阈值或线下 approvals proof。
 - 联合阶段全票通过时立即通过；未全票但已收齐全部机构票权时转入公民投票。
 - 联合阶段超时后，若未全票通过，必须自动进入公民投票阶段。
 - 联合投票在 `STAGE_JOINT` 管理员参与阶段占用所有参与治理主体的普通互斥锁，进入 `STAGE_CITIZEN` 后释放。
@@ -96,7 +96,7 @@ any → unknown
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
-- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值
+- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人多签/机构多签写入主体配置阈值。
 - `JointVotesByAdmin` / `JointInstitutionTallies`
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesByBindingId` / `CitizenTallies`
@@ -131,20 +131,21 @@ any → unknown
 1. 普通业务通过 `do_create_internal_proposal` 创建提案，阶段为 `STAGE_INTERNAL`，只接受 Active 管理员主体，并登记 `Regular` 锁。
 2. 创建多签主体的业务通过 `do_create_pending_subject_internal_proposal` 创建提案，只接受 Pending 管理员主体，并登记 `Regular` 锁。
 3. 管理员集合变更通过 `do_create_admin_set_mutation_internal_proposal` 创建提案，并登记 `AdminSetMutationExclusive` 锁。
-4. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。
+4. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。NRC/PRC/PRB 的快照值来自固定治理常量；ORG_DUOQIAN 的快照值来自 Active/Pending 注册多签主体。
 5. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过。
 6. 达阈值时立即 `Passed`（`set_status_and_emit`）。
 7. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
 
 ### 3.2 联合提案
 1. 通过 `do_create_joint_proposal` 创建提案，阶段为 `STAGE_JOINT`，并为所有参与机构登记 `Regular` 锁。
-2. `joint_vote` 由机构当前管理员个人钱包直接上链投票：
+2. `joint_vote` 由提案管理员快照中的机构管理员个人钱包直接上链投票：
    - `proposal_id + institution + who` 只能投一次
    - 仅允许当前机构管理员投票
    - 投票结果立即写入 `JointVotesByAdmin`
 3. 链上同步维护 `JointInstitutionTallies`：
-   - `yes >= institution_threshold` 时，自动把该机构结果记为 `approved`
-   - `yes + remaining_admins < institution_threshold` 时，自动把该机构结果记为 `rejected`
+   - `yes >= fixed_governance_threshold` 时，自动把该机构结果记为 `approved`
+   - `yes + remaining_admins < fixed_governance_threshold` 时，自动把该机构结果记为 `rejected`
+   - 联合投票永远只覆盖国储会、省储会、省储行，不读取 ORG_DUOQIAN 注册多签主体阈值，也不新增联合阈值快照。
 4. 机构结果形成后写入 `JointVotesByInstitution`，并按机构权重累计到 `JointTallies`。
 5. 联合全票通过则立即 `Passed`。
 6. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`，并释放管理员阶段互斥锁。
@@ -252,11 +253,20 @@ any → unknown
 
 ### 5.9 联合投票自动机构结算
 `joint_vote` 不再接收线下 approvals proof，而是直接接收管理员个人钱包的链上投票：
-- 仅允许当前机构管理员投票
+- 仅允许提案管理员快照中的本机构管理员投票
 - 同一管理员对同一 `proposal_id + institution` 只能投一次
-- 赞成票达到机构阈值时，自动形成该机构 `approved`
-- 剩余管理员已不足以让赞成达到阈值时，自动形成该机构 `rejected`
+- 赞成票达到固定治理阈值时，自动形成该机构 `approved`
+- 剩余管理员已不足以让赞成达到固定治理阈值时，自动形成该机构 `rejected`
 - 任一机构 `rejected` 后，联合阶段立即结束并进入公民投票
+
+### 5.9.1 治理固定阈值与注册多签动态阈值边界
+阈值来源按主体类型硬隔离：
+
+- 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
+- 联合投票不调用 `InternalThresholdProvider::pass_threshold`，避免把注册多签主体阈值误用于治理联合投票。
+- NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
+- ORG_DUOQIAN 注册个人多签/机构多签的阈值由注册主体配置提供；创建 Active/Pending 内部提案时写入 `InternalThresholdSnapshot`，投票期间只读快照。
+- 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 
 ### 5.10 Proposal ID 年份边界
 `allocate_proposal_id` 的年份段按 UTC 公历年计算：
