@@ -2083,13 +2083,26 @@ pub struct RuntimeInternalThresholdProvider;
 
 impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
     fn pass_threshold(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
-        admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
+        match org {
+            voting_engine::internal_vote::ORG_NRC
+            | voting_engine::internal_vote::ORG_PRC
+            | voting_engine::internal_vote::ORG_PRB => {
+                voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+            }
+            voting_engine::internal_vote::ORG_DUOQIAN => {
+                admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
+            }
+            _ => None,
+        }
     }
 
     fn pending_pass_threshold(
         org: u8,
         institution: voting_engine::InstitutionPalletId,
     ) -> Option<u32> {
+        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+            return None;
+        }
         admins_change::Pallet::<Runtime>::pending_subject_threshold_for_snapshot(org, institution)
     }
 }

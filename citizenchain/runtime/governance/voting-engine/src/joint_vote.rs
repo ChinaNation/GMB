@@ -17,14 +17,13 @@ use primitives::count_const::{
 };
 
 use crate::{
-    internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
+    internal_vote::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
     pallet::{
         Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
         JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
     InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
-    InternalThresholdProvider, PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT,
-    STAGE_JOINT, STATUS_PASSED,
+    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use crate::nrc_pallet_id_bytes;
@@ -304,8 +303,10 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        let threshold = T::InternalThresholdProvider::pass_threshold(org, institution)
-            .ok_or(Error::<T>::InvalidInstitution)?;
+        // 中文注释：联合投票永远只覆盖国储会、省储会、省储行。
+        // 三类治理机构阈值是制度常量，不读取注册多签主体阈值，也不做提案级阈值快照。
+        let threshold =
+            fixed_governance_pass_threshold(org).ok_or(Error::<T>::InvalidInstitution)?;
         // 中文注释：admin_count 从快照取，保证阈值计算不受管理员更换影响。
         let admin_count = Self::snapshot_admin_count(proposal_id, institution)
             .ok_or(Error::<T>::InvalidInstitution)?;

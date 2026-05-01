@@ -379,21 +379,21 @@ impl InternalAdminCountProvider for () {
     }
 }
 
-/// 内部投票阈值动态提供器。
-/// 生产 runtime 由 admins-change 统一主体表提供；默认实现仅供独立测试治理机构使用。
+/// 注册多签内部投票阈值提供器。
+/// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接注册多签主体阈值。
 pub trait InternalThresholdProvider {
     fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32>;
 
-    /// Pending 主体创建投票使用的阈值。普通业务不得通过此方法授权。
+    /// Pending 注册多签主体创建投票使用的阈值。普通业务不得通过此方法授权。
     fn pending_pass_threshold(_org: u8, _institution: InstitutionPalletId) -> Option<u32> {
         None
     }
 }
 
-/// 默认实现：仅支持治理机构的硬编码阈值。
+/// 默认实现：仅支持治理机构的固定制度阈值，注册多签主体需要 runtime 注入真实 Provider。
 impl InternalThresholdProvider for () {
     fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-        internal_vote::governance_org_pass_threshold(org)
+        internal_vote::fixed_governance_pass_threshold(org)
     }
 }
 
@@ -1856,6 +1856,9 @@ mod tests {
     thread_local! {
         static INTERNAL_CALLBACK_LOG: RefCell<Vec<(u64, bool)>> = const { RefCell::new(Vec::new()) };
     }
+    thread_local! {
+        static REGISTERED_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(3) };
+    }
 
     pub struct TestSfidEligibility;
     pub struct TestPopulationSnapshotVerifier;
@@ -1874,6 +1877,22 @@ mod tests {
             1 => AccountId32::new([92u8; 32]),
             _ => AccountId32::new([93u8; 32]),
         }
+    }
+
+    fn registered_subject_institution() -> InstitutionPalletId {
+        [78u8; 48]
+    }
+
+    fn registered_subject_admin(index: usize) -> AccountId32 {
+        match index {
+            0 => AccountId32::new([81u8; 32]),
+            1 => AccountId32::new([82u8; 32]),
+            _ => AccountId32::new([83u8; 32]),
+        }
+    }
+
+    fn set_registered_duoqian_threshold(threshold: u32) {
+        REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = threshold);
     }
 
     impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -1896,6 +1915,16 @@ mod tests {
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
+                internal_vote::ORG_DUOQIAN => {
+                    institution == registered_subject_institution()
+                        && [
+                            registered_subject_admin(0),
+                            registered_subject_admin(1),
+                            registered_subject_admin(2),
+                        ]
+                        .iter()
+                        .any(|admin| admin == who)
+                }
                 _ => false,
             }
         }
@@ -1925,6 +1954,13 @@ mod tests {
                             .map(AccountId32::new)
                             .collect()
                     }),
+                internal_vote::ORG_DUOQIAN if institution == registered_subject_institution() => {
+                    Some(sp_std::vec![
+                        registered_subject_admin(0),
+                        registered_subject_admin(1),
+                        registered_subject_admin(2),
+                    ])
+                }
                 _ => None,
             }
         }
@@ -1956,8 +1992,19 @@ mod tests {
     }
 
     impl InternalThresholdProvider for TestInternalThresholdProvider {
-        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            internal_vote::governance_org_pass_threshold(org)
+        fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+            if org == internal_vote::ORG_DUOQIAN && institution == registered_subject_institution()
+            {
+                return REGISTERED_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()));
+            }
+            // 中文注释：治理机构返回“毒化阈值”，用于证明治理投票不再依赖动态 Provider。
+            if matches!(
+                org,
+                internal_vote::ORG_NRC | internal_vote::ORG_PRC | internal_vote::ORG_PRB
+            ) {
+                return Some(1);
+            }
+            None
         }
 
         fn pending_pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
@@ -2095,6 +2142,7 @@ mod tests {
             TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
             JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
             JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
+            REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 3);
             System::set_block_number(1);
         });
         ext
@@ -2488,6 +2536,23 @@ mod tests {
     }
 
     #[test]
+    fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 中文注释：测试 Provider 对治理机构故意返回 1，这里必须仍写入固定治理阈值。
+            assert_eq!(
+                InternalThresholdSnapshot::<Test>::get(proposal_id),
+                Some(primitives::count_const::NRC_INTERNAL_THRESHOLD)
+            );
+        });
+    }
+
+    #[test]
     fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
         new_test_ext().execute_with(|| {
             let proposal_id = create_pending_subject_proposal_via_engine(
@@ -2523,6 +2588,50 @@ mod tests {
             assert_eq!(
                 VotingEngine::proposals(proposal_id)
                     .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
+        new_test_ext().execute_with(|| {
+            set_registered_duoqian_threshold(3);
+            let proposal_id = create_internal_proposal_via_engine(
+                registered_subject_admin(0),
+                internal_vote::ORG_DUOQIAN,
+                registered_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
+            set_registered_duoqian_threshold(2);
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(1),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(2),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
                     .status,
                 STATUS_PASSED
             );
@@ -2960,6 +3069,47 @@ mod tests {
             assert_noop!(
                 submit_joint_vote(nrc_admin(0), proposal_id, nrc_pid(), true),
                 pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_uses_fixed_governance_threshold_not_provider() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                )
+                .expect("joint proposal should be created");
+
+            // 中文注释：测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+            assert_eq!(
+                JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+                None
+            );
+
+            for i in 1..primitives::count_const::NRC_INTERNAL_THRESHOLD as usize {
+                assert_ok!(submit_joint_vote(
+                    nrc_admin(i),
+                    proposal_id,
+                    nrc_pid(),
+                    true
+                ));
+            }
+            assert_eq!(
+                JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+                Some(true)
             );
         });
     }

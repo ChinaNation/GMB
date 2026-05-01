@@ -35,14 +35,20 @@ pub fn is_valid_org(org: u8) -> bool {
     matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_DUOQIAN)
 }
 
-/// 治理机构（NRC/PRC/PRB）的硬编码阈值，供 `InternalThresholdProvider` 默认实现使用。
-pub fn governance_org_pass_threshold(org: u8) -> Option<u32> {
+/// 治理机构（NRC/PRC/PRB）的固定制度阈值。
+/// 中文注释：国储会、省储会、省储行阈值是永久治理常量，不读取注册多签主体配置。
+pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
     match org {
         ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
         ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
         ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
         _ => None,
     }
+}
+
+/// 兼容旧调用名；语义等同于 `fixed_governance_pass_threshold`。
+pub fn governance_org_pass_threshold(org: u8) -> Option<u32> {
+    fixed_governance_pass_threshold(org)
 }
 
 use crate::nrc_pallet_id_bytes;
@@ -137,10 +143,20 @@ fn internal_threshold<T: Config>(
     institution: InstitutionPalletId,
     pending_subject: bool,
 ) -> Option<u32> {
-    if pending_subject {
-        T::InternalThresholdProvider::pending_pass_threshold(org, institution)
-    } else {
-        T::InternalThresholdProvider::pass_threshold(org, institution)
+    match org {
+        ORG_NRC | ORG_PRC | ORG_PRB => {
+            // 中文注释：三类治理机构阈值是制度常量，内部提案创建时也只快照固定值。
+            fixed_governance_pass_threshold(org)
+        }
+        ORG_DUOQIAN if pending_subject => {
+            // 中文注释：注册多签激活投票读取 Pending 主体阈值，并在创建时写入快照。
+            T::InternalThresholdProvider::pending_pass_threshold(org, institution)
+        }
+        ORG_DUOQIAN => {
+            // 中文注释：已激活注册多签读取主体配置阈值，并在创建时写入快照。
+            T::InternalThresholdProvider::pass_threshold(org, institution)
+        }
+        _ => None,
     }
 }
 

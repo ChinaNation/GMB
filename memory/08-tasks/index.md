@@ -1,6 +1,7 @@
 # 任务索引
 
 ## open
+
 - `memory/08-tasks/open/20260321-084304-统一本地调试时-sfid-后端监听地址与手机访问地址-修复提交升级提案时人口快照接口连接超时问题.md`
 - `memory/08-tasks/open/20260321-095406-检查区块链所需的人口快照数据与sfid实际提供的人口快照数据是否对齐.md`
 - `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
@@ -43,16 +44,11 @@
 - `memory/08-tasks/open/20260430-102248-分析-citizenchain-runtime-governance-下每个模块的功能边界-并重点明确-admins-change-与-voting-engine-的功能边界.md`
 - `memory/08-tasks/open/20260430-110243-重构-wallet-目录为一层子目录结构-ui-页面迁移到-pages-ui-cards-组件迁移到-widgets-同步引用-测试和文档.md`
 - `memory/08-tasks/open/20260430-110408-只读审查管理员更换模块-admins-change-是否存在漏洞-需要改进的地方和残留.md`
+- `memory/08-tasks/open/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
 - `memory/08-tasks/open/20260430-wuminapp-onchain-move.md`
 
 ## done
 
-- `memory/08-tasks/done/20260430-165708-核验-voting-engine-unix-seconds-to-year-元旦附近年份错分问题.md`
-- `memory/08-tasks/done/20260430-161713-p1-voting-status-state-machine.md`
-- `memory/08-tasks/done/20260430-154307-p2-p3-voting-finalized-transaction.md`
-- `memory/08-tasks/done/20260430-145704-p1-admins-change-mutex.md`
-- `memory/08-tasks/done/20260430-140612-p2-admins-change-proposal-consistency.md`
-- `memory/08-tasks/done/20260430-132721-p2-pending-api-active-snapshot.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -198,4 +194,12 @@
 - `memory/08-tasks/done/20260430-120900-把官网的更新部署到服务器-64-181-239-233.md`
 - `memory/08-tasks/done/20260430-124640-恢复-wuminapp-交易-tab-四个独立入口.md`
 - `memory/08-tasks/done/20260430-131327-修复交易页恢复原-ui-仅新增个人多签和机构多签入口.md`
+- `memory/08-tasks/done/20260430-132721-p2-pending-api-active-snapshot.md`
+- `memory/08-tasks/done/20260430-140612-p2-admins-change-proposal-consistency.md`
+- `memory/08-tasks/done/20260430-145704-p1-admins-change-mutex.md`
+- `memory/08-tasks/done/20260430-154307-p2-p3-voting-finalized-transaction.md`
+- `memory/08-tasks/done/20260430-161713-p1-voting-status-state-machine.md`
+- `memory/08-tasks/done/20260430-165708-核验-voting-engine-unix-seconds-to-year-元旦附近年份错分问题.md`
+- `memory/08-tasks/done/20260430-174943-检查-joint-vote-rs-联合投票阈值是否动态读取而未使用快照-确认是否存在一致性裂缝.md`
+- `memory/08-tasks/done/20260430-182001-按正确边界改造联合投票固定治理阈值-注册多签继续动态阈值并创建时快照-暂不升级-runtime.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`
