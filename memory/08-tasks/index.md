@@ -44,11 +44,12 @@
 - `memory/08-tasks/open/20260430-102248-分析-citizenchain-runtime-governance-下每个模块的功能边界-并重点明确-admins-change-与-voting-engine-的功能边界.md`
 - `memory/08-tasks/open/20260430-110243-重构-wallet-目录为一层子目录结构-ui-页面迁移到-pages-ui-cards-组件迁移到-widgets-同步引用-测试和文档.md`
 - `memory/08-tasks/open/20260430-110408-只读审查管理员更换模块-admins-change-是否存在漏洞-需要改进的地方和残留.md`
-- `memory/08-tasks/open/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
+- `memory/08-tasks/open/20260430-185906-检查-governance-proposal-cleanup-schedule-cleanup-连续队列满后是否导致提案存储永久不清理.md`
 - `memory/08-tasks/open/20260430-wuminapp-onchain-move.md`
 
 ## done
 
+- `memory/08-tasks/done/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`

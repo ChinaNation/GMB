@@ -30,8 +30,8 @@ use primitives::count_const::{
 };
 use voting_engine::{
     internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL,
-    STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome,
+    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -406,16 +406,6 @@ pub mod pallet {
 
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
-                let proposal_id =
-                    match T::InternalVoteEngine::create_admin_set_mutation_internal_proposal(
-                        who.clone(),
-                        org,
-                        institution,
-                    ) {
-                        Ok(proposal_id) => proposal_id,
-                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                    };
-
                 let action = AdminReplacementAction {
                     institution,
                     old_admin: old_admin.clone(),
@@ -423,15 +413,16 @@ pub mod pallet {
                 };
                 let mut encoded = Vec::from(crate::MODULE_TAG);
                 encoded.extend_from_slice(&action.encode());
-                if let Err(err) =
-                    voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)
-                {
-                    return TransactionOutcome::Rollback(Err(err));
-                }
-                voting_engine::Pallet::<T>::store_proposal_meta(
-                    proposal_id,
-                    frame_system::Pallet::<T>::block_number(),
-                );
+                let proposal_id = match T::InternalVoteEngine::create_admin_set_mutation_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    encoded,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
 
                 Self::deposit_event(Event::<T>::AdminReplacementProposed {
                     proposal_id,
@@ -453,8 +444,8 @@ pub mod pallet {
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_admin_replacement())]
         pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::try_execute_replacement(proposal_id)
+            let who = ensure_signed(origin)?;
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
     }
 
@@ -706,34 +697,9 @@ pub mod pallet {
             Some(subject.admins.len() as u32)
         }
 
-        /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
-        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        fn load_proposal_data(proposal_id: u64) -> Option<AdminReplacementAction<T::AccountId>> {
-            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)?;
-            let tag = crate::MODULE_TAG;
-            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
-                return None;
-            }
-            AdminReplacementAction::decode(&mut &raw[tag.len()..]).ok()
-        }
-
-        pub(crate) fn try_execute_replacement(proposal_id: u64) -> DispatchResult {
-            let action =
-                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            Self::try_execute_replacement_from_action(proposal_id, action)
-        }
-
         pub(crate) fn try_execute_replacement_from_action(
             proposal_id: u64,
             action: AdminReplacementAction<T::AccountId>,
-        ) -> DispatchResult {
-            Self::try_execute_replacement_from_action_with_finalizer(proposal_id, action, false)
-        }
-
-        pub(crate) fn try_execute_replacement_from_action_with_finalizer(
-            proposal_id: u64,
-            action: AdminReplacementAction<T::AccountId>,
-            callback_context: bool,
         ) -> DispatchResult {
             // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -802,16 +768,6 @@ pub mod pallet {
                 new_admin: action.new_admin,
             });
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Ok(())
         }
     }
@@ -832,16 +788,19 @@ pub mod pallet {
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         // Step 1:认领 — 检查 ProposalData 是否以 MODULE_TAG 开头。
         let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(()), // 非本模块提案
+            _ => return Ok(ProposalExecutionOutcome::Ignored), // 非本模块提案
         };
 
         if !approved {
             // 否决:无独立存储需清理(ProposalData 由投票引擎延迟清理)。
-            return Ok(());
+            return Ok(ProposalExecutionOutcome::Executed);
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
@@ -849,29 +808,16 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             AdminReplacementAction::<T::AccountId>::decode(&mut &raw[crate::MODULE_TAG.len()..])
                 .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-        // Step 3:打业务执行时间戳(首次进入 PASSED)。
-        voting_engine::Pallet::<T>::set_proposal_passed(
-            proposal_id,
-            frame_system::Pallet::<T>::block_number(),
-        );
-
-        // Step 4:执行替换。失败进入执行失败终态,不保留可跨时期重试的 PASSED 提案。
-        if pallet::Pallet::<T>::try_execute_replacement_from_action_with_finalizer(
-            proposal_id,
-            action,
-            true,
-        )
-        .is_err()
-        {
-            voting_engine::Pallet::<T>::set_callback_execution_result(
-                proposal_id,
-                STATUS_EXECUTION_FAILED,
-            )?;
-            pallet::Pallet::<T>::deposit_event(
-                pallet::Event::<T>::AdminReplacementExecutionFailed { proposal_id },
-            );
+        // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。
+        match pallet::Pallet::<T>::try_execute_replacement_from_action(proposal_id, action) {
+            Ok(()) => Ok(ProposalExecutionOutcome::Executed),
+            Err(_) => {
+                pallet::Pallet::<T>::deposit_event(
+                    pallet::Event::<T>::AdminReplacementExecutionFailed { proposal_id },
+                );
+                Ok(ProposalExecutionOutcome::FatalFailed)
+            }
         }
-        Ok(())
     }
 }
 
@@ -889,7 +835,8 @@ mod tests {
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use voting_engine::{
         internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
-        InternalVoteEngine, STATUS_PASSED, STATUS_REJECTED,
+        InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
+        STATUS_REJECTED,
     };
 
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -1002,6 +949,10 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -1083,6 +1034,16 @@ mod tests {
             let proposal = maybe.as_mut().expect("proposal should exist");
             proposal.status = STATUS_PASSED;
         });
+        let now = System::block_number();
+        voting_engine::ProposalExecutionRetryStates::<Test>::insert(
+            proposal_id,
+            voting_engine::ExecutionRetryState {
+                manual_attempts: 0,
+                first_auto_failed_at: now,
+                retry_deadline: now,
+                last_attempt_at: None,
+            },
+        );
     }
 
     /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 后的统一入口)。
@@ -1444,7 +1405,7 @@ mod tests {
                 .expect("should decode");
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -1545,7 +1506,7 @@ mod tests {
 
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -1643,7 +1604,7 @@ mod tests {
 
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
             let admins = current_admins(institution);
             assert!(!admins.iter().any(|a| a == &new_admin));
@@ -1672,7 +1633,7 @@ mod tests {
             });
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::InvalidProposalKind
+                voting_engine::pallet::Error::<Test>::ProposalOwnerMissing
             );
 
             voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
@@ -1680,9 +1641,15 @@ mod tests {
                 proposal.kind = voting_engine::PROPOSAL_KIND_INTERNAL;
                 proposal.stage = voting_engine::STAGE_JOINT;
             });
-            assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::InvalidProposalStage
+            assert_ok!(AdminsChange::execute_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid
+            ));
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTION_FAILED
             );
         });
     }
@@ -1708,7 +1675,7 @@ mod tests {
             });
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalInstitutionMismatch
+                voting_engine::pallet::Error::<Test>::NoPermission
             );
 
             voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
@@ -1716,9 +1683,15 @@ mod tests {
                 proposal.internal_institution = Some(institution);
                 proposal.internal_org = Some(ORG_PRC);
             });
-            assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalOrgMismatch
+            assert_ok!(AdminsChange::execute_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid
+            ));
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTION_FAILED
             );
         });
     }

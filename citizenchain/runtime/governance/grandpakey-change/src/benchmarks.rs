@@ -50,10 +50,23 @@ fn propose<T: pallet::Config>(
     .is_ok());
 }
 
-/// 用引擎低级接口直接把提案推到 PASSED(绕开投票路径;benchmark 只测
-/// execute / cancel 本身的开销)。
+/// 准备统一重试状态(绕开投票路径;benchmark 只测 execute / cancel 本身的开销)。
 fn pass_proposal<T: pallet::Config>(proposal_id: u64) {
-    assert!(voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok());
+    voting_engine::Proposals::<T>::mutate(proposal_id, |maybe| {
+        if let Some(proposal) = maybe {
+            proposal.status = STATUS_PASSED;
+        }
+    });
+    let now = frame_system::Pallet::<T>::block_number();
+    voting_engine::ProposalExecutionRetryStates::<T>::insert(
+        proposal_id,
+        voting_engine::ExecutionRetryState {
+            manual_attempts: 0,
+            first_auto_failed_at: now,
+            retry_deadline: now,
+            last_attempt_at: None,
+        },
+    );
 }
 
 #[benchmarks]
@@ -105,7 +118,8 @@ mod benchmarks {
         action.old_key = seeded_public_key(250);
         let mut new_data = sp_runtime::sp_std::vec::Vec::from(tag);
         new_data.extend_from_slice(&action.encode());
-        voting_engine::Pallet::<T>::store_proposal_data(0, new_data).expect("store should succeed");
+        voting_engine::Pallet::<T>::update_proposal_data(0, crate::MODULE_TAG, new_data)
+            .expect("store should succeed");
 
         #[extrinsic_call]
         cancel_failed_replace_grandpa_key(RawOrigin::Signed(caller), 0);

@@ -58,20 +58,6 @@ impl<T: Config> Pallet<T> {
         // 中文注释：联合投票提案创建、业务数据写入和计数递增必须原子提交；
         // 任一步失败都不能留下孤儿提案或错误的 VotingProposalCount。
         with_transaction(|| {
-            let proposal_id = match T::JointVoteEngine::create_joint_proposal(
-                proposer.clone(),
-                eligible_total,
-                snapshot_nonce.as_slice(),
-                signature.as_slice(),
-            ) {
-                Ok(id) => id,
-                Err(_) => {
-                    return TransactionOutcome::Rollback(Err(
-                        Error::<T>::JointVoteCreateFailed.into()
-                    ))
-                }
-            };
-
             let data = IssuanceProposalData {
                 proposer: proposer.clone(),
                 reason: reason.to_vec(),
@@ -80,13 +66,21 @@ impl<T: Config> Pallet<T> {
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&data.encode());
-            if voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded).is_err() {
-                return TransactionOutcome::Rollback(Err(
-                    Error::<T>::ProposalDataStoreFailed.into()
-                ));
-            }
-            let now = frame_system::Pallet::<T>::block_number();
-            voting_engine::Pallet::<T>::store_proposal_meta(proposal_id, now);
+            let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
+                proposer.clone(),
+                eligible_total,
+                snapshot_nonce.as_slice(),
+                signature.as_slice(),
+                crate::MODULE_TAG,
+                encoded,
+            ) {
+                Ok(id) => id,
+                Err(_) => {
+                    return TransactionOutcome::Rollback(Err(
+                        Error::<T>::JointVoteCreateFailed.into()
+                    ))
+                }
+            };
 
             if let Err(err) = Self::increment_voting_proposal_count() {
                 return TransactionOutcome::Rollback(Err(err));

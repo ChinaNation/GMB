@@ -105,11 +105,10 @@ Runtime 配置位置：
 流程：
 1. 校验 `ProposeOrigin`（`EnsureJointProposer`）。
 2. 校验 `reason` 与 `code` 非空。
-3. 调用 `JointVoteEngine::create_joint_proposal` 创建联合投票，获取统一 `proposal_id`。
-4. 计算 `code_hash`，构造摘要 `Proposal` 并序列化存入 `ProposalData`。
-5. 将原始 wasm 写入 `store_proposal_object(proposal_id, kind=1, code)`。
-6. 调用 `store_proposal_meta` 记录创建时间。
-7. 发出 `RuntimeUpgradeProposed` 事件。
+3. 计算 `code_hash`，构造摘要 `Proposal` 并加 `MODULE_TAG` 序列化。
+4. 调用 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票，并在同一事务中写入 owner/data/meta。
+5. 将原始 wasm 通过 `store_proposal_object_for(proposal_id, MODULE_TAG, kind=1, code)` 写入对象层。
+6. 发出 `RuntimeUpgradeProposed` 事件。
 
 ### 5.2 `finalize_joint_vote`（call index = 1）
 说明：
@@ -126,8 +125,8 @@ Runtime 配置位置：
 4. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
-   - 成功：标记 `Passed`，在投票引擎回调作用域内静默写为 `STATUS_EXECUTED`
-   - 失败：标记 `ExecutionFailed`，在投票引擎回调作用域内静默写为 `STATUS_EXECUTION_FAILED`
+   - 成功：标记 `Passed`，回调返回 `ProposalExecutionOutcome::Executed`
+   - 失败：标记 `ExecutionFailed`，回调返回 `ProposalExecutionOutcome::FatalFailed`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
 5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
@@ -152,10 +151,10 @@ Runtime 配置位置：
 
 - 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`
 - 联合投票拒绝时，投票引擎保持 `STATUS_REJECTED`
-- runtime code 执行成功时，本模块通过 `set_callback_execution_result(STATUS_EXECUTED)` 静默写入执行成功终态
-- runtime code 执行失败时，本模块通过 `set_callback_execution_result(STATUS_EXECUTION_FAILED)` 静默写入执行失败终态
+- runtime code 执行成功时，本模块返回 `ProposalExecutionOutcome::Executed`，投票引擎写入执行成功终态
+- runtime code 执行失败时，本模块返回 `ProposalExecutionOutcome::FatalFailed`，投票引擎写入执行失败终态
 
-原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只静默写执行结果，最终 `ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
+原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只返回统一执行结果，最终状态、`ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
 
 提案状态流转（投票引擎侧）：
 - `VOTING → PASSED → EXECUTED`（联合投票通过且 runtime code 执行成功）
@@ -175,6 +174,7 @@ Runtime 配置位置：
 `JointVoteResultCallback::on_joint_vote_finalized`：
 1. 接收投票引擎统一的 `proposal_id`（无需映射反查）
 2. 调用 `apply_joint_vote_result(proposal_id, approved)`
+3. 返回 `ProposalExecutionOutcome`，由投票引擎统一推进状态
 
 Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolution-issuance`，再尝试 `runtime-upgrade`。
 
@@ -223,7 +223,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - `RuntimeCodeExecutor` 职责边界
 - `ProposalStatus` 各状态语义
 - 联合投票通过后的执行/失败分叉
-- `STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 静默写入投票引擎状态的原因
+- `ProposalExecutionOutcome::Executed / FatalFailed` 与投票引擎状态的映射原因
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
