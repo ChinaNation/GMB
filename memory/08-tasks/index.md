@@ -44,7 +44,6 @@
 - `memory/08-tasks/open/20260430-102248-分析-citizenchain-runtime-governance-下每个模块的功能边界-并重点明确-admins-change-与-voting-engine-的功能边界.md`
 - `memory/08-tasks/open/20260430-110243-重构-wallet-目录为一层子目录结构-ui-页面迁移到-pages-ui-cards-组件迁移到-widgets-同步引用-测试和文档.md`
 - `memory/08-tasks/open/20260430-110408-只读审查管理员更换模块-admins-change-是否存在漏洞-需要改进的地方和残留.md`
-- `memory/08-tasks/open/20260430-185906-检查-governance-proposal-cleanup-schedule-cleanup-连续队列满后是否导致提案存储永久不清理.md`
 - `memory/08-tasks/open/20260430-wuminapp-onchain-move.md`
 
 ## done
@@ -203,6 +202,7 @@
 - `memory/08-tasks/done/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
 - `memory/08-tasks/done/20260430-174943-检查-joint-vote-rs-联合投票阈值是否动态读取而未使用快照-确认是否存在一致性裂缝.md`
 - `memory/08-tasks/done/20260430-182001-按正确边界改造联合投票固定治理阈值-注册多签继续动态阈值并创建时快照-暂不升级-runtime.md`
+- `memory/08-tasks/done/20260430-185906-检查-governance-proposal-cleanup-schedule-cleanup-连续队列满后是否导致提案存储永久不清理.md`
 - `memory/08-tasks/done/20260430-200621-修复-voting-engine-权限和重试残留.md`
 - `memory/08-tasks/done/20260430-204134-修复-admins-change-close-subject-禁止关闭内置治理机构.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`

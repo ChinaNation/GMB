@@ -8,7 +8,7 @@
 //! - 提案完成（通过/拒绝/过期）时，调用 `schedule_cleanup` 注册延迟清理
 //! - 清理时间 = 完成时区块 + 90 天区块数
 //! - 每个区块 `on_initialize` 检查 `CleanupQueue[当前区块]`，到期后触发清理
-//! - 每区块最多触发 `MAX_TRIGGERS_PER_BLOCK` 个提案进入清理流程
+//! - 单个到期桶最多 50 个提案，全部有界触发进入分块清理状态机
 //!
 //! ## 清理执行
 //!
@@ -32,11 +32,8 @@ use sp_runtime::traits::{One, Saturating};
 /// 提案完成后保留天数。
 const RETENTION_DAYS: u32 = 90;
 
-/// 每区块最多从 CleanupQueue 触发清理的提案数量。
-const MAX_TRIGGERS_PER_BLOCK: u32 = 5;
-
-/// CleanupQueue 单个区块的 BoundedVec 上限。
-const QUEUE_CAPACITY: u32 = 50;
+/// 最多向后查找多少个清理桶。
+const MAX_CLEANUP_SCHEDULE_OFFSET: u32 = 100;
 
 /// 计算保留期限对应的区块数。
 fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
@@ -46,8 +43,8 @@ fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
 }
 
 /// 注册延迟清理：提案完成时调用，90 天后自动清理。
-/// 如果目标区块的队列已满（50 个），自动顺延到下一个区块，保证不丢失。
-/// 连续 100 个区块都满时返回错误（实际几乎不可能发生）。
+/// 如果目标区块的队列已满（50 个），自动顺延到下一个区块。
+/// 连续 100 个区块都满时返回错误，调用方必须回滚终态写入。
 pub fn schedule_cleanup<T: Config>(
     proposal_id: u64,
     current_block: BlockNumberFor<T>,
@@ -55,26 +52,25 @@ pub fn schedule_cleanup<T: Config>(
     let base = current_block.saturating_add(retention_blocks::<T>());
     let mut target = base;
 
-    // 尝试最多 100 个区块的偏移，找到有空位的队列
-    for _ in 0..100u32 {
-        let success =
-            pallet::CleanupQueue::<T>::mutate(target, |ids| ids.try_push(proposal_id).is_ok());
-        if success {
+    // 中文注释：只有真实写入 CleanupQueue 后才返回成功，避免终态提案静默失去清理入口。
+    for _ in 0..MAX_CLEANUP_SCHEDULE_OFFSET {
+        if pallet::CleanupQueue::<T>::try_mutate(target, |ids| {
+            ids.try_push(proposal_id)
+                .map_err(|_| pallet::Error::<T>::CleanupQueueFull)
+        })
+        .is_ok()
+        {
             return Ok(());
         }
         target = target.saturating_add(BlockNumberFor::<T>::one());
     }
 
-    // 极端情况：连续 100 个区块都满了（几乎不可能）。
-    // 使用 defensive! 在 debug/test 模式下 panic 提示开发者，生产模式仅记录日志。
-    // 数据不会被清理但不影响链运行。
-    frame_support::defensive!("schedule_cleanup: all queues full, proposal may not be cleaned up");
-    Ok(())
+    Err(pallet::Error::<T>::CleanupQueueFull.into())
 }
 
 /// 在 `on_initialize` 中调用。
 /// 检查当前区块是否有到期清理任务，有则触发（注册到 PendingProposalCleanups）。
-/// 未处理完的保留在队列中，下个区块继续。
+/// 单桶容量固定为 50，因此当前桶全部触发，投票明细删除仍由后续状态机分块执行。
 pub fn process_cleanup_queue<T: Config>(now: BlockNumberFor<T>) -> Weight {
     let db_weight = T::DbWeight::get();
     let mut weight = db_weight.reads(1); // 读取 CleanupQueue[now]
@@ -84,30 +80,12 @@ pub fn process_cleanup_queue<T: Config>(now: BlockNumberFor<T>) -> Weight {
         return weight;
     }
 
-    let total = queue.len();
-    let to_process = core::cmp::min(total, MAX_TRIGGERS_PER_BLOCK as usize);
-
-    for i in 0..to_process {
-        let proposal_id = queue[i];
+    for proposal_id in queue {
         weight = weight.saturating_add(trigger_cleanup::<T>(proposal_id));
     }
 
-    if to_process >= total {
-        // 全部处理完，删除队列条目
-        pallet::CleanupQueue::<T>::remove(now);
-        weight = weight.saturating_add(db_weight.writes(1));
-    } else {
-        // 未处理完，保留剩余部分
-        let remaining: BoundedVec<u64, ConstU32<QUEUE_CAPACITY>> = queue
-            .into_inner()
-            .into_iter()
-            .skip(to_process)
-            .collect::<sp_std::vec::Vec<_>>()
-            .try_into()
-            .unwrap_or_default();
-        pallet::CleanupQueue::<T>::insert(now, remaining);
-        weight = weight.saturating_add(db_weight.writes(1));
-    }
+    pallet::CleanupQueue::<T>::remove(now);
+    weight = weight.saturating_add(db_weight.writes(1));
 
     weight
 }
