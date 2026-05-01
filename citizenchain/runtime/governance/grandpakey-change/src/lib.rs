@@ -152,7 +152,8 @@ pub mod pallet {
             let onchain = Pallet::<T>::on_chain_storage_version();
             if onchain < 2 {
                 let mut reads: u64 = 1;
-                let mut writes: u64 = 1;
+                let clear_result = GrandpaKeyOwnerByKey::<T>::clear(u32::MAX, None);
+                let mut writes: u64 = 1u64.saturating_add(clear_result.unique as u64);
                 for (inst, key) in CurrentGrandpaKeys::<T>::iter() {
                     reads = reads.saturating_add(1);
                     GrandpaKeyOwnerByKey::<T>::insert(key, inst);
@@ -162,6 +163,53 @@ pub mod pallet {
                 return T::DbWeight::get().reads_writes(reads, writes);
             }
             Weight::zero()
+        }
+
+        #[cfg(feature = "try-runtime")]
+        fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
+            let mut seen = sp_std::collections::btree_set::BTreeSet::new();
+            let mut count: u32 = 0;
+            for (_inst, key) in CurrentGrandpaKeys::<T>::iter() {
+                ensure!(
+                    seen.insert(key),
+                    "CurrentGrandpaKeys 中存在重复 GRANDPA 公钥"
+                );
+                count = count.saturating_add(1);
+            }
+            Ok(count.encode())
+        }
+
+        #[cfg(feature = "try-runtime")]
+        fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
+            let expected_count = u32::decode(&mut &state[..]).map_err(|_| {
+                sp_runtime::TryRuntimeError::Other("grandpakey-change pre_upgrade 状态解码失败")
+            })?;
+
+            ensure!(
+                Pallet::<T>::on_chain_storage_version() >= STORAGE_VERSION,
+                "grandpakey-change storage version 未升级到 v2"
+            );
+
+            let mut current_count: u32 = 0;
+            for (inst, key) in CurrentGrandpaKeys::<T>::iter() {
+                current_count = current_count.saturating_add(1);
+                ensure!(
+                    GrandpaKeyOwnerByKey::<T>::get(key) == Some(inst),
+                    "GrandpaKeyOwnerByKey 反向索引与 CurrentGrandpaKeys 不一致"
+                );
+            }
+
+            let reverse_count = GrandpaKeyOwnerByKey::<T>::iter().count() as u32;
+            ensure!(
+                current_count == expected_count,
+                "CurrentGrandpaKeys 数量在迁移前后不一致"
+            );
+            ensure!(
+                reverse_count == current_count,
+                "GrandpaKeyOwnerByKey 数量与 CurrentGrandpaKeys 不一致"
+            );
+
+            Ok(())
         }
     }
 
@@ -203,18 +251,12 @@ pub mod pallet {
     pub enum Error<T> {
         /// 中文注释：机构不属于 NRC 或 PRC。
         InvalidInstitution,
-        /// 中文注释：机构与提案所属组织不匹配。
-        InstitutionOrgMismatch,
-        /// 中文注释：不支持的组织类型。
-        UnsupportedOrg,
         /// 中文注释：调用者不是该机构的内部管理员。
         UnauthorizedAdmin,
         /// 中文注释：提案动作数据未找到或解码失败。
         ProposalActionNotFound,
         /// 中文注释：提案未达到通过状态，不可执行。
         ProposalNotPassed,
-        /// 中文注释：已通过的提案不能直接取消。
-        PassedProposalCannotBeCancelled,
         /// 中文注释：机构当前 GRANDPA 公钥未找到（创世未初始化）。
         CurrentGrandpaKeyNotFound,
         /// 中文注释：新公钥不能为全零值。
@@ -253,10 +295,6 @@ pub mod pallet {
             ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
 
             let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                matches!(actual_org, ORG_NRC | ORG_PRC),
-                Error::<T>::UnsupportedOrg
-            );
             ensure!(
                 Self::is_internal_admin(actual_org, institution, &who),
                 Error::<T>::UnauthorizedAdmin
@@ -709,6 +747,10 @@ mod tests {
                 GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[1].grandpa_key)),
                 1,
             ),
+            (
+                GrandpaAuthorityId::from(ed25519::Public::from_raw(CHINA_CB[2].grandpa_key)),
+                1,
+            ),
         ]
     }
 
@@ -1018,6 +1060,120 @@ mod tests {
                     .status,
                 STATUS_PASSED
             );
+        });
+    }
+
+    #[test]
+    fn finalized_vote_fatal_fails_when_old_authority_disappeared() {
+        new_test_ext().execute_with(|| {
+            let institution = prc_pallet_id();
+            let old_key = CurrentGrandpaKeys::<Test>::get(institution)
+                .expect("institution should have an initial key");
+            let new_key = valid_public_key(72);
+            let replacement_authority = valid_public_key(73);
+
+            assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(prc_admin(0)),
+                institution,
+                new_key,
+            ));
+            let pid = last_proposal_id();
+
+            // 中文注释：模拟其他治理动作已经把提案绑定的旧 authority 替换掉。
+            assert_ok!(Grandpa::schedule_change(
+                vec![
+                    (authority_id_from_key(CHINA_CB[0].grandpa_key), 1),
+                    (authority_id_from_key(replacement_authority), 1),
+                    (authority_id_from_key(CHINA_CB[2].grandpa_key), 1),
+                ],
+                GrandpaChangeDelay::get(),
+                None,
+            ));
+            finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+            assert!(Grandpa::pending_change().is_none());
+
+            pass_prc_proposal(1, pid);
+
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(pid)
+                    .expect("fatal failed proposal should remain until cleanup")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
+            assert!(GrandpaKeyOwnerByKey::<Test>::get(new_key).is_none());
+            assert!(System::events().iter().any(|record| {
+                matches!(
+                    &record.event,
+                    RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed {
+                        proposal_id
+                    }) if *proposal_id == pid
+                )
+            }));
+        });
+    }
+
+    #[test]
+    fn finalized_vote_fatal_fails_when_new_key_collides_after_first_execution() {
+        new_test_ext().execute_with(|| {
+            let first_institution = cb_pallet_id(1);
+            let second_institution = cb_pallet_id(2);
+            let first_old_key = CurrentGrandpaKeys::<Test>::get(first_institution)
+                .expect("first institution should have an initial key");
+            let second_old_key = CurrentGrandpaKeys::<Test>::get(second_institution)
+                .expect("second institution should have an initial key");
+            let shared_new_key = valid_public_key(74);
+
+            assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(cb_admin(1, 0)),
+                first_institution,
+                shared_new_key,
+            ));
+            let first_pid = last_proposal_id();
+            assert_ok!(GrandpaKeyChange::propose_replace_grandpa_key(
+                RuntimeOrigin::signed(cb_admin(2, 0)),
+                second_institution,
+                shared_new_key,
+            ));
+            let second_pid = last_proposal_id();
+
+            pass_prc_proposal(1, first_pid);
+            assert_eq!(
+                CurrentGrandpaKeys::<Test>::get(first_institution),
+                Some(shared_new_key)
+            );
+            assert_eq!(
+                GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
+                Some(first_institution)
+            );
+            finalize_grandpa_at(1 + GrandpaChangeDelay::get());
+            assert!(Grandpa::pending_change().is_none());
+
+            pass_prc_proposal(2, second_pid);
+
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(second_pid)
+                    .expect("colliding proposal should remain until cleanup")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert_eq!(
+                CurrentGrandpaKeys::<Test>::get(second_institution),
+                Some(second_old_key)
+            );
+            assert_eq!(
+                GrandpaKeyOwnerByKey::<Test>::get(shared_new_key),
+                Some(first_institution)
+            );
+            assert!(GrandpaKeyOwnerByKey::<Test>::get(first_old_key).is_none());
+            assert!(System::events().iter().any(|record| {
+                matches!(
+                    &record.event,
+                    RuntimeEvent::GrandpaKeyChange(Event::<Test>::GrandpaKeyExecutionFailed {
+                        proposal_id
+                    }) if *proposal_id == second_pid
+                )
+            }));
         });
     }
 
