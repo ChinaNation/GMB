@@ -1,6 +1,6 @@
 //! 全局活跃提案数量限制。
 //!
-//! 每个机构（InstitutionPalletId）同时最多允许 `MAX_ACTIVE_PROPOSALS` 个活跃提案，
+//! 每个机构（InstitutionPalletId）同时最多允许 Runtime 配置数量的活跃提案，
 //! 不区分提案类型（转账、销毁、换管理员等），由投票引擎统一管控。
 //!
 //! 使用方式：
@@ -12,9 +12,6 @@ use crate::pallet::{self, Config, Error};
 use crate::InstitutionPalletId;
 use frame_support::pallet_prelude::*;
 
-/// 每个机构最多同时存在的活跃提案数。
-pub const MAX_ACTIVE_PROPOSALS: u32 = 10;
-
 /// 尝试为机构新增一个活跃提案。
 /// 成功返回 Ok(())，达到上限返回 Err。
 pub fn try_add_active_proposal<T: Config>(
@@ -23,7 +20,7 @@ pub fn try_add_active_proposal<T: Config>(
 ) -> DispatchResult {
     pallet::ActiveProposalsByInstitution::<T>::try_mutate(institution, |ids| {
         ensure!(
-            (ids.len() as u32) < MAX_ACTIVE_PROPOSALS,
+            (ids.len() as u32) < T::MaxActiveProposals::get(),
             Error::<T>::ActiveProposalLimitReached
         );
         ids.try_push(proposal_id)

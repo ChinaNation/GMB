@@ -2597,6 +2597,20 @@ mod tests {
     /// 测试用 InternalThresholdProvider：从 admins-change 统一主体表读取阈值。
     pub struct TestInternalThresholdProvider;
     impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+        fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
+            if org != ORG_DUOQIAN {
+                return false;
+            }
+            admins_change::Pallet::<Test>::active_subject_exists(org, institution)
+        }
+
+        fn is_known_pending_subject(org: u8, institution: InstitutionPalletId) -> bool {
+            if org != ORG_DUOQIAN {
+                return false;
+            }
+            admins_change::Pallet::<Test>::pending_subject_exists_for_snapshot(org, institution)
+        }
+
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_DUOQIAN {
                 return voting_engine::internal_vote::governance_org_pass_threshold(org);
@@ -2625,6 +2639,8 @@ mod tests {
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
         type CleanupKeysPerStep = ConstU32<64>;
         type SfidEligibility = TestSfidEligibility;

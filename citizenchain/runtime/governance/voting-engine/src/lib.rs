@@ -737,6 +737,16 @@ impl InternalAdminCountProvider for () {
 /// 注册多签内部投票阈值提供器。
 /// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接注册多签主体阈值。
 pub trait InternalThresholdProvider {
+    /// 查询 Active 主体是否存在。用于机构合法性判断，不与阈值读取混用。
+    fn is_known_subject(_org: u8, _institution: InstitutionPalletId) -> bool {
+        false
+    }
+
+    /// 查询 Pending 主体是否存在。仅供创建/激活该主体的投票入口使用。
+    fn is_known_pending_subject(_org: u8, _institution: InstitutionPalletId) -> bool {
+        false
+    }
+
     fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32>;
 
     /// Pending 注册多签主体创建投票使用的阈值。普通业务不得通过此方法授权。
@@ -745,10 +755,10 @@ pub trait InternalThresholdProvider {
     }
 }
 
-/// 默认实现：仅支持治理机构的固定制度阈值，注册多签主体需要 runtime 注入真实 Provider。
+/// 默认实现不提供任何阈值，强制 runtime / mock runtime 显式注入真实 Provider。
 impl InternalThresholdProvider for () {
-    fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-        internal_vote::fixed_governance_pass_threshold(org)
+    fn pass_threshold(_org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+        None
     }
 }
 
@@ -855,6 +865,14 @@ pub mod pallet {
         /// 单个到期区块允许挂载的提案 ID 上限，避免 expiry 桶无界增长。
         #[pallet::constant]
         type MaxProposalsPerExpiry: Get<u32>;
+
+        /// 单个提案最多持有的内部互斥锁 binding 数量。
+        #[pallet::constant]
+        type MaxInternalProposalMutexBindings: Get<u32>;
+
+        /// 每个机构最多允许同时存在的活跃提案数量。
+        #[pallet::constant]
+        type MaxActiveProposals: Get<u32>;
 
         /// 每个区块最多执行多少个清理步骤，避免历史提案清理拖垮 on_initialize。
         #[pallet::constant]
@@ -1127,14 +1145,14 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 每个机构的活跃提案 ID 列表（全局管控，不区分提案类型，上限 10 个）。
+    /// 每个机构的活跃提案 ID 列表（全局管控，不区分提案类型，上限由 Runtime 配置）。
     #[pallet::storage]
     #[pallet::getter(fn active_proposals_by_institution)]
     pub type ActiveProposalsByInstitution<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
         InstitutionPalletId,
-        BoundedVec<u64, ConstU32<{ crate::active_proposal_limit::MAX_ACTIVE_PROPOSALS }>>,
+        BoundedVec<u64, T::MaxActiveProposals>,
         ValueQuery,
     >;
 
@@ -1158,7 +1176,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         u64,
-        BoundedVec<InternalProposalMutexBinding, ConstU32<128>>,
+        BoundedVec<InternalProposalMutexBinding, T::MaxInternalProposalMutexBindings>,
         ValueQuery,
     >;
 
@@ -1235,6 +1253,10 @@ pub mod pallet {
         InvalidProposalStatus,
         /// 中文注释：内部投票的机构类型不合法。
         InvalidInternalOrg,
+        /// 中文注释：内部投票阈值快照缺失。
+        MissingThresholdSnapshot,
+        /// 中文注释：内部投票管理员快照缺失。
+        MissingAdminSnapshot,
         /// 中文注释：机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
         InvalidInstitution,
         /// 中文注释：调用者无权执行此操作（非管理员或外部 extrinsic 直接调用）。
@@ -2818,6 +2840,8 @@ mod tests {
         type MaxVoteSignatureLength = ConstU32<64>;
         type MaxAutoFinalizePerBlock = ConstU32<64>;
         type MaxProposalsPerExpiry = ConstU32<128>;
+        type MaxInternalProposalMutexBindings = ConstU32<256>;
+        type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<3>;
         type CleanupKeysPerStep = ConstU32<2>;
         type MaxProposalDataLen = ConstU32<4096>;
@@ -3003,6 +3027,14 @@ mod tests {
     }
 
     impl InternalThresholdProvider for TestInternalThresholdProvider {
+        fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
+            org == internal_vote::ORG_DUOQIAN && institution == registered_subject_institution()
+        }
+
+        fn is_known_pending_subject(org: u8, institution: InstitutionPalletId) -> bool {
+            org == internal_vote::ORG_DUOQIAN && institution == pending_subject_institution()
+        }
+
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org == internal_vote::ORG_DUOQIAN && institution == registered_subject_institution()
             {
