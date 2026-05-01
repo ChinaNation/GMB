@@ -1,6 +1,6 @@
 # ADMINS_ORIGIN_GOV Technical Notes
 
-最新更新：2026-04-30，新增管理员更换互斥、执行失败终态、创建事务回滚与回调最终事件收口。
+最新更新：2026-04-30，新增管理员更换互斥、执行失败终态、创建事务回滚、回调最终事件收口，并固化内置治理机构不可关闭规则。
 
 ## 1. 模块定位
 
@@ -54,6 +54,12 @@ Institutions<InstitutionPalletId, AdminInstitution>
 - `activate_subject`
 - `remove_pending_subject`
 - `close_subject`
+
+关闭规则：
+
+- `close_subject` 只允许关闭动态主体：`SfidInstitution / PersonalDuoqian`。
+- `BuiltinInstitution` 代表国储会、省储会、省储行等制度内置治理主体，永远不能进入 `Closed` 状态。
+- 该规则由 `close_subject` 自身校验，不能只依赖调用方约束，避免未来 runtime caller 误传 NRC/PRC/PRB 的 `InstitutionPalletId`。
 
 ## 4. 管理员读取 API
 
@@ -164,6 +170,8 @@ cargo test -p admins-change --lib
 - 替换后新管理员可继续发起提案。
 - 无效机构、旧管理员缺失、新管理员已存在等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
+- NRC/PRC/PRB 等 `BuiltinInstitution` 调用 `close_subject` 会被拒绝，状态保持 `Active`。
+- `PersonalDuoqian / SfidInstitution` 等动态主体激活后仍可通过 `close_subject` 正常关闭。
 - 执行路径拒绝 kind / stage / org / institution 与 `AdminReplacementAction` 不一致的提案。
 - 执行路径要求提案仍是管理员集合变更独占锁 owner。
 - 同主体普通内部提案活跃时，管理员更换业务入口会被投票引擎互斥规则拒绝。
