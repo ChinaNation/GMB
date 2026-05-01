@@ -243,6 +243,7 @@ any → unknown
 - 核心层：`Proposals` / `JointTallies` / `CitizenTallies` / `InternalTallies` / `InternalThresholdSnapshot` / `ProposalMutexBindings`
 - 大体量前缀（`JointVotesByAdmin` / `JointVotesByInstitution` / `JointInstitutionTallies` / `CitizenVotesByBindingId` / `InternalVotesByAccount` / vote credential nonce）写入 `PendingProposalCleanups`
 - `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
+- `CleanupQueue[block]` 单桶容量固定为 50；到期块会一次性把当前桶内所有 proposal 注册进 `PendingProposalCleanups`，不会把剩余项写回旧区块键。
 
 **自动清理注册**：`set_status_and_emit` 只在真正终态（`STATUS_REJECTED` / `STATUS_EXECUTED` / `STATUS_EXECUTION_FAILED`）调用 `schedule_cleanup` 注册 90 天延迟清理。`STATUS_PASSED` 是执行授权/可重试态，不允许被延迟清理删除业务数据。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。
 
@@ -250,7 +251,7 @@ any → unknown
 - `InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
 - 其中 `ProposalObject` 专门负责删除对象层存储；`FinalCleanup` 释放残留互斥锁并删除摘要层、提案主表与 tally。
 
-**`schedule_cleanup` 返回 `DispatchResult`**：该函数在目标区块队列已满时自动顺延到下一个区块（最多尝试 100 个连续区块）。如果连续 100 个区块队列均满（极端情况），使用 `defensive!` 宏在 debug/test 模式下发出警告，但仍返回 `Ok(())`，不阻塞主流程。
+**`schedule_cleanup` 返回 `DispatchResult`**：该函数在目标区块队列已满时自动顺延到下一个区块（最多尝试 100 个连续区块）。如果连续 100 个区块队列均满，返回 `CleanupQueueFull` 并要求调用方回滚终态写入；不得把“清理未登记”伪装成成功。手动重试、取消和 retry deadline 自动超时路径都在事务内完成终态写入与清理登记，避免出现“提案已终态但清理未登记”的半成功状态。
 
 ### 5.6 回调一致性与最终事件收口
 `set_status_and_emit` 现已使用存储事务包裹：

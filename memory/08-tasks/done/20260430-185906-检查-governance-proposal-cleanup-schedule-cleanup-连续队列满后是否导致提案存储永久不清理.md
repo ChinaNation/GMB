@@ -1,7 +1,7 @@
 # 任务卡：检查 governance proposal_cleanup schedule_cleanup 连续队列满后是否导致提案存储永久不清理
 
 - 任务编号：20260430-185906
-- 状态：open
+- 状态：done
 - 所属模块：citizenchain-runtime-governance
 - 当前负责人：Codex
 - 创建时间：2026-04-30 18:59:06
@@ -33,6 +33,9 @@
 - 只读检查结论
 - 风险判断
 - 后续修复建议
+- 代码修复
+- 单元测试
+- 技术文档更新
 
 ## 待确认问题
 
@@ -48,6 +51,13 @@
 - 证据 3：真正删除 `ProposalData`、`ProposalOwner`、`ProposalMeta`、`Proposals`、`InternalTallies`、`JointTallies`、`CitizenTallies`、`AdminSnapshot` 等数据的路径依赖 `CleanupQueue` 到期后注册 `PendingProposalCleanups`；如果清理登记丢失，该提案没有其他补偿清理入口。
 - 额外发现：`process_cleanup_queue` 每区块最多触发 5 个提案，但当同一 `CleanupQueue[now]` 中超过 5 个提案时，剩余项被写回同一个旧 `now` 键。后续区块只读取当前区块键，因此剩余项也会永久滞留。这个问题比 100 个队列全满更容易触发。
 - 未执行测试：本次按用户要求先做存在性检查，未修改代码，未跑测试。
+- 已修复 `schedule_cleanup`：连续 100 个目标清理桶均满时返回 `CleanupQueueFull`，不再伪装为 `Ok(())`。
+- 已修复 `process_cleanup_queue`：当前到期桶单桶最多 50 个提案，全部有界触发进入 `PendingProposalCleanups`，不再把剩余项写回旧区块键。
+- 已修复终态原子性：终态副作用先登记清理，再移除 retry state、通知业务终态和释放互斥锁；手动重试、取消、retry deadline 自动超时路径均使用事务包住状态写入与清理登记。
+- 已修复 retry deadline 超时吞错：清理登记失败时回滚终态写入，并把 retry deadline 顺延重排到后续区块，避免自动超时路径丢失清理。
+- 已更新 `memory/05-modules/citizenchain/runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md`，记录清理队列和 `CleanupQueueFull` 行为。
+- 已补充单元测试：到期桶 50 项全处理、连续 100 个清理桶满返回错误、终态清理登记失败事务回滚、retry deadline 清理登记失败保留并重排状态。
+- 验证通过：`cargo test cleanup --lib`、`cargo test retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails --lib`、`cargo test --lib`。
 
 ## 建议修复方向
 
@@ -70,3 +80,10 @@
   - 连续 100 个目标清理桶塞满后，再调用 `schedule_cleanup` 返回 `CleanupQueueFull`，不返回 `Ok(())`。
   - `set_status_and_emit` 遇到 `CleanupQueueFull` 时事务回滚，不产生“终态已写入但清理未登记”的状态。
   - 执行重试超时路径遇到清理登记失败时不会吞错并永久丢失清理。
+
+## 完成信息
+
+- 完成时间：2026-04-30 21:18:24
+- 完成摘要：修复 voting-engine 清理队列静默泄漏：schedule_cleanup 失败返回 CleanupQueueFull，到期桶 50 项全触发，终态收口事务化，补充清理队列和 retry deadline 测试并更新技术文档
+- 对照清单：memory/07-ai/pre-submit-checklist.md
+- 对照总标准：memory/07-ai/definition-of-done.md

@@ -1287,6 +1287,8 @@ pub mod pallet {
         TooManyExecutionRetryDeadlines,
         /// 中文注释：owner 模块没有明确允许取消该 PASSED 重试提案。
         ProposalCancellationNotAllowed,
+        /// 中文注释：终态提案的延迟清理队列连续多个目标区块已满，必须回滚终态写入。
+        CleanupQueueFull,
     }
 
     #[pallet::hooks]
@@ -1758,16 +1760,16 @@ pub mod pallet {
                 Self::is_terminal_status(status),
                 Error::<T>::InvalidProposalStatus
             );
+            let now = frame_system::Pallet::<T>::block_number();
+            proposal_cleanup::schedule_cleanup::<T>(proposal_id, now)?;
             ProposalExecutionRetryStates::<T>::remove(proposal_id);
             if status == STATUS_EXECUTION_FAILED {
                 if let Some(proposal) = Proposals::<T>::get(proposal_id) {
-                    // 中文注释：执行失败终态需要业务模块清理 pending 锁或独立动作存储；
-                    // 清理失败不阻断投票引擎终态收口，避免提案卡在半终态。
+                    // 中文注释：清理登记成功后再通知业务模块释放 pending 锁，
+                    // 避免先产生业务侧副作用、再发现链上清理无法登记。
                     let _ = Self::notify_execution_failed_terminal(proposal_id, proposal.kind);
                 }
             }
-            let now = frame_system::Pallet::<T>::block_number();
-            proposal_cleanup::schedule_cleanup::<T>(proposal_id, now)?;
             if let Some(proposal) = Proposals::<T>::get(proposal_id) {
                 if Self::should_release_internal_proposal_mutexes(
                     proposal.kind,
@@ -1778,6 +1780,30 @@ pub mod pallet {
                 }
             }
             Ok(())
+        }
+
+        fn queue_execution_retry_deadline(
+            proposal_id: u64,
+            target: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            Ok(ExecutionRetryDeadlines::<T>::try_mutate(target, |ids| {
+                ids.try_push(proposal_id)
+                    .map_err(|_| Error::<T>::TooManyExecutionRetryDeadlines)
+            })?)
+        }
+
+        fn reschedule_execution_retry_deadline(proposal_id: u64, from: BlockNumberFor<T>) -> bool {
+            let mut target = from;
+            for _ in 0..100u32 {
+                if Self::queue_execution_retry_deadline(proposal_id, target).is_ok() {
+                    return true;
+                }
+                target = target.saturating_add(BlockNumberFor::<T>::one());
+            }
+            frame_support::defensive!(
+                "reschedule_execution_retry_deadline: all retry deadline queues full"
+            );
+            false
         }
 
         fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
@@ -1858,10 +1884,7 @@ pub mod pallet {
                 retry_deadline,
                 last_attempt_at: None,
             };
-            ExecutionRetryDeadlines::<T>::try_mutate(retry_deadline, |ids| {
-                ids.try_push(proposal_id)
-                    .map_err(|_| Error::<T>::TooManyExecutionRetryDeadlines)
-            })?;
+            Self::queue_execution_retry_deadline(proposal_id, retry_deadline)?;
             ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
             Self::deposit_event(Event::<T>::ProposalExecutionRetryScheduled {
                 proposal_id,
@@ -1909,6 +1932,10 @@ pub mod pallet {
                     continue;
                 };
                 if state.retry_deadline > now {
+                    let _ = Self::reschedule_execution_retry_deadline(
+                        proposal_id,
+                        state.retry_deadline,
+                    );
                     continue;
                 }
                 let Some(proposal) = Proposals::<T>::get(proposal_id) else {
@@ -1919,90 +1946,125 @@ pub mod pallet {
                     ProposalExecutionRetryStates::<T>::remove(proposal_id);
                     continue;
                 }
-                if Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED).is_ok() {
-                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
-                    Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired { proposal_id });
-                    let _ = Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED);
+                let result = with_transaction(|| {
+                    let result = (|| -> DispatchResult {
+                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                        Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired {
+                            proposal_id,
+                        });
+                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                    })();
+                    match result {
+                        Ok(()) => TransactionOutcome::Commit(Ok(())),
+                        Err(err) => TransactionOutcome::Rollback(Err(err)),
+                    }
+                });
+                if result.is_err() {
+                    let next_block = now.saturating_add(BlockNumberFor::<T>::one());
+                    let _ = Self::reschedule_execution_retry_deadline(proposal_id, next_block);
                 }
             }
             weight
         }
 
         fn retry_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            Self::ensure_retry_admin(who, proposal_id)?;
-            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalNotRetryable
-            );
-            let mut state = ProposalExecutionRetryStates::<T>::get(proposal_id)
-                .ok_or(Error::<T>::ProposalNotRetryable)?;
-            let now = frame_system::Pallet::<T>::block_number();
-            ensure!(
-                now <= state.retry_deadline,
-                Error::<T>::ExecutionRetryDeadlinePassed
-            );
-            ensure!(
-                u32::from(state.manual_attempts) < T::MaxManualExecutionAttempts::get(),
-                Error::<T>::ManualExecutionAttemptsExceeded
-            );
+            with_transaction(|| {
+                let result = (|| -> DispatchResult {
+                    Self::ensure_retry_admin(who, proposal_id)?;
+                    let proposal =
+                        Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+                    ensure!(
+                        proposal.status == STATUS_PASSED,
+                        Error::<T>::ProposalNotRetryable
+                    );
+                    let mut state = ProposalExecutionRetryStates::<T>::get(proposal_id)
+                        .ok_or(Error::<T>::ProposalNotRetryable)?;
+                    let now = frame_system::Pallet::<T>::block_number();
+                    ensure!(
+                        now <= state.retry_deadline,
+                        Error::<T>::ExecutionRetryDeadlinePassed
+                    );
+                    ensure!(
+                        u32::from(state.manual_attempts) < T::MaxManualExecutionAttempts::get(),
+                        Error::<T>::ManualExecutionAttemptsExceeded
+                    );
 
-            let outcome = Self::invoke_execution_callback(proposal_id, proposal.kind, true)?;
-            match outcome {
-                ProposalExecutionOutcome::Executed => {
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
-                    Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                        proposal_id,
-                        manual_attempts: state.manual_attempts,
-                        outcome: STATUS_EXECUTED,
-                    });
-                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTED)
-                }
-                ProposalExecutionOutcome::RetryableFailed => {
-                    state.manual_attempts = state.manual_attempts.saturating_add(1);
-                    state.last_attempt_at = Some(now);
-                    if u32::from(state.manual_attempts) >= T::MaxManualExecutionAttempts::get() {
-                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                        Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                            proposal_id,
-                            manual_attempts: state.manual_attempts,
-                            outcome: STATUS_EXECUTION_FAILED,
-                        });
-                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                    } else {
-                        Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                            proposal_id,
-                            manual_attempts: state.manual_attempts,
-                            outcome: STATUS_PASSED,
-                        });
-                        ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
-                        Ok(())
+                    let outcome =
+                        Self::invoke_execution_callback(proposal_id, proposal.kind, true)?;
+                    match outcome {
+                        ProposalExecutionOutcome::Executed => {
+                            Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
+                            Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                                proposal_id,
+                                manual_attempts: state.manual_attempts,
+                                outcome: STATUS_EXECUTED,
+                            });
+                            Self::finish_terminal_status(proposal_id, STATUS_EXECUTED)
+                        }
+                        ProposalExecutionOutcome::RetryableFailed => {
+                            state.manual_attempts = state.manual_attempts.saturating_add(1);
+                            state.last_attempt_at = Some(now);
+                            if u32::from(state.manual_attempts)
+                                >= T::MaxManualExecutionAttempts::get()
+                            {
+                                Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                                Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                                    proposal_id,
+                                    manual_attempts: state.manual_attempts,
+                                    outcome: STATUS_EXECUTION_FAILED,
+                                });
+                                Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                            } else {
+                                Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                                    proposal_id,
+                                    manual_attempts: state.manual_attempts,
+                                    outcome: STATUS_PASSED,
+                                });
+                                ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
+                                Ok(())
+                            }
+                        }
+                        ProposalExecutionOutcome::FatalFailed => {
+                            Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                            Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                                proposal_id,
+                                manual_attempts: state.manual_attempts,
+                                outcome: STATUS_EXECUTION_FAILED,
+                            });
+                            Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                        }
+                        ProposalExecutionOutcome::Ignored => {
+                            Err(Error::<T>::ProposalOwnerMissing.into())
+                        }
                     }
+                })();
+                match result {
+                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Err(err) => TransactionOutcome::Rollback(Err(err)),
                 }
-                ProposalExecutionOutcome::FatalFailed => {
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-                    Self::deposit_event(Event::<T>::ProposalExecutionRetried {
-                        proposal_id,
-                        manual_attempts: state.manual_attempts,
-                        outcome: STATUS_EXECUTION_FAILED,
-                    });
-                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
-                }
-                ProposalExecutionOutcome::Ignored => Err(Error::<T>::ProposalOwnerMissing.into()),
-            }
+            })
         }
 
         fn cancel_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            Self::ensure_retry_admin(who, proposal_id)?;
-            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalNotRetryable
-            );
-            Self::can_cancel_passed_proposal_by_owner(proposal_id, proposal.kind)?;
-            Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
-            Self::deposit_event(Event::<T>::ProposalExecutionCancelled { proposal_id });
-            Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+            with_transaction(|| {
+                let result = (|| -> DispatchResult {
+                    Self::ensure_retry_admin(who, proposal_id)?;
+                    let proposal =
+                        Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+                    ensure!(
+                        proposal.status == STATUS_PASSED,
+                        Error::<T>::ProposalNotRetryable
+                    );
+                    Self::can_cancel_passed_proposal_by_owner(proposal_id, proposal.kind)?;
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                    Self::deposit_event(Event::<T>::ProposalExecutionCancelled { proposal_id });
+                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                })();
+                match result {
+                    Ok(()) => TransactionOutcome::Commit(Ok(())),
+                    Err(err) => TransactionOutcome::Rollback(Err(err)),
+                }
+            })
         }
 
         /// 兼容层：旧业务 execute_xxx extrinsic 必须委托到统一重试状态机。
@@ -2091,11 +2153,6 @@ pub mod pallet {
                         ))
                     }
                 };
-                Self::deposit_event(Event::<T>::ProposalFinalized {
-                    proposal_id,
-                    status: final_status,
-                });
-
                 // 中文注释：PASSED 是执行授权/可重试态，不再视为终态。
                 // 90 天延迟清理只登记 REJECTED / EXECUTED / EXECUTION_FAILED。
                 if Self::is_terminal_status(final_status) {
@@ -2106,6 +2163,10 @@ pub mod pallet {
                 {
                     Self::release_internal_proposal_mutexes(proposal_id);
                 }
+                Self::deposit_event(Event::<T>::ProposalFinalized {
+                    proposal_id,
+                    status: final_status,
+                });
 
                 TransactionOutcome::Commit(Ok(()))
             })
@@ -2704,7 +2765,9 @@ mod tests {
     use core::cell::RefCell;
     use std::collections::BTreeSet;
 
-    use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks};
+    use frame_support::{
+        assert_noop, assert_ok, derive_impl, traits::ConstU32, traits::Hooks, BoundedVec,
+    };
     use frame_system as system;
     use primitives::china::china_cb::{
         shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
@@ -3406,6 +3469,25 @@ mod tests {
                 citizen_eligible_total: eligible_total,
             },
         );
+    }
+
+    fn cleanup_retention_blocks() -> u64 {
+        90u64 * primitives::pow_const::BLOCKS_PER_DAY
+    }
+
+    fn full_cleanup_bucket(seed: u64) -> BoundedVec<u64, ConstU32<50>> {
+        (0..50u64)
+            .map(|index| 1_000_000 + seed.saturating_mul(50) + index)
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("test cleanup bucket should fit capacity")
+    }
+
+    fn fill_cleanup_schedule_window(current_block: u64) {
+        let base = current_block.saturating_add(cleanup_retention_blocks());
+        for offset in 0..100u64 {
+            CleanupQueue::<Test>::insert(base + offset, full_cleanup_bucket(offset));
+        }
     }
 
     #[test]
@@ -4907,6 +4989,103 @@ mod tests {
             assert_noop!(
                 VotingEngine::schedule_proposal_expiry(999, end),
                 pallet::Error::<Test>::TooManyProposalsAtExpiry
+            );
+        });
+    }
+
+    #[test]
+    fn cleanup_queue_processes_full_due_bucket_without_orphaning_remaining_items() {
+        new_test_ext().execute_with(|| {
+            let cleanup_block = 77u64;
+            let ids: BoundedVec<u64, ConstU32<50>> = (0..50u64)
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("cleanup queue should fit");
+            for proposal_id in ids.iter().copied() {
+                insert_citizen_proposal(proposal_id, 10, 100);
+            }
+            CleanupQueue::<Test>::insert(cleanup_block, ids);
+
+            System::set_block_number(cleanup_block);
+            <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block);
+
+            assert!(CleanupQueue::<Test>::get(cleanup_block).is_empty());
+            for proposal_id in 0..50u64 {
+                assert_eq!(
+                    PendingProposalCleanups::<Test>::get(proposal_id),
+                    Some(PendingCleanupStage::AdminSnapshots)
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn schedule_cleanup_returns_error_when_all_candidate_buckets_are_full() {
+        new_test_ext().execute_with(|| {
+            let now = System::block_number();
+            fill_cleanup_schedule_window(now);
+
+            assert_noop!(
+                proposal_cleanup::schedule_cleanup::<Test>(9_999, now),
+                Error::<Test>::CleanupQueueFull
+            );
+        });
+    }
+
+    #[test]
+    fn terminal_status_rolls_back_when_cleanup_cannot_be_scheduled() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = 9_999u64;
+            let now = System::block_number();
+            insert_citizen_proposal(proposal_id, 10, now + 100);
+            fill_cleanup_schedule_window(now);
+
+            assert_noop!(
+                VotingEngine::set_status_and_emit(proposal_id, STATUS_REJECTED),
+                Error::<Test>::CleanupQueueFull
+            );
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_VOTING
+            );
+            assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
+        });
+    }
+
+    #[test]
+    fn retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+            fill_cleanup_schedule_window(deadline);
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_PASSED
+            );
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_some());
+            assert!(
+                ExecutionRetryDeadlines::<Test>::get(deadline + 1).contains(&proposal_id),
+                "cleanup scheduling failure must requeue retry deadline instead of losing it"
             );
         });
     }
