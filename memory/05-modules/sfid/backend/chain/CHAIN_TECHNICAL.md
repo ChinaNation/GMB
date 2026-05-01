@@ -1,166 +1,140 @@
-# CHAIN_TECHNICAL
+# SFID 后端 `chain/` 技术说明
 
-## 0. 区块链端方案对齐（冻结，优先级最高）
-1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
-2. 功能 1/2/3 统一按 Runtime 固定 payload、统一摘要算法 `blake2_256(scale_encode(payload))`、统一签名算法 `sr25519`。
-3. 功能 1/2/3 的 nonce 防重放分别按 Runtime 对应键消费，任何重复 nonce 必须被链上拒绝。
-4. 若本文件其余章节与本节冲突，以本节为准。
+- 最后更新:2026-05-01
+- 任务卡:`memory/08-tasks/open/20260501-sfid-chain-folder-restructure.md`
 
-## 0.1 五项能力总对齐矩阵（冻结）
-1. 功能 1：公民身份绑定凭证
-   - 链上需要：`genesis_hash`、`who`、`binding_id`、`bind_nonce`、`signature`。
-   - SFID 实际提供：`GET /api/v1/bind/result` 返回 Runtime 绑定凭证；核心签名 payload 与链上 verifier 一致。
-   - 对齐结论：已对齐；链上调用已改为 `bind_sfid(origin, credential)`，不再消费 `sfid_code` 与过期字段。
-2. 功能 2：公民投票凭证
-   - 链上需要：`binding_id`、`proposal_id`、`vote_nonce`、`signature`。
-   - SFID 实际提供：`POST /api/v1/vote/verify` 返回投票凭证；核心签名 payload 与链上 verifier 一致。
-   - 对齐结论：已对齐；`is_bound/has_vote_eligibility/message/key_*` 属状态或运维字段，不参与链上验签。
-3. 功能 3：联合投票人口快照
-   - 链上需要：`eligible_total`、`snapshot_nonce`、`signature`，且发起账户 `who` 必须进入签名 payload。
-   - SFID 实际提供：`GET /api/v1/chain/voters/count` 返回人口快照签名；核心签名 payload 与链上 verifier 一致。
-   - 对齐结论：已对齐；对链接口现固定返回 `genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
-4. 功能 4：机构 `sfid_id` 登记
-   - 链上需要：proof 型字段包 `(DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash, sfid_id, name, register_nonce)`，以及 extrinsic `register_sfid_institution(sfid_id, name, register_nonce, signature)`。`name` 参数（机构名称，BoundedVec<u8, 128>）纳入签名载荷防篡改。创建/注销多签账户时按 0.1%（最低 10 分）收取手续费，走 FeeRouter 分账。
-   - SFID 实际提供：`sheng-admins` 模块在机构扫码录入成功后，生成 `genesis_hash + sfid_id + name + register_nonce + signature`，并用这组字段调用链上登记入口，同时在响应中回写 proof 字段与 `tx_hash/block_number`。
-   - 对齐结论：已对齐（2026-04-20 统一 DUOQIAN_V1 + op_tag 方案）。
-5. 功能 5：SFID 验签主备账户管理
-   - 链上需要：创世三账户 `main + backup_1 + backup_2`，以及标准 extrinsic `rotate_sfid_keys(new_backup)`，要求由备用账户发起。
-   - SFID 实际提供：`key-admins` 模块以链上三把公钥为唯一真相；`rotate/challenge` 与 `rotate/commit` 都强制发起者是 `backup_1/backup_2`，若服务端代提链上交易，则必须具备所选备用账户的 signer 能力。
-   - 对齐结论：已对齐到“功能 5 只能由备用账户发起”的口径；`/api/v1/attestor/public-key` 继续对外公布当前本地主公钥，但仅用于功能 1/2/3/4 的主签名输出。
+## 0. 架构铁律
 
-## 1. 模块目标
-1. `chain` 模块负责 SFID 面向区块链的凭证与查询接口。
-2. 本模块聚焦功能 1/2/3（绑定、投票、人口快照）的 Runtime 对齐，不承载机构治理与密钥治理后台流程。
+> **链 → SFID 单向 HTTP pull**:链需要 SFID 数据时主动调本目录端点;
+> **SFID 自身独立维护数据**,不读链不推链(过渡期 3 处保留,见 §4)。
 
-## 2. Runtime 对齐基线（冻结）
-1. 以链上 Runtime 为唯一验签真值。
-2. 功能 1/2/3 摘要算法统一为 `blake2_256(scale_encode(payload))`，签名算法统一为 `sr25519`。
-3. Runtime 代码锚点：
-   - 绑定 payload：`citizenchain/runtime/src/configs/mod.rs:676`
-   - 投票 payload：`citizenchain/runtime/src/configs/mod.rs:720`
-   - 人口快照 payload：`citizenchain/runtime/src/configs/mod.rs:780`
-4. 防重放锚点：
-   - 绑定：`citizenchain/otherpallet/sfid-system/src/lib.rs:294`（`hash(nonce)`）
-   - 投票：`citizenchain/otherpallet/sfid-system/src/lib.rs:434`（`proposal_id + binding_id + hash(vote_nonce)`）
+历史上 chain ↔ SFID 双向交互、轮询、attestor HMAC 鉴权等多种模式并存,
+本次重构(2026-05-01)统一收敛为单向 pull,并把所有"和链交互"的代码集中
+到 `sfid/backend/src/chain/` 目录,7 个二级目录按功能划分。
 
-## 3. API 矩阵（模块内）
-1. `POST /api/v1/bind/request`
-2. `GET /api/v1/bind/result`
-   - 绑定成功时返回：`genesis_hash`、`who`、`binding_id`、`bind_nonce`、`signature`。
-   - 同一 `account_pubkey` 在已绑定状态下，若 active signer 未变化则返回同一份持久化凭证；若 signer / key 元信息变化则重新签发。
-3. `POST /api/v1/vote/verify`
-   - `proposal_id` 必填；返回：`binding_id`、`proposal_id`、`vote_nonce`、`signature`（并可附带 `key_id/key_version/alg`）。
-   - 隐私约束：不返回 `sfid_code` 明文。
-4. `GET /api/v1/chain/voters/count?account_pubkey=<who>`
-   - `who(account)` 必填（兼容别名 `who`），返回：`genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
-5. `POST /api/v1/chain/binding/validate`
-6. `POST /api/v1/chain/reward/ack`
-7. `GET /api/v1/chain/reward/state`
-8. `GET /api/v1/attestor/public-key`
-9. `GET /api/v1/admin/chain/balance?account_pubkey=<hex>`
-   - 权限：任意已登录管理员（`require_admin_any`）。
-   - 功能：通过 `chain/balance.rs` 直接读取本地全节点 `System.Account` 存储项，截取 `data.free`（u128，单位"分"）并按 `xxx.xx` 元格式化。
-   - 存储键算法：`twox_128("System") || twox_128("Account") || blake2_128(account32) || account32`。
-   - 返回：`{ account_pubkey, balance_min_units(string), balance_text("xxx.xx"), unit("元") }`。
-   - 用途：密钥管理页"主账户"行右侧展示链上余额；前端每次进入 `keyring` 视图都拉一次，不缓存（SFID 服务器与全节点同机部署，无超时降级）。
+## 1. 目录结构
 
-## 4. 功能 1/2/3 对齐契约（Runtime 口径）
+```
+sfid/backend/src/chain/
+├── mod.rs                  # 子模块声明
+├── url.rs                  # SFID_CHAIN_WS_URL 入口(给过渡态推链 helper 用)
+├── runtime_align.rs        # SCALE 编码 + 域常量 + genesis_hash 缓存 + 凭证签发
+│
+├── institution_info/       # 链/钱包 pull 机构信息(含清算行)
+├── joint_vote/             # 联合投票:获取公民人数快照凭证
+├── citizen_binding/        # 公民身份绑定(过渡:含 admin push extrinsic)
+├── citizen_vote/           # 公民投票凭证签发
+├── key_admins/             # key-admins 推链(过渡:rotate / sheng_signing / state 查)
+├── sheng_admin/            # 省级管理员链上 signing pubkey 清理(过渡)
+└── balance/                # admin 后台主账户链上余额展示
+```
 
-### 4.1 功能 1：SFID 绑定验签
-1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_BIND, genesis_hash, who, binding_id, bind_nonce)`。
-2. `genesis_hash` 对应 Runtime `block_hash(0)`。
-3. SFID 对链输出字段（链上消费）：`genesis_hash`、`who`、`binding_id`、`bind_nonce`、`signature`。
-4. 链上交易参数更新为：`bind_sfid(origin, credential)`；Runtime 直接使用 `credential.binding_id` 绑定，不再消费旧版明文与过期字段。
-5. `bind_nonce` 必须一次性，链上按 `hash(bind_nonce)` 去重。
-6. SFID 在绑定确认时生成并持久化运行时绑定凭证，`bind_result` 仅回传已持久化凭证，避免重复查询产生不同 `bind_nonce`。
-7. 若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化凭证不一致，SFID 必须重新签发 Runtime 绑定凭证并覆盖旧值。
-8. 运维侧可在本地持久化 `key_id`、`key_version`、`alg`，但对链接口只返回 Runtime 核心字段。
-9. `bind_result.signature` 为 Runtime 凭证签名；`sfid_signature` 不再对链接口暴露。
+## 2. 当前在用端点(链端真实消费)
 
-### 4.2 功能 2：投票凭证验签与防重放
-1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_VOTE, genesis_hash, who, binding_id, proposal_id, vote_nonce)`。
-2. SFID 对链输出字段：`genesis_hash`、`who`、`binding_id`、`proposal_id`、`vote_nonce`、`signature`。
-3. 链上防重放键固定为：`(proposal_id, binding_id, hash(vote_nonce))`。
-4. `vote_nonce` 每次新生成，严禁复用。
+| 端点 | 模块 | 调用方 | 用途 |
+|---|---|---|---|
+| `GET /api/v1/app/voters/count` | `joint_vote/` | citizenchain/node | 创建联合投票时拉人口快照 |
+| `POST /api/v1/app/vote/credential` | `citizen_vote/` | wuminapp | 公民投票时拉凭证再上链 |
+| `GET /api/v1/app/institutions/search` | `institution_info/` | wuminapp / 节点桌面 | 通用机构搜索 |
+| `GET /api/v1/app/institutions/:sfid_id` | `institution_info/` | 同上 | 单机构详情 |
+| `GET /api/v1/app/institutions/:sfid_id/accounts` | `institution_info/` | 同上 | 机构账户列表(脱敏) |
+| `GET /api/v1/app/clearing-banks/search` | `institution_info/` | wuminapp | 已激活清算行(分页) |
+| `GET /api/v1/app/clearing-banks/eligible-search` | `institution_info/` | 节点桌面 | 候选清算行(可未激活) |
+| `GET /api/v1/admin/chain/balance` | `balance/` | SFID admin keyring 视图 | 主账户链上余额展示 |
 
-### 4.3 功能 3：人口快照签名
-1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, snapshot_nonce)`。
-2. `voters/count` 必须接收 `who(account)` 并进入签名 payload，不能仅对 `eligible_total` 签名。
-3. SFID 对链输出字段：`genesis_hash`、`who`、`eligible_total`、`snapshot_nonce`、`signature`。
-4. 人口快照对链接口已收口为最小字段集，不再并行返回旧版兼容字段。
+## 3. 凭证签发签名口径(冻结)
 
-### 4.4 运行时环境约束
-1. Runtime 签名所需 `genesis_hash` 在开发环境通过 `SFID_CHAIN_RPC_URL / SFID_CHAIN_WS_URL` 启动时自动发现；生产环境通过代码内 `TRUSTED_PRODUCTION_CHAINS` 白名单与链上实际 `block_hash(0)` 校验后缓存。
-2. 签名密钥缓存中的 seed 必须使用可清零敏感类型存储（`SensitiveSeed`），禁止以普通 `String` 持有。
-3. `runtime_meta` 不再持久化或恢复活动主私钥 / 主公钥 / 已知 seed 映射，防止数据库旧状态覆盖部署环境。
+`runtime_align.rs` 维护 4 套凭证签发函数,全部用 SFID main 私钥签:
 
-### 4.5 功能 4：机构登记签名
-1. 固定 payload：`(DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash, sfid_id, name, register_nonce)`。
-2. 签名载荷包含 `name`（机构名称）字段，用于链上存储展示并防篡改。
-3. SFID 对链输出字段：`genesis_hash`、`sfid_id`、`name`、`register_nonce`、`signature`。
-4. 链上交易参数：`register_sfid_institution(sfid_id, name, register_nonce, signature)`。
-5. `register_nonce` 每次新生成（UUID），链上按 `hash(register_nonce)` 去重。
+```rust
+build_bind_credential(state, account_pubkey, binding_seed, bind_nonce)
+build_vote_credential(state, account_pubkey, binding_seed, proposal_id, vote_nonce)
+build_population_snapshot_credential(state, account_pubkey, eligible_total, snapshot_nonce)
+build_institution_credential(state, sfid_id, name, register_nonce)
+```
 
-## 5. 功能 4/5 模块边界（SFID 系统内）
+签名 payload:`blake2_256(scale_encode(DUOQIAN_DOMAIN ++ OP_SIGN_<TAG> ++ payload))`
+- `DUOQIAN_DOMAIN`:`b"DUOQIAN_V1"`(10 字节)
+- `OP_SIGN_BIND` = 0x10 / `OP_SIGN_VOTE` = 0x11 / `OP_SIGN_POP` = 0x12 / `OP_SIGN_INST` = 0x13
 
-### 5.1 功能 4：机构 `sfid_id` 登记
-1. 归属 `sheng-admins` 模块：负责机构主数据与审批。
-2. 标准流程：`SFID 审批完成 -> 授权 Origin 发链上登记交易 -> 回写 tx_hash/block_number`。
-3. `sfid_id` 格式（长度、字符集、大小写）由 SFID 与链侧双端校验。
+字节布局必须与 `citizenchain/runtime/src/configs/mod.rs` 的链端 verifier 严格对齐;
+任一字段顺序变更都需要双端同步,否则 `sr25519_verify` 必败。
 
-### 5.2 功能 5：验签密钥运维（主备轮换）
-1. 归属 `key-admins` 模块：负责密钥治理、轮换流程、审计记录。
-2. 链侧动作以标准 extrinsic 为准（如 `rotate_sfid_keys`），不依赖私有 RPC 方法。
-3. 轮换策略：先写链上 backup，再提升为 main，再下发新 backup；全程记录审计事件与版本号。
-4. 当前正式口径下，备用私钥不进入 `sfid`；因此 `sfid` 不得假设本地持有 backup seed 自动代签上链。
-5. `rotate/commit` 必须串行执行，防止并发提交导致本地 keyring 状态回写覆盖。
-6. 上链成功后本地写入前必须重检 keyring `version`；若版本已变化，返回冲突并禁止本地覆盖。
-7. `wait_for_finalized` 必须设置超时（默认 `90` 秒，可配置），避免链终局停滞导致服务请求无限挂起。
+链上 verifier 锚点:
+- 绑定 payload:`citizenchain/runtime/src/configs/mod.rs::RuntimeSfidVerifier::verify`
+- 投票 payload:`citizenchain/otherpallet/sfid-system/src/lib.rs::verify_and_consume_vote_credential`
+- 人口快照 payload:`citizenchain/runtime/src/configs/mod.rs::verify_population_snapshot`
+- 机构注册 payload:`citizenchain/runtime/src/configs/mod.rs::verify_institution_registration`
 
-## 6. 实施步骤（文档与接口同步）
-1. 冻结协议字段顺序与 domain 常量，输出签名向量文档（输入、哈希、签名样例）。
-2. 改造 SFID 后端功能 1/2/3 接口 payload 结构，严格对齐 Runtime。
-3. 改造链侧调用参数组装，确保 `who`、`binding_id/binding_id`、`nonce` 类型一致。
-4. 完成本地链 + SFID 集成联调，覆盖重放攻击与密钥轮换回归。
-5. 清理不一致口径：同步更新 `SFID_SYSTEM_TECHNICAL.md`、`CHAIN_TECHNICAL.md`、`SUPER_ADMINS_TECHNICAL.md`、`KEY_ADMINS_TECHNICAL.md`。
+## 4. 过渡态:SFID 推 extrinsic / 主动读链
 
-## 7. 验收标准
-1. 功能 1/2/3 链上验签通过率 `100%`，摘要算法全部为 `blake2_256`。
-2. 任意重复 nonce 必须被链上拒绝。
-3. 密钥轮换后新签名可验，旧签名按策略失效或按窗口兼容。
-4. 文档字段、代码字段、链上 verifier 三者一致。
+下面 3 处仍含"SFID 主动连链"代码,与铁律不符,但本轮先不动业务流程:
 
-## 8. 与其他模块边界
-1. 机构登记能力见：`backend/src/sheng-admins/SUPER_ADMINS_TECHNICAL.md`。
-2. 密钥轮换能力见：`backend/src/key-admins/KEY_ADMINS_TECHNICAL.md`。
-3. 本模块仅提供链路接口与凭证输出，不负责后台治理审批。
+| 模块 | 触发场景 | 链交互动作 |
+|---|---|---|
+| `chain/citizen_binding/push.rs` | admin 在 SFID 后台点"推链绑定" | 提交 `bind_sfid` / `unbind_sfid` extrinsic |
+| `chain/key_admins/rotate.rs` | KEY_ADMIN 走主备账户轮换 commit | 提交 `rotate_sfid_keys` extrinsic |
+| `chain/key_admins/sheng_signing.rs` | 省登录管理员首次登录 / KEY_ADMIN 替换省管理员 | 提交 `set_sheng_signing_pubkey` extrinsic |
+| `chain/sheng_admin/clear_sheng_signing.rs` | 同上(替换时清旧 pubkey) | 同上 |
+| `chain/key_admins/chain_keyring_query.rs` | 启动期同步 SFID 主备账户 | 读链 `state_getStorage` |
+| `chain/key_admins/state_query.rs` | balance / 其他模块共用 RPC helper | 读链 |
+| `chain/balance/handler.rs` | admin keyring 视图 | 读链 `System::Account` |
 
-## 9. 本地手机联调地址约束
-1. `sfid` 后端监听地址通过 `SFID_BIND_ADDR` 控制，格式固定为 `<host>:<port>`。
-2. 手机真机联调时，`SFID_BIND_ADDR` 应优先使用 `0.0.0.0:<port>` 监听全部网卡，不能使用 `127.0.0.1`。
-3. 手机访问地址应通过 `SFID_PUBLIC_BASE_URL` 或 `WUMINAPP_API_BASE_URL` 单独指定为电脑的局域网 IP，不能直接把一个不属于本机网卡的公网 IP 填进 `SFID_BIND_ADDR`。
-4. `wuminapp/scripts/app-run.sh` 与 `wuminapp/scripts/app-clean-run.sh` 会优先复用 `sfid/.env.dev.local` 中的 `SFID_PUBLIC_BASE_URL`，其次才回退到 `SFID_BIND_ADDR`。
+后续配套链端"chain pull 凭证→外部代提"流程就绪后,本节内容应整体下架。
 
-## 10. 创世哈希绑定策略
-1. 开发环境（`SFID_ENV=dev`）默认通过 `SFID_CHAIN_RPC_URL / SFID_CHAIN_WS_URL` 在启动时自动获取创世哈希，适配经常清链重启的开发链。
-2. 开发环境仍允许通过 `SFID_CHAIN_GENESIS_HASH` 临时覆盖，但仅用于特殊调试，不作为默认路径。
-3. 当同时配置 `SFID_CHAIN_RPC_URL` 与 `SFID_CHAIN_WS_URL` 时，开发环境优先使用 HTTP JSON-RPC 调用 `chain_getBlockHash(0)` 获取创世哈希，只有缺少 HTTP RPC 时才回退到 WebSocket，避免本地 `ws://` 被客户端判定为 insecure。
-4. 生产环境（`SFID_ENV=prod`）不再信任运行时传入的 `SFID_CHAIN_GENESIS_HASH`，而是要求链上实际返回的创世哈希命中代码内 `TRUSTED_PRODUCTION_CHAINS` 白名单。
-5. 若生产环境连接到的链不在白名单内，`sfid` 必须拒绝初始化 Runtime 签名上下文。
-6. 若后续需要支持多条正式链，只允许在 `TRUSTED_PRODUCTION_CHAINS` 中追加新链定义，保持源码级强绑定。
+## 5. 删除清单(2026-05-01 一次性下架)
 
-## 11. 主签名人唯一来源
-1. `sfid` 当前在线主私钥只允许来自部署环境中的 `SFID_SIGNING_SEED_HEX`。
-2. 这把主私钥必须使用 Substrate `sp-core::sr25519::Pair::from_seed_slice` 规则派生公钥与签名，不允许使用裸 schnorrkel uniform 扩展替代。
-3. 启动时必须先从链上读取：
-   - `SfidSystem::SfidMainAccount`
-   - `SfidSystem::SfidBackupAccount1`
-   - `SfidSystem::SfidBackupAccount2`
-4. `sfid` 必须把链上三把公钥同步到本地 `chain_keyring_state` 镜像，再做签名服务启动。
-5. 若本地主私钥派生公钥不等于链上 `SfidMainAccount`，服务必须拒绝启动，不能继续提供绑定凭证、投票凭证、人口快照签名。
+| 项 | 原因 |
+|---|---|
+| `chain/vote.rs::verify_vote_eligibility` | 0 caller dead route |
+| `chain/voters.rs::chain_voters_count` | 与 `app/voters/count` 重复 |
+| `chain/binding.rs::chain_binding_validate / chain_reward_*` | 0 caller dead routes |
+| `chain/clearing_bank_watcher.rs` | SFID 不再读链,改由 wuminapp 自己读 ClearingBankNodes 过滤 |
+| `chain/app_api.rs` | 拆到 `joint_vote/` + `citizen_vote/` |
+| `app_core/http_security.rs::attestor_public_key` | 0 caller |
+| `institutions/handler.rs::sync_institution_chain_state` | 0 caller |
+| `app_core/http_security.rs` 中 chain HMAC 鉴权全套 | 与 dead routes 配套 |
+| `main.rs::prepare_chain_request` / `ensure_chain_request_db` | 同上 |
+| `models/mod.rs` 中 `ChainRequestAuth / VoteVerifyInput / ChainVotersCount* / ChainBindingValidate* / RewardAck* / RewardState*` | 全部 dead 数据结构 |
+| `key-admins/chain_proof.rs` | 仅服务于已下架的 `attestor/public-key` |
 
-## 12. ClearingBankNodes watcher 启动约束
-1. `chain::clearing_bank_watcher::ClearingBankNodeCache` 必须先在同步启动阶段构造并放入 `AppState`。
-2. `chain::clearing_bank_watcher::start_watcher()` 只允许在 `tokio::runtime::Runtime::block_on(...)` 已进入的上下文里调用。
-3. 禁止在同步 `main()` 初始化阶段直接调用 `tokio::spawn` 启动 `ClearingBankNodes watcher`，否则会因 Tokio reactor 尚未建立导致后端启动 panic。
-4. `SFID_CHAIN_WS_URL` 缺失时允许跳过 watcher，仅保留空 cache，不得阻塞 `sfid` 主服务启动。
+总计:删除约 1300 行 + 移动整合约 1500 行;迁移结束后 `cargo test --bin sfid-backend` 77/77 通过。
+
+## 6. 节点客户端反序列化契约(P0 修复点)
+
+故障:节点桌面"添加清算行"输入完整 sfid_id 后报"SFID 响应解析失败:error decoding response body"。
+
+根因:节点端 `EligibleSearchEnvelope { data: { items } }` 套了一层 `items` 信封,
+而 SFID 端 `ApiResponse.data` 直接是 Vec;字段还混了 camelCase / snake_case;
+`institution_name` 在两步式未命名时缺字段;`main_chain_status` 是 SCREAMING_SNAKE_CASE。
+
+修复:`citizenchain/node/src/offchain/sfid.rs` 拆双 DTO:
+- `SfidEligibleRow`(snake_case + Option + SfidMultisigChainStatus 枚举)→ deserialize SFID 响应
+- `EligibleClearingBankCandidate`(camelCase + 友好状态字符串)→ serialize 给 Tauri 前端
+
+字段映射表(冻结):
+
+| SFID 端字段(snake_case) | 节点 → TS 字段(camelCase) | 备注 |
+|---|---|---|
+| `sfid_id` | `sfidId` | |
+| `institution_name`(可缺失) | `institutionName`(缺失填空串) | 两步式未命名 |
+| `a3` | `a3` | |
+| `sub_type`(可缺失) | `subType` | |
+| `parent_sfid_id`(可缺失) | `parentSfidId` | FFR 候选才有 |
+| `parent_institution_name`(可缺失) | `parentInstitutionName` | |
+| `parent_a3`(可缺失) | `parentA3` | |
+| `province` / `city` | 同名 | |
+| `main_account`(可缺失) | `mainAccount` | hex |
+| `fee_account`(可缺失) | `feeAccount` | hex |
+| `main_chain_status` enum | `mainChainStatus` 字符串 | NOT_ON_CHAIN→Inactive / PENDING→Pending / ACTIVE→Registered / REVOKED→Failed |
+
+任一字段或映射改动必须同时更新两端 + 本表。
+
+## 7. 验收
+
+- `cargo check -p sfid-backend` 零 error,3 个无关 warning(province.rs 字段读未读)
+- `cargo test --bin sfid-backend` 77/77 通过
+- `cargo check -p node --tests`(citizenchain)零 error
+- 节点桌面输入 `FFR-AH001-ZG1C-887947508-20260430` 能搜到候选(P0 解决)
+- 全仓 grep 残留扫描:`subxt|chain_http_url|chain_ws_url` 仅在 `chain/` 子目录出现
+- `verify_vote_eligibility / chain_voters_count / chain_binding_validate / chain_reward / attestor_public_key / sync_institution_chain_state / clearing_bank_watcher` 全 SFID 后端零残留(只剩 ↑ 历史注释)

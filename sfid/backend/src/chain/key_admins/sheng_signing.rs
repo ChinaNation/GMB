@@ -1,11 +1,14 @@
-//! 中文注释：链上 `sfid_system::set_sheng_signing_pubkey` 提交 helper。
+//! 推链 helper:`SfidSystem::set_sheng_signing_pubkey`。
 //!
-//! 对齐本仓 PoW 链推链三件套(feedback_sfid_pow_chain_recipe)：
-//!   ① 显式 nonce(legacy RPC system_accountNextIndex)
+//! 给 SFID 后端 admin 流程(省登录管理员密钥首次登录 bootstrap、
+//! KEY_ADMIN 替换省管理员清理链上 pubkey 等)调用。
+//!
+//! 严格遵守 SFID PoW 链推链三件套(`feedback_sfid_pow_chain_recipe`):
+//!   ① 显式 nonce(legacy RPC `system_account_next_index`)
 //!   ② extrinsic immortal
-//!   ③ 只等 InBestBlock
+//!   ③ 只等 `InBestBlock`
 //!
-//! 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B。
+//! 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 起源。
 
 use sp_core::Pair;
 use subxt::{
@@ -18,10 +21,10 @@ use crate::key_admins::sheng_signer_cache::ProvinceSigner;
 
 /// 提交 `SfidSystem::set_sheng_signing_pubkey(province, new_pubkey)`。
 ///
-/// `new_pubkey = None` → 清除该省；`Some` → 写入。
+/// `new_pubkey = None` → 清除该省;`Some` → 写入。
 ///
-/// 注意：本 helper 不从 AppState 拿任何东西；调用方必须先解析 ws_url 并构造
-/// `OnlineClient` 和 `LegacyRpcMethods`，保持 PoW 链提交三件套一致。
+/// 调用方需要先解析 ws_url 并构造 `OnlineClient` 与 `LegacyRpcMethods`,
+/// 与 PoW 链推链三件套保持一致。
 #[allow(dead_code)]
 pub(crate) async fn submit_set_sheng_signing_pubkey_with_client(
     client: &OnlineClient<PolkadotConfig>,

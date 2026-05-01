@@ -6,30 +6,30 @@
 // - `ConnectivityTestReport`          — node Tauri 4 重连通性自测结果
 // - `DecryptedAdminInfo`              — 已解密私钥的清算行管理员条目(内存内)
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-/// SFID `/clearing-banks/eligible-search` 单条候选(资格白名单内,可能未激活)。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// 节点桌面"添加清算行"页用的候选机构记录(序列化给 Tauri 前端)。
+///
+/// 反序列化 SFID 响应的 DTO 在 [`super::sfid::SfidEligibleRow`](snake_case),
+/// 本结构只做 Serialize → TS 端 camelCase。两段 DTO 解耦,避免之前
+/// "误用同一 struct 同时跨 SFID 入口/Tauri 出口"导致的契约 mismatch P0。
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EligibleClearingBankCandidate {
     pub sfid_id: String,
+    /// 机构中文名;两步式未命名时为空串。
     pub institution_name: String,
     pub a3: String,
-    #[serde(default)]
     pub sub_type: Option<String>,
-    #[serde(default)]
     pub parent_sfid_id: Option<String>,
-    #[serde(default)]
     pub parent_institution_name: Option<String>,
-    #[serde(default)]
     pub parent_a3: Option<String>,
     pub province: String,
     pub city: String,
-    /// 主账户当前链上状态:Inactive / Pending / Registered / Failed。
+    /// 主账户当前链上状态:`Inactive` / `Pending` / `Registered` / `Failed`,
+    /// 由 `super::sfid::map_chain_status` 从 SFID 端 SCREAMING_SNAKE_CASE 枚举映射。
     pub main_chain_status: String,
-    #[serde(default)]
     pub main_account: Option<String>,
-    #[serde(default)]
     pub fee_account: Option<String>,
 }
 

@@ -77,10 +77,6 @@ fn build_test_state() -> AppState {
                 unreachable!("main_tests.rs only compiles in test cfg")
             }
         },
-        // 测试态:不启动 watcher,只塞个空 cache(scan_ok=false → 不参与过滤,降级老语义)。
-        clearing_bank_node_cache: Arc::new(
-            chain::clearing_bank_watcher::ClearingBankNodeCache::new(),
-        ),
     };
     seed_sheng_admins(&state);
     key_admins::seed_chain_keyring(&state);
@@ -901,76 +897,10 @@ fn validate_bind_callback_url_rejects_localhost_and_private_literals() {
     assert!(private_ip.is_err());
 }
 
-#[test]
-fn chain_signature_payload_and_hash_are_deterministic() {
-    let payload = chain_signature_payload("vote_verify", "req-1", "nonce-1", 1731000000, "fp-123");
-    let sig_a = chain_signature_hex("secret-a", payload.as_str());
-    let sig_b = chain_signature_hex("secret-a", payload.as_str());
-    let sig_c = chain_signature_hex("secret-b", payload.as_str());
-    assert!(constant_time_eq_hex(sig_a.as_str(), sig_b.as_str()));
-    assert!(!constant_time_eq_hex(sig_a.as_str(), sig_c.as_str()));
-}
-
-#[test]
-fn chain_request_requires_replay_headers() {
-    std::env::set_var("SFID_CHAIN_TOKEN", "test-chain-token");
-    std::env::set_var(
-        "SFID_CHAIN_SIGNING_SECRET",
-        "test-chain-signing-secret-at-least-32",
-    );
-    let mut store = Store::default();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-chain-token",
-        HeaderValue::from_static("test-chain-token"),
-    );
-    assert!(require_chain_request(&mut store, &headers, "vote_verify", "fp").is_err());
-}
-
-#[test]
-fn chain_request_rejects_duplicate_nonce() {
-    std::env::set_var("SFID_CHAIN_TOKEN", "test-chain-token");
-    std::env::set_var(
-        "SFID_CHAIN_SIGNING_SECRET",
-        "test-chain-signing-secret-at-least-32",
-    );
-    let mut store = Store::default();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-chain-token",
-        HeaderValue::from_static("test-chain-token"),
-    );
-    headers.insert("x-chain-request-id", HeaderValue::from_static("req-1"));
-    headers.insert("x-chain-nonce", HeaderValue::from_static("nonce-1"));
-    let ts = Utc::now().timestamp();
-    headers.insert(
-        "x-chain-timestamp",
-        HeaderValue::from_str(&ts.to_string()).expect("header value"),
-    );
-    let sig_payload = chain_signature_payload("vote_verify", "req-1", "nonce-1", ts, "fp-1");
-    let sig = chain_signature_hex(
-        "test-chain-signing-secret-at-least-32",
-        sig_payload.as_str(),
-    );
-    headers.insert(
-        "x-chain-signature",
-        HeaderValue::from_str(sig.as_str()).expect("header value"),
-    );
-    assert!(require_chain_request(&mut store, &headers, "vote_verify", "fp-1").is_ok());
-
-    let mut second_headers = headers.clone();
-    second_headers.insert("x-chain-request-id", HeaderValue::from_static("req-2"));
-    let sig_payload_2 = chain_signature_payload("vote_verify", "req-2", "nonce-1", ts, "fp-2");
-    let sig2 = chain_signature_hex(
-        "test-chain-signing-secret-at-least-32",
-        sig_payload_2.as_str(),
-    );
-    second_headers.insert(
-        "x-chain-signature",
-        HeaderValue::from_str(sig2.as_str()).expect("header value"),
-    );
-    assert!(require_chain_request(&mut store, &second_headers, "vote_verify", "fp-2").is_err());
-}
+// 中文注释:chain_signature_payload_and_hash_are_deterministic / chain_request_requires_replay_headers
+// / chain_request_rejects_duplicate_nonce 三个测试配套于已下架的 chain HMAC 鉴权(prepare_chain_request +
+// /api/v1/chain/* dead routes),2026-05-01 一并下架。chain pull 端点的安全模型不依赖
+// HMAC,无需替代测试。
 
 // 中文注释:legacy chain_bind_result_reuses_persisted_runtime_credential 测试已删除
 // (依赖 bindings_by_pubkey + get_bind_result,均已清除)。
