@@ -777,7 +777,7 @@ pub mod pallet {
 //
 // Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
 // 通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
-// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方直接 Ok(()) skip。
+// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方返回 Ignored。
 //
 // 设计要点:
 // - `approved = true` 时执行 `try_execute_replacement`,失败发 `AdminReplacementExecutionFailed`

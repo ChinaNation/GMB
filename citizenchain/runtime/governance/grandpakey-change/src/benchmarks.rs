@@ -118,8 +118,13 @@ mod benchmarks {
         action.old_key = seeded_public_key(250);
         let mut new_data = sp_runtime::sp_std::vec::Vec::from(tag);
         new_data.extend_from_slice(&action.encode());
-        voting_engine::Pallet::<T>::update_proposal_data(0, crate::MODULE_TAG, new_data)
-            .expect("store should succeed");
+        let bounded_data: frame_support::BoundedVec<
+            u8,
+            <T as voting_engine::Config>::MaxProposalDataLen,
+        > = new_data
+            .try_into()
+            .expect("benchmark proposal data should fit");
+        voting_engine::ProposalData::<T>::insert(0, bounded_data);
 
         #[extrinsic_call]
         cancel_failed_replace_grandpa_key(RawOrigin::Signed(caller), 0);
