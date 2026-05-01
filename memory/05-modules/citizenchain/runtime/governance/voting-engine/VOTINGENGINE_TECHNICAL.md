@@ -105,7 +105,7 @@ any → unknown
 - `CitizenVotesByBindingId` / `CitizenTallies`
 - `UsedPopulationSnapshotNonce`：人口快照 nonce 防重放
 - `ProposalData`：提案摘要层存储（默认上限 100KB）
-- `ProposalOwner`：`proposal_id -> MODULE_TAG`，标记业务 owner。创建提案时原子写入，后续更新数据必须校验 owner。
+- `ProposalOwner`：`proposal_id -> MODULE_TAG`，标记业务 owner。创建提案时原子写入，后续生产路径不再允许业务模块改写 data/object。
 - `ProposalObjectMeta` / `ProposalObject`：提案对象层存储（默认上限 10MB）
 - `ProposalExecutionRetryStates`：自动执行失败后的可重试状态，记录手动失败次数、首次失败区块、重试截止区块和最近手动尝试区块。
 - `ExecutionRetryDeadlines`：按区块索引待过期的 retry proposal，用于 `on_initialize` 到期转 `STATUS_EXECUTION_FAILED`。
@@ -180,16 +180,17 @@ any → unknown
 
 - `Ignored`：不是本模块提案；若所有回调都忽略，投票引擎回滚并报 owner 缺失。
 - `Executed`：业务执行成功，投票引擎转 `STATUS_EXECUTED`。
-- `RetryableFailed`：业务暂时失败，投票引擎保持 `STATUS_PASSED`，写入 retry state。
+- `RetryableFailed`：内部业务暂时失败，投票引擎保持 `STATUS_PASSED`，写入 retry state。联合提案当前没有手动 retry/cancel 管理策略，若 callback 误返回该结果，投票引擎会兜底转 `STATUS_EXECUTION_FAILED`，避免提案卡在 `PASSED`。
 - `FatalFailed`：业务确定不可执行，投票引擎转 `STATUS_EXECUTION_FAILED`。
 
 自动执行流程：
 
 1. 投票判定为 `PASSED` 后，`set_status_and_emit` 在同一事务内调用业务 callback。
 2. callback 返回 `Executed` 时，状态转 `STATUS_EXECUTED` 并注册 90 天终态清理。
-3. callback 返回 `RetryableFailed` 时，状态保持 `STATUS_PASSED`，写入 `ProposalExecutionRetryStates`，并按 `ExecutionRetryGraceBlocks` 注册过期索引。
-4. callback 返回 `FatalFailed` 时，状态转 `STATUS_EXECUTION_FAILED` 并注册终态清理。
-5. callback 返回错误时，整个投票判定回滚，过期桶保留重试入口。
+3. internal callback 返回 `RetryableFailed` 时，状态保持 `STATUS_PASSED`，写入 `ProposalExecutionRetryStates`，并按 `ExecutionRetryGraceBlocks` 注册过期索引。
+4. joint callback 返回 `RetryableFailed` 时不进入 retry state，直接转 `STATUS_EXECUTION_FAILED`。
+5. callback 返回 `FatalFailed` 时，状态转 `STATUS_EXECUTION_FAILED` 并触发执行失败终态 hook 后注册终态清理。
+6. callback 返回错误时，整个投票判定回滚，过期桶保留重试入口。
 
 手动执行流程：
 
@@ -203,7 +204,8 @@ any → unknown
 
 1. 业务模块保留的 `cancel_xxx` 兼容入口必须委托 `VotingEngine::cancel_passed_proposal_for`；也可直接调用投票引擎公开 extrinsic `cancel_passed_proposal`。
 2. 投票引擎校验状态、权限，并调用 owner callback 的 `can_cancel_passed_proposal`。
-3. 取消成功后转 `STATUS_EXECUTION_FAILED`。
+3. callback 默认返回 `Ignored`，只有 owner 模块显式返回 `ProposalCancelDecision::Allow` 才能取消；否则返回 `ProposalCancellationNotAllowed`。
+4. 取消成功后转 `STATUS_EXECUTION_FAILED`。
 
 清理与互斥：
 
@@ -258,10 +260,10 @@ any → unknown
 - 避免提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
 
 ### 5.6.1 Owner 绑定与数据写入收口
-- 创建提案时必须使用 `create_internal_proposal_with_data`、`create_pending_subject_internal_proposal_with_data`、`create_admin_set_mutation_internal_proposal_with_data` 或 `create_joint_proposal_with_data`，在同一事务内写入 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
-- `store_proposal_data`、`store_proposal_meta`、`set_proposal_passed` 已从生产公开 API 收口，避免任意 runtime caller 跨模块覆写业务数据或伪造 passed_at。
-- 需要更新数据时使用 `update_proposal_data(proposal_id, module_tag, data)`，必须通过 owner 校验。
-- 大对象使用 `store_proposal_object_for(proposal_id, module_tag, object)`，同样必须通过 owner 校验。
+- 创建提案时必须使用 `create_internal_proposal_with_data`、`create_pending_subject_internal_proposal_with_data`、`create_admin_set_mutation_internal_proposal_with_data`、`create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，在同一事务内写入 `ProposalOwner`、`ProposalData`、`ProposalMeta`，以及可选的 `ProposalObject`。
+- `store_proposal_data`、`store_proposal_meta`、`set_proposal_passed`、`update_proposal_data`、`store_proposal_object_for`、`remove_proposal_object` 均不再是生产公开 API，避免任意 runtime caller 跨模块覆写业务数据、对象数据或伪造 passed_at。
+- `module_tag` 只用于 owner 路由与数据解码，不是权限凭据；生产业务模块不得通过 caller-supplied `module_tag` 修改已创建提案的数据。
+- 业务执行状态以后只通过 `ProposalExecutionOutcome` 反馈给投票引擎，由投票引擎统一写 `Proposal.status` 和终态清理。
 
 ### 5.6.2 状态机强约束
 `set_status_and_emit` 写状态前会校验旧状态和目标状态：
@@ -282,7 +284,7 @@ any → unknown
 - 下一块会通过 `PendingExpiryBucket` 继续重试，直到回调成功或人工介入。
 
 ### 5.7.1 执行失败 retry state
-自动执行返回 `RetryableFailed` 时，投票引擎写入 `ProposalExecutionRetryStates`：
+内部提案自动执行返回 `RetryableFailed` 时，投票引擎写入 `ProposalExecutionRetryStates`：
 - `manual_attempts = 0`
 - `first_auto_failed_at = 当前区块`
 - `retry_deadline = 当前区块 + ExecutionRetryGraceBlocks`
@@ -364,6 +366,7 @@ proposal_id = UTC 公历年份 × 1,000,000 + 年内计数器
 7. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
 8. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
 9. 自动执行失败后的重试/取消必须走 `retry_passed_proposal` / `cancel_passed_proposal` 或业务模块兼容入口委托到这两个内部能力。
+10. `can_cancel_passed_proposal` 默认忽略，业务模块必须只在确认 owner 且确定不可恢复时返回 `ProposalCancelDecision::Allow`。
 
 ## 9. 文件索引
 - 入口与存储定义：`src/lib.rs`

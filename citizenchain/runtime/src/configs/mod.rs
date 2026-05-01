@@ -1779,18 +1779,28 @@ mod tests {
                 .expect("module tag bound");
             voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
             voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
-            assert_ok!(voting_engine::Pallet::<Runtime>::store_proposal_object_for(
+            let code_vec = code.into_inner();
+            let object_len = u32::try_from(code_vec.len()).expect("runtime code length fits u32");
+            let object_hash = <Runtime as frame_system::Config>::Hashing::hash(&code_vec);
+            let bounded_object: frame_support::BoundedVec<
+                u8,
+                <Runtime as voting_engine::Config>::MaxProposalObjectLen,
+            > = code_vec.try_into().expect("runtime code object bound");
+            voting_engine::ProposalObject::<Runtime>::insert(proposal_id, bounded_object);
+            voting_engine::ProposalObjectMeta::<Runtime>::insert(
                 proposal_id,
-                runtime_upgrade::MODULE_TAG,
-                runtime_upgrade::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
-                code.into_inner()
-            ));
+                voting_engine::ProposalObjectMetadata {
+                    kind: runtime_upgrade::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+                    object_len,
+                    object_hash,
+                },
+            );
 
-            // 回调拒绝 → 提案状态应变为 Rejected
-            assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
-                proposal_id,
-                false
-            ));
+            // 回调拒绝后，业务摘要保持创建时快照，终态由 voting-engine 统一维护。
+            let outcome =
+                RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
+                    .expect("runtime-upgrade callback should succeed");
+            assert_eq!(outcome, voting_engine::ProposalExecutionOutcome::Executed);
             let raw = voting_engine::Pallet::<Runtime>::get_proposal_data(proposal_id)
                 .expect("proposal data should exist");
             let tag = runtime_upgrade::MODULE_TAG;
@@ -1803,7 +1813,7 @@ mod tests {
                     .expect("should decode");
             assert!(matches!(
                 updated.status,
-                runtime_upgrade::pallet::ProposalStatus::Rejected
+                runtime_upgrade::pallet::ProposalStatus::Voting
             ));
         });
     }

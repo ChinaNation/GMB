@@ -26,7 +26,8 @@ use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use voting_engine::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalCancelDecision,
+    ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -477,10 +478,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, sp_runtime::DispatchError> {
         let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(()),
+            _ => return Ok(ProposalCancelDecision::Ignored),
         };
         let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
@@ -495,7 +498,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     proposal_id,
                     institution: action.institution,
                 });
-                Ok(())
+                Ok(ProposalCancelDecision::Allow)
             }
         }
     }

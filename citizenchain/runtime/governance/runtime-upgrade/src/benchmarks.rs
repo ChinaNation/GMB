@@ -99,13 +99,25 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
             .expect("benchmark module tag should fit");
     voting_engine::ProposalData::<T>::insert(proposal_id, bounded_data);
     voting_engine::ProposalOwner::<T>::insert(proposal_id, owner);
-    voting_engine::Pallet::<T>::store_proposal_object_for(
+    let object_data = code.into_inner();
+    let object_len =
+        u32::try_from(object_data.len()).expect("benchmark object length should fit u32");
+    let object_hash = T::Hashing::hash(&object_data);
+    let bounded_object: frame_support::BoundedVec<
+        u8,
+        <T as voting_engine::Config>::MaxProposalObjectLen,
+    > = object_data
+        .try_into()
+        .expect("benchmark proposal object should fit");
+    voting_engine::ProposalObject::<T>::insert(proposal_id, bounded_object);
+    voting_engine::ProposalObjectMeta::<T>::insert(
         proposal_id,
-        crate::MODULE_TAG,
-        crate::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
-        code.into_inner(),
-    )
-    .expect("benchmark store_proposal_object should succeed");
+        voting_engine::ProposalObjectMetadata {
+            kind: crate::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+            object_len,
+            object_hash,
+        },
+    );
 }
 
 fn decode_tagged_proposal<T: Config>(raw: &[u8]) -> Proposal<T> {
@@ -156,7 +168,7 @@ mod benchmarks {
         let raw =
             voting_engine::Pallet::<T>::get_proposal_data(0u64).expect("proposal should exist");
         let proposal = decode_tagged_proposal::<T>(&raw);
-        assert!(matches!(proposal.status, ProposalStatus::Passed));
+        assert!(matches!(proposal.status, ProposalStatus::Voting));
     }
 
     #[benchmark]
@@ -169,6 +181,6 @@ mod benchmarks {
         let raw =
             voting_engine::Pallet::<T>::get_proposal_data(1u64).expect("proposal should exist");
         let proposal = decode_tagged_proposal::<T>(&raw);
-        assert!(matches!(proposal.status, ProposalStatus::Rejected));
+        assert!(matches!(proposal.status, ProposalStatus::Voting));
     }
 }
