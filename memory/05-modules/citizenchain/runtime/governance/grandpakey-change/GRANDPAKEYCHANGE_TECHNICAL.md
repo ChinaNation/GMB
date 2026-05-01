@@ -85,23 +85,25 @@ Runtime 配置位置：
 - `new_key` 不能被其他机构当前占用（反向索引 O(1)）
 - 机构活跃提案数由 `voting-engine` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
 
-### 5.2 `vote_replace_grandpa_key`（index = 1）
-约束：
-- 投票人必须是该机构内部管理员
-- 委托 `voting-engine` 内部投票
-- 一旦提案 `STATUS_PASSED`，无条件自动尝试执行替换
-- 自动执行暂时失败仅记录 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，不回滚投票
+### 5.2 投票入口（由 VotingEngine 承载）
+`vote_replace_grandpa_key` extrinsic 已删除。
 
-### 5.3 `execute_replace_grandpa_key`（index = 2）
+当前投票统一走 `VotingEngine::internal_vote(proposal_id, approve)`：
+- 投票人必须是提案快照中的目标机构内部管理员。
+- 达到固定治理阈值后，投票引擎将提案推进到 `STATUS_PASSED` 并回调本模块自动执行。
+- 自动执行遇到 `GrandpaChangePending` 时发出 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，提案保留在 `STATUS_PASSED` 供后续重试。
+- 自动执行遇到 `OldAuthorityNotFound`、`NewKeyAlreadyUsed` 等确定不可执行错误时发出 `GrandpaKeyExecutionFailed`，返回 `FatalFailed`，由投票引擎推进到 `STATUS_EXECUTION_FAILED`。
+
+### 5.3 `execute_replace_grandpa_key`（index = 1）
 约束：
 - 兼容入口：委托 `VotingEngine::retry_passed_proposal_for`
 - 仅提案快照管理员可手动执行，重试次数、deadline 与状态推进由投票引擎统一校验
 - 用于“已通过但自动执行暂时失败”的重试
 
-### 5.4 `cancel_failed_replace_grandpa_key`（index = 4）
+### 5.4 `cancel_failed_replace_grandpa_key`（index = 2）
 注意：旧版 `cancel_stale_replace_grandpa_key`（index = 3）已移除，stale 清理由投票引擎统一承载。
 
-当前 `cancel_failed_replace_grandpa_key`（index = 4）：
+当前 `cancel_failed_replace_grandpa_key`（index = 2）：
 约束：
 - 兼容入口：委托 `VotingEngine::cancel_passed_proposal_for`
 - 仅提案快照管理员可清理
@@ -129,7 +131,7 @@ Runtime 配置位置：
 - `UnauthorizedAdmin`：非该机构管理员
 
 ## 8. 风险控制与并发策略
-- 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 返回 `RetryableFailed`，等待下次重试；确定不可执行时再人工取消失败提案。
+- 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 返回 `RetryableFailed`，等待下次重试；若重试时已经确定不可执行，则进入 `STATUS_EXECUTION_FAILED` 或由人工取消失败提案。
 - 立即切换风险：通过 `GrandpaAuthoritySetChangeDelay=30` 降低。
 - 长期卡死风险：通过 `cancel_failed_replace_grandpa_key` 消除。
 - 已修复风险：过去只校验 `new_key` “能解压为曲线点”，未拒绝 small-order 弱公钥；现在已显式拒绝 weak key。
@@ -166,8 +168,18 @@ Runtime 配置位置：
 - 本模块负责“换钥治理编排 + authority set 调度”，不负责私钥托管。
 - 等值投票惩罚链路（offences/session historical）仍未启用；当前仅为后续接入保留历史 set 映射能力。
 
-## 12. 测试覆盖
-`cargo test -p grandpakey-change` 覆盖（15 个用例）：
+## 12. 迁移与 try-runtime
+`STORAGE_VERSION = 2` 的迁移负责从 `CurrentGrandpaKeys` 重建 `GrandpaKeyOwnerByKey` 反向索引。
+
+迁移策略：
+- 先清空 `GrandpaKeyOwnerByKey`，再按 `CurrentGrandpaKeys` 全量重建，保证重跑迁移时不会静默保留脏反向索引。
+- `pre_upgrade` 记录 `CurrentGrandpaKeys` 数量，并检查当前 key 无重复。
+- `post_upgrade` 校验 storage version、正反向索引数量一致、每条 `CurrentGrandpaKeys[institution] = key` 都有 `GrandpaKeyOwnerByKey[key] = institution`。
+
+Cargo `try-runtime` feature 会向 `frame-support`、`frame-system`、`pallet-grandpa`、`sp-runtime`、`voting-engine` 传播。
+
+## 13. 测试覆盖
+`cargo test -p grandpakey-change` 覆盖（17 个用例，含 runtime integrity/genesis 基础用例）：
 
 正向路径：
 - 投票通过后自动执行密钥替换并更新 authority set
@@ -184,3 +196,5 @@ Runtime 配置位置：
 - 执行非通过提案拒绝（`ProposalNotPassed`）
 - 取消仍可执行提案拒绝（`ProposalStillExecutable`）
 - 取消暂时阻塞提案拒绝（`GrandpaChangePending`）
+- 投票通过后旧 authority 已消失，自动执行进入 `STATUS_EXECUTION_FAILED`
+- 两个机构抢同一把 `new_key`，后通过者自动执行进入 `STATUS_EXECUTION_FAILED`
