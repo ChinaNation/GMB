@@ -1071,8 +1071,8 @@ pub mod pallet {
         pub(crate) fn allocate_proposal_id() -> Result<u64, DispatchError> {
             let now_ms = T::TimeProvider::now().as_millis();
             // 毫秒 → 秒 → 年份（UTC）
-            let secs = (now_ms / 1000) as i64;
-            let year = Self::unix_seconds_to_year(secs);
+            let secs = u64::try_from(now_ms / 1000).map_err(|_| Error::<T>::ProposalIdOverflow)?;
+            let year = Self::unix_seconds_to_year(secs)?;
 
             let stored_year = CurrentProposalYear::<T>::get();
             let counter = if stored_year != year {
@@ -1099,12 +1099,43 @@ pub mod pallet {
             Ok(id)
         }
 
-        /// Unix 秒数转年份（简化算法，不需要精确到天）。
-        fn unix_seconds_to_year(secs: i64) -> u16 {
-            // 1970-01-01 起算，每年约 31,556,952 秒（365.2425 天）
-            const SECS_PER_YEAR: i64 = 31_556_952;
-            let year = 1970 + (secs / SECS_PER_YEAR);
-            year as u16
+        /// Unix 秒数转 UTC 公历年份。
+        pub(crate) fn unix_seconds_to_year(secs: u64) -> Result<u16, DispatchError> {
+            const SECS_PER_DAY: u64 = 86_400;
+            const DAYS_PER_400_YEARS: u64 = 146_097;
+
+            let mut days = secs / SECS_PER_DAY;
+            let cycles = days / DAYS_PER_400_YEARS;
+            let mut year = 1970u32
+                .checked_add(
+                    u32::try_from(cycles)
+                        .map_err(|_| Error::<T>::ProposalIdOverflow)?
+                        .checked_mul(400)
+                        .ok_or(Error::<T>::ProposalIdOverflow)?,
+                )
+                .ok_or(Error::<T>::ProposalIdOverflow)?;
+            days %= DAYS_PER_400_YEARS;
+
+            // 中文注释：提案 ID 年份段必须按真实 UTC 公历年边界切换，
+            // 不能使用平均年秒数，否则元旦附近会漂移到错误年份段。
+            while days >= Self::days_in_year(year) as u64 {
+                days -= Self::days_in_year(year) as u64;
+                year = year.checked_add(1).ok_or(Error::<T>::ProposalIdOverflow)?;
+            }
+
+            u16::try_from(year).map_err(|_| Error::<T>::ProposalIdOverflow.into())
+        }
+
+        pub(crate) fn days_in_year(year: u32) -> u16 {
+            if Self::is_leap_year(year) {
+                366
+            } else {
+                365
+            }
+        }
+
+        pub(crate) fn is_leap_year(year: u32) -> bool {
+            year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
         }
 
         pub(crate) fn ensure_open_proposal(
@@ -1806,6 +1837,9 @@ mod tests {
         static USED_VOTE_NONCES: RefCell<BTreeSet<(u64, Vec<u8>, Vec<u8>)>> = RefCell::new(BTreeSet::new());
     }
     thread_local! {
+        static TEST_NOW_SECS: RefCell<u64> = const { RefCell::new(DEFAULT_TEST_NOW_SECS) };
+    }
+    thread_local! {
         static JOINT_CALLBACK_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
     }
     thread_local! {
@@ -1934,12 +1968,13 @@ mod tests {
         }
     }
 
-    /// 测试用时间提供器：返回 2026 年中（2026-07-01 00:00:00 UTC）。
+    const DEFAULT_TEST_NOW_SECS: u64 = 1_782_864_000;
+
+    /// 测试用时间提供器：默认返回 2026 年中，可由单测覆盖为指定 UTC 秒。
     pub struct TestTimeProvider;
     impl frame_support::traits::UnixTime for TestTimeProvider {
         fn now() -> core::time::Duration {
-            // 2026-07-01 00:00:00 UTC ≈ 1782864000 秒
-            core::time::Duration::from_secs(1_782_864_000)
+            TEST_NOW_SECS.with(|secs| core::time::Duration::from_secs(*secs.borrow()))
         }
     }
     impl
@@ -2057,6 +2092,7 @@ mod tests {
         let mut ext = sp_io::TestExternalities::new(storage);
         ext.execute_with(|| {
             USED_VOTE_NONCES.with(|set| set.borrow_mut().clear());
+            TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
             JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
             JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
             System::set_block_number(1);
@@ -2240,6 +2276,10 @@ mod tests {
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = status);
     }
 
+    fn set_test_now_secs(secs: u64) {
+        TEST_NOW_SECS.with(|value| *value.borrow_mut() = secs);
+    }
+
     fn mark_vote_nonce_used(
         proposal_id: u64,
         binding_id: <Test as frame_system::Config>::Hash,
@@ -2327,6 +2367,69 @@ mod tests {
                 citizen_eligible_total: eligible_total,
             },
         );
+    }
+
+    #[test]
+    fn unix_seconds_to_year_uses_utc_gregorian_boundaries() {
+        new_test_ext().execute_with(|| {
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_798_761_600).expect("valid 2027 timestamp"),
+                2027
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_830_297_600).expect("valid 2028 timestamp"),
+                2028
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_861_919_999).expect("valid 2028 timestamp"),
+                2028
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_861_920_000).expect("valid 2029 timestamp"),
+                2029
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_956_528_000).expect("valid 2032 timestamp"),
+                2032
+            );
+        });
+    }
+
+    #[test]
+    fn leap_year_rules_match_gregorian_calendar() {
+        new_test_ext().execute_with(|| {
+            assert!(VotingEngine::is_leap_year(2000));
+            assert!(!VotingEngine::is_leap_year(2100));
+            assert!(VotingEngine::is_leap_year(2400));
+            assert_eq!(VotingEngine::days_in_year(2028), 366);
+            assert_eq!(VotingEngine::days_in_year(2029), 365);
+        });
+    }
+
+    #[test]
+    fn proposal_id_counter_resets_at_real_utc_year_boundary() {
+        new_test_ext().execute_with(|| {
+            set_test_now_secs(1_830_297_599);
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_eq!(proposal_id, 2027_000_000);
+            assert_eq!(CurrentProposalYear::<Test>::get(), 2027);
+            assert_eq!(YearProposalCounter::<Test>::get(), 1);
+
+            set_test_now_secs(1_830_297_600);
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_eq!(proposal_id, 2028_000_000);
+            assert_eq!(CurrentProposalYear::<Test>::get(), 2028);
+            assert_eq!(YearProposalCounter::<Test>::get(), 1);
+            assert_eq!(NextProposalId::<Test>::get(), 2028_000_001);
+        });
     }
 
     #[test]
