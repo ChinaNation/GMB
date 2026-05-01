@@ -47,6 +47,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260430-165708-核验-voting-engine-unix-seconds-to-year-元旦附近年份错分问题.md`
 - `memory/08-tasks/done/20260430-161713-p1-voting-status-state-machine.md`
 - `memory/08-tasks/done/20260430-154307-p2-p3-voting-finalized-transaction.md`
 - `memory/08-tasks/done/20260430-145704-p1-admins-change-mutex.md`
