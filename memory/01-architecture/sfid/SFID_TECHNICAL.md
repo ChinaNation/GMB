@@ -390,7 +390,7 @@
 4. 回调签名验签：
    - 回调体包含 `callback_attestation`（SFID 签名封装）。
    - Header 返回 `x-sfid-callback-signature`、`x-sfid-callback-key-id`。
-   - 区块链通过 `/api/v1/attestor/public-key` 获取验签公钥。
+   - 链端验签公钥来自链上 `SfidSystem::SfidMainAccount` storage(创世写入 + `rotate_sfid_keys` extrinsic 维护),不依赖 HTTP 端点。历史 `/api/v1/attestor/public-key` 端点 0 caller,2026-05-01 一并下架。
 5. 奖励闭环状态机：
    - 绑定成功初始化 `PENDING`；
    - 区块链回执 `FAILED` -> `RETRY_WAITING`（超重试上限转 `FAILED`）；

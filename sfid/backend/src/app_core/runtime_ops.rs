@@ -136,18 +136,10 @@ pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) 
     });
 }
 
-pub(crate) fn vote_cache_key(account_pubkey: &str, proposal_id: Option<u64>) -> String {
-    match proposal_id {
-        Some(id) => format!("{account_pubkey}:{id}"),
-        None => format!("{account_pubkey}:none"),
-    }
-}
-
-pub(crate) fn cleanup_vote_cache(store: &mut Store, now: DateTime<Utc>) {
-    store
-        .vote_verify_cache
-        .retain(|_, entry| entry.cached_at > now - Duration::seconds(5));
-}
+// 中文注释:vote_cache_key / cleanup_vote_cache 配套于已下架的 verify_vote_eligibility
+// dead route(`POST /api/v1/vote/verify`),2026-05-01 一并移除。当前 chain pull 的
+// /api/v1/app/vote/credential 不依赖 cache,vote_verify_cache 只在投票账户绑定状态
+// 变化时才被 invalidate_vote_cache_for_pubkey 清理。
 
 pub(crate) fn invalidate_vote_cache_for_pubkey(store: &mut Store, account_pubkey: &str) {
     store

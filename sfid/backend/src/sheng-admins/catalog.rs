@@ -232,43 +232,9 @@ pub(crate) async fn replace_sheng_admin(
     // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 9：
     // KEY_ADMIN 更换省登录管理员时，级联清理链上 signing pubkey + 内存 cache。
     // 新管理员首次登录时会重新 bootstrap 新的密钥对并再次推链。
-    {
-        use subxt::backend::legacy::LegacyRpcMethods;
-        use subxt::{OnlineClient, PolkadotConfig};
-        let ws_url_res = crate::chain::url::chain_ws_url();
-        match ws_url_res {
-            Ok(ws) => match OnlineClient::<PolkadotConfig>::from_insecure_url(ws.clone()).await {
-                Ok(client) => {
-                    match subxt::backend::rpc::RpcClient::from_insecure_url(ws.as_str()).await {
-                        Ok(rpc) => {
-                            let legacy = LegacyRpcMethods::<PolkadotConfig>::new(rpc);
-                            let main_pair = state.sheng_signer_cache.sfid_main_signer();
-                            if let Err(e) = crate::key_admins::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client(
-                                    &client,
-                                    &legacy,
-                                    &main_pair,
-                                    province_name.as_str(),
-                                    None,
-                                )
-                                .await
-                                {
-                                    tracing::warn!(province = %province_name, error = %e, "clear sheng signing pubkey on chain failed");
-                                }
-                        }
-                        Err(e) => {
-                            tracing::warn!(province = %province_name, error = %e, "legacy rpc connect failed");
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(province = %province_name, error = %e, "chain connect failed");
-                }
-            },
-            Err(e) => {
-                tracing::warn!(province = %province_name, error = %e, "resolve ws url failed");
-            }
-        }
-    }
+    // 推链 helper 已搬到 chain/sheng_admin/clear_sheng_signing.rs,失败仅 warn 不中断。
+    crate::chain::sheng_admin::clear_sheng_signing_pubkey_on_chain(&state, province_name.as_str())
+        .await;
     // 清理新管理员残留的密文（一般是 None）+ 驱逐本省 cache。
     {
         if let Ok(mut store) = state.store.write() {

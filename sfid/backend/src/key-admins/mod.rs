@@ -1,13 +1,11 @@
 pub(crate) mod chain_keyring;
-pub(crate) mod chain_proof;
-pub(crate) mod chain_sheng_signing;
 pub(crate) mod rsa_blind;
 pub(crate) mod sheng_signer_cache;
 pub(crate) mod signer_router;
 
 use self::chain_keyring::{
-    try_derive_pubkey_hex_from_seed, try_load_signing_key_from_seed, verify_rotation_signature,
-    ChainKeyringState, KeySlot, RotateMainError, RotateMainRequest,
+    try_derive_pubkey_hex_from_seed, verify_rotation_signature, ChainKeyringState, KeySlot,
+    RotateMainError, RotateMainRequest,
 };
 use axum::{
     extract::State,
@@ -16,19 +14,10 @@ use axum::{
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
-use reqwest::Client as HttpClient;
-use serde_json::json;
 use sp_core::Pair;
-use std::hash::Hasher;
 use std::{sync::OnceLock, time::Duration as StdDuration};
-use subxt::{
-    config::substrate::{AccountId32, MultiSignature},
-    dynamic::{tx, Value},
-    OnlineClient, PolkadotConfig,
-};
 use tokio::sync::Mutex as TokioMutex;
 use tracing::warn;
-use twox_hash::XxHash64;
 use uuid::Uuid;
 
 use blake2::digest::consts::U32;
@@ -89,17 +78,7 @@ fn normalize_pubkey_for_signing(value: &str) -> String {
     format!("0x{}", no_prefix.to_ascii_lowercase())
 }
 
-fn twox_128(input: &[u8]) -> [u8; 16] {
-    let mut h1 = XxHash64::with_seed(0);
-    h1.write(input);
-    let mut h2 = XxHash64::with_seed(1);
-    h2.write(input);
-
-    let mut out = [0u8; 16];
-    out[..8].copy_from_slice(&h1.finish().to_le_bytes());
-    out[8..].copy_from_slice(&h2.finish().to_le_bytes());
-    out
-}
+// 中文注释:twox_128 helper 已搬到 chain/key_admins/chain_keyring_query.rs。
 
 fn rotate_commit_signature_message(challenge_text: &str, new_backup_pubkey: &str) -> String {
     format!(
@@ -538,7 +517,7 @@ pub(crate) async fn admin_chain_keyring_rotate_commit(
     let chain_submit_timeout = rotate_chain_submit_timeout();
     let chain_submit = match tokio::time::timeout(
         chain_submit_timeout,
-        submit_rotate_sfid_keys_extrinsic(
+        crate::chain::key_admins::submit_rotate_sfid_keys_extrinsic(
             initiator_pubkey.as_str(),
             initiator_seed_hex.expose_secret(),
             new_backup_pubkey.as_str(),
@@ -912,7 +891,7 @@ pub(crate) fn validate_active_main_signer_with_keyring(state: &AppState) -> Resu
 }
 
 pub(crate) async fn sync_chain_keyring_from_chain(state: &AppState) -> Result<bool, String> {
-    let chain_state = fetch_chain_keyring_from_chain().await?;
+    let chain_state = crate::chain::key_admins::fetch_chain_keyring_from_chain().await?;
     let mut store = state
         .store
         .write()
@@ -1154,196 +1133,12 @@ fn set_active_main_signer(
     Ok(())
 }
 
-/// 暴露给其他模块（如 chain::balance）按需调用 state_getStorage。
-pub(crate) async fn call_chain_state_get_storage(
-    storage_key_hex: &str,
-) -> Result<Option<String>, String> {
-    let result = chain_rpc_call("state_getStorage", json!([storage_key_hex])).await?;
-    Ok(result.as_str().map(str::to_string))
-}
-
-async fn chain_rpc_call(
-    method: &str,
-    params: serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let client = HttpClient::new();
-    let url = crate::chain::url::chain_http_url()?;
-    let response = client
-        .post(url)
-        .json(&json!({
-            "id": 1,
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("chain rpc request failed: {e}"))?;
-    let status = response.status();
-    let payload = response
-        .json::<serde_json::Value>()
-        .await
-        .map_err(|e| format!("decode chain rpc response failed: {e}"))?;
-    if !status.is_success() {
-        return Err(format!("chain rpc returned status {status}"));
-    }
-    if let Some(err) = payload.get("error") {
-        return Err(format!("chain rpc returned error: {err}"));
-    }
-    Ok(payload["result"].clone())
-}
-
-fn parse_chain_account_storage(raw: Option<&str>, field: &str) -> Result<String, String> {
-    let Some(raw) = raw else {
-        return Err(format!("chain storage `{field}` is empty"));
-    };
-    let bytes = hex::decode(raw.trim_start_matches("0x"))
-        .map_err(|_| format!("chain storage `{field}` is not valid hex"))?;
-    let account = match bytes.len() {
-        32 => bytes,
-        33 if bytes.first().copied() == Some(1) => bytes[1..33].to_vec(),
-        _ => {
-            return Err(format!(
-                "chain storage `{field}` has unexpected AccountId encoding length {}",
-                bytes.len()
-            ))
-        }
-    };
-    Ok(format!("0x{}", hex::encode(account)))
-}
-
-async fn fetch_chain_keyring_from_chain() -> Result<ChainKeyringState, String> {
-    async fn fetch_pubkey(storage_name: &str) -> Result<String, String> {
-        let storage_key = format!(
-            "0x{}{}",
-            hex::encode(twox_128(b"SfidSystem")),
-            hex::encode(twox_128(storage_name.as_bytes()))
-        );
-        let raw = chain_rpc_call("state_getStorage", json!([storage_key])).await?;
-        parse_chain_account_storage(raw.as_str(), storage_name)
-    }
-
-    let main_pubkey = fetch_pubkey("SfidMainAccount").await?;
-    let backup_a_pubkey = fetch_pubkey("SfidBackupAccount1").await?;
-    let backup_b_pubkey = fetch_pubkey("SfidBackupAccount2").await?;
-    Ok(ChainKeyringState::new(
-        main_pubkey,
-        backup_a_pubkey,
-        backup_b_pubkey,
-    ))
-}
-
-#[derive(Debug, Clone)]
-struct ChainRotateReceipt {
-    tx_hash: String,
-    block_number: u64,
-}
-
-fn parse_account_id32(pubkey: &str) -> Result<[u8; 32], String> {
-    parse_sr25519_pubkey_bytes(pubkey).ok_or_else(|| "invalid sr25519 account pubkey".to_string())
-}
-
-async fn submit_rotate_sfid_keys_extrinsic(
-    initiator_pubkey: &str,
-    initiator_seed_hex: &str,
-    new_backup_pubkey: &str,
-) -> Result<ChainRotateReceipt, String> {
-    // 中文注释：与 institutions.rs 中 register_sfid_institution 相同，
-    // PoW 链下 subxt 0.43 默认行为(从 finalized 读 nonce/取 era birth/等 finalize)全部踩坑，
-    // 必须做三件事：① legacy RPC 取 best+pool 视图 nonce ② immortal era ③ 只等 InBestBlock。
-    // 详见 ADR `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
-    let ws_url = crate::chain::url::chain_ws_url()
-        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    let client = OnlineClient::<PolkadotConfig>::from_url(ws_url.clone())
-        .await
-        .map_err(|e| {
-            format!("rotate_sfid_keys submit failed: chain websocket connect failed: {e}")
-        })?;
-    // ① legacy RPC client，用于显式取 nonce
-    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: legacy rpc connect failed: {e}"))?;
-    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
-
-    let signer_account = AccountId32(
-        parse_account_id32(initiator_pubkey)
-            .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?,
-    );
-    let chain_nonce = legacy_rpc
-        .system_account_next_index(&signer_account)
-        .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: fetch account nonce failed: {e}"))?;
-    let new_backup_account = parse_account_id32(new_backup_pubkey)
-        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    let payload = tx(
-        "SfidSystem",
-        "rotate_sfid_keys",
-        vec![Value::from_bytes(new_backup_account)],
-    );
-    // ② immortal + 显式 nonce
-    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
-        .immortal()
-        .nonce(chain_nonce)
-        .build();
-    let mut partial_tx = client
-        .tx()
-        .create_partial(&payload, &signer_account, params)
-        .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: build extrinsic failed: {e}"))?;
-    let signing_key = try_load_signing_key_from_seed(initiator_seed_hex)
-        .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    let signature = signing_key.sign(&partial_tx.signer_payload()).0;
-    let tx = partial_tx
-        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
-    let tx_hash = format!("0x{}", hex::encode(tx.hash().as_ref()));
-
-    let mut submitted = tx
-        .submit_and_watch()
-        .await
-        .map_err(|e| format!("rotate_sfid_keys submit failed: submit_and_watch failed: {e}"))?;
-    // ③ 只等 InBestBlock
-    let in_block = tokio::time::timeout(std::time::Duration::from_secs(120), async {
-        use subxt::tx::TxStatus;
-        loop {
-            match submitted.next().await {
-                Some(Ok(TxStatus::InBestBlock(b))) => return Ok::<_, String>(b),
-                Some(Ok(TxStatus::InFinalizedBlock(b))) => return Ok(b),
-                Some(Ok(TxStatus::Error { message }))
-                | Some(Ok(TxStatus::Invalid { message }))
-                | Some(Ok(TxStatus::Dropped { message })) => {
-                    return Err(format!("tx pool reported: {message}"));
-                }
-                Some(Ok(_)) => continue,
-                Some(Err(e)) => return Err(format!("tx watch stream error: {e}")),
-                None => return Err("tx watch stream closed unexpectedly".to_string()),
-            }
-        }
-    })
-    .await
-    .map_err(|_| {
-        "rotate_sfid_keys submit failed: timed out waiting for in-block inclusion".to_string()
-    })?
-    .map_err(|e| format!("rotate_sfid_keys submit failed: {e}"))?;
-    in_block
-        .wait_for_success()
-        .await
-        .map_err(|e| format!("rotate_sfid_keys included failed: {e}"))?;
-
-    let block = client
-        .blocks()
-        .at(in_block.block_hash())
-        .await
-        .map_err(|e| format!("rotate_sfid_keys included failed: fetch block failed: {e}"))?;
-    let block_number =
-        block.number().to_string().parse::<u64>().map_err(|e| {
-            format!("rotate_sfid_keys included failed: parse block number failed: {e}")
-        })?;
-
-    Ok(ChainRotateReceipt {
-        tx_hash,
-        block_number,
-    })
-}
+// 中文注释:以下推链/读链 helper 已搬到 chain/key_admins/ 子目录:
+// - call_chain_state_get_storage / chain_rpc_call → chain/key_admins/state_query.rs
+// - fetch_chain_keyring_from_chain               → chain/key_admins/chain_keyring_query.rs
+// - submit_rotate_sfid_keys_extrinsic / ChainRotateReceipt → chain/key_admins/rotate.rs
+// - submit_set_sheng_signing_pubkey_with_client  → chain/key_admins/sheng_signing.rs
+// 本模块外部调用方继续走 `crate::chain::key_admins::*` 重新导出的入口。
 
 /// 中文注释：省登录管理员登录成功后，确保本省签名私钥在进程内缓存就绪。
 ///
@@ -1362,7 +1157,7 @@ pub(crate) async fn bootstrap_sheng_signer(
     admin_pubkey: &str,
     province: &str,
 ) -> Result<(), String> {
-    use self::chain_sheng_signing::submit_set_sheng_signing_pubkey_with_client;
+    use crate::chain::key_admins::submit_set_sheng_signing_pubkey_with_client;
     use sp_core::sr25519;
     use subxt::backend::legacy::LegacyRpcMethods;
     use subxt::{OnlineClient, PolkadotConfig};

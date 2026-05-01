@@ -5,8 +5,19 @@ use std::fmt;
 use zeroize::Zeroize;
 
 use crate::key_admins::chain_keyring::ChainKeyringState;
-use crate::key_admins::chain_proof::SignatureEnvelope;
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
+
+/// 中文注释:历史 `make_signature_envelope` 已下线,本结构仅保留作为
+/// `BindCallbackPayload.proof / callback_attestation` 字段类型(目前由
+/// runtime_align 单边产出,未实际填充)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SignatureEnvelope {
+    pub(crate) key_id: String,
+    pub(crate) key_version: String,
+    pub(crate) alg: String,
+    pub(crate) payload: String,
+    pub(crate) signature_hex: String,
+}
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(transparent)]
@@ -436,12 +447,8 @@ pub(crate) struct VoteVerifyCacheEntry {
     pub(crate) cached_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct ChainRequestAuth {
-    pub(crate) request_id: String,
-    pub(crate) nonce: String,
-    pub(crate) timestamp: i64,
-}
+// 中文注释:ChainRequestAuth 配套于已下架的 chain HMAC 鉴权(prepare_chain_request),
+// 2026-05-01 一并下架。
 
 #[derive(Deserialize)]
 pub(crate) struct AuditLogsQuery {
@@ -875,96 +882,10 @@ pub(crate) struct BindScanOutput {
     pub(crate) expire_at: i64,
 }
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct VoteVerifyInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) proposal_id: u64,
-}
-
-#[derive(Serialize)]
-pub(crate) struct VoteVerifyOutput {
-    pub(crate) genesis_hash: String,
-    pub(crate) who: String,
-    pub(crate) binding_id: String,
-    pub(crate) proposal_id: u64,
-    pub(crate) vote_nonce: String,
-    pub(crate) signature: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct ChainVotersCountQuery {
-    pub(crate) account_pubkey: Option<String>,
-    pub(crate) who: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ChainVotersCountOutput {
-    pub(crate) genesis_hash: String,
-    pub(crate) eligible_total: u64,
-    pub(crate) who: String,
-    pub(crate) snapshot_nonce: String,
-    pub(crate) signature: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct ChainBindingValidateInput {
-    pub(crate) archive_no: String,
-    pub(crate) account_pubkey: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ChainBindingValidateOutput {
-    pub(crate) is_bound: bool,
-    pub(crate) is_voting_eligible: bool,
-    pub(crate) citizen_status: Option<CitizenStatus>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum RewardAckStatusInput {
-    Success,
-    Failed,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct RewardAckInput {
-    pub(crate) account_pubkey: String,
-    pub(crate) callback_id: String,
-    pub(crate) status: RewardAckStatusInput,
-    pub(crate) reward_tx_hash: Option<String>,
-    pub(crate) error_message: Option<String>,
-    pub(crate) retry_after_seconds: Option<u64>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct RewardAckOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) callback_id: String,
-    pub(crate) reward_status: RewardStatus,
-    pub(crate) retry_count: u32,
-    pub(crate) next_retry_at: Option<i64>,
-    pub(crate) message: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct RewardStateOutput {
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) callback_id: String,
-    pub(crate) reward_status: RewardStatus,
-    pub(crate) retry_count: u32,
-    pub(crate) max_retries: u32,
-    pub(crate) reward_tx_hash: Option<String>,
-    pub(crate) last_error: Option<String>,
-    pub(crate) next_retry_at: Option<i64>,
-    pub(crate) updated_at: i64,
-    pub(crate) created_at: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct RewardStateQuery {
-    pub(crate) account_pubkey: String,
-}
+// 中文注释:VoteVerifyInput/Output、ChainVotersCountQuery/Output、ChainBindingValidate
+// Input/Output、RewardAckInput/Output、RewardStateOutput/Query、RewardAckStatusInput
+// 全部配套于已下架的 /api/v1/{vote/verify, chain/voters/count, chain/binding/validate,
+// chain/reward/{ack,state}} dead routes,2026-05-01 一并下架。
 
 #[derive(Deserialize)]
 pub(crate) struct CpmsStatusScanInput {

@@ -856,8 +856,13 @@ pub(crate) async fn citizen_push_chain_bind(
         }
     };
 
-    // 提交 bind_sfid extrinsic（PoW 链三件套）
-    let tx_hash = match submit_bind_sfid_extrinsic(&credential, &province_pair).await {
+    // 提交 bind_sfid extrinsic(PoW 链三件套,实现在 chain/citizen_binding/push.rs)
+    let tx_hash = match crate::chain::citizen_binding::submit_bind_sfid_extrinsic(
+        &credential,
+        &province_pair,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             return api_error(
@@ -920,8 +925,13 @@ pub(crate) async fn citizen_push_chain_unbind(
             Err((status, msg)) => return api_error(status, 5001, &msg),
         };
 
-    // 提交 unbind_sfid(target) extrinsic
-    let tx_hash = match submit_unbind_sfid_extrinsic(&account_pubkey, &province_pair).await {
+    // 提交 unbind_sfid(target) extrinsic(实现在 chain/citizen_binding/push.rs)
+    let tx_hash = match crate::chain::citizen_binding::submit_unbind_sfid_extrinsic(
+        &account_pubkey,
+        &province_pair,
+    )
+    .await
+    {
         Ok(v) => v,
         Err(e) => {
             return api_error(
@@ -953,192 +963,5 @@ pub(crate) async fn citizen_push_chain_unbind(
     .into_response()
 }
 
-// ── 链上提交辅助函数 ──────────────────────────────────────
-
-/// 提交 bind_sfid extrinsic（PoW 链三件套：显式 nonce + immortal + 等 InBestBlock）。
-async fn submit_bind_sfid_extrinsic(
-    credential: &crate::chain::runtime_align::RuntimeBindCredential,
-    province_pair: &sp_core::sr25519::Pair,
-) -> Result<String, String> {
-    use subxt::{
-        config::substrate::{AccountId32, MultiSignature},
-        dynamic::{tx, Value},
-        OnlineClient, PolkadotConfig,
-    };
-
-    let ws_url = crate::chain::url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(&ws_url)
-        .await
-        .map_err(|e| format!("chain ws connect failed: {e}"))?;
-    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("legacy rpc connect failed: {e}"))?;
-    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
-
-    let signer_account = AccountId32(province_pair.public().0);
-    let chain_nonce = legacy_rpc
-        .system_account_next_index(&signer_account)
-        .await
-        .map_err(|e| format!("fetch nonce failed: {e}"))?;
-
-    let binding_id_bytes =
-        hex::decode(&credential.binding_id).map_err(|e| format!("binding_id hex decode: {e}"))?;
-    let nonce_bytes = credential.bind_nonce.as_bytes().to_vec();
-    let sig_bytes =
-        hex::decode(&credential.signature).map_err(|e| format!("signature hex decode: {e}"))?;
-
-    let payload = tx(
-        "SfidSystem",
-        "bind_sfid",
-        vec![Value::named_composite([
-            ("binding_id", Value::from_bytes(binding_id_bytes)),
-            ("bind_nonce", Value::from_bytes(nonce_bytes)),
-            ("signature", Value::from_bytes(sig_bytes)),
-        ])],
-    );
-
-    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
-        .immortal()
-        .nonce(chain_nonce)
-        .build();
-    let mut partial_tx = client
-        .tx()
-        .create_partial(&payload, &signer_account, params)
-        .await
-        .map_err(|e| format!("build extrinsic failed: {e}"))?;
-    let signature = province_pair.sign(&partial_tx.signer_payload()).0;
-    let extrinsic = partial_tx
-        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
-    let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
-
-    let mut submitted = extrinsic
-        .submit_and_watch()
-        .await
-        .map_err(|e| format!("submit_and_watch failed: {e}"))?;
-    // 只等 InBestBlock（PoW 链不等 finalize）
-    tokio::time::timeout(std::time::Duration::from_secs(120), async {
-        use subxt::tx::TxStatus;
-        loop {
-            match submitted.next().await {
-                Some(Ok(TxStatus::InBestBlock(b))) => {
-                    b.wait_for_success()
-                        .await
-                        .map_err(|e| format!("dispatch failed: {e}"))?;
-                    return Ok::<_, String>(());
-                }
-                Some(Ok(TxStatus::InFinalizedBlock(b))) => {
-                    b.wait_for_success()
-                        .await
-                        .map_err(|e| format!("dispatch failed: {e}"))?;
-                    return Ok(());
-                }
-                Some(Ok(TxStatus::Error { message }))
-                | Some(Ok(TxStatus::Invalid { message }))
-                | Some(Ok(TxStatus::Dropped { message })) => {
-                    return Err(format!("tx pool: {message}"));
-                }
-                Some(Ok(_)) => continue,
-                Some(Err(e)) => return Err(format!("tx watch error: {e}")),
-                None => return Err("tx watch stream closed".to_string()),
-            }
-        }
-    })
-    .await
-    .map_err(|_| "timed out waiting for in-block inclusion".to_string())?
-    .map_err(|e| e)?;
-
-    Ok(tx_hash)
-}
-
-/// 提交 unbind_sfid(target) extrinsic。
-async fn submit_unbind_sfid_extrinsic(
-    target_pubkey_hex: &str,
-    province_pair: &sp_core::sr25519::Pair,
-) -> Result<String, String> {
-    use subxt::{
-        config::substrate::{AccountId32, MultiSignature},
-        dynamic::{tx, Value},
-        OnlineClient, PolkadotConfig,
-    };
-
-    let target_bytes = hex::decode(target_pubkey_hex.trim_start_matches("0x"))
-        .map_err(|e| format!("target pubkey hex decode: {e}"))?;
-    if target_bytes.len() != 32 {
-        return Err("target pubkey must be 32 bytes".to_string());
-    }
-    let mut target_arr = [0u8; 32];
-    target_arr.copy_from_slice(&target_bytes);
-
-    let ws_url = crate::chain::url::chain_ws_url()?;
-    let client = OnlineClient::<PolkadotConfig>::from_insecure_url(&ws_url)
-        .await
-        .map_err(|e| format!("chain ws connect failed: {e}"))?;
-    let rpc_client = subxt::backend::rpc::RpcClient::from_insecure_url(ws_url.as_str())
-        .await
-        .map_err(|e| format!("legacy rpc connect failed: {e}"))?;
-    let legacy_rpc = subxt::backend::legacy::LegacyRpcMethods::<PolkadotConfig>::new(rpc_client);
-
-    let signer_account = AccountId32(province_pair.public().0);
-    let chain_nonce = legacy_rpc
-        .system_account_next_index(&signer_account)
-        .await
-        .map_err(|e| format!("fetch nonce failed: {e}"))?;
-
-    // unbind_sfid(target: AccountId) — call_index 1
-    let payload = tx(
-        "SfidSystem",
-        "unbind_sfid",
-        vec![Value::from_bytes(target_arr.to_vec())],
-    );
-
-    let params = subxt::config::DefaultExtrinsicParamsBuilder::<PolkadotConfig>::new()
-        .immortal()
-        .nonce(chain_nonce)
-        .build();
-    let mut partial_tx = client
-        .tx()
-        .create_partial(&payload, &signer_account, params)
-        .await
-        .map_err(|e| format!("build extrinsic failed: {e}"))?;
-    let signature = province_pair.sign(&partial_tx.signer_payload()).0;
-    let extrinsic = partial_tx
-        .sign_with_account_and_signature(&signer_account, &MultiSignature::Sr25519(signature));
-    let tx_hash = format!("0x{}", hex::encode(extrinsic.hash().as_ref()));
-
-    let mut submitted = extrinsic
-        .submit_and_watch()
-        .await
-        .map_err(|e| format!("submit_and_watch failed: {e}"))?;
-    tokio::time::timeout(std::time::Duration::from_secs(120), async {
-        use subxt::tx::TxStatus;
-        loop {
-            match submitted.next().await {
-                Some(Ok(TxStatus::InBestBlock(b))) => {
-                    b.wait_for_success()
-                        .await
-                        .map_err(|e| format!("dispatch failed: {e}"))?;
-                    return Ok::<_, String>(());
-                }
-                Some(Ok(TxStatus::InFinalizedBlock(b))) => {
-                    b.wait_for_success()
-                        .await
-                        .map_err(|e| format!("dispatch failed: {e}"))?;
-                    return Ok(());
-                }
-                Some(Ok(TxStatus::Error { message }))
-                | Some(Ok(TxStatus::Invalid { message }))
-                | Some(Ok(TxStatus::Dropped { message })) => {
-                    return Err(format!("tx pool: {message}"));
-                }
-                Some(Ok(_)) => continue,
-                Some(Err(e)) => return Err(format!("tx watch error: {e}")),
-                None => return Err("tx watch stream closed".to_string()),
-            }
-        }
-    })
-    .await
-    .map_err(|_| "timed out waiting for in-block inclusion".to_string())?
-    .map_err(|e| e)?;
-
-    Ok(tx_hash)
-}
+// 中文注释:历史 submit_bind_sfid_extrinsic / submit_unbind_sfid_extrinsic 已搬到
+// chain/citizen_binding/push.rs;调用入口走 `crate::chain::citizen_binding::*`。

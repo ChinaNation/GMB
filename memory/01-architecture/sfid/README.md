@@ -227,7 +227,7 @@ curl http://127.0.0.1:8899/api/v1/health
 - 回调体包含 `callback_attestation`（SFID 对回调内容签名）；HTTP Header 同步返回：
   - `x-sfid-callback-signature`
   - `x-sfid-callback-key-id`
-- 区块链可用 `GET /api/v1/attestor/public-key` 获取验签公钥。
+- 链端验签公钥来自链上 storage `SfidSystem::SfidMainAccount`(创世写入 + 链上 `rotate_sfid_keys` extrinsic 维护),不再走 HTTP 拉取。历史 `/api/v1/attestor/public-key` 端点 0 caller,2026-05-01 一并下架。
 
 ### 已实现的稳定性增强
 - 幂等与防重放：链路接口统一 `request_id/nonce/timestamp` 校验，并写入数据库幂等表 `chain_idempotency_requests`。
