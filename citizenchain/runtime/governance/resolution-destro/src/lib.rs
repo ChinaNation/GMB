@@ -15,7 +15,7 @@ use primitives::china::china_ch::{
 };
 use voting_engine::{
     internal_vote::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -169,20 +169,19 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
 
-            let proposal_id =
-                T::InternalVoteEngine::create_internal_proposal(who.clone(), org, institution)?;
-
             let action = DestroyAction {
                 institution,
                 amount,
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(
-                proposal_id,
-                frame_system::Pallet::<T>::block_number(),
-            );
+            let proposal_id = T::InternalVoteEngine::create_internal_proposal_with_data(
+                who.clone(),
+                org,
+                institution,
+                crate::MODULE_TAG,
+                encoded,
+            )?;
 
             Self::deposit_event(Event::<T>::DestroyProposed {
                 proposal_id,
@@ -201,8 +200,8 @@ pub mod pallet {
         #[pallet::call_index(1)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_destroy())]
         pub fn execute_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::try_execute_destroy(proposal_id)
+            let who = ensure_signed(origin)?;
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
     }
 
@@ -219,34 +218,9 @@ pub mod pallet {
             )
         }
 
-        /// 从投票引擎 ProposalData 中读取并解码本模块的业务数据。
-        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        fn load_proposal_data(proposal_id: u64) -> Option<DestroyAction<BalanceOf<T>>> {
-            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)?;
-            let tag = crate::MODULE_TAG;
-            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
-                return None;
-            }
-            DestroyAction::decode(&mut &raw[tag.len()..]).ok()
-        }
-
-        pub(crate) fn try_execute_destroy(proposal_id: u64) -> DispatchResult {
-            let action =
-                Self::load_proposal_data(proposal_id).ok_or(Error::<T>::ProposalActionNotFound)?;
-            Self::try_execute_destroy_from_action(proposal_id, action)
-        }
-
         pub(crate) fn try_execute_destroy_from_action(
             proposal_id: u64,
             action: DestroyAction<BalanceOf<T>>,
-        ) -> DispatchResult {
-            Self::try_execute_destroy_from_action_with_finalizer(proposal_id, action, false)
-        }
-
-        pub(crate) fn try_execute_destroy_from_action_with_finalizer(
-            proposal_id: u64,
-            action: DestroyAction<BalanceOf<T>>,
-            callback_context: bool,
         ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -275,16 +249,6 @@ pub mod pallet {
                 T::Currency::slash(&institution_account, action.amount);
             ensure!(remaining.is_zero(), Error::<T>::InsufficientBalance);
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Self::deposit_event(Event::<T>::DestroyExecuted {
                 proposal_id,
                 institution: action.institution,
@@ -303,37 +267,29 @@ pub mod pallet {
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(()),
+            _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
         if !approved {
-            return Ok(());
+            return Ok(ProposalExecutionOutcome::Executed);
         }
         let action = DestroyAction::<BalanceOf<T>>::decode(&mut &raw[crate::MODULE_TAG.len()..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-        // 打执行时间戳（对齐决议发行语义）。
-        voting_engine::Pallet::<T>::set_proposal_passed(
-            proposal_id,
-            frame_system::Pallet::<T>::block_number(),
-        );
-
-        // 执行销毁;失败只发事件并保留 PASSED,等待余额恢复后手动重试。
-        // 投票不回滚(票已投完,回滚会造成票数丢失)。
-        if pallet::Pallet::<T>::try_execute_destroy_from_action_with_finalizer(
-            proposal_id,
-            action,
-            true,
-        )
-        .is_err()
-        {
-            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::DestroyExecutionFailed {
-                proposal_id,
-            });
+        match pallet::Pallet::<T>::try_execute_destroy_from_action(proposal_id, action) {
+            Ok(()) => Ok(ProposalExecutionOutcome::Executed),
+            Err(_) => {
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::DestroyExecutionFailed {
+                    proposal_id,
+                });
+                Ok(ProposalExecutionOutcome::RetryableFailed)
+            }
         }
-        Ok(())
     }
 }
 
@@ -519,6 +475,10 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -738,9 +698,21 @@ mod tests {
                 1_000
             );
             assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
-            assert_noop!(
-                ResolutionDestro::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::InsufficientBalance
+            assert_ok!(ResolutionDestro::execute_destroy(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid
+            ));
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposal_execution_retry_state(pid)
+                    .expect("retry state should exist")
+                    .manual_attempts,
+                1
+            );
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposals(pid)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
             );
         });
     }
@@ -765,9 +737,16 @@ mod tests {
 
             // 如果不校验 ED，这里会被销毁到 0 并触发账户 reap。
             assert_eq!(Balances::free_balance(&account), 1_000);
-            assert_noop!(
-                ResolutionDestro::execute_destroy(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::InsufficientBalance
+            assert_ok!(ResolutionDestro::execute_destroy(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                pid
+            ));
+            assert_eq!(Balances::free_balance(&account), 1_000);
+            assert_eq!(
+                voting_engine::Pallet::<Test>::proposal_execution_retry_state(pid)
+                    .expect("retry state should exist")
+                    .manual_attempts,
+                1
             );
         });
     }
@@ -896,7 +875,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_destroy_is_allowed_for_non_admin() {
+    fn execute_destroy_requires_snapshot_admin() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
             let account = institution_account(institution);
@@ -913,8 +892,12 @@ mod tests {
                 assert_ok!(cast_vote(nrc_admin(i), pid, true));
             }
             let _ = Balances::deposit_creating(&account, 200);
+            assert_noop!(
+                ResolutionDestro::execute_destroy(RuntimeOrigin::signed(outsider), pid),
+                voting_engine::pallet::Error::<Test>::NoPermission
+            );
             assert_ok!(ResolutionDestro::execute_destroy(
-                RuntimeOrigin::signed(outsider),
+                RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
             assert_eq!(Balances::free_balance(&account), 100);

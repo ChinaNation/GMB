@@ -171,15 +171,8 @@ pub mod pallet {
             ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
             ensure!(!code.is_empty(), Error::<T>::EmptyRuntimeCode);
 
-            let proposal_id = T::JointVoteEngine::create_joint_proposal(
-                proposer.clone(),
-                eligible_total,
-                snapshot_nonce.as_slice(),
-                signature.as_slice(),
-            )
-            .map_err(|_| Error::<T>::JointVoteCreateFailed)?;
-
-            let code_hash = T::Hashing::hash(code.as_slice());
+            let code_vec = code.into_inner();
+            let code_hash = T::Hashing::hash(code_vec.as_slice());
             let proposal = Proposal::<T> {
                 proposer: proposer.clone(),
                 reason,
@@ -188,16 +181,32 @@ pub mod pallet {
             };
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&proposal.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
-            voting_engine::Pallet::<T>::store_proposal_object(
-                proposal_id,
-                PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
-                code.into_inner(),
-            )?;
-            voting_engine::Pallet::<T>::store_proposal_meta(
-                proposal_id,
-                frame_system::Pallet::<T>::block_number(),
-            );
+            let proposal_id = frame_support::storage::with_transaction(|| {
+                let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
+                    proposer.clone(),
+                    eligible_total,
+                    snapshot_nonce.as_slice(),
+                    signature.as_slice(),
+                    crate::MODULE_TAG,
+                    encoded,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(_) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(
+                            Error::<T>::JointVoteCreateFailed.into(),
+                        ))
+                    }
+                };
+                match voting_engine::Pallet::<T>::store_proposal_object_for(
+                    proposal_id,
+                    crate::MODULE_TAG,
+                    PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
+                    code_vec,
+                ) {
+                    Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                    Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+                }
+            })?;
 
             Self::deposit_event(Event::<T>::RuntimeUpgradeProposed {
                 proposal_id,
@@ -270,7 +279,11 @@ pub mod pallet {
         fn save_proposal(proposal_id: u64, proposal: &Proposal<T>) -> DispatchResult {
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&proposal.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)
+            voting_engine::Pallet::<T>::update_proposal_data(
+                proposal_id,
+                crate::MODULE_TAG,
+                encoded,
+            )
         }
 
         fn load_runtime_code(proposal_id: u64) -> Result<CodeOf<T>, DispatchError> {
@@ -344,28 +357,28 @@ pub mod pallet {
 }
 
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
-    fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_joint_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         // 中文注释：统一使用 voting engine 的 proposal_id，不再需要反查映射。
         pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
+        if !approved {
+            return Ok(voting_engine::ProposalExecutionOutcome::Executed);
+        }
         if approved {
             let proposal = pallet::Pallet::<T>::load_proposal(vote_proposal_id)?;
             match proposal.status {
                 pallet::ProposalStatus::Passed => {
-                    voting_engine::Pallet::<T>::set_callback_execution_result(
-                        vote_proposal_id,
-                        voting_engine::STATUS_EXECUTED,
-                    )?;
+                    return Ok(voting_engine::ProposalExecutionOutcome::Executed)
                 }
                 pallet::ProposalStatus::ExecutionFailed => {
-                    voting_engine::Pallet::<T>::set_callback_execution_result(
-                        vote_proposal_id,
-                        voting_engine::STATUS_EXECUTION_FAILED,
-                    )?;
+                    return Ok(voting_engine::ProposalExecutionOutcome::FatalFailed)
                 }
                 _ => {}
             }
         }
-        Ok(())
+        Ok(voting_engine::ProposalExecutionOutcome::Ignored)
     }
 }
 
@@ -458,6 +471,34 @@ mod tests {
                 Ok(v)
             })
         }
+
+        fn create_joint_proposal_with_data(
+            who: AccountId32,
+            eligible_total: u64,
+            snapshot_nonce: &[u8],
+            signature: &[u8],
+            module_tag: &[u8],
+            data: Vec<u8>,
+        ) -> Result<u64, DispatchError> {
+            let proposal_id =
+                Self::create_joint_proposal(who, eligible_total, snapshot_nonce, signature)?;
+            let bounded_data: frame_support::BoundedVec<
+                u8,
+                <Test as voting_engine::Config>::MaxProposalDataLen,
+            > = data
+                .try_into()
+                .map_err(|_| DispatchError::Other("proposal data too large"))?;
+            let owner: frame_support::BoundedVec<
+                u8,
+                <Test as voting_engine::Config>::MaxModuleTagLen,
+            > = module_tag
+                .to_vec()
+                .try_into()
+                .map_err(|_| DispatchError::Other("module tag too large"))?;
+            voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+            voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
+            Ok(proposal_id)
+        }
     }
 
     pub struct TestTimeProvider;
@@ -477,6 +518,10 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type SfidEligibility = ();
         type PopulationSnapshotVerifier = ();
         type JointVoteResultCallback = ();
@@ -624,11 +669,34 @@ mod tests {
         );
     }
 
-    fn call_joint_callback(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn call_joint_callback(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<voting_engine::ProposalExecutionOutcome, DispatchError> {
         voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
         let result = RuntimeUpgrade::on_joint_vote_finalized(proposal_id, approved);
         voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
-        result
+        match result {
+            Ok(outcome) => {
+                if approved {
+                    voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                        if let Some(proposal) = maybe {
+                            proposal.status = match outcome {
+                                voting_engine::ProposalExecutionOutcome::Executed => {
+                                    voting_engine::STATUS_EXECUTED
+                                }
+                                voting_engine::ProposalExecutionOutcome::FatalFailed => {
+                                    voting_engine::STATUS_EXECUTION_FAILED
+                                }
+                                _ => proposal.status,
+                            };
+                        }
+                    });
+                }
+                Ok(outcome)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     #[test]

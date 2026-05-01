@@ -49,9 +49,9 @@
 
 - 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，写入 `admins-change::Institutions` 的 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会写入 `PersonalDuoqian` 类型的 `Pending` 主体。
-- 创建投票通过后激活主体；创建拒绝或执行失败后清理主体；多签关闭后关闭主体。
-- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal`，由 Pending 快照 API 锁定管理员和阈值。
-- 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal`，只接受 Active 主体。
+- 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 voting-engine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
+- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_data`，由 Pending 快照 API 锁定管理员和阈值，并在同一事务中绑定 owner/data/meta。
+- 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal_with_data`，只接受 Active 主体。
 
 ## 5. 机构创建入口
 
@@ -91,7 +91,7 @@ propose_create_institution(
 - 手续费按 `onchain-transaction::calculate_onchain_fee(initial_total)` 计算。
 - 发起提案时从创建者账户 reserve `initial_total + fee`。
 - 投票通过执行时，先 unreserve，再扣手续费，再把各账户初始余额划入对应机构账户。
-- 投票拒绝、超时清理或执行失败时，释放 reserve 并清理 pending 索引。
+- 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 voting-engine 的终态回调释放 reserve 并清理 pending 索引。
 
 ## 6. 投票回调
 

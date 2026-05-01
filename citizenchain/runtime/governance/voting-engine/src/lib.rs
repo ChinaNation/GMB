@@ -17,8 +17,8 @@
 //!   Phase 1 整改后投票一律走本 pallet 的公开 `internal_vote / joint_vote /
 //!   citizen_vote` extrinsic)。
 //! - `InternalVoteResultCallback` / `JointVoteResultCallback`:内部/联合提案
-//!   进入终态(PASSED/REJECTED)时,投票引擎对所有业务模块 tuple 广播回调,
-//!   业务模块按 `MODULE_TAG` 前缀认领自己的提案并执行业务。
+//!   完成投票判定时,投票引擎按统一状态机调用业务 executor。
+//!   业务模块只返回统一执行结果，不再直接推进投票引擎状态；PASSED 表示执行授权/可重试态。
 //! - 自动超时结算、原子终结 + 回调一致性(回调返回 Err 整体回滚)、
 //!   90 天延迟分块清理。
 
@@ -67,8 +67,24 @@ pub const STATUS_PASSED: u8 = 1;
 pub const STATUS_REJECTED: u8 = 2;
 /// 提案已执行完成（终态）。消费模块在业务逻辑成功后推进到该状态。
 pub const STATUS_EXECUTED: u8 = 3;
-/// 投票通过但业务执行失败（终态）。由消费模块回调在 set_status_and_emit 事务内静默写入。
+/// 投票通过但业务执行失败（终态）。只由投票引擎在重试耗尽、超时或业务永久失败时写入。
 pub const STATUS_EXECUTION_FAILED: u8 = 4;
+
+/// 业务模块统一执行结果。
+///
+/// 中文注释：业务模块只表达“业务动作执行结果”，不再直接改写提案状态。
+/// 投票引擎根据该结果统一维护 PASSED / EXECUTED / EXECUTION_FAILED 状态。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub enum ProposalExecutionOutcome {
+    /// 不是本模块提案。
+    Ignored,
+    /// 业务执行成功。
+    Executed,
+    /// 暂时失败，保留 PASSED 并允许管理员手动重试。
+    RetryableFailed,
+    /// 确定不可执行，进入 EXECUTION_FAILED 终态。
+    FatalFailed,
+}
 
 /// 内部提案互斥类型。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
@@ -102,6 +118,19 @@ pub struct InternalProposalMutexBinding {
     pub kind: InternalProposalMutexKind,
 }
 
+/// 自动执行失败后的统一重试状态。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub struct ExecutionRetryState<BlockNumber> {
+    /// 已失败的手动执行次数。自动执行失败不计入该次数。
+    pub manual_attempts: u8,
+    /// 第一次自动执行失败所在区块。
+    pub first_auto_failed_at: BlockNumber,
+    /// 超过该区块仍未执行成功，则自动转 EXECUTION_FAILED。
+    pub retry_deadline: BlockNumber,
+    /// 最近一次手动执行尝试所在区块。
+    pub last_attempt_at: Option<BlockNumber>,
+}
+
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(
@@ -111,7 +140,38 @@ pub trait JointVoteEngine<AccountId> {
         signature: &[u8],
     ) -> Result<u64, DispatchError>;
 
+    fn create_joint_proposal_with_data(
+        who: AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError>;
+
     fn cleanup_joint_proposal(_proposal_id: u64) {}
+}
+
+impl<AccountId> JointVoteEngine<AccountId> for () {
+    fn create_joint_proposal(
+        _who: AccountId,
+        _eligible_total: u64,
+        _snapshot_nonce: &[u8],
+        _signature: &[u8],
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("JointVoteEngineNotConfigured"))
+    }
+
+    fn create_joint_proposal_with_data(
+        _who: AccountId,
+        _eligible_total: u64,
+        _snapshot_nonce: &[u8],
+        _signature: &[u8],
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("JointVoteEngineNotConfigured"))
+    }
 }
 
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
@@ -128,10 +188,30 @@ pub trait InternalVoteEngine<AccountId> {
         institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError>;
 
+    fn create_internal_proposal_with_data(
+        who: AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError>;
+
     fn create_pending_subject_internal_proposal(
         _who: AccountId,
         _org: u8,
         _institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "PendingSubjectVoteEngineNotConfigured",
+        ))
+    }
+
+    fn create_pending_subject_internal_proposal_with_data(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
             "PendingSubjectVoteEngineNotConfigured",
@@ -148,6 +228,18 @@ pub trait InternalVoteEngine<AccountId> {
         ))
     }
 
+    fn create_admin_set_mutation_internal_proposal_with_data(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "AdminSetMutationVoteEngineNotConfigured",
+        ))
+    }
+
     fn cleanup_internal_proposal(_proposal_id: u64) {}
 }
 
@@ -156,6 +248,16 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
         _who: AccountId,
         _org: u8,
         _institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
+    }
+
+    fn create_internal_proposal_with_data(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
     }
@@ -183,19 +285,33 @@ impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, S
 }
 
 pub trait JointVoteResultCallback {
-    fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult;
+    fn on_joint_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError>;
+
+    fn can_cancel_passed_proposal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
+
+    fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
 }
 
 impl JointVoteResultCallback for () {
-    fn on_joint_vote_finalized(_vote_proposal_id: u64, _approved: bool) -> DispatchResult {
-        Ok(())
+    fn on_joint_vote_finalized(
+        _vote_proposal_id: u64,
+        _approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        Ok(ProposalExecutionOutcome::Ignored)
     }
 }
 
 /// 内部投票终态回调。
 ///
-/// 投票引擎在提案进入 `STATUS_PASSED` / `STATUS_REJECTED` 时(由
-/// `set_status_and_emit` 统一触发)对所有注册的业务模块广播此回调。
+/// 投票引擎在提案进入 `STATUS_PASSED` / `STATUS_REJECTED` 时对所有注册
+/// 的业务模块广播此回调，并根据返回的 [`ProposalExecutionOutcome`] 统一推进状态。
 ///
 /// 业务模块应当:
 /// - 通过 `ProposalData` 的 `MODULE_TAG` 前缀(或业务独立存储键)认领自己的提案,
@@ -203,18 +319,45 @@ impl JointVoteResultCallback for () {
 /// - `approved = true` 时执行具体业务动作(转账 / 替换管理员 / 销毁 / ...);
 /// - `approved = false` 时可选清理业务独立存储(如 `SweepProposalActions`)。
 ///
-/// 与 [`JointVoteResultCallback`] 行为对称:回调返回 `Err` 会让
-/// `set_status_and_emit` 的整个事务回滚,提案状态不推进。
+/// 回调返回 `Err` 表示业务数据异常，会让整个状态转换事务回滚。
 ///
 /// 多业务模块通过 tuple 注册(见下方 `impl` for `(A,)`、`(A, B)` ... 等元组类型)。
 pub trait InternalVoteResultCallback {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult;
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError>;
+
+    fn can_cancel_passed_proposal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
+
+    fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
 }
 
 /// 默认空实现(runtime 在 Phase 2 业务模块改造前临时挂 `type X = ()`)。
 impl InternalVoteResultCallback for () {
-    fn on_internal_vote_finalized(_proposal_id: u64, _approved: bool) -> DispatchResult {
-        Ok(())
+    fn on_internal_vote_finalized(
+        _proposal_id: u64,
+        _approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        Ok(ProposalExecutionOutcome::Ignored)
+    }
+}
+
+fn merge_execution_outcome(
+    current: ProposalExecutionOutcome,
+    next: ProposalExecutionOutcome,
+) -> ProposalExecutionOutcome {
+    use ProposalExecutionOutcome::*;
+    match (current, next) {
+        (Ignored, outcome) => outcome,
+        (outcome, Ignored) => outcome,
+        (FatalFailed, _) | (_, FatalFailed) => FatalFailed,
+        (RetryableFailed, _) | (_, RetryableFailed) => RetryableFailed,
+        (Executed, Executed) => Executed,
     }
 }
 
@@ -228,18 +371,42 @@ impl InternalVoteResultCallback for () {
 // duoqian_manage / admins_change / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
         A::on_internal_vote_finalized(proposal_id, approved)
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)
     }
 }
 
 impl<A: InternalVoteResultCallback, B: InternalVoteResultCallback> InternalVoteResultCallback
     for (A, B)
 {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        A::on_internal_vote_finalized(proposal_id, approved)?;
-        B::on_internal_vote_finalized(proposal_id, approved)?;
-        Ok(())
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let a = A::on_internal_vote_finalized(proposal_id, approved)?;
+        let b = B::on_internal_vote_finalized(proposal_id, approved)?;
+        Ok(merge_execution_outcome(a, b))
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)?;
+        B::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)
     }
 }
 
@@ -249,11 +416,32 @@ impl<
         C: InternalVoteResultCallback,
     > InternalVoteResultCallback for (A, B, C)
 {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        A::on_internal_vote_finalized(proposal_id, approved)?;
-        B::on_internal_vote_finalized(proposal_id, approved)?;
-        C::on_internal_vote_finalized(proposal_id, approved)?;
-        Ok(())
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let mut outcome = A::on_internal_vote_finalized(proposal_id, approved)?;
+        outcome = merge_execution_outcome(
+            outcome,
+            B::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            C::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        Ok(outcome)
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)?;
+        B::can_cancel_passed_proposal(proposal_id)?;
+        C::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)?;
+        C::on_execution_failed_terminal(proposal_id)
     }
 }
 
@@ -264,12 +452,38 @@ impl<
         D: InternalVoteResultCallback,
     > InternalVoteResultCallback for (A, B, C, D)
 {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        A::on_internal_vote_finalized(proposal_id, approved)?;
-        B::on_internal_vote_finalized(proposal_id, approved)?;
-        C::on_internal_vote_finalized(proposal_id, approved)?;
-        D::on_internal_vote_finalized(proposal_id, approved)?;
-        Ok(())
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let mut outcome = A::on_internal_vote_finalized(proposal_id, approved)?;
+        outcome = merge_execution_outcome(
+            outcome,
+            B::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            C::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            D::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        Ok(outcome)
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)?;
+        B::can_cancel_passed_proposal(proposal_id)?;
+        C::can_cancel_passed_proposal(proposal_id)?;
+        D::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)?;
+        C::on_execution_failed_terminal(proposal_id)?;
+        D::on_execution_failed_terminal(proposal_id)
     }
 }
 
@@ -281,13 +495,44 @@ impl<
         E: InternalVoteResultCallback,
     > InternalVoteResultCallback for (A, B, C, D, E)
 {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        A::on_internal_vote_finalized(proposal_id, approved)?;
-        B::on_internal_vote_finalized(proposal_id, approved)?;
-        C::on_internal_vote_finalized(proposal_id, approved)?;
-        D::on_internal_vote_finalized(proposal_id, approved)?;
-        E::on_internal_vote_finalized(proposal_id, approved)?;
-        Ok(())
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let mut outcome = A::on_internal_vote_finalized(proposal_id, approved)?;
+        outcome = merge_execution_outcome(
+            outcome,
+            B::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            C::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            D::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            E::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        Ok(outcome)
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)?;
+        B::can_cancel_passed_proposal(proposal_id)?;
+        C::can_cancel_passed_proposal(proposal_id)?;
+        D::can_cancel_passed_proposal(proposal_id)?;
+        E::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)?;
+        C::on_execution_failed_terminal(proposal_id)?;
+        D::on_execution_failed_terminal(proposal_id)?;
+        E::on_execution_failed_terminal(proposal_id)
     }
 }
 
@@ -300,14 +545,50 @@ impl<
         F: InternalVoteResultCallback,
     > InternalVoteResultCallback for (A, B, C, D, E, F)
 {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
-        A::on_internal_vote_finalized(proposal_id, approved)?;
-        B::on_internal_vote_finalized(proposal_id, approved)?;
-        C::on_internal_vote_finalized(proposal_id, approved)?;
-        D::on_internal_vote_finalized(proposal_id, approved)?;
-        E::on_internal_vote_finalized(proposal_id, approved)?;
-        F::on_internal_vote_finalized(proposal_id, approved)?;
-        Ok(())
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, DispatchError> {
+        let mut outcome = A::on_internal_vote_finalized(proposal_id, approved)?;
+        outcome = merge_execution_outcome(
+            outcome,
+            B::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            C::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            D::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            E::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        outcome = merge_execution_outcome(
+            outcome,
+            F::on_internal_vote_finalized(proposal_id, approved)?,
+        );
+        Ok(outcome)
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        A::can_cancel_passed_proposal(proposal_id)?;
+        B::can_cancel_passed_proposal(proposal_id)?;
+        C::can_cancel_passed_proposal(proposal_id)?;
+        D::can_cancel_passed_proposal(proposal_id)?;
+        E::can_cancel_passed_proposal(proposal_id)?;
+        F::can_cancel_passed_proposal(proposal_id)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        A::on_execution_failed_terminal(proposal_id)?;
+        B::on_execution_failed_terminal(proposal_id)?;
+        C::on_execution_failed_terminal(proposal_id)?;
+        D::on_execution_failed_terminal(proposal_id)?;
+        E::on_execution_failed_terminal(proposal_id)?;
+        F::on_execution_failed_terminal(proposal_id)
     }
 }
 
@@ -517,6 +798,22 @@ pub mod pallet {
         #[pallet::constant]
         type MaxProposalObjectLen: Get<u32>;
 
+        /// 业务模块标识最大长度，用于 ProposalOwner 绑定。
+        #[pallet::constant]
+        type MaxModuleTagLen: Get<u32>;
+
+        /// 自动执行失败后允许的最大手动失败次数。
+        #[pallet::constant]
+        type MaxManualExecutionAttempts: Get<u32>;
+
+        /// 自动执行失败后等待管理员手动执行的宽限区块数。
+        #[pallet::constant]
+        type ExecutionRetryGraceBlocks: Get<BlockNumberFor<Self>>;
+
+        /// 单个区块最多处理多少个执行重试超时提案。
+        #[pallet::constant]
+        type MaxExecutionRetryDeadlinesPerBlock: Get<u32>;
+
         type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
             Self::AccountId,
@@ -575,8 +872,8 @@ pub mod pallet {
 
     /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
     ///
-    /// 中文注释：消费模块只能在这个作用域内通过 `set_callback_execution_result`
-    /// 静默写入业务执行结果，避免非回调路径绕过最终事件和互斥锁释放逻辑。
+    /// 中文注释：生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域只保护
+    /// 单测兼容辅助接口，避免非回调路径绕过最终事件和互斥锁释放逻辑。
     #[pallet::storage]
     pub type CallbackExecutionScopes<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, (), OptionQuery>;
@@ -702,6 +999,32 @@ pub mod pallet {
     pub type ProposalData<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, BoundedVec<u8, T::MaxProposalDataLen>, OptionQuery>;
 
+    /// 提案 owner：proposal_id → 业务模块 MODULE_TAG。
+    ///
+    /// 中文注释：ProposalOwner 是投票引擎分发自动执行、手动重试和取消的唯一归属来源。
+    /// 业务模块不再只依赖 ProposalData 前缀自认领，避免跨模块覆写后静默跳过。
+    #[pallet::storage]
+    #[pallet::getter(fn proposal_owner)]
+    pub type ProposalOwner<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, BoundedVec<u8, T::MaxModuleTagLen>, OptionQuery>;
+
+    /// 自动执行失败后的可重试状态。
+    #[pallet::storage]
+    #[pallet::getter(fn proposal_execution_retry_state)]
+    pub type ProposalExecutionRetryStates<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, ExecutionRetryState<BlockNumberFor<T>>, OptionQuery>;
+
+    /// 执行重试超时队列：retry_deadline → proposal_id 列表。
+    #[pallet::storage]
+    #[pallet::getter(fn execution_retry_deadlines)]
+    pub type ExecutionRetryDeadlines<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        BlockNumberFor<T>,
+        BoundedVec<u64, T::MaxExecutionRetryDeadlinesPerBlock>,
+        ValueQuery,
+    >;
+
     /// 提案对象层元数据（对象类型 / 长度 / 哈希），由投票引擎统一存储和清理。
     #[pallet::storage]
     #[pallet::getter(fn proposal_object_meta)]
@@ -781,8 +1104,23 @@ pub mod pallet {
             citizen_end: BlockNumberFor<T>,
             eligible_total: u64,
         },
-        /// 中文注释：提案终结，status 为最终状态（PASSED/REJECTED/EXECUTED/EXECUTION_FAILED）。
+        /// 中文注释：投票阶段完成或执行状态变化；PASSED 是执行授权/可重试态，不是终态。
         ProposalFinalized { proposal_id: u64, status: u8 },
+        /// 中文注释：自动执行失败，提案进入 PASSED 可重试态。
+        ProposalExecutionRetryScheduled {
+            proposal_id: u64,
+            retry_deadline: BlockNumberFor<T>,
+        },
+        /// 中文注释：管理员手动执行已尝试。
+        ProposalExecutionRetried {
+            proposal_id: u64,
+            manual_attempts: u8,
+            outcome: u8,
+        },
+        /// 中文注释：PASSED 可重试提案超过宽限期，转入执行失败终态。
+        ProposalExecutionRetryExpired { proposal_id: u64 },
+        /// 中文注释：管理员取消 PASSED 可重试提案，转入执行失败终态。
+        ProposalExecutionCancelled { proposal_id: u64 },
         /// 中文注释：内部投票已投出一票。
         InternalVoteCast {
             proposal_id: u64,
@@ -859,6 +1197,20 @@ pub mod pallet {
         TooManyInternalProposalMutexBindings,
         /// 中文注释：管理员更换提案不是当前治理主体的独占锁 owner。
         InternalProposalMutexOwnerMismatch,
+        /// 中文注释：提案尚未绑定业务 owner。
+        ProposalOwnerMissing,
+        /// 中文注释：提案 owner 与当前业务模块不匹配。
+        ProposalOwnerMismatch,
+        /// 中文注释：提案业务数据已绑定，禁止跨模块覆写。
+        ProposalDataAlreadyRegistered,
+        /// 中文注释：提案不是可手动执行状态。
+        ProposalNotRetryable,
+        /// 中文注释：手动执行失败次数已达上限。
+        ManualExecutionAttemptsExceeded,
+        /// 中文注释：手动执行宽限期已过。
+        ExecutionRetryDeadlinePassed,
+        /// 中文注释：单个区块执行重试超时队列已满。
+        TooManyExecutionRetryDeadlines,
     }
 
     #[pallet::hooks]
@@ -900,6 +1252,8 @@ pub mod pallet {
                 }
             }
 
+            weight = weight.saturating_add(Self::process_execution_retry_deadlines(n));
+
             weight = weight.saturating_add(Self::process_pending_cleanup_steps());
 
             // 处理延迟清理队列：清理 90 天前完成的提案的全部数据
@@ -915,7 +1269,7 @@ pub mod pallet {
         ///
         /// 所有机构管理员对内部提案的投票统一走此 call。
         /// 由 `do_internal_vote` 做完整的阶段/权限/防双投/记票/阈值校验。
-        /// 达到终态(PASSED/REJECTED)时会通过 `set_status_and_emit` 触发
+        /// 达到投票判定(PASSED/REJECTED)时会通过 `set_status_and_emit` 触发
         /// `InternalVoteResultCallback` 广播给业务模块执行后续动作。
         ///
         /// 签名客户端构造 call_data 格式:
@@ -994,6 +1348,32 @@ pub mod pallet {
             };
 
             Ok(Some(actual_weight).into())
+        }
+
+        /// 统一手动执行已通过但自动执行失败的提案。
+        ///
+        /// 中文注释：业务模块不得再各自暴露 execute_xxx 重试入口；所有手动执行
+        /// 都必须经过投票引擎校验 PASSED 状态、管理员权限、重试次数和宽限期。
+        #[pallet::call_index(4)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(8, 8))]
+        pub fn retry_passed_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::retry_passed_proposal_inner(&who, proposal_id)
+        }
+
+        /// 统一取消已通过但无法继续执行的提案。
+        ///
+        /// 中文注释：取消只允许 `PASSED -> EXECUTION_FAILED`，进入执行失败终态后
+        /// 不再允许重试或再次取消。
+        #[pallet::call_index(5)]
+        #[pallet::weight(T::DbWeight::get().reads_writes(7, 7))]
+        pub fn cancel_passed_proposal(
+            origin: OriginFor<T>,
+            proposal_id: u64,
+            _reason: BoundedVec<u8, T::MaxProposalDataLen>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::cancel_passed_proposal_inner(&who, proposal_id)
         }
     }
 
@@ -1271,9 +1651,283 @@ pub mod pallet {
             Ok(())
         }
 
-        fn with_callback_execution_scope<F>(proposal_id: u64, callback: F) -> DispatchResult
+        fn is_terminal_status(status: u8) -> bool {
+            matches!(
+                status,
+                STATUS_REJECTED | STATUS_EXECUTED | STATUS_EXECUTION_FAILED
+            )
+        }
+
+        fn mark_proposal_passed_at(proposal_id: u64, block: BlockNumberFor<T>) {
+            ProposalMeta::<T>::mutate(proposal_id, |meta| {
+                if let Some(m) = meta {
+                    if m.passed_at.is_none() {
+                        m.passed_at = Some(block);
+                    }
+                }
+            });
+        }
+
+        fn set_proposal_status(proposal_id: u64, status: u8) -> DispatchResult {
+            Proposals::<T>::try_mutate(proposal_id, |maybe| {
+                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                Self::ensure_valid_status_transition(proposal.status, status)?;
+                proposal.status = status;
+                Ok(())
+            })
+        }
+
+        fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
+            ensure!(
+                Self::is_terminal_status(status),
+                Error::<T>::InvalidProposalStatus
+            );
+            ProposalExecutionRetryStates::<T>::remove(proposal_id);
+            if status == STATUS_EXECUTION_FAILED {
+                if let Some(proposal) = Proposals::<T>::get(proposal_id) {
+                    // 中文注释：执行失败终态需要业务模块清理 pending 锁或独立动作存储；
+                    // 清理失败不阻断投票引擎终态收口，避免提案卡在半终态。
+                    let _ = Self::notify_execution_failed_terminal(proposal_id, proposal.kind);
+                }
+            }
+            Self::deposit_event(Event::<T>::ProposalFinalized {
+                proposal_id,
+                status,
+            });
+            let now = frame_system::Pallet::<T>::block_number();
+            proposal_cleanup::schedule_cleanup::<T>(proposal_id, now)?;
+            if let Some(proposal) = Proposals::<T>::get(proposal_id) {
+                if Self::should_release_internal_proposal_mutexes(
+                    proposal.kind,
+                    proposal.stage,
+                    status,
+                ) {
+                    Self::release_internal_proposal_mutexes(proposal_id);
+                }
+            }
+            Ok(())
+        }
+
+        fn ensure_retry_admin(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
+            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+            let institution = proposal
+                .internal_institution
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                Self::is_admin_in_snapshot(proposal_id, institution, who),
+                Error::<T>::NoPermission
+            );
+            Ok(())
+        }
+
+        fn invoke_execution_callback(
+            proposal_id: u64,
+            kind: u8,
+            approved: bool,
+        ) -> Result<ProposalExecutionOutcome, DispatchError> {
+            match kind {
+                PROPOSAL_KIND_INTERNAL => {
+                    T::InternalVoteResultCallback::on_internal_vote_finalized(proposal_id, approved)
+                }
+                PROPOSAL_KIND_JOINT => {
+                    T::JointVoteResultCallback::on_joint_vote_finalized(proposal_id, approved)
+                }
+                _ => Err(Error::<T>::InvalidProposalKind.into()),
+            }
+        }
+
+        fn can_cancel_passed_proposal_by_owner(proposal_id: u64, kind: u8) -> DispatchResult {
+            match kind {
+                PROPOSAL_KIND_INTERNAL => {
+                    T::InternalVoteResultCallback::can_cancel_passed_proposal(proposal_id)
+                }
+                PROPOSAL_KIND_JOINT => {
+                    T::JointVoteResultCallback::can_cancel_passed_proposal(proposal_id)
+                }
+                _ => Err(Error::<T>::InvalidProposalKind.into()),
+            }
+        }
+
+        fn notify_execution_failed_terminal(proposal_id: u64, kind: u8) -> DispatchResult {
+            match kind {
+                PROPOSAL_KIND_INTERNAL => {
+                    T::InternalVoteResultCallback::on_execution_failed_terminal(proposal_id)
+                }
+                PROPOSAL_KIND_JOINT => {
+                    T::JointVoteResultCallback::on_execution_failed_terminal(proposal_id)
+                }
+                _ => Err(Error::<T>::InvalidProposalKind.into()),
+            }
+        }
+
+        fn schedule_execution_retry(proposal_id: u64) -> DispatchResult {
+            if ProposalExecutionRetryStates::<T>::contains_key(proposal_id) {
+                return Ok(());
+            }
+            let now = frame_system::Pallet::<T>::block_number();
+            let retry_deadline = now.saturating_add(T::ExecutionRetryGraceBlocks::get());
+            let state = ExecutionRetryState {
+                manual_attempts: 0,
+                first_auto_failed_at: now,
+                retry_deadline,
+                last_attempt_at: None,
+            };
+            ExecutionRetryDeadlines::<T>::try_mutate(retry_deadline, |ids| {
+                ids.try_push(proposal_id)
+                    .map_err(|_| Error::<T>::TooManyExecutionRetryDeadlines)
+            })?;
+            ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
+            Self::deposit_event(Event::<T>::ProposalExecutionRetryScheduled {
+                proposal_id,
+                retry_deadline,
+            });
+            Ok(())
+        }
+
+        fn apply_automatic_execution_outcome(
+            proposal_id: u64,
+            outcome: ProposalExecutionOutcome,
+        ) -> DispatchResult {
+            match outcome {
+                ProposalExecutionOutcome::Ignored => Err(Error::<T>::ProposalOwnerMissing.into()),
+                ProposalExecutionOutcome::Executed => {
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)
+                }
+                ProposalExecutionOutcome::RetryableFailed => {
+                    Self::schedule_execution_retry(proposal_id)
+                }
+                ProposalExecutionOutcome::FatalFailed => {
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                }
+            }
+        }
+
+        fn process_execution_retry_deadlines(now: BlockNumberFor<T>) -> Weight {
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads_writes(1, 1);
+            let queue = ExecutionRetryDeadlines::<T>::take(now);
+            if queue.is_empty() {
+                return weight;
+            }
+
+            for proposal_id in queue.into_iter() {
+                weight = weight.saturating_add(db_weight.reads_writes(2, 3));
+                let Some(state) = ProposalExecutionRetryStates::<T>::get(proposal_id) else {
+                    continue;
+                };
+                if state.retry_deadline > now {
+                    continue;
+                }
+                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    continue;
+                };
+                if proposal.status != STATUS_PASSED {
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    continue;
+                }
+                if Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED).is_ok() {
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired { proposal_id });
+                    let _ = Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED);
+                }
+            }
+            weight
+        }
+
+        fn retry_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
+            Self::ensure_retry_admin(who, proposal_id)?;
+            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::ProposalNotRetryable
+            );
+            let mut state = ProposalExecutionRetryStates::<T>::get(proposal_id)
+                .ok_or(Error::<T>::ProposalNotRetryable)?;
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(
+                now <= state.retry_deadline,
+                Error::<T>::ExecutionRetryDeadlinePassed
+            );
+            ensure!(
+                u32::from(state.manual_attempts) < T::MaxManualExecutionAttempts::get(),
+                Error::<T>::ManualExecutionAttemptsExceeded
+            );
+
+            let outcome = Self::invoke_execution_callback(proposal_id, proposal.kind, true)?;
+            match outcome {
+                ProposalExecutionOutcome::Executed => {
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
+                    Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                        proposal_id,
+                        manual_attempts: state.manual_attempts,
+                        outcome: STATUS_EXECUTED,
+                    });
+                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTED)
+                }
+                ProposalExecutionOutcome::RetryableFailed => {
+                    state.manual_attempts = state.manual_attempts.saturating_add(1);
+                    state.last_attempt_at = Some(now);
+                    if u32::from(state.manual_attempts) >= T::MaxManualExecutionAttempts::get() {
+                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                        Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                            proposal_id,
+                            manual_attempts: state.manual_attempts,
+                            outcome: STATUS_EXECUTION_FAILED,
+                        });
+                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                    } else {
+                        Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                            proposal_id,
+                            manual_attempts: state.manual_attempts,
+                            outcome: STATUS_PASSED,
+                        });
+                        ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
+                        Ok(())
+                    }
+                }
+                ProposalExecutionOutcome::FatalFailed => {
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                    Self::deposit_event(Event::<T>::ProposalExecutionRetried {
+                        proposal_id,
+                        manual_attempts: state.manual_attempts,
+                        outcome: STATUS_EXECUTION_FAILED,
+                    });
+                    Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                }
+                ProposalExecutionOutcome::Ignored => Err(Error::<T>::ProposalOwnerMissing.into()),
+            }
+        }
+
+        fn cancel_passed_proposal_inner(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
+            Self::ensure_retry_admin(who, proposal_id)?;
+            let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+            ensure!(
+                proposal.status == STATUS_PASSED,
+                Error::<T>::ProposalNotRetryable
+            );
+            Self::can_cancel_passed_proposal_by_owner(proposal_id, proposal.kind)?;
+            Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+            Self::deposit_event(Event::<T>::ProposalExecutionCancelled { proposal_id });
+            Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+        }
+
+        /// 兼容层：旧业务 execute_xxx extrinsic 必须委托到统一重试状态机。
+        pub fn retry_passed_proposal_for(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
+            Self::retry_passed_proposal_inner(who, proposal_id)
+        }
+
+        /// 兼容层：旧业务 cancel_xxx extrinsic 必须委托到统一取消状态机。
+        pub fn cancel_passed_proposal_for(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
+            Self::cancel_passed_proposal_inner(who, proposal_id)
+        }
+
+        fn with_callback_execution_scope<F, R>(
+            proposal_id: u64,
+            callback: F,
+        ) -> Result<R, DispatchError>
         where
-            F: FnOnce() -> DispatchResult,
+            F: FnOnce() -> Result<R, DispatchError>,
         {
             CallbackExecutionScopes::<T>::insert(proposal_id, ());
             let result = callback();
@@ -1281,9 +1935,8 @@ pub mod pallet {
             result
         }
 
-        /// 更新提案状态，并在业务回调完成后发出最终 ProposalFinalized 事件。
-        /// 手动补偿执行路径可调用此方法设置 STATUS_EXECUTED。
-        pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
+        /// 更新提案状态，并按统一 executor 结果推进业务执行状态。
+        pub(crate) fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
                 let (kind, stage, institution, should_run_callback) = match Proposals::<
                     T,
@@ -1297,6 +1950,10 @@ pub mod pallet {
                         let stage = proposal.stage;
                         let inst = proposal.internal_institution;
                         proposal.status = status;
+                        if old_status == STATUS_VOTING && status == STATUS_PASSED {
+                            let now = frame_system::Pallet::<T>::block_number();
+                            Self::mark_proposal_passed_at(proposal_id, now);
+                        }
                         Ok((
                             kind,
                             stage,
@@ -1317,33 +1974,19 @@ pub mod pallet {
                     }
                 }
 
-                // 中文注释:callback 只在"投票中 → PASSED/REJECTED"首次进入投票终态时触发,
-                // 不触发 PASSED→EXECUTED / PASSED→EXECUTION_FAILED 的二次推进。
-                // 后者是业务执行结果,业务自己清楚,不需要再次回调(否则会被错误解读为"否决"清理存储)。
-                if kind == PROPOSAL_KIND_JOINT && should_run_callback {
-                    if let Err(err) = Self::with_callback_execution_scope(proposal_id, || {
-                        T::JointVoteResultCallback::on_joint_vote_finalized(
-                            proposal_id,
-                            status == STATUS_PASSED,
-                        )
+                if should_run_callback {
+                    let outcome = match Self::with_callback_execution_scope(proposal_id, || {
+                        Self::invoke_execution_callback(proposal_id, kind, status == STATUS_PASSED)
                     }) {
-                        // 中文注释：联合投票结果必须由业务模块成功消费后，
-                        // 才允许投票引擎把提案标记为最终状态。
-                        return TransactionOutcome::Rollback(Err(err));
-                    }
-                }
-
-                // 中文注释:内部投票终态回调(对称于上面 joint 回调)。
-                // 业务模块在回调内执行具体业务动作(转账 / 替换管理员 / 销毁 / ...),
-                // 失败则整个状态转换事务回滚,票数 + 状态都保持原样。
-                if kind == PROPOSAL_KIND_INTERNAL && should_run_callback {
-                    if let Err(err) = Self::with_callback_execution_scope(proposal_id, || {
-                        T::InternalVoteResultCallback::on_internal_vote_finalized(
-                            proposal_id,
-                            status == STATUS_PASSED,
-                        )
-                    }) {
-                        return TransactionOutcome::Rollback(Err(err));
+                        Ok(outcome) => outcome,
+                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                    };
+                    if status == STATUS_PASSED {
+                        if let Err(err) =
+                            Self::apply_automatic_execution_outcome(proposal_id, outcome)
+                        {
+                            return TransactionOutcome::Rollback(Err(err));
+                        }
                     }
                 }
 
@@ -1360,10 +2003,9 @@ pub mod pallet {
                     status: final_status,
                 });
 
-                // 终态转换时自动注册 90 天延迟清理（PASSED/REJECTED/EXECUTED 均触发）。
-                // 同一提案可能多次进入终态（PASSED → EXECUTED），schedule_cleanup
-                // 内部用 try_push 保证幂等，重复注册不会导致重复清理。
-                if final_status != STATUS_VOTING {
+                // 中文注释：PASSED 是执行授权/可重试态，不再视为终态。
+                // 90 天延迟清理只登记 REJECTED / EXECUTED / EXECUTION_FAILED。
+                if Self::is_terminal_status(final_status) {
                     let now = frame_system::Pallet::<T>::block_number();
                     let _ = proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
                 }
@@ -1377,10 +2019,13 @@ pub mod pallet {
 
         /// 回调专用执行结果写入。
         ///
-        /// 中文注释：业务回调运行在 `set_status_and_emit(PASSED/REJECTED)` 的同一事务内。
-        /// 回调只静默写入执行结果，不发 `ProposalFinalized`、不登记清理、不释放互斥锁；
-        /// 这些收口动作统一由外层 `set_status_and_emit` 在读取最终状态后执行一次。
-        pub fn set_callback_execution_result(proposal_id: u64, final_status: u8) -> DispatchResult {
+        /// 中文注释：仅供单测验证旧回调作用域保护；生产业务回调应直接返回
+        /// `ProposalExecutionOutcome`，由外层 `set_status_and_emit` 统一收口状态、事件和清理。
+        #[cfg(test)]
+        pub(crate) fn set_callback_execution_result(
+            proposal_id: u64,
+            final_status: u8,
+        ) -> DispatchResult {
             ensure!(
                 CallbackExecutionScopes::<T>::contains_key(proposal_id),
                 Error::<T>::InvalidProposalStatus
@@ -1554,8 +2199,10 @@ pub mod pallet {
                     JointTallies::<T>::remove(proposal_id);
                     CitizenTallies::<T>::remove(proposal_id);
                     ProposalData::<T>::remove(proposal_id);
+                    ProposalOwner::<T>::remove(proposal_id);
                     ProposalMeta::<T>::remove(proposal_id);
-                    let weight = db_weight.writes(9);
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    let weight = db_weight.writes(11);
                     (None, weight) // 全部完成
                 }
             }
@@ -1617,8 +2264,80 @@ pub mod pallet {
     // ──── 统一提案数据存储公共接口 ────
 
     impl<T: Config> Pallet<T> {
-        /// 存储提案业务数据（由业务模块在创建提案时调用）。
-        pub fn store_proposal_data(proposal_id: u64, data: sp_std::vec::Vec<u8>) -> DispatchResult {
+        fn bounded_module_tag(
+            module_tag: &[u8],
+        ) -> Result<BoundedVec<u8, T::MaxModuleTagLen>, DispatchError> {
+            module_tag
+                .to_vec()
+                .try_into()
+                .map_err(|_| DispatchError::Other("ModuleTagTooLarge"))
+        }
+
+        fn ensure_proposal_owner(proposal_id: u64, module_tag: &[u8]) -> DispatchResult {
+            let owner =
+                ProposalOwner::<T>::get(proposal_id).ok_or(Error::<T>::ProposalOwnerMissing)?;
+            ensure!(
+                owner.as_slice() == module_tag,
+                Error::<T>::ProposalOwnerMismatch
+            );
+            Ok(())
+        }
+
+        /// 创建提案后原子绑定业务 owner、业务数据和创建区块。
+        ///
+        /// 中文注释：业务模块只能在提案创建阶段调用一次。后续更新必须走
+        /// `update_proposal_data` 并通过 owner 校验，禁止跨模块覆写 ProposalData。
+        pub(crate) fn register_proposal_data(
+            proposal_id: u64,
+            module_tag: &[u8],
+            data: sp_std::vec::Vec<u8>,
+            created_at: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            ensure!(
+                Proposals::<T>::contains_key(proposal_id),
+                Error::<T>::ProposalNotFound
+            );
+            ensure!(
+                !ProposalOwner::<T>::contains_key(proposal_id)
+                    && !ProposalData::<T>::contains_key(proposal_id),
+                Error::<T>::ProposalDataAlreadyRegistered
+            );
+            let owner = Self::bounded_module_tag(module_tag)?;
+            let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
+                .try_into()
+                .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;
+            ProposalOwner::<T>::insert(proposal_id, owner);
+            ProposalData::<T>::insert(proposal_id, bounded);
+            ProposalMeta::<T>::insert(
+                proposal_id,
+                ProposalMetadata {
+                    created_at,
+                    passed_at: None,
+                },
+            );
+            Ok(())
+        }
+
+        /// owner 校验后的业务数据更新。
+        pub fn update_proposal_data(
+            proposal_id: u64,
+            module_tag: &[u8],
+            data: sp_std::vec::Vec<u8>,
+        ) -> DispatchResult {
+            Self::ensure_proposal_owner(proposal_id, module_tag)?;
+            let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
+                .try_into()
+                .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;
+            ProposalData::<T>::insert(proposal_id, bounded);
+            Ok(())
+        }
+
+        /// 存储提案业务数据（仅保留给 voting-engine crate 内部测试/迁移使用）。
+        #[cfg(test)]
+        pub(crate) fn store_proposal_data(
+            proposal_id: u64,
+            data: sp_std::vec::Vec<u8>,
+        ) -> DispatchResult {
             let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
                 .try_into()
                 .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;
@@ -1632,7 +2351,7 @@ pub mod pallet {
         }
 
         /// 存储提案大对象（例如 runtime wasm）。
-        pub fn store_proposal_object(
+        pub(crate) fn store_proposal_object(
             proposal_id: u64,
             kind: u8,
             data: sp_std::vec::Vec<u8>,
@@ -1655,6 +2374,17 @@ pub mod pallet {
             Ok(())
         }
 
+        /// owner 校验后的提案大对象写入。
+        pub fn store_proposal_object_for(
+            proposal_id: u64,
+            module_tag: &[u8],
+            kind: u8,
+            data: sp_std::vec::Vec<u8>,
+        ) -> DispatchResult {
+            Self::ensure_proposal_owner(proposal_id, module_tag)?;
+            Self::store_proposal_object(proposal_id, kind, data)
+        }
+
         /// 读取提案大对象原始数据。
         pub fn get_proposal_object(proposal_id: u64) -> Option<sp_std::vec::Vec<u8>> {
             ProposalObject::<T>::get(proposal_id).map(|v| v.into_inner())
@@ -1674,7 +2404,8 @@ pub mod pallet {
         }
 
         /// 存储提案辅助元数据（创建时间）。
-        pub fn store_proposal_meta(proposal_id: u64, created_at: BlockNumberFor<T>) {
+        #[cfg(test)]
+        pub(crate) fn store_proposal_meta(proposal_id: u64, created_at: BlockNumberFor<T>) {
             ProposalMeta::<T>::insert(
                 proposal_id,
                 ProposalMetadata {
@@ -1685,12 +2416,9 @@ pub mod pallet {
         }
 
         /// 标记提案通过时间。
-        pub fn set_proposal_passed(proposal_id: u64, block: BlockNumberFor<T>) {
-            ProposalMeta::<T>::mutate(proposal_id, |meta| {
-                if let Some(m) = meta {
-                    m.passed_at = Some(block);
-                }
-            });
+        #[cfg(test)]
+        pub(crate) fn set_proposal_passed(proposal_id: u64, block: BlockNumberFor<T>) {
+            Self::mark_proposal_passed_at(proposal_id, block);
         }
 
         /// 读取提案辅助元数据。
@@ -1723,6 +2451,40 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
         )
     }
 
+    fn create_joint_proposal_with_data(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let signature: pallet::VoteSignatureOf<T> = signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_joint_proposal(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
     fn cleanup_joint_proposal(_proposal_id: u64) {
         // 已弃用：清理现在由 set_status_and_emit 在终态转换时自动注册。
         // 保留空实现以兼容 trait 定义。
@@ -1738,6 +2500,29 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
     }
 
+    fn create_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
     fn create_pending_subject_internal_proposal(
         who: T::AccountId,
         org: u8,
@@ -1746,12 +2531,63 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         pallet::Pallet::<T>::do_create_pending_subject_internal_proposal(who, org, institution)
     }
 
+    fn create_pending_subject_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_pending_subject_internal_proposal(
+                who,
+                org,
+                institution,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
     fn create_admin_set_mutation_internal_proposal(
         who: T::AccountId,
         org: u8,
         institution: InstitutionPalletId,
     ) -> Result<u64, DispatchError> {
         pallet::Pallet::<T>::do_create_admin_set_mutation_internal_proposal(who, org, institution)
+    }
+
+    fn create_admin_set_mutation_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_admin_set_mutation_internal_proposal(
+                    who,
+                    org,
+                    institution,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
     }
 
     fn cleanup_internal_proposal(_proposal_id: u64) {
@@ -1821,6 +2657,10 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<2>;
         type MaxProposalDataLen = ConstU32<4096>;
         type MaxProposalObjectLen = ConstU32<10_240>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
@@ -2107,27 +2947,47 @@ mod tests {
     }
 
     impl JointVoteResultCallback for TestJointVoteResultCallback {
-        fn on_joint_vote_finalized(vote_proposal_id: u64, _approved: bool) -> DispatchResult {
+        fn on_joint_vote_finalized(
+            vote_proposal_id: u64,
+            approved: bool,
+        ) -> Result<ProposalExecutionOutcome, DispatchError> {
             if JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
                 Err(DispatchError::Other("joint callback failed"))
             } else {
                 if let Some(status) = JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow()) {
-                    VotingEngine::set_callback_execution_result(vote_proposal_id, status)?;
+                    return Ok(match status {
+                        STATUS_EXECUTED => ProposalExecutionOutcome::Executed,
+                        STATUS_EXECUTION_FAILED => ProposalExecutionOutcome::FatalFailed,
+                        STATUS_PASSED => ProposalExecutionOutcome::RetryableFailed,
+                        _ => ProposalExecutionOutcome::Ignored,
+                    });
                 }
-                Ok(())
+                let _ = vote_proposal_id;
+                Ok(if approved {
+                    ProposalExecutionOutcome::RetryableFailed
+                } else {
+                    ProposalExecutionOutcome::Executed
+                })
             }
         }
     }
 
     impl InternalVoteResultCallback for TestInternalVoteResultCallback {
-        fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+        fn on_internal_vote_finalized(
+            proposal_id: u64,
+            approved: bool,
+        ) -> Result<ProposalExecutionOutcome, DispatchError> {
             // 先记日志,无论成功/失败都记 — 事务回滚会让日志外的状态回退,但
             // thread_local 不参与事务,通过对比"日志有/状态没变"即可验证回滚语义。
             INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().push((proposal_id, approved)));
             if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
                 Err(DispatchError::Other("internal callback failed"))
             } else {
-                Ok(())
+                Ok(if approved {
+                    ProposalExecutionOutcome::RetryableFailed
+                } else {
+                    ProposalExecutionOutcome::Executed
+                })
             }
         }
     }
@@ -3503,14 +4363,25 @@ mod tests {
             assert_eq!(proposal.status, STATUS_PASSED);
             assert!(has_used_vote_nonce(0, binding_id_ok(), "immediate-cleanup"));
 
-            // set_status_and_emit(STATUS_PASSED) 在 citizen_vote 通过时已自动注册 90 天后清理。
-            // 推进到清理到期区块并运行多轮 on_initialize 直到清理完成。
+            // 中文注释：PASSED 现在是可执行/可重试态，不允许被 90 天清理删除。
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
-            // schedule_cleanup 在 block 0 调用，cleanup_at = 0 + retention = retention
             let cleanup_block = retention;
             for i in 0..20u64 {
                 System::set_block_number(cleanup_block + i);
                 <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
+            }
+            assert!(has_used_vote_nonce(0, binding_id_ok(), "immediate-cleanup"));
+            assert!(Proposals::<Test>::get(0).is_some());
+
+            // 进入真正终态后才注册 90 天清理。
+            assert_ok!(VotingEngine::set_status_and_emit(
+                0,
+                STATUS_EXECUTION_FAILED
+            ));
+            let terminal_cleanup_block = System::block_number() + retention;
+            for i in 0..20u64 {
+                System::set_block_number(terminal_cleanup_block + i);
+                <VotingEngine as Hooks<u64>>::on_initialize(terminal_cleanup_block + i);
             }
             assert!(!has_used_vote_nonce(
                 0,
@@ -3946,10 +4817,14 @@ mod tests {
                 mark_vote_nonce_used(proposal_id, *binding_id, nonce);
             }
 
-            // set_status_and_emit 终态转换时自动注册 90 天后清理
+            // 中文注释：先进入 PASSED，再进入真正终态；只有终态会注册 90 天后清理。
             assert_ok!(VotingEngine::set_status_and_emit(
                 proposal_id,
                 STATUS_PASSED
+            ));
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_EXECUTION_FAILED
             ));
             // 此时 PendingProposalCleanups 尚未设置（要等 90 天后 process_cleanup_queue 触发）
             assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
@@ -4247,6 +5122,120 @@ mod tests {
                 proposal_id,
                 &nrc_admin(12)
             ));
+        });
+    }
+
+    #[test]
+    fn manual_retry_third_failure_marks_execution_failed() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should exist")
+                    .manual_attempts,
+                0
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                proposal_id
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should remain")
+                    .manual_attempts,
+                1
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(1)),
+                proposal_id
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should remain")
+                    .manual_attempts,
+                2
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(2)),
+                proposal_id
+            ));
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+
+            let third_retry_outcome = System::events()
+                .into_iter()
+                .rev()
+                .find_map(|record| match record.event {
+                    RuntimeEvent::VotingEngine(Event::ProposalExecutionRetried {
+                        proposal_id: event_id,
+                        manual_attempts: 3,
+                        outcome,
+                    }) if event_id == proposal_id => Some(outcome),
+                    _ => None,
+                })
+                .expect("third retry event should exist");
+            assert_eq!(third_retry_outcome, STATUS_EXECUTION_FAILED);
+        });
+    }
+
+    #[test]
+    fn execution_retry_deadline_expires_to_execution_failed() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert!(System::events().into_iter().any(|record| matches!(
+                record.event,
+                RuntimeEvent::VotingEngine(Event::ProposalExecutionRetryExpired {
+                    proposal_id: event_id
+                }) if event_id == proposal_id
+            )));
         });
     }
 

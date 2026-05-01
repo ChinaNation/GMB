@@ -26,8 +26,7 @@ use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use voting_engine::{
     internal_vote::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_EXECUTION_FAILED,
-    STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -80,7 +79,6 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use sp_runtime::DispatchError;
     use sp_std::vec::Vec;
     use voting_engine::{InternalAdminProvider, InternalVoteEngine};
 
@@ -277,19 +275,15 @@ pub mod pallet {
                 new_key,
             };
 
-            let proposal_id = T::InternalVoteEngine::create_internal_proposal(
+            let mut encoded = sp_std::vec::Vec::from(crate::MODULE_TAG);
+            encoded.extend_from_slice(&action.encode());
+            let proposal_id = T::InternalVoteEngine::create_internal_proposal_with_data(
                 who.clone(),
                 actual_org,
                 institution,
+                crate::MODULE_TAG,
+                encoded,
             )?;
-
-            let mut encoded = sp_std::vec::Vec::from(crate::MODULE_TAG);
-            encoded.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(
-                proposal_id,
-                frame_system::Pallet::<T>::block_number(),
-            );
 
             Self::deposit_event(Event::<T>::GrandpaKeyReplacementProposed {
                 proposal_id,
@@ -314,13 +308,7 @@ pub mod pallet {
             proposal_id: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let action = Self::decode_action(proposal_id)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-            Self::try_execute_from_action(proposal_id, action)
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
 
         /// 清理"已通过但确定无法执行"的提案(如 GRANDPA 密钥格式错乱等)。
@@ -331,36 +319,7 @@ pub mod pallet {
             proposal_id: u64,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            let action = Self::decode_action(proposal_id)?;
-            let org = institution_org(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                Self::is_internal_admin(org, action.institution, &who),
-                Error::<T>::UnauthorizedAdmin
-            );
-
-            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            ensure!(
-                proposal.status == STATUS_PASSED,
-                Error::<T>::ProposalNotPassed
-            );
-            // 中文注释：这里只允许清理”确定已经执行不了”的通过提案；
-            // 若只是 GRANDPA 仍有 pending change，则属于暂时不可执行，应该等待后重试。
-            match Self::validate_action(&action) {
-                Ok(_) => return Err(Error::<T>::ProposalStillExecutable.into()),
-                Err(Error::<T>::GrandpaChangePending) => {
-                    return Err(Error::<T>::GrandpaChangePending.into())
-                }
-                Err(_) => {}
-            }
-
-            Self::deposit_event(Event::<T>::FailedProposalCancelled {
-                proposal_id,
-                institution: action.institution,
-            });
-            // 中文注释：投票已经通过，取消不可执行提案应进入执行失败终态，而不是改写为否决。
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTION_FAILED)?;
-            Ok(())
+            voting_engine::Pallet::<T>::cancel_passed_proposal_for(&who, proposal_id)
         }
     }
 
@@ -388,33 +347,10 @@ pub mod pallet {
                 .unwrap_or(false)
         }
 
-        /// 中文注释：从投票引擎读取并解码提案动作数据。
-        /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
-        pub(crate) fn decode_action(
-            proposal_id: u64,
-        ) -> Result<GrandpaKeyReplacementAction, DispatchError> {
-            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
-                .ok_or(Error::<T>::ProposalActionNotFound)?;
-            let tag = crate::MODULE_TAG;
-            if raw.len() < tag.len() || &raw[..tag.len()] != tag {
-                return Err(Error::<T>::ProposalActionNotFound.into());
-            }
-            GrandpaKeyReplacementAction::decode(&mut &raw[tag.len()..])
-                .map_err(|_| Error::<T>::ProposalActionNotFound.into())
-        }
-
         /// 中文注释：尝试执行已通过的密钥替换提案，成功后调度 GRANDPA authority set 变更。
         pub(crate) fn try_execute_from_action(
             proposal_id: u64,
             action: GrandpaKeyReplacementAction,
-        ) -> DispatchResult {
-            Self::try_execute_from_action_with_finalizer(proposal_id, action, false)
-        }
-
-        pub(crate) fn try_execute_from_action_with_finalizer(
-            proposal_id: u64,
-            action: GrandpaKeyReplacementAction,
-            callback_context: bool,
         ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -443,20 +379,11 @@ pub mod pallet {
                 old_key: action.old_key,
                 new_key: action.new_key,
             });
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
             Ok(())
         }
 
         /// 中文注释：校验提案可执行性——无 pending change、旧 key 存在、替换后无重复。
-        fn validate_action(
+        pub(crate) fn validate_action(
             action: &GrandpaKeyReplacementAction,
         ) -> Result<Vec<(GrandpaAuthorityId, u64)>, Error<T>> {
             ensure!(
@@ -509,25 +436,68 @@ pub mod pallet {
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(()),
+            _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
         if !approved {
-            return Ok(());
+            return Ok(ProposalExecutionOutcome::Executed);
         }
         let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-        if pallet::Pallet::<T>::try_execute_from_action_with_finalizer(proposal_id, action, true)
-            .is_err()
-        {
-            pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
-                proposal_id,
-            });
+        match pallet::Pallet::<T>::validate_action(&action) {
+            Err(pallet::Error::<T>::GrandpaChangePending) => {
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
+                    proposal_id,
+                });
+                return Ok(ProposalExecutionOutcome::RetryableFailed);
+            }
+            Err(_) => {
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
+                    proposal_id,
+                });
+                return Ok(ProposalExecutionOutcome::FatalFailed);
+            }
+            Ok(_) => {}
         }
-        Ok(())
+
+        match pallet::Pallet::<T>::try_execute_from_action(proposal_id, action) {
+            Ok(()) => Ok(ProposalExecutionOutcome::Executed),
+            Err(_) => {
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::GrandpaKeyExecutionFailed {
+                    proposal_id,
+                });
+                Ok(ProposalExecutionOutcome::RetryableFailed)
+            }
+        }
+    }
+
+    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        let action = GrandpaKeyReplacementAction::decode(&mut &raw[crate::MODULE_TAG.len()..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        // 中文注释：只允许取消确定不可执行的 GRANDPA 替换；pending change 属于可恢复失败。
+        match pallet::Pallet::<T>::validate_action(&action) {
+            Ok(_) => Err(pallet::Error::<T>::ProposalStillExecutable.into()),
+            Err(pallet::Error::<T>::GrandpaChangePending) => {
+                Err(pallet::Error::<T>::GrandpaChangePending.into())
+            }
+            Err(_) => {
+                pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::FailedProposalCancelled {
+                    proposal_id,
+                    institution: action.institution,
+                });
+                Ok(())
+            }
+        }
     }
 }
 
@@ -542,6 +512,7 @@ mod tests {
     use primitives::china::china_cb::CHINA_CB;
     use sp_core::{Pair, Void};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+    use voting_engine::STATUS_EXECUTION_FAILED;
 
     type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -693,6 +664,10 @@ mod tests {
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -1133,7 +1108,7 @@ mod tests {
                     RuntimeOrigin::signed(prc_admin(0)),
                     pid,
                 ),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }

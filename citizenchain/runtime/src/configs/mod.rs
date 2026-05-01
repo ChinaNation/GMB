@@ -1340,11 +1340,14 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
 pub struct RuntimeJointVoteResultCallback;
 
 impl voting_engine::JointVoteResultCallback for RuntimeJointVoteResultCallback {
-    fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_joint_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (vote_proposal_id, approved);
-            Ok(())
+            Ok(voting_engine::ProposalExecutionOutcome::Ignored)
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
@@ -1378,6 +1381,10 @@ impl voting_engine::Config for Runtime {
     type MaxProposalsPerExpiry = ConstU32<2_048>;
     type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 * 1024 }>;
+    type MaxModuleTagLen = ConstU32<32>;
+    type MaxManualExecutionAttempts = ConstU32<3>;
+    type ExecutionRetryGraceBlocks = ConstU32<21_600>;
+    type MaxExecutionRetryDeadlinesPerBlock = ConstU32<2_048>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
     type CleanupKeysPerStep = ConstU32<256>;
     type SfidEligibility = RuntimeSfidEligibility;
@@ -1453,7 +1460,7 @@ mod tests {
             let recipient = AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address);
             let total_amount = 123u128;
 
-            // 直接在投票引擎 ProposalData 中写入带 MODULE_TAG 前缀的业务数据
+            // 测试中直接写入 ProposalData/Owner，生产路径必须走 create_*_with_data 原子入口。
             let data = resolution_issuance::proposal::IssuanceProposalData {
                 proposer: recipient.clone(),
                 reason: b"runtime-integration".to_vec(),
@@ -1465,12 +1472,19 @@ mod tests {
             };
             let mut encoded = Vec::from(resolution_issuance::MODULE_TAG);
             encoded.extend_from_slice(&data.encode());
-            voting_engine::Pallet::<Runtime>::store_proposal_data(proposal_id, encoded)
-                .expect("store_proposal_data should succeed");
-            voting_engine::Pallet::<Runtime>::store_proposal_meta(
-                proposal_id,
-                System::block_number(),
-            );
+            let bounded_data: frame_support::BoundedVec<
+                u8,
+                <Runtime as voting_engine::Config>::MaxProposalDataLen,
+            > = encoded.try_into().expect("proposal data bound");
+            let owner: frame_support::BoundedVec<
+                u8,
+                <Runtime as voting_engine::Config>::MaxModuleTagLen,
+            > = resolution_issuance::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .expect("module tag bound");
+            voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
+            voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
 
             resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
@@ -1735,7 +1749,7 @@ mod tests {
                 RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
             );
 
-            // 通过 voting-engine 的 ProposalData 写入提案数据（模块已无本地存储）
+            // 测试中直接写入 voting-engine 存储；生产路径必须走 create_*_with_data 原子入口。
             let proposal_id = 7u64;
             let proposer = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
             let reason: runtime_upgrade::pallet::ReasonOf<Runtime> =
@@ -1752,12 +1766,22 @@ mod tests {
             };
             let mut encoded = Vec::from(runtime_upgrade::MODULE_TAG);
             encoded.extend_from_slice(&codec::Encode::encode(&proposal));
-            assert_ok!(voting_engine::Pallet::<Runtime>::store_proposal_data(
+            let bounded_data: frame_support::BoundedVec<
+                u8,
+                <Runtime as voting_engine::Config>::MaxProposalDataLen,
+            > = encoded.try_into().expect("proposal data bound");
+            let owner: frame_support::BoundedVec<
+                u8,
+                <Runtime as voting_engine::Config>::MaxModuleTagLen,
+            > = runtime_upgrade::MODULE_TAG
+                .to_vec()
+                .try_into()
+                .expect("module tag bound");
+            voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
+            voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
+            assert_ok!(voting_engine::Pallet::<Runtime>::store_proposal_object_for(
                 proposal_id,
-                encoded
-            ));
-            assert_ok!(voting_engine::Pallet::<Runtime>::store_proposal_object(
-                proposal_id,
+                runtime_upgrade::MODULE_TAG,
                 runtime_upgrade::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
                 code.into_inner()
             ));

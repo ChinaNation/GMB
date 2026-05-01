@@ -10,10 +10,11 @@
 pub struct SweepAction<Balance> {
     pub institution: InstitutionPalletId,  // 机构标识 (48 字节)
     pub amount: Balance,                    // 划转金额 (分)
+    pub proposer: AccountId,                 // 提案人
 }
 ```
 
-存储：`SweepProposalActions<T>` — 独立 `StorageMap<u64, SweepAction>`，无需 MODULE_TAG。
+存储：`SweepProposalActions<T>` — 独立 `StorageMap<u64, SweepAction>`；投票引擎 `ProposalOwner` 仍绑定 `duoqian-transfer` 的 `MODULE_TAG`。
 
 ## 常量
 
@@ -35,30 +36,16 @@ pub struct SweepAction<Balance> {
 
 ## 提案/投票/执行流程
 
-### 1. propose_sweep_to_main (call_index=5)
+### 1. propose_sweep_to_main (call_index=2)
 
 1. 校验调用者为对应机构管理员
-2. 通过 `InternalVoteEngine::create_internal_proposal` 创建提案（获取 proposal_id）
+2. 通过 `InternalVoteEngine::create_internal_proposal_with_data` 创建提案，并绑定 owner/data/meta（获取 proposal_id）
 3. 写入 `SweepProposalActions` 存储
 4. 触发 `SweepToMainProposed` 事件
 
-### 2. finalize_sweep_to_main (call_index=6,Step 2 · 2026-04-21)
+### 2. 投票
 
-替换原 `vote_sweep_to_main`(已物理删除)。发起人一次性提交所有管理员 sr25519 签名聚合:
-
-1. 从 `SweepProposalActions` 读取 `SweepAction`(含 proposer)
-2. 解析 `(org, from = fee_account, to = main_account)`
-3. 查阈值 `InternalThresholdProvider::pass_threshold(org, institution)`
-4. 构造 `TransferVoteIntent { from, to, amount, remark_hash: blake2_256(b""), proposer, approve: true }`
-5. `signing_hash = intent.signing_hash(ss58, OP_SIGN_SWEEP = 0x17)`
-6. 共用 helper `verify_and_cast_votes`:逐条验签 + `cast_internal_vote`
-7. 达阈值 `STATUS_PASSED` → 事务内 `try_execute_sweep`;失败发 `SweepExecutionFailed`
-8. 发 `SweepToMainFinalized { proposal_id, signatures_accepted, final_status }` 事件
-
-**SweepAction 结构变更**:新增 `proposer: AccountId` 字段,用于 intent 构造。
-
-**sweep 签名域隔离**:`OP_SIGN_SWEEP = 0x17` 与 transfer / safety_fund 签名域完全隔离,
-跨业务签名重放自动失败。
+管理员统一调用 `VotingEngine::internal_vote(proposal_id, approve)`。投票引擎使用创建时的管理员快照和固定阈值判定，达阈值后回调本模块自动执行 sweep。
 
 ### 3. try_execute_sweep（内部方法）
 
@@ -70,8 +57,8 @@ pub struct SweepAction<Balance> {
 6. 执行 `Currency::transfer` 从 fee_account 到 main_account（KeepAlive）
 7. 执行 `Currency::withdraw` 扣取手续费
 8. 手续费通过 `FeeRouter`（即 `TransferFeeRouter` -> `OnchainFeeRouter`）按 80/10/10 分账
-9. 设置提案状态为 `STATUS_EXECUTED`
-10. 触发 `SweepToMainExecuted` 事件（含 `reserve_left` 余额）
+9. 触发 `SweepToMainExecuted` 事件（含 `reserve_left` 余额）
+10. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎设置提案状态为 `STATUS_EXECUTED`
 
 ## 手续费分账路径
 
@@ -91,9 +78,4 @@ pub struct SweepAction<Balance> {
 | `SweepProposalNotPassed` | 提案未通过 |
 | `InsufficientFeeReserve` | 余额不足以覆盖划转+手续费+保留 |
 | `SweepAmountExceedsCap` | 超过可用余额 80% 上限 |
-| `UnauthorizedSignature` | Step 2 · finalize 签名 admin 非本机构管理员 |
-| `DuplicateSignature` | Step 2 · 同批次 admin 签名重复 |
-| `InvalidSignature` | Step 2 · sr25519 验签失败 |
-| `InsufficientSignatures` | Step 2 · 签名数 < 阈值 |
-| `MalformedSignature` | Step 2 · sig 长度非 64 字节 |
 | `InstitutionSpendNotAllowed` | 资产保护检查未通过 |

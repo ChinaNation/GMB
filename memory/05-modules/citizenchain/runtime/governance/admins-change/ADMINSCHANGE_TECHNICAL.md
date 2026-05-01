@@ -97,7 +97,7 @@ Pending 快照专用 API：
 - 投票引擎提案、互斥锁、管理员快照、阈值快照、业务数据、业务元数据和业务事件必须全部成功才提交。
 - 任一步失败都会整体回滚，避免留下无 `ProposalData` 的管理员更换提案或独占锁。
 
-投票通过后由 `InternalVoteExecutor` 自动执行；回调内执行成功时通过 `set_callback_execution_result(STATUS_EXECUTED)` 静默写入最终状态，失败时通过 `set_callback_execution_result(STATUS_EXECUTION_FAILED)` 静默写入执行失败终态。最终 `ProposalFinalized` 事件、清理登记和互斥锁释放统一由投票引擎外层发出/处理一次。
+投票通过后由 `InternalVoteExecutor` 自动执行；回调成功返回 `ProposalExecutionOutcome::Executed`，失败返回 `ProposalExecutionOutcome::FatalFailed`。最终 `ProposalFinalized` 事件、清理登记和互斥锁释放统一由投票引擎外层发出/处理一次。
 
 执行规则：
 
@@ -119,7 +119,7 @@ Pending 快照专用 API：
 - 同一治理主体下，有普通内部提案活跃时，不能创建管理员更换提案。
 - 普通内部提案之间默认不互斥。
 - 不同治理主体互不影响。
-- 自动执行失败进入 `STATUS_EXECUTION_FAILED` 后释放独占锁，但该提案不能再手动执行。
+- 自动执行失败映射为 `FatalFailed`，进入 `STATUS_EXECUTION_FAILED` 后释放独占锁，且该提案不能再手动执行。
 
 ## 6. 运行时接线
 

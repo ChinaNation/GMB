@@ -86,10 +86,22 @@ fn insert_voting_proposal<T: Config>(proposal_id: u64) {
     };
     let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
     encoded.extend_from_slice(&proposal.encode());
-    voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)
-        .expect("benchmark store_proposal_data should succeed");
-    voting_engine::Pallet::<T>::store_proposal_object(
+    let bounded_data: frame_support::BoundedVec<
+        u8,
+        <T as voting_engine::Config>::MaxProposalDataLen,
+    > = encoded
+        .try_into()
+        .expect("benchmark proposal data should fit");
+    let owner: frame_support::BoundedVec<u8, <T as voting_engine::Config>::MaxModuleTagLen> =
+        crate::MODULE_TAG
+            .to_vec()
+            .try_into()
+            .expect("benchmark module tag should fit");
+    voting_engine::ProposalData::<T>::insert(proposal_id, bounded_data);
+    voting_engine::ProposalOwner::<T>::insert(proposal_id, owner);
+    voting_engine::Pallet::<T>::store_proposal_object_for(
         proposal_id,
+        crate::MODULE_TAG,
         crate::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
         code.into_inner(),
     )

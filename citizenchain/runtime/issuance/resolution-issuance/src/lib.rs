@@ -16,7 +16,6 @@ mod tests;
 pub mod validation;
 pub mod weights;
 
-use frame_support::pallet_prelude::DispatchResult;
 pub use pallet::*;
 use voting_engine::JointVoteResultCallback;
 
@@ -330,26 +329,19 @@ pub mod pallet {
 }
 
 impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
-    fn on_joint_vote_finalized(vote_proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_joint_vote_finalized(
+        vote_proposal_id: u64,
+        approved: bool,
+    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let outcome = pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
-        match outcome {
+        Ok(match outcome {
             pallet::FinalizeOutcome::ApprovedExecutionSucceeded => {
-                // 中文注释：本回调运行在投票引擎 set_status_and_emit 的事务中；
-                // 执行成功时静默写入 EXECUTED，最终事件由投票引擎外层统一发一次。
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    vote_proposal_id,
-                    voting_engine::STATUS_EXECUTED,
-                )?;
+                voting_engine::ProposalExecutionOutcome::Executed
             }
             pallet::FinalizeOutcome::ApprovedExecutionFailed => {
-                // 中文注释：执行失败时静默写入失败终态，最终事件由投票引擎外层统一发一次。
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    vote_proposal_id,
-                    voting_engine::STATUS_EXECUTION_FAILED,
-                )?;
+                voting_engine::ProposalExecutionOutcome::FatalFailed
             }
-            pallet::FinalizeOutcome::Rejected => {}
-        }
-        Ok(())
+            pallet::FinalizeOutcome::Rejected => voting_engine::ProposalExecutionOutcome::Executed,
+        })
     }
 }

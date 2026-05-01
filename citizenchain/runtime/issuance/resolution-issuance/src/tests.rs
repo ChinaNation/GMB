@@ -107,6 +107,32 @@ impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
             Ok(v)
         })
     }
+
+    fn create_joint_proposal_with_data(
+        who: AccountId32,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        module_tag: &[u8],
+        data: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let proposal_id =
+            Self::create_joint_proposal(who, eligible_total, snapshot_nonce, signature)?;
+        let bounded_data: frame_support::BoundedVec<
+            u8,
+            <Test as voting_engine::Config>::MaxProposalDataLen,
+        > = data
+            .try_into()
+            .map_err(|_| DispatchError::Other("proposal data too large"))?;
+        let owner: frame_support::BoundedVec<u8, <Test as voting_engine::Config>::MaxModuleTagLen> =
+            module_tag
+                .to_vec()
+                .try_into()
+                .map_err(|_| DispatchError::Other("module tag too large"))?;
+        voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+        voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        Ok(proposal_id)
+    }
 }
 
 pub struct TestSfidEligibility;
@@ -163,6 +189,10 @@ impl voting_engine::Config for Test {
     type CleanupKeysPerStep = ConstU32<64>;
     type MaxProposalDataLen = ConstU32<8192>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+    type MaxModuleTagLen = ConstU32<32>;
+    type MaxManualExecutionAttempts = ConstU32<3>;
+    type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+    type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
     type SfidEligibility = TestSfidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
@@ -224,11 +254,34 @@ fn insert_engine_proposal(proposal_id: u64) {
     );
 }
 
-fn call_joint_callback(proposal_id: u64, approved: bool) -> DispatchResult {
+fn call_joint_callback(
+    proposal_id: u64,
+    approved: bool,
+) -> Result<voting_engine::ProposalExecutionOutcome, DispatchError> {
     voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
     let result = ResolutionIssuance::on_joint_vote_finalized(proposal_id, approved);
     voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
-    result
+    match result {
+        Ok(outcome) => {
+            if approved {
+                voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                    if let Some(proposal) = maybe {
+                        proposal.status = match outcome {
+                            voting_engine::ProposalExecutionOutcome::Executed => {
+                                voting_engine::STATUS_EXECUTED
+                            }
+                            voting_engine::ProposalExecutionOutcome::FatalFailed => {
+                                voting_engine::STATUS_EXECUTION_FAILED
+                            }
+                            _ => proposal.status,
+                        };
+                    }
+                });
+            }
+            Ok(outcome)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 fn reason_ok() -> pallet::ReasonOf<Test> {

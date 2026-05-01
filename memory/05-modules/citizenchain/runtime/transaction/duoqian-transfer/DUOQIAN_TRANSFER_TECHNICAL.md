@@ -1,88 +1,26 @@
 # DUOQIAN Transfer Pow 技术文档（机构多签名地址转账模块）
 
-## Step 2 · 离线 QR 聚合改造(2026-04-21)
+## 2026-04-30 · 统一投票引擎状态机改造
 
-本模块所有 3 组业务(transfer / safety_fund / sweep)已从"每管理员在线 `vote_X`"
-模式统一改造为"发起人离线收齐 N 个管理员 sr25519 签名 → 一笔 `finalize_X` 代投"
-的离线 QR 聚合签名模式。投票引擎零改动。
+本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `voting-engine` 生命周期：
+
+- 提案创建使用 `create_internal_proposal_with_data`，在同一事务中绑定 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
+- 管理员投票统一走 `VotingEngine::internal_vote(proposal_id, approve)`，本模块不再提供独立 vote/finalize call。
+- 投票通过后由 `InternalVoteExecutor` 自动执行。
+- 自动执行成功返回 `ProposalExecutionOutcome::Executed`，投票引擎转 `STATUS_EXECUTED`。
+- 自动执行失败返回 `ProposalExecutionOutcome::RetryableFailed`，提案保持 `STATUS_PASSED` 并进入统一 retry state。
+- 手动重试入口保留为兼容 call，但内部委托 `VotingEngine::retry_passed_proposal_for`，由投票引擎统一校验快照管理员权限、最多 3 次手动失败和 retry deadline。
 
 ### 入口对照
 
-| call_index | 原 extrinsic | 新 extrinsic | op_tag |
-|---|---|---|---|
-| 0 | propose_transfer | propose_transfer(不变) | — |
-| 1 | ~~vote_transfer~~ | **finalize_transfer** | `OP_SIGN_TRANSFER = 0x15` |
-| 2 | execute_transfer | execute_transfer(保留,手动重试) | — |
-| 3 | propose_safety_fund_transfer | propose_safety_fund_transfer(不变) | — |
-| 4 | ~~vote_safety_fund_transfer~~ | **finalize_safety_fund_transfer** | `OP_SIGN_SAFETY_FUND = 0x16` |
-| 5 | propose_sweep_to_main | propose_sweep_to_main(不变) | — |
-| 6 | ~~vote_sweep_to_main~~ | **finalize_sweep_to_main** | `OP_SIGN_SWEEP = 0x17` |
-
-### 统一签名 Intent
-
-三组共用一个 `TransferVoteIntent` SCALE 结构:
-
-```rust
-pub struct TransferVoteIntent<AccountId, Balance> {
-    pub proposal_id: u64,
-    pub org: u8,
-    pub institution: InstitutionPalletId,
-    pub from: AccountId,         // 资金源(主账户 / NRC_ANQUAN / 费用账户)
-    pub to: AccountId,           // 资金目标(beneficiary / 主账户)
-    pub amount: Balance,
-    pub remark_hash: [u8; 32],   // blake2_256(remark);sweep 用 blake2_256(b"")
-    pub proposer: AccountId,
-    pub approve: bool,           // 恒 true,占位防误签
-}
-```
-
-`signing_hash(ss58_prefix, op_tag)` 计算公式:
-
-```
-preimage = DUOQIAN_DOMAIN(10B) || op_tag(1B) || ss58_prefix_le(2B) || blake2_256(intent.encode())
-signing_hash = blake2_256(preimage)
-sig = sr25519_sign(admin_key, signing_hash)
-```
-
-三组 op_tag 不同 → signing_hash 不同 → **跨业务签名重放自动失败**。
-
-### 三业务字段映射
-
-| | op_tag | from | to | remark_hash 来源 |
-|---|---|---|---|---|
-| transfer | `OP_SIGN_TRANSFER(0x15)` | `institution_pallet_address(institution)` | `action.beneficiary` | `blake2_256(action.remark)` |
-| safety_fund | `OP_SIGN_SAFETY_FUND(0x16)` | `NRC_ANQUAN_ADDRESS` 常量 | `action.beneficiary` | `blake2_256(action.remark)` |
-| sweep | `OP_SIGN_SWEEP(0x17)` | `resolve_fee_account(institution)` | `resolve_main_account(institution)` | `blake2_256(b"")` |
-
-### 共用 helper
-
-`Pallet::<T>::verify_and_cast_votes(proposal_id, org, institution, threshold, signing_hash, sigs)`
-是三个 `finalize_X` 共用的签名验证 + 代投循环。任一签名失败(成员校验 / 去重 /
-长度 / 验签 / 代投)都让整笔交易回滚,不接受部分签名。
-
-### Tx 1 event 字段补齐(供 wuminapp 生成 QR)
-
-- `TransferProposed` 增加 `from / remark / expires_at`
-- `SafetyFundTransferProposed` 增加 `from / remark / expires_at`
-- `SweepToMainProposed` 增加 `from / to / expires_at`
-
-### 新增错误码
-
-- `UnauthorizedSignature`:sig 对应 admin 非该机构管理员
-- `DuplicateSignature`:同批次 admin 重复
-- `InvalidSignature`:sr25519 验签失败
-- `InsufficientSignatures`:签名数 < threshold
-- `MalformedSignature`:sig 长度非 64 字节
-
-### 新增事件
-
-每组 `finalize_X` 调用结束都发 `*Finalized { proposal_id, signatures_accepted, final_status }`
-事件,便于链下追踪"N 签提交 → 投票引擎状态"的一一对应。
-
-### SweepAction 结构变更
-
-`SweepAction` 新增 `proposer: AccountId` 字段,与 transfer / safety_fund 保持结构一致,
-用于 `TransferVoteIntent.proposer` 填充。
+| call_index | extrinsic | 说明 |
+|---|---|---|
+| 0 | `propose_transfer` | 发起普通机构转账提案 |
+| 1 | `propose_safety_fund_transfer` | 发起安全基金转账提案 |
+| 2 | `propose_sweep_to_main` | 发起费用账户划转主账户提案 |
+| 3 | `execute_transfer` | 兼容手动重试入口，委托 voting-engine |
+| 4 | `execute_safety_fund_transfer` | 兼容手动重试入口，委托 voting-engine |
+| 5 | `execute_sweep_to_main` | 兼容手动重试入口，委托 voting-engine |
 
 ## 0. 功能需求
 
@@ -179,48 +117,23 @@ pub fn propose_transfer(
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
 9. 机构主账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
-10. 活跃提案数由 `voting-engine` 在 `create_internal_proposal` 中统一检查（全局限额）。
+10. 活跃提案数由 `voting-engine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
 
 **执行逻辑：**
 
-1. 调用 `InternalVoteEngine::create_internal_proposal(proposer, org, institution)` 获取 `proposal_id`。
-2. 编码 `TransferAction { institution, beneficiary, amount, remark, proposer }` 存入 `voting_engine::ProposalData`。
-3. 记录 `ProposalMeta`（创建块号）到 `voting_engine`。
-4. 发出 `TransferProposed` 事件。
+1. 编码 `MODULE_TAG + TransferAction { institution, beneficiary, amount, remark, proposer }`。
+2. 调用 `InternalVoteEngine::create_internal_proposal_with_data(proposer, org, institution, MODULE_TAG, encoded)` 获取 `proposal_id`，并原子写入 owner/data/meta。
+3. 发出 `TransferProposed` 事件。
 
-### 2.2 finalize_transfer — 离线聚合代投(Step 2 替换 vote_transfer)
+### 2.2 投票入口
+
+本模块不再提供独立 `vote_transfer` / `finalize_transfer`。管理员投票统一走：
 
 ```rust
-pub fn finalize_transfer(
-    origin: OriginFor<T>,
-    proposal_id: u64,
-    sigs: BoundedVec<
-        (T::AccountId, duoqian_manage::pallet::AdminSignatureOf<T>),
-        <T as duoqian_manage::Config>::MaxAdmins,
-    >,
-) -> DispatchResult
+VotingEngine::internal_vote(origin, proposal_id, approve)
 ```
 
-**校验规则：**
-
-1. `origin` 必须是 `signed`(任何账户,发起人不必是管理员 — Tx 1 已锁定 `proposer`)。
-2. `proposal_id` 必须在 `voting_engine::ProposalData` 中存在且能解码为 `TransferAction`。
-3. 聚合签名数量 >= 该机构阈值,否则 `InsufficientSignatures`。
-4. `sigs` 中每个 `admin` 必须是该机构当前管理员(`UnauthorizedSignature`),且同批次不重复(`DuplicateSignature`)。
-5. 每条 `sig_bytes.len() == 64`(`MalformedSignature`),且对 `TransferVoteIntent.signing_hash(ss58, OP_SIGN_TRANSFER)` 的 sr25519 验签通过(`InvalidSignature`)。
-
-**执行逻辑：**
-
-1. 解析 `(org, from = institution_pallet_address(institution))`。
-2. 读阈值 `T::InternalThresholdProvider::pass_threshold(org, institution)`。
-3. 构造 `TransferVoteIntent { proposal_id, org, institution, from, to: action.beneficiary, amount, remark_hash: blake2_256(action.remark), proposer: action.proposer, approve: true }`。
-4. 计算 `signing_hash = intent.signing_hash(ss58_prefix, OP_SIGN_TRANSFER)`。
-5. 调 `verify_and_cast_votes(...)`:逐条验签 + `cast_internal_vote(admin, proposal_id, true)`。
-6. 读 `proposal.status`:
-   - `STATUS_PASSED` → `with_transaction(|| try_execute_transfer(proposal_id))`;失败发 `TransferExecutionFailed`,提案保留供 `execute_transfer` 重试。
-7. 发 `TransferFinalized { proposal_id, signatures_accepted, final_status }` 事件。
-
-**幂等保护**:`cast_internal_vote` 内部 `AlreadyVoted` 检查会让同一 proposal 第二次 finalize 整笔回滚,不会重复入金。
+投票引擎根据提案创建时的管理员快照和阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
 
 ### 2.3 execute_transfer — 手动执行已通过的转账提案
 
@@ -235,14 +148,15 @@ pub fn execute_transfer(
 
 **校验规则：**
 
-1. `origin` 必须是 `signed`（任何签名账户，不限管理员）。
-2. `proposal_id` 必须存在。
-3. 提案状态必须为 `STATUS_PASSED`。
-4. 提案数据（`TransferAction`）必须存在且可解码。
+1. `origin` 必须是 `signed` 且为提案快照管理员。
+2. `proposal_id` 必须存在，状态必须为 `STATUS_PASSED`。
+3. 提案必须存在 retry state，未超过 `ExecutionRetryGraceBlocks`。
+4. 手动失败次数必须小于 `MaxManualExecutionAttempts`。
+5. 提案数据（`TransferAction`）必须存在且可解码。
 
-**执行逻辑：** 与 `vote_transfer` 中自动执行的逻辑完全一致（共用 `try_execute_transfer` 内部方法）。执行成功后提案状态变为 `STATUS_EXECUTED`，防止双重执行。
+**执行逻辑：** 兼容入口直接委托 `VotingEngine::retry_passed_proposal_for`。投票引擎再次调用本模块 callback，执行成功后转 `STATUS_EXECUTED`；失败未满 3 次保持 `STATUS_PASSED`；第 3 次失败转 `STATUS_EXECUTION_FAILED`。
 
-**设计说明：** 任何签名账户都可调用（不限管理员），避免因管理员离线导致已通过的提案无法落地。与 `resolution-destro::execute_destroy` 保持一致。
+**设计说明：** 手动重试权限、次数和超时统一由投票引擎管理，业务模块不再各自实现重试状态机。
 
 ## 3. 存储项
 
@@ -251,8 +165,11 @@ pub fn execute_transfer(
 | 存储位置 | Key | Value | 说明 |
 | --- | --- | --- | --- |
 | `voting_engine::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
+| `voting_engine::ProposalOwner` | `u64` | `MODULE_TAG` | 业务 owner，禁止跨模块覆写 |
 | `voting_engine::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
 | `voting_engine::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
+| `SafetyFundProposalActions` | `u64` | `SafetyFundAction` | 安全基金动作独立存储，owner 仍为 `MODULE_TAG` |
+| `SweepProposalActions` | `u64` | `SweepAction` | 费用划转动作独立存储，owner 仍为 `MODULE_TAG` |
 
 ### 3.1 TransferAction 结构
 
@@ -267,22 +184,22 @@ pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 }
 ```
 
-## 4. 事件(Step 2 已更新)
+## 4. 事件
 
 ```rust
 #[pallet::event]
 pub enum Event<T: Config> {
-    /// 转账提案已创建(Tx 1,wuminapp 扫描此事件构造 QR)
+    /// 转账提案已创建
     TransferProposed {
         proposal_id: u64,
         org: u8,
         institution: InstitutionPalletId,
         proposer: T::AccountId,
-        from: T::AccountId,                             // Step 2 新增(= 机构主账户)
+        from: T::AccountId,                             // 机构主账户
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
-        remark: BoundedVec<u8, T::MaxRemarkLen>,        // Step 2 新增(供 QR)
-        expires_at: BlockNumberFor<T>,                  // Step 2 新增(超时区块)
+        remark: BoundedVec<u8, T::MaxRemarkLen>,
+        expires_at: BlockNumberFor<T>,                  // 投票超时区块
     },
     /// 投票通过但执行失败(可通过 execute_transfer 手动重试)
     TransferExecutionFailed { proposal_id: u64, institution: InstitutionPalletId },
@@ -294,40 +211,35 @@ pub enum Event<T: Config> {
         amount: BalanceOf<T>,
         fee: BalanceOf<T>,
     },
-    /// Step 2 新增:finalize_transfer 代投完成
-    TransferFinalized { proposal_id: u64, signatures_accepted: u32, final_status: u8 },
-
     // 安全基金组:结构同上
     SafetyFundTransferProposed {
         proposal_id: u64,
         proposer: T::AccountId,
-        from: T::AccountId,                             // Step 2 新增(= NRC_ANQUAN_ADDRESS)
+        from: T::AccountId,                             // NRC_ANQUAN_ADDRESS
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
-        remark: BoundedVec<u8, T::MaxRemarkLen>,        // Step 2 新增
-        expires_at: BlockNumberFor<T>,                  // Step 2 新增
+        remark: BoundedVec<u8, T::MaxRemarkLen>,
+        expires_at: BlockNumberFor<T>,
     },
     SafetyFundTransferExecuted { proposal_id: u64, beneficiary: T::AccountId, amount: BalanceOf<T>, fee: BalanceOf<T> },
     SafetyFundExecutionFailed { proposal_id: u64 },
-    SafetyFundFinalized { proposal_id: u64, signatures_accepted: u32, final_status: u8 },
 
     // Sweep 组:
     SweepToMainProposed {
         proposal_id: u64,
         institution: InstitutionPalletId,
         proposer: T::AccountId,
-        from: T::AccountId,                             // Step 2 新增(= fee_account)
-        to: T::AccountId,                               // Step 2 新增(= main_account)
+        from: T::AccountId,                             // fee_account
+        to: T::AccountId,                               // main_account
         amount: BalanceOf<T>,
-        expires_at: BlockNumberFor<T>,                  // Step 2 新增
+        expires_at: BlockNumberFor<T>,
     },
     SweepToMainExecuted { proposal_id: u64, institution: InstitutionPalletId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
     SweepExecutionFailed { proposal_id: u64 },
-    SweepToMainFinalized { proposal_id: u64, signatures_accepted: u32, final_status: u8 },
 }
 ```
 
-**Step 2 已删除**:`TransferVoteSubmitted` / `SafetyFundVoteSubmitted` / `SweepToMainVoteSubmitted`(三个投票事件与 `vote_X` extrinsic 一起删除,统一由 `*Finalized` 替代)。
+投票事件统一由 `voting-engine::InternalVoteCast`、`ProposalFinalized`、`ProposalExecutionRetryScheduled`、`ProposalExecutionRetried` 等事件表达。
 
 ## 5. 错误码
 
@@ -349,12 +261,6 @@ pub enum Error<T> {
     // safety_fund / sweep 专有
     SafetyFundProposalNotFound, SafetyFundInsufficientBalance, SafetyFundProposalNotPassed,
     SweepProposalNotFound, InvalidSweepAmount, InsufficientFeeReserve, SweepAmountExceedsCap, SweepProposalNotPassed,
-    // Step 2 · 离线聚合签名改造新增 5 个
-    UnauthorizedSignature,           // sig 对应 admin 非该机构管理员
-    DuplicateSignature,              // 同批次 admin 重复
-    InvalidSignature,                // sr25519 验签失败
-    InsufficientSignatures,          // 签名数 < 阈值
-    MalformedSignature,              // sig 长度非 64 字节
 }
 ```
 
@@ -388,29 +294,25 @@ pub enum Error<T> {
 - 10% → 国储会
 - 10% → 安全基金账户
 
-## 7. 转账执行逻辑(Step 2 · 离线聚合版)
+## 7. 转账执行逻辑
 
 ### 7.1 自动执行流程
 
-`finalize_transfer` 代投结束后,若投票引擎进入 `STATUS_PASSED`,在同一交易内
-**尝试自动执行转账**:
+`VotingEngine::internal_vote` 达到阈值后，投票引擎进入 `STATUS_PASSED` 并在同一事务内回调本模块自动执行：
 
 ```
-1. verify_and_cast_votes() 循环结束,最后一次 cast_internal_vote() 触发 STATUS_PASSED
-2. 读取 proposal.status:
-3. 若 STATUS_PASSED(yes >= threshold):
-   a. 从 voting_engine::ProposalData 读取 TransferAction
-   b. institution_pallet_address(institution) 获取 from 地址
-   c. 计算手续费 fee = calculate_onchain_fee(amount)
-   d. 校验余额: free_balance >= amount + fee + ED
-   e. with_transaction(|| {
-        Currency::transfer(from, beneficiary, amount, KeepAlive)
-        Currency::withdraw(from, fee, FEE, KeepAlive) → FeeRouter 分账
-        set_callback_execution_result(STATUS_EXECUTED)
-        deposit_event(TransferExecuted)
-      })
-   f. 若事务失败:deposit_event(TransferExecutionFailed),提案保留供 execute_transfer 重试
-4. 最后 deposit_event(TransferFinalized { proposal_id, signatures_accepted, final_status })
+1. 最后一票触发 voting-engine 的 STATUS_PASSED 判定
+2. voting-engine 调用 InternalVoteExecutor::on_internal_vote_finalized(proposal_id, approved=true)
+3. 本模块按 ProposalOwner / ProposalData / 独立 action storage 认领 transfer、safety_fund 或 sweep
+4. 执行业务转账:
+   a. 解析资金源和目标账户
+   b. 计算手续费 fee = calculate_onchain_fee(amount)
+   c. 校验余额与 ED
+   d. Currency::transfer(...)
+   e. Currency::withdraw(..., FEE, KeepAlive) → FeeRouter 分账
+   f. deposit_event(*Executed)
+5. 执行成功返回 ProposalExecutionOutcome::Executed
+6. 执行失败发 *ExecutionFailed，返回 ProposalExecutionOutcome::RetryableFailed
 ```
 
 ### 7.2 提案状态流转
@@ -419,12 +321,15 @@ pub enum Error<T> {
 VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
                 ↓ 执行失败
            保持 PASSED（可通过 execute_transfer 重试）
+                ↓ 3 次手动失败或 deadline 到期
+           EXECUTION_FAILED（终态）
 ```
 
 - `VOTING`（0）：投票进行中
 - `PASSED`（1）：投票通过，待执行或执行失败待重试
 - `REJECTED`（2）：投票超时未达阈值
 - `EXECUTED`（3）：执行成功，终态，无法再次执行
+- `EXECUTION_FAILED`（4）：重试失败满 3 次或超过宽限期，终态
 
 ### 7.3 余额保护
 
@@ -439,30 +344,26 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 | 总发行量 | 减少（资金销毁） | 不变（资金转移） |
 | 目标 | 无（资金消失） | `beneficiary` 账户 |
 
-## 8. 提案与 finalize 的区块写入(Step 2 · 离线聚合版)
+## 8. 提案与投票区块写入
 
-### 8.1 两步式时序
+### 8.1 时序
 
 ```
 区块 N  : 管理员A 发起 propose_transfer(...)
            → 创建提案 proposal_id=X
            → emit TransferProposed { from, beneficiary, amount, remark, expires_at, ... }
-           → wuminapp 扫此事件,生成 QR 包含所有字段
 
-离线    : 管理员 B..M 扫描 QR → 对 TransferVoteIntent 做 sr25519 签名 → 回传发起人
-
-区块 N+k: 发起人(或任何签名账户)提交 finalize_transfer(X, sigs)
-           → 循环验签 + 循环 cast_internal_vote
+区块 N+k: 快照管理员逐个提交 VotingEngine::internal_vote(X, approve=true)
            → STATUS_PASSED 达阈值
-           → 同一交易内 try_execute_transfer 自动执行
-           → emit TransferExecuted + TransferFinalized
+           → 同一交易内 callback 自动执行
+           → emit TransferExecuted 或 TransferExecutionFailed
 ```
 
 ### 8.2 关键差异
 
-- **原模式**:N 个管理员各发一笔在线 `vote_X` extrinsic,N 笔上链交易。
-- **离线聚合**:仅 Tx 1 + Tx 2 两笔上链交易,中间签名聚合完全线下,不占链带宽。
-- 幂等保护:`cast_internal_vote` 内部 `AlreadyVoted` 让重复 finalize 自动回滚。
+- 投票完全复用 `voting-engine::internal_vote`，不再有业务 pallet 自己的 vote/finalize 状态机。
+- 幂等保护由投票引擎的 `InternalVotesByAccount` / `AlreadyVoted` 统一提供。
+- 手动重试、取消、3 次失败终态和 deadline 终态由投票引擎统一处理。
 
 ### 8.3 投票阈值
 
@@ -514,20 +415,18 @@ pub trait Config:
 
 说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `duoqian_manage::Config` 和 `voting_engine::Config` 提供，本模块不再单独声明。
 
-## 11. Weight 估算(Step 2 已更新)
+## 11. Weight 估算
 
 | Extrinsic | 预估 Weight | DB 读 | DB 写 |
 | --- | --- | --- | --- |
 | `propose_transfer` | ~55 ms | 5 | 7 |
-| `finalize_transfer(n)` | ~60 ms + 40 ms × n | 6 + n | 8 + n |
 | `execute_transfer`(手动重试) | ~75 ms | 4 | 4 |
-| `finalize_safety_fund_transfer(n)` | ~60 ms + 40 ms × n | 6 + n | 8 + n |
-| `finalize_sweep_to_main(n)` | ~60 ms + 40 ms × n | 6 + n | 8 + n |
+| `propose_safety_fund_transfer` | 待 benchmark | - | - |
+| `propose_sweep_to_main` | 待 benchmark | - | - |
+| `execute_safety_fund_transfer`(手动重试) | 待 benchmark | - | - |
+| `execute_sweep_to_main`(手动重试) | 待 benchmark | - | - |
 
-说明:`n` = 聚合签名数量(= 参与代投的管理员数)。基础成本覆盖读取 `ProposalData` +
-解析 Action + 构造 intent + 查阈值 + 调投票引擎;每签名增量包含一次 sr25519 验签
-(~35 ms)+ 一次 `cast_internal_vote`(~5 ms DB 写)。实际值需跑 benchmark 生成,
-占位公式详见 `src/weights.rs::finalize_base`。
+说明：投票权重由 `voting-engine::internal_vote` 承担；本模块 execute 兼容入口主要是委托投票引擎 retry 并触发业务执行。正式数值需重新跑 benchmark 生成。
 
 ## 12. 文件清单
 

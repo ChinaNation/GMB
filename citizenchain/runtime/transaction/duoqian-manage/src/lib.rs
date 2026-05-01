@@ -29,7 +29,7 @@ use sp_runtime::{
 };
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use voting_engine::{
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_REJECTED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
 pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
@@ -894,17 +894,8 @@ pub mod pallet {
                 },
             );
 
-            // 创建投票引擎提案。管理员快照由 admins-change 的 Pending 主体提供。
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal(
-                    who.clone(),
-                    org,
-                    institution,
-                )?;
-
-            // 存储业务数据到投票引擎 ProposalData
             let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>> {
                 duoqian_address: duoqian_address.clone(),
                 proposer: who.clone(),
@@ -915,8 +906,15 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(proposal_id, now);
+            // 中文注释：创建提案时由 voting-engine 原子绑定 owner/data/meta，防止跨模块覆写。
+            let proposal_id =
+                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    data,
+                )?;
 
             // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -1193,16 +1191,8 @@ pub mod pallet {
                 Error::<T>::ReservedBalanceRemaining
             );
 
-            // 创建投票引擎提案
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
-            let proposal_id = <T as Config>::InternalVoteEngine::create_internal_proposal(
-                who.clone(),
-                org,
-                institution,
-            )?;
-
-            // 存储业务数据
             let action = CloseDuoqianAction {
                 duoqian_address: duoqian_address.clone(),
                 beneficiary: beneficiary.clone(),
@@ -1211,11 +1201,14 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CLOSE);
             data.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(
-                proposal_id,
-                frame_system::Pallet::<T>::block_number(),
-            );
+            let proposal_id =
+                <T as Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    data,
+                )?;
             PendingCloseProposal::<T>::insert(&duoqian_address, proposal_id);
 
             Self::deposit_event(Event::<T>::CloseDuoqianProposed {
@@ -1342,17 +1335,8 @@ pub mod pallet {
                 },
             );
 
-            // 创建投票引擎提案
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal(
-                    who.clone(),
-                    org,
-                    institution,
-                )?;
-
-            // 存储业务数据（复用 ACTION_CREATE + CreateDuoqianAction）
             let action = CreateDuoqianAction {
                 duoqian_address: duoqian_address.clone(),
                 proposer: who.clone(),
@@ -1363,8 +1347,14 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(proposal_id, now);
+            let proposal_id =
+                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    data,
+                )?;
 
             // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -1905,13 +1895,6 @@ pub mod pallet {
 
             let institution = account_to_institution_id(&main_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal(
-                    who.clone(),
-                    org,
-                    institution,
-                )?;
-
             let action = CreateInstitutionAction {
                 sfid_id: sfid_id.clone(),
                 institution_name: institution_name.clone(),
@@ -1933,8 +1916,14 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE_INSTITUTION);
             data.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, data)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(proposal_id, now);
+            let proposal_id =
+                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    data,
+                )?;
             PendingInstitutionCreate::<T>::insert(proposal_id, &action);
             UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
 
@@ -1991,7 +1980,7 @@ pub mod pallet {
         pub(crate) fn execute_create_institution_with_finalizer(
             proposal_id: u64,
             action: &CreateInstitutionActionOf<T>,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             ensure!(
                 PendingInstitutionCreate::<T>::contains_key(proposal_id),
@@ -2058,15 +2047,6 @@ pub mod pallet {
                 fee: action.fee,
             });
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
             Ok(())
         }
 
@@ -2074,7 +2054,7 @@ pub mod pallet {
         pub(crate) fn execute_create_with_finalizer(
             proposal_id: u64,
             action: &CreateDuoqianAction<T::AccountId, BalanceOf<T>>,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             // 计算手续费（复用 onchain-transaction 公共费率）
             let amount_u128: u128 = action.amount.saturated_into();
@@ -2120,16 +2100,6 @@ pub mod pallet {
                 fee,
             });
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Ok(())
         }
 
@@ -2137,7 +2107,7 @@ pub mod pallet {
         pub(crate) fn execute_close_with_finalizer(
             proposal_id: u64,
             action: &CloseDuoqianAction<T::AccountId>,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             ensure!(
                 T::InstitutionAsset::can_spend(
@@ -2196,16 +2166,6 @@ pub mod pallet {
                 fee,
             });
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Ok(())
         }
     }
@@ -2225,15 +2185,18 @@ pub mod pallet {
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         use frame_support::storage::{with_transaction, TransactionOutcome};
         let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(()),
+            _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
         let tag = crate::MODULE_TAG;
         if raw.len() <= tag.len() {
-            return Ok(());
+            return Ok(ProposalExecutionOutcome::Ignored);
         }
         let action_byte = raw[tag.len()];
 
@@ -2245,7 +2208,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     )
                     .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
-                    // 事务内执行,失败则清理 Pending 释放地址锁定。
+                    // 中文注释：事务内执行，失败时保留 Pending，等待 voting-engine 统一重试/终态清理。
                     let exec_result =
                         with_transaction(
                             || match pallet::Pallet::<T>::execute_create_with_finalizer(
@@ -2258,16 +2221,15 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                             },
                         );
                     if exec_result.is_err() {
-                        DuoqianAccounts::<T>::remove(&action.duoqian_address);
-                        PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                        pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::CreateExecutionFailed {
                                 proposal_id,
                                 duoqian_address: action.duoqian_address,
                             },
                         );
+                        return Ok(ProposalExecutionOutcome::RetryableFailed);
                     }
+                    return Ok(ProposalExecutionOutcome::Executed);
                 }
                 ACTION_CREATE_INSTITUTION => {
                     let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
@@ -2284,11 +2246,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         }
                     });
                     if exec_result.is_err() {
-                        pallet::Pallet::<T>::cleanup_pending_institution_create(
-                            proposal_id,
-                            &action,
-                            false,
-                        );
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCreateExecutionFailed {
                                 proposal_id,
@@ -2296,7 +2253,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                                 main_address: action.main_address,
                             },
                         );
+                        return Ok(ProposalExecutionOutcome::RetryableFailed);
                     }
+                    return Ok(ProposalExecutionOutcome::Executed);
                 }
                 ACTION_CLOSE => {
                     let action =
@@ -2315,16 +2274,17 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                             },
                         );
                     if exec_result.is_err() {
-                        PendingCloseProposal::<T>::remove(&action.duoqian_address);
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::CloseExecutionFailed {
                                 proposal_id,
                                 duoqian_address: action.duoqian_address,
                             },
                         );
+                        return Ok(ProposalExecutionOutcome::RetryableFailed);
                     }
+                    return Ok(ProposalExecutionOutcome::Executed);
                 }
-                _ => {}
+                _ => return Ok(ProposalExecutionOutcome::Ignored),
             }
         } else {
             // 否决:清理 Pending 记录释放地址锁定。
@@ -2364,6 +2324,45 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 }
                 _ => {}
             }
+        }
+        Ok(ProposalExecutionOutcome::Executed)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        let tag = crate::MODULE_TAG;
+        ensure!(
+            raw.len() > tag.len(),
+            pallet::Error::<T>::ProposalActionNotFound
+        );
+        match raw[tag.len()] {
+            ACTION_CREATE => {
+                let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>>::decode(
+                    &mut &raw[tag.len() + 1..],
+                )
+                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                DuoqianAccounts::<T>::remove(&action.duoqian_address);
+                PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
+                pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
+            }
+            ACTION_CREATE_INSTITUTION => {
+                let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                pallet::Pallet::<T>::cleanup_pending_institution_create(
+                    proposal_id,
+                    &action,
+                    false,
+                );
+            }
+            ACTION_CLOSE => {
+                let action = CloseDuoqianAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                PendingCloseProposal::<T>::remove(&action.duoqian_address);
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -2639,6 +2638,10 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<4096>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -3264,14 +3267,18 @@ mod tests {
                 2,
             ));
 
-            // execute_create 失败后 DuoqianAccounts 中的 Pending 条目应被清除
-            assert!(
-                DuoqianAccounts::<Test>::get(&duoqian_address).is_none(),
-                "pending entry must be cleaned up after execute_create failure"
+            // 中文注释：自动执行失败后统一保留 Pending，等待 voting-engine 手动重试或终态清理。
+            assert_eq!(
+                DuoqianAccounts::<Test>::get(&duoqian_address)
+                    .expect("pending entry should be retained")
+                    .status,
+                DuoqianStatus::Pending
             );
-
-            // PersonalDuoqianInfo 也不应残留（机构多签无条目，remove 为 no-op）
             assert!(PersonalDuoqianInfo::<Test>::get(&duoqian_address).is_none());
+            assert!(
+                voting_engine::Pallet::<Test>::proposal_execution_retry_state(pid).is_some(),
+                "retry state must be recorded after execute_create failure"
+            );
         });
     }
 
