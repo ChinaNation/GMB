@@ -2,7 +2,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use codec::{Decode, Encode};
+use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
@@ -70,36 +70,6 @@ fn snapshot_sig_ok<T: pallet::Config>() -> pallet::SnapshotSignatureOf<T> {
     vec![b's'; len].try_into().expect("signature fits")
 }
 
-fn insert_proposal_data_for_benchmark<T: pallet::Config>(
-    proposal_id: u64,
-    proposer: T::AccountId,
-    reason: &pallet::ReasonOf<T>,
-    total_amount: pallet::BalanceOf<T>,
-    allocations: &pallet::AllocationOf<T>,
-) {
-    let data = crate::proposal::IssuanceProposalData {
-        proposer,
-        reason: reason.to_vec(),
-        total_amount,
-        allocations: allocations.to_vec(),
-    };
-    let mut encoded = Vec::from(crate::MODULE_TAG);
-    encoded.extend_from_slice(&data.encode());
-    let bounded_data: frame_support::BoundedVec<
-        u8,
-        <T as voting_engine::Config>::MaxProposalDataLen,
-    > = encoded
-        .try_into()
-        .expect("benchmark proposal data should fit");
-    let owner: frame_support::BoundedVec<u8, <T as voting_engine::Config>::MaxModuleTagLen> =
-        crate::MODULE_TAG
-            .to_vec()
-            .try_into()
-            .expect("benchmark module tag should fit");
-    voting_engine::ProposalData::<T>::insert(proposal_id, bounded_data);
-    voting_engine::ProposalOwner::<T>::insert(proposal_id, owner);
-}
-
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -139,48 +109,6 @@ mod benchmarks {
         );
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);
-    }
-
-    #[benchmark]
-    fn finalize_joint_vote_approved() {
-        let proposal_id = 11u64;
-        let proposer = nrc_admin::<T>();
-        let reason = reason_max::<T>();
-        let (allocations, total_amount) = full_allocations::<T>();
-        insert_proposal_data_for_benchmark::<T>(
-            proposal_id,
-            proposer,
-            &reason,
-            total_amount,
-            &allocations,
-        );
-        VotingProposalCount::<T>::put(1u32);
-
-        #[extrinsic_call]
-        finalize_joint_vote(RawOrigin::Root, proposal_id, true);
-
-        assert_eq!(VotingProposalCount::<T>::get(), 0u32);
-    }
-
-    #[benchmark]
-    fn finalize_joint_vote_rejected() {
-        let proposal_id = 12u64;
-        let proposer = nrc_admin::<T>();
-        let reason = reason_ok::<T>();
-        let (allocations, total_amount) = full_allocations::<T>();
-        insert_proposal_data_for_benchmark::<T>(
-            proposal_id,
-            proposer,
-            &reason,
-            total_amount,
-            &allocations,
-        );
-        VotingProposalCount::<T>::put(1u32);
-
-        #[extrinsic_call]
-        finalize_joint_vote(RawOrigin::Root, proposal_id, false);
-
-        assert_eq!(VotingProposalCount::<T>::get(), 0u32);
     }
 
     #[benchmark]

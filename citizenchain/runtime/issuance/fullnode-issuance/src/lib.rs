@@ -7,7 +7,7 @@
 //! 1. 本模块 `fullnode-issuance` 是【系统级、制度性】的货币发行模块；
 //! 2. 用于在 Substrate PoW 共识下，对成功铸造新区块的【全节点】发放铸块奖励//!
 //! 3. 本模块不属于治理参数范畴，不接受链上治理修改；
-//! 4. 本模块仅依赖最小必要 Runtime Storage（矿工身份到账户钱包绑定表）用于发奖资格判定，其发行金额与高度规则完全由常量决定。
+//! 4. 本模块仅依赖最小必要 Runtime Storage（真实出块记录、矿工身份到账户钱包绑定表）用于发奖资格判定，其发行金额与高度规则完全由常量决定。
 //!
 //! 二、发行规则（写死于 primitives::pow_const）
 //! ---------------------------------------------------------------------------
@@ -19,7 +19,7 @@
 //! 三、技术实现原则
 //! ---------------------------------------------------------------------------
 //! 1. 本模块不参与PoW共识过程，仅消费共识结果，PoW共识由Substrate框架原生实现，通过PreRuntime Digest + FindAuthor获取区块作者；
-//! 2. 本模块使用最小必要 Storage（矿工身份到账户钱包的一次性绑定表），不记录已发行数量与已奖励区块；
+//! 2. 本模块使用最小必要 Storage（真实出块记录、矿工身份到账户钱包的一次性绑定表），不记录已发行数量与已奖励区块；
 //! 3. 奖励发放时机：奖励在区块执行完成后的 on_finalize 阶段发放，属于对“已完成铸块行为”的结算，而非预测性激励；
 //! 4. 区块高度作为唯一时间与次数约束，区块高度全网一致、不可篡改的事实状态，不依赖任何人为或治理输入。
 //!
@@ -81,6 +81,12 @@ pub mod pallet {
     pub type RewardWalletByMiner<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, T::AccountId, OptionQuery>;
 
+    /// 矿工身份账户（powr）最近一次真实出块的区块高度。
+    #[pallet::storage]
+    #[pallet::getter(fn last_authored_block_by_miner)]
+    pub type LastAuthoredBlockByMiner<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, u32, OptionQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -115,14 +121,15 @@ pub mod pallet {
         RewardWalletCannotBeMiner,
         /// 新奖励钱包必须不同于当前已绑定钱包。
         RewardWalletUnchanged,
+        /// 矿工身份尚未在链上产生过真实出块记录。
+        MinerNeverAuthoredBlock,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 由矿工身份账户（powr 对应账户）发起一次性绑定。
         ///
-        /// 注意：当前不做“是否真实矿工”的额外校验。若未来 runtime 引入矿工注册表/白名单，
-        /// 建议在此处增加资格检查以降低无效绑定造成的状态膨胀风险。
+        /// 注意：绑定资格来自链上真实出块记录，不读取任何节点本地 keystore。
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::bind_reward_wallet())]
         pub fn bind_reward_wallet(origin: OriginFor<T>, wallet: T::AccountId) -> DispatchResult {
@@ -132,8 +139,12 @@ pub mod pallet {
                 Error::<T>::RewardWalletAlreadyBound
             );
             ensure!(wallet != miner, Error::<T>::RewardWalletCannotBeMiner);
+            ensure!(
+                LastAuthoredBlockByMiner::<T>::contains_key(&miner),
+                Error::<T>::MinerNeverAuthoredBlock
+            );
 
-            // 中文注释：绑定表只决定奖励接收钱包，不改变矿工作者身份本身。
+            // 中文注释：绑定表只决定奖励接收钱包，不改变出块作者身份本身。
             RewardWalletByMiner::<T>::insert(&miner, &wallet);
             Self::deposit_event(Event::<T>::RewardWalletBound { miner, wallet });
             Ok(())
@@ -162,10 +173,7 @@ pub mod pallet {
     }
 
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T>
-    where
-        BlockNumberFor<T>: Into<u32>,
-    {
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         #[cfg(feature = "std")]
         fn integrity_test() {
             let reward: BalanceOf<T> = FULLNODE_BLOCK_REWARD.saturated_into();
@@ -177,28 +185,30 @@ pub mod pallet {
         }
 
         fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-            let block_number: u32 = n.into();
-            if block_number >= FULLNODE_REWARD_START_BLOCK
-                && block_number <= FULLNODE_REWARD_END_BLOCK
+            let block_number = n.saturated_into::<u64>();
+            if block_number >= u64::from(FULLNODE_REWARD_START_BLOCK)
+                && block_number <= u64::from(FULLNODE_REWARD_END_BLOCK)
             {
                 // 预申报 on_finalize 最坏路径预算：
-                // digest + wallet map + balances/issuance + event 相关读写
-                T::DbWeight::get().reads_writes(3, 3)
+                // digest + 真实出块记录 + wallet map + balances/issuance + event 相关读写
+                T::DbWeight::get().reads_writes(3, 4)
             } else {
                 Weight::zero()
             }
         }
 
         fn on_finalize(n: BlockNumberFor<T>) {
-            // 制度前提：本链区块高度使用 u32 表示
-            let block_number: u32 = n.into();
+            // 中文注释：区间判断使用 u64，避免把运行时 BlockNumber 强绑定为 u32。
+            let block_number_u64 = n.saturated_into::<u64>();
 
             // 是否处于全节点 PoW 奖励区间 [1, 9,999,999]
-            if block_number < FULLNODE_REWARD_START_BLOCK
-                || block_number > FULLNODE_REWARD_END_BLOCK
+            if block_number_u64 < u64::from(FULLNODE_REWARD_START_BLOCK)
+                || block_number_u64 > u64::from(FULLNODE_REWARD_END_BLOCK)
             {
                 return;
             }
+            // 中文注释：固定奖励区间本身写死在 u32 范围内，进入区间后再转为存储和事件字段。
+            let block_number: u32 = block_number_u64.saturated_into();
 
             // 从共识 PreRuntime Digest 中获取 PoW 出块作者
             let digest = <frame_system::Pallet<T>>::digest();
@@ -213,6 +223,9 @@ pub mod pallet {
                     return;
                 } // 理论上不应发生，发生则不发奖励
             };
+
+            // 中文注释：只有共识 digest 证明真实出过块的账户，才允许后续绑定奖励钱包。
+            LastAuthoredBlockByMiner::<T>::insert(&author, block_number);
 
             // 已绑定钱包则发到钱包，未绑定则默认发到矿工自身账户。
             let recipient =
@@ -339,6 +352,10 @@ mod tests {
         AccountId32::new([n; 32])
     }
 
+    fn mark_miner_authored(miner: &AccountId32, block_number: u32) {
+        LastAuthoredBlockByMiner::<Test>::insert(miner, block_number);
+    }
+
     #[test]
     fn bind_reward_wallet_only_once() {
         new_test_ext().execute_with(|| {
@@ -346,6 +363,7 @@ mod tests {
             let wallet = account(2);
             let wallet2 = account(3);
 
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -371,10 +389,24 @@ mod tests {
     }
 
     #[test]
+    fn bind_rejects_never_authored_miner() {
+        new_test_ext().execute_with(|| {
+            let miner = account(5);
+            let wallet = account(6);
+
+            assert_noop!(
+                FullnodeIssuance::bind_reward_wallet(RuntimeOrigin::signed(miner), wallet),
+                Error::<Test>::MinerNeverAuthoredBlock
+            );
+        });
+    }
+
+    #[test]
     fn reward_issued_within_range_when_bound() {
         new_test_ext().execute_with(|| {
             let miner = account(11);
             let wallet = account(22);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -418,6 +450,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let miner = account(55);
             let wallet = account(66);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -450,6 +483,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let miner = account(77);
             let wallet = account(88);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -479,6 +513,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let miner = account(91);
             let wallet = account(92);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -528,6 +563,7 @@ mod tests {
                 Balances::free_balance(miner.clone()),
                 primitives::pow_const::FULLNODE_BLOCK_REWARD
             );
+            assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(1));
             let has_event = System::events().iter().any(|r| {
                 matches!(
                     r.event,
@@ -544,11 +580,41 @@ mod tests {
     }
 
     #[test]
+    fn miner_can_bind_after_first_authored_block() {
+        new_test_ext().execute_with(|| {
+            let miner = account(104);
+            let wallet = account(105);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
+
+            // 中文注释：首次出块前没有绑定资格，首次奖励仍进入矿工身份账户。
+            <FullnodeIssuance as Hooks<u32>>::on_finalize(1);
+            assert_eq!(
+                Balances::free_balance(miner.clone()),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+            assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(1));
+
+            assert_ok!(FullnodeIssuance::bind_reward_wallet(
+                RuntimeOrigin::signed(miner.clone()),
+                wallet.clone()
+            ));
+
+            <FullnodeIssuance as Hooks<u32>>::on_finalize(2);
+            assert_eq!(
+                Balances::free_balance(wallet),
+                primitives::pow_const::FULLNODE_BLOCK_REWARD
+            );
+            assert_eq!(LastAuthoredBlockByMiner::<Test>::get(&miner), Some(2));
+        });
+    }
+
+    #[test]
     fn reward_wallet_can_be_rebound_by_miner() {
         new_test_ext().execute_with(|| {
             let miner = account(111);
             let wallet1 = account(112);
             let wallet2 = account(113);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet1
@@ -581,6 +647,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let miner = account(114);
             let wallet = account(115);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -602,6 +669,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let miner = account(116);
             let wallet = account(117);
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet.clone()
@@ -637,6 +705,7 @@ mod tests {
             let wallet1 = account(132);
             let wallet2 = account(133);
 
+            mark_miner_authored(&miner, 1);
             assert_ok!(FullnodeIssuance::bind_reward_wallet(
                 RuntimeOrigin::signed(miner.clone()),
                 wallet1.clone()

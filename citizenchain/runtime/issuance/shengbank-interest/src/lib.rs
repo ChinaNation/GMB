@@ -13,7 +13,7 @@ pub mod pallet {
     use codec::Decode;
     use frame_support::{ensure, pallet_prelude::*, traits::Currency};
     use frame_system::{ensure_root, pallet_prelude::*};
-    use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
+    use sp_runtime::traits::{CheckedMul, SaturatedConversion, Zero};
     use sp_std::prelude::*;
 
     // ===== 引入制度常量 =====
@@ -25,9 +25,15 @@ pub mod pallet {
         },
     };
 
-    const AUTO_BACKFILL_MAX_YEARS_PER_BLOCK: u32 = 8;
-    const MAX_FORCE_SETTLE_YEARS: u32 = SHENGBANK_INTEREST_DURATION_YEARS;
-    const SETTLEMENT_CPU_OP_WEIGHT: u64 = 50_000;
+    // 中文注释：自动路径只允许每个年度边界块结算 1 年，避免历史欠账集中压进单块。
+    const AUTO_BACKFILL_MAX_YEARS_PER_BLOCK: u32 = 1;
+    // 中文注释：Root 补结算保留批处理能力，但必须分批执行，避免单笔交易结算 100 年。
+    const MAX_FORCE_SETTLE_YEARS: u32 = 8;
+    // 中文注释：省储行利息制度当前固定启用逐年递减，禁止保留关闭递减的死分支。
+    const _: () = assert!(
+        ENABLE_SHENGBANK_INTEREST_DECAY,
+        "ENABLE_SHENGBANK_INTEREST_DECAY must stay true"
+    );
 
     // ===== 配置 =====
     #[pallet::config]
@@ -77,6 +83,9 @@ pub mod pallet {
         /// stake_amount 转换到运行时 Balance 发生饱和截断。
         ShengBankPrincipalOverflow { year: u32, pallet_id: [u8; 48] },
 
+        /// 利率乘法发生溢出，跳过该省储行本年度铸币并让年度结算失败。
+        ShengBankInterestOverflow { year: u32, pallet_id: [u8; 48] },
+
         /// 某一年度结算完成
         ShengBankYearSettled { year: u32 },
 
@@ -120,23 +129,18 @@ pub mod pallet {
             let current_year = Self::current_year(n);
             let last_year = Self::last_settled_year();
 
-            // 只在“年度边界区块”触发，按年度顺序自动补结算，最多结算到制度上限年限。
+            // 只在“年度边界区块”触发，按年度顺序自动补结算。
             if current_year > last_year && last_year < SHENGBANK_INTEREST_DURATION_YEARS {
-                let (reads, writes, ops) = Self::settle_next_years(
+                // 中文注释：自动结算的最坏路径由 benchmark 权重覆盖，不再使用手写读写估算。
+                let _ = Self::settle_next_years(
                     current_year,
                     AUTO_BACKFILL_MAX_YEARS_PER_BLOCK,
                     Some(n),
                 );
-                return T::DbWeight::get()
-                    .reads_writes(reads, writes)
-                    .saturating_add(Weight::from_parts(
-                        ops.saturating_mul(SETTLEMENT_CPU_OP_WEIGHT),
-                        0,
-                    ));
+                return T::WeightInfo::on_initialize_settlement();
             }
 
-            // 默认只读一次 LastSettledYear
-            T::DbWeight::get().reads(1)
+            T::WeightInfo::on_initialize_boundary_noop()
         }
 
         /// try-runtime 状态校验：确保 LastSettledYear 不超过制度年限上限。
@@ -168,12 +172,6 @@ pub mod pallet {
             );
             let current_year = Self::current_year(frame_system::Pallet::<T>::block_number());
             let (reads, writes, ops) = Self::settle_next_years(current_year, max_years, None);
-            let actual_weight = T::DbWeight::get()
-                .reads_writes(reads, writes)
-                .saturating_add(Weight::from_parts(
-                    ops.saturating_mul(SETTLEMENT_CPU_OP_WEIGHT),
-                    0,
-                ));
             log::debug!(
                 target: "runtime::shengbank",
                 "force_settle_years finished | reads={} writes={} ops={}",
@@ -181,7 +179,8 @@ pub mod pallet {
                 writes,
                 ops
             );
-            Ok(Some(actual_weight).into())
+            // 中文注释：实际扣重保持使用声明的 benchmark 权重，避免用运行时手写估算低报。
+            Ok(().into())
         }
 
         /// Root 强制推进到指定年度（跳过无法修复的失败年度）。
@@ -291,13 +290,10 @@ pub mod pallet {
 
         /// 计算某年的利率（BP，万分比）
         fn interest_bp_for_year(year: u32) -> u32 {
-            if !ENABLE_SHENGBANK_INTEREST_DECAY {
-                return SHENGBANK_INITIAL_INTEREST_BP;
-            }
-
-            if year > SHENGBANK_INTEREST_DURATION_YEARS {
-                return 0;
-            }
+            debug_assert!(
+                year >= 1 && year <= SHENGBANK_INTEREST_DURATION_YEARS,
+                "settlement year must stay inside shengbank interest duration"
+            );
 
             // 中文注释：第 1 年使用初始利率，从第 2 年开始按固定 BP 递减，最低不会小于 0。
             let decay = year
@@ -309,6 +305,7 @@ pub mod pallet {
 
         /// 核心铸造逻辑（只针对固定省储行多签地址，不可覆盖）。
         fn mint_interest_for_year(year: u32) -> (u64, u64, u32, u32) {
+            // 中文注释：这里的读写计数只保留给调试日志；真实区块权重以 benchmark 产物为准。
             // 保守估算每家省储行读：
             // - 账户余额读取
             // - 总发行量读取
@@ -355,7 +352,19 @@ pub mod pallet {
                     continue;
                 }
 
-                let interest = principal.saturating_mul(rate_bp.into()) / 10_000u32.into();
+                // 中文注释：利率乘法必须显式检查溢出，避免 saturating_mul 静默铸出异常大额。
+                let rate: BalanceOf<T> = rate_bp.into();
+                let Some(gross_interest) = principal.checked_mul(&rate) else {
+                    Self::deposit_event(Event::<T>::ShengBankInterestOverflow { year, pallet_id });
+                    log::error!(
+                        target: "runtime::shengbank",
+                        "省储行利息乘法溢出: {}",
+                        bank.shenfen_id
+                    );
+                    writes = writes.saturating_add(1);
+                    continue;
+                };
+                let interest = gross_interest / 10_000u32.into();
 
                 if interest.is_zero() {
                     // 利息为0不视为失败，避免把“无应付利息”误判成年度失败。
@@ -535,19 +544,18 @@ mod tests {
     }
 
     #[test]
-    fn should_backfill_next_unsettled_year_on_later_boundary() {
+    fn later_boundary_auto_settles_only_next_unsettled_year() {
         new_test_ext().execute_with(|| {
-            // 直接跳到第2年边界：应在同一边界块内补结算到第2年。
+            // 中文注释：直接跳到第 2 年边界时，自动路径也只补下一个未结算年度。
             System::set_block_number(20);
             ShengBankInterest::on_initialize(20);
 
-            assert_eq!(LastSettledYear::<Test>::get(), 2);
+            assert_eq!(LastSettledYear::<Test>::get(), 1);
 
             let first_bank = &primitives::china::china_ch::CHINA_CH[0];
             let account = shengbank_account(0);
             let year1 = first_bank.stake_amount * 100u128 / 10_000u128;
-            let year2 = first_bank.stake_amount * 99u128 / 10_000u128;
-            assert_eq!(Balances::free_balance(account), year1 + year2);
+            assert_eq!(Balances::free_balance(account), year1);
         });
     }
 
@@ -648,16 +656,28 @@ mod tests {
     }
 
     #[test]
-    fn force_settle_years_rejects_zero_count() {
+    fn force_settle_years_rejects_zero_and_oversized_count() {
         new_test_ext().execute_with(|| {
             assert_noop!(
                 ShengBankInterest::force_settle_years(RuntimeOrigin::root(), 0),
                 Error::<Test>::InvalidOperationCount
             );
             assert_noop!(
-                ShengBankInterest::force_settle_years(RuntimeOrigin::root(), 101),
+                ShengBankInterest::force_settle_years(RuntimeOrigin::root(), 9),
                 Error::<Test>::InvalidOperationCount
             );
+        });
+    }
+
+    #[test]
+    fn force_settle_years_allows_max_batch() {
+        new_test_ext().execute_with(|| {
+            System::set_block_number(100); // current_year = 10
+            assert_ok!(ShengBankInterest::force_settle_years(
+                RuntimeOrigin::root(),
+                8
+            ));
+            assert_eq!(LastSettledYear::<Test>::get(), 8);
         });
     }
 
@@ -678,11 +698,11 @@ mod tests {
     }
 
     #[test]
-    fn on_initialize_respects_auto_backfill_cap() {
+    fn on_initialize_settles_only_one_year_per_boundary() {
         new_test_ext().execute_with(|| {
             System::set_block_number(100); // current_year = 10
             ShengBankInterest::on_initialize(100);
-            assert_eq!(LastSettledYear::<Test>::get(), 8); // AUTO_BACKFILL_MAX_YEARS_PER_BLOCK
+            assert_eq!(LastSettledYear::<Test>::get(), 1); // AUTO_BACKFILL_MAX_YEARS_PER_BLOCK
         });
     }
 
@@ -704,28 +724,25 @@ mod tests {
             System::set_block_number(50); // current_year = 5
                                           // 模拟 Root 已跳过前两年故障
             LastSettledYear::<Test>::put(2);
-            // 自动结算应从第 3 年开始恢复
+            // 自动结算应从第 3 年开始恢复，但单个边界块只结算 1 年。
             ShengBankInterest::on_initialize(50);
-            // 应结算到第 5 年（current_year）
-            assert_eq!(LastSettledYear::<Test>::get(), 5);
+            assert_eq!(LastSettledYear::<Test>::get(), 3);
             let first_bank = &primitives::china::china_ch::CHINA_CH[0];
             let account = shengbank_account(0);
-            // 第 3/4/5 年的利率分别是 98/97/96 BP
+            // 第 3 年利率为 98 BP。
             let year3 = first_bank.stake_amount * 98u128 / 10_000u128;
-            let year4 = first_bank.stake_amount * 97u128 / 10_000u128;
-            let year5 = first_bank.stake_amount * 96u128 / 10_000u128;
-            assert_eq!(Balances::free_balance(account), year3 + year4 + year5);
+            assert_eq!(Balances::free_balance(account), year3);
         });
     }
 
     #[test]
     fn force_settle_years_caps_at_current_year() {
-        // 在 current_year=3 时请求补结算 10 年，验证只结算 3 年。
+        // 在 current_year=3 时请求补结算 8 年，验证只结算 3 年。
         new_test_ext().execute_with(|| {
             System::set_block_number(30); // current_year = 3
             assert_ok!(ShengBankInterest::force_settle_years(
                 RuntimeOrigin::root(),
-                10
+                8
             ));
             assert_eq!(LastSettledYear::<Test>::get(), 3);
         });

@@ -1,19 +1,24 @@
-//! Weight functions for `resolution_issuance`.
+//! Conservative fallback weights for `resolution_issuance`.
 //!
-//! 中文注释：该文件在模块合并时先使用保守权重占位，后续必须通过
-//! `citizenchain/scripts/benchmark.sh` 对 `resolution_issuance` 重新生成。
+//! 中文注释：当前仓库的 benchmark 运行依赖带 Benchmark Runtime API 的 WASM。
+//! 本次尝试确认现有 CI WASM 不包含该 API，而本地从源码构建 benchmark WASM
+//! 仍被上游 `wasm32v1-none`/`std` feature 问题阻塞。这里先使用偏高保守上界，
+//! 不把本文件伪装成正式 benchmark 产物；发布前必须用 benchmark WASM 重新生成。
 
+#![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]
 #![allow(unused_imports)]
+#![allow(missing_docs)]
 
 use core::marker::PhantomData;
-use frame_support::{traits::Get, weights::Weight};
+use frame_support::{
+    traits::Get,
+    weights::{constants::RocksDbWeight, Weight},
+};
 
 pub trait WeightInfo {
     fn set_allowed_recipients() -> Weight;
     fn propose_resolution_issuance() -> Weight;
-    fn finalize_joint_vote_approved() -> Weight;
-    fn finalize_joint_vote_rejected() -> Weight;
     fn clear_executed() -> Weight;
     fn set_paused() -> Weight;
 }
@@ -21,53 +26,62 @@ pub trait WeightInfo {
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
     fn set_allowed_recipients() -> Weight {
-        Weight::from_parts(13_000_000, 2_000).saturating_add(T::DbWeight::get().reads_writes(2, 1))
+        // 中文注释：覆盖读取活跃提案数、读取旧名单、校验并写入新名单的维护路径。
+        Weight::from_parts(25_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 6_000))
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(1))
     }
 
     fn propose_resolution_issuance() -> Weight {
-        Weight::from_parts(80_000_000, 9_000).saturating_add(T::DbWeight::get().reads_writes(4, 4))
-    }
-
-    fn finalize_joint_vote_approved() -> Weight {
-        Weight::from_parts(140_000_000, 12_000)
-            .saturating_add(T::DbWeight::get().reads_writes(8, 8))
-    }
-
-    fn finalize_joint_vote_rejected() -> Weight {
-        Weight::from_parts(35_000_000, 5_000).saturating_add(T::DbWeight::get().reads_writes(3, 4))
+        // 中文注释：覆盖收款名单校验、Voting ProposalData 写入和提案计数写入的最重公开入口。
+        Weight::from_parts(180_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 25_000))
+            .saturating_add(T::DbWeight::get().reads(7))
+            .saturating_add(T::DbWeight::get().writes(7))
     }
 
     fn clear_executed() -> Weight {
-        Weight::from_parts(12_000_000, 2_500).saturating_add(T::DbWeight::get().reads_writes(1, 1))
+        Weight::from_parts(20_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(T::DbWeight::get().reads(1))
+            .saturating_add(T::DbWeight::get().writes(1))
     }
 
     fn set_paused() -> Weight {
-        Weight::from_parts(10_000_000, 1_500).saturating_add(T::DbWeight::get().reads_writes(1, 1))
+        Weight::from_parts(18_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(T::DbWeight::get().reads(1))
+            .saturating_add(T::DbWeight::get().writes(1))
     }
 }
 
 impl WeightInfo for () {
     fn set_allowed_recipients() -> Weight {
-        Weight::from_parts(13_000_000, 2_000)
+        Weight::from_parts(25_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 6_000))
+            .saturating_add(RocksDbWeight::get().reads(2))
+            .saturating_add(RocksDbWeight::get().writes(1))
     }
 
     fn propose_resolution_issuance() -> Weight {
-        Weight::from_parts(80_000_000, 9_000)
-    }
-
-    fn finalize_joint_vote_approved() -> Weight {
-        Weight::from_parts(140_000_000, 12_000)
-    }
-
-    fn finalize_joint_vote_rejected() -> Weight {
-        Weight::from_parts(35_000_000, 5_000)
+        Weight::from_parts(180_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 25_000))
+            .saturating_add(RocksDbWeight::get().reads(7))
+            .saturating_add(RocksDbWeight::get().writes(7))
     }
 
     fn clear_executed() -> Weight {
-        Weight::from_parts(12_000_000, 2_500)
+        Weight::from_parts(20_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(RocksDbWeight::get().reads(1))
+            .saturating_add(RocksDbWeight::get().writes(1))
     }
 
     fn set_paused() -> Weight {
-        Weight::from_parts(10_000_000, 1_500)
+        Weight::from_parts(18_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 4_000))
+            .saturating_add(RocksDbWeight::get().reads(1))
+            .saturating_add(RocksDbWeight::get().writes(1))
     }
 }

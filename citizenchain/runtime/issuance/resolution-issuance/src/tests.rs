@@ -219,7 +219,6 @@ impl pallet::Config for Test {
     type Currency = Balances;
     type ProposeOrigin = EnsureNrcAdminForTest;
     type RecipientSetOrigin = frame_system::EnsureRoot<AccountId32>;
-    type JointVoteFinalizeOrigin = frame_system::EnsureRoot<AccountId32>;
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId32>;
     type JointVoteEngine = TestJointVoteEngine;
     type MaxReasonLen = ConstU32<128>;
@@ -248,12 +247,16 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn insert_engine_proposal(proposal_id: u64) {
+    insert_engine_proposal_with_status(proposal_id, voting_engine::STATUS_PASSED);
+}
+
+fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
     voting_engine::pallet::Proposals::<Test>::insert(
         proposal_id,
         voting_engine::Proposal {
             kind: voting_engine::PROPOSAL_KIND_JOINT,
             stage: voting_engine::STAGE_JOINT,
-            status: voting_engine::STATUS_PASSED,
+            status,
             internal_org: None,
             internal_institution: None,
             start: 0u64,
@@ -261,6 +264,22 @@ fn insert_engine_proposal(proposal_id: u64) {
             citizen_eligible_total: 10,
         },
     );
+}
+
+fn overwrite_proposal_data(
+    proposal_id: u64,
+    data: crate::proposal::IssuanceProposalData<AccountId32, Balance>,
+) {
+    let mut encoded = Vec::from(crate::MODULE_TAG);
+    encoded.extend_from_slice(&codec::Encode::encode(&data));
+    let bounded_data: BoundedVec<u8, <Test as voting_engine::Config>::MaxProposalDataLen> =
+        encoded.try_into().expect("proposal data should fit");
+    let owner: BoundedVec<u8, <Test as voting_engine::Config>::MaxModuleTagLen> = crate::MODULE_TAG
+        .to_vec()
+        .try_into()
+        .expect("module tag should fit");
+    voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+    voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
 }
 
 fn call_joint_callback(
@@ -400,6 +419,83 @@ fn approved_callback_executes_issuance() {
 }
 
 #[test]
+fn callback_rejects_non_finalizable_engine_status() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            reason_ok(),
+            4300,
+            allocations_ok(4300),
+            10,
+            nonce_ok(),
+            sig_ok()
+        ));
+
+        insert_engine_proposal_with_status(100, voting_engine::STATUS_VOTING);
+        assert_noop!(
+            call_joint_callback(100, true),
+            pallet::Error::<Test>::ProposalNotFinalizable
+        );
+        assert_eq!(pallet::VotingProposalCount::<Test>::get(), 1);
+        assert!(!pallet::Executed::<Test>::contains_key(100));
+        assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
+    });
+}
+
+#[test]
+fn callback_requires_voting_engine_scope() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            reason_ok(),
+            4300,
+            allocations_ok(4300),
+            10,
+            nonce_ok(),
+            sig_ok()
+        ));
+
+        insert_engine_proposal(100);
+        assert_noop!(
+            ResolutionIssuance::on_joint_vote_finalized(100, true),
+            pallet::Error::<Test>::ProposalNotFinalizable
+        );
+        assert_eq!(pallet::VotingProposalCount::<Test>::get(), 1);
+        assert!(!pallet::Executed::<Test>::contains_key(100));
+    });
+}
+
+#[test]
+fn second_callback_after_executed_is_rejected() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            reason_ok(),
+            4300,
+            allocations_ok(4300),
+            10,
+            nonce_ok(),
+            sig_ok()
+        ));
+
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
+        assert_noop!(
+            call_joint_callback(100, true),
+            pallet::Error::<Test>::ProposalNotFinalizable
+        );
+        assert_eq!(
+            voting_engine::pallet::Proposals::<Test>::get(100)
+                .expect("engine proposal should exist")
+                .status,
+            voting_engine::STATUS_EXECUTED
+        );
+        assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
+        assert_eq!(pallet::TotalIssued::<Test>::get(), 4300);
+    });
+}
+
+#[test]
 fn rejected_callback_does_not_issue() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_resolution_issuance(
@@ -412,8 +508,42 @@ fn rejected_callback_does_not_issue() {
             sig_ok()
         ));
 
+        insert_engine_proposal_with_status(100, voting_engine::STATUS_REJECTED);
         assert_ok!(call_joint_callback(100, false));
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
+        assert!(!pallet::Executed::<Test>::contains_key(100));
+        assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
+    });
+}
+
+#[test]
+fn callback_rejects_corrupted_reason_with_reason_too_long() {
+    new_test_ext().execute_with(|| {
+        assert_ok!(ResolutionIssuance::propose_resolution_issuance(
+            RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
+            reason_ok(),
+            4300,
+            allocations_ok(4300),
+            10,
+            nonce_ok(),
+            sig_ok()
+        ));
+
+        overwrite_proposal_data(
+            100,
+            crate::proposal::IssuanceProposalData {
+                proposer: AccountId32::new([1u8; 32]),
+                reason: vec![b'x'; 129],
+                total_amount: 4300,
+                allocations: allocations_ok(4300).to_vec(),
+            },
+        );
+        insert_engine_proposal(100);
+        assert_noop!(
+            call_joint_callback(100, true),
+            pallet::Error::<Test>::ReasonTooLong
+        );
+        assert_eq!(pallet::VotingProposalCount::<Test>::get(), 1);
         assert!(!pallet::Executed::<Test>::contains_key(100));
         assert_eq!(pallet::TotalIssued::<Test>::get(), 0);
     });
@@ -465,11 +595,14 @@ fn pause_blocks_approved_execution() {
             sig_ok()
         ));
         assert_ok!(ResolutionIssuance::set_paused(RuntimeOrigin::root(), true));
-        assert_ok!(ResolutionIssuance::finalize_joint_vote(
-            RuntimeOrigin::root(),
-            100,
-            true
-        ));
+        insert_engine_proposal(100);
+        assert_ok!(call_joint_callback(100, true));
+        assert_eq!(
+            voting_engine::pallet::Proposals::<Test>::get(100)
+                .expect("engine proposal should exist")
+                .status,
+            voting_engine::STATUS_EXECUTION_FAILED
+        );
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(!pallet::Executed::<Test>::contains_key(100));
         assert_eq!(pallet::TotalIssued::<Test>::get(), 0);

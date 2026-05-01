@@ -4,15 +4,13 @@ use crate::pallet::{
     AllocationOf, BalanceOf, Config, Error, Event, EverExecuted, Executed, Pallet, Paused,
     ReasonOf, TotalIssued,
 };
-use codec::Encode;
 use frame_support::{
     dispatch::DispatchResult,
     ensure,
     storage::with_storage_layer,
     traits::{Currency, Get, Imbalance},
 };
-use sp_runtime::traits::{CheckedAdd, Hash, Zero};
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_runtime::traits::{CheckedAdd, Hash};
 
 impl<T: Config> Pallet<T> {
     pub(crate) fn execute_approved_issuance(
@@ -47,24 +45,13 @@ impl<T: Config> Pallet<T> {
         Self::validate_execution_allocations(&total_amount, allocations)?;
 
         let existential_deposit = T::Currency::minimum_balance();
-        let mut seen_recipients: BTreeSet<Vec<u8>> = BTreeSet::new();
-        let mut sum = BalanceOf::<T>::zero();
         for item in allocations.iter() {
-            let recipient_key = item.recipient.encode();
-            ensure!(
-                seen_recipients.insert(recipient_key),
-                Error::<T>::DuplicateRecipient
-            );
-            ensure!(!item.amount.is_zero(), Error::<T>::ZeroAmount);
+            // 中文注释：名单唯一、单笔非零和总额匹配已由共享校验负责；执行层只补 ED。
             ensure!(
                 item.amount >= existential_deposit,
                 Error::<T>::BelowExistentialDeposit
             );
-            sum = sum
-                .checked_add(&item.amount)
-                .ok_or(Error::<T>::AllocationOverflow)?;
         }
-        ensure!(sum == total_amount, Error::<T>::TotalMismatch);
         ensure!(
             total_amount <= T::MaxSingleIssuance::get(),
             Error::<T>::ExceedsSingleIssuanceCap

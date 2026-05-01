@@ -49,16 +49,18 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+	/// Storage: `FullnodeIssuance::LastAuthoredBlockByMiner` (r:1 w:0)
 	/// Storage: `FullnodeIssuance::RewardWalletByMiner` (r:1 w:1)
+	/// Proof: `FullnodeIssuance::LastAuthoredBlockByMiner` (`max_values`: None, `max_size`: Some(52), added: 2545, mode: `MaxEncodedLen`)
 	/// Proof: `FullnodeIssuance::RewardWalletByMiner` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	fn bind_reward_wallet() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `109`
-		//  Estimated: `3545`
+		//  Estimated: `6090`
 		// Minimum execution time: 16_170_000 picoseconds.
 		Weight::from_parts(16_752_000, 0)
-			.saturating_add(Weight::from_parts(0, 3545))
-			.saturating_add(T::DbWeight::get().reads(1))
+			.saturating_add(Weight::from_parts(0, 6090))
+			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 	/// Storage: `FullnodeIssuance::RewardWalletByMiner` (r:1 w:1)
@@ -76,16 +78,18 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
+	/// Storage: `FullnodeIssuance::LastAuthoredBlockByMiner` (r:1 w:0)
 	/// Storage: `FullnodeIssuance::RewardWalletByMiner` (r:1 w:1)
+	/// Proof: `FullnodeIssuance::LastAuthoredBlockByMiner` (`max_values`: None, `max_size`: Some(52), added: 2545, mode: `MaxEncodedLen`)
 	/// Proof: `FullnodeIssuance::RewardWalletByMiner` (`max_values`: None, `max_size`: Some(80), added: 2555, mode: `MaxEncodedLen`)
 	fn bind_reward_wallet() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `109`
-		//  Estimated: `3545`
+		//  Estimated: `6090`
 		// Minimum execution time: 16_170_000 picoseconds.
 		Weight::from_parts(16_752_000, 0)
-			.saturating_add(Weight::from_parts(0, 3545))
-			.saturating_add(RocksDbWeight::get().reads(1))
+			.saturating_add(Weight::from_parts(0, 6090))
+			.saturating_add(RocksDbWeight::get().reads(2))
 			.saturating_add(RocksDbWeight::get().writes(1))
 	}
 	/// Storage: `FullnodeIssuance::RewardWalletByMiner` (r:1 w:1)
