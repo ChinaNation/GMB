@@ -86,6 +86,18 @@ pub enum ProposalExecutionOutcome {
     FatalFailed,
 }
 
+/// 业务模块对 `PASSED` 重试提案是否允许管理员提前取消的决策。
+///
+/// 中文注释：`MODULE_TAG` 只用于路由识别，不能作为权限凭据；因此取消必须由真正
+/// 认领该提案的 callback 显式返回 `Allow`，默认实现一律 `Ignored`。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
+pub enum ProposalCancelDecision {
+    /// 不是本模块提案。
+    Ignored,
+    /// 本模块确认该提案已不可执行，允许进入 EXECUTION_FAILED 终态。
+    Allow,
+}
+
 /// 内部提案互斥类型。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub enum InternalProposalMutexKind {
@@ -148,6 +160,21 @@ pub trait JointVoteEngine<AccountId> {
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
+
+    fn create_joint_proposal_with_data_and_object(
+        _who: AccountId,
+        _eligible_total: u64,
+        _snapshot_nonce: &[u8],
+        _signature: &[u8],
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+        _object_kind: u8,
+        _object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "JointVoteEngineObjectStoreNotConfigured",
+        ))
+    }
 
     fn cleanup_joint_proposal(_proposal_id: u64) {}
 }
@@ -290,8 +317,10 @@ pub trait JointVoteResultCallback {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError>;
 
-    fn can_cancel_passed_proposal(_proposal_id: u64) -> DispatchResult {
-        Ok(())
+    fn can_cancel_passed_proposal(
+        _proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        Ok(ProposalCancelDecision::Ignored)
     }
 
     fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
@@ -315,7 +344,7 @@ impl JointVoteResultCallback for () {
 ///
 /// 业务模块应当:
 /// - 通过 `ProposalData` 的 `MODULE_TAG` 前缀(或业务独立存储键)认领自己的提案,
-///   不属于自己的提案直接返回 `Ok(())` 跳过;
+///   不属于自己的提案直接返回 `ProposalExecutionOutcome::Ignored` 跳过;
 /// - `approved = true` 时执行具体业务动作(转账 / 替换管理员 / 销毁 / ...);
 /// - `approved = false` 时可选清理业务独立存储(如 `SweepProposalActions`)。
 ///
@@ -328,8 +357,10 @@ pub trait InternalVoteResultCallback {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, DispatchError>;
 
-    fn can_cancel_passed_proposal(_proposal_id: u64) -> DispatchResult {
-        Ok(())
+    fn can_cancel_passed_proposal(
+        _proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        Ok(ProposalCancelDecision::Ignored)
     }
 
     fn on_execution_failed_terminal(_proposal_id: u64) -> DispatchResult {
@@ -361,6 +392,20 @@ fn merge_execution_outcome(
     }
 }
 
+fn merge_cancel_decision(
+    current: ProposalCancelDecision,
+    next: ProposalCancelDecision,
+) -> ProposalCancelDecision {
+    match (current, next) {
+        (ProposalCancelDecision::Allow, _) | (_, ProposalCancelDecision::Allow) => {
+            ProposalCancelDecision::Allow
+        }
+        (ProposalCancelDecision::Ignored, ProposalCancelDecision::Ignored) => {
+            ProposalCancelDecision::Ignored
+        }
+    }
+}
+
 // ──── InternalVoteResultCallback 的 tuple 实现(手写,覆盖 1~6 个成员)────
 //
 // 语义:依次调用每个成员的 `on_internal_vote_finalized`;任一成员返回 `Err`
@@ -378,7 +423,9 @@ impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
         A::on_internal_vote_finalized(proposal_id, approved)
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
         A::can_cancel_passed_proposal(proposal_id)
     }
 
@@ -399,9 +446,12 @@ impl<A: InternalVoteResultCallback, B: InternalVoteResultCallback> InternalVoteR
         Ok(merge_execution_outcome(a, b))
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
-        A::can_cancel_passed_proposal(proposal_id)?;
-        B::can_cancel_passed_proposal(proposal_id)
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(a, b))
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
@@ -432,10 +482,13 @@ impl<
         Ok(outcome)
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
-        A::can_cancel_passed_proposal(proposal_id)?;
-        B::can_cancel_passed_proposal(proposal_id)?;
-        C::can_cancel_passed_proposal(proposal_id)
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        let c = C::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(merge_cancel_decision(a, b), c))
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
@@ -472,11 +525,17 @@ impl<
         Ok(outcome)
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
-        A::can_cancel_passed_proposal(proposal_id)?;
-        B::can_cancel_passed_proposal(proposal_id)?;
-        C::can_cancel_passed_proposal(proposal_id)?;
-        D::can_cancel_passed_proposal(proposal_id)
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        let c = C::can_cancel_passed_proposal(proposal_id)?;
+        let d = D::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(
+            merge_cancel_decision(merge_cancel_decision(a, b), c),
+            d,
+        ))
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
@@ -519,12 +578,18 @@ impl<
         Ok(outcome)
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
-        A::can_cancel_passed_proposal(proposal_id)?;
-        B::can_cancel_passed_proposal(proposal_id)?;
-        C::can_cancel_passed_proposal(proposal_id)?;
-        D::can_cancel_passed_proposal(proposal_id)?;
-        E::can_cancel_passed_proposal(proposal_id)
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        let c = C::can_cancel_passed_proposal(proposal_id)?;
+        let d = D::can_cancel_passed_proposal(proposal_id)?;
+        let e = E::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(
+            merge_cancel_decision(merge_cancel_decision(merge_cancel_decision(a, b), c), d),
+            e,
+        ))
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
@@ -573,13 +638,22 @@ impl<
         Ok(outcome)
     }
 
-    fn can_cancel_passed_proposal(proposal_id: u64) -> DispatchResult {
-        A::can_cancel_passed_proposal(proposal_id)?;
-        B::can_cancel_passed_proposal(proposal_id)?;
-        C::can_cancel_passed_proposal(proposal_id)?;
-        D::can_cancel_passed_proposal(proposal_id)?;
-        E::can_cancel_passed_proposal(proposal_id)?;
-        F::can_cancel_passed_proposal(proposal_id)
+    fn can_cancel_passed_proposal(
+        proposal_id: u64,
+    ) -> Result<ProposalCancelDecision, DispatchError> {
+        let a = A::can_cancel_passed_proposal(proposal_id)?;
+        let b = B::can_cancel_passed_proposal(proposal_id)?;
+        let c = C::can_cancel_passed_proposal(proposal_id)?;
+        let d = D::can_cancel_passed_proposal(proposal_id)?;
+        let e = E::can_cancel_passed_proposal(proposal_id)?;
+        let f = F::can_cancel_passed_proposal(proposal_id)?;
+        Ok(merge_cancel_decision(
+            merge_cancel_decision(
+                merge_cancel_decision(merge_cancel_decision(merge_cancel_decision(a, b), c), d),
+                e,
+            ),
+            f,
+        ))
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
@@ -1211,6 +1285,8 @@ pub mod pallet {
         ExecutionRetryDeadlinePassed,
         /// 中文注释：单个区块执行重试超时队列已满。
         TooManyExecutionRetryDeadlines,
+        /// 中文注释：owner 模块没有明确允许取消该 PASSED 重试提案。
+        ProposalCancellationNotAllowed,
     }
 
     #[pallet::hooks]
@@ -1677,7 +1753,7 @@ pub mod pallet {
             })
         }
 
-        fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
+        fn apply_terminal_side_effects(proposal_id: u64, status: u8) -> DispatchResult {
             ensure!(
                 Self::is_terminal_status(status),
                 Error::<T>::InvalidProposalStatus
@@ -1690,10 +1766,6 @@ pub mod pallet {
                     let _ = Self::notify_execution_failed_terminal(proposal_id, proposal.kind);
                 }
             }
-            Self::deposit_event(Event::<T>::ProposalFinalized {
-                proposal_id,
-                status,
-            });
             let now = frame_system::Pallet::<T>::block_number();
             proposal_cleanup::schedule_cleanup::<T>(proposal_id, now)?;
             if let Some(proposal) = Proposals::<T>::get(proposal_id) {
@@ -1705,6 +1777,15 @@ pub mod pallet {
                     Self::release_internal_proposal_mutexes(proposal_id);
                 }
             }
+            Ok(())
+        }
+
+        fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
+            Self::apply_terminal_side_effects(proposal_id, status)?;
+            Self::deposit_event(Event::<T>::ProposalFinalized {
+                proposal_id,
+                status,
+            });
             Ok(())
         }
 
@@ -1737,7 +1818,7 @@ pub mod pallet {
         }
 
         fn can_cancel_passed_proposal_by_owner(proposal_id: u64, kind: u8) -> DispatchResult {
-            match kind {
+            let decision = match kind {
                 PROPOSAL_KIND_INTERNAL => {
                     T::InternalVoteResultCallback::can_cancel_passed_proposal(proposal_id)
                 }
@@ -1745,7 +1826,12 @@ pub mod pallet {
                     T::JointVoteResultCallback::can_cancel_passed_proposal(proposal_id)
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
-            }
+            }?;
+            ensure!(
+                decision == ProposalCancelDecision::Allow,
+                Error::<T>::ProposalCancellationNotAllowed
+            );
+            Ok(())
         }
 
         fn notify_execution_failed_terminal(proposal_id: u64, kind: u8) -> DispatchResult {
@@ -1786,6 +1872,7 @@ pub mod pallet {
 
         fn apply_automatic_execution_outcome(
             proposal_id: u64,
+            kind: u8,
             outcome: ProposalExecutionOutcome,
         ) -> DispatchResult {
             match outcome {
@@ -1794,7 +1881,13 @@ pub mod pallet {
                     Self::set_proposal_status(proposal_id, STATUS_EXECUTED)
                 }
                 ProposalExecutionOutcome::RetryableFailed => {
-                    Self::schedule_execution_retry(proposal_id)
+                    if kind == PROPOSAL_KIND_INTERNAL {
+                        Self::schedule_execution_retry(proposal_id)
+                    } else {
+                        // 中文注释：当前统一 retry/cancel 管理员权限只支持内部提案；
+                        // joint callback 若误返回 RetryableFailed，立即失败终态，避免 PASSED 卡死。
+                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                    }
                 }
                 ProposalExecutionOutcome::FatalFailed => {
                     Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)
@@ -1983,7 +2076,7 @@ pub mod pallet {
                     };
                     if status == STATUS_PASSED {
                         if let Err(err) =
-                            Self::apply_automatic_execution_outcome(proposal_id, outcome)
+                            Self::apply_automatic_execution_outcome(proposal_id, kind, outcome)
                         {
                             return TransactionOutcome::Rollback(Err(err));
                         }
@@ -2006,10 +2099,11 @@ pub mod pallet {
                 // 中文注释：PASSED 是执行授权/可重试态，不再视为终态。
                 // 90 天延迟清理只登记 REJECTED / EXECUTED / EXECUTION_FAILED。
                 if Self::is_terminal_status(final_status) {
-                    let now = frame_system::Pallet::<T>::block_number();
-                    let _ = proposal_cleanup::schedule_cleanup::<T>(proposal_id, now);
-                }
-                if Self::should_release_internal_proposal_mutexes(kind, stage, final_status) {
+                    if let Err(err) = Self::apply_terminal_side_effects(proposal_id, final_status) {
+                        return TransactionOutcome::Rollback(Err(err));
+                    }
+                } else if Self::should_release_internal_proposal_mutexes(kind, stage, final_status)
+                {
                     Self::release_internal_proposal_mutexes(proposal_id);
                 }
 
@@ -2261,7 +2355,7 @@ pub mod pallet {
         }
     }
 
-    // ──── 统一提案数据存储公共接口 ────
+    // ──── 统一提案数据存储接口 ────
 
     impl<T: Config> Pallet<T> {
         fn bounded_module_tag(
@@ -2273,20 +2367,10 @@ pub mod pallet {
                 .map_err(|_| DispatchError::Other("ModuleTagTooLarge"))
         }
 
-        fn ensure_proposal_owner(proposal_id: u64, module_tag: &[u8]) -> DispatchResult {
-            let owner =
-                ProposalOwner::<T>::get(proposal_id).ok_or(Error::<T>::ProposalOwnerMissing)?;
-            ensure!(
-                owner.as_slice() == module_tag,
-                Error::<T>::ProposalOwnerMismatch
-            );
-            Ok(())
-        }
-
         /// 创建提案后原子绑定业务 owner、业务数据和创建区块。
         ///
-        /// 中文注释：业务模块只能在提案创建阶段调用一次。后续更新必须走
-        /// `update_proposal_data` 并通过 owner 校验，禁止跨模块覆写 ProposalData。
+        /// 中文注释：业务模块只能通过 `create_*_with_data` 系列入口在创建阶段写入一次。
+        /// 后续生产路径不得再让 caller 自报 `module_tag` 更新 ProposalData。
         pub(crate) fn register_proposal_data(
             proposal_id: u64,
             module_tag: &[u8],
@@ -2315,20 +2399,6 @@ pub mod pallet {
                     passed_at: None,
                 },
             );
-            Ok(())
-        }
-
-        /// owner 校验后的业务数据更新。
-        pub fn update_proposal_data(
-            proposal_id: u64,
-            module_tag: &[u8],
-            data: sp_std::vec::Vec<u8>,
-        ) -> DispatchResult {
-            Self::ensure_proposal_owner(proposal_id, module_tag)?;
-            let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
-                .try_into()
-                .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;
-            ProposalData::<T>::insert(proposal_id, bounded);
             Ok(())
         }
 
@@ -2374,17 +2444,6 @@ pub mod pallet {
             Ok(())
         }
 
-        /// owner 校验后的提案大对象写入。
-        pub fn store_proposal_object_for(
-            proposal_id: u64,
-            module_tag: &[u8],
-            kind: u8,
-            data: sp_std::vec::Vec<u8>,
-        ) -> DispatchResult {
-            Self::ensure_proposal_owner(proposal_id, module_tag)?;
-            Self::store_proposal_object(proposal_id, kind, data)
-        }
-
         /// 读取提案大对象原始数据。
         pub fn get_proposal_object(proposal_id: u64) -> Option<sp_std::vec::Vec<u8>> {
             ProposalObject::<T>::get(proposal_id).map(|v| v.into_inner())
@@ -2398,7 +2457,8 @@ pub mod pallet {
         }
 
         /// 删除提案对象层数据与元数据。
-        pub fn remove_proposal_object(proposal_id: u64) {
+        #[cfg(test)]
+        pub(crate) fn remove_proposal_object(proposal_id: u64) {
             ProposalObject::<T>::remove(proposal_id);
             ProposalObjectMeta::<T>::remove(proposal_id);
         }
@@ -2479,6 +2539,48 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
             };
             let now = frame_system::Pallet::<T>::block_number();
             match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_joint_proposal_with_data_and_object(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+        object_kind: u8,
+        object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let signature: pallet::VoteSignatureOf<T> = signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_joint_proposal(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            if let Err(err) =
+                pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now)
+            {
+                return frame_support::storage::TransactionOutcome::Rollback(Err(err));
+            }
+            match pallet::Pallet::<T>::store_proposal_object(proposal_id, object_kind, object_data)
+            {
                 Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
                 Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             }
@@ -2695,6 +2797,12 @@ mod tests {
     }
     thread_local! {
         static INTERNAL_CALLBACK_LOG: RefCell<Vec<(u64, bool)>> = const { RefCell::new(Vec::new()) };
+    }
+    thread_local! {
+        static INTERNAL_CALLBACK_OVERRIDE_STATUS: RefCell<Option<u8>> = const { RefCell::new(None) };
+    }
+    thread_local! {
+        static INTERNAL_TERMINAL_CLEANUP_LOG: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
     }
     thread_local! {
         static REGISTERED_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(3) };
@@ -2964,7 +3072,7 @@ mod tests {
                 }
                 let _ = vote_proposal_id;
                 Ok(if approved {
-                    ProposalExecutionOutcome::RetryableFailed
+                    ProposalExecutionOutcome::Executed
                 } else {
                     ProposalExecutionOutcome::Executed
                 })
@@ -2983,12 +3091,27 @@ mod tests {
             if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
                 Err(DispatchError::Other("internal callback failed"))
             } else {
+                if let Some(status) =
+                    INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow())
+                {
+                    return Ok(match status {
+                        STATUS_EXECUTED => ProposalExecutionOutcome::Executed,
+                        STATUS_EXECUTION_FAILED => ProposalExecutionOutcome::FatalFailed,
+                        STATUS_PASSED => ProposalExecutionOutcome::RetryableFailed,
+                        _ => ProposalExecutionOutcome::Ignored,
+                    });
+                }
                 Ok(if approved {
                     ProposalExecutionOutcome::RetryableFailed
                 } else {
                     ProposalExecutionOutcome::Executed
                 })
             }
+        }
+
+        fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+            INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().push(proposal_id));
+            Ok(())
         }
     }
 
@@ -3002,6 +3125,10 @@ mod tests {
             TEST_NOW_SECS.with(|secs| *secs.borrow_mut() = DEFAULT_TEST_NOW_SECS);
             JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
             JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
+            INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+            INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
+            INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
+            INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
             REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 3);
             System::set_block_number(1);
         });
@@ -3182,6 +3309,10 @@ mod tests {
 
     fn set_joint_callback_override_status(status: Option<u8>) {
         JOINT_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = status);
+    }
+
+    fn set_internal_callback_override_status(status: Option<u8>) {
+        INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = status);
     }
 
     fn set_test_now_secs(secs: u64) {
@@ -4340,7 +4471,7 @@ mod tests {
             ));
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
-            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.status, STATUS_EXECUTED);
         });
     }
 
@@ -4360,28 +4491,15 @@ mod tests {
             ));
 
             let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
-            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.status, STATUS_EXECUTED);
             assert!(has_used_vote_nonce(0, binding_id_ok(), "immediate-cleanup"));
 
-            // 中文注释：PASSED 现在是可执行/可重试态，不允许被 90 天清理删除。
+            // 中文注释：执行成功终态会注册 90 天延迟清理，清理前凭证仍保留。
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
             let cleanup_block = retention;
             for i in 0..20u64 {
                 System::set_block_number(cleanup_block + i);
                 <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
-            }
-            assert!(has_used_vote_nonce(0, binding_id_ok(), "immediate-cleanup"));
-            assert!(Proposals::<Test>::get(0).is_some());
-
-            // 进入真正终态后才注册 90 天清理。
-            assert_ok!(VotingEngine::set_status_and_emit(
-                0,
-                STATUS_EXECUTION_FAILED
-            ));
-            let terminal_cleanup_block = System::block_number() + retention;
-            for i in 0..20u64 {
-                System::set_block_number(terminal_cleanup_block + i);
-                <VotingEngine as Hooks<u64>>::on_initialize(terminal_cleanup_block + i);
             }
             assert!(!has_used_vote_nonce(
                 0,
@@ -4447,7 +4565,7 @@ mod tests {
             }
 
             let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.status, STATUS_EXECUTED);
             assert_eq!(proposal.stage, STAGE_JOINT);
             assert_eq!(
                 JointTallies::<Test>::get(proposal_id).yes,
@@ -4593,7 +4711,7 @@ mod tests {
             ));
 
             let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-            assert_eq!(proposal.status, STATUS_PASSED);
+            assert_eq!(proposal.status, STATUS_EXECUTED);
             assert_eq!(proposal.stage, STAGE_JOINT);
         });
     }
@@ -4740,7 +4858,7 @@ mod tests {
                 Proposals::<Test>::get(proposal_id)
                     .expect("proposal should exist")
                     .status,
-                STATUS_PASSED
+                STATUS_EXECUTED
             );
             assert!(PendingExpiryBucket::<Test>::get().is_none());
             assert!(ProposalsByExpiry::<Test>::get(expired_at).is_empty());
@@ -4817,14 +4935,10 @@ mod tests {
                 mark_vote_nonce_used(proposal_id, *binding_id, nonce);
             }
 
-            // 中文注释：先进入 PASSED，再进入真正终态；只有终态会注册 90 天后清理。
+            // 中文注释：投票通过后由 callback 返回 Executed，终态会注册 90 天后清理。
             assert_ok!(VotingEngine::set_status_and_emit(
                 proposal_id,
                 STATUS_PASSED
-            ));
-            assert_ok!(VotingEngine::set_status_and_emit(
-                proposal_id,
-                STATUS_EXECUTION_FAILED
             ));
             // 此时 PendingProposalCleanups 尚未设置（要等 90 天后 process_cleanup_queue 触发）
             assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
@@ -4926,7 +5040,9 @@ mod tests {
     /// 重置 Phase 1 新增的 thread_local 测试桩状态,避免用例间污染。
     fn reset_internal_callback_state() {
         INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+        INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
+        INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
     }
 
     #[test]
@@ -5199,6 +5315,96 @@ mod tests {
                 })
                 .expect("third retry event should exist");
             assert_eq!(third_retry_outcome, STATUS_EXECUTION_FAILED);
+        });
+    }
+
+    #[test]
+    fn default_cancel_callback_rejects_passed_retry_proposal() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::cancel_passed_proposal(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    proposal_id,
+                    b"not allowed"
+                        .to_vec()
+                        .try_into()
+                        .expect("reason should fit")
+                ),
+                Error::<Test>::ProposalCancellationNotAllowed
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            let cleanup_log = INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow().clone());
+            assert_eq!(cleanup_log, vec![proposal_id]);
+        });
+    }
+
+    #[test]
+    fn joint_retryable_outcome_is_forced_to_execution_failed() {
+        new_test_ext().execute_with(|| {
+            set_joint_callback_override_status(Some(STATUS_PASSED));
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    snapshot_nonce_ok().as_slice(),
+                    snapshot_sig_ok().as_slice(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none(),
+                "joint proposal must not enter internal retry state"
+            );
         });
     }
 

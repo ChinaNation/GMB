@@ -72,16 +72,16 @@ Runtime 配置位置：
 
 ## 3. 核心数据结构
 ### 3.1 ProposalStatus
-- `Voting`：联合投票中
-- `Passed`：联合投票通过且 runtime code 执行成功
-- `Rejected`：联合投票拒绝
-- `ExecutionFailed`：联合投票通过，但 runtime code 执行失败
+- `Voting`：创建时摘要快照；生产终态以 voting-engine 的 `Proposal.status` 为准。
+- `Passed`：历史兼容枚举，生产回调路径不再写入。
+- `Rejected`：历史兼容枚举，生产回调路径不再写入。
+- `ExecutionFailed`：历史兼容枚举，生产回调路径不再写入。
 
 ### 3.2 Proposal（摘要，序列化存入 voting-engine ProposalData）
 - `proposer: AccountId`：提案发起人（国储会或省储会管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
-- `status: ProposalStatus`：当前提案状态
+- `status: ProposalStatus`：创建时摘要字段；真实投票/执行状态读取 voting-engine。
 
 ### 3.3 对象层数据（统一存入 voting-engine ProposalObject）
 - `kind = 1`：表示 runtime wasm 对象
@@ -106,8 +106,8 @@ Runtime 配置位置：
 1. 校验 `ProposeOrigin`（`EnsureJointProposer`）。
 2. 校验 `reason` 与 `code` 非空。
 3. 计算 `code_hash`，构造摘要 `Proposal` 并加 `MODULE_TAG` 序列化。
-4. 调用 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票，并在同一事务中写入 owner/data/meta。
-5. 将原始 wasm 通过 `store_proposal_object_for(proposal_id, MODULE_TAG, kind=1, code)` 写入对象层。
+4. 调用 `JointVoteEngine::create_joint_proposal_with_data_and_object` 创建联合投票，并在同一事务中写入 owner/data/meta 和 runtime wasm 对象。
+5. 不再通过 caller-supplied `MODULE_TAG` 调用投票引擎后续写接口，避免跨模块覆写对象层。
 6. 发出 `RuntimeUpgradeProposed` 事件。
 
 ### 5.2 `finalize_joint_vote`（call index = 1）
@@ -117,16 +117,16 @@ Runtime 配置位置：
 
 流程：
 1. 校验 `Root`。
-2. 从 `ProposalData` 加载提案摘要并要求当前状态为 `Voting`。
+2. 从 `ProposalData` 加载提案摘要；若投票引擎 `Proposals` 存在，则要求其状态与本次回调方向一致（通过为 `STATUS_PASSED`，否决为 `STATUS_REJECTED`）。
 3. 若 `approved=false`：
-   - 标记 `Rejected`
-   - 保持投票引擎状态为 `STATUS_REJECTED`
+   - 不改写业务摘要，保持创建时快照
+   - 返回 `ProposalExecutionOutcome::Executed`，投票引擎保持 `STATUS_REJECTED`
    - 发出 `JointVoteFinalized`
 4. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
-   - 成功：标记 `Passed`，回调返回 `ProposalExecutionOutcome::Executed`
-   - 失败：标记 `ExecutionFailed`，回调返回 `ProposalExecutionOutcome::FatalFailed`
+   - 成功：回调返回 `ProposalExecutionOutcome::Executed`
+   - 失败：回调返回 `ProposalExecutionOutcome::FatalFailed`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
 5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
@@ -149,12 +149,12 @@ Runtime 配置位置：
 
 当前实现与 `voting-engine` 的协作关系如下：
 
-- 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`
+- 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`，再在同一事务中执行本模块回调
 - 联合投票拒绝时，投票引擎保持 `STATUS_REJECTED`
 - runtime code 执行成功时，本模块返回 `ProposalExecutionOutcome::Executed`，投票引擎写入执行成功终态
 - runtime code 执行失败时，本模块返回 `ProposalExecutionOutcome::FatalFailed`，投票引擎写入执行失败终态
 
-原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只返回统一执行结果，最终状态、`ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
+原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只返回统一执行结果，不再回写 `ProposalData` 中的 `ProposalStatus`；最终状态、`ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
 
 提案状态流转（投票引擎侧）：
 - `VOTING → PASSED → EXECUTED`（联合投票通过且 runtime code 执行成功）
@@ -162,13 +162,13 @@ Runtime 配置位置：
 - `VOTING → PASSED → EXECUTION_FAILED`（联合投票通过，但 runtime code 执行失败）
 
 说明：
-- 本模块自身的 `ProposalStatus`（`Passed`/`ExecutionFailed`/`Rejected`）与投票引擎侧通用状态并非一一等价，前者表达业务结果，后者表达投票引擎主状态机结果。
-- 节点 UI / RPC 查询层如果需要面向用户展示真实升级结果，不能只读 `VotingEngine::Proposals.status`；
-  必须继续解码本模块写入 `ProposalData` 的 `ProposalStatus`：
-  - `Voting` → `投票中`
-  - `Passed` → `已执行`
-  - `Rejected` → `已否决`
-  - `ExecutionFailed` → `执行失败`
+- 本模块自身的 `ProposalStatus` 仅作为历史兼容和摘要结构字段保留，生产回调不再回写它。
+- 节点 UI / RPC 查询层如果需要面向用户展示真实升级结果，应读取 `VotingEngine::Proposals.status`；`ProposalData` 只用于展示 proposer、reason、code_hash 等摘要信息。
+  - `VotingEngine::STATUS_VOTING` / `STATUS_PASSED` → 投票中或执行待重试态
+  - `VotingEngine::STATUS_REJECTED` → 已否决
+  - `VotingEngine::STATUS_EXECUTED` → 已执行
+  - `VotingEngine::STATUS_EXECUTION_FAILED` → 执行失败
+  - `Passed` / `Rejected` / `ExecutionFailed` → 历史兼容枚举，不再由生产回调路径写入
 
 ## 6. 回调路径
 `JointVoteResultCallback::on_joint_vote_finalized`：
@@ -185,9 +185,10 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 原始 code 已丢失
 
 现已修复：
-- 先执行，根据结果决定状态
-- 执行成功才进入 `Passed`
-- 执行失败进入 `ExecutionFailed`
+- 先执行，根据结果返回 `ProposalExecutionOutcome`
+- 执行成功由投票引擎进入 `STATUS_EXECUTED`
+- 执行失败由投票引擎进入 `STATUS_EXECUTION_FAILED`
+- 业务摘要中的 `ProposalStatus` 不再作为生产终态来源
 
 ### 7.2 已修复风险：大 wasm 直接塞入 ProposalData 导致提案创建失败
 旧实现中整份 runtime wasm 会直接编码进 `ProposalData`，而投票引擎通用摘要存储无法承载 MB 级对象，runtime 升级提案会在创建阶段触发 `ProposalDataTooLarge`。
@@ -195,6 +196,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 现已修复：
 - `ProposalData` 只存摘要
 - wasm 改为统一写入投票引擎对象层 `ProposalObject`
+- 创建提案时通过 `create_joint_proposal_with_data_and_object` 一次性原子写入，后续不暴露对象覆写入口
 - 投票引擎摘要上限提升到 `100KB`
 - 投票引擎对象层上限提升到 `10MB`
 - runtime 升级业务自身 `MaxRuntimeCodeSize` 继续保持 `5MB`
@@ -206,7 +208,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 联合投票通过且执行成功时写入 `STATUS_EXECUTED`
 - 联合投票拒绝时保持 `STATUS_REJECTED`
 - 联合投票通过但执行失败时写入 `STATUS_EXECUTION_FAILED`
-- 查询层文档已明确：展示真实升级结果时优先解码业务 `ProposalStatus`
+- 查询层文档已明确：展示真实升级结果时以 voting-engine 的 `Proposal.status` 为准，业务摘要只用于展示 proposer/reason/code_hash
 
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
 旧版 benchmark 存在偏差。现已修复：
