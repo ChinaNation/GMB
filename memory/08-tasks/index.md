@@ -49,7 +49,6 @@
 
 ## done
 
-- `memory/08-tasks/done/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -201,6 +200,9 @@
 - `memory/08-tasks/done/20260430-154307-p2-p3-voting-finalized-transaction.md`
 - `memory/08-tasks/done/20260430-161713-p1-voting-status-state-machine.md`
 - `memory/08-tasks/done/20260430-165708-核验-voting-engine-unix-seconds-to-year-元旦附近年份错分问题.md`
+- `memory/08-tasks/done/20260430-170233-检查-voting-engine-中-set-status-and-emit-store-proposal-data-set-proposal-passed-是否为无校验-pub-fn-并评估是否存在跨-palle.md`
 - `memory/08-tasks/done/20260430-174943-检查-joint-vote-rs-联合投票阈值是否动态读取而未使用快照-确认是否存在一致性裂缝.md`
 - `memory/08-tasks/done/20260430-182001-按正确边界改造联合投票固定治理阈值-注册多签继续动态阈值并创建时快照-暂不升级-runtime.md`
+- `memory/08-tasks/done/20260430-200621-修复-voting-engine-权限和重试残留.md`
+- `memory/08-tasks/done/20260430-204134-修复-admins-change-close-subject-禁止关闭内置治理机构.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`

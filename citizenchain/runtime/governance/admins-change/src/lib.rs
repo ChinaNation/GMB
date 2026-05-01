@@ -365,6 +365,8 @@ pub mod pallet {
         SubjectNotPending,
         /// 管理员主体状态不是 Active
         SubjectNotActive,
+        /// 内置治理机构永远不可关闭
+        BuiltinSubjectCannotClose,
         /// 管理员主体类型与 org 不匹配
         InvalidSubjectKind,
         /// 阈值不合法
@@ -597,6 +599,11 @@ pub mod pallet {
                 ensure!(
                     subject.status == AdminSubjectStatus::Active,
                     Error::<T>::SubjectNotActive
+                );
+                // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能进入 Closed。
+                ensure!(
+                    !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
+                    Error::<T>::BuiltinSubjectCannotClose
                 );
                 subject.status = AdminSubjectStatus::Closed;
                 subject.updated_at = frame_system::Pallet::<T>::block_number();
@@ -1116,6 +1123,69 @@ mod tests {
                 AdminsChange::pending_subject_admins_for_snapshot(ORG_DUOQIAN, institution)
                     .is_none()
             );
+        });
+    }
+
+    #[test]
+    fn builtin_subjects_cannot_be_closed() {
+        new_test_ext().execute_with(|| {
+            for (institution, org, admin) in [
+                (nrc_pallet_id(), ORG_NRC, nrc_admin(0)),
+                (prc_pallet_id(), ORG_PRC, prc_admin(0)),
+                (prb_pallet_id(), ORG_PRB, prb_admin(0)),
+            ] {
+                assert_noop!(
+                    AdminsChange::close_subject(institution),
+                    Error::<Test>::BuiltinSubjectCannotClose
+                );
+
+                let subject = Institutions::<Test>::get(institution)
+                    .expect("builtin subject should remain stored");
+                assert_eq!(subject.kind, AdminSubjectKind::BuiltinInstitution);
+                assert_eq!(subject.status, AdminSubjectStatus::Active);
+                assert!(AdminsChange::is_active_subject_admin(
+                    org,
+                    institution,
+                    &admin
+                ));
+            }
+        });
+    }
+
+    #[test]
+    fn dynamic_subjects_can_be_closed() {
+        new_test_ext().execute_with(|| {
+            for (offset, kind) in [
+                (0u8, AdminSubjectKind::PersonalDuoqian),
+                (1u8, AdminSubjectKind::SfidInstitution),
+            ] {
+                let mut institution = pending_subject_id();
+                institution[0] = institution[0].saturating_add(offset);
+                let admin_a = AccountId32::new([221u8.saturating_add(offset); 32]);
+                let admin_b = AccountId32::new([231u8.saturating_add(offset); 32]);
+
+                assert_ok!(AdminsChange::create_pending_subject(
+                    institution,
+                    ORG_DUOQIAN,
+                    kind,
+                    vec![admin_a.clone(), admin_b],
+                    2,
+                    admin_a.clone()
+                ));
+                assert_ok!(AdminsChange::activate_subject(institution));
+                assert_ok!(AdminsChange::close_subject(institution));
+
+                let subject = Institutions::<Test>::get(institution)
+                    .expect("dynamic subject should remain stored");
+                assert_eq!(subject.kind, kind);
+                assert_eq!(subject.status, AdminSubjectStatus::Closed);
+                assert!(!AdminsChange::is_active_subject_admin(
+                    ORG_DUOQIAN,
+                    institution,
+                    &admin_a
+                ));
+                assert!(AdminsChange::active_subject_admins(ORG_DUOQIAN, institution).is_none());
+            }
         });
     }
 
