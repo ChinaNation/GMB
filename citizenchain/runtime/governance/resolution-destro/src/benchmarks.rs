@@ -86,9 +86,21 @@ mod benchmarks {
         let institution_account = institution_account::<T>(institution);
         let _ = T::Currency::deposit_creating(&institution_account, top_up);
 
-        // 用引擎低级接口直接把提案推到 PASSED。
-        assert!(
-            voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED).is_ok()
+        // 中文注释：benchmark 只准备统一重试状态，不再调用 voting-engine 内部状态推进函数。
+        voting_engine::Proposals::<T>::mutate(proposal_id, |maybe| {
+            if let Some(proposal) = maybe {
+                proposal.status = STATUS_PASSED;
+            }
+        });
+        let now = frame_system::Pallet::<T>::block_number();
+        voting_engine::ProposalExecutionRetryStates::<T>::insert(
+            proposal_id,
+            voting_engine::ExecutionRetryState {
+                manual_attempts: 0,
+                first_auto_failed_at: now,
+                retry_deadline: now,
+                last_attempt_at: None,
+            },
         );
 
         #[extrinsic_call]

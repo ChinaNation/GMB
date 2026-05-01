@@ -14,7 +14,7 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
-// Phase 3 整改(2026-04-22):原 `finalize_X` 离线聚合签名路径所依赖的
+// 统一状态机整改:原业务自有投票/finalize 路径所依赖的
 // `sr25519::{Public, Signature}` / `Vec` / `BTreeSet` 已全部随投票统一入口
 // 改造下线,不再从此处导入。
 extern crate alloc;
@@ -27,12 +27,14 @@ use primitives::china::china_ch::{
 };
 use voting_engine::{
     internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, STATUS_EXECUTED, STATUS_PASSED,
+    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 pub use pallet::*;
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 pub const MODULE_TAG: &[u8] = b"dq-xfer";
+const SAFETY_FUND_OWNER_DATA: &[u8] = b"dq-xfer:safety";
+const SWEEP_OWNER_DATA: &[u8] = b"dq-xfer:sweep";
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
@@ -199,17 +201,17 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 转账提案已创建(Tx 1)。wuminapp 扫描此事件后即可构造 QR 分发给各管理员签名。
+        /// 转账提案已创建。wuminapp 可扫描此事件展示投票详情。
         TransferProposed {
             proposal_id: u64,
             org: u8,
             institution: InstitutionPalletId,
             proposer: T::AccountId,
-            /// 资金源(= 机构主账户),Step 2 新增供 QR 生成
+            /// 资金源(= 机构主账户)。
             from: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
-            /// 原文 remark,供管理员扫 QR 时人眼核对;链上验签用 `blake2_256(remark)`
+            /// 原文 remark,供管理员投票前核对。
             remark: BoundedVec<u8, T::MaxRemarkLen>,
             /// 投票引擎分配的超时区块,供 wuminapp 倒计时
             expires_at: BlockNumberFor<T>,
@@ -227,13 +229,7 @@ pub mod pallet {
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
-        /// finalize_transfer 代投完成(无论最终状态):统计接受签名数 + 投票引擎当前状态。
-        TransferFinalized {
-            proposal_id: u64,
-            signatures_accepted: u32,
-            final_status: u8,
-        },
-        /// 安全基金转账提案已创建(Tx 1)。
+        /// 安全基金转账提案已创建。
         SafetyFundTransferProposed {
             proposal_id: u64,
             proposer: T::AccountId,
@@ -241,7 +237,7 @@ pub mod pallet {
             from: T::AccountId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
-            /// 原文 remark,供管理员扫 QR 核对
+            /// 原文 remark,供管理员投票前核对。
             remark: BoundedVec<u8, T::MaxRemarkLen>,
             expires_at: BlockNumberFor<T>,
         },
@@ -254,13 +250,7 @@ pub mod pallet {
         },
         /// 安全基金投票通过但执行失败
         SafetyFundExecutionFailed { proposal_id: u64 },
-        /// finalize_safety_fund_transfer 代投完成。
-        SafetyFundFinalized {
-            proposal_id: u64,
-            signatures_accepted: u32,
-            final_status: u8,
-        },
-        /// 手续费划转提案已创建(Tx 1)。
+        /// 手续费划转提案已创建。
         SweepToMainProposed {
             proposal_id: u64,
             institution: InstitutionPalletId,
@@ -282,12 +272,6 @@ pub mod pallet {
         },
         /// 手续费划转投票通过但执行失败
         SweepExecutionFailed { proposal_id: u64 },
-        /// finalize_sweep_to_main 代投完成。
-        SweepToMainFinalized {
-            proposal_id: u64,
-            signatures_accepted: u32,
-            final_status: u8,
-        },
     }
 
     #[pallet::error]
@@ -334,17 +318,6 @@ pub mod pallet {
         SweepAmountExceedsCap,
         /// 中文注释：手续费划转提案未通过。
         SweepProposalNotPassed,
-        // ── Step 2 · 离线 QR 聚合签名改造新增错误 ──
-        /// finalize_X 提交的签名对应的 admin 不在该机构管理员列表
-        UnauthorizedSignature,
-        /// finalize_X 同一 admin 在同一批签名里重复出现
-        DuplicateSignature,
-        /// finalize_X sr25519 签名验证失败
-        InvalidSignature,
-        /// finalize_X 提交的签名数量少于阈值
-        InsufficientSignatures,
-        /// finalize_X sr25519 签名长度必须恰好为 64 字节
-        MalformedSignature,
     }
 
     #[pallet::call]
@@ -408,14 +381,6 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
             ensure!(free >= required, Error::<T>::InsufficientBalance);
 
-            // 创建内部投票提案
-            let proposal_id =
-                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal(
-                    who.clone(),
-                    org,
-                    institution,
-                )?;
-
             let action = TransferAction {
                 institution,
                 beneficiary: beneficiary.clone(),
@@ -425,11 +390,15 @@ pub mod pallet {
             };
             let mut encoded = sp_runtime::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
-            voting_engine::Pallet::<T>::store_proposal_data(proposal_id, encoded)?;
-            voting_engine::Pallet::<T>::store_proposal_meta(
-                proposal_id,
-                frame_system::Pallet::<T>::block_number(),
-            );
+            // 中文注释：创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
+            let proposal_id =
+                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                    who.clone(),
+                    org,
+                    institution,
+                    crate::MODULE_TAG,
+                    encoded,
+                )?;
 
             // 从投票引擎回读 proposal.end 作为 expires_at,供 wuminapp 倒计时。
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -502,12 +471,13 @@ pub mod pallet {
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
-            // 创建内部投票提案
             let proposal_id =
-                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal(
+                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
                     who.clone(),
                     ORG_NRC,
                     nrc_institution,
+                    crate::MODULE_TAG,
+                    sp_runtime::Vec::from(SAFETY_FUND_OWNER_DATA),
                 )?;
 
             SafetyFundProposalActions::<T>::insert(
@@ -560,10 +530,12 @@ pub mod pallet {
             );
 
             let proposal_id =
-                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal(
+                <T as duoqian_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
                     who.clone(),
                     org,
                     institution,
+                    crate::MODULE_TAG,
+                    sp_runtime::Vec::from(SWEEP_OWNER_DATA),
                 )?;
 
             SweepProposalActions::<T>::insert(
@@ -593,36 +565,36 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 任意人触发"已通过转账提案"的执行(自动执行失败后的补救重试)。
+        /// 快照管理员触发"已通过转账提案"的执行(自动执行失败后的补救重试)。
         ///
         /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
         /// 通过后由本模块的 `InternalVoteExecutor` 自动触发 `try_execute_transfer`。
         /// 执行失败会发 `TransferExecutionFailed` 事件且保留 PASSED 状态,
-        /// 任何签名账户(不一定是管理员)可调用本 call 重试。
+        /// 本 call 委托 voting-engine 统一校验管理员权限、重试次数和截止区块。
         #[pallet::call_index(3)]
         #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
         pub fn execute_transfer(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::try_execute_transfer(proposal_id)
+            let who = ensure_signed(origin)?;
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
 
-        /// 任意人触发"已通过安全基金提案"的执行。
+        /// 快照管理员触发"已通过安全基金提案"的执行。
         #[pallet::call_index(4)]
         #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
         pub fn execute_safety_fund_transfer(
             origin: OriginFor<T>,
             proposal_id: u64,
         ) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::try_execute_safety_fund(proposal_id)
+            let who = ensure_signed(origin)?;
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
 
-        /// 任意人触发"已通过手续费划转提案"的执行。
+        /// 快照管理员触发"已通过手续费划转提案"的执行。
         #[pallet::call_index(5)]
         #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
         pub fn execute_sweep_to_main(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let _ = ensure_signed(origin)?;
-            Self::try_execute_sweep(proposal_id)
+            let who = ensure_signed(origin)?;
+            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
         }
     }
 
@@ -725,14 +697,9 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
 
-        /// 执行手续费划转。
-        pub(crate) fn try_execute_sweep(proposal_id: u64) -> DispatchResult {
-            Self::try_execute_sweep_with_finalizer(proposal_id, false)
-        }
-
-        pub(crate) fn try_execute_sweep_with_finalizer(
+        pub(crate) fn try_execute_sweep_from_callback(
             proposal_id: u64,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             let action = SweepProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SweepProposalNotFound)?;
@@ -806,26 +773,12 @@ pub mod pallet {
                 fee: tx_fee,
                 reserve_left,
             });
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
             Ok(())
         }
 
-        /// 执行安全基金转账（投票通过后自动调用）。
-        pub(crate) fn try_execute_safety_fund(proposal_id: u64) -> DispatchResult {
-            Self::try_execute_safety_fund_with_finalizer(proposal_id, false)
-        }
-
-        pub(crate) fn try_execute_safety_fund_with_finalizer(
+        pub(crate) fn try_execute_safety_fund_from_callback(
             proposal_id: u64,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             let action = SafetyFundProposalActions::<T>::get(proposal_id)
                 .ok_or(Error::<T>::SafetyFundProposalNotFound)?;
@@ -884,16 +837,6 @@ pub mod pallet {
             .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Self::deposit_event(Event::SafetyFundTransferExecuted {
                 proposal_id,
                 beneficiary: action.beneficiary,
@@ -904,15 +847,9 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 从 voting-engine 读取提案数据并执行转账。
-        /// vote_transfer（自动执行）和 execute_transfer（手动重试）共用此逻辑。
-        pub(crate) fn try_execute_transfer(proposal_id: u64) -> DispatchResult {
-            Self::try_execute_transfer_with_finalizer(proposal_id, false)
-        }
-
-        pub(crate) fn try_execute_transfer_with_finalizer(
+        pub(crate) fn try_execute_transfer_from_callback(
             proposal_id: u64,
-            callback_context: bool,
+            _callback_context: bool,
         ) -> DispatchResult {
             let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
@@ -989,16 +926,6 @@ pub mod pallet {
             });
             exec_result?;
 
-            // 中文注释：回调内只静默写执行结果，最终事件、清理和互斥锁释放由投票引擎外层统一执行。
-            if callback_context {
-                voting_engine::Pallet::<T>::set_callback_execution_result(
-                    proposal_id,
-                    STATUS_EXECUTED,
-                )?;
-            } else {
-                voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_EXECUTED)?;
-            }
-
             Self::deposit_event(Event::<T>::TransferExecuted {
                 proposal_id,
                 institution: action.institution,
@@ -1013,19 +940,22 @@ pub mod pallet {
 
 // ──── 投票终态回调:把已通过的 3 组业务提案(转账/安全基金/手续费划转)落地到链上 ────
 //
-// Phase 2 整改后业务模块不再持有 `finalize_X` 聚合签名 call,提案通过(或否决)
+// 统一状态机整改后业务模块不再持有独立 vote/finalize call,提案通过(或否决)
 // 由投票引擎通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀 + 独立存储键认领对应业务:
 // - `MODULE_TAG` 前缀 `dq-xfer` → transfer
 // - `SafetyFundProposalActions[id]` 存在 → safety_fund
 // - `SweepProposalActions[id]` 存在 → sweep
 //
-// 失败语义:执行失败发 ExecutionFailed 事件,提案保留 PASSED 状态,任何账户
-// 可通过 execute_X 手动重试(call_index 3/4/5)。
+// 失败语义:执行失败发 ExecutionFailed 事件,提案保留 PASSED 状态,快照管理员
+// 可通过 execute_X 手动重试(call_index 3/4/5),实际权限由 voting-engine 统一校验。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
-    fn on_internal_vote_finalized(proposal_id: u64, approved: bool) -> DispatchResult {
+    fn on_internal_vote_finalized(
+        proposal_id: u64,
+        approved: bool,
+    ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let is_transfer = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
             .map(|raw| raw.starts_with(crate::MODULE_TAG))
             .unwrap_or(false);
@@ -1033,16 +963,16 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         let is_sweep = SweepProposalActions::<T>::contains_key(proposal_id);
 
         if !is_transfer && !is_safety_fund && !is_sweep {
-            return Ok(()); // 非本模块提案
+            return Ok(ProposalExecutionOutcome::Ignored); // 非本模块提案
         }
 
         if approved {
             let exec_result = if is_transfer {
-                pallet::Pallet::<T>::try_execute_transfer_with_finalizer(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_transfer_from_callback(proposal_id, true)
             } else if is_safety_fund {
-                pallet::Pallet::<T>::try_execute_safety_fund_with_finalizer(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_safety_fund_from_callback(proposal_id, true)
             } else {
-                pallet::Pallet::<T>::try_execute_sweep_with_finalizer(proposal_id, true)
+                pallet::Pallet::<T>::try_execute_sweep_from_callback(proposal_id, true)
             };
             if let Err(_e) = exec_result {
                 // 执行失败:发事件,提案保留 PASSED,供 execute_X 重试。
@@ -1070,12 +1000,21 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                         proposal_id,
                     });
                 }
+                return Ok(ProposalExecutionOutcome::RetryableFailed);
             }
+            return Ok(ProposalExecutionOutcome::Executed);
         } else {
             // 否决:清理独立存储,避免僵尸数据。
             SafetyFundProposalActions::<T>::remove(proposal_id);
             SweepProposalActions::<T>::remove(proposal_id);
         }
+        Ok(ProposalExecutionOutcome::Executed)
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        // 中文注释：普通转账仅依赖 ProposalData；安全基金和 sweep 还有独立动作存储，需要终态清理。
+        SafetyFundProposalActions::<T>::remove(proposal_id);
+        SweepProposalActions::<T>::remove(proposal_id);
         Ok(())
     }
 }
@@ -1091,7 +1030,7 @@ mod tests {
     use frame_system as system;
     use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine::STATUS_REJECTED;
+    use voting_engine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
 
     type Balance = u128;
     type Block = frame_system::mocking::MockBlock<Test>;
@@ -1230,18 +1169,15 @@ mod tests {
         }
     }
 
-    // Step 2 · 测试扩展:
+    // 测试扩展:
     // 原 TestInternalAdminProvider 只读 CHINA_CB/CHINA_CH 硬编码 admin(非真实 sr25519 公钥,无法签名)。
-    // 为支持 finalize_X 的 sr25519 验签路径,新增 thread_local 覆盖层:
-    //   - EXTRA_ADMINS 按 (org, institution) 注入 sr25519 派生 admin 集合
-    //   - EXTRA_THRESHOLDS 按 (org, institution) 覆盖阈值(方便用 2 个签名就达标)
+    // 为支持 `internal_vote` 的可签名测试账户,新增 thread_local 覆盖层:
+    //   - EXTRA_ADMINS 按 (org, institution) 注入 sr25519 派生 admin 集合。
+    // NRC/PRC/PRB 的内部阈值是 voting-engine 固定制度常量,测试必须注入足够管理员并投满该阈值。
     // 若某 (org, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
     thread_local! {
         static EXTRA_ADMINS: core::cell::RefCell<
             alloc::collections::BTreeMap<(u8, InstitutionPalletId), alloc::vec::Vec<AccountId32>>,
-        > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
-        static EXTRA_THRESHOLDS: core::cell::RefCell<
-            alloc::collections::BTreeMap<(u8, InstitutionPalletId), u32>,
         > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
     }
 
@@ -1251,18 +1187,8 @@ mod tests {
         });
     }
 
-    fn set_extra_threshold(org: u8, institution: InstitutionPalletId, threshold: u32) {
-        EXTRA_THRESHOLDS.with(|m| {
-            m.borrow_mut().insert((org, institution), threshold);
-        });
-    }
-
     fn get_extra_admins(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
         EXTRA_ADMINS.with(|m| m.borrow().get(&(org, institution)).cloned())
-    }
-
-    fn get_extra_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-        EXTRA_THRESHOLDS.with(|m| m.borrow().get(&(org, institution)).copied())
     }
 
     pub struct TestInternalAdminProvider;
@@ -1364,10 +1290,6 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            // 优先:测试注入的阈值覆盖(用于把 NRC/PRC/PRB 的大阈值降到 2,方便 finalize 测试)
-            if let Some(t) = get_extra_threshold(org, institution) {
-                return Some(t);
-            }
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
                     voting_engine::internal_vote::governance_org_pass_threshold(org)
@@ -1430,6 +1352,10 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<1024>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+        type MaxModuleTagLen = ConstU32<32>;
+        type MaxManualExecutionAttempts = ConstU32<3>;
+        type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+        type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }
@@ -1472,7 +1398,7 @@ mod tests {
         type WeightInfo = ();
     }
 
-    /// Step 2 · 测试 helper:从 (org, institution, index) 派生 sr25519 keypair。
+    /// 测试 helper:从 (org, institution, index) 派生 sr25519 keypair。
     ///
     /// 同 (org, institution, index) 每次调用返回相同 keypair,保证测试确定性。
     /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
@@ -1503,9 +1429,8 @@ mod tests {
         derive_admin_pair(ORG_PRB, &prb_pallet_id(), index as u8).0
     }
 
-    // Phase 2 整改:聚合签名 helper `make_transfer_sigs` 已删除,投票统一走
-    // `VotingEngine::internal_vote`;`finalize_transfer_n` 直接用 admin
-    // 账户调公开 call 逐个投票。
+    // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
+    // `VotingEngine::internal_vote`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
     fn nrc_pallet_id() -> InstitutionPalletId {
         reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
@@ -1582,14 +1507,38 @@ mod tests {
         admin_pairs(ORG_PRB, prb_pallet_id(), count)
     }
 
+    fn nrc_pass_count() -> usize {
+        primitives::count_const::NRC_INTERNAL_THRESHOLD as usize
+    }
+
+    fn prc_pass_count() -> usize {
+        primitives::count_const::PRC_INTERNAL_THRESHOLD as usize
+    }
+
+    fn prb_pass_count() -> usize {
+        primitives::count_const::PRB_INTERNAL_THRESHOLD as usize
+    }
+
+    fn nrc_pass_pairs() -> Vec<(AccountId32, sr25519::Pair)> {
+        nrc_pairs(primitives::count_const::NRC_INTERNAL_THRESHOLD as u8)
+    }
+
+    fn prc_pass_pairs() -> Vec<(AccountId32, sr25519::Pair)> {
+        prc_pairs(primitives::count_const::PRC_INTERNAL_THRESHOLD as u8)
+    }
+
+    fn prb_pass_pairs() -> Vec<(AccountId32, sr25519::Pair)> {
+        prb_pairs(primitives::count_const::PRB_INTERNAL_THRESHOLD as u8)
+    }
+
     /// Phase 2 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
     /// 让 `pairs` 前 `n` 个成员各投一张赞成票。
     ///
-    /// 替代旧的 `finalize_transfer_n` 聚合签名 helper——业务模块不再持有
-    /// `finalize_transfer` call,通过后由 [`InternalVoteExecutor`] 自动触发
-    /// `try_execute_transfer`。多余参数(`_org` / `_institution` / `_from` / `_to` /
+    /// 替代旧的聚合签名 helper——业务模块不再持有独立 finalize call,
+    /// 通过后由 [`InternalVoteExecutor`] 自动触发 `try_execute_transfer`。
+    /// 多余参数(`_org` / `_institution` / `_from` / `_to` /
     /// `_amount` / `_remark` / `_proposer`)保留占位,让调用端旧语义透明迁移。
-    fn finalize_transfer_n(
+    fn cast_transfer_votes_n(
         pairs: &[(AccountId32, sr25519::Pair)],
         n: usize,
         pid: u64,
@@ -1603,6 +1552,12 @@ mod tests {
     ) -> frame_support::dispatch::DispatchResult {
         for (admin, _pair) in pairs.iter().take(n) {
             VotingEngine::internal_vote(RuntimeOrigin::signed(admin.clone()), pid, true)?;
+            if VotingEngine::proposals(pid)
+                .map(|proposal| proposal.status != STATUS_VOTING)
+                .unwrap_or(true)
+            {
+                break;
+            }
         }
         Ok(())
     }
@@ -1629,23 +1584,23 @@ mod tests {
 
         let mut ext: sp_io::TestExternalities = storage.into();
         ext.execute_with(|| {
-            // Step 2 · 离线聚合改造:为 4 种 org 注入 sr25519 派生 admin(每组前 3 个)+
-            // 覆盖阈值 2,让 finalize_X 测试只需 2 个签名即可达阈值。
-            // Provider 的 is_internal_admin / get_admin_list / pass_threshold 会优先
-            // 读 thread_local 注入,未注入时 fallback 到 CHINA_CB / CHINA_CH 硬编码。
+            // 为 3 种固定治理 org 注入 sr25519 派生 admin。
+            // 注入数量必须覆盖 voting-engine 的固定制度阈值,保证投票测试走真实状态机。
+            // Provider 的 is_internal_admin / get_admin_list 会优先读 thread_local 注入,
+            // 未注入时 fallback 到 CHINA_CB / CHINA_CH 硬编码。
             let nrc = nrc_pallet_id();
             let prc = prc_pallet_id();
             let prb = prb_pallet_id();
             let dq = registered_duoqian_institution();
-            let nrc_accts: Vec<AccountId32> = nrc_pairs(3).into_iter().map(|(a, _)| a).collect();
-            let prc_accts: Vec<AccountId32> = prc_pairs(3).into_iter().map(|(a, _)| a).collect();
-            let prb_accts: Vec<AccountId32> = prb_pairs(3).into_iter().map(|(a, _)| a).collect();
+            let nrc_accts: Vec<AccountId32> =
+                nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
+            let prc_accts: Vec<AccountId32> =
+                prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
+            let prb_accts: Vec<AccountId32> =
+                prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
             set_extra_admins(ORG_NRC, nrc, nrc_accts);
             set_extra_admins(ORG_PRC, prc, prc_accts);
             set_extra_admins(ORG_PRB, prb, prb_accts);
-            set_extra_threshold(ORG_NRC, nrc, 2);
-            set_extra_threshold(ORG_PRC, prc, 2);
-            set_extra_threshold(ORG_PRB, prb, 2);
             // ORG_DUOQIAN 的 admin / threshold 直接从 DuoqianAccounts 读,测试需要时
             // 显式写入 DuoqianAccounts(见 `registered_duoqian_admin` 路径)。
             let _ = dq;
@@ -1654,7 +1609,7 @@ mod tests {
     }
 
     #[test]
-    fn nrc_transfer_executes_when_finalize_reaches_threshold() {
+    fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
             let inst_account = institution_account(institution);
@@ -1670,9 +1625,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,
@@ -1692,7 +1647,7 @@ mod tests {
     }
 
     #[test]
-    fn prc_transfer_executes_when_finalize_reaches_threshold() {
+    fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = prc_pallet_id();
             let inst_account = institution_account(institution);
@@ -1708,9 +1663,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &prc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &prc_pass_pairs(),
+                prc_pass_count(),
                 pid,
                 ORG_PRC,
                 institution,
@@ -1728,7 +1683,7 @@ mod tests {
     }
 
     #[test]
-    fn prb_transfer_executes_when_finalize_reaches_threshold() {
+    fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = prb_pallet_id();
             let inst_account = institution_account(institution);
@@ -1744,9 +1699,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &prb_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &prb_pass_pairs(),
+                prb_pass_count(),
                 pid,
                 ORG_PRB,
                 institution,
@@ -1764,7 +1719,7 @@ mod tests {
     }
 
     #[test]
-    fn registered_duoqian_transfer_executes_when_finalize_reaches_threshold() {
+    fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         new_test_ext().execute_with(|| {
             let institution = registered_duoqian_institution();
             let inst_account = registered_duoqian_account();
@@ -1799,7 +1754,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
+            assert_ok!(cast_transfer_votes_n(
                 &registered_duoqian_pairs(2),
                 2,
                 pid,
@@ -1939,9 +1894,9 @@ mod tests {
             ));
             let pid1 = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid1,
                 ORG_NRC,
                 institution,
@@ -2026,9 +1981,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,
@@ -2051,8 +2006,8 @@ mod tests {
             let inst_account = institution_account(institution);
             let dest = beneficiary();
 
-            // 余额 10_000,提案 9_000(预检通过),然后在 finalize 前转走 9_000
-            // 使余额仅 1_000,finalize 时自动执行因余额不足失败,但提案保留,可 execute_transfer 重试。
+            // 余额 10_000,提案 9_000(预检通过),然后在投票通过前转走 9_000。
+            // 使余额仅 1_000,自动执行因余额不足失败,但提案保留,可 execute_transfer 重试。
             assert_ok!(DuoqianTransfer::propose_transfer(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
@@ -2063,7 +2018,7 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            // finalize 前转走余额,使自动执行失败
+            // 投票通过前转走余额,使自动执行失败。
             let drain_dest = AccountId32::new([88u8; 32]);
             let _ = Balances::deposit_creating(&drain_dest, 1);
             assert_ok!(<Balances as frame_support::traits::Currency<_>>::transfer(
@@ -2074,11 +2029,11 @@ mod tests {
             ));
             assert_eq!(Balances::free_balance(&inst_account), 1_000);
 
-            // finalize:签名验证 + 代投通过,但 try_execute_transfer 因余额不足失败。
+            // 投票达阈值后自动执行,但 try_execute_transfer 因余额不足失败。
             // 提案仍为 PASSED,转账未执行。
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,
@@ -2129,13 +2084,13 @@ mod tests {
             // 提案仍在投票中，不能手动执行
             assert_noop!(
                 DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::Error::<Test>::ProposalNotRetryable
             );
         });
     }
 
     #[test]
-    fn execute_transfer_is_callable_by_non_admin() {
+    fn execute_transfer_rejects_non_admin_retry() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
             let inst_account = institution_account(institution);
@@ -2163,9 +2118,9 @@ mod tests {
                 frame_support::traits::ExistenceRequirement::KeepAlive,
             ));
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,
@@ -2180,12 +2135,12 @@ mod tests {
             assert_eq!(Balances::free_balance(&dest), 0);
             let _ = Balances::deposit_creating(&inst_account, 10_000);
 
-            // 非管理员也能调用 execute_transfer
-            assert_ok!(DuoqianTransfer::execute_transfer(
-                RuntimeOrigin::signed(outsider),
-                pid
-            ));
-            assert_eq!(Balances::free_balance(&dest), 100);
+            // 统一重试入口只允许快照管理员手动重试。
+            assert_noop!(
+                DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(outsider), pid),
+                voting_engine::Error::<Test>::NoPermission
+            );
+            assert_eq!(Balances::free_balance(&dest), 0);
         });
     }
 
@@ -2206,9 +2161,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,
@@ -2230,7 +2185,7 @@ mod tests {
             // 再次调用 execute_transfer 应被拒绝
             assert_noop!(
                 DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                Error::<Test>::ProposalNotPassed
+                voting_engine::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -2301,9 +2256,9 @@ mod tests {
             ));
             let pid = last_proposal_id();
 
-            assert_ok!(finalize_transfer_n(
-                &nrc_pairs(2),
-                2,
+            assert_ok!(cast_transfer_votes_n(
+                &nrc_pass_pairs(),
+                nrc_pass_count(),
                 pid,
                 ORG_NRC,
                 institution,

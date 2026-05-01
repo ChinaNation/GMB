@@ -58,8 +58,7 @@ Runtime 配置位置：
 - 公钥到机构的反向索引，O(1) 判断 new_key 是否已被占用
 
 提案数据存储在 `voting-engine` 中：
-- 提案动作（`GrandpaKeyReplacementAction`）通过 `store_proposal_data` 写入
-- 提案创建高度通过 `store_proposal_meta` 写入
+- 提案动作（`GrandpaKeyReplacementAction`）通过 `create_internal_proposal_with_data` 在创建提案时原子写入，并同步绑定 `ProposalOwner`
 - 机构活跃提案列表由 `ActiveProposalsByInstitution`（上限 10 个）管控
 
 历史存储项（已移除）：
@@ -91,21 +90,23 @@ Runtime 配置位置：
 - 投票人必须是该机构内部管理员
 - 委托 `voting-engine` 内部投票
 - 一旦提案 `STATUS_PASSED`，无条件自动尝试执行替换
-- 自动执行失败仅记录 `GrandpaKeyExecutionFailed`，不回滚投票
+- 自动执行暂时失败仅记录 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，不回滚投票
 
 ### 5.3 `execute_replace_grandpa_key`（index = 2）
 约束：
-- 仅该机构内部管理员可手动执行
-- 用于“已通过但自动执行失败”的重试
+- 兼容入口：委托 `VotingEngine::retry_passed_proposal_for`
+- 仅提案快照管理员可手动执行，重试次数、deadline 与状态推进由投票引擎统一校验
+- 用于“已通过但自动执行暂时失败”的重试
 
 ### 5.4 `cancel_failed_replace_grandpa_key`（index = 4）
 注意：旧版 `cancel_stale_replace_grandpa_key`（index = 3）已移除，stale 清理由投票引擎统一承载。
 
 当前 `cancel_failed_replace_grandpa_key`（index = 4）：
 约束：
-- 仅该机构内部管理员可清理
+- 兼容入口：委托 `VotingEngine::cancel_passed_proposal_for`
+- 仅提案快照管理员可清理
 - 仅可清理“已通过但当前确定不可执行”的提案
-- 清理时将投票引擎状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`，用于解除机构被 ActiveProposal 长期锁死的问题
+- 清理时由投票引擎将状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`
 
 ## 6. 执行路径与 GRANDPA 交互
 `try_execute_from_action` 关键步骤：
@@ -115,8 +116,8 @@ Runtime 配置位置：
 4. 校验替换后无重复 key（否则 `NewKeyAlreadyUsed`）
 5. 若已有 pending change，直接报 `GrandpaChangePending`
 6. 调用 `pallet_grandpa::schedule_change(next_authorities, delay, None)`
-7. 成功后调用 `set_status_and_emit(STATUS_EXECUTED)` 标记为已执行终态，防止重复执行
-8. 同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
+7. 同步更新 `CurrentGrandpaKeys` 与 `GrandpaKeyOwnerByKey`
+8. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎统一标记 `STATUS_EXECUTED`
 
 提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）/ `VOTING → PASSED → EXECUTION_FAILED`（已通过但确认不可执行）。
 注：`cancel_failed_replace_grandpa_key` 会将已通过但不可执行的提案设置为 `STATUS_EXECUTION_FAILED` 后清理。
@@ -128,7 +129,7 @@ Runtime 配置位置：
 - `UnauthorizedAdmin`：非该机构管理员
 
 ## 8. 风险控制与并发策略
-- 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 失败，等待下次重试或人工清理失败提案。
+- 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 返回 `RetryableFailed`，等待下次重试；确定不可执行时再人工取消失败提案。
 - 立即切换风险：通过 `GrandpaAuthoritySetChangeDelay=30` 降低。
 - 长期卡死风险：通过 `cancel_failed_replace_grandpa_key` 消除。
 - 已修复风险：过去只校验 `new_key` “能解压为曲线点”，未拒绝 small-order 弱公钥；现在已显式拒绝 weak key。

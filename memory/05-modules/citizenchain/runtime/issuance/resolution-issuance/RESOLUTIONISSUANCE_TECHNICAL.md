@@ -76,13 +76,13 @@ citizenchain/runtime/issuance/resolution-issuance/
 
 1. 管理员调用 `propose_resolution_issuance`。
 2. 模块校验理由、总金额、分配明细和合法收款名单。
-3. 模块通过 `JointVoteEngine` 创建联合投票提案。
-4. 模块把 `MODULE_TAG + IssuanceProposalData` 写入投票引擎 ProposalData。
+3. 模块通过 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票提案，并在同一事务中写入 owner/data/meta。
+4. `ProposalData` 内容为 `MODULE_TAG + IssuanceProposalData`。
 5. 投票引擎终结联合投票后回调 `ResolutionIssuance`。
 6. 如果投票通过，模块在同一事务内执行发行、记录防重放、清理 ProposalData 并递减计数。
 7. 如果投票否决，模块只清理提案数据并递减计数。
-8. 如果投票通过且执行成功，模块发出执行事件，并由回调把投票引擎状态静默写为 `STATUS_EXECUTED`。
-9. 如果投票通过但执行失败，模块发出失败事件，并由回调把投票引擎状态静默写为 `STATUS_EXECUTION_FAILED`。
+8. 如果投票通过且执行成功，模块发出执行事件，并返回 `ProposalExecutionOutcome::Executed`。
+9. 如果投票通过但执行失败，模块发出失败事件，并返回 `ProposalExecutionOutcome::FatalFailed`。
 
 ## 7. 安全边界
 

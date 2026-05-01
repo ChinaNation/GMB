@@ -3,9 +3,9 @@
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
 `voting-engine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
-- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案、清理内部提案（清理方法已废弃，由引擎自动注册）
-- `JointVoteEngine`：创建联合提案、清理联合/公民投票状态（清理方法已废弃，由引擎自动注册）
-- `JointVoteResultCallback`：联合提案终局后把结果回传给具体治理模块
+- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案；业务模块必须优先使用 `*_with_data` 变体在同一事务中绑定 owner/data/meta
+- `JointVoteEngine`：创建联合提案；业务模块必须优先使用 `create_joint_proposal_with_data` 在同一事务中绑定 owner/data/meta
+- `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后把执行结果以 `ProposalExecutionOutcome` 回传给投票引擎
 
 ### 0.2 内部投票功能需求
 - 内部提案只能由业务治理模块通过 `InternalVoteEngine` trait 创建，不能直接通过外部 extrinsic 创建。
@@ -38,6 +38,8 @@
 - 提案状态必须走显式状态机，只允许 `VOTING -> PASSED / REJECTED` 与 `PASSED -> EXECUTED / EXECUTION_FAILED`。
 - `REJECTED / EXECUTED / EXECUTION_FAILED` 是不可再变化的终态。
 - `PASSED` 是可执行/可重试态；需要重试的业务自动执行失败不得写成 `EXECUTION_FAILED`。
+- 自动执行失败进入统一 retry state；管理员最多可手动失败 3 次，超出或超过执行宽限区块后统一转 `EXECUTION_FAILED`。
+- `ProposalData` 必须绑定 `ProposalOwner`，禁止跨模块覆写。
 - 自动超时结算必须受单块上限约束，避免 `on_initialize` 无界增长。
 - 联合投票终结时，投票引擎状态变更与业务模块回调必须保持原子一致。
 - 自动结算若遇到回调失败，必须保留重试索引，不能让提案卡在 `Voting` 且丢失后续处理入口。
@@ -51,26 +53,27 @@
 - 公民投票（`CITIZEN`）
 
 它通过 trait 为上层治理模块提供标准化能力：
-- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案、内部提案清理（清理方法已废弃 no-op）
-- `JointVoteEngine`：创建联合提案、联合提案清理（清理方法已废弃 no-op）
-- `JointVoteResultCallback`：联合提案终结后回调目标治理模块
+- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建管理员集合变更内部提案；`cleanup_internal_proposal` 已废弃为 no-op
+- `JointVoteEngine`：创建联合提案；`cleanup_joint_proposal` 已废弃为 no-op
+- `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后回调目标治理模块，返回统一执行结果
 
 ## 2. 核心数据结构
 ### 2.1 Proposal
 `Proposal<BlockNumber>` 字段：
 - `kind`：提案类型（内部/联合）
 - `stage`：当前阶段（内部/联合/公民）
-- `status`：投票中/通过/否决/已执行
+- `status`：投票中/执行授权/否决/已执行/执行失败
   - `STATUS_VOTING = 0`：投票进行中
-  - `STATUS_PASSED = 1`：投票已通过
-  - `STATUS_REJECTED = 2`：投票被否决
-  - `STATUS_EXECUTED = 3`：提案已执行完成（终态）。消费模块在回调内通过 `set_callback_execution_result(STATUS_EXECUTED)` 静默写入；手动补偿执行路径仍可通过 `set_status_and_emit(STATUS_EXECUTED)` 推进。
-  - `STATUS_EXECUTION_FAILED = 4`：投票通过但业务执行失败（终态）。由消费模块回调通过 `set_callback_execution_result(STATUS_EXECUTION_FAILED)` 在同一事务内静默写入。
+  - `STATUS_PASSED = 1`：投票已通过，进入业务执行授权/可重试态，不是终态
+  - `STATUS_REJECTED = 2`：投票被否决（终态）
+  - `STATUS_EXECUTED = 3`：提案已执行完成（终态）
+  - `STATUS_EXECUTION_FAILED = 4`：执行失败终态，用于手动失败满 3 次、执行宽限期超时或业务判定不可执行
 
 状态流转：
 ```
 VOTING(0) → PASSED(1) → EXECUTED(3)（执行成功）
-         → PASSED(1) → EXECUTION_FAILED(4)（投票通过但执行失败）
+         → PASSED(1)（自动/手动执行暂时失败，继续可重试）
+         → EXECUTION_FAILED(4)（手动失败满 3 次、宽限期超时或确定不可执行）
          → REJECTED(2)（投票超时/否决）
 ```
 
@@ -102,8 +105,11 @@ any → unknown
 - `CitizenVotesByBindingId` / `CitizenTallies`
 - `UsedPopulationSnapshotNonce`：人口快照 nonce 防重放
 - `ProposalData`：提案摘要层存储（默认上限 100KB）
+- `ProposalOwner`：`proposal_id -> MODULE_TAG`，标记业务 owner。创建提案时原子写入，后续更新数据必须校验 owner。
 - `ProposalObjectMeta` / `ProposalObject`：提案对象层存储（默认上限 10MB）
-- `CallbackExecutionScopes`：回调执行临时作用域，只在 `set_status_and_emit` 调用业务回调期间存在，用于限制 `set_callback_execution_result` 的使用位置。
+- `ProposalExecutionRetryStates`：自动执行失败后的可重试状态，记录手动失败次数、首次失败区块、重试截止区块和最近手动尝试区块。
+- `ExecutionRetryDeadlines`：按区块索引待过期的 retry proposal，用于 `on_initialize` 到期转 `STATUS_EXECUTION_FAILED`。
+- `CallbackExecutionScopes`：回调执行临时作用域，仅保护单测兼容辅助接口；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
 - `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
 - `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放。
 
@@ -167,23 +173,46 @@ any → unknown
 4. `advance_joint_to_citizen` 现在会主动移除旧联合阶段的 expiry 条目，因此正常路径下不再留下历史索引项。自动结算仍保留兜底逻辑：若过期桶中出现历史索引项，会按当前 `proposal.end/status` 判定并跳过。
 5. 若自动结算时下游回调失败，提案会重新写回过期桶，等待后续区块继续重试。
 
-## 4. 状态终结与回调
-投票结果统一通过 `set_status_and_emit` 完成终结；回调内的业务执行结果通过 `set_callback_execution_result` 静默写入：
-1. 原子更新 `Proposals.status`
-2. 对联合提案触发 `JointVoteResultCallback`，对内部提案触发 `InternalVoteResultCallback`
-3. 若回调返回错误，则整个终结动作回滚，不留下”投票引擎已终结、业务模块未消费”的不一致状态
-4. 回调成功后，再由外层发送一次 `ProposalFinalized` 事件；若业务模块在回调中用 `set_callback_execution_result` 写入 `EXECUTED / EXECUTION_FAILED`，事件里的 `status` 使用该最终状态
-5. 回调内不得调用 `set_status_and_emit(STATUS_EXECUTED)`，否则会形成嵌套终结事件；只能调用 `set_callback_execution_result`
-6. `set_callback_execution_result` 必须处于 `CallbackExecutionScopes[proposal_id]` 作用域内，否则返回 `InvalidProposalStatus`
-7. 手动补偿执行路径不在回调事务内，仍可调用 `set_status_and_emit(proposal_id, STATUS_EXECUTED)` 将提案标记为已执行终态，防止重复执行
-8. 当 status 从 `STATUS_VOTING` 转为终态（`PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时，自动调用 `schedule_cleanup` 注册 90 天延迟清理，消费模块无需手动调用清理方法
-9. 内部提案互斥锁在 `STATUS_REJECTED / STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 时释放；联合提案在 `STAGE_JOINT` 直接 `STATUS_PASSED` 时也释放。
+## 4. 状态终结、回调与重试
+投票结果统一通过 `set_status_and_emit` 完成投票判定；该函数已收口为 `pub(crate)`，只允许 `voting-engine` 内部计票、超时和阶段流转逻辑调用。业务模块不得直接推进 `Proposal.status`，只能通过 callback 返回统一执行结果。
 
-注：`set_status_and_emit` 可见性已从 `pub(crate)` 提升为 `pub`，以便上层治理模块直接调用设置 `STATUS_EXECUTED`。
+`ProposalExecutionOutcome` 语义：
 
-旧低级覆盖 API `override_proposal_status` 已删除，不再允许业务模块绕过状态机直接写状态。
+- `Ignored`：不是本模块提案；若所有回调都忽略，投票引擎回滚并报 owner 缺失。
+- `Executed`：业务执行成功，投票引擎转 `STATUS_EXECUTED`。
+- `RetryableFailed`：业务暂时失败，投票引擎保持 `STATUS_PASSED`，写入 retry state。
+- `FatalFailed`：业务确定不可执行，投票引擎转 `STATUS_EXECUTION_FAILED`。
 
-`finalize_proposal` extrinsic 仍保留，作为手动补偿入口（例如诊断/运维场景），但正常超时路径由 `on_initialize` 自动结算。
+自动执行流程：
+
+1. 投票判定为 `PASSED` 后，`set_status_and_emit` 在同一事务内调用业务 callback。
+2. callback 返回 `Executed` 时，状态转 `STATUS_EXECUTED` 并注册 90 天终态清理。
+3. callback 返回 `RetryableFailed` 时，状态保持 `STATUS_PASSED`，写入 `ProposalExecutionRetryStates`，并按 `ExecutionRetryGraceBlocks` 注册过期索引。
+4. callback 返回 `FatalFailed` 时，状态转 `STATUS_EXECUTION_FAILED` 并注册终态清理。
+5. callback 返回错误时，整个投票判定回滚，过期桶保留重试入口。
+
+手动执行流程：
+
+1. 业务模块保留的 `execute_xxx` 兼容入口必须委托 `VotingEngine::retry_passed_proposal_for`；也可直接调用投票引擎公开 extrinsic `retry_passed_proposal`。
+2. 投票引擎校验提案存在、状态为 `STATUS_PASSED`、caller 是提案快照管理员、未超过 `retry_deadline`、手动失败次数未达到 `MaxManualExecutionAttempts`。
+3. 执行成功转 `STATUS_EXECUTED`。
+4. 执行失败且未满 3 次时递增 `manual_attempts`，保持 `STATUS_PASSED`。
+5. 第 3 次手动失败转 `STATUS_EXECUTION_FAILED`。
+
+手动取消流程：
+
+1. 业务模块保留的 `cancel_xxx` 兼容入口必须委托 `VotingEngine::cancel_passed_proposal_for`；也可直接调用投票引擎公开 extrinsic `cancel_passed_proposal`。
+2. 投票引擎校验状态、权限，并调用 owner callback 的 `can_cancel_passed_proposal`。
+3. 取消成功后转 `STATUS_EXECUTION_FAILED`。
+
+清理与互斥：
+
+- `STATUS_PASSED` 是可重试态，不注册 90 天清理。
+- 只有 `STATUS_REJECTED / STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 注册 90 天终态清理。
+- 内部提案互斥锁在 `STATUS_REJECTED / STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 时释放；联合提案进入公民阶段时释放联合阶段锁。
+- `finalize_proposal` extrinsic 仍保留，作为手动触发投票超时结算入口；正常超时路径由 `on_initialize` 自动结算。
+
+旧低级覆盖 API `override_proposal_status` 已删除；`store_proposal_data`、`set_proposal_passed`、`set_callback_execution_result` 不再是生产公开能力。
 
 ## 5. 已修复的关键风险
 ### 5.1 Proposal ID 溢出
@@ -213,7 +242,7 @@ any → unknown
 - 大体量前缀（`JointVotesByAdmin` / `JointVotesByInstitution` / `JointInstitutionTallies` / `CitizenVotesByBindingId` / `InternalVotesByAccount` / vote credential nonce）写入 `PendingProposalCleanups`
 - `on_initialize` 按 `MaxCleanupStepsPerBlock` 与 `CleanupKeysPerStep` 分块续清，避免 finalize 路径单次无界 `clear_prefix`
 
-**自动清理注册**：`set_status_and_emit` 在终态转换（`STATUS_VOTING` → `PASSED` / `REJECTED` / `EXECUTED` / `EXECUTION_FAILED`）时自动调用 `schedule_cleanup` 注册 90 天延迟清理。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。同一提案的多次终态转换（如 `PASSED` → `EXECUTED`）通过 `try_push` 保持幂等，不会导致重复清理。
+**自动清理注册**：`set_status_and_emit` 只在真正终态（`STATUS_REJECTED` / `STATUS_EXECUTED` / `STATUS_EXECUTION_FAILED`）调用 `schedule_cleanup` 注册 90 天延迟清理。`STATUS_PASSED` 是执行授权/可重试态，不允许被延迟清理删除业务数据。因此消费模块不再需要手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`，这两个 trait 方法已废弃（保留空实现以兼容 trait 定义）。
 
 **清理阶段顺序**：
 - `InternalVotes → JointAdminVotes → JointInstitutionVotes → JointInstitutionTallies → CitizenVotes → VoteCredentials → ProposalObject → FinalCleanup`
@@ -225,10 +254,16 @@ any → unknown
 `set_status_and_emit` 现已使用存储事务包裹：
 - 若 `JointVoteResultCallback` 或 `InternalVoteResultCallback` 返回错误，则回滚 `Proposal.status` 与 `ProposalFinalized` 事件。
 - `ProposalFinalized` 在回调完成后由外层统一发出一次，避免业务模块成功执行时出现重复最终事件。
-- `set_callback_execution_result` 只允许回调在 `CallbackExecutionScopes` 内把 `STATUS_PASSED` 静默推进到 `STATUS_EXECUTED / STATUS_EXECUTION_FAILED`，不发事件、不登记清理、不释放互斥锁。
+- callback 通过 `ProposalExecutionOutcome` 表达执行结果；生产业务模块不再调用 `set_callback_execution_result`。
 - 避免提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
 
-### 5.6.1 状态机强约束
+### 5.6.1 Owner 绑定与数据写入收口
+- 创建提案时必须使用 `create_internal_proposal_with_data`、`create_pending_subject_internal_proposal_with_data`、`create_admin_set_mutation_internal_proposal_with_data` 或 `create_joint_proposal_with_data`，在同一事务内写入 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
+- `store_proposal_data`、`store_proposal_meta`、`set_proposal_passed` 已从生产公开 API 收口，避免任意 runtime caller 跨模块覆写业务数据或伪造 passed_at。
+- 需要更新数据时使用 `update_proposal_data(proposal_id, module_tag, data)`，必须通过 owner 校验。
+- 大对象使用 `store_proposal_object_for(proposal_id, module_tag, object)`，同样必须通过 owner 校验。
+
+### 5.6.2 状态机强约束
 `set_status_and_emit` 写状态前会校验旧状态和目标状态：
 
 - 允许：`VOTING -> PASSED`
@@ -245,6 +280,15 @@ any → unknown
 `auto_finalize_expiry_bucket` 现会把终结失败的提案重新写回 `ProposalsByExpiry`：
 - 避免 `on_initialize` 取出过期桶后因为回调失败直接“吞掉重试入口”。
 - 下一块会通过 `PendingExpiryBucket` 继续重试，直到回调成功或人工介入。
+
+### 5.7.1 执行失败 retry state
+自动执行返回 `RetryableFailed` 时，投票引擎写入 `ProposalExecutionRetryStates`：
+- `manual_attempts = 0`
+- `first_auto_failed_at = 当前区块`
+- `retry_deadline = 当前区块 + ExecutionRetryGraceBlocks`
+- `last_attempt_at = None`
+
+后续 `retry_passed_proposal` 成功会转 `STATUS_EXECUTED`；失败会累计 `manual_attempts`。达到 `MaxManualExecutionAttempts`（当前 runtime 配置为 3）或 `retry_deadline` 到期，统一转 `STATUS_EXECUTION_FAILED`。
 
 ### 5.8 到期桶有界化
 `ProposalsByExpiry` 已改为 `BoundedVec`，由 `MaxProposalsPerExpiry` 限制单个 expiry 桶大小：
@@ -312,13 +356,14 @@ proposal_id = UTC 公历年份 × 1,000,000 + 年内计数器
 
 ## 8. 运行与集成注意事项
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
-2. ~~上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`。~~ **已废弃**：`set_status_and_emit` 在终态转换时自动注册 90 天延迟清理，消费模块无需手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`（这两个 trait 方法现为空实现 no-op）。
-3. `create_internal_proposal` / `create_pending_subject_internal_proposal` / `create_joint_proposal` / `internal_vote` 外部 extrinsic 已禁用，统一要求业务模块通过 trait 接入，避免生成无业务映射的悬空提案或绕过上层副作用。
-4. 普通业务模块必须调用 `create_internal_proposal`；只有 `duoqian-manage` 创建机构多签/个人多签主体时可调用 `create_pending_subject_internal_proposal`。
-5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_set_mutation_internal_proposal`。
+2. ~~上层治理模块在消费联合终结结果后应调用 `cleanup_joint_proposal`。~~ **已废弃**：投票引擎在真正终态自动注册 90 天延迟清理，消费模块无需手动调用 `cleanup_joint_proposal` 或 `cleanup_internal_proposal`（这两个 trait 方法现为空实现 no-op）。
+3. 业务模块必须通过 trait 接入提案创建，优先使用 `*_with_data` 变体，避免生成无业务映射的悬空提案或绕过 owner 绑定。
+4. 普通业务模块必须调用 `create_internal_proposal_with_data`；只有 `duoqian-manage` 创建机构多签/个人多签主体时可调用 `create_pending_subject_internal_proposal_with_data`。
+5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_set_mutation_internal_proposal_with_data`。
 6. 当前生产链已确认无活跃未终态提案，新增互斥存储以空状态启用；若未来在有存量活跃提案的链上升级，需要先补一次性锁重建迁移。
 7. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
 8. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。
+9. 自动执行失败后的重试/取消必须走 `retry_passed_proposal` / `cancel_passed_proposal` 或业务模块兼容入口委托到这两个内部能力。
 
 ## 9. 文件索引
 - 入口与存储定义：`src/lib.rs`

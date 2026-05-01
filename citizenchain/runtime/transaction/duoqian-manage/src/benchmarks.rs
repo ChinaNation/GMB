@@ -125,8 +125,21 @@ fn find_safe_beneficiary<T: Config>(
 
 /// Benchmark 辅助:让指定提案通过(绕开投票路径,benchmark 只关心后续业务执行开销)。
 fn pass_proposal<T: Config>(proposal_id: u64) -> Result<(), BenchmarkError> {
-    voting_engine::Pallet::<T>::set_status_and_emit(proposal_id, STATUS_PASSED)
-        .map_err(|_| BenchmarkError::Stop("benchmark: set_status_and_emit PASSED failed"))?;
+    voting_engine::Proposals::<T>::mutate(proposal_id, |maybe| {
+        if let Some(proposal) = maybe {
+            proposal.status = STATUS_PASSED;
+        }
+    });
+    let now = frame_system::Pallet::<T>::block_number();
+    voting_engine::ProposalExecutionRetryStates::<T>::insert(
+        proposal_id,
+        voting_engine::ExecutionRetryState {
+            manual_attempts: 0,
+            first_auto_failed_at: now,
+            retry_deadline: now,
+            last_attempt_at: None,
+        },
+    );
     Ok(())
 }
 
