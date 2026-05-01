@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
 import { QrScanner } from '../../shared/qr/QrScanner';
 import { transactionApi as api } from './api';
+import { calculateTransferFeeYuan } from './fee';
 import type { ColdWallet, TransferSignRequestResult } from './types';
 
 type Props = {
@@ -33,11 +34,13 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
   const [countdown, setCountdown] = useState(90);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [unlockPassword, setUnlockPassword] = useState('');
 
   const signRequestRef = useRef(signRequest);
   signRequestRef.current = signRequest;
 
-  const fee = Math.max(amountYuan * 0.001, 0.10);
+  const isMinerHotWallet = wallet.kind === 'minerHot';
+  const fee = calculateTransferFeeYuan(amountYuan);
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -51,7 +54,21 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
   }, [step, countdown]);
 
   const handleConfirm = useCallback(async () => {
+    setError(null);
     try {
+      if (isMinerHotWallet) {
+        if (!unlockPassword.trim()) {
+          setError('请输入设备开机密码');
+          return;
+        }
+        setStep('submit');
+        const result = await api.submitMinerTransfer(toAddress, amountYuan, unlockPassword);
+        setUnlockPassword('');
+        setTxHash(result.txHash);
+        setStep('done');
+        return;
+      }
+
       const result = await api.buildTransferRequest(wallet.pubkeyHex, toAddress, amountYuan);
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -61,7 +78,7 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [wallet.pubkeyHex, toAddress, amountYuan]);
+  }, [isMinerHotWallet, wallet.pubkeyHex, toAddress, amountYuan, unlockPassword]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -117,9 +134,34 @@ export function TransferSigningFlow({ wallet, toAddress, amountYuan, onClose, on
                 <span className="transfer-signing-label">预估手续费</span>
                 <span className="transfer-signing-value">{fmtYuan(fee)} 元</span>
               </div>
+              <div className="transfer-signing-row">
+                <span className="transfer-signing-label">签名方式</span>
+                <span className="transfer-signing-value">
+                  {isMinerHotWallet ? '矿工热钱包' : '离线冷钱包'}
+                </span>
+              </div>
             </div>
+            {isMinerHotWallet && (
+              <div className="transfer-signing-password">
+                <label>设备开机密码</label>
+                <input
+                  type="password"
+                  value={unlockPassword}
+                  onChange={(e) => setUnlockPassword(e.target.value)}
+                  placeholder="请输入设备开机密码"
+                  autoFocus
+                />
+              </div>
+            )}
+            {error && <div className="error">{error}</div>}
             <div className="transfer-signing-actions">
-              <button className="transfer-signing-confirm" onClick={handleConfirm}>确认转账</button>
+              <button
+                className="transfer-signing-confirm"
+                onClick={handleConfirm}
+                disabled={isMinerHotWallet && !unlockPassword.trim()}
+              >
+                {isMinerHotWallet ? '确认并提交' : '确认转账'}
+              </button>
               <button className="cancel-button" onClick={onClose}>取消</button>
             </div>
           </div>

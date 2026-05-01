@@ -135,6 +135,7 @@ Weight 集成：
 - 覆盖口径：首次成功发奖路径（含 `deposit_creating`、计数写回、双重去重标记与事件）
 - 未单独覆盖：重复领取、达到上限、零奖励配置等跳过路径
 - 目的：校准上游 `bind_sfid` 叠加的回调 weight，而不是测用户交易本身
+- Cargo feature：`runtime-benchmarks` 会向 `pallet-balances` 与 `sfid-system` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 
 ---
 

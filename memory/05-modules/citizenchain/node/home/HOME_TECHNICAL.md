@@ -8,13 +8,13 @@ home/
 ├── process/mod.rs      # 进程生命周期管理（启动、停止、检测、二进制校验）
 ├── rpc/mod.rs          # 节点 RPC 调用（链状态、指纹验证、genesis hash）
 ├── identity/mod.rs     # 节点身份管理（名称、PeerId、运行状态）
-├── transaction/mod.rs  # 首页交易、冷钱包、本地钱包与转账提交
+├── transaction/mod.rs  # 首页交易、冷钱包、矿工热钱包与转账提交
 └── HOME_TECHNICAL.md   # 本文档
 ```
 
 前端首页结构与后端保持一致：
 - `node/frontend/home/home-node/`：节点状态与身份展示，包含本功能 `api.ts` 与 `types.ts`
-- `node/frontend/home/transaction/`：冷钱包列表、本地钱包管理、转账签名与提交面板，包含本功能 `api.ts` 与 `types.ts`
+- `node/frontend/home/transaction/`：冷钱包列表、矿工热钱包展示、转账签名与提交面板，包含本功能 `api.ts` 与 `types.ts`
 - 前端交易扫码依赖 `node/frontend/shared/qr/`，不再从治理目录复用 QR 组件
 
 ## Cargo.toml 构建依赖
@@ -87,7 +87,14 @@ RPC 暴露说明：
 ## transaction/mod.rs
 
 核心职责：
-- **冷钱包列表**：读取、添加、删除和设置当前本地冷钱包。
-- **余额查询**：按冷钱包公钥读取链上账户余额，供首页交易栏展示。
-- **转账签名请求**：构造冷钱包二维码签名所需 payload，确保在线端只负责组装与提交。
-- **签名提交**：接收冷钱包签名结果后提交链上转账交易。
+- **钱包列表**：冷钱包从 `cold-wallets.json` 读取；矿工热钱包从默认链 `powr` keystore 动态注入并置顶，不写入冷钱包文件。
+- **矿工热钱包**：列表名称固定为“矿工热钱包”，不显示删除按钮；若用户尝试重复添加同一矿工地址，后端直接拒绝。
+- **余额查询**：按钱包公钥读取链上账户余额，供首页交易栏展示。
+- **冷钱包签名请求**：构造二维码签名所需 payload，确保普通钱包继续由离线设备签名。
+- **矿工热钱包签名提交**：前端要求设备开机密码；后端校验通过后签发进程内一次性令牌，再调用本机 `transaction_submitMinerTransfer` RPC 使用 `powr` 密钥签名 `Balances::transfer_keep_alive`。
+- **签名提交**：冷钱包接收离线签名结果后提交链上转账；矿工热钱包由节点直接返回交易哈希。
+
+安全约束：
+1. `cold-wallets.json` 只持久化普通冷钱包，避免把矿工热钱包误当作可删除用户钱包。
+2. `transaction_submitMinerTransfer` RPC 需要一次性令牌；令牌只由 Tauri 命令在设备密码校验通过后生成，直接访问本机 RPC 不能转出矿工余额。
+3. 手续费预估复用 runtime `onchain_transaction::calculate_onchain_fee` 口径，前端展示只作为预估，最终以链上扣费为准。

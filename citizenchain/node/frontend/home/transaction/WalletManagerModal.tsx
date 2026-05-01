@@ -162,12 +162,14 @@ export function WalletManagerModal({ wallets, activeId, onClose, onUpdate, onSel
                 <span className="wallet-row-balance">
                   {bal != null ? `${fenToYuan(bal)} 元` : '-'}
                 </span>
-                <button
-                  className={`wallet-row-delete-text ${confirmDeleteId === w.id ? 'confirm' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleDeleteClick(w.id); }}
-                >
-                  {confirmDeleteId === w.id ? '确认' : '删除'}
-                </button>
+                {w.deletable && (
+                  <button
+                    className={`wallet-row-delete-text ${confirmDeleteId === w.id ? 'confirm' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(w.id); }}
+                  >
+                    {confirmDeleteId === w.id ? '确认' : '删除'}
+                  </button>
+                )}
               </div>
             );
           })}
