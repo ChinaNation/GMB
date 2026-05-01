@@ -9,16 +9,7 @@
 
 #![cfg(feature = "runtime-benchmarks")]
 
-use frame_benchmarking::v2::*;
-
-#[benchmarks]
-mod benchmarks {
-    // 正式 benchmark 生成入口:后续在 benchmark runtime 中补
-    // `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank` /
-    // `submit_offchain_batch_v2` / `propose_l2_fee_rate` / `set_max_l2_fee_rate` /
-    // 节点声明三类 Call 的自动 benchmark。
-    //
-    // 注意:这些 benchmark 需要构造真实 `SfidAccountQuery` 对应的链上机构、
-    // 管理员与清算行节点声明。offchain-transaction crate 为避免循环依赖,
-    // 不直接依赖 duoqian-manage,因此正式生成应在完整 runtime 层执行。
-}
+// 中文注释：当前 crate 暂未提供可执行 benchmark。这里不能保留空的
+// `#[benchmarks]` 模块，否则 frame-benchmarking 宏会生成非法代码并阻断
+// runtime-benchmarks 构建。正式补齐 offchain-transaction benchmark 时，再恢复
+// `bind_clearing_bank` / `deposit` / `withdraw` / `switch_bank` 等入口。

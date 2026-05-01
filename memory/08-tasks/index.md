@@ -45,6 +45,13 @@
 - `memory/08-tasks/open/20260430-110243-重构-wallet-目录为一层子目录结构-ui-页面迁移到-pages-ui-cards-组件迁移到-widgets-同步引用-测试和文档.md`
 - `memory/08-tasks/open/20260430-110408-只读审查管理员更换模块-admins-change-是否存在漏洞-需要改进的地方和残留.md`
 - `memory/08-tasks/open/20260430-wuminapp-onchain-move.md`
+- `memory/08-tasks/open/20260501-081928-检查-fullnode-issuance-bind-reward-wallet-是否存在任意签名账户可永久写入-rewardwalletbyminer-导致存储膨胀的问题.md`
+- `memory/08-tasks/open/20260501-085455-检查-resolution-issuance-是否存在重复校验以及-shengbank-interest-是否存在不可达死分支.md`
+- `memory/08-tasks/open/20260501-090036-修复-resolution-issuance-execution-层重复-allocation-去重与-sum-校验-只保留执行期专属-ed-cap-防重放-暂停检查.md`
+- `memory/08-tasks/open/20260501-090514-清理-shengbank-interest-利率不可达分支.md`
+- `memory/08-tasks/open/20260501-091353-检查-onchain-transaction-fee-修正分账与-feepaid-tip-文档假设是否存在-l1-l4-问题.md`
+- `memory/08-tasks/open/20260501-091854-修复-onchain-transaction-l1-l2-l4-明确-no-refund-协议-fee-percent-保底日志-feepaid-tip-源码说明.md`
+- `memory/08-tasks/open/20260501-092408-准备-benchmark-runtime-wasm-并重新生成-resolution-权重.md`
 
 ## done
 
@@ -209,3 +216,11 @@
 - `memory/08-tasks/done/20260430-213345-只读分析-voting-engine-internal-vote-与-active-proposal-limit-以及-admins-change-回调中的-l1-l5-审查问题是否存在.md`
 - `memory/08-tasks/done/20260430-215740-修复-voting-engine-internal-vote-provider-fallback-threshold-provider-默认实现-active-proposal-上限硬编码与主体合法性语义.md`
 - `memory/08-tasks/done/20260430-wuminapp-offchain-move.md`
+- `memory/08-tasks/done/20260501-081728-审查-resolution-issuance-双-finalize.md`
+- `memory/08-tasks/done/20260501-081838-检查-shengbank-interest-自动补-8-年单块权重风险.md`
+- `memory/08-tasks/done/20260501-082729-删除-resolution-issuance-双-finalize-入口.md`
+- `memory/08-tasks/done/20260501-085322-清理-resolution-issuance-无效-cleanup-和错误码.md`
+- `memory/08-tasks/done/20260501-090259-修复-issuance-常量死分支和区块号耦合.md`
+- `memory/08-tasks/done/20260501-090444-检查-runtime-issuance-模块权重占位-cargo-迁移和-shengbank-利率溢出事件问题.md`
+- `memory/08-tasks/done/20260501-091136-修复-issuance-权重占位-cargo-冗余-迁移兜底与利率溢出审计.md`
+- `memory/08-tasks/done/20260501-091450-修复-onchain-transaction-手续费公式入口和销毁审计事件.md`

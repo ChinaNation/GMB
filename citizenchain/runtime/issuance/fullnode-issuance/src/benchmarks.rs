@@ -15,6 +15,9 @@ mod benchmarks {
         let miner: T::AccountId = frame_benchmarking::account("miner", 0, 0);
         let wallet: T::AccountId = frame_benchmarking::account("wallet", 0, 0);
 
+        // 中文注释：绑定资格来自真实出块记录，benchmark 需预置已出块矿工。
+        pallet::LastAuthoredBlockByMiner::<T>::insert(&miner, 1u32);
+
         #[extrinsic_call]
         bind_reward_wallet(RawOrigin::Signed(miner), wallet);
     }

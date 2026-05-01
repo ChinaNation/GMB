@@ -7,7 +7,7 @@
 - 奖励金额、起始高度、结束高度必须由制度常量固定，不能被链上治理动态修改。
 - 只有在奖励区间内，且能够从当前区块共识 digest 识别出作者时，才允许发放奖励。
 - 未绑定钱包时，奖励默认发到矿工自身账户；绑定钱包后发到绑定的钱包。
-- 矿工必须支持首次绑定奖励钱包，并且可以自行重绑到新钱包。
+- 已经真实出过块的矿工必须支持首次绑定奖励钱包，并且可以自行重绑到新钱包。
 - 奖励钱包必须与矿工身份账户分离；`rebind` 必须真正切换到不同的新钱包。
 - 奖励结算必须发生在 `on_finalize`，只对"已经完成的出块行为"进行结算，不做预测性预发。
 - 发行都必须链上可审计，便于后续核账。
@@ -20,7 +20,7 @@
 - 奖励规则常量化（金额、起止高度写死在 `primitives::pow_const`）。
 - 奖励触发客观化（仅基于区块高度 + 共识层 `FindAuthor`）。
 - 发放可审计（发放均有链上事件）。
-- 矿工自主管理收款地址（支持首次绑定 + 重绑，无需治理）。
+- 矿工自主管理收款地址（真实出块后支持首次绑定 + 重绑，无需治理）。
 
 代码位置：
 - `/Users/rhett/GMB/citizenchain/runtime/issuance/fullnode-issuance/src/lib.rs`
@@ -37,9 +37,16 @@ Runtime 注入配置：
 - `Config::Currency`：奖励铸造与记账货币实现
 - `Config::FindAuthor`：从 PreRuntime Digest 解析区块作者
 
+依赖边界：
+- `fullnode-issuance` 不直接使用 `sp-std`，Cargo 依赖保持最小化，避免为未使用 crate 传播额外 feature。
+
 ---
 
 ## 3. 存储结构
+- `LastAuthoredBlockByMiner: Map<AccountId -> u32>`
+  - key：矿工身份账户（出块作者）
+  - value：该账户最近一次被 PoW digest 证明为区块作者的区块高度
+  - 语义：作为 `bind_reward_wallet` 的链上矿工资格来源；runtime 不读取节点本地 keystore
 - `RewardWalletByMiner: Map<AccountId -> AccountId>`
   - key：矿工身份账户（出块作者）
   - value：奖励到账钱包账户
@@ -59,6 +66,7 @@ Runtime 注入配置：
 - `RewardWalletNotBound`
 - `RewardWalletCannotBeMiner`
 - `RewardWalletUnchanged`
+- `MinerNeverAuthoredBlock`
 
 ---
 
@@ -68,14 +76,16 @@ Runtime 注入配置：
 - 逻辑：
 1. 校验调用者未绑定过奖励钱包
 2. 校验 `wallet != miner`
-3. 写入 `RewardWalletByMiner`
-4. 发送 `RewardWalletBound`
+3. 校验 `LastAuthoredBlockByMiner[miner]` 已存在，证明该账户真实出过块
+4. 写入 `RewardWalletByMiner`
+5. 发送 `RewardWalletBound`
 - weight：`T::WeightInfo::bind_reward_wallet()`
 
 说明：
-- 当前不做"是否真实矿工"的额外资格校验。
+- 当前不允许从未出块的账户提前绑定奖励钱包。
+- 首次出块前没有绑定时，第一笔奖励会默认发到矿工身份账户；出块记录生成后，矿工可再绑定独立奖励钱包。
+- 真实矿工资格来自链上 PoW digest 解析出的出块记录，不来自节点本地 keystore 或桌面端 UI。
 - 当前要求奖励钱包必须与矿工身份账户不同，避免矿工身份与收款钱包混同。
-- 这是一个已知 trade-off；若 runtime 后续引入矿工注册表/白名单，可在此处接入资格检查。
 
 ### 5.2 `rebind_reward_wallet(new_wallet)`（call index = 1）
 - 权限：`Signed`
@@ -95,21 +105,24 @@ Runtime 注入配置：
 ## 6. 生命周期逻辑（Hooks）
 ### 6.1 `on_initialize(n)`: finalize 预算预申报
 - 行为：
-  - 当 `n` 在奖励区间 `[FULLNODE_REWARD_START_BLOCK, FULLNODE_REWARD_END_BLOCK]` 时，返回 `T::DbWeight::get().reads_writes(3, 3)`。
+  - 将 `n` 饱和转换为 `u64` 后判断奖励区间，避免 pallet 对 runtime `BlockNumber` 形成 `Into<u32>` 编译期耦合。
+  - 当 `n` 在奖励区间 `[FULLNODE_REWARD_START_BLOCK, FULLNODE_REWARD_END_BLOCK]` 时，返回 `T::DbWeight::get().reads_writes(3, 4)`。
   - 区间外返回 `Weight::zero()`。
 - 目的：为 `on_finalize` 的最坏路径预留区块 weight 预算，避免 finalize 工作"未计重"。
 
 ### 6.2 `on_finalize(n)`: 实际奖励结算
 流程：
-1. 将区块高度转换为 `u32`，若不在奖励区间则直接返回。
-2. 从 `frame_system::digest()` 读取 pre-runtime digest。
-3. 通过 `T::FindAuthor::find_author(...)` 解析作者：
+1. 将区块高度饱和转换为 `u64` 做奖励区间判断，若不在奖励区间则直接返回。
+2. 进入固定奖励区间后，再转为 `u32` 写入存储和事件字段；该区间上界 `FULLNODE_REWARD_END_BLOCK = 9,999,999` 本身在 `u32` 范围内。
+3. 从 `frame_system::digest()` 读取 pre-runtime digest。
+4. 通过 `T::FindAuthor::find_author(...)` 解析作者：
    - `None`：发 `FullnodeIssuanceSkippedNoAuthor { block }` 并返回。
-4. 查询 `RewardWalletByMiner`：
+5. 写入 `LastAuthoredBlockByMiner[author] = block`，记录该账户已真实出块。
+6. 查询 `RewardWalletByMiner`：
    - `Some(wallet)`：奖励发到绑定的钱包。
    - `None`：奖励发到矿工自身账户。
-5. 以 `FULLNODE_BLOCK_REWARD` 铸造并发放到收款地址（`deposit_creating`）。
-6. 发 `FullnodeIssuanceIssued { block, miner, wallet, amount }`。
+7. 以 `FULLNODE_BLOCK_REWARD` 铸造并发放到收款地址（`deposit_creating`）。
+8. 发 `FullnodeIssuanceIssued { block, miner, wallet, amount }`。
 
 ---
 
@@ -119,14 +132,19 @@ Runtime 注入配置：
 - `on_finalize` 的执行预算由 `on_initialize` 统一预申报。
 
 注意事项：
-- `src/weights.rs` 已由 benchmark 自动生成，`bind/rebind` 当前路径对应 1 次读取 + 1 次写入。
-- `on_finalize` 的预算仍通过 `on_initialize` 的 `reads_writes(3,3)` 预申报。
+- `bind_reward_wallet` 当前路径对应 2 次读取 + 1 次写入：读取真实出块记录与既有绑定，并写入奖励钱包绑定。
+- `rebind_reward_wallet` 当前路径对应 1 次读取 + 1 次写入。
+- `on_finalize` 的预算通过 `on_initialize` 的 `reads_writes(3,4)` 预申报。
+- `src/weights.rs` 已按新增读取做保守补偿；后续重新跑 benchmark 时应以最新结果覆盖。
 
 ---
 
 ## 8. 测试覆盖（当前）
 `cargo test -p fullnode-issuance` 当前覆盖：
 - 一次性绑定与重复绑定拒绝
+- 从未真实出块的账户无法绑定奖励钱包
+- 首次出块会记录 `LastAuthoredBlockByMiner`
+- 矿工首次出块后可绑定奖励钱包，后续奖励转入绑定钱包
 - 绑定矿工自身账户为奖励钱包会被拒绝
 - 起始边界块（`1`）发放
 - 结束边界块（`9_999_999`）发放
@@ -148,8 +166,8 @@ Runtime 注入配置：
   - 成功：`FullnodeIssuanceIssued`
   - 跳过（无作者）：`FullnodeIssuanceSkippedNoAuthor`
 - 矿工钱包管理建议：
-  - 矿工启动后即可出块获得奖励（默认发到矿工自身账户）。
-  - 需要将收益发到独立钱包时，通过 `bind_reward_wallet` 绑定。
+  - 矿工启动后即可出块获得奖励（首次未绑定时默认发到矿工自身账户）。
+  - 矿工至少真实出过一次块后，才能通过 `bind_reward_wallet` 绑定独立奖励钱包。
   - 钱包迁移/风险处置时使用 `rebind_reward_wallet` 主动切换收款地址。
 
 ## 10. 矿工密钥架构
@@ -195,19 +213,21 @@ Substrate 框架的 `sr25519_generate_new(key_type, None)` 行为：
 ### 10.5 密钥使用流程
 1. 用户首次启动节点 → node 的 `ensure_powr_key()` 生成密钥并写入 keystore
 2. 节点出块 → `author_pre_digest()` 从 keystore 读取公钥作为区块作者
-3. 用户绑定收款地址 → 节点桌面端调用 node RPC `reward_bindWallet` → node 用 keystore 密钥签名并提交
-4. 链上 `bind_reward_wallet` 以矿工身份记录映射 → 后续奖励发到绑定的收款地址
+3. 链上 `on_finalize` 解析 PoW digest，记录 `LastAuthoredBlockByMiner`
+4. 用户绑定收款地址 → 节点桌面端调用 node RPC `reward_bindWallet` → node 用 keystore 密钥签名并提交
+5. 链上 `bind_reward_wallet` 校验矿工已有真实出块记录后记录映射 → 后续奖励发到绑定的收款地址
 
 由于出块和绑定使用的是同一把 keystore 密钥（同一个 `sr25519_sign` 路径），`RewardWalletByMiner` 映射的 key 与出块作者一致，奖励能正确发到绑定的收款地址。
 
 ---
 
 ## 11. 审查结论与建议
-本轮没有发现新的高风险权限绕过或重复发奖漏洞。
+2026-05-01 修复结论：
 
 当前状态：
-1. 仍允许任意签名账户先绑定一个奖励钱包，即使它从未真正出块；这不会造成多发奖励，但会带来少量无效状态膨胀。若后续引入矿工注册表/白名单，可在 `bind_reward_wallet` 接资格检查。
+1. `bind_reward_wallet` 已要求调用账户存在真实出块记录，普通付费账户不能再批量写入永久 `RewardWalletByMiner`。
 2. 已明确禁止把矿工身份账户本身作为奖励钱包，避免矿工身份与收款地址混同。
 3. `rebind` 当前不设冷却期，但必须切换到不同的新钱包；重复绑定当前钱包会直接拒绝，避免无意义写操作和事件。
-4. `bind/rebind` 已接入 benchmark 生成的权重；`on_finalize` 预算仍通过 `on_initialize` 预申报。
+4. `bind_reward_wallet` 已按新增出块记录读取补偿权重；`on_finalize` 预算已通过 `on_initialize` 上调。
 5. 已补 `integrity_test` 校验 `FULLNODE_BLOCK_REWARD` 必须能完整装入 runtime `Balance`，避免未来有人调整 Balance 类型后发生静默截断。
+6. 已移除 `BlockNumberFor<T>: Into<u32>` trait 约束，奖励区间判断改为 `u64`，未来 runtime 区块号扩展到 `u64` 时不会先在本 pallet 编译边界失败。

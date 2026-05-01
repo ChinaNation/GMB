@@ -16,17 +16,8 @@ pub fn on_runtime_upgrade<T: Config>() -> Weight {
         return db.reads(1);
     }
 
-    let mut reads = 1u64;
-    let mut writes = 0u64;
-    if crate::pallet::AllowedRecipients::<T>::get().is_empty() {
-        reads = reads.saturating_add(1);
-        if let Some(defaults) = Pallet::<T>::decode_default_allowed_recipients() {
-            crate::pallet::AllowedRecipients::<T>::put(defaults);
-            writes = writes.saturating_add(1);
-        }
-    }
-
+    // 中文注释：当前链按 fresh genesis 口径启动，AllowedRecipients 由 genesis_build 写入。
+    // 这里仅推进 storage version，不伪装承担历史数据迁移职责。
     STORAGE_VERSION.put::<Pallet<T>>();
-    writes = writes.saturating_add(1);
-    db.reads_writes(reads, writes)
+    db.reads_writes(1, 1)
 }

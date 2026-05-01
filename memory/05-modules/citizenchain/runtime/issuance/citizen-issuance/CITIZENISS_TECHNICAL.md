@@ -88,7 +88,7 @@ Weight 集成：
 - `DuplicateBindingId`
 - `MaxCountReached`
 - `AccountAlreadyRewarded`
-- `ZeroRewardConfigured`
+- `ZeroRewardConfigured` — 奖励常量已由编译期断言锁定非零，该原因仅作为 `Balance` 类型转换后的防御性兜底。
 
 错误：
 - `Error<T>` 当前为空（模块无外部可调用 extrinsic，核心流程由回调驱动）。
@@ -104,7 +104,7 @@ Weight 集成：
 2. 再进行账户去重检查（`AccountRewarded`）。
 3. 读取 `RewardedCount`，若达到 `MAX_COUNT` 则跳过。
 4. 根据 `RewardedCount` 与 `HIGH_REWARD_COUNT` 决定高额/常规奖励。
-5. 将奖励常量转换为 `BalanceOf<T>`；若未来配置漂移导致奖励变成 0，则返回 `ZeroRewardConfigured` 并跳过，不推进状态。
+5. 将奖励常量转换为 `BalanceOf<T>`；高额/常规奖励常量在编译期断言必须非零，若类型转换后仍得到 0，则返回 `ZeroRewardConfigured` 并跳过，不推进状态。
 6. `Currency::deposit_creating` 铸币到 `who`。
    - 这是模块设计内的主动增发，返回的 `PositiveImbalance` 会被有意丢弃。
 7. 写回 `RewardedCount += 1`，并写入两级去重标记。
@@ -147,7 +147,7 @@ Weight 集成：
 - 可审计性：
   - 跳过路径均有链上原因事件，不依赖链下日志推断。
 - 配置健壮性：
-  - 若未来奖励常量被误配为 0，模块会显式发出 `ZeroRewardConfigured` 跳过事件，而不是静默吞掉。
+  - 高额/常规奖励常量通过编译期断言锁定非零；`ZeroRewardConfigured` 只保留为运行时 `Balance` 转换异常的防御性事件，而不是常规配置漂移路径。
 
 ---
 

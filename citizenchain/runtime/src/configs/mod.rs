@@ -250,6 +250,7 @@ impl pallet_transaction_payment::Config for Runtime {
             Balances,
             PowDigestAuthor,
             RuntimeNrcAccountProvider,
+            RuntimeSafetyFundAccountProvider,
         >,
         OnchainTxAmountExtractor,
         RuntimeFeePayerExtractor,
@@ -270,6 +271,16 @@ impl onchain_transaction::NrcAccountProvider<AccountId> for RuntimeNrcAccountPro
         Some(AccountId::new(
             primitives::china::china_cb::CHINA_CB[0].fee_address,
         ))
+    }
+}
+
+pub struct RuntimeSafetyFundAccountProvider;
+
+impl onchain_transaction::SafetyFundAccountProvider<AccountId>
+    for RuntimeSafetyFundAccountProvider
+{
+    fn safety_fund_account() -> AccountId {
+        AccountId::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
     }
 }
 
@@ -371,9 +382,8 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             // 付费调用交易：治理/用户操作（1 元/次）
             RuntimeCall::ResolutionIssuance(ref ri_call) => {
                 match ri_call {
-                    // 免费：治理权限终结投票 + 设置收款白名单
-                    resolution_issuance::pallet::Call::finalize_joint_vote { .. }
-                    | resolution_issuance::pallet::Call::set_allowed_recipients { .. }
+                    // 免费：Root 维护类操作；决议发行 finalize 只允许 voting-engine 回调，不再暴露 call。
+                    resolution_issuance::pallet::Call::set_allowed_recipients { .. }
                     | resolution_issuance::pallet::Call::clear_executed { .. }
                     | resolution_issuance::pallet::Call::set_paused { .. } => {
                         onchain_transaction::AmountExtractResult::NoAmount
@@ -1043,6 +1053,7 @@ impl frame_support::traits::OnUnbalanced<pallet_balances::NegativeImbalance<Runt
             Balances,
             PowDigestAuthor,
             RuntimeNrcAccountProvider,
+            RuntimeSafetyFundAccountProvider,
         >;
         <FeeRouter as frame_support::traits::tokens::imbalance::OnUnbalanced<_>>::on_unbalanced(
             credit,
@@ -1177,28 +1188,6 @@ impl offchain_transaction::Config for Runtime {
     type WeightInfo = offchain_transaction::weights::SubstrateWeight<Runtime>;
 }
 
-pub struct EnsureJointVoteFinalizeOrigin;
-
-impl EnsureOrigin<RuntimeOrigin> for EnsureJointVoteFinalizeOrigin {
-    type Success = ();
-
-    fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
-        #[cfg(feature = "runtime-benchmarks")]
-        {
-            return frame_system::EnsureRoot::<AccountId>::try_origin(o).map(|_| ());
-        }
-        #[cfg(not(feature = "runtime-benchmarks"))]
-        {
-            Err(o)
-        }
-    }
-
-    #[cfg(feature = "runtime-benchmarks")]
-    fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
-        Ok(RuntimeOrigin::from(frame_system::RawOrigin::Root))
-    }
-}
-
 pub struct EnsureNrcAdmin;
 
 impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
@@ -1282,8 +1271,6 @@ impl resolution_issuance::Config for Runtime {
     type Currency = Balances;
     type ProposeOrigin = EnsureJointProposer;
     type RecipientSetOrigin = frame_system::EnsureRoot<AccountId>;
-    // 中文注释：禁用外部 finalize 入口，只允许投票引擎回调路径落地结果。
-    type JointVoteFinalizeOrigin = EnsureJointVoteFinalizeOrigin;
     // 中文注释：维护入口只允许 root 操作暂停与短期执行记录清理。
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = resolution_issuance::weights::SubstrateWeight<Runtime>;
@@ -1459,18 +1446,33 @@ mod tests {
         new_test_ext().execute_with(|| {
             // 统一 ID：proposal_id 即投票引擎 ID，不再有双 ID 映射
             let proposal_id = 99u64;
-            let recipient = AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address);
-            let total_amount = 123u128;
+            let per_recipient_amount = 123u128;
+            let allocations: Vec<
+                resolution_issuance::proposal::RecipientAmount<AccountId, Balance>,
+            > = CHINA_CB
+                .iter()
+                .skip(1)
+                .map(|node| resolution_issuance::proposal::RecipientAmount {
+                    recipient: AccountId::new(node.main_address),
+                    amount: per_recipient_amount,
+                })
+                .collect();
+            let recipient = allocations
+                .first()
+                .expect("CHINA_CB has province recipients")
+                .recipient
+                .clone();
+            let recipient_before = Balances::free_balance(&recipient);
+            let total_amount = allocations
+                .iter()
+                .fold(0u128, |sum, item| sum.saturating_add(item.amount));
 
             // 测试中直接写入 ProposalData/Owner，生产路径必须走 create_*_with_data 原子入口。
             let data = resolution_issuance::proposal::IssuanceProposalData {
                 proposer: recipient.clone(),
                 reason: b"runtime-integration".to_vec(),
                 total_amount,
-                allocations: vec![resolution_issuance::proposal::RecipientAmount {
-                    recipient: recipient.clone(),
-                    amount: total_amount,
-                }],
+                allocations,
             };
             let mut encoded = Vec::from(resolution_issuance::MODULE_TAG);
             encoded.extend_from_slice(&data.encode());
@@ -1487,6 +1489,19 @@ mod tests {
                 .expect("module tag bound");
             voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
             voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
+            voting_engine::Proposals::<Runtime>::insert(
+                proposal_id,
+                voting_engine::Proposal {
+                    kind: voting_engine::PROPOSAL_KIND_JOINT,
+                    stage: voting_engine::STAGE_JOINT,
+                    status: voting_engine::STATUS_PASSED,
+                    internal_org: None,
+                    internal_institution: None,
+                    start: 0u32,
+                    end: 100u32,
+                    citizen_eligible_total: 10,
+                },
+            );
 
             resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
@@ -1497,10 +1512,12 @@ mod tests {
                 true,
             );
 
+            voting_engine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
                 proposal_id,
                 true
             ));
+            voting_engine::CallbackExecutionScopes::<Runtime>::remove(proposal_id);
 
             // 验证 VotingProposalCount 已递减
             assert_eq!(
@@ -1522,7 +1539,10 @@ mod tests {
                 resolution_issuance::pallet::TotalIssued::<Runtime>::get(),
                 total_amount
             );
-            assert_eq!(Balances::free_balance(&recipient), total_amount);
+            assert_eq!(
+                Balances::free_balance(&recipient),
+                recipient_before.saturating_add(per_recipient_amount)
+            );
         });
     }
 
