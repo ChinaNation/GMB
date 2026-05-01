@@ -73,3 +73,27 @@
   - 增加负向测试：非 owner 覆写数据失败、非回调作用域写 `passed_at` 失败、业务模块无法把 `VOTING` 提案直接置为 `PASSED`。
   - 更新治理模块文档，说明 voting-engine 是提案生命周期唯一状态机，业务 pallet 只持有受限 capability。
   - 清理旧公开接口、旧测试中允许覆盖 `ProposalData` 的断言和相关残留注释。
+
+## PASSED 等待手动重试模块清单
+
+- `governance/resolution-destro`：自动销毁失败只发 `DestroyExecutionFailed`，提案保留 `STATUS_PASSED`，公开 `execute_destroy` 供后续补余额后重试。
+- `governance/grandpakey-change`：自动替换失败只发 `GrandpaKeyExecutionFailed`，提案保留 `STATUS_PASSED`，公开 `execute_replace_grandpa_key` 供管理员重试；确定不可执行时用 `cancel_failed_replace_grandpa_key` 转 `STATUS_EXECUTION_FAILED`。
+- `transaction/duoqian-transfer`：transfer / safety fund / sweep 三类执行失败均发对应失败事件并保留 `STATUS_PASSED`，公开 `execute_transfer`、`execute_safety_fund_transfer`、`execute_sweep_to_main` 重试。
+- `transaction/duoqian-manage`：callback 注释与代码表现为执行失败后发事件并保留 `STATUS_PASSED`，但当前未发现公开 `execute_create` / `execute_close` / `execute_create_institution` 重试 call；属于修复时必须明确取舍的残留边界。
+- 明确不属于等待重试：`governance/admins-change` 自动执行失败会写 `STATUS_EXECUTION_FAILED`，`runtime-upgrade` 和 `resolution-issuance` 联合投票回调执行失败也写 `STATUS_EXECUTION_FAILED`。
+
+## 统一状态语义决策
+
+- `STATUS_REJECTED` 是投票否决终态，不允许执行或重试。
+- `STATUS_PASSED` 表示提案已通过并获得业务执行授权，同时也是自动执行暂时失败后的统一可重试态。
+- `STATUS_EXECUTED` 是业务执行成功终态。
+- `STATUS_EXECUTION_FAILED` 只表示确定不可执行、人工取消或永久失败终态；进入该状态后不允许继续执行或取消。
+- 因此“手动重试”不应发生在 `STATUS_EXECUTION_FAILED` 下，而应统一发生在 `STATUS_PASSED` 下。
+- 统一取消流程应从 `STATUS_PASSED -> STATUS_EXECUTION_FAILED`，由 voting-engine 统一入口做 owner、状态、权限和业务模块可取消性校验。
+- 统一手动执行流程应由 voting-engine 暴露单一入口，例如 `retry_passed_proposal(proposal_id)`：
+  - 要求提案状态必须是 `STATUS_PASSED`。
+  - voting-engine 根据 `ProposalOwner` 分发到对应业务 executor。
+  - 执行成功则进入 `STATUS_EXECUTED` 终态。
+  - 暂时失败则保持 `STATUS_PASSED`，继续允许后续重试。
+  - 确定不可执行不应在 retry 中直接静默吞掉，应返回错误或提示走 `cancel_passed_proposal`。
+- 如果无人手动执行，提案会一直保持 `STATUS_PASSED`，直到有人重试成功、有人取消为 `STATUS_EXECUTION_FAILED`，或后续另行设计“通过后执行宽限期/过期取消”规则。当前建议先不自动过期取消，避免把余额不足、GRANDPA pending 等可恢复问题误杀。
