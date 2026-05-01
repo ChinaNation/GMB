@@ -7,7 +7,7 @@
 - 利息接收账户只能是 `CHINA_CH` 中硬编码的省储行多签地址，不能由外部调用临时改写。
 - 结算按照年度执行，基于 runtime 注入的 `BlocksPerYear` 在年度边界自动触发。
 - 每年只允许顺序结算，不能跳过前一年直接结算后一年。
-- 利率按制度常量执行：支持首年固定利率和逐年递减，到制度年限后自动归零。
+- 利率按制度常量执行：固定启用首年利率和逐年递减，到制度年限后自动归零。
 - 只有当 43 家省储行在某一年度全部成功处理后，该年度才算真正 settled。
 - 自动结算失败时必须保留在当前年度，等待 Root 手动补结算或强制推进，不允许静默跳过。
 - Root 可以手动补结算若干已到期年度，也可以在故障无法修复时强制推进到某个已到期年度。
@@ -27,12 +27,11 @@
 
 ## 2. 关键常量与配置
 模块内常量：
-- `AUTO_BACKFILL_MAX_YEARS_PER_BLOCK = 8`
-- `MAX_FORCE_SETTLE_YEARS = SHENGBANK_INTEREST_DURATION_YEARS`
-- `SETTLEMENT_CPU_OP_WEIGHT = 50_000`
+- `AUTO_BACKFILL_MAX_YEARS_PER_BLOCK = 1`
+- `MAX_FORCE_SETTLE_YEARS = 8`
 
 制度常量：
-- `ENABLE_SHENGBANK_INTEREST_DECAY`
+- `ENABLE_SHENGBANK_INTEREST_DECAY` — 通过编译期断言锁定为 `true`，模块不保留关闭递减的运行时分支。
 - `SHENGBANK_INITIAL_INTEREST_BP`
 - `SHENGBANK_INTEREST_DECREASE_BP`
 - `SHENGBANK_INTEREST_DURATION_YEARS`
@@ -43,7 +42,7 @@ Runtime 注入：
 - `Config::WeightInfo = shengbank_interest::weights::SubstrateWeight<Runtime>`
 
 Runtime 接线：
-- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:538`
+- `/Users/rhett/GMB/citizenchain/runtime/src/configs/mod.rs:522`
 
 ## 3. 存储结构
 - `LastSettledYear: u32`
@@ -57,6 +56,7 @@ Runtime 接线：
 - `ShengBankDecodeFailed { year, pallet_id }`
 - `ShengBankIdEncodeFailed { year, index }`
 - `ShengBankPrincipalOverflow { year, pallet_id }`
+- `ShengBankInterestOverflow { year, pallet_id }` — 本金乘利率发生溢出，跳过该省储行并让年度结算失败（链上可审计）
 - `ShengBankYearSettled { year }`
 - `ShengBankYearSettlementFailed { year, success_count, total_count }`
 - `ShengBankYearForceAdvanced { year }`
@@ -77,8 +77,9 @@ Runtime 接线：
 流程：
 1. 计算 `current_year` 和 `last_settled_year`。
 2. 若当前已经进入更高年度，且尚未达到制度年限，则调用 `settle_next_years(...)`。
-3. 自动补结算单个区块最多推进 8 年，防止一次区块做过多历史回填。
-4. 若在年度边界块但当前没有待结算年度，则只计一次 `LastSettledYear` 读取。
+3. 自动补结算单个区块最多推进 1 年，避免多年历史欠账集中压进同一个年度边界块。
+4. 若存在多年未结算历史欠账，自动路径只处理下一年，剩余年度由 Root 通过 `force_settle_years` 分批补救。
+5. 若在年度边界块但当前没有待结算年度，则只走 `on_initialize_boundary_noop` 权重。
 
 ## 6. 年度结算逻辑
 入口：`settle_next_years(current_year, max_years, block)`
@@ -90,11 +91,15 @@ Runtime 接线：
 
 单年发放：`mint_interest_for_year(year)`
 
+利率计算：
+- `settle_next_years` 只会传入 `year <= SHENGBANK_INTEREST_DURATION_YEARS` 的年度。
+- `interest_bp_for_year` 不再保留 `!ENABLE_SHENGBANK_INTEREST_DECAY` 和超出制度年限的不可达返回分支；前者由编译期断言锁定，后者由年度结算边界保证。
+
 对每家省储行执行：
 1. 将 `shenfen_id` 编码成固定 48 字节 `pallet_id`。
 2. 由 `main_address` 解码出固定收款账户。
 3. 将 `stake_amount` 转成运行时 `Balance`，并做回写校验防止饱和截断。
-4. 计算 `interest = principal * rate_bp / 10_000`。
+4. 使用 `checked_mul` 计算 `principal * rate_bp` 后再除以 `10_000`；若乘法溢出，发出 `ShengBankInterestOverflow` 并让该年度结算失败。
 5. `interest == 0` 时视为成功但不发币。
 6. `interest < minimum_balance` 时视为成功但跳过发币，作为 dust 防御兜底。
 7. 其他情况用 `deposit_creating` 直接增发到省储行多签账户，并记录 `ShengBankInterestMinted`。
@@ -102,8 +107,8 @@ Runtime 接线：
 ## 7. Root 补救接口
 ### 7.1 `force_settle_years(max_years)`（call index = 0）
 - 作用：手动补结算若干已到期年度。
-- 约束：`0 < max_years <= MAX_FORCE_SETTLE_YEARS`
-- 返回：按实际读写和 CPU 操作量回填 `actual_weight`。
+- 约束：`0 < max_years <= MAX_FORCE_SETTLE_YEARS`，当前 `MAX_FORCE_SETTLE_YEARS = 8`。
+- 权重：使用声明的 benchmark 权重，不再按运行时手写读写计数回填 `actual_weight`，避免低报真实执行成本。
 
 ### 7.2 `force_advance_year(year)`（call index = 1）
 - 作用：跳过已经到期但无法修复的故障年度。
@@ -116,21 +121,25 @@ Runtime 接线：
 - 该接口不能提前跳过未来尚未到期的年度，避免误操作直接抹掉未来若干年的利息发放。
 
 ## 8. 权重策略
-当前实现采用“读写估算 + CPU 兜底”的组合：
-- 存储权重：`T::DbWeight::reads_writes(reads, writes)`
-- 计算权重：`Weight::from_parts(ops * SETTLEMENT_CPU_OP_WEIGHT, 0)`
-
 当前 `WeightInfo` 提供：
 - `force_settle_years(max_years)`
 - `force_advance_year()`
+- `on_initialize_boundary_noop()`
+- `on_initialize_settlement()`
+
+当前策略：
+- 非年度边界块直接返回 `Weight::zero()`，不读取存储。
+- 年度边界但无待结算年度返回 `T::WeightInfo::on_initialize_boundary_noop()`。
+- 年度边界且存在待结算年度时，自动路径固定只结算 1 年，并返回 `T::WeightInfo::on_initialize_settlement()`。
+- `force_settle_years` 的声明权重仍来自 benchmark，执行完成后不再用手写读写计数覆盖实际权重。
 
 已知待改进：
-- `on_initialize` 的权重仍使用手工估算（`SETTLEMENT_CPU_OP_WEIGHT` + 读写计数），未接入 benchmark 生成的 `WeightInfo`。`benchmarks.rs` 已定义 `on_initialize_settlement` 和 `on_initialize_noop` 两个 benchmark，但 `WeightInfo` trait 只暴露了两个 Root 调用，未包含 on_initialize 路径。当前过估是安全的，但结算逻辑变化后权重不会自动跟着变。
+- `on_initialize_settlement` 当前复用单年 `force_settle_years(1)` 的 benchmark 权重并额外加一次 `LastSettledYear` 读取作为保守上界；后续重新跑 benchmark 时，应由 `on_initialize_settlement` 和 `on_initialize_boundary_noop` 独立生成权重。
 - `weights.rs` 硬编码 43 个省储行的读写次数，如果 `CHINA_CH` 数量变化需要重新跑 benchmark。
 
 补充说明：
 - `weights.rs` 当前为 `frame-benchmarking` 生成产物。
-- `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（结算路径 + 空操作路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
+- `benchmarks.rs` 覆盖两个 Root 调用和两个 `on_initialize` 路径（单年结算路径 + 年度边界无待结算路径），`force_settle_years` 的组件范围应与 `MAX_FORCE_SETTLE_YEARS` 保持一致。
 - 若 benchmark 组件范围、执行路径或常量边界发生变化，需要重新生成 `weights.rs`，不是历史上跑过一次就可以永久沿用。
 
 ## 9. try-runtime 支持
@@ -146,15 +155,15 @@ Hooks 中实现了 `try_state` 钩子，校验：
 执行命令：
 - `cargo test -p shengbank-interest`
 
-当前覆盖（18 个业务测试）：
+当前覆盖（19 个业务测试）：
 - 第 1 / 2 年正常发放与利率递减。
-- 晚到边界时自动补结算。
+- 晚到边界时自动只补下一个未结算年度。
 - 年限达到上限后停止继续发放。
 - Root 手动补结算。
 - Root 强制推进恢复。
 - 非 Root 调用拒绝。
-- `force_settle_years` 参数校验。
-- 自动补结算上限为 8 年。
+- `force_settle_years` 参数校验和 8 年批处理上限。
+- 自动补结算上限为 1 年。
 - `BlocksPerYear == 0` 时禁用自动结算。
 - 未来年度不能被 `force_advance_year` 提前跳过。
 - 故障恢复后自动结算恢复（`force_advance_then_settle_resumes`）。
@@ -162,12 +171,12 @@ Hooks 中实现了 `try_state` 钩子，校验：
 - 第 100 年边界利率 1 BP 正确发放，第 101 年不再发放（`year_100_boundary_settles_with_minimum_rate`）。
 
 已知待补充：
-- 5 个审计/失败事件（`ShengBankDecodeFailed`、`ShengBankIdEncodeFailed`、`ShengBankPrincipalOverflow`、`ShengBankYearSettlementFailed`、`ShengBankInterestBelowED`）缺少显式触发和断言的回归测试。当前测试覆盖正常流程和边界条件，未覆盖错误分支。修改 CHINA_CH、账户解码、ED 兜底或结算中止逻辑时应优先补充。
+- 6 个审计/失败事件（`ShengBankDecodeFailed`、`ShengBankIdEncodeFailed`、`ShengBankPrincipalOverflow`、`ShengBankInterestOverflow`、`ShengBankYearSettlementFailed`、`ShengBankInterestBelowED`）缺少显式触发和断言的回归测试。当前测试覆盖正常流程和边界条件，未覆盖错误分支。修改 CHINA_CH、账户解码、ED 兜底或结算中止逻辑时应优先补充。
 
 ## 11. 审查结论与建议
-本轮没有发现新的高风险权限绕过或资金记账一致性漏洞。
+本轮已修复自动补结算单块权重尖峰风险：自动路径从 8 年/块收敛为 1 年/块，Root 补结算上限收敛为 8 年/笔，并让 `on_initialize` 返回 `WeightInfo` 权重，避免继续依赖手写读写估算。
 
 建议：
 1. 若调整 benchmark 组件范围、年度上限或结算路径，应同步重新跑 benchmark 并更新 `weights.rs`。
 2. `force_advance_year` 属于恢复型 Root 接口，运维上应优先修复故障再跳过年度，只把它当成最后手段。
-3. 若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，建议补一条”利息乘法溢出”显式检测事件，避免继续依赖饱和算术。
+3. 利息乘法已由 `checked_mul` 和 `ShengBankInterestOverflow` 审计事件兜底；若未来 `CHINA_CH` 的 `stake_amount` 或运行时 `Balance` 精度发生变化，应重新跑相关测试和 benchmark。

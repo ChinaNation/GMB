@@ -5,7 +5,7 @@ use codec::Decode;
 use frame_support::{dispatch::DispatchResult, ensure, BoundedVec};
 use primitives::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, Zero};
-use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
+use sp_std::collections::btree_set::BTreeSet;
 
 impl<T: Config> Pallet<T> {
     pub(crate) fn validate_proposal_allocations(
@@ -86,26 +86,6 @@ impl<T: Config> Pallet<T> {
             );
         }
         Ok(())
-    }
-
-    pub(crate) fn decode_default_allowed_recipients(
-    ) -> Option<BoundedVec<T::AccountId, T::MaxAllocations>> {
-        let recipients: Vec<T::AccountId> = CHINA_CB
-            .iter()
-            .skip(1)
-            .filter_map(|node| T::AccountId::decode(&mut &node.main_address[..]).ok())
-            .collect();
-        if recipients.is_empty() {
-            return None;
-        }
-        let bounded: BoundedVec<T::AccountId, T::MaxAllocations> = recipients.try_into().ok()?;
-        if Self::ensure_unique_recipients(bounded.as_slice()).is_err() {
-            return None;
-        }
-        if Self::ensure_recipients_in_china_cb(&bounded).is_err() {
-            return None;
-        }
-        Some(bounded)
     }
 
     pub(crate) fn validate_execution_allocations(

@@ -40,6 +40,16 @@ pub mod pallet {
         CITIZEN_ISSUANCE_ONE_TIME_ONLY,
         "CITIZEN_ISSUANCE_ONE_TIME_ONLY must be true"
     );
+    // 中文注释：奖励金额属于制度常量，必须在编译期保持非零。
+    const _: () = assert!(
+        CITIZEN_ISSUANCE_HIGH_REWARD > 0,
+        "CITIZEN_ISSUANCE_HIGH_REWARD must be greater than zero"
+    );
+    // 中文注释：常规奖励同样不允许配置成零，零奖励只保留运行时类型转换兜底。
+    const _: () = assert!(
+        CITIZEN_ISSUANCE_NORMAL_REWARD > 0,
+        "CITIZEN_ISSUANCE_NORMAL_REWARD must be greater than zero"
+    );
 
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -92,7 +102,7 @@ pub mod pallet {
         MaxCountReached,
         /// 中文注释：该账户已通过其他 SFID 领取过奖励，换绑不可再领。
         AccountAlreadyRewarded,
-        /// 中文注释：奖励常量配置为零（不应出现，属防御性检查）。
+        /// 中文注释：奖励常量已由编译期断言锁定为非零；该分支只兜底 Balance 转换异常。
         ZeroRewardConfigured,
     }
 
@@ -159,6 +169,7 @@ pub mod pallet {
                 !reward.is_zero(),
                 "citizen issuance reward constants must stay greater than zero"
             );
+            // 中文注释：制度奖励常量已编译期锁定非零，这里保留为 Balance 类型转换后的防御性兜底。
             if reward.is_zero() {
                 return Err(SkipReason::ZeroRewardConfigured);
             }

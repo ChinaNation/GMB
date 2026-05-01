@@ -12,6 +12,7 @@ use frame_support::{
 use frame_system as system;
 use onchain_transaction::{
     AmountExtractResult, CallAmount, NrcAccountProvider, OnchainChargeAdapter, OnchainFeeRouter,
+    SafetyFundAccountProvider,
 };
 use pallet_transaction_payment::OnChargeTransaction;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
@@ -116,6 +117,13 @@ impl NrcAccountProvider<AccountId32> for MockNrcAccountProvider {
     }
 }
 
+struct MockSafetyFundAccountProvider;
+impl SafetyFundAccountProvider<AccountId32> for MockSafetyFundAccountProvider {
+    fn safety_fund_account() -> AccountId32 {
+        AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+    }
+}
+
 struct AmountExtractorAmount;
 impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorAmount {
     fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
@@ -123,7 +131,13 @@ impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorAmount {
     }
 }
 
-type BenchRouter = OnchainFeeRouter<Test, Balances, MockFindAuthor, MockNrcAccountProvider>;
+type BenchRouter = OnchainFeeRouter<
+    Test,
+    Balances,
+    MockFindAuthor,
+    MockNrcAccountProvider,
+    MockSafetyFundAccountProvider,
+>;
 type BenchAdapter = OnchainChargeAdapter<Balances, BenchRouter, AmountExtractorAmount, ()>;
 
 fn account(n: u8) -> AccountId32 {

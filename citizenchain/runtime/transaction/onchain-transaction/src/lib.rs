@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Decode;
 use frame_support::traits::{
     fungible::Inspect,
     tokens::{
@@ -20,17 +19,53 @@ use sp_std::{marker::PhantomData, prelude::*};
 /// 最小 pallet：仅承载手续费事件，无 storage、无 call、无 hooks。
 #[frame_support::pallet]
 pub mod pallet {
+    use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+    use scale_info::TypeInfo;
+    use sp_runtime::RuntimeDebug;
+
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
     #[pallet::config]
     pub trait Config: frame_system::Config<RuntimeEvent: From<Event<Self>>> {}
 
+    /// 中文注释：手续费份额销毁原因，供链上事件审计和运维聚合。
+    #[derive(
+        Clone,
+        Copy,
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Eq,
+        PartialEq,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+    )]
+    pub enum BurnReason {
+        /// 中文注释：当前区块作者无法从共识 digest 中识别。
+        AuthorMissing,
+        /// 中文注释：区块作者尚未绑定全节点手续费奖励钱包。
+        WalletUnbound,
+        /// 中文注释：全节点奖励钱包入账失败，剩余 credit 被销毁。
+        FullnodeResolveFailed,
+        /// 中文注释：国储会手续费账户未配置。
+        NrcMissing,
+        /// 中文注释：国储会手续费账户入账失败，剩余 credit 被销毁。
+        NrcResolveFailed,
+        /// 中文注释：安全基金账户入账失败，剩余 credit 被销毁。
+        SafetyFundResolveFailed,
+    }
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
     pub enum Event<T: Config> {
         /// 交易手续费已收取。
+        /// NOTE: `fee` 只包含基础手续费，不包含 tip；调整 tip 机制时必须同步
+        /// `ONCHAIN_TECHNICAL.md` 第 11 节以及下游 RPC / dashboard 统计口径。
         FeePaid { who: T::AccountId, fee: u128 },
+        /// 手续费分账份额因无法安全入账而被销毁。
+        FeeShareBurnt { reason: BurnReason, amount: u128 },
     }
 }
 
@@ -58,8 +93,8 @@ const _: () = {
 /// - 全节点（绑定钱包）分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
 /// - 国储会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
 /// - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）
-pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcAccountProvider>(
-    PhantomData<(T, Currency, AuthorFinder, NrcAccountProvider)>,
+pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider>(
+    PhantomData<(T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider)>,
 );
 
 /// 金额提取分类结果：
@@ -105,6 +140,13 @@ impl<AccountId> NrcAccountProvider<AccountId> for () {
     fn nrc_account() -> Option<AccountId> {
         None
     }
+}
+
+/// 统一抽象：由 Runtime 注入安全基金收款账户来源。
+pub trait SafetyFundAccountProvider<AccountId> {
+    /// 提供安全基金账户。
+    /// 安全基金账户属于制度常量，使用 provider 可避免在分账热路径反复 decode。
+    fn safety_fund_account() -> AccountId;
 }
 
 /// 链上手续费收取适配器：
@@ -201,8 +243,10 @@ where
         _tip: Self::Balance,
         liquidity_info: Self::LiquidityInfo,
     ) -> Result<(), TransactionValidityError> {
-        // 中文注释：本制度按交易金额固定收费，协议上明确"不做执行后退款"；
-        // 因此 corrected_fee_with_tip 在此实现中被有意忽略。
+        // PROTOCOL: no post-dispatch refund.
+        // 中文注释：本制度按交易金额固定收费，协议上明确"不做执行后退款"。
+        // `_corrected_fee_with_tip` 和 `_tip` 仅来自 transaction-payment 标准接口，
+        // 本实现只对 `withdraw_fee` 已扣出的 credit 做最终分账。
         if let Some((fee_credit, tip_credit)) = liquidity_info {
             Router::on_unbalanceds(Some(fee_credit).into_iter().chain(Some(tip_credit)));
         }
@@ -229,13 +273,15 @@ where
     type Credit = ();
 }
 
-impl<T, Currency, AuthorFinder, NrcProvider> OnUnbalanced<Credit<T::AccountId, Currency>>
-    for OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider>
+impl<T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider>
+    OnUnbalanced<Credit<T::AccountId, Currency>>
+    for OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider>
 where
-    T: frame_system::Config + fullnode_issuance::Config,
+    T: frame_system::Config + fullnode_issuance::Config + pallet::Config,
     Currency: Balanced<T::AccountId>,
     AuthorFinder: FindAuthor<T::AccountId>,
     NrcProvider: NrcAccountProvider<T::AccountId>,
+    SafetyFundProvider: SafetyFundAccountProvider<T::AccountId>,
 {
     fn on_nonzero_unbalanced(amount: Credit<T::AccountId, Currency>) {
         let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT;
@@ -251,6 +297,15 @@ where
 
         // 中文注释：制度常量异常时，直接全部销毁，避免错误分配。
         if total_percent != EXPECTED_FEE_PERCENT_TOTAL {
+            log::error!(
+                target: "runtime::onchain_transaction",
+                "fee distribution percents must sum to {}; got fullnode={}, nrc={}, safety_fund={}, total={}",
+                EXPECTED_FEE_PERCENT_TOTAL,
+                fullnode_percent,
+                nrc_percent,
+                safety_fund_percent,
+                total_percent
+            );
             return;
         }
 
@@ -269,25 +324,34 @@ where
             Some(miner) => {
                 if let Some(wallet) = fullnode_issuance::RewardWalletByMiner::<T>::get(&miner) {
                     if let Err(remaining) = Currency::resolve(&wallet, fullnode_credit) {
+                        let burnt_amount = remaining.peek().saturated_into::<u128>();
                         log::warn!(
                             target: "runtime::onchain_transaction",
                             "burn fullnode fee share: failed to resolve reward wallet credit: {:?}",
                             remaining.peek()
                         );
+                        emit_fee_share_burn::<T>(
+                            pallet::BurnReason::FullnodeResolveFailed,
+                            burnt_amount,
+                        );
                     }
                 } else {
+                    let burnt_amount = fullnode_credit.peek().saturated_into::<u128>();
                     log::warn!(
                         target: "runtime::onchain_transaction",
                         "burn fullnode fee share: author found but reward wallet not bound"
                     );
+                    emit_fee_share_burn::<T>(pallet::BurnReason::WalletUnbound, burnt_amount);
                     drop(fullnode_credit);
                 }
             }
             None => {
+                let burnt_amount = fullnode_credit.peek().saturated_into::<u128>();
                 log::warn!(
                     target: "runtime::onchain_transaction",
                     "burn fullnode fee share: block author not found"
                 );
+                emit_fee_share_burn::<T>(pallet::BurnReason::AuthorMissing, burnt_amount);
                 drop(fullnode_credit);
             }
         }
@@ -295,41 +359,43 @@ where
         // 中文注释：国储会手续费账户分成。
         if let Some(nrc_fee_account) = NrcProvider::nrc_account() {
             if let Err(remaining) = Currency::resolve(&nrc_fee_account, nrc_credit) {
+                let burnt_amount = remaining.peek().saturated_into::<u128>();
                 log::warn!(
                     target: "runtime::onchain_transaction",
                     "nrc fee share: failed to resolve nrc fee account credit: {:?}",
                     remaining.peek()
                 );
+                emit_fee_share_burn::<T>(pallet::BurnReason::NrcResolveFailed, burnt_amount);
             }
         } else {
+            let burnt_amount = nrc_credit.peek().saturated_into::<u128>();
             log::warn!(
                 target: "runtime::onchain_transaction",
                 "nrc fee share: nrc fee account not configured"
             );
+            emit_fee_share_burn::<T>(pallet::BurnReason::NrcMissing, burnt_amount);
+            drop(nrc_credit);
         }
 
-        // 中文注释：安全基金账户分成（NRC_ANQUAN_ADDRESS 常量地址）。
-        let safety_fund_account =
-            T::AccountId::decode(&mut &primitives::china::china_cb::NRC_ANQUAN_ADDRESS[..]);
-        match safety_fund_account {
-            Ok(account) => {
-                if let Err(remaining) = Currency::resolve(&account, safety_fund_credit) {
-                    log::warn!(
-                        target: "runtime::onchain_transaction",
-                        "safety fund fee share: failed to resolve credit: {:?}",
-                        remaining.peek()
-                    );
-                }
-            }
-            Err(_) => {
-                log::error!(
-                    target: "runtime::onchain_transaction",
-                    "safety fund fee share: NRC_ANQUAN_ADDRESS decode failed (should never happen)"
-                );
-                drop(safety_fund_credit);
-            }
+        // 中文注释：安全基金账户由 runtime provider 注入，避免每笔手续费分账重复 decode 常量地址。
+        let safety_fund_account = SafetyFundProvider::safety_fund_account();
+        if let Err(remaining) = Currency::resolve(&safety_fund_account, safety_fund_credit) {
+            let burnt_amount = remaining.peek().saturated_into::<u128>();
+            log::warn!(
+                target: "runtime::onchain_transaction",
+                "safety fund fee share: failed to resolve credit: {:?}",
+                remaining.peek()
+            );
+            emit_fee_share_burn::<T>(pallet::BurnReason::SafetyFundResolveFailed, burnt_amount);
         }
     }
+}
+
+fn emit_fee_share_burn<T: pallet::Config>(reason: pallet::BurnReason, amount: u128) {
+    if amount == 0 {
+        return;
+    }
+    pallet::Pallet::<T>::deposit_event(pallet::Event::FeeShareBurnt { reason, amount });
 }
 
 fn custom_fee_with_tip<T, Currency, AmountExtractor>(
@@ -352,18 +418,11 @@ where
     };
     // 中文注释：统一先转成 u128 做费率计算，避免不同 Balance 类型下重复实现乘法与舍入逻辑。
     let amount_u128: u128 = amount.saturated_into();
-    let by_rate: u128 = mul_perbill_round(amount_u128, primitives::core_const::ONCHAIN_FEE_RATE);
-    let min_fee: u128 = primitives::core_const::ONCHAIN_MIN_FEE; // 0.1元=10分
-                                                                 // 中文注释：业务制度要求"按比例收费，但永远不少于最低费"。
     let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
-        by_rate.max(min_fee).saturated_into();
+        calculate_onchain_fee(amount_u128).saturated_into();
     Ok(base_fee.saturating_add(tip))
 }
 
-/// 使用旧版 `Currency` trait 从指定账户扣取手续费并按制度分账。
-///
-/// 分账规则：全节点矿工奖励钱包 80% / 国储会 10% / 安全基金 10%。
-/// `miner_wallet`：当前区块矿工绑定的奖励钱包；`nrc_account`：国储会账户。
 /// 按交易金额计算链上手续费（对外公开，供其他 pallet 复用）。
 ///
 /// 公式：`max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
@@ -513,6 +572,13 @@ mod tests {
         }
     }
 
+    struct MockSafetyFundAccountProvider;
+    impl SafetyFundAccountProvider<AccountId32> for MockSafetyFundAccountProvider {
+        fn safety_fund_account() -> AccountId32 {
+            AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS)
+        }
+    }
+
     fn account(n: u8) -> AccountId32 {
         AccountId32::new([n; 32])
     }
@@ -528,7 +594,9 @@ mod tests {
         }
         .assimilate_storage(&mut storage)
         .expect("balances genesis build should succeed");
-        sp_io::TestExternalities::new(storage)
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| System::set_block_number(1));
+        ext
     }
 
     struct AmountExtractorAmount;
@@ -569,6 +637,27 @@ mod tests {
     fn sample_call() -> RuntimeCall {
         RuntimeCall::System(frame_system::Call::remark {
             remark: vec![1, 2, 3],
+        })
+    }
+
+    fn has_fee_share_burn_event(reason: pallet::BurnReason, amount: u128) -> bool {
+        System::events().iter().any(|r| {
+            matches!(
+                &r.event,
+                RuntimeEvent::OnchainTransaction(pallet::Event::FeeShareBurnt {
+                    reason: event_reason,
+                    amount: event_amount,
+                }) if *event_reason == reason && *event_amount == amount
+            )
+        })
+    }
+
+    fn has_fee_paid_event() -> bool {
+        System::events().iter().any(|r| {
+            matches!(
+                r.event,
+                RuntimeEvent::OnchainTransaction(pallet::Event::FeePaid { .. })
+            )
         })
     }
 
@@ -679,6 +768,27 @@ mod tests {
     }
 
     #[test]
+    fn withdraw_no_amount_without_tip_returns_none_and_no_fee_paid_event() {
+        type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorNoAmount, ()>;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+            let issuance_before = Balances::total_issuance();
+
+            let liquidity =
+                <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 0)
+                    .expect("zero-fee withdraw should succeed");
+
+            assert!(liquidity.is_none());
+            assert_eq!(Balances::free_balance(who), 1_000);
+            assert_eq!(Balances::total_issuance(), issuance_before);
+            assert!(!has_fee_paid_event());
+        });
+    }
+
+    #[test]
     fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
         type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorTiny, ()>;
 
@@ -711,7 +821,8 @@ mod tests {
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -737,7 +848,13 @@ mod tests {
             )
             .expect("payer should have enough balance");
 
-            OnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
@@ -760,7 +877,8 @@ mod tests {
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -777,7 +895,10 @@ mod tests {
             let expected_burn = expected_fullnode;
 
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner.clone()));
-            assert_eq!(fullnode_issuance::RewardWalletByMiner::<Test>::get(&miner), None);
+            assert_eq!(
+                fullnode_issuance::RewardWalletByMiner::<Test>::get(&miner),
+                None
+            );
 
             let credit = <Balances as Balanced<AccountId32>>::withdraw(
                 &payer,
@@ -788,13 +909,23 @@ mod tests {
             )
             .expect("payer should have enough balance");
 
-            OnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(missing_wallet), 0);
             assert_eq!(Balances::free_balance(&nrc), expected_nrc);
             assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::WalletUnbound,
+                expected_burn
+            ));
         });
     }
 
@@ -808,7 +939,8 @@ mod tests {
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -834,12 +966,22 @@ mod tests {
             )
             .expect("payer should have enough balance");
 
-            OnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProvider>::on_nonzero_unbalanced(credit);
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(&nrc), expected_nrc);
             assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::AuthorMissing,
+                expected_burn
+            ));
         });
     }
 
@@ -854,7 +996,8 @@ mod tests {
             let total_fee = 100u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -881,12 +1024,87 @@ mod tests {
             )
             .expect("payer should have enough balance");
 
-            OnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderNone>::on_nonzero_unbalanced(credit);
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProviderNone,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 900);
             assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
             assert_eq!(Balances::free_balance(&safety_fund), expected_safety_fund);
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::NrcMissing,
+                expected_burn
+            ));
+        });
+    }
+
+    #[test]
+    fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+            let total_fee = 50u128;
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(safety_fund_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc = remainder.saturating_mul(nrc_percent)
+                / nrc_percent.saturating_add(safety_fund_percent);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+
+            TestExistentialDeposit::set(100);
+            // 中文注释：只让全节点奖励钱包保持未创建状态，确保本用例命中 fullnode resolve 失败。
+            let _ = Balances::deposit_creating(&nrc, 100);
+            let _ = Balances::deposit_creating(&safety_fund, 100);
+            let issuance_before = Balances::total_issuance();
+            fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                total_fee,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 950);
+            assert_eq!(Balances::free_balance(&reward_wallet), 0);
+            assert_eq!(Balances::free_balance(&nrc), 100 + expected_nrc);
+            assert_eq!(
+                Balances::free_balance(&safety_fund),
+                100 + expected_safety_fund
+            );
+            assert_eq!(
+                Balances::total_issuance(),
+                issuance_before - expected_fullnode
+            );
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::FullnodeResolveFailed,
+                expected_fullnode
+            ));
+            TestExistentialDeposit::set(1);
         });
     }
 
@@ -909,7 +1127,8 @@ mod tests {
             let total_fee = 500u128;
             let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
             let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
-            let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -938,7 +1157,13 @@ mod tests {
             )
             .expect("payer should have enough balance");
 
-            OnchainFeeRouter::<Test, Balances, MockFindAuthor, MockNrcAccountProviderResolveFail>::on_nonzero_unbalanced(credit);
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProviderResolveFail,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
 
             assert_eq!(Balances::free_balance(payer), 500);
             assert_eq!(Balances::free_balance(&reward_wallet), expected_fullnode);
@@ -948,7 +1173,76 @@ mod tests {
                 safety_fund_initial + expected_safety_fund
             );
             assert_eq!(Balances::total_issuance(), issuance_before - expected_burn);
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::NrcResolveFailed,
+                expected_burn
+            ));
             assert!(expected_nrc < 100, "nrc share should stay below high ED");
+            TestExistentialDeposit::set(1);
+        });
+    }
+
+    #[test]
+    fn fee_router_burns_safety_fund_share_when_resolve_fails() {
+        new_test_ext().execute_with(|| {
+            let payer = account(1);
+            let miner = account(9);
+            let reward_wallet = account(8);
+            let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
+            let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
+            let total_fee = 500u128;
+            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let safety_fund_percent =
+                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+            let total_percent = fullnode_percent
+                .saturating_add(nrc_percent)
+                .saturating_add(safety_fund_percent);
+            let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
+            let remainder = total_fee.saturating_sub(expected_fullnode);
+            let expected_nrc = remainder.saturating_mul(nrc_percent)
+                / nrc_percent.saturating_add(safety_fund_percent);
+            let expected_safety_fund = remainder.saturating_sub(expected_nrc);
+
+            TestExistentialDeposit::set(100);
+            // 中文注释：全节点钱包与 NRC 账户先置为已存在账户，只让安全基金新账户低于 ED。
+            let _ = Balances::deposit_creating(&reward_wallet, 100);
+            let _ = Balances::deposit_creating(&nrc, 100);
+            let issuance_before = Balances::total_issuance();
+            fullnode_issuance::RewardWalletByMiner::<Test>::insert(&miner, &reward_wallet);
+            MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
+            let credit = <Balances as Balanced<AccountId32>>::withdraw(
+                &payer,
+                total_fee,
+                Precision::Exact,
+                Preservation::Preserve,
+                Fortitude::Polite,
+            )
+            .expect("payer should have enough balance");
+
+            OnchainFeeRouter::<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >::on_nonzero_unbalanced(credit);
+
+            assert_eq!(Balances::free_balance(payer), 500);
+            assert_eq!(
+                Balances::free_balance(&reward_wallet),
+                100 + expected_fullnode
+            );
+            assert_eq!(Balances::free_balance(&nrc), 100 + expected_nrc);
+            assert_eq!(Balances::free_balance(&safety_fund), 0);
+            assert_eq!(
+                Balances::total_issuance(),
+                issuance_before - expected_safety_fund
+            );
+            assert!(has_fee_share_burn_event(
+                pallet::BurnReason::SafetyFundResolveFailed,
+                expected_safety_fund
+            ));
             TestExistentialDeposit::set(1);
         });
     }
@@ -957,7 +1251,13 @@ mod tests {
     fn correct_and_deposit_does_not_refund_overpayment() {
         type Adapter = OnchainChargeAdapter<
             Balances,
-            OnchainFeeRouter<Test, Balances, MockFindAuthor, MockNrcAccountProviderNone>,
+            OnchainFeeRouter<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProviderNone,
+                MockSafetyFundAccountProvider,
+            >,
             AmountExtractorAmount,
             (),
         >;
@@ -1012,10 +1312,55 @@ mod tests {
     }
 
     #[test]
+    fn correct_and_deposit_fee_none_is_noop() {
+        type Adapter = OnchainChargeAdapter<
+            Balances,
+            OnchainFeeRouter<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >,
+            AmountExtractorAmount,
+            (),
+        >;
+
+        new_test_ext().execute_with(|| {
+            let who = account(1);
+            let call = sample_call();
+            let info = call.get_dispatch_info();
+            let issuance_before = Balances::total_issuance();
+            let balance_before = Balances::free_balance(&who);
+
+            assert_ok!(
+                <Adapter as OnChargeTransaction<Test>>::correct_and_deposit_fee(
+                    &who,
+                    &info,
+                    &Default::default(),
+                    0,
+                    0,
+                    None,
+                )
+            );
+
+            assert_eq!(Balances::free_balance(&who), balance_before);
+            assert_eq!(Balances::total_issuance(), issuance_before);
+            assert!(!has_fee_paid_event());
+        });
+    }
+
+    #[test]
     fn tip_is_routed_with_fee_using_same_distribution() {
         type Adapter = OnchainChargeAdapter<
             Balances,
-            OnchainFeeRouter<Test, Balances, MockFindAuthor, MockNrcAccountProvider>,
+            OnchainFeeRouter<
+                Test,
+                Balances,
+                MockFindAuthor,
+                MockNrcAccountProvider,
+                MockSafetyFundAccountProvider,
+            >,
             AmountExtractorTiny,
             (),
         >;

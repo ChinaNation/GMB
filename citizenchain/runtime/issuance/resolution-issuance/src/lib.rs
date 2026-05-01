@@ -46,7 +46,7 @@ pub mod pallet {
     pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
 
-    /// 中文注释：联合投票终结后的业务执行结果，用于决定 post-dispatch 退费和投票引擎状态写入。
+    /// 中文注释：联合投票终结后的业务执行结果，用于回调时告知投票引擎写入最终执行状态。
     pub(crate) enum FinalizeOutcome {
         ApprovedExecutionSucceeded,
         ApprovedExecutionFailed,
@@ -64,8 +64,6 @@ pub mod pallet {
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
         /// 更新合法收款账户集合。
         type RecipientSetOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-        /// 回放联合投票结果的受限来源（生产配置为拒绝所有外部来源）。
-        type JointVoteFinalizeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
         /// 维护入口：仅用于清理短期执行记录和暂停开关。
         type MaintenanceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
@@ -247,6 +245,7 @@ pub mod pallet {
         ExceedsSingleIssuanceCap,
         NotExecuted,
         PalletPaused,
+        ProposalNotFinalizable,
     }
 
     #[pallet::call]
@@ -273,30 +272,6 @@ pub mod pallet {
                 snapshot_nonce,
                 signature,
             )
-        }
-
-        /// 联合投票回调入口。生产环境通过 Runtime 配置禁止外部直接调用。
-        #[pallet::call_index(1)]
-        #[pallet::weight(if *approved {
-            <T as Config>::WeightInfo::finalize_joint_vote_approved()
-        } else {
-            <T as Config>::WeightInfo::finalize_joint_vote_rejected()
-        })]
-        pub fn finalize_joint_vote(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approved: bool,
-        ) -> DispatchResultWithPostInfo {
-            T::JointVoteFinalizeOrigin::ensure_origin(origin)?;
-            let outcome = Self::apply_joint_vote_result(proposal_id, approved)?;
-            let actual = match outcome {
-                FinalizeOutcome::ApprovedExecutionSucceeded => None,
-                FinalizeOutcome::ApprovedExecutionFailed => {
-                    Some(T::DbWeight::get().reads_writes(5, 7))
-                }
-                FinalizeOutcome::Rejected => Some(T::DbWeight::get().reads_writes(3, 4)),
-            };
-            Ok(actual.into())
         }
 
         /// 更新链上合法收款账户集合（只允许新增，不允许删除）。

@@ -45,6 +45,8 @@ use frame_support::{
 pub trait WeightInfo {
 	fn force_settle_years(y: u32, ) -> Weight;
 	fn force_advance_year() -> Weight;
+	fn on_initialize_boundary_noop() -> Weight;
+	fn on_initialize_settlement() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -53,7 +55,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:43 w:43)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// The range of component `y` is `[1, 100]`.
+	/// The range of component `y` is `[1, 8]`.
 	fn force_settle_years(y: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1302`
@@ -78,6 +80,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
+	/// Storage: `ShengBankInterest::LastSettledYear` (r:1 w:0)
+	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn on_initialize_boundary_noop() -> Weight {
+		// 中文注释：边界无待结算路径只读年度状态；复用更重的 Root 推进权重作为保守上界。
+		Self::force_advance_year()
+	}
+	/// Storage: `ShengBankInterest::LastSettledYear` (r:1 w:1)
+	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:43 w:43)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	fn on_initialize_settlement() -> Weight {
+		// 中文注释：自动路径现在固定只结算 1 年，直接复用单年补结算 benchmark 权重。
+		Self::force_settle_years(1)
+			.saturating_add(T::DbWeight::get().reads(1))
+	}
 }
 
 impl WeightInfo for () {
@@ -85,7 +102,7 @@ impl WeightInfo for () {
 	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:43 w:43)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// The range of component `y` is `[1, 100]`.
+	/// The range of component `y` is `[1, 8]`.
 	fn force_settle_years(y: u32, ) -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1302`
@@ -109,5 +126,20 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 1489))
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(1))
+	}
+	/// Storage: `ShengBankInterest::LastSettledYear` (r:1 w:0)
+	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	fn on_initialize_boundary_noop() -> Weight {
+		// 中文注释：边界无待结算路径只读年度状态；复用更重的 Root 推进权重作为保守上界。
+		Self::force_advance_year()
+	}
+	/// Storage: `ShengBankInterest::LastSettledYear` (r:1 w:1)
+	/// Proof: `ShengBankInterest::LastSettledYear` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:43 w:43)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	fn on_initialize_settlement() -> Weight {
+		// 中文注释：自动路径现在固定只结算 1 年，直接复用单年补结算 benchmark 权重。
+		Self::force_settle_years(1)
+			.saturating_add(RocksDbWeight::get().reads(1))
 	}
 }
