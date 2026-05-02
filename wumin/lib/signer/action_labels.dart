@@ -20,6 +20,7 @@ const Map<String, String> actionLabels = {
   'propose_sweep_to_main': '手续费划转提案',
   'propose_create': '创建多签账户',
   'propose_create_personal': '创建个人多签',
+  'propose_create_institution': '创建机构多签账户',
   'propose_close': '关闭多签提案',
   'propose_destroy': '销毁决议提案',
   'propose_admin_replacement': '管理员替换提案',

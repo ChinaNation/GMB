@@ -83,6 +83,13 @@ class PalletRegistry {
   static const int proposeCreatePersonalCall = 3;
   static const int cleanupRejectedProposalCall = 4;
 
+  /// `propose_create_institution(sfid_id, institution_name, accounts,
+  /// admin_count, duoqian_admins, threshold, register_nonce, signature,
+  /// province, signer_admin_pubkey, a3, sub_type, parent_sfid_id)` —
+  /// 机构多签账户创建提案,凭证由 SFID 后端按 (province, admin_pubkey)
+  /// 双层签发(ADR-008 step2b)。
+  static const int proposeCreateInstitutionCall = 5;
+
   // ---- ResolutionDestro (14) ----
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;

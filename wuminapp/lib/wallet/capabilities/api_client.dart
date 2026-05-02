@@ -49,6 +49,11 @@ class AdminCatalogResponse {
 }
 
 /// SFID 人口快照响应。
+///
+/// ADR-008 step3:凭证双层匹配。SFID 后端在签发人口快照时下发
+/// (province, signer_admin_pubkey) — 链端 RuntimePopulationSnapshotVerifier
+/// 走 `sheng_signing_pubkey_for_admin(province, admin_pubkey)` 双映射查派生
+/// 公钥;无对应记录直接拒签。wuminapp 在线端透传到 chain extrinsic,不二次校验。
 class PopulationSnapshotResponse {
   const PopulationSnapshotResponse({
     required this.genesisHash,
@@ -56,6 +61,8 @@ class PopulationSnapshotResponse {
     required this.snapshotNonce,
     required this.signature,
     required this.who,
+    required this.province,
+    required this.signerAdminPubkey,
   });
 
   final String genesisHash;
@@ -69,6 +76,14 @@ class PopulationSnapshotResponse {
 
   /// 归一化后的账户公钥 hex。
   final String who;
+
+  /// 签发 admin 所属省份(UTF-8 中文,如 "安徽省")。
+  /// SFID 后端按登录省管理员路由下发,链端 SCALE 末尾必填字段。
+  final String province;
+
+  /// 签发本凭证的省管理员 admin pubkey(0x 小写 hex,32 字节)。
+  /// feedback_pubkey_format_rule.md:内部统一 0x 小写 hex。
+  final String signerAdminPubkey;
 }
 
 class ApiClient {
@@ -321,12 +336,30 @@ class ApiClient {
       throw Exception('population snapshot invalid response: missing data');
     }
 
+    final province = (data['province']?.toString() ?? '').trim();
+    final signerAdminPubkeyRaw =
+        (data['signer_admin_pubkey']?.toString() ?? '').trim();
+    if (province.isEmpty) {
+      throw Exception(
+          'population snapshot 缺少 province 字段(ADR-008 step3 必填)');
+    }
+    if (signerAdminPubkeyRaw.isEmpty) {
+      throw Exception(
+          'population snapshot 缺少 signer_admin_pubkey 字段(ADR-008 step3 必填)');
+    }
+    // feedback_pubkey_format_rule.md:统一 0x 小写 hex。
+    final signerAdminPubkey = signerAdminPubkeyRaw.startsWith('0x')
+        ? signerAdminPubkeyRaw.toLowerCase()
+        : '0x${signerAdminPubkeyRaw.toLowerCase()}';
+
     return PopulationSnapshotResponse(
       eligibleTotal: (data['eligible_total'] as num?)?.toInt() ?? 0,
       snapshotNonce: (data['snapshot_nonce']?.toString() ?? '').trim(),
       genesisHash: (data['genesis_hash']?.toString() ?? '').trim(),
       signature: (data['signature']?.toString() ?? '').trim(),
       who: (data['who']?.toString() ?? '').trim(),
+      province: province,
+      signerAdminPubkey: signerAdminPubkey,
     );
   }
 
