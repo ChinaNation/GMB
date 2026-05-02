@@ -7,7 +7,7 @@ import { Card, Button, Alert, message, Descriptions, Tag } from 'antd';
 import type { AdminAuth } from '../../api/client';
 import { activateSigner, type SignerActivateResult } from './api';
 import { ShengSlotLabel } from './types';
-import { glassCardStyle, glassCardHeadStyle } from '../../App';
+import { glassCardStyle, glassCardHeadStyle } from '../../common/cardStyles';
 
 interface Props {
   auth: AdminAuth;

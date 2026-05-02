@@ -11,7 +11,7 @@ import { listCitizens, scanCpmsStatusQr, citizenPushChainBind, citizenPushChainU
 import { decodeSs58 } from '../utils/ss58';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { useAuth } from '../hooks/useAuth';
-import { glassCardStyle, glassCardHeadStyle } from '../App';
+import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { BindModal } from './BindModal';
 
 

@@ -37,23 +37,6 @@ import { CitizensView } from './citizens/CitizensView';
 
 const { Header, Content } = Layout;
 
-/** 业务卡片统一毛玻璃风格(export 给业务子目录复用,保持视觉一致) */
-export const glassCardStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.92)',
-  backdropFilter: 'blur(16px)',
-  borderRadius: 16,
-  boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-  border: '1px solid rgba(255,255,255,0.6)'
-};
-
-/** Card title 左侧 teal 竖条 + 加粗(export 同上) */
-export const glassCardHeadStyle: React.CSSProperties = {
-  borderBottom: '1px solid #e5e7eb',
-  borderLeft: '3px solid #0d9488',
-  paddingLeft: 20,
-  fontWeight: 600
-};
-
 /** Header 右上角的管理员显示名称 */
 function resolveHeaderAdminName(auth: AdminAuth | null): string {
   if (!auth) return '';

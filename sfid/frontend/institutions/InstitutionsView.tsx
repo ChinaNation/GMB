@@ -1,7 +1,7 @@
 // 中文注释:通用机构 tab 视图。公安局/公权机构/私权机构三个 tab 共享同一套 UI,
 // 仅通过 `category` 参数切换数据过滤 + 锁字段规则。
 //
-// 视觉完全复用"注册局"的 Card 样式(glassCardStyle / glassCardHeadStyle 直接从 App.tsx 导入),
+// 视觉完全复用"注册局"的 Card 样式(glassCardStyle / glassCardHeadStyle),
 // 保证横线颜色、毛玻璃底、绿色左竖条与注册局完全一致。
 //
 // Card title 布局:
@@ -20,7 +20,7 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { useScope } from '../hooks/useScope';
 import type { AdminAuth, SfidMetaResult } from '../api/client';
 import type { InstitutionCategory } from '../api/institution';
-import { glassCardStyle, glassCardHeadStyle } from '../App';
+import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 
 interface Props {
   auth: AdminAuth;
