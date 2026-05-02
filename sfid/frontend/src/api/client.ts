@@ -1,11 +1,16 @@
 export type TokenAdminAuth = {
   access_token: string;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
+  role: 'SHENG_ADMIN' | 'SHI_ADMIN';
   admin_name?: string;
   admin_province?: string | null;
   /// 仅 ShiAdmin 有值：操作员所属的市（用于多签管理页锁定 / 列表过滤）
   admin_city?: string | null;
+  /// ADR-008 起 SHENG_ADMIN 三槽自治。当前登录 admin 的槽位标记。
+  /// 仅前端展示与权限判断用,链上权威字段以 sheng-admin/roster 为准。
+  unlocked_slot?: import('../types/slot').ShengSlot | null;
+  /// 当前已解锁的省级签名密钥对应的 admin pubkey(三槽各一把,默认 = admin_pubkey)。
+  unlocked_admin_pubkey?: string | null;
 };
 
 export type AdminAuth = TokenAdminAuth;
@@ -86,7 +91,7 @@ export function adminHeaders(auth: AdminAuth): HeadersInit {
 export type AdminAuthCheck = {
   ok: boolean;
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
+  role: 'SHENG_ADMIN' | 'SHI_ADMIN';
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;
@@ -94,7 +99,7 @@ export type AdminAuthCheck = {
 
 export type AdminIdentifyResult = {
   admin_pubkey: string;
-  role: 'KEY_ADMIN' | 'SHENG_ADMIN' | 'SHI_ADMIN';
+  role: 'SHENG_ADMIN' | 'SHI_ADMIN';
   status: 'ACTIVE' | 'DISABLED';
   admin_name: string;
   admin_province?: string | null;
@@ -231,46 +236,6 @@ export type CpmsArchiveImportResult = {
 export type CpmsStatusScanResult = {
   archive_no: string;
   status: 'NORMAL' | 'ABNORMAL';
-  message: string;
-};
-
-export type KeyringStateResult = {
-  version: number;
-  main_pubkey: string;
-  main_name: string;
-  backup_a_pubkey: string;
-  backup_a_name: string;
-  backup_b_pubkey: string;
-  backup_b_name: string;
-  updated_at: number;
-};
-
-export type KeyringRotateChallengeResult = {
-  challenge_id: string;
-  keyring_version: number;
-  challenge_text: string;
-  expire_at: number;
-};
-
-export type KeyringRotateCommitResult = {
-  old_main_pubkey: string;
-  promoted_slot: 'MAIN' | 'BACKUP_A' | 'BACKUP_B';
-  chain_tx_hash?: string;
-  chain_submit_ok: boolean;
-  chain_submit_error?: string | null;
-  version: number;
-  main_pubkey: string;
-  backup_a_pubkey: string;
-  backup_b_pubkey: string;
-  updated_at: number;
-  message: string;
-};
-
-export type KeyringRotateVerifyResult = {
-  challenge_id: string;
-  initiator_pubkey: string;
-  keyring_version: number;
-  verified: boolean;
   message: string;
 };
 
@@ -765,60 +730,6 @@ export async function replaceShengAdmin(
   });
 }
 
-export async function getAttestorKeyring(auth: AdminAuth): Promise<KeyringStateResult> {
-  return request<KeyringStateResult>('/api/v1/admin/attestor/keyring', {
-    method: 'GET',
-    headers: adminHeaders(auth)
-  });
-}
-
-export async function createKeyringRotateChallenge(
-  auth: AdminAuth,
-  payload: { initiator_pubkey: string }
-): Promise<KeyringRotateChallengeResult> {
-  return request<KeyringRotateChallengeResult>('/api/v1/admin/attestor/rotate/challenge', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function verifyKeyringRotateSignature(
-  auth: AdminAuth,
-  payload: { challenge_id: string; signature: string }
-): Promise<KeyringRotateVerifyResult> {
-  return request<KeyringRotateVerifyResult>('/api/v1/admin/attestor/rotate/verify', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
-export async function commitKeyringRotate(
-  auth: AdminAuth,
-  payload: {
-    challenge_id: string;
-    signature: string;
-    new_backup_pubkey: string;
-    new_backup_name?: string;
-  }
-): Promise<KeyringRotateCommitResult> {
-  return request<KeyringRotateCommitResult>('/api/v1/admin/attestor/rotate/commit', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...adminHeaders(auth)
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
 // ── 链上余额查询 ──────────────────────────────────────
 
 export type ChainBalanceResult = {
@@ -831,7 +742,7 @@ export type ChainBalanceResult = {
 };
 
 /// 查询链上账户的 free 余额（最小单位 = 分）。
-/// 仅在密钥管理页用于展示主账户的链上余额。
+/// 通用余额查询接口,角色无关,目前供省管理员名册/激活/rotate 等页面查 SFID main 账户使用。
 export async function getChainBalance(
   auth: AdminAuth,
   accountPubkey: string,

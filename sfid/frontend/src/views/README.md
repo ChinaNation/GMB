@@ -8,10 +8,9 @@ App.tsx 是路由壳子,只负责 Layout / AuthProvider / Menu / 按 activeView 
 
 - `auth/` — 登录鉴权(LoginView)
 - `citizens/` — 注册局 + 业务员绑定/解绑
-- `operators/` — 市管理员(ShiAdmin)
-- `sheng-admins/` — 省管理员(ShengAdmin),含 system-settings 分支
-- `keyring/` — KeyAdmin 密钥轮换 + 主账户余额
-- `institutions/` — 私权/公权/公安局机构共享视图
+- `shi_admin/` — 市管理员(ShiAdmin)
+- `sheng_admin/` — 省管理员(ShengAdmin,3-tier:Main/Backup1/Backup2),含 system-settings 分支
+- `institutions/` — 私权/公权/公安局机构共享视图(ADR-008 起 keyring/ 已删,KEY_ADMIN 角色彻底废止)
 - `common/` — 跨 view 共享小组件(ProvinceGrid/CityGrid)
 
 ## 新增功能流程

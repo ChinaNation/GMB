@@ -28,9 +28,8 @@ import type { AdminAuth, SfidMetaResult } from '../api/client';
 import { adminLogout, checkAdminAuth, getSfidMeta } from '../api/client';
 import { LoginView } from '../views/auth/LoginView';
 import { InstitutionsView } from '../views/institutions/InstitutionsView';
-import { OperatorsView } from '../views/operators/OperatorsView';
-import { ShengAdminsView } from '../views/sheng-admins/ShengAdminsView';
-import { KeyringView } from '../views/keyring/KeyringView';
+import { OperatorsView } from '../views/shi_admin/OperatorsView';
+import { ShengAdminsView } from '../views/sheng_admin/ShengAdminsView';
 import { CitizensView } from '../views/citizens/CitizensView';
 
 const { Header, Content } = Layout;
@@ -57,7 +56,7 @@ function resolveHeaderAdminName(auth: AdminAuth | null): string {
   if (!auth) return '';
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
   if (name) return name;
-  if (auth.role === 'KEY_ADMIN') return '密钥管理员';
+  // ADR-008(2026-05-01)起 KEY_ADMIN 角色已彻底删除,只剩 SHENG_ADMIN / SHI_ADMIN。
   if (auth.role === 'SHENG_ADMIN') return '省级管理员';
   if (auth.role === 'SHI_ADMIN') return '市级管理员';
   return '';
@@ -69,7 +68,6 @@ type ActiveView =
   | 'gov-institutions'
   | 'multisig'
   | 'system-settings'
-  | 'keyring'
   | 'sheng-admins'
   | 'operators';
 
@@ -292,11 +290,6 @@ function AppInner() {
                 key: 'system-settings' as const, label: '注册局',
                 visible: capabilities.canViewSystemSettings,
                 onClick: () => setActiveView('system-settings')
-              },
-              {
-                key: 'keyring' as const, label: '密钥管理',
-                visible: capabilities.canViewKeyring,
-                onClick: () => setActiveView('keyring')
               }
             ] as const)
               .filter((tab) => tab.visible)
@@ -332,8 +325,6 @@ function AppInner() {
             <InstitutionsView key="GOV_INSTITUTION" auth={auth} category="GOV_INSTITUTION" sfidMeta={sfidMeta} />
           ) : activeView === 'multisig' && capabilities.canViewMultisig && auth ? (
             <InstitutionsView key="PRIVATE_INSTITUTION" auth={auth} category="PRIVATE_INSTITUTION" sfidMeta={sfidMeta} />
-          ) : activeView === 'keyring' && capabilities.canManageKeyring ? (
-            <KeyringView />
           ) : activeView === 'system-settings' && capabilities.canViewSystemSettings ? (
             <ShengAdminsView mode="system-settings" />
           ) : (

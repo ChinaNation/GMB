@@ -1,7 +1,6 @@
 // 中文注释:sfid 前端登录态 + 能力标志的全局 Context。
-// 步 0 目标:让 App.tsx 不再自己管 auth state,改成从 useAuth() 拿。
-// 能力标志暂时对齐 App.tsx 原来的 resolveRoleCapabilities(也就是 RoleCapabilities 形状),
-// 避免步 0 同时改动 2000+ 行 capabilities 调用点。
+// ADR-008(2026-05-01)起 KEY_ADMIN 已彻底删除,角色仅剩 SHENG_ADMIN / SHI_ADMIN。
+// 省管理员三槽自治(Main/Backup1/Backup2)由 sheng_admin 视图自身处理,本 context 只看 role + 三 槽位字段。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
@@ -12,38 +11,35 @@ import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/store
 export type RoleCapabilities = {
   canViewInstitutions: boolean;
   canViewMultisig: boolean;
-  canViewKeyring: boolean;
   canViewShengAdmins: boolean;
   canViewShiAdmins: boolean;
   canCrudShiAdmins: boolean;
   canManageInstitutions: boolean;
   canRegisterInstitutions: boolean;
-  canReplaceShengAdmins: boolean;
-  canManageKeyring: boolean;
   canStatusScan: boolean;
   canBusinessWrite: boolean;
   canViewSystemSettings: boolean;
+  /** 当前 SHENG_ADMIN 是否处于 main 槽(可对名册做加/删 backup) */
+  isShengMainSlot: boolean;
 };
 
 export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const role = auth?.role;
-  const isKeyAdmin = role === 'KEY_ADMIN';
   const isShengAdmin = role === 'SHENG_ADMIN';
   const isShiAdmin = role === 'SHI_ADMIN';
+  const isShengMainSlot = isShengAdmin && (auth?.unlocked_slot === 'Main');
   return {
-    canViewInstitutions: isKeyAdmin || isShengAdmin,
-    canViewMultisig: isKeyAdmin || isShengAdmin || isShiAdmin,
-    canViewKeyring: isKeyAdmin,
-    canViewShengAdmins: isKeyAdmin || isShengAdmin,
-    canViewShiAdmins: isKeyAdmin || isShengAdmin || isShiAdmin,
-    canCrudShiAdmins: isKeyAdmin || isShengAdmin,
-    canManageInstitutions: isKeyAdmin || isShengAdmin,
-    canRegisterInstitutions: isKeyAdmin || isShengAdmin,
-    canReplaceShengAdmins: isKeyAdmin,
-    canManageKeyring: isKeyAdmin,
-    canStatusScan: isKeyAdmin || isShengAdmin || isShiAdmin,
+    canViewInstitutions: isShengAdmin,
+    canViewMultisig: isShengAdmin || isShiAdmin,
+    canViewShengAdmins: isShengAdmin,
+    canViewShiAdmins: isShengAdmin || isShiAdmin,
+    canCrudShiAdmins: isShengAdmin,
+    canManageInstitutions: isShengAdmin,
+    canRegisterInstitutions: isShengAdmin,
+    canStatusScan: isShengAdmin || isShiAdmin,
     canBusinessWrite: true,
-    canViewSystemSettings: isKeyAdmin || isShengAdmin || isShiAdmin,
+    canViewSystemSettings: isShengAdmin || isShiAdmin,
+    isShengMainSlot,
   };
 }
 
