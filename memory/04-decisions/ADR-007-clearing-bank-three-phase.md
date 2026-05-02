@@ -74,7 +74,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 #### 2.2 node Tauri 后端改动
 
-新增 Tauri command（`citizenchain/node/src/offchain/commands.rs`，具体能力拆在 `offchain/{sfid,chain,health,signing,decrypt}.rs`）：
+新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{duoqian_manage,offchain_transaction,settlement}/commands.rs`）：
 
 - `search_eligible_clearing_banks(query, limit)`：转发 SFID `/clearing-banks/eligible-search`
 - `query_clearing_bank_node_info(sfid_id)`：链上查 `ClearingBankNodes[sfid_id]`

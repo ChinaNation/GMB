@@ -1,3 +1,8 @@
+//! 中文注释:SFID 号码生成使用的省/市/镇/村行政代码表。
+//!
+//! 本文件只保存编码与行政区层级,不再承载省管理员公钥、槽位或链上名册逻辑。
+//! 省管理员归属统一放在 `crate::sheng_admins::province_admins`。
+
 pub struct VillageCode {
     pub name: &'static str,
     pub code: &'static str,
@@ -18,55 +23,54 @@ pub struct CityCode {
 pub struct ProvinceCode {
     pub name: &'static str,
     pub code: &'static str,
-    pub pubkey: &'static str,
     pub cities: &'static [CityCode],
 }
 
 #[rustfmt::skip]
 pub const PROVINCES: [ProvinceCode; 43] = [
-    ProvinceCode {name: "中枢省",code: "ZS",pubkey: "0xd641dbfe17fa3fb2427b974212a0fe821b12576e0eade088309d4f05f2cc9930",cities: &m01_zs::CITIES_ZS,},
-    ProvinceCode {name: "岭南省",code: "LN",pubkey: "0xe28a39b8f9f9bdc7d0d5c2f6bf290f892a25aeeb34c57002cdb978d13c4efa26",cities: &m02_ln::CITIES_LN,},
-    ProvinceCode {name: "广东省",code: "GD",pubkey: "0x5cdd16e9a9b63f2660ad7829c6d2004ddb713ea46ee5086e53edbda3dd175b42",cities: &m03_gd::CITIES_GD,},
-    ProvinceCode {name: "广西省",code: "GX",pubkey: "0x1cb60c7ae7236b61ab6d678ee240978ba7653174f725cebe50db02642f2e9129",cities: &m04_gx::CITIES_GX,},
-    ProvinceCode {name: "福建省",code: "FJ",pubkey: "0x02d25858d77d87bf0637bdf37e0ae45819bed00b06ed41dc3c2e4888512a7003",cities: &m05_fj::CITIES_FJ,},
-    ProvinceCode {name: "海南省",code: "HN",pubkey: "0x94c8853d6090b02581659cae1ce33ce0b3c84078b606e53e052d8439e73fec1e",cities: &m06_hn::CITIES_HN,},
-    ProvinceCode {name: "云南省",code: "YN",pubkey: "0xe658db8112f1ea0a7d2e63b7622e2514c5c65a89db441e3df507272ab2d6231e",cities: &m07_yn::CITIES_YN,},
-    ProvinceCode {name: "贵州省",code: "GZ",pubkey: "0xfe7176d115b207356914f92e2da1391db92bc5a463be7f89f2b37d65e367895e",cities: &m08_gz::CITIES_GZ,},
-    ProvinceCode {name: "湖南省",code: "HU",pubkey: "0x8aaa255eb6fc0ae304b89a55e93809092f897641917f78d0d1e360c198599105",cities: &m09_hu::CITIES_HU,},
-    ProvinceCode {name: "江西省",code: "JX",pubkey: "0x6c11e617a58e56ba71a2d92b7e989de1a649e4103776dbd8465a3f729b66ca31",cities: &m10_jx::CITIES_JX,},
-    ProvinceCode {name: "浙江省",code: "ZJ",pubkey: "0xf47373164ca9f7167e1da17955761b17e38823348c8aeecb5f259a25d3ad6d2f",cities: &m11_zj::CITIES_ZJ,},
-    ProvinceCode {name: "江苏省",code: "JS",pubkey: "0x78bc0525055f37f2c7245e94dc95baa3dafc1dc051631f0333bd9dbf9818fb0e",cities: &m12_js::CITIES_JS,},
-    ProvinceCode {name: "山东省",code: "SD",pubkey: "0x9edf2e0e022b9ff892175528d4a87ef466c0896cc2586b705523932cfd5a1777",cities: &m13_sd::CITIES_SD,},
-    ProvinceCode {name: "山西省",code: "SX",pubkey: "0xac2d0d1ffed7aa373adefa5ddfbc4f377edc91b825b2b13464932bbbb264b40f",cities: &m14_sx::CITIES_SX,},
-    ProvinceCode {name: "河南省",code: "HE",pubkey: "0xdc95de49abd2d371b368256939d15370d0f9915d738d52434431b0c763004b50",cities: &m15_he::CITIES_HE,},
-    ProvinceCode {name: "河北省",code: "HB",pubkey: "0x604925f9cb49555816b880542cb8045ad4e50165351f5b14d1fd111171bb8617",cities: &m16_hb::CITIES_HB,},
-    ProvinceCode {name: "湖北省",code: "HI",pubkey: "0x1ec98129b379e9f60bad6f0d0bc73e327c20424ac5392192518b71627f752e24",cities: &m17_hi::CITIES_HI,},
-    ProvinceCode {name: "陕西省",code: "SI",pubkey: "0xf6c3e174783aeeea0afc736a42e52ebd2029b4a56de04e9a5301d98094332f45",cities: &m18_si::CITIES_SI,},
-    ProvinceCode {name: "重庆省",code: "CQ",pubkey: "0x1c6f70806461448e7e2621cf29b0924aee483300f4554bea393c1b9c54e78442",cities: &m19_cq::CITIES_CQ,},
-    ProvinceCode {name: "四川省",code: "SC",pubkey: "0x7ed7d3bd8ae09960884ff1a98db4493fc5f6818e900f45f66b6b7e76e11e8274",cities: &m20_sc::CITIES_SC,},
-    ProvinceCode {name: "甘肃省",code: "GS",pubkey: "0x52be4ed7bf042b94a4f54ea74369133f5e6ced79e03e84020093c8ec73114c78",cities: &m21_gs::CITIES_GS,},
-    ProvinceCode {name: "北平省",code: "BP",pubkey: "0x940e9a759ce49bee1a49eb8a32dbd03a8813e52f4632534d4cc5c4b7a4cea746",cities: &m22_bp::CITIES_BP,},
-    ProvinceCode {name: "海滨省",code: "HA",pubkey: "0xfccb22b76f7fff0f05dbbab53cba7bbe1bbe0edfece43b139321bec88cb7aa1f",cities: &m23_ha::CITIES_HA,},
-    ProvinceCode {name: "松江省",code: "SJ",pubkey: "0x1a1c763345d8bb2e08b30e18788c1bc8e977fd54ba61aa936a8c5db13cf09c03",cities: &m24_sj::CITIES_SJ,},
-    ProvinceCode {name: "龙江省",code: "LJ",pubkey: "0x4a74ce94de45a80b73850750fd2b08c1782f8e6f4a2301fc2a72af7938a92436",cities: &m25_lj::CITIES_LJ,},
-    ProvinceCode {name: "吉林省",code: "JL",pubkey: "0x9a2c2b408a0773c19cfc7207780571ab321dd285f11b7a1bb09e013fed73e737",cities: &m26_jl::CITIES_JL,},
-    ProvinceCode {name: "辽宁省",code: "LI",pubkey: "0xdc3295a5e874ea91d6dcde444b698c5ecf183b16f11954c9fc71e91bfe87b377",cities: &m27_li::CITIES_LI,},
-    ProvinceCode {name: "宁夏省",code: "NX",pubkey: "0xf05e4afa76f9d883151a6ef656013efef42a6821feef45b42b43f67eca6d6328",cities: &m28_nx::CITIES_NX,},
-    ProvinceCode {name: "青海省",code: "QH",pubkey: "0x1af800fa82965b12fa04f7a87245cc9be5d3fb8cf88a1026e3dc45eacfec405d",cities: &m29_qh::CITIES_QH,},
-    ProvinceCode {name: "安徽省",code: "AH",pubkey: "0x5498141113bf85eca686955162ee2912ac6c3b050ba9ffa102ac923ab0bb350b",cities: &m30_ah::CITIES_AH,},
-    ProvinceCode {name: "台湾省",code: "TW",pubkey: "0xd81866ce95bc72bc7f66e67262e829dcde04b069df3f816faa2865a9382fbf25",cities: &m31_tw::CITIES_TW,},
-    ProvinceCode {name: "西藏省",code: "XZ",pubkey: "0x506bb4c300584f13b4307e8cdc251e7756f212c2ee7c302bdd778688c47b201b",cities: &m32_xz::CITIES_XZ,},
-    ProvinceCode {name: "新疆省",code: "XJ",pubkey: "0x9281ec501bb174b6a608e23fe74770643bdb14e9f26f1aee45f740e3e1d80657",cities: &m33_xj::CITIES_XJ,},
-    ProvinceCode {name: "西康省",code: "XK",pubkey: "0xbc6215cb2b86840fb27864f72f08ba09a552e2dfcb38fe8ec010664c37e6b748",cities: &m34_xk::CITIES_XK,},
-    ProvinceCode {name: "阿里省",code: "AL",pubkey: "0xb217302c1c6d099df4a440126df288b74c17ec6b59cd02952b772f47e8154c6d",cities: &m35_al::CITIES_AL,},
-    ProvinceCode {name: "葱岭省",code: "CL",pubkey: "0x98db54a14cdb9015525467d129668eb58573103013ee9ec8ba380384e2b54b41",cities: &m36_cl::CITIES_CL,},
-    ProvinceCode {name: "天山省",code: "TS",pubkey: "0x463d76ac7e1d3c4cb3355128395189d17bbafb6552a9fdacf075b1fe1f13c32c",cities: &m37_ts::CITIES_TS,},
-    ProvinceCode {name: "河西省",code: "HX",pubkey: "0x2608cab4ded7bee2ac75d55d46d76904f1907b90a4ef768e03cc1663a04de062",cities: &m38_hx::CITIES_HX,},
-    ProvinceCode {name: "昆仑省",code: "KL",pubkey: "0xc645ea0c6e3adb4809268d13cd9820fd759056b2382a5531406873638ce7044a",cities: &m39_kl::CITIES_KL,},
-    ProvinceCode {name: "河套省",code: "HT",pubkey: "0x10972b4b6b227da8cb90cac066502d7210a50955256c83ec083f6b87e3abd71e",cities: &m40_ht::CITIES_HT,},
-    ProvinceCode {name: "热河省",code: "RH",pubkey: "0x1e312af5890084151339ec37b9e7145211366c7ac3163a5ca3d7e8ccb809d674",cities: &m41_rh::CITIES_RH,},
-    ProvinceCode {name: "兴安省",code: "XA",pubkey: "0x10e74326066fceebb3eb103182f36825dee56b077722900c4f718a1fe754823b",cities: &m42_xa::CITIES_XA,},
-    ProvinceCode {name: "合江省",code: "HJ",pubkey: "0x8c72490d8774dc1c4305825d82788ad1bd1dc53b06360c2301974e6bc12df638",cities: &m43_hj::CITIES_HJ,},
+    ProvinceCode {name: "中枢省",code: "ZS",cities: &m01_zs::CITIES_ZS,},
+    ProvinceCode {name: "岭南省",code: "LN",cities: &m02_ln::CITIES_LN,},
+    ProvinceCode {name: "广东省",code: "GD",cities: &m03_gd::CITIES_GD,},
+    ProvinceCode {name: "广西省",code: "GX",cities: &m04_gx::CITIES_GX,},
+    ProvinceCode {name: "福建省",code: "FJ",cities: &m05_fj::CITIES_FJ,},
+    ProvinceCode {name: "海南省",code: "HN",cities: &m06_hn::CITIES_HN,},
+    ProvinceCode {name: "云南省",code: "YN",cities: &m07_yn::CITIES_YN,},
+    ProvinceCode {name: "贵州省",code: "GZ",cities: &m08_gz::CITIES_GZ,},
+    ProvinceCode {name: "湖南省",code: "HU",cities: &m09_hu::CITIES_HU,},
+    ProvinceCode {name: "江西省",code: "JX",cities: &m10_jx::CITIES_JX,},
+    ProvinceCode {name: "浙江省",code: "ZJ",cities: &m11_zj::CITIES_ZJ,},
+    ProvinceCode {name: "江苏省",code: "JS",cities: &m12_js::CITIES_JS,},
+    ProvinceCode {name: "山东省",code: "SD",cities: &m13_sd::CITIES_SD,},
+    ProvinceCode {name: "山西省",code: "SX",cities: &m14_sx::CITIES_SX,},
+    ProvinceCode {name: "河南省",code: "HE",cities: &m15_he::CITIES_HE,},
+    ProvinceCode {name: "河北省",code: "HB",cities: &m16_hb::CITIES_HB,},
+    ProvinceCode {name: "湖北省",code: "HI",cities: &m17_hi::CITIES_HI,},
+    ProvinceCode {name: "陕西省",code: "SI",cities: &m18_si::CITIES_SI,},
+    ProvinceCode {name: "重庆省",code: "CQ",cities: &m19_cq::CITIES_CQ,},
+    ProvinceCode {name: "四川省",code: "SC",cities: &m20_sc::CITIES_SC,},
+    ProvinceCode {name: "甘肃省",code: "GS",cities: &m21_gs::CITIES_GS,},
+    ProvinceCode {name: "北平省",code: "BP",cities: &m22_bp::CITIES_BP,},
+    ProvinceCode {name: "海滨省",code: "HA",cities: &m23_ha::CITIES_HA,},
+    ProvinceCode {name: "松江省",code: "SJ",cities: &m24_sj::CITIES_SJ,},
+    ProvinceCode {name: "龙江省",code: "LJ",cities: &m25_lj::CITIES_LJ,},
+    ProvinceCode {name: "吉林省",code: "JL",cities: &m26_jl::CITIES_JL,},
+    ProvinceCode {name: "辽宁省",code: "LI",cities: &m27_li::CITIES_LI,},
+    ProvinceCode {name: "宁夏省",code: "NX",cities: &m28_nx::CITIES_NX,},
+    ProvinceCode {name: "青海省",code: "QH",cities: &m29_qh::CITIES_QH,},
+    ProvinceCode {name: "安徽省",code: "AH",cities: &m30_ah::CITIES_AH,},
+    ProvinceCode {name: "台湾省",code: "TW",cities: &m31_tw::CITIES_TW,},
+    ProvinceCode {name: "西藏省",code: "XZ",cities: &m32_xz::CITIES_XZ,},
+    ProvinceCode {name: "新疆省",code: "XJ",cities: &m33_xj::CITIES_XJ,},
+    ProvinceCode {name: "西康省",code: "XK",cities: &m34_xk::CITIES_XK,},
+    ProvinceCode {name: "阿里省",code: "AL",cities: &m35_al::CITIES_AL,},
+    ProvinceCode {name: "葱岭省",code: "CL",cities: &m36_cl::CITIES_CL,},
+    ProvinceCode {name: "天山省",code: "TS",cities: &m37_ts::CITIES_TS,},
+    ProvinceCode {name: "河西省",code: "HX",cities: &m38_hx::CITIES_HX,},
+    ProvinceCode {name: "昆仑省",code: "KL",cities: &m39_kl::CITIES_KL,},
+    ProvinceCode {name: "河套省",code: "HT",cities: &m40_ht::CITIES_HT,},
+    ProvinceCode {name: "热河省",code: "RH",cities: &m41_rh::CITIES_RH,},
+    ProvinceCode {name: "兴安省",code: "XA",cities: &m42_xa::CITIES_XA,},
+    ProvinceCode {name: "合江省",code: "HJ",cities: &m43_hj::CITIES_HJ,},
 ];
 
 #[path = "city_codes/01_ZS.rs"]
@@ -177,135 +181,4 @@ pub fn province_name_by_code(code: &str) -> Option<&'static str> {
 
 pub fn provinces() -> &'static [ProvinceCode] {
     &PROVINCES
-}
-
-pub fn sheng_admin_province(pubkey: &str) -> Option<&'static str> {
-    PROVINCES
-        .iter()
-        .find(|p| p.pubkey.eq_ignore_ascii_case(pubkey))
-        .map(|p| p.name)
-}
-
-pub fn sheng_admin_display_name(pubkey: &str) -> Option<String> {
-    let province_name = sheng_admin_province(pubkey)?;
-    Some(format!("{province_name}省级管理员"))
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// 中文注释:省管理员 3-tier 槽位模型(ADR-008,2026-05-01)
-//
-// 每省 main / backup_1 / backup_2 三槽:
-// - main:由 PROVINCES 常量硬编码 43 把(沿用 pubkey 字段)
-// - backup_1 / backup_2:由 main 登录后通过 SFID 前端动态添加,链上
-//   ShengAdmins[Province][Slot] 持久化(链上写入留 Phase 4 实现)
-// 本结构是 SFID 端表达"某省当前生效三槽公钥"的纯数据载体,
-// fetch_backup_admins 暂为 mock,Phase 4 子卡接入真实链查。
-// ─────────────────────────────────────────────────────────────────────────
-
-/// 省管理员槽位。链上 storage `ShengAdmins[Province][Slot]` 同语义。
-///
-/// 中文注释:Phase 3 阶段本枚举先以"独立类型 + 仅 sheng_admins 内部消费"
-/// 形态存在,主流程 handler 仍走 legacy AdminRole;Phase 4+5 子卡接入后
-/// allow(dead_code) 可以一并去掉。
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Slot {
-    Main,
-    Backup1,
-    Backup2,
-}
-
-#[allow(dead_code)]
-impl Slot {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Slot::Main => "MAIN",
-            Slot::Backup1 => "BACKUP_1",
-            Slot::Backup2 => "BACKUP_2",
-        }
-    }
-}
-
-/// 某省当前生效的三槽管理员公钥。
-///
-/// - `main`:固定的 sfid/province.rs 常量 pubkey(0x 小写 hex)
-/// - `backup_1` / `backup_2`:None 表示该 slot 尚未注册;
-///   填充由 main 登录后通过 add_sheng_admin_backup 走链上(Phase 4)
-#[allow(dead_code)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProvinceAdmins {
-    pub main: [u8; 32],
-    pub backup_1: Option<[u8; 32]>,
-    pub backup_2: Option<[u8; 32]>,
-}
-
-#[allow(dead_code)]
-impl ProvinceAdmins {
-    /// 构造仅含 main 的初始状态(backup 槽全空)。
-    pub fn from_main(main: [u8; 32]) -> Self {
-        Self {
-            main,
-            backup_1: None,
-            backup_2: None,
-        }
-    }
-
-    /// 给定 pubkey,定位它属于哪个 slot。
-    pub fn slot_of(&self, pubkey: &[u8; 32]) -> Option<Slot> {
-        if &self.main == pubkey {
-            return Some(Slot::Main);
-        }
-        if let Some(b) = self.backup_1.as_ref() {
-            if b == pubkey {
-                return Some(Slot::Backup1);
-            }
-        }
-        if let Some(b) = self.backup_2.as_ref() {
-            if b == pubkey {
-                return Some(Slot::Backup2);
-            }
-        }
-        None
-    }
-}
-
-/// 把 0x 小写 hex 字符串解析为 32 字节 pubkey。失败返回 None。
-#[allow(dead_code)]
-pub fn pubkey_from_hex(hex: &str) -> Option<[u8; 32]> {
-    let trimmed = hex
-        .trim()
-        .strip_prefix("0x")
-        .or_else(|| hex.trim().strip_prefix("0X"))
-        .unwrap_or_else(|| hex.trim());
-    let raw = ::hex::decode(trimmed).ok()?;
-    if raw.len() != 32 {
-        return None;
-    }
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&raw);
-    Some(out)
-}
-
-/// 中文注释:Phase 3 mock 实现,链上 backup 公钥目前固定返回 [None, None]。
-/// Phase 4 子卡接入 chain pull(ShengAdmins[Province][Backup1|Backup2])。
-///
-/// 调用方:`sheng_admins/login.rs` 在受理 backup 登录挑战时,需要查询
-/// 当前省 backup_1 / backup_2 公钥来判定签名合法性。
-#[allow(dead_code)]
-pub fn fetch_backup_admins(_province: &str) -> [Option<[u8; 32]>; 2] {
-    tracing::warn!("fetch_backup_admins mocked, awaiting Phase 4 chain pull");
-    [None, None]
-}
-
-/// 用 main const + mock backup 拼出本省 ProvinceAdmins。
-#[allow(dead_code)]
-pub fn province_admins_for(province_name: &str) -> Option<ProvinceAdmins> {
-    let p = PROVINCES.iter().find(|p| p.name == province_name)?;
-    let main = pubkey_from_hex(p.pubkey)?;
-    let [b1, b2] = fetch_backup_admins(province_name);
-    Some(ProvinceAdmins {
-        main,
-        backup_1: b1,
-        backup_2: b2,
-    })
 }

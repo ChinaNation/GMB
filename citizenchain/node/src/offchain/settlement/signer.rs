@@ -1,9 +1,9 @@
-//! 扫码支付 Step 2b-ii-β-1 新增:基于 `offchain::keystore::SigningKey` 的批次签名器。
+//! 扫码支付 Step 2b-ii-β-1 新增:基于 `settlement::keystore::SigningKey` 的批次签名器。
 //!
 //! 中文注释:
 //! - 本文件实现 `packer::BatchSigner` trait,把 batch 的签名消息转交给清算行
 //!   管理员的 sr25519 私钥。
-//! - `SigningKey` 沿用 `offchain/keystore.rs` 的密钥容器,
+//! - `SigningKey` 沿用 `settlement/keystore.rs` 的密钥容器,
 //!   Step 2b-iv 删除旧省储行路径时再考虑是否统一)。持有 `Arc<RwLock<Option<..>>>`
 //!   是为了支持**热切换密钥**(节点运行中重新解锁后替换 inner)+ 未加载时 None
 //!   的情况下签名直接返回 Err,便于 packer 通过 `rollback` 路径回滚 pending。
@@ -19,9 +19,8 @@
 use sp_core::{sr25519, Pair};
 use std::sync::{Arc, RwLock};
 
-use crate::offchain::keystore::SigningKey;
-
 use super::packer::BatchSigner;
+use super::keystore::SigningKey;
 
 /// 基于 `SigningKey` 的 `BatchSigner` 实现。
 pub struct KeystoreBatchSigner {

@@ -3,7 +3,9 @@
 //! 中文注释:
 //! - 本目录统一承载 node 层清算行功能,包括清算行管理命令、本地账本、
 //!   对 wuminapp 的 RPC、批次打包器、链上事件监听同步、主账对账。
-//! - `commands`:Tauri 前端清算行页面的 SFID 查询、链上查询、扫码签名、解密入口。
+//! - `duoqian_manage`:清算行注册机构的多签创建、SFID 查询、链上机构详情。
+//! - `offchain_transaction`:扫码支付收单、本地交易账本、清算行节点声明。
+//! - `settlement`:清算行批次打包、管理员解锁、签名、提交与链上监听。
 //! - `service::new_full` 检测到 `--clearing-bank` CLI flag 时,调
 //!   `start_clearing_bank_components` 启动本目录下的组件,并 spawn:
 //!     - `offchain-clearing-packer`(30 秒 tick)
@@ -12,25 +14,15 @@
 //!   不加 `--clearing-bank` 的节点仅跑 PoW + GRANDPA,跳过本目录所有启动。
 //!
 //! 模块边界(对照上层 ADR-006/ADR-007):
-//! - `sfid` / `chain` / `health` / `signing` / `decrypt`:清算行管理流程。
-//! - `ledger`:清算行本地 L3 存款缓存(权威账本在链上 `DepositBalance`)
-//! - `rpc`:对 wuminapp 的查询 / 扫码支付提交
-//! - `settlement`:批次聚合、清算行多签、上链提交、链上事件监听。
-//! - `reserve`:本地 `Σ confirmed` 与链上 `BankTotalDeposits` 周期对账
+//! - `duoqian_manage`:只管清算行注册机构的多签管理。
+//! - `offchain_transaction`:只管扫码支付收单与清算行节点声明。
+//! - `settlement`:只管本清算行交易打包上链与结算 worker。
 
-pub(crate) mod bootstrap;
-pub mod chain;
-pub(crate) mod commands;
-pub mod decrypt;
-pub mod health;
-pub mod keystore;
-pub mod ledger;
-pub mod reserve;
-pub mod rpc;
+pub mod common;
+pub mod duoqian_manage;
+pub mod duoqian_transfer;
+pub mod offchain_transaction;
 pub mod settlement;
-pub mod sfid;
-pub mod signing;
-pub mod types;
 
 use codec::{Decode, Encode};
 use sc_client_api::StorageProvider;
@@ -40,14 +32,13 @@ use sp_storage::StorageKey;
 use std::path::Path;
 use std::sync::Arc;
 
-use self::ledger::OffchainLedger;
-use self::reserve::ReserveMonitor;
-use self::rpc::OffchainClearingRpcImpl;
+use self::offchain_transaction::ledger::OffchainLedger;
+use self::offchain_transaction::rpc::OffchainClearingRpcImpl;
 use self::settlement::listener::EventListener;
 use self::settlement::packer::{
     BatchSigner, BatchSubmitter, NoopBatchSigner, NoopBatchSubmitter, OffchainPacker,
 };
-pub use self::settlement::signer::KeystoreBatchSigner;
+use self::settlement::reserve::ReserveMonitor;
 
 /// Step 2b 新增:清算行节点一次性启动时组装的组件集合。
 ///
@@ -78,7 +69,7 @@ pub struct OffchainComponents {
 /// [`password`]   节点启动时用于 AES-256-GCM 风格加密 ledger 的对称密钥字符串
 ///                (目前实现为 blake2b_256(password) XOR 流 + HMAC,见 `ledger.rs`)。
 /// [`signer`]     批次签名器。Step 2b-ii-α 传 `NoopBatchSigner`;Step 2b-ii-β
-///                传真实 `KeystoreBatchSigner`(从 `offchain::keystore` 派生)。
+///                传真实 `KeystoreBatchSigner`(从 `offchain::settlement::keystore` 派生)。
 /// [`submitter`]  extrinsic 提交器。Step 2b-ii-α 传 `NoopBatchSubmitter`;Step
 ///                2b-ii-β 传真实 `PoolBatchSubmitter`(拼 RuntimeCall + 调
 ///                `TransactionPool`)。

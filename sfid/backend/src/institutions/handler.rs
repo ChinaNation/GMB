@@ -21,7 +21,7 @@
 //! ## 已搬迁(2026-05-01 chain/ 重构)
 //!
 //! 区块链 / 钱包 pull 用的"机构信息查询"5 个 endpoint(无鉴权)已搬到
-//! `crate::chain::institution_info::*`,本文件不再持有。
+//! `crate::chain::duoqian_info::*`,本文件不再持有。
 //!
 //! 历史 `POST /api/v1/app/institutions/:sfid_id/chain-sync(sync_institution_chain_state)`
 //! 配套 SFID 主动读链场景,2026-05-01 一并下架(SFID 不再读链)。
@@ -1342,18 +1342,16 @@ pub(crate) async fn list_accounts(
     .into_response()
 }
 
-
-// ─── 5b/扫码支付/清算行候选搜索 已搬 chain/institution_info/ ─────────
+// ─── 5b/扫码支付/清算行候选搜索 已搬 chain/duoqian_info/ ─────────
 //
-// 5 个 endpoint 全部移到 chain/institution_info/handler.rs:
+// 5 个 endpoint 全部移到 chain/duoqian_info/handler.rs:
 //   - app_search_institutions / app_get_institution / app_list_accounts
 //   - app_search_clearing_banks / app_search_eligible_clearing_banks
 //
 // 历史 sync_institution_chain_state(POST /app/institutions/:sfid_id/chain-sync)
 // 0 caller,与 SFID 不再读链铁律冲突,2026-05-01 一并下架。
 //
-// 调用入口现走 `crate::chain::institution_info::*` 重新导出。
-
+// 调用入口现走 `crate::chain::duoqian_info::*` 重新导出。
 
 // ─── 6. 删除账户(软删,不触链)──────────────────────────────────
 

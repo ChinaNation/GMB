@@ -38,8 +38,8 @@ pub use cities::{cities_of, real_cities_of};
 pub use generator::{generate_sfid_code, GenerateSfidInput};
 pub use institution_code::InstitutionCode;
 pub use province::{
-    city_code_by_name, province_code_by_name, province_name_by_code, provinces,
-    sheng_admin_display_name, sheng_admin_province, CityCode, ProvinceCode,
+    city_code_by_name, province_code_by_name, province_name_by_code, provinces, CityCode,
+    ProvinceCode,
 };
 pub use validator::{
     validate_sfid_id_format, SFID_ID_MAX_BYTES, SFID_ID_SEGMENT_A3_LEN, SFID_ID_SEGMENT_COUNT,
