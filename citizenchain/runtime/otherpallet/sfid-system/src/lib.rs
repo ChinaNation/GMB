@@ -729,22 +729,6 @@ pub mod pallet {
             ShengAdmins::<T>::get(&bounded, Slot::Main).as_ref() == Some(pubkey)
         }
 
-        /// 中文注释:**编译垫片**(Step 2b 起删除)。
-        /// ADR-008 后链上不再保留单一 SFID 主公钥,所有验签按 (province, admin_pubkey) 二元组进行。
-        /// 本 fn 临时返回 None 以保住下游(`runtime/src/configs/mod.rs` verifier fallback / 旧 RuntimeSfidVerifier)
-        /// 编译;Step 2b 改造完后必须连同 caller 一起删。
-        #[deprecated(note = "ADR-008 step2b: 改用 sheng_signing_pubkey_for_admin")]
-        pub fn current_sfid_verify_pubkey() -> Option<[u8; 32]> {
-            None
-        }
-
-        /// 中文注释:**编译垫片**(Step 2b 起删除)。
-        /// 旧的"按省单一签名公钥"语义在 ADR-008 后退役,改为 `sheng_signing_pubkey_for_admin`。
-        #[deprecated(note = "ADR-008 step2b: 改用 sheng_signing_pubkey_for_admin")]
-        pub fn sheng_signing_pubkey(_province: &[u8]) -> Option<[u8; 32]> {
-            None
-        }
-
         // ---- Helpers (内部) ----
 
         fn bounded_province(province: &[u8]) -> Result<ProvinceBound, Error<T>> {
