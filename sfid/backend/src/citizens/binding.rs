@@ -1,3 +1,9 @@
+//! 公民身份绑定/解绑 handler 集合。
+//!
+//! 含 challenge 签发、`citizen_bind` / `citizen_unbind`、链上推送
+//! (`citizen_push_chain_bind/unbind`) 以及 wuminapp 投票账户登记/查询。
+//! 链交互能力位于 `chain::citizen_binding`。
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},

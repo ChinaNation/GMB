@@ -42,3 +42,51 @@
 ## 工作量
 
 ~1 agent round
+
+## Progress
+
+### 2026-05-01 phase23d 子卡完工
+
+**搬迁动作**:
+
+- `git mv sfid/backend/src/operate/{binding,cpms_qr,status}.rs` → `sfid/backend/src/citizens/`
+- 删 `sfid/backend/src/operate/mod.rs` + `rmdir operate/`
+- 新建 `sfid/backend/src/citizens/{mod,handler,vote}.rs`(handler/vote 空骨架 + `//!` 中文用途说明)
+- 三个迁入文件顶部补 `//!` 模块级文档注释
+
+**调用方更新**(13 处):
+
+- `main.rs:32` `mod operate;` → `mod citizens;`(同 mod 列字母序就位)
+- `main.rs:1005-1089` 7 处路由 `operate::binding::*` → `citizens::binding::*`
+- `main.rs:1065` 注释 "indexer / operate 模块" → "indexer / citizens 模块"
+- `shi_admins/mod.rs:10` `crate::operate::status` → `crate::citizens::status`
+- `citizens/status.rs:99` 自引用 `crate::operate::cpms_qr` → `crate::citizens::cpms_qr`
+- `chain/citizen_binding/mod.rs:13` 注释 `crate::operate::binding` → `crate::citizens::binding`
+- `sfid/generator.rs:7` 注释 `operate::binding` → `citizens::binding`(去掉过渡说明)
+- `main_tests.rs:201,204` 注释 `operate::binding` → `citizens::binding`(2 处)
+
+**文档同步**:
+
+- `git mv memory/05-modules/sfid/backend/operate/OPERATE_TECHNICAL.md` →
+  `memory/05-modules/sfid/backend/citizens/CITIZENS_TECHNICAL.md` 并改写正文(模块定位/路由表/审计事件全部对齐 phase23d 后形态)
+- `shi_admins/SHI_ADMINS_TECHNICAL.md`:`operate::status` → `citizens::status`(2 处)
+- `sheng_admins/SHENG_ADMINS_TECHNICAL.md`:`backend/src/operate/status.rs` → `backend/src/citizens/status.rs`
+- `business/BUSINESS_TECHNICAL.md`:"操作业务在 backend/src/operate" → "公民身份业务在 backend/src/citizens"
+- `models/MODELS_TECHNICAL.md`:列出业务模块时 `operate(操作业务)` → `citizens(公民身份业务)`
+- `sfid/SFID_TECHNICAL.md`:铁律说明里 `operate` → `citizens`
+
+**验收**:
+
+- `cargo check` 全绿(3 baseline province dead_code warnings)
+- `cargo test` **79 passed / 0 failed / 0 ignored**
+- `cargo clippy --all-targets -- -D warnings` 59 errors = baseline(零新增)
+- `grep -rn "crate::operate\|operate::\|src/operate/" sfid/backend/src/` = **0 hit**
+- `grep -rn "crate::citizens\|citizens::" sfid/backend/src/` = **14 hit**(≥8 阈值)
+- `ls sfid/backend/src/operate/` = 不存在
+- `citizens/{handler,vote}.rs` 空骨架 + `//!` 中文用途说明
+
+**后续提醒**:
+
+- handler/vote 拆分留给后续 Phase(任务卡里已说明,phase23d 不在范围)
+- cpms_qr 边界讨论(是否拆 `cpms/` 子模块)留 phase7 评估
+- phase23e 可继续拆 `key-admins/`、`chain/key_admins/`、`chain/balance/`

@@ -214,4 +214,4 @@
    - `backend/src/sheng-admins/catalog.rs`（省级管理员目录）
    - `backend/src/sheng-admins/institutions.rs`（机构管理）
 4. 省域判定：`backend/src/business/scope.rs`
-5. CPMS 状态扫码联动：`backend/src/operate/status.rs`
+5. CPMS 状态扫码联动：`backend/src/citizens/status.rs`

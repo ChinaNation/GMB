@@ -1,3 +1,8 @@
+//! CPMS 站点公民扫码 QR canonical 文本拼装与签名校验工具。
+//!
+//! 旧 CPMS QR 签名链路已废弃(SFID-CPMS QR v1 走 archive_import 端点);
+//! 此处仅保留 canonical 文本生成和兼容签名校验函数,供 `status.rs` 复用。
+
 #[allow(dead_code)]
 pub(crate) fn canonical_citizen_qr_text(
     ver: &str,

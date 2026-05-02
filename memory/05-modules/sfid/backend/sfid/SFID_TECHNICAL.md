@@ -9,7 +9,7 @@
 ## 2. 模块结构(任务卡 1 重组后)
 
 铁律:`feedback_sfid_module_is_single_entry.md` — sfid 系统所有 SFID 相关常量、枚举、生成、校验
-**必须**归位本模块,不能散在 sheng-admins / shi-admins / operate / business / chain 等业务模块里。
+**必须**归位本模块,不能散在 sheng-admins / shi-admins / citizens / business / chain 等业务模块里。
 
 - `mod.rs`
   - 纯 `pub mod` + `pub use` 聚合,不放实现。

@@ -4,7 +4,7 @@
 //! 这是 sfid 系统**唯一**的 SFID 号生成入口,供所有业务模块调用:
 //! - `sheng_admins::institutions` 公安局/公权机构 SFID 生成
 //! - `sheng_admins::multisig`     多签机构 SFID 生成
-//! - `operate::binding`           公民绑定兜底 SFID 生成(后续并入 `citizens::binding`)
+//! - `citizens::binding`          公民绑定兜底 SFID 生成
 //! - `app_core::runtime_ops`      seed 阶段 SFID 生成
 //!
 //! 生成的 SFID 号结构见 `sfid/validator.rs` 顶部注释。

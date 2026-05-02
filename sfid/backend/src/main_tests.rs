@@ -198,10 +198,10 @@ fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
 }
 
 // 说明：原 `setup_bind_confirm_test_state` 辅助函数及对应的 `bind_confirm_*` 测试
-// 依赖已废弃的 `operate::binding::admin_bind_confirm` + `AdminBindInput` + 基于
+// 依赖已废弃的 `citizens::binding::admin_bind_confirm` + `AdminBindInput` + 基于
 // `archive_index + qr_id` 的旧绑定流程。当前绑定流程已重构为 `citizen_bind`
 // （challenge + signature 模式），整个旧测试路径不再可复用，已整体删除。
-// 新流程的测试请在 `operate::binding::citizen_bind` 的调用侧按新入参重写。
+// 新流程的测试请在 `citizens::binding::citizen_bind` 的调用侧按新入参重写。
 
 #[tokio::test]
 async fn keyring_rotate_challenge_rejects_main_initiator() {
