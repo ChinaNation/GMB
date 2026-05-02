@@ -35,9 +35,7 @@ mod operate;
 mod qr;
 mod scope;
 mod sfid;
-#[path = "sheng-admins/mod.rs"]
 mod sheng_admins;
-#[path = "shi-admins/mod.rs"]
 mod shi_admins;
 mod store_shards;
 use business::scope::in_scope_cpms_site;

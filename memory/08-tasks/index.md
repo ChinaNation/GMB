@@ -53,6 +53,16 @@
 - `memory/08-tasks/open/20260501-091854-修复-onchain-transaction-l1-l2-l4-明确-no-refund-协议-fee-percent-保底日志-feepaid-tip-源码说明.md`
 - `memory/08-tasks/open/20260501-092408-准备-benchmark-runtime-wasm-并重新生成-resolution-权重.md`
 - `memory/08-tasks/open/20260501-093040-修复-onchain-transaction-l3-安全基金账户热路径重复-decode-改为-runtime-provider-注入.md`
+- `memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23a-models-mod-split.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23b-rsa-blind-relocate.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23c-business-to-scope.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23d-operate-to-citizens.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase23e-key-admin-final-removal.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase45-chain-push-and-routes.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase6-frontend-3tier-views.md`
+- `memory/08-tasks/open/20260501-sfid-step1-phase7-acceptance-and-cleanup.md`
 
 ## done
 
