@@ -77,6 +77,8 @@ impl
         _proposal_id: u64,
         _nonce: &NonceOf<Test>,
         signature: &SignatureOf<Test>,
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         signature.as_slice() == b"vote-ok"
     }
@@ -131,6 +133,13 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
     BindCredential {
         binding_id: binding_id(seed),
         bind_nonce: nonce(bind_nonce),
+        // ADR-008 step3:每个 BindCredential 必带 (province, signer_admin_pubkey)。
+        // 测试用占位值即可,sfid-system 自身不解析这两个字段(真实双层校验留 runtime verifier)。
+        province: b"liaoning"
+            .to_vec()
+            .try_into()
+            .expect("province fits"),
+        signer_admin_pubkey: [7u8; 32],
         signature: signature(sig),
     }
 }
@@ -214,7 +223,9 @@ fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
             &1,
             7,
             b"vote-nonce",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
         assert!(!<Pallet<Test> as SfidEligibilityProvider<
             u64,
@@ -224,7 +235,9 @@ fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
             &1,
             7,
             b"vote-nonce",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
     });
 }
@@ -247,7 +260,9 @@ fn vote_nonce_is_scoped_per_proposal_and_cannot_replay_within_same_proposal() {
             &1,
             proposal_a,
             b"same-nonce",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
 
         assert!(!<Pallet<Test> as SfidEligibilityProvider<
@@ -258,7 +273,9 @@ fn vote_nonce_is_scoped_per_proposal_and_cannot_replay_within_same_proposal() {
             &1,
             proposal_a,
             b"same-nonce",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
 
         assert!(<Pallet<Test> as SfidEligibilityProvider<
@@ -269,7 +286,9 @@ fn vote_nonce_is_scoped_per_proposal_and_cannot_replay_within_same_proposal() {
             &1,
             proposal_b,
             b"same-nonce",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
     });
 }
@@ -280,6 +299,11 @@ fn bind_rejects_empty_nonce() {
         let empty_credential = BindCredential {
             binding_id: binding_id(b"id-empty"),
             bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
+            province: b"liaoning"
+                .to_vec()
+                .try_into()
+                .expect("province fits"),
+            signer_admin_pubkey: [7u8; 32],
             signature: signature("bind-ok"),
         };
         assert_noop!(
@@ -385,7 +409,9 @@ fn cleanup_vote_credentials_removes_nonces() {
             &1,
             42,
             b"vote-nonce-c",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
 
         <Pallet<Test> as SfidEligibilityProvider<
@@ -401,7 +427,9 @@ fn cleanup_vote_credentials_removes_nonces() {
             &1,
             42,
             b"vote-nonce-c",
-            b"vote-ok"
+            b"vote-ok",
+            b"liaoning",
+            &[7u8; 32]
         ));
     });
 }

@@ -133,11 +133,14 @@ impl<T: Config> Pallet<T> {
 
     /// 创建联合投票提案：独立计算本阶段 30 天截止区块，并在创建时锁定公民总人口快照。
     /// 国储会和省储会管理员均可发起，活跃提案名额计入发起人所属机构。
+    /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
     pub(crate) fn do_create_joint_proposal(
         who: T::AccountId,
         eligible_total: u64,
         snapshot_nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, sp_runtime::DispatchError> {
         // 中文注释：国储会和省储会管理员可发起联合提案，同时解析发起人所属机构用于名额管控。
         let proposer_institution =
@@ -148,6 +151,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidPopulationSnapshot
         );
         ensure!(!signature.is_empty(), Error::<T>::InvalidPopulationSnapshot);
+        ensure!(!province.is_empty(), Error::<T>::InvalidPopulationSnapshot);
 
         let snapshot_nonce_hash = T::Hashing::hash(snapshot_nonce.as_slice());
         ensure!(
@@ -159,7 +163,9 @@ impl<T: Config> Pallet<T> {
                 &who,
                 eligible_total,
                 &snapshot_nonce,
-                &signature
+                &signature,
+                province,
+                signer_admin_pubkey,
             ),
             Error::<T>::InvalidPopulationSnapshot
         );

@@ -126,7 +126,7 @@ build_institution_credential(state, sfid_id, name, register_nonce)
 而 SFID 端 `ApiResponse.data` 直接是 Vec;字段还混了 camelCase / snake_case;
 `institution_name` 在两步式未命名时缺字段;`main_chain_status` 是 SCREAMING_SNAKE_CASE。
 
-修复:`citizenchain/node/src/offchain/sfid.rs` 拆双 DTO:
+修复:`citizenchain/node/src/offchain/duoqian_manage/sfid.rs` 拆双 DTO:
 - `SfidEligibleRow`(snake_case + Option + SfidMultisigChainStatus 枚举)→ deserialize SFID 响应
 - `EligibleClearingBankCandidate`(camelCase + 友好状态字符串)→ serialize 给 Tauri 前端
 
