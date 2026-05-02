@@ -156,6 +156,8 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
+        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
+        /// 由 voting-engine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
@@ -165,6 +167,8 @@ pub mod pallet {
             eligible_total: u64,
             snapshot_nonce: SnapshotNonceOf<T>,
             signature: SnapshotSignatureOf<T>,
+            province: BoundedVec<u8, ConstU32<64>>,
+            signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
 
@@ -186,6 +190,8 @@ pub mod pallet {
                 eligible_total,
                 snapshot_nonce.as_slice(),
                 signature.as_slice(),
+                province.as_slice(),
+                &signer_admin_pubkey,
                 crate::MODULE_TAG,
                 encoded,
                 PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
@@ -430,8 +436,14 @@ mod tests {
             eligible_total: u64,
             snapshot_nonce: &[u8],
             signature: &[u8],
+            province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> Result<u64, DispatchError> {
-            if eligible_total == 0 || snapshot_nonce.is_empty() || signature.is_empty() {
+            if eligible_total == 0
+                || snapshot_nonce.is_empty()
+                || signature.is_empty()
+                || province.is_empty()
+            {
                 return Err(DispatchError::Other("bad snapshot"));
             }
             NEXT_JOINT_ID.with(|id| {
@@ -447,11 +459,19 @@ mod tests {
             eligible_total: u64,
             snapshot_nonce: &[u8],
             signature: &[u8],
+            province: &[u8],
+            signer_admin_pubkey: &[u8; 32],
             module_tag: &[u8],
             data: Vec<u8>,
         ) -> Result<u64, DispatchError> {
-            let proposal_id =
-                Self::create_joint_proposal(who, eligible_total, snapshot_nonce, signature)?;
+            let proposal_id = Self::create_joint_proposal(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+                province,
+                signer_admin_pubkey,
+            )?;
             let bounded_data: frame_support::BoundedVec<
                 u8,
                 <Test as voting_engine::Config>::MaxProposalDataLen,
@@ -475,6 +495,8 @@ mod tests {
             eligible_total: u64,
             snapshot_nonce: &[u8],
             signature: &[u8],
+            province: &[u8],
+            signer_admin_pubkey: &[u8; 32],
             module_tag: &[u8],
             data: Vec<u8>,
             object_kind: u8,
@@ -485,6 +507,8 @@ mod tests {
                 eligible_total,
                 snapshot_nonce,
                 signature,
+                province,
+                signer_admin_pubkey,
                 module_tag,
                 data,
             )?;
@@ -648,6 +672,16 @@ mod tests {
             .expect("snapshot signature should fit")
     }
 
+    /// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
+    /// `TestJointVoteEngine` 仅做空字段非空检验,真实 sr25519 验签覆盖留 runtime 层。
+    fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
+        b"liaoning".to_vec().try_into().expect("province should fit")
+    }
+
+    fn signer_admin_pubkey_ok() -> [u8; 32] {
+        [7u8; 32]
+    }
+
     /// 从 ProposalData 读取并跳过 MODULE_TAG 后 decode 提案摘要。
     fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
         let raw = voting_engine::Pallet::<Test>::get_proposal_data(proposal_id)
@@ -667,7 +701,9 @@ mod tests {
             code_ok(),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
     }
 
@@ -730,7 +766,9 @@ mod tests {
                     code_ok(),
                     10,
                     nonce_ok(),
-                    sig_ok()
+                    sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok()
                 ),
                 sp_runtime::DispatchError::BadOrigin
             );
@@ -741,7 +779,9 @@ mod tests {
                 code_ok(),
                 10,
                 nonce_ok(),
-                sig_ok()
+                sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
             ));
 
             assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
@@ -750,7 +790,9 @@ mod tests {
                 code_ok(),
                 10,
                 nonce_ok(),
-                sig_ok()
+                sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
             ));
 
             assert!(

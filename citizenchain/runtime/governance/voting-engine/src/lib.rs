@@ -144,12 +144,16 @@ pub struct ExecutionRetryState<BlockNumber> {
 }
 
 /// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
+/// ADR-008 step3:每个入口都加 `(province, signer_admin_pubkey)` 双层匹配字段,
+/// 业务 pallet extrinsic 必须把这两个字段从外部传进来。
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(
         who: AccountId,
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data(
@@ -157,6 +161,8 @@ pub trait JointVoteEngine<AccountId> {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
@@ -166,6 +172,8 @@ pub trait JointVoteEngine<AccountId> {
         _eligible_total: u64,
         _snapshot_nonce: &[u8],
         _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
         _object_kind: u8,
@@ -185,6 +193,8 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
         _eligible_total: u64,
         _snapshot_nonce: &[u8],
         _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("JointVoteEngineNotConfigured"))
     }
@@ -194,6 +204,8 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
         _eligible_total: u64,
         _snapshot_nonce: &[u8],
         _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -291,12 +303,17 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
 }
 
 /// 中文注释：公民总人口快照验签接口（由 runtime 对接 SFID 系统）。
+/// ADR-008 step3:`(province, signer_admin_pubkey)` 必须随 payload 一起进 SCALE 哈希,
+/// runtime verifier 按 `ShengSigningPubkey` 双映射查派生签名公钥并验签;
+/// 链上 0 prior knowledge of SFID,无任何"SFID main 兜底"路径。
 pub trait PopulationSnapshotVerifier<AccountId, Nonce, Signature> {
     fn verify_population_snapshot(
         who: &AccountId,
         eligible_total: u64,
         nonce: &Nonce,
         signature: &Signature,
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 }
 
@@ -306,6 +323,8 @@ impl<AccountId, Nonce, Signature> PopulationSnapshotVerifier<AccountId, Nonce, S
         _eligible_total: u64,
         _nonce: &Nonce,
         _signature: &Signature,
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -1404,6 +1423,8 @@ pub mod pallet {
         ///
         /// SFID 绑定用户按 >50% 多数投票;外层可由任意签名账户代投,
         /// 内层 `signature` 必须是 `binding_id` 绑定的用户本人 sr25519 签名。
+        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
+        /// 链上 verifier 按 `ShengSigningPubkey` 派生公钥验签。
         #[pallet::call_index(2)]
         #[pallet::weight(T::WeightInfo::citizen_vote())]
         pub fn citizen_vote(
@@ -1412,10 +1433,21 @@ pub mod pallet {
             binding_id: T::Hash,
             nonce: VoteNonceOf<T>,
             signature: VoteSignatureOf<T>,
+            province: BoundedVec<u8, ConstU32<64>>,
+            signer_admin_pubkey: [u8; 32],
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(who, proposal_id, binding_id, nonce, signature, approve)
+            Self::do_citizen_vote(
+                who,
+                proposal_id,
+                binding_id,
+                nonce,
+                signature,
+                province,
+                signer_admin_pubkey,
+                approve,
+            )
         }
 
         #[pallet::call_index(3)]
@@ -2577,6 +2609,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, DispatchError> {
         let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
             .to_vec()
@@ -2591,6 +2625,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
             eligible_total,
             snapshot_nonce,
             signature,
+            province,
+            signer_admin_pubkey,
         )
     }
 
@@ -2599,6 +2635,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -2616,6 +2654,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
                 eligible_total,
                 snapshot_nonce,
                 signature,
+                province,
+                signer_admin_pubkey,
             ) {
                 Ok(proposal_id) => proposal_id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
@@ -2633,6 +2673,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
@@ -2652,6 +2694,8 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
                 eligible_total,
                 snapshot_nonce,
                 signature,
+                province,
+                signer_admin_pubkey,
             ) {
                 Ok(proposal_id) => proposal_id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
@@ -3079,8 +3123,13 @@ mod tests {
             eligible_total: u64,
             nonce: &pallet::VoteNonceOf<Test>,
             signature: &pallet::VoteSignatureOf<Test>,
+            province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            eligible_total > 0 && !nonce.is_empty() && signature.as_slice() == b"snapshot-ok"
+            eligible_total > 0
+                && !nonce.is_empty()
+                && signature.as_slice() == b"snapshot-ok"
+                && !province.is_empty()
         }
     }
 
@@ -3098,8 +3147,14 @@ mod tests {
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
+            province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            if !Self::is_eligible(binding_id, who) || signature != b"vote-ok" || nonce.is_empty() {
+            if !Self::is_eligible(binding_id, who)
+                || signature != b"vote-ok"
+                || nonce.is_empty()
+                || province.is_empty()
+            {
                 return false;
             }
             let key = (proposal_id, binding_id.encode(), nonce.to_vec());
@@ -3382,6 +3437,17 @@ mod tests {
 
     fn vote_sig_bad() -> pallet::VoteSignatureOf<Test> {
         b"bad".to_vec().try_into().expect("signature should fit")
+    }
+
+    /// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
+    /// `TestPopulationSnapshotVerifier` / `TestSfidEligibility` 仅做空字段非空检验,
+    /// 真实 sr25519 验签覆盖留 runtime 层。
+    fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
+        b"liaoning".to_vec().try_into().expect("province should fit")
+    }
+
+    fn signer_admin_pubkey_ok() -> [u8; 32] {
+        [7u8; 32]
     }
 
     fn snapshot_nonce_ok() -> pallet::VoteNonceOf<Test> {
@@ -4082,7 +4148,9 @@ mod tests {
                     outsider,
                     10,
                     nonce.as_slice(),
-                    sig.as_slice()
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
                 )
                 .is_err()
             );
@@ -4096,7 +4164,9 @@ mod tests {
                     prc_admin(0),
                     10,
                     nonce_prc.as_slice(),
-                    sig.as_slice()
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
                 )
             );
 
@@ -4109,7 +4179,9 @@ mod tests {
                     nrc_admin(0),
                     10,
                     nonce_nrc.as_slice(),
-                    sig.as_slice()
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
                 )
             );
         });
@@ -4126,6 +4198,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4161,6 +4235,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4189,6 +4265,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4230,6 +4308,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4259,6 +4339,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4311,7 +4393,9 @@ mod tests {
                     nrc_admin(0),
                     10,
                     nonce.as_slice(),
-                    sig.as_slice()
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
                 )
             );
 
@@ -4322,7 +4406,9 @@ mod tests {
                     nrc_admin(0),
                     11,
                     nonce.as_slice(),
-                    sig.as_slice()
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
                 )
                 .is_err()
             );
@@ -4341,6 +4427,8 @@ mod tests {
                     binding_id_ok(),
                     vote_nonce("n-1"),
                     vote_sig_bad(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     true
                 ),
                 pallet::Error::<Test>::InvalidSfidVoteCredential
@@ -4352,6 +4440,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("n-2"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
             assert_eq!(CitizenTallies::<Test>::get(0).yes, 1);
@@ -4369,6 +4459,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("n-1"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
 
@@ -4379,6 +4471,8 @@ mod tests {
                     binding_id_ok(),
                     vote_nonce("n-2"),
                     vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     false
                 ),
                 pallet::Error::<Test>::AlreadyVoted
@@ -4398,6 +4492,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
 
@@ -4407,6 +4503,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("same"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
         });
@@ -4424,6 +4522,8 @@ mod tests {
                     binding_id_ok(),
                     vote_nonce("x-1"),
                     vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     true
                 ),
                 pallet::Error::<Test>::CitizenEligibleTotalNotSet
@@ -4481,6 +4581,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("timeout-cleanup"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
             assert!(has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
@@ -4521,6 +4623,8 @@ mod tests {
                     <Test as frame_system::Config>::Hashing::hash(b"sfid-other"),
                     vote_nonce("n-ineligible-hash"),
                     vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     true
                 ),
                 pallet::Error::<Test>::SfidNotEligible
@@ -4534,6 +4638,8 @@ mod tests {
                     binding_id_ok(),
                     vote_nonce("n-ineligible"),
                     vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     true
                 ),
                 pallet::Error::<Test>::SfidNotEligible
@@ -4552,6 +4658,8 @@ mod tests {
                     10,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4562,6 +4670,8 @@ mod tests {
                     binding_id_ok(),
                     vote_nonce("joint-stage"),
                     vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
                     true
                 ),
                 pallet::Error::<Test>::InvalidProposalStage
@@ -4581,6 +4691,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("immediate-pass"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
 
@@ -4601,6 +4713,8 @@ mod tests {
                 binding_id_ok(),
                 vote_nonce("immediate-cleanup"),
                 vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
                 true
             ));
 
@@ -4666,6 +4780,8 @@ mod tests {
                     100,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4699,6 +4815,8 @@ mod tests {
                     77,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
             cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
@@ -4732,6 +4850,8 @@ mod tests {
                     88,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4770,6 +4890,8 @@ mod tests {
                     88,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4807,6 +4929,8 @@ mod tests {
                     66,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
             JointTallies::<Test>::insert(
@@ -4841,6 +4965,8 @@ mod tests {
                     100,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4882,6 +5008,8 @@ mod tests {
                     100,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -4933,6 +5061,8 @@ mod tests {
                     66,
                     nonce.as_slice(),
                     sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
@@ -5599,6 +5729,8 @@ mod tests {
                     10,
                     snapshot_nonce_ok().as_slice(),
                     snapshot_sig_ok().as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
                 )
                 .expect("joint proposal should be created");
 
