@@ -7,5 +7,5 @@ pub(crate) async fn admin_cpms_status_scan(
     headers: HeaderMap,
     Json(input): Json<CpmsStatusScanInput>,
 ) -> impl IntoResponse {
-    crate::operate::status::admin_cpms_status_scan(State(state), headers, Json(input)).await
+    crate::citizens::status::admin_cpms_status_scan(State(state), headers, Json(input)).await
 }
