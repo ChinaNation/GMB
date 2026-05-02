@@ -286,31 +286,9 @@ pub mod pallet {
     pub type UsedShengNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
-    /// 中文注释:**编译垫片** GenesisConfig(Step 2c 起删除)。
-    /// ADR-008 后链上 0 prior knowledge of SFID,创世不再写入任何 admin 公钥。
-    /// 留这个空 stub 是为了让 `runtime/src/genesis_config_presets.rs` 与
-    /// `RuntimeGenesisConfig::default()` 路径在 step2c 前继续编译;step2c 改完
-    /// genesis_config_presets.rs 后必须连同本 stub 一起删。
-    /// 字段保留旧 JSON 兼容键以让 `serde_json::from_value(patch["sfidSystem"])` 能 deserialize,
-    /// 但 build_genesis 主动忽略全部输入,不写任何 storage。
-    #[pallet::genesis_config]
-    #[derive(frame_support::DefaultNoBound)]
-    pub struct GenesisConfig<T: Config> {
-        #[serde(rename = "sfidMainAccount", default)]
-        pub sfid_main_account: Option<T::AccountId>,
-        #[serde(rename = "sfidBackupAccount1", default)]
-        pub sfid_backup_account_1: Option<T::AccountId>,
-        #[serde(rename = "sfidBackupAccount2", default)]
-        pub sfid_backup_account_2: Option<T::AccountId>,
-    }
-
-    #[pallet::genesis_build]
-    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-        fn build(&self) {
-            // 中文注释:ADR-008 后 SFID 不再有任何创世硬编码;输入字段保留只为兼容旧 JSON,build 阶段什么都不做。
-            // step2c 起本垫片连同字段一并删除。
-        }
-    }
+    // ADR-008 Step 2c:GenesisConfig 已彻底删除。
+    // 链上 0 prior knowledge of SFID,创世 storage 全空,
+    // ShengAdmins / ShengSigningPubkey 走 first-come-first-serve activation 写入。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -355,8 +333,21 @@ pub mod pallet {
     }
 
     /// 中文注释:本模块无需 on_initialize / on_finalize 钩子。
+    /// ADR-008 Step 2c:on_runtime_upgrade 仅 log 提示;开发期老 storage 数据由
+    /// fresh genesis 重启清理(`feedback_chain_in_dev.md` 允许),不在 hook 内做
+    /// 显式 kill_prefix(已删字段无 storage_alias 引用,残留 entry 无人读取也无害)。
     #[pallet::hooks]
-    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> Weight {
+            // 中文注释:ADR-008 Step 2c。开发期裸升级路径,实际 storage 清理由
+            // chain 重启 + fresh genesis 完成。本 hook 输出 log 仅作可观测标记。
+            log::info!(
+                target: "sfid-system",
+                "ADR-008 Step 2c on_runtime_upgrade: legacy SFID storage (SfidMainAccount/Backup{{1,2}}, single-value ShengSigningPubkey, ProvinceBySigningPubkey, GenesisConfig) removed; fresh-genesis path expected"
+            );
+            T::DbWeight::get().reads(0)
+        }
+    }
 
     #[pallet::error]
     pub enum Error<T> {

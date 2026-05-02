@@ -7,7 +7,7 @@ use frame_support::{
     derive_impl, parameter_types,
     traits::{ConstU128, ConstU32, VariantCountOf},
 };
-use frame_system as system;
+use frame_system::{self as system, EnsureRoot};
 use pallet_balances;
 use primitives::citizen_const::{CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_MAX_COUNT};
 use sfid_system::{BindCredential, SfidVerifier, SfidVoteVerifier};
@@ -126,6 +126,8 @@ impl sfid_system::Config for Test {
     type SfidVoteVerifier = TestSfidVoteVerifier;
     /// 中文注释：集成测试核心——将 OnSfidBound 接入真实的 CitizenIssuance。
     type OnSfidBound = CitizenIssuance;
+    /// ADR-008 Step 2c:`unbind_sfid` 由 Root 授权(集成测试不涉及解绑路径)。
+    type UnbindOrigin = EnsureRoot<u64>;
     type WeightInfo = ();
 }
 
@@ -158,16 +160,11 @@ fn make_credential(
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {
-    let mut storage = frame_system::GenesisConfig::<Test>::default()
+    // ADR-008 Step 2c:sfid_system::GenesisConfig 已删,创世 storage 全空,
+    // 链上 0 prior knowledge of SFID,集成测试不再注入任何 SFID 创世账户。
+    let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("frame system genesis storage should build");
-    sfid_system::GenesisConfig::<Test> {
-        sfid_main_account: Some(100),
-        sfid_backup_account_1: Some(101),
-        sfid_backup_account_2: Some(102),
-    }
-    .assimilate_storage(&mut storage)
-    .expect("sfid genesis should build");
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
         System::set_block_number(10);

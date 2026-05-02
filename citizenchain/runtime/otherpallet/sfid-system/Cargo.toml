@@ -15,6 +15,7 @@ frame-benchmarking = { workspace = true, optional = true }
 sp-core = { workspace = true }
 sp-io = { workspace = true }
 sp-runtime = { workspace = true }
+log = { version = "0.4", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
 
 [features]
@@ -34,5 +35,6 @@ std = [
     "sp-core/std",
     "sp-io/std",
     "sp-runtime/std",
+    "log/std",
     "primitives/std",
 ]
