@@ -1120,12 +1120,19 @@ mod tests {
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
-            _account_name: &duoqian_manage::pallet::AccountNameOf<Test>,
+            institution_name: &duoqian_manage::pallet::AccountNameOf<Test>,
+            account_names: &[alloc::vec::Vec<u8>],
             nonce: &duoqian_manage::pallet::RegisterNonceOf<Test>,
             signature: &duoqian_manage::pallet::RegisterSignatureOf<Test>,
-            _signing_province: Option<&[u8]>,
+            province: &[u8],
+            signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            !nonce.is_empty() && signature.as_slice() == b"register-ok"
+            !institution_name.is_empty()
+                && !account_names.is_empty()
+                && !nonce.is_empty()
+                && !province.is_empty()
+                && signer_admin_pubkey != &[0u8; 32]
+                && signature.as_slice() == b"register-ok"
         }
     }
 
@@ -1146,6 +1153,8 @@ mod tests {
             _proposal_id: u64,
             _nonce: &[u8],
             _signature: &[u8],
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -1164,6 +1173,8 @@ mod tests {
             _eligible_total: u64,
             _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
             _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -1387,8 +1398,6 @@ mod tests {
         type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
-        type MaxA3Length = ConstU32<8>;
-        type MaxSubTypeLength = ConstU32<32>;
         type MaxAdminSignatureLength = ConstU32<64>;
         type MaxInstitutionAccounts = ConstU32<8>;
         type MinCreateAmount = ConstU128<111>;

@@ -117,12 +117,6 @@ pub struct AccountWithBalance {
 pub struct InstitutionDetail {
     pub sfid_id: String,
     pub institution_name: String,
-    /// 机构类型对前端友好标签(由 a3 + sub_type 推):
-    /// 私法人多签 / 私非法人多签 / 公权多签 / 公安局多签 等。
-    pub institution_type_label: String,
-    pub a3: String,
-    pub sub_type: Option<String>,
-    pub parent_sfid_id: Option<String>,
 
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
@@ -162,32 +156,35 @@ pub struct InstitutionProposalItem {
     pub summary: String,
 }
 
-// ─── SFID `app_get_institution` 响应(含 chain pull 凭证) ──────────
+// ─── SFID `registration-info` 响应(链上注册专用) ──────────
 
-/// `chain/institution_info::app_get_institution` 的反序列化形态。
+/// SFID `/api/v1/app/institutions/:sfid_id/registration-info` 的响应形态。
 ///
-/// SFID 端响应是 `MultisigInstitution` 全部字段平铺 + 末尾 2 个签名字段。
-/// 节点桌面发起 `propose_create_institution` extrinsic 时,
-/// 直接把本结构里的 register_nonce / signature / province (做 signing_province)/
-/// institution_name / a3 / sub_type / parent_sfid_id 透传给 extrinsic。
-///
-/// 同时实现 Serialize 以便 Tauri 命令把本结构透传给前端,前端再回传到
-/// `build_propose_create_institution_request` Tauri 命令。
+/// 中文注释:这是链上注册唯一可信输入,只暴露 sfid_id / 机构名称 / 账户名称列表
+/// 和 SFID 省级签名凭证。机构类型、企业类型、所属法人关系只留在 SFID 查询侧做资格判断,
+/// 不进入节点注册 payload。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub struct InstitutionCredentialResp {
+pub struct InstitutionRegistrationInfoResp {
     pub sfid_id: String,
-    #[serde(default)]
-    pub institution_name: Option<String>,
-    pub a3: String,
-    #[serde(default)]
-    pub sub_type: Option<String>,
-    #[serde(default)]
-    pub parent_sfid_id: Option<String>,
-    pub province: String,
-    pub city: String,
-    /// 防重放 nonce(本次响应生成的随机 hex)。
+    pub institution_name: String,
+    pub account_names: Vec<String>,
+    pub credential: InstitutionRegistrationCredentialResp,
+}
+
+/// SFID 对机构注册 payload 签发的凭证。
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InstitutionRegistrationCredentialResp {
+    /// 链 genesis hash,节点验签时对应 runtime 的 block_hash(0)。
+    pub genesis_hash: String,
+    /// 防重放 nonce(本次响应生成的随机字符串)。
     pub register_nonce: String,
+    pub province: String,
+    /// 本次签名所用省管理员公钥(32 字节 hex),链上按 (province, signer_admin_pubkey) 查派生签名公钥。
+    pub signer_admin_pubkey: String,
     /// 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。
     pub signature: String,
+    /// SFID 端附带的审计元信息,节点只透传展示/排查,不参与链上注册编码。
+    pub meta: serde_json::Value,
 }

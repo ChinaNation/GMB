@@ -257,6 +257,7 @@
 - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
 - `memory/08-tasks/done/20260501-sfid-chain-folder-restructure.md`
 - `memory/08-tasks/done/20260502-134646-在-gmb-ai-编程系统中增加强制规则-每次输出技术方案时-必须输出本次预计修改的目录-并为每个目录附中文.md`
+- `memory/08-tasks/done/20260502-duoqian-registration-info-align.md`
 - `memory/08-tasks/done/20260502-node-offchain-clearing-dir-refactor.md`
 - `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
 - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`

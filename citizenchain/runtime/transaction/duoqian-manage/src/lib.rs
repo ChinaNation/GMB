@@ -83,10 +83,12 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
 /// - 删除"用 SfidMainAccount 主公钥兜底"分支（链上 0 prior knowledge of SFID）；
 /// - `province` 从可选项改为必填；
 /// - 新增 `signer_admin_pubkey` 显式指明本次签名的省管理员公钥（main 或 backup_{1,2}）。
+/// - 中文注释:签名业务字段收口为 sfid_id / institution_name / account_names[]。
 pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        account_name: &AccountName,
+        institution_name: &AccountName,
+        account_names: &[Vec<u8>],
         nonce: &Nonce,
         signature: &Signature,
         province: &[u8],
@@ -97,7 +99,8 @@ pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
 impl<AccountName, Nonce, Signature> SfidInstitutionVerifier<AccountName, Nonce, Signature> for () {
     fn verify_institution_registration(
         _sfid_id: &[u8],
-        _account_name: &AccountName,
+        _institution_name: &AccountName,
+        _account_names: &[Vec<u8>],
         _nonce: &Nonce,
         _signature: &Signature,
         _province: &[u8],
@@ -162,38 +165,6 @@ pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
 pub struct RegisteredInstitution<SfidId, AccountName> {
     pub sfid_id: SfidId,
     pub account_name: AccountName,
-}
-
-/// 机构元数据(2026-04-27, ADR-007 Step 2 新增)。
-///
-/// 每个 sfid_id 唯一一条,在该机构首次调用 `register_sfid_institution` 时由 SFID
-/// 后端推链上链。包含清算行资格白名单判定所需字段:
-/// - `a3`:主体属性(SFR / FFR / GFR / SF),用作清算行资格白名单一级过滤
-/// - `sub_type`:仅 a3==SFR 时有值(JOINT_STOCK / LIMITED_LIABILITY 等),
-///    清算行资格要求 SFR 必须 `JOINT_STOCK`
-/// - `parent_sfid_id`:仅 a3==FFR 时有值,指向所属 SFR 法人;清算行资格要求
-///    FFR 的 parent 必须是 SFR-JOINT_STOCK
-///
-/// 资格判定:`(SFR ∧ sub_type=JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)`
-/// 详见 ADR-007 与 [bank_check::SfidAccountQuery::is_clearing_bank_eligible]。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub struct MetadataInfo<A3, SubType, SfidId> {
-    /// 主体属性(SFR / FFR / GFR / SF)。
-    pub a3: A3,
-    /// 私法人子类型(仅 a3==SFR 时有值)。
-    pub sub_type: Option<SubType>,
-    /// 所属法人机构 sfid_id(仅 a3==FFR 时必填)。
-    pub parent_sfid_id: Option<SfidId>,
 }
 
 /// 创建多签账户提案的业务数据（存入投票引擎 ProposalData）
@@ -288,16 +259,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
 
-        /// a3 主体属性字符串最大长度(8 字节足够 "SFR"/"FFR"/"GFR"/"SF" 等)。
-        /// Step 2(2026-04-27, ADR-007)新增,用于 InstitutionMetadata。
-        #[pallet::constant]
-        type MaxA3Length: Get<u32>;
-
-        /// 私法人子类型字符串最大长度(32 字节足够 "JOINT_STOCK"/"LIMITED_LIABILITY" 等)。
-        /// Step 2(2026-04-27, ADR-007)新增,用于 InstitutionMetadata。
-        #[pallet::constant]
-        type MaxSubTypeLength: Get<u32>;
-
         /// 管理员 sr25519 签名最大字节数(固定 64)。
         /// 用于 `finalize_create` 聚合签名时的 BoundedVec 容量上限,防止过大输入。
         #[pallet::constant]
@@ -334,12 +295,9 @@ pub mod pallet {
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
     pub type RegisterNonceOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterNonceLength>;
     pub type RegisterSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxRegisterSignatureLength>;
-    /// Step 2 新增:机构 a3 主体属性字节串(SFR/FFR/GFR/SF)。
-    pub type A3Of<T> = BoundedVec<u8, <T as Config>::MaxA3Length>;
-    /// Step 2 新增:机构 sub_type 子类型字节串(JOINT_STOCK 等,仅 SFR 有值)。
-    pub type SubTypeOf<T> = BoundedVec<u8, <T as Config>::MaxSubTypeLength>;
-    /// Step 2 新增:机构元数据,见 [MetadataInfo]。
-    pub type MetadataInfoOf<T> = MetadataInfo<A3Of<T>, SubTypeOf<T>, SfidIdOf<T>>;
+    /// 中文注释:注册凭证里的账户名列表,顺序必须与 SFID `registration-info` 返回一致。
+    pub type InstitutionAccountNamesOf<T> =
+        BoundedVec<AccountNameOf<T>, <T as Config>::MaxInstitutionAccounts>;
     /// 机构创建时用户输入的账户初始余额列表项。
     pub type InstitutionInitialAccountOf<T> =
         InstitutionInitialAccount<AccountNameOf<T>, BalanceOf<T>>;
@@ -361,9 +319,6 @@ pub mod pallet {
         <T as frame_system::Config>::AccountId,
         BlockNumberFor<T>,
         AccountNameOf<T>,
-        A3Of<T>,
-        SubTypeOf<T>,
-        SfidIdOf<T>,
     >;
     /// 机构账户信息。
     pub type InstitutionAccountInfoOf<T> = InstitutionAccountInfo<
@@ -379,8 +334,6 @@ pub mod pallet {
         BalanceOf<T>,
         DuoqianAdminsOf<T>,
         CreateInstitutionAccountsOf<T>,
-        A3Of<T>,
-        SubTypeOf<T>,
     >;
 
     /// 管理员离线 sr25519 签名载体(固定 64 字节)。
@@ -425,20 +378,6 @@ pub mod pallet {
         RegisteredInstitution<SfidIdOf<T>, AccountNameOf<T>>,
         OptionQuery,
     >;
-
-    /// 机构元数据(2026-04-27, ADR-007 Step 2 新增):sfid_id → MetadataInfo
-    ///
-    /// 每个 sfid_id 唯一一条,由 SFID 后端推链时通过 `register_sfid_institution`
-    /// 上链。后续同 sfid_id 不同 account_name 的 register 调用必须传相同元数据
-    /// (链上校验一致性,不允许覆写)。
-    ///
-    /// 用途:
-    /// - 清算行资格白名单判定(SFR-JOINT_STOCK / FFR-parent.SFR.JOINT_STOCK)
-    /// - 链上 `bank_check::ensure_can_be_bound` 第 5 重校验
-    #[pallet::storage]
-    #[pallet::getter(fn institution_metadata)]
-    pub type InstitutionMetadata<T: Config> =
-        StorageMap<_, Blake2_128Concat, SfidIdOf<T>, MetadataInfoOf<T>, OptionQuery>;
 
     /// 机构级多签信息：key 为 sfid_id。
     ///
@@ -708,18 +647,6 @@ pub mod pallet {
         RegisterNonceAlreadyUsed,
         /// ADR-008 step2b 新增:机构登记凭证缺省份(province 改必填后空字节串拒绝)
         EmptyProvince,
-        /// Step 2 新增:a3 为空(机构元数据必填)
-        EmptyA3,
-        /// Step 2 新增:SFR 必须传 sub_type
-        MissingSubType,
-        /// Step 2 新增:非 SFR 不应传 sub_type
-        UnexpectedSubType,
-        /// Step 2 新增:FFR 必须传 parent_sfid_id
-        MissingParentSfid,
-        /// Step 2 新增:非 FFR 不应传 parent_sfid_id
-        UnexpectedParentSfid,
-        /// Step 2 新增:同 sfid_id 二次注册时元数据与已上链不一致
-        InstitutionMetadataMismatch,
         /// 无法将派生地址转换为账户ID
         DerivedAddressDecodeFailed,
         /// 账户仍有保留余额，不允许注销
@@ -947,78 +874,39 @@ pub mod pallet {
             Ok(())
         }
 
-        /// SFID 后端推链注册机构地址。
+        /// SFID 注册信息凭证批量登记机构账户地址。
         ///
-        /// Step 2(2026-04-27, ADR-007)新增 a3 / sub_type / parent_sfid_id 三个参数,
-        /// 用于上链机构元数据(InstitutionMetadata storage),作为清算行资格白名单
-        /// 判定的链上数据源。规则:
-        /// - 第一次注册某 sfid_id 时:写入 InstitutionMetadata
-        /// - 同 sfid_id 后续注册不同 account_name:校验本次元数据与已上链一致(防覆写)
-        ///
-        /// 元数据要求:
-        /// - `a3`:必填,字节串(SFR/FFR/GFR/SF)
-        /// - `sub_type`:仅 a3==SFR 时有值;否则必须 None
-        /// - `parent_sfid_id`:仅 a3==FFR 时必填;否则必须 None
-        ///
-        /// ADR-008 step2b:
-        /// - `province` 改为必填(取代旧 `signing_province: Option<Vec<u8>>`);
-        /// - 新增 `signer_admin_pubkey: [u8; 32]`,指明本次凭证由该省哪一位 admin
-        ///   (main / backup_1 / backup_2)派生的省级签名密钥签发。runtime verifier
-        ///   按 (province, signer_admin_pubkey) 在 `ShengSigningPubkey` 中查公钥,
-        ///   未 activate 即拒签。
+        /// 中文注释:本入口与 SFID `/registration-info` 对齐,业务字段只接收
+        /// `sfid_id / institution_name / account_names[]`。机构类型、企业类型、
+        /// 所属法人关系只由 SFID 系统用于候选资格判断,不再进入链上注册 payload。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
             origin: OriginFor<T>,
             sfid_id: SfidIdOf<T>,
-            account_name: AccountNameOf<T>,
+            institution_name: AccountNameOf<T>,
+            account_names: InstitutionAccountNamesOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            // ADR-008 step2b：必填省份(UTF-8 字节)。runtime 在 (province, signer_admin_pubkey)
-            // 二元组下查省级签名公钥,无对应记录即拒签。
             province: Vec<u8>,
-            // ADR-008 step2b：本次凭证签发方公钥(省级 main / backup_1 / backup_2 之一,
-            // 由 SFID 后端登录态决定)。runtime verifier 据此在 ShengSigningPubkey 双映射中
-            // 找派生的签名公钥;未 activate 时拒绝。内部统一 [u8; 32] hex 字节,前端展示 SS58。
             signer_admin_pubkey: [u8; 32],
-            // Step 2 新增:机构元数据(SFID 后端推链时一并上链)。
-            a3: A3Of<T>,
-            sub_type: Option<SubTypeOf<T>>,
-            parent_sfid_id: Option<SfidIdOf<T>>,
         ) -> DispatchResult {
             let submitter = ensure_signed(origin)?;
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
-            ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
-            ensure!(!a3.is_empty(), Error::<T>::EmptyA3);
-            // ADR-008 step2b: province 必填(空字节串视作非法,不允许走"无省"兜底分支)。
+            ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
+            ensure!(!account_names.is_empty(), Error::<T>::MissingMainAccount);
             ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
-            // a3 与 sub_type / parent_sfid_id 的形态一致性校验:
-            // - SFR: sub_type 必填, parent_sfid_id 必须 None
-            // - FFR: sub_type 必须 None, parent_sfid_id 必填
-            // - 其他(GFR/SF): sub_type 与 parent_sfid_id 必须都为 None
-            match a3.as_slice() {
-                b"SFR" => {
-                    ensure!(sub_type.is_some(), Error::<T>::MissingSubType);
-                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
-                }
-                b"FFR" => {
-                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
-                    ensure!(parent_sfid_id.is_some(), Error::<T>::MissingParentSfid);
-                }
-                _ => {
-                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
-                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
-                }
-            }
             let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
             ensure!(
                 !UsedRegisterNonce::<T>::get(register_nonce_hash),
                 Error::<T>::RegisterNonceAlreadyUsed
             );
+            let account_name_payload = Self::account_names_payload_from_names(&account_names)?;
             ensure!(
                 T::SfidInstitutionVerifier::verify_institution_registration(
                     sfid_id.as_slice(),
-                    &account_name,
+                    &institution_name,
+                    &account_name_payload,
                     &register_nonce,
                     &signature,
                     province.as_slice(),
@@ -1026,64 +914,58 @@ pub mod pallet {
                 ),
                 Error::<T>::InvalidSfidInstitutionSignature
             );
-            ensure!(
-                !SfidRegisteredAddress::<T>::contains_key(&sfid_id, &account_name),
-                Error::<T>::SfidAlreadyRegistered
-            );
 
-            // 按账户名翻译到 Role（"主账户"/"费用账户" 强制走 OP_MAIN/OP_FEE 且不再拼 account_name；
-            // 其他非空 account_name 走 OP_INSTITUTION 并把 account_name 拼进 preimage）。
-            let role = Self::role_from_account_name(account_name.as_slice())?;
-            let duoqian_address = Self::derive_institution_address(sfid_id.as_slice(), role)?;
-            ensure!(
-                !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
-                Error::<T>::AddressAlreadyExists
-            );
-            ensure!(
-                !T::ReservedAddressChecker::is_reserved(&duoqian_address),
-                Error::<T>::AddressReserved
-            );
-            ensure!(
-                T::AddressValidator::is_valid(&duoqian_address),
-                Error::<T>::InvalidAddress
-            );
-            ensure!(
-                !T::ProtectedSourceChecker::is_protected(&duoqian_address),
-                Error::<T>::ProtectedSource
-            );
-
-            // Step 2:写入或校验 InstitutionMetadata(同 sfid_id 必须元数据一致)。
-            let new_metadata = MetadataInfo {
-                a3: a3.clone(),
-                sub_type: sub_type.clone(),
-                parent_sfid_id: parent_sfid_id.clone(),
-            };
-            if let Some(existing) = InstitutionMetadata::<T>::get(&sfid_id) {
+            let mut derived: Vec<(AccountNameOf<T>, T::AccountId)> =
+                Vec::with_capacity(account_names.len());
+            let mut seen = BTreeSet::<Vec<u8>>::new();
+            for account_name in account_names.iter() {
+                ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
                 ensure!(
-                    existing.a3 == new_metadata.a3
-                        && existing.sub_type == new_metadata.sub_type
-                        && existing.parent_sfid_id == new_metadata.parent_sfid_id,
-                    Error::<T>::InstitutionMetadataMismatch
+                    seen.insert(account_name.as_slice().to_vec()),
+                    Error::<T>::DuplicateAccountName
                 );
-            } else {
-                InstitutionMetadata::<T>::insert(&sfid_id, &new_metadata);
+                ensure!(
+                    !SfidRegisteredAddress::<T>::contains_key(&sfid_id, account_name),
+                    Error::<T>::SfidAlreadyRegistered
+                );
+                let role = Self::role_from_account_name(account_name.as_slice())?;
+                let duoqian_address = Self::derive_institution_address(sfid_id.as_slice(), role)?;
+                ensure!(
+                    !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
+                    Error::<T>::AddressAlreadyExists
+                );
+                ensure!(
+                    !T::ReservedAddressChecker::is_reserved(&duoqian_address),
+                    Error::<T>::AddressReserved
+                );
+                ensure!(
+                    T::AddressValidator::is_valid(&duoqian_address),
+                    Error::<T>::InvalidAddress
+                );
+                ensure!(
+                    !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+                    Error::<T>::ProtectedSource
+                );
+                derived.push((account_name.clone(), duoqian_address));
             }
 
-            SfidRegisteredAddress::<T>::insert(&sfid_id, &account_name, &duoqian_address);
             UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
-            AddressRegisteredSfid::<T>::insert(
-                &duoqian_address,
-                RegisteredInstitution {
+            for (account_name, duoqian_address) in derived {
+                SfidRegisteredAddress::<T>::insert(&sfid_id, &account_name, &duoqian_address);
+                AddressRegisteredSfid::<T>::insert(
+                    &duoqian_address,
+                    RegisteredInstitution {
+                        sfid_id: sfid_id.clone(),
+                        account_name: account_name.clone(),
+                    },
+                );
+                Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
                     sfid_id: sfid_id.clone(),
-                    account_name: account_name.clone(),
-                },
-            );
-            Self::deposit_event(Event::<T>::SfidInstitutionRegistered {
-                sfid_id,
-                account_name,
-                duoqian_address,
-                submitter,
-            });
+                    account_name,
+                    duoqian_address,
+                    submitter: submitter.clone(),
+                });
+            }
             Ok(())
         }
 
@@ -1107,9 +989,6 @@ pub mod pallet {
             // ADR-008 step2b：必填省份 + 签名 admin pubkey,与 register_sfid_institution 同义。
             province: Vec<u8>,
             signer_admin_pubkey: [u8; 32],
-            a3: A3Of<T>,
-            sub_type: Option<SubTypeOf<T>>,
-            parent_sfid_id: Option<SfidIdOf<T>>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
             with_transaction(|| {
@@ -1125,9 +1004,6 @@ pub mod pallet {
                     signature,
                     province,
                     signer_admin_pubkey,
-                    a3,
-                    sub_type,
-                    parent_sfid_id,
                 ) {
                     Ok(()) => TransactionOutcome::Commit(Ok(())),
                     Err(e) => TransactionOutcome::Rollback(Err(e)),
@@ -1572,29 +1448,6 @@ pub mod pallet {
             Ok(Sr25519Public::from_raw(arr))
         }
 
-        fn ensure_institution_metadata_shape(
-            a3: &A3Of<T>,
-            sub_type: &Option<SubTypeOf<T>>,
-            parent_sfid_id: &Option<SfidIdOf<T>>,
-        ) -> DispatchResult {
-            ensure!(!a3.is_empty(), Error::<T>::EmptyA3);
-            match a3.as_slice() {
-                b"SFR" => {
-                    ensure!(sub_type.is_some(), Error::<T>::MissingSubType);
-                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
-                }
-                b"FFR" => {
-                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
-                    ensure!(parent_sfid_id.is_some(), Error::<T>::MissingParentSfid);
-                }
-                _ => {
-                    ensure!(sub_type.is_none(), Error::<T>::UnexpectedSubType);
-                    ensure!(parent_sfid_id.is_none(), Error::<T>::UnexpectedParentSfid);
-                }
-            }
-            Ok(())
-        }
-
         fn ensure_admin_config(
             who: &T::AccountId,
             admin_count: u32,
@@ -1671,6 +1524,31 @@ pub mod pallet {
             }
 
             DuoqianAccounts::<T>::contains_key(account).then(|| account_to_institution_id(account))
+        }
+
+        /// 中文注释:把机构创建账户列表里的 account_name 抽成 SFID 签名 payload 使用的
+        /// `Vec<Vec<u8>>`。顺序不重排,必须和 SFID `/registration-info.account_names` 一致。
+        fn account_names_payload_from_initial_accounts(
+            accounts: &InstitutionInitialAccountsOf<T>,
+        ) -> Result<Vec<Vec<u8>>, DispatchError> {
+            let mut names: Vec<Vec<u8>> = Vec::with_capacity(accounts.len());
+            for item in accounts.iter() {
+                ensure!(!item.account_name.is_empty(), Error::<T>::EmptyAccountName);
+                names.push(item.account_name.as_slice().to_vec());
+            }
+            Ok(names)
+        }
+
+        /// 中文注释:把批量 register 入口的 account_names 抽成验签 payload。
+        fn account_names_payload_from_names(
+            account_names: &InstitutionAccountNamesOf<T>,
+        ) -> Result<Vec<Vec<u8>>, DispatchError> {
+            let mut names: Vec<Vec<u8>> = Vec::with_capacity(account_names.len());
+            for account_name in account_names.iter() {
+                ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
+                names.push(account_name.as_slice().to_vec());
+            }
+            Ok(names)
         }
 
         fn validate_institution_initial_accounts(
@@ -1787,9 +1665,6 @@ pub mod pallet {
             signature: RegisterSignatureOf<T>,
             province: Vec<u8>,
             signer_admin_pubkey: [u8; 32],
-            a3: A3Of<T>,
-            sub_type: Option<SubTypeOf<T>>,
-            parent_sfid_id: Option<SfidIdOf<T>>,
         ) -> DispatchResult {
             ensure!(
                 !T::ProtectedSourceChecker::is_protected(&who),
@@ -1802,7 +1677,6 @@ pub mod pallet {
                 !Institutions::<T>::contains_key(&sfid_id),
                 Error::<T>::InstitutionAlreadyExists
             );
-            Self::ensure_institution_metadata_shape(&a3, &sub_type, &parent_sfid_id)?;
             Self::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
 
             let register_nonce_hash = T::Hashing::hash(register_nonce.as_slice());
@@ -1810,10 +1684,13 @@ pub mod pallet {
                 !UsedRegisterNonce::<T>::get(register_nonce_hash),
                 Error::<T>::RegisterNonceAlreadyUsed
             );
+            let account_name_payload =
+                Self::account_names_payload_from_initial_accounts(&accounts)?;
             ensure!(
                 T::SfidInstitutionVerifier::verify_institution_registration(
                     sfid_id.as_slice(),
                     &institution_name,
+                    &account_name_payload,
                     &register_nonce,
                     &signature,
                     province.as_slice(),
@@ -1838,25 +1715,9 @@ pub mod pallet {
                 Error::<T>::InsufficientAmount
             );
 
-            let metadata_was_existing = InstitutionMetadata::<T>::contains_key(&sfid_id);
-            let new_metadata = MetadataInfo {
-                a3: a3.clone(),
-                sub_type: sub_type.clone(),
-                parent_sfid_id: parent_sfid_id.clone(),
-            };
-            if let Some(existing) = InstitutionMetadata::<T>::get(&sfid_id) {
-                ensure!(
-                    existing.a3 == new_metadata.a3
-                        && existing.sub_type == new_metadata.sub_type
-                        && existing.parent_sfid_id == new_metadata.parent_sfid_id,
-                    Error::<T>::InstitutionMetadataMismatch
-                );
-            }
-
             T::Currency::reserve(&who, reserve_total).map_err(|_| Error::<T>::ReserveFailed)?;
 
             let now = frame_system::Pallet::<T>::block_number();
-            InstitutionMetadata::<T>::insert(&sfid_id, &new_metadata);
             Institutions::<T>::insert(
                 &sfid_id,
                 InstitutionInfo {
@@ -1870,9 +1731,6 @@ pub mod pallet {
                     created_at: now,
                     status: InstitutionLifecycleStatus::Pending,
                     account_count: created_accounts.len() as u32,
-                    a3: a3.clone(),
-                    sub_type: sub_type.clone(),
-                    parent_sfid_id: parent_sfid_id.clone(),
                 },
             );
 
@@ -1939,10 +1797,6 @@ pub mod pallet {
                 initial_total,
                 fee,
                 reserve_total,
-                a3,
-                sub_type,
-                parent_sfid_id,
-                metadata_was_existing,
             };
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE_INSTITUTION);
@@ -1988,9 +1842,6 @@ pub mod pallet {
             let _ = T::Currency::unreserve(&action.proposer, action.reserve_total);
             PendingInstitutionCreate::<T>::remove(proposal_id);
             Institutions::<T>::remove(&action.sfid_id);
-            if !action.metadata_was_existing {
-                InstitutionMetadata::<T>::remove(&action.sfid_id);
-            }
             for account in action.accounts.iter() {
                 InstitutionAccounts::<T>::remove(&action.sfid_id, &account.account_name);
                 SfidRegisteredAddress::<T>::remove(&action.sfid_id, &account.account_name);
@@ -2514,13 +2365,17 @@ mod tests {
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
-            _account_name: &AccountNameOf<Test>,
+            institution_name: &AccountNameOf<Test>,
+            account_names: &[Vec<u8>],
             nonce: &RegisterNonceOf<Test>,
             signature: &RegisterSignatureOf<Test>,
             province: &[u8],
             signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            if nonce.is_empty()
+            if institution_name.is_empty()
+                || account_names.is_empty()
+                || account_names.iter().any(|name| name.is_empty())
+                || nonce.is_empty()
                 || province.is_empty()
                 || signer_admin_pubkey == &[0u8; 32]
                 || signature.as_slice() != b"register-ok"
@@ -2529,9 +2384,11 @@ mod tests {
             }
             // 严格模式:若注入了 ACTIVATED_ROSTER,则 (province, admin_pubkey) 必须命中。
             let strict_hit = ACTIVATED_ROSTER.with(|r| match &*r.borrow() {
-                Some(entries) => Some(entries.iter().any(|(p, k)| {
-                    p.as_slice() == province && k == signer_admin_pubkey
-                })),
+                Some(entries) => Some(
+                    entries
+                        .iter()
+                        .any(|(p, k)| p.as_slice() == province && k == signer_admin_pubkey),
+                ),
                 None => None,
             });
             match strict_hit {
@@ -2747,8 +2604,6 @@ mod tests {
         type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
-        type MaxA3Length = ConstU32<8>;
-        type MaxSubTypeLength = ConstU32<32>;
         type MaxAdminSignatureLength = ConstU32<64>;
         type MaxInstitutionAccounts = ConstU32<8>;
         type MinCreateAmount = ConstU128<111>;
@@ -2839,20 +2694,20 @@ mod tests {
             .to_vec()
             .try_into()
             .expect("register signature should fit");
-        // Step 2:测试默认用 GFR(公权机构),无 sub_type / parent。
-        let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
+        let account_names: InstitutionAccountNamesOf<Test> = vec![account_name.clone()]
+            .try_into()
+            .expect("account names should fit");
         // ADR-008 step2b：province 必填,signer_admin_pubkey 必填非全 0。mock verifier 仅做形态校验。
+        // 中文注释：注册验签 payload 只包含 SFID号、机构名称、账户名称列表和 SFID 签发凭证。
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
             account_name.clone(),
+            account_names,
             register_nonce,
             signature,
             b"LN".to_vec(),
             [1u8; 32],
-            a3,
-            None,
-            None,
         ));
         let duoqian_address = SfidRegisteredAddress::<Test>::get(&sfid, &account_name)
             .expect("sfid should be registered");
@@ -2953,19 +2808,19 @@ mod tests {
                 .to_vec()
                 .try_into()
                 .expect("register signature should fit");
-            let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
+            let account_names: InstitutionAccountNamesOf<Test> = vec![account_name.clone()]
+                .try_into()
+                .expect("account names should fit");
             assert_noop!(
                 Duoqian::register_sfid_institution(
                     RuntimeOrigin::signed(admin(1)),
                     sfid,
-                    account_name,
+                    account_name.clone(),
+                    account_names,
                     register_nonce,
                     bad_signature,
                     b"LN".to_vec(),
                     [1u8; 32],
-                    a3,
-                    None,
-                    None,
                 ),
                 Error::<Test>::InvalidSfidInstitutionSignature
             );
@@ -3462,9 +3317,6 @@ mod tests {
                 b"register-ok".to_vec().try_into().unwrap(),
                 b"AH".to_vec(),
                 [1u8; 32],
-                b"GFR".to_vec().try_into().unwrap(),
-                None,
-                None,
             ));
 
             let pid = last_proposal_id();
@@ -3555,9 +3407,6 @@ mod tests {
                 b"register-ok".to_vec().try_into().unwrap(),
                 b"AH".to_vec(),
                 [1u8; 32],
-                b"GFR".to_vec().try_into().unwrap(),
-                None,
-                None,
             ));
             let pid = last_proposal_id();
             let main_address = Pallet::<Test>::derive_institution_address(
@@ -3618,9 +3467,6 @@ mod tests {
                     b"register-ok".to_vec().try_into().unwrap(),
                     b"AH".to_vec(),
                     [1u8; 32],
-                    b"GFR".to_vec().try_into().unwrap(),
-                    None,
-                    None,
                 ),
                 Error::<Test>::MissingMainAccount
             );
@@ -3656,9 +3502,6 @@ mod tests {
                     b"register-ok".to_vec().try_into().unwrap(),
                     b"AH".to_vec(),
                     [1u8; 32],
-                    b"GFR".to_vec().try_into().unwrap(),
-                    None,
-                    None,
                 ),
                 Error::<Test>::AccountInitialAmountBelowMinimum
             );
@@ -3691,18 +3534,18 @@ mod tests {
             .to_vec()
             .try_into()
             .expect("register signature should fit");
-        let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
+        let account_names: InstitutionAccountNamesOf<Test> = vec![account_name.clone()]
+            .try_into()
+            .expect("account names should fit");
         Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid,
-            account_name,
+            account_name.clone(),
+            account_names,
             register_nonce,
             signature,
             province.to_vec(),
             admin_pubkey,
-            a3,
-            None,
-            None,
         )
     }
 

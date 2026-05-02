@@ -1,26 +1,22 @@
 // 创建机构多签页:链上 propose_create_institution(pallet=17, call=5)。
 //
 // 流程:
-//   1. 加载时调 offchainApi.fetchInstitutionCredential(sfidId) 拉机构信息 + 凭证
-//      响应自带 register_nonce + signature(由本机构所属省的省级签名密钥签发)
-//   2. 候选账户列表(从 SFID 同接口的 institution_name 导出 + 后续 SFID 多账户接口扩展):
-//      最简实现 = 用响应里的 institution_name 作主账户名称推断,UI 表单允许用户
-//      为已知账户(主账户/费用账户)填初始资金(1.11 元起)
+//   1. 加载时调 offchainApi.fetchInstitutionRegistrationInfo(sfidId) 拉注册专用信息
+//      响应自带 register_nonce / signature / province / signer_admin_pubkey。
+//   2. 账户列表完全以 SFID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
 //   3. 管理员列表:创建人(选中的本机冷钱包)自动占第一位 + 扫码添加管理员
 //   4. 阈值范围 ⌈n/2⌉ ~ n
 //   5. 选签名冷钱包 → buildProposeCreateInstitutionRequest → QR 两段握手 →
 //      submitProposeCreateInstitution → 成功跳 wait-vote
 //
-// 中文注释:本任务卡范围内 SFID 端只在 institution detail 接口里多带 2 个签名字段,
-// 没有"机构账户列表"独立 endpoint。表单先固定列出"主账户" + "费用账户"两条
-// 并允许用户填初始资金;follow-up 任务卡可改为读 SFID `/institutions/:sfid_id/accounts`
-// 拿动态账户列表。
+// 中文注释:链上注册 payload 只接收 SFID号、机构名称、账户名称列表和 SFID 签发凭证。
+// 机构类型三件套只属于 SFID 候选查询和资格判断,不再进入本页面提交链路。
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
 import { offchainApi } from '../api';
 import { saveKnownSfid } from '../section';
-import type { InitialAccountInputDto, InstitutionCredentialResp } from '../types';
+import type { InitialAccountInputDto, InstitutionRegistrationInfoResp } from '../types';
 
 type AdminWalletProfile = {
   address: string;
@@ -43,11 +39,6 @@ type AccountForm = {
   amountYuan: string;
 };
 
-const DEFAULT_ACCOUNT_FORM: AccountForm[] = [
-  { accountName: '主账户', amountYuan: '' },
-  { accountName: '费用账户', amountYuan: '' },
-];
-
 function yuanToFenString(yuan: string): string | null {
   const trimmed = yuan.trim();
   if (!trimmed) return null;
@@ -67,9 +58,10 @@ export function CreateMultisigInstitutionPage({
   onBack,
   onSubmitted,
 }: Props) {
-  const [credential, setCredential] = useState<InstitutionCredentialResp | null>(null);
+  const [registrationInfo, setRegistrationInfo] =
+    useState<InstitutionRegistrationInfoResp | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<AccountForm[]>(DEFAULT_ACCOUNT_FORM);
+  const [accounts, setAccounts] = useState<AccountForm[]>([]);
   const [adminPubkeys, setAdminPubkeys] = useState<string[]>([]);
   const [thresholdInput, setThresholdInput] = useState('');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletProfile | null>(
@@ -81,10 +73,12 @@ export function CreateMultisigInstitutionPage({
   useEffect(() => {
     let cancelled = false;
     offchainApi
-      .fetchInstitutionCredential(sfidId)
-      .then((c) => {
+      .fetchInstitutionRegistrationInfo(sfidId)
+      .then((info) => {
         if (cancelled) return;
-        setCredential(c);
+        setRegistrationInfo(info);
+        // 中文注释:账户名称由 SFID registration-info 签名覆盖,前端不得自行增删账户。
+        setAccounts(info.account_names.map((name) => ({ accountName: name, amountYuan: '' })));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -141,7 +135,8 @@ export function CreateMultisigInstitutionPage({
     && parseInt(thresholdInput.trim(), 10) <= adminCount;
 
   const validate = (): string | null => {
-    if (!credential) return '机构凭证未加载';
+    if (!registrationInfo) return '机构注册信息未加载';
+    if (registrationInfo.account_names.length === 0) return 'SFID 未返回账户名称列表';
     if (!selectedWallet) return '请选择签名冷钱包';
     if (adminCount < 2) return '管理员至少 2 人(创建人占第 1 位,需扫码再加 1 人以上)';
     if (!thresholdValid) {
@@ -164,7 +159,7 @@ export function CreateMultisigInstitutionPage({
       setSubmitError(err);
       return;
     }
-    if (!credential || !selectedWallet) return;
+    if (!registrationInfo || !selectedWallet) return;
 
     setSubmitting(true);
     try {
@@ -173,7 +168,8 @@ export function CreateMultisigInstitutionPage({
         amountFen: yuanToFenString(a.amountYuan)!,
       }));
       const threshold = parseInt(thresholdInput.trim(), 10);
-      const institutionName = credential.institution_name?.trim() ?? '';
+      const institutionName = registrationInfo.institution_name.trim();
+      const sfidCredential = registrationInfo.credential;
 
       // Step 1: 构 QR 签名请求
       const reqResult = await offchainApi.buildProposeCreateInstitutionRequest({
@@ -183,12 +179,10 @@ export function CreateMultisigInstitutionPage({
         accounts: accountInputs,
         adminPubkeys,
         threshold,
-        registerNonce: credential.register_nonce,
-        signatureHex: credential.signature,
-        signingProvince: credential.province,
-        a3: credential.a3,
-        subType: credential.sub_type ?? null,
-        parentSfidId: credential.parent_sfid_id ?? null,
+        registerNonce: sfidCredential.register_nonce,
+        signatureHex: sfidCredential.signature,
+        signingProvince: sfidCredential.province,
+        signerAdminPubkey: sfidCredential.signer_admin_pubkey,
       });
 
       // Step 2: 弹 QR 两段握手(对接现有 wumin sign_request page)。
@@ -227,7 +221,7 @@ export function CreateMultisigInstitutionPage({
       </>
     );
   }
-  if (!credential) {
+  if (!registrationInfo) {
     return (
       <>
         <button className="back-button" onClick={onBack}>← 返回</button>
@@ -236,7 +230,7 @@ export function CreateMultisigInstitutionPage({
     );
   }
 
-  const institutionName = credential.institution_name ?? '';
+  const institutionName = registrationInfo.institution_name;
 
   return (
     <>

@@ -744,7 +744,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             pallet::Error::<T>::UnauthorizedAdmin
         );
 
-        // 7. 资格白名单(委托给 trait 实现层查 InstitutionMetadata)
+        // 7. 资格白名单:SFID 负责候选资格,链上实现层只确认该机构账户已注册且 Active。
         ensure!(
             T::SfidAccountQuery::is_clearing_bank_eligible(&bank_main),
             pallet::Error::<T>::NotEligibleForClearingBank

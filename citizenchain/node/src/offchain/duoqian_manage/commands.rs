@@ -9,8 +9,8 @@ use tauri::AppHandle;
 use crate::governance::signing as gov_signing;
 use crate::home;
 use crate::offchain::common::types::{
-    EligibleClearingBankCandidate, InstitutionCredentialResp, InstitutionDetail,
-    InstitutionProposalPage,
+    EligibleClearingBankCandidate, InstitutionDetail, InstitutionProposalPage,
+    InstitutionRegistrationInfoResp,
 };
 
 use super::signing::InitialAccountInput;
@@ -63,16 +63,16 @@ pub async fn fetch_clearing_bank_institution_proposals(
     .map_err(|e| format!("fetch_clearing_bank_institution_proposals task failed:{e}"))?
 }
 
-/// 调 SFID 拉机构信息 + chain pull 凭证。
+/// 调 SFID 拉链上注册专用机构信息 + 签发凭证。
 #[tauri::command]
-pub async fn fetch_clearing_bank_institution_credential(
+pub async fn fetch_clearing_bank_institution_registration_info(
     sfid_id: String,
-) -> Result<InstitutionCredentialResp, String> {
+) -> Result<InstitutionRegistrationInfoResp, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        super::sfid::fetch_institution_credential(&sfid_id)
+        super::sfid::fetch_institution_registration_info(&sfid_id)
     })
     .await
-    .map_err(|e| format!("fetch_clearing_bank_institution_credential task failed:{e}"))?
+    .map_err(|e| format!("fetch_clearing_bank_institution_registration_info task failed:{e}"))?
 }
 
 /// 中文注释:从 TS 端传入的账户初始资金条目。
@@ -114,9 +114,7 @@ pub async fn build_propose_create_institution_request(
     register_nonce: String,
     signature_hex: String,
     signing_province: String,
-    a3: String,
-    sub_type: Option<String>,
-    parent_sfid_id: Option<String>,
+    signer_admin_pubkey: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
@@ -136,9 +134,7 @@ pub async fn build_propose_create_institution_request(
             &register_nonce,
             &signature_hex,
             &signing_province,
-            &a3,
-            sub_type.as_deref(),
-            parent_sfid_id.as_deref(),
+            &signer_admin_pubkey,
         )
     })
     .await
@@ -160,9 +156,7 @@ pub async fn submit_propose_create_institution(
     register_nonce: String,
     signature_hex: String,
     signing_province: String,
-    a3: String,
-    sub_type: Option<String>,
-    parent_sfid_id: Option<String>,
+    signer_admin_pubkey: String,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -184,9 +178,7 @@ pub async fn submit_propose_create_institution(
             &register_nonce,
             &signature_hex,
             &signing_province,
-            &a3,
-            sub_type.as_deref(),
-            parent_sfid_id.as_deref(),
+            &signer_admin_pubkey,
         )?;
         gov_signing::verify_and_submit(
             &request_id,

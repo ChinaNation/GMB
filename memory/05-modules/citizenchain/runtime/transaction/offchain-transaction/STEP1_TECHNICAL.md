@@ -35,11 +35,13 @@ pub fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 }
 ```
 
-合法清算行的四条并列条件(`ensure_can_be_bound`):
+合法清算行的六条并列条件(`ensure_can_be_bound`):
 1. 在 `AddressRegisteredSfid` 有登记
 2. `name` 段等于 `"主账户"`(3 字节 UTF-8 × 3 字 = 9 字节)
 3. A3 ∈ {SFR, FFR}
-4. `DuoqianAccount.status == Active`
+4. `InstitutionAccounts[(sfid_id, "主账户")].status == Active`
+5. `SfidAccountQuery::is_clearing_bank_eligible(bank_main)` 通过。2026-05-02 起 SFID 系统负责 `eligible-search` 候选筛选,链上不再保存 `a3/sub_type/parent_sfid_id` 元数据,这里只确认账户属于已注册且 Active 的 SFID 机构账户
+6. `ClearingBankNodes[sfid_id]` 已声明,确保用户不能绑定到"合法机构但未加入清算网络"的节点
 
 ## 4. 解耦抽象 `SfidAccountQuery`
 
@@ -50,15 +52,20 @@ pub trait SfidAccountQuery<AccountId> {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
     fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId>;
     fn is_active(addr: &AccountId) -> bool;
+    fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
+    fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
+    fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
 
 // 默认 () 实现返回未登记,供测试用。
 ```
 
-**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `duoqian-manage` 的三张 Storage:
+**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `duoqian-manage` / `offchain-transaction` 的链上索引:
 - `AddressRegisteredSfid` → `account_info`
 - `SfidRegisteredAddress` → `find_address`
-- `DuoqianAccounts` → `is_active`
+- `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
+- `admins-change` 主体表 → `is_admin_of`
+- `ClearingBankNodes` → `is_registered_clearing_node`
 
 **好处**:
 - offchain-transaction 的 Cargo.toml 不新增 duoqian-manage 依赖
@@ -186,3 +193,4 @@ $ cargo check -p institution-asset
 ## 15. 变更记录
 
 - 2026-04-19:Step 1 首次落地,新增 4 文件 + lib.rs 聚合扩展 + 跨模块配置改动。
+- 2026-05-02:清算行资格元数据从链上移除。SFID 负责候选资格筛选,链上只确认机构账户已注册、Active 且已声明节点。
