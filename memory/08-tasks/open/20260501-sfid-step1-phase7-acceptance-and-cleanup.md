@@ -114,3 +114,63 @@ grep -rEn "keyring|key_admin" sfid/frontend/src/                                
 - feature branch:`sfid-step1-phase7-acceptance-and-cleanup`
 - 单 PR 落地,作为 Step 1 收口 PR
 - PR 描述:贴出全部 grep 残留检查输出 + e2e 结果
+
+## Progress(2026-05-01,SFID Agent 工作线程)
+
+### 已完成 — chain push 4 个 extrinsic mock → real
+
+| 文件 | 改动 |
+|---|---|
+| `sfid/backend/src/chain/client.rs` | 整体重写:`MockTxHash` → `TxHash`(保留 `.hex` 字段,handler 调用点零变化);`submit_immortal_paysno_mock` → `submit_immortal_paysno(label, call_bytes)` 真实推链;新增 V4 BARE 包装 helper `wrap_v4_bare`(version_byte=0x04 + Compact len 前缀);新增 32 字节随机 `generate_sheng_nonce`;subxt OnlineClient 单例 `tokio::OnceCell` + 指数退避重试 3 次(200/400/800ms);`TxStatus::InBestBlock` 收口;1010 / Invalid → `ChainPushError::InvalidTx`;`ChainPushError::NotImplemented` 已删除 |
+| `chain/sheng_admin/add_backup.rs` | service 改 `add_backup(province, slot, new_pubkey, signer_pair)`,内部生成 nonce + 计算 `blake2_256((ADD_BACKUP_DOMAIN, province, slot, new_pubkey, nonce).encode())` + sr25519 签名 + 裸 SCALE 编码 call_bytes(pallet_idx=10, call_idx=2)+ 调 `submit_immortal_paysno`;handler 从 `state.sheng_signer_cache.any_for_province` 取 signer pair |
+| `chain/sheng_admin/remove_backup.rs` | 同上(call_idx=3,domain `b"remove_sheng_admin_backup_v1"`) |
+| `chain/sheng_signer/activation.rs` | 同上(call_idx=4,domain `b"activate_sheng_signing_pubkey_v1"`),signer pair 从 `cache.get(province, &admin_pubkey)` |
+| `chain/sheng_signer/rotation.rs` | 同上(call_idx=5,domain `b"rotate_sheng_signing_pubkey_v1"`) |
+| `chain/sheng_admin/mod.rs` / `chain/sheng_signer/mod.rs` | 顶部 `//!` 注释更新为 phase7 真实推链 |
+| `sheng_admins/roster.rs` | 历史 mock(无活跃调用方)注释 + 函数名改 `push_chain_placeholder`,标注被 `chain/sheng_admin/` 取代 |
+| `chain/sheng_admin/query.rs` / `handler.rs` | warn 字符串 / 错误文案去 mock 字眼(query.rs 仍是占位实现,留独立卡;chain pull 不在本卡范围) |
+
+### 关键约束已对齐
+
+- pallet_index = 10(SfidSystem,与 `runtime/src/lib.rs` `#[runtime::pallet_index(10)]` 对齐)
+- 4 个 call_index = 2/3/4/5
+- Slot SCALE 编码:Main=0 / Backup1=1 / Backup2=2(单字节,与链端 `pub enum Slot` 对齐)
+- ProvinceBound encoded as `Vec<u8>`(`Compact(len) ++ bytes`)
+- ShengNonce = `[u8; 32]`(无长度前缀)
+- domain 常量 `[u8; N]` 数组(死规则 `feedback_scale_domain_must_be_array.md`)
+- payload 顺序与链端 `Pallet::*_payload` helper 严格一致
+- V4 BARE wire 格式(`Compact(len) ++ 0x04 ++ pallet_idx ++ call_idx ++ args`)与
+  substrate `Preamble::Bare(LEGACY_EXTRINSIC_FORMAT_VERSION)` 编码等价
+
+### 验证结果
+
+```
+cargo check -p sfid-backend  # 全绿(仅 3 条 baseline dead_code warning 在 sfid/province.rs)
+cargo test   -p sfid-backend  # 79 passed; 0 failed(baseline 66 → +13 新增)
+cargo clippy -p sfid-backend --all-targets  # chain/ 子目录零新增 error/warning(baseline 51 warnings 在 store_shards/main.rs 不变)
+
+grep -rn "submit_immortal_paysno_mock\|chain push mocked\|chain pull mocked\|MockTxHash" sfid/backend/src/  # 0
+grep -rn "ChainPushError::NotImplemented" sfid/backend/src/                                                   # 0
+```
+
+### 新增测试覆盖
+
+- `chain::client::tests`:`wrap_v4_bare_prepends_compact_len_and_version_byte` / `wrap_v4_bare_handles_longer_payloads`(2 字节 Compact 模式)/ `generate_sheng_nonce_returns_random_32_bytes` / `tx_hash_from_h256_uses_lowercase_0x_hex` / `chain_push_error_display_carries_payload`
+- `chain::sheng_admin::add_backup::tests`:payload 签名 + sr25519 自验证 / `Slot::Main` 拒绝路径 / call_bytes 头字节断言 / **完整 V4 BARE wire 字节构造端到端断言**
+- `chain::sheng_admin::remove_backup::tests`:payload 签名 + 拒绝 Main 槽
+- `chain::sheng_signer::{activation,rotation}::tests`:payload 签名自验证
+
+### 已识别架构卡点(留 Step 2 联调时统一解决)
+
+- **链端 4 个 unsigned extrinsic 验签语义与 SFID 后端可签密钥不匹配**:
+  - `add_sheng_admin_backup` / `remove_sheng_admin_backup` 链端要求由本省 `ShengAdmins[Province][Main]` 公钥签发;SFID 后端不持有 admin slot 私钥(admin 私钥仅在冷钱包内)。
+  - `activate_sheng_signing_pubkey` / `rotate_sheng_signing_pubkey` 链端要求由 `admin_pubkey` 签发;SFID 后端 `sheng_signer_cache` 持有的是 **signing pair**(bootstrap 派生),公钥即 `signing_pubkey`,与 `admin_pubkey` 是不同密钥。
+  - **当前实现**:4 个 helper 用 `sheng_signer_cache` 的 signing pair 作为 stand-in 签名,链端 `Sheng3TierSignatureInvalid` 验签会失败,直至引入冷钱包签名通路或链端 verifier 调整。
+- **e2e 测试自动化降级**:phase7 任务卡指引"如启动 docker 链端复杂可降级为 mock 单元测试,真实 e2e 留人工"。本期补了完整 wire 字节构造断言(`add_backup_constructs_correct_unsigned_extrinsic_wire`)+ payload 签名自验证,真实链联调留 Step 2 上线后人工验收。
+- **chain pull(`query.rs::fetch_roster`)未切真**:仍走常量 + None 占位。本卡严格只覆盖 4 个 push extrinsic,chain pull 切真留独立任务卡。
+
+### 后续建议任务卡
+
+1. **冷钱包签名通路**(优先级 P0):wumin/wuminapp 增加 4 个 unsigned extrinsic 的 QR 扫码签名两色识别,SFID 后端改为接收前端推链请求体里的 sig 字段(而非自己签)。
+2. **chain pull 全量切真**:`chain/sheng_admin/query.rs` + `chain/citizen_binding` 等 4 个 chain pull 业务模块走 subxt `storage().fetch()`。
+3. **`sheng_admins/roster.rs` 删除**:无活跃调用方,Phase 7 收尾时一并删除。
