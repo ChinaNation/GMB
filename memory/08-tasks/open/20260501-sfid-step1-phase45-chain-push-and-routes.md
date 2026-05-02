@@ -137,3 +137,67 @@ GET  /chain/sheng-admin/list[?province=AH]
 - feature branch:`sfid-step1-phase45-chain-push-and-routes`
 - 单 PR 落地,commit message 引用任务卡 + ADR-008
 - 留 TODO 标记:`// TODO(step2-联调): 替换 mock 为真实推链 - 见任务卡 phase7`
+
+---
+
+## Progress(2026-05-01)
+
+### A. `chain/sheng_admin/`(管理员名册) — 完工
+
+- [x] `mod.rs`(30 行,顶部 `//!` 注释:Pays::No / 1010 错误规避 / phase45 mock 标注)
+- [x] `query.rs`(67 行,`fetch_roster` mock 返回 `[Some(main), None, None]`,带 `tracing::warn!("chain pull mocked, awaiting Step 2")`,附 2 个 tokio test)
+- [x] `add_backup.rs`(129 行,service + handler;require_sheng_admin → 取 ctx.admin_province → mock 推链)
+- [x] `remove_backup.rs`(110 行,同结构)
+- [x] `handler.rs`(137 行,`list_roster_admin` session 版 + `list_roster_public` 公开版,共享 `render_roster` helper)
+
+### B. `chain/sheng_signer/`(签名密钥) — 完工
+
+- [x] `mod.rs`(17 行)
+- [x] `activation.rs`(117 行,从 cache 取 keypair → 推 mock activate;cache miss 时返回 1503)
+- [x] `rotation.rs`(112 行,接收 `new_signing_pubkey` 入参 → 推 mock rotate)
+- [x] `handler.rs`(10 行 re-export 占位,phase7 改造时统一入口)
+
+### C. `chain/client.rs`(共享 helper) — 完工(独立文件,未抽 runtime_align)
+
+- [x] `client.rs`(105 行)
+- [x] `MockTxHash::placeholder()` 返回固定 `0x...beef` hash
+- [x] `submit_immortal_paysno_mock(extrinsic_label)` emit `tracing::warn!(extrinsic, "chain push mocked, awaiting Step 2")`
+- [x] `ChainPushError` 枚举占位:`NotImplemented` / `InvalidTx` / `Other`
+- [x] runtime_align.rs 不动(按"卡住时策略",phase7 切真时再合并)
+
+### D. `main.rs` 路由表收敛 — 完工
+
+新增 6 个 endpoint(任务卡指定 7 个,其中 `/api/v1/admin/sheng-admin/dashboard` 已存在为 `sheng_admins::list_sheng_admins`,任务卡说明"若已有就好"未重复挂):
+
+```
+GET  /api/v1/admin/sheng-admin/roster              → chain::sheng_admin::handler::list_roster_admin    (admin session)
+POST /api/v1/admin/sheng-admin/roster/add-backup   → chain::sheng_admin::add_backup::handler           (admin session)
+POST /api/v1/admin/sheng-admin/roster/remove-backup→ chain::sheng_admin::remove_backup::handler        (admin session)
+POST /api/v1/admin/sheng-signer/activate           → chain::sheng_signer::activation::handler          (admin session)
+POST /api/v1/admin/sheng-signer/rotate             → chain::sheng_signer::rotation::handler            (admin session)
+GET  /api/v1/chain/sheng-admin/list?province=XX    → chain::sheng_admin::handler::list_roster_public   (公开,挂在 app_routes 全局 rate limit 之后)
+```
+
+### E. `AppState` 字段精简 — 无新增,与 phase23e 既有结构对齐
+
+- 无 KEY_ADMIN 残留字段(`signing_seed_hex` / `known_key_seeds` / `key_id` / `key_version` / `key_alg` / `public_key_hex` 早随 phase23e 全删)
+- 保留:`store` / `rate_limit_redis` / `cpms_register_inflight` / `sheng_signer_cache` / `sharded_store`
+- AppState struct 未改
+
+### Cargo 终态
+
+- `cargo check`:全绿,**3 baseline warning**(province.rs `name`/`code`/`towns` dead_code,与 baseline 一致)
+- `cargo test`:**66 passed / 0 failed**(baseline 64 + query.rs 新增 2 个 tokio test)
+- `cargo clippy --all-targets -- -D warnings`:**51 errors**(与 baseline 51 持平,未引入新错)
+
+### Mock helper 关键字标记(grep 可观察)
+
+- `chain push mocked, awaiting Step 2` — `chain/client.rs::submit_immortal_paysno_mock`
+- `chain pull mocked, awaiting Step 2` — `chain/sheng_admin/query.rs::fetch_roster`
+- `[chain push] add_sheng_admin_backup 即将提交` 等 4 条 `tracing::info!` 业务前缀,phase7 切真时一并替换为真实 tx 进度
+
+### 后续任务卡调整建议
+
+- 不需要调整。phase7(mock → real)预计仅替换 `chain/client.rs::submit_immortal_paysno_mock` 内部、新增 subxt 单例、保持 service / handler 接口稳定
+- 是否抽公共 subxt OnlineClient 单例,phase7 决定;phase45 不强求
+- 残留 `sheng_admins/roster.rs::push_chain_mock`(roster.rs 同名旧 mock,99 行起)与新 chain/sheng_admin/add_backup 路径重复:phase7 切真时收敛二者,phase45 暂保留(business service 与 chain push extrinsic 是两层职责)
