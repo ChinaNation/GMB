@@ -30,6 +30,9 @@ import { LoginView } from '../views/auth/LoginView';
 import { InstitutionsView } from '../views/institutions/InstitutionsView';
 import { OperatorsView } from '../views/shi_admin/OperatorsView';
 import { ShengAdminsView } from '../views/sheng_admin/ShengAdminsView';
+import { RosterPage } from '../views/sheng_admin/RosterPage';
+import { ActivationPage } from '../views/sheng_admin/ActivationPage';
+import { RotatePage } from '../views/sheng_admin/RotatePage';
 import { CitizensView } from '../views/citizens/CitizensView';
 
 const { Header, Content } = Layout;
@@ -69,7 +72,10 @@ type ActiveView =
   | 'multisig'
   | 'system-settings'
   | 'sheng-admins'
-  | 'operators';
+  | 'operators'
+  | 'sheng-roster'
+  | 'sheng-signer-activate'
+  | 'sheng-signer-rotate';
 
 function AppInner() {
   const { auth, setAuth, capabilities } = useAuth();
@@ -290,6 +296,21 @@ function AppInner() {
                 key: 'system-settings' as const, label: '注册局',
                 visible: capabilities.canViewSystemSettings,
                 onClick: () => setActiveView('system-settings')
+              },
+              {
+                key: 'sheng-roster' as const, label: '省管理员名册',
+                visible: auth?.role === 'SHENG_ADMIN',
+                onClick: () => setActiveView('sheng-roster')
+              },
+              {
+                key: 'sheng-signer-activate' as const, label: '激活签名',
+                visible: auth?.role === 'SHENG_ADMIN',
+                onClick: () => setActiveView('sheng-signer-activate')
+              },
+              {
+                key: 'sheng-signer-rotate' as const, label: 'rotate 签名',
+                visible: auth?.role === 'SHENG_ADMIN',
+                onClick: () => setActiveView('sheng-signer-rotate')
               }
             ] as const)
               .filter((tab) => tab.visible)
@@ -327,6 +348,12 @@ function AppInner() {
             <InstitutionsView key="PRIVATE_INSTITUTION" auth={auth} category="PRIVATE_INSTITUTION" sfidMeta={sfidMeta} />
           ) : activeView === 'system-settings' && capabilities.canViewSystemSettings ? (
             <ShengAdminsView mode="system-settings" />
+          ) : activeView === 'sheng-roster' && auth?.role === 'SHENG_ADMIN' ? (
+            <RosterPage auth={auth} />
+          ) : activeView === 'sheng-signer-activate' && auth?.role === 'SHENG_ADMIN' ? (
+            <ActivationPage auth={auth} />
+          ) : activeView === 'sheng-signer-rotate' && auth?.role === 'SHENG_ADMIN' ? (
+            <RotatePage auth={auth} />
           ) : (
             <CitizensView />
           )}
