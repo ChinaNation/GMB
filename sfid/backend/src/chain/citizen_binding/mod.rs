@@ -10,7 +10,7 @@
 //! - 凭证签发(`build_bind_credential` / `build_bind_credential_with_province`)
 //!   保留在 [`crate::chain::runtime_align`],与其他凭证类型共享 offline 编码工具
 //!
-//! handler 入口仍在 [`crate::operate::binding`],本模块只负责"和链交互"的部分。
+//! handler 入口仍在 [`crate::citizens::binding`],本模块只负责"和链交互"的部分。
 
 pub(crate) mod push;
 

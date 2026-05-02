@@ -1,3 +1,8 @@
+//! 公民状态扫码 handler:CPMS 站点扫公民状态 QR,审计 + 缓存失效。
+//!
+//! 入口由 `shi_admins::admin_cpms_status_scan` 路由转发,链上交互能力位于
+//! `chain::citizen_binding`,canonical 文本拼装位于 `citizens::cpms_qr`。
+
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
@@ -91,7 +96,7 @@ pub(crate) async fn admin_cpms_status_scan(
         CitizenStatus::Normal => "NORMAL",
         CitizenStatus::Abnormal => "ABNORMAL",
     };
-    let canonical = crate::operate::cpms_qr::canonical_status_qr_text(
+    let canonical = crate::citizens::cpms_qr::canonical_status_qr_text(
         &payload.ver,
         &payload.issuer_id,
         &payload.site_sfid,

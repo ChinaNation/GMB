@@ -23,13 +23,13 @@ use uuid::Uuid;
 
 mod app_core;
 mod chain;
+mod citizens;
 mod indexer;
 mod institutions;
 #[path = "key-admins/mod.rs"]
 mod key_admins;
 mod login;
 mod models;
-mod operate;
 #[allow(dead_code)]
 mod qr;
 mod scope;
@@ -1002,24 +1002,24 @@ fn main() {
             // ── 公民身份绑定 ──
             .route(
                 "/api/v1/admin/citizen/bind/challenge",
-                post(operate::binding::citizen_bind_challenge),
+                post(citizens::binding::citizen_bind_challenge),
             )
             .route(
                 "/api/v1/admin/citizen/bind",
-                post(operate::binding::citizen_bind),
+                post(citizens::binding::citizen_bind),
             )
             .route(
                 "/api/v1/admin/citizen/unbind",
-                post(operate::binding::citizen_unbind),
+                post(citizens::binding::citizen_unbind),
             )
             // ── 投票账户推链 ──
             .route(
                 "/api/v1/admin/citizen/bind/push-chain",
-                post(operate::binding::citizen_push_chain_bind),
+                post(citizens::binding::citizen_push_chain_bind),
             )
             .route(
                 "/api/v1/admin/citizen/unbind/push-chain",
-                post(operate::binding::citizen_push_chain_unbind),
+                post(citizens::binding::citizen_push_chain_unbind),
             )
             .route("/api/v1/admin/sfid/meta", get(sfid::admin::admin_sfid_meta))
             .route(
@@ -1062,7 +1062,7 @@ fn main() {
         // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
         //
         // 全部端点都汇集在 chain/ 子目录(institution_info / joint_vote / citizen_vote)。
-        // wuminapp 自有功能(钱包交易索引、投票账户绑定)继续留 indexer / operate 模块。
+        // wuminapp 自有功能(钱包交易索引、投票账户绑定)继续留 indexer / citizens 模块。
         let app_routes = Router::new()
             // ── 联合投票:获取公民人数快照凭证 ──
             .route(
@@ -1082,11 +1082,11 @@ fn main() {
             // ── wuminapp 投票账户注册/查询(wuminapp 自有) ──
             .route(
                 "/api/v1/app/vote-account/register",
-                post(operate::binding::app_vote_account_register),
+                post(citizens::binding::app_vote_account_register),
             )
             .route(
                 "/api/v1/app/vote-account/status",
-                get(operate::binding::app_vote_account_status),
+                get(citizens::binding::app_vote_account_status),
             )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
