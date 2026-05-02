@@ -40,6 +40,9 @@ class RuntimeUpgradeService {
 
   /// 提交 propose_runtime_upgrade extrinsic。
   ///
+  /// ADR-008 step3 双层凭证(province, signer_admin_pubkey)由 SFID 后端
+  /// 在签发人口快照时一并下发,本服务仅按 SCALE 顺序透传到 chain。
+  ///
   /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
   Future<({String txHash, int usedNonce})> submitProposeRuntimeUpgrade({
     required String reason,
@@ -47,16 +50,23 @@ class RuntimeUpgradeService {
     required int eligibleTotal,
     required Uint8List snapshotNonce,
     required Uint8List signature,
+    required Uint8List province,
+    required Uint8List signerAdminPubkey,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    final callData = _buildProposeRuntimeUpgradeCall(
+    if (signerAdminPubkey.length != 32) {
+      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
+    }
+    final callData = buildProposeRuntimeUpgradeCallForTest(
       reason: reason,
       wasmCode: wasmCode,
       eligibleTotal: eligibleTotal,
       snapshotNonce: snapshotNonce,
       signature: signature,
+      province: province,
+      signerAdminPubkey: signerAdminPubkey,
     );
     return _signAndSubmit(
       callData: callData,
@@ -326,15 +336,35 @@ class RuntimeUpgradeService {
 
   /// 构造 propose_runtime_upgrade call data。
   ///
-  /// 格式：[13][0][compact_len+reason_utf8][compact_len+wasm_bytes]
-  ///       [u64_le:eligible_total][compact_len+nonce_bytes][compact_len+signature_bytes]
-  Uint8List _buildProposeRuntimeUpgradeCall({
+  /// 格式(ADR-008 step3 双层凭证)：
+  /// `[13][0]
+  ///  [compact_len+reason_utf8]
+  ///  [compact_len+wasm_bytes]
+  ///  [u64_le:eligible_total]
+  ///  [compact_len+nonce_bytes]
+  ///  [compact_len+signature_bytes]
+  ///  [compact_len+province_bytes]   ★ ADR-008 step3
+  ///  [32B signer_admin_pubkey]      ★ ADR-008 step3`
+  ///
+  /// 与链端 `propose_runtime_upgrade` extrinsic SCALE 顺序逐字一致。
+  /// signer_admin_pubkey 是 [u8; 32] 固定字段(无 Compact 长度前缀)。
+  /// feedback_scale_domain_must_be_array.md:固定长度 byte array 不走 Vec 编码。
+  ///
+  /// `@visibleForTesting`:对 step2d 双端 SCALE fixture 暴露,链端 = wumin =
+  /// wuminapp 三处字节序列必须逐字一致,因此该构造逻辑被独立测试覆盖。
+  @visibleForTesting
+  static Uint8List buildProposeRuntimeUpgradeCallForTest({
     required String reason,
     required Uint8List wasmCode,
     required int eligibleTotal,
     required Uint8List snapshotNonce,
     required Uint8List signature,
+    required Uint8List province,
+    required Uint8List signerAdminPubkey,
   }) {
+    if (signerAdminPubkey.length != 32) {
+      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
+    }
     final output = ByteOutput();
     output.pushByte(_palletIndex);
     output.pushByte(_proposeCallIndex);
@@ -369,6 +399,15 @@ class RuntimeUpgradeService {
     if (signature.isNotEmpty) {
       output.write(signature);
     }
+
+    // ★ province: BoundedVec<u8, ConstU32<64>> = Compact<u32> length + bytes
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(province.length)));
+    if (province.isNotEmpty) {
+      output.write(province);
+    }
+
+    // ★ signer_admin_pubkey: [u8; 32] 固定字节,无 Compact 前缀
+    output.write(signerAdminPubkey);
 
     return output.toBytes();
   }
@@ -522,7 +561,7 @@ class RuntimeUpgradeService {
 
   // ──── 内部：编码工具 ────
 
-  Uint8List _u64ToLeBytes(int value) {
+  static Uint8List _u64ToLeBytes(int value) {
     final bytes = Uint8List(8);
     final bd = ByteData.sublistView(bytes);
     bd.setUint64(0, value, Endian.little);

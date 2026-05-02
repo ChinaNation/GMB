@@ -183,8 +183,10 @@ class PayloadDecoder {
       // ── DuoqianManage(17) ──
       // Phase 3：投票入口统一到 VotingEngine::internal_vote。本 pallet
       // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
-      // register_sfid_institution 由 sfid 后端 ShengSigningPubkey 直签,
+      // register_sfid_institution(call=2) 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
+      // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
+      // ADR-008 step2b/step2d 后凭证带 (province, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.duoqianManagePallet) {
         if (callIndex == PalletRegistry.proposeCreateCall) {
           return _decodeProposeCreate(bytes);
@@ -195,12 +197,23 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
           return _decodeProposeCreatePersonal(bytes);
         }
+        if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
+          return _decodeProposeCreateInstitution(bytes);
+        }
         if (callIndex == PalletRegistry.cleanupRejectedProposalCall) {
           return _decodeProposalIdOnly(
             bytes,
             action: 'cleanup_rejected_proposal',
             summaryTemplate: '清理被拒提案 #{id} 残留',
           );
+        }
+      }
+
+      // ── ResolutionIssuance(8) · 决议发行联合提案 ──
+      // ADR-008 step3 后凭证 SCALE 末尾带 (province, signer_admin_pubkey)。
+      if (palletIndex == PalletRegistry.resolutionIssuancePallet) {
+        if (callIndex == PalletRegistry.proposeResolutionIssuanceCall) {
+          return _decodeProposeResolutionIssuance(bytes);
         }
       }
 
@@ -458,11 +471,19 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // VotingEngine(9) / citizen_vote(2)
-  // 格式：[0x09][0x02][proposal_id:u64_le][binding_id:32][Vec nonce][Vec sig][approve:bool]
+  //
+  // ADR-008 step3 凭证双层匹配:
+  // 格式：[0x09][0x02][proposal_id:u64_le][binding_id:32]
+  //       [Vec nonce][Vec sig][Vec province][[u8;32] signer_admin_pubkey][approve:bool]
+  //
+  // (province, signer_admin_pubkey) 必须进 payload — 链端 RuntimeSfidVoteVerifier
+  // 走 sheng_signing_pubkey_for_admin(province, admin) 双层匹配查派生公钥,
+  // signer_admin_pubkey 不进 SCALE 即被拒签 → decoder 拒绝旧凭证字节流。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCitizenVote(Uint8List bytes) {
-    // 最小：2 + 8 + 32 + 1(Vec nonce compact len) + 1(Vec sig compact len) + 1(approve) = 45
-    if (bytes.length < 45) return null;
+    // 最小：2 + 8 + 32 + 1(nonce compact) + 1(sig compact)
+    //      + 1(province compact) + 32(signer_admin_pubkey) + 1(approve) = 78
+    if (bytes.length < 78) return null;
 
     final proposalId = _readU64Le(bytes, 2);
 
@@ -481,6 +502,21 @@ class PayloadDecoder {
     if (offset + sigLen > bytes.length) return null;
     offset += sigLen;
 
+    // ADR-008 step3 ★ Vec<u8> province (UTF-8 省份字节,BoundedVec<u8, 64>)
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final province = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // ADR-008 step3 ★ [u8; 32] signer_admin_pubkey (固定 32 字节)
+    if (offset + 32 > bytes.length) return null;
+    final signerAdminPubkey = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
     // approve: bool（1 字节）
     if (offset >= bytes.length) return null;
     final approve = bytes[offset] != 0;
@@ -492,6 +528,8 @@ class PayloadDecoder {
       fields: {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
+        'province': province,
+        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
       },
     );
   }
@@ -499,14 +537,16 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // RuntimeUpgrade(13) / propose_runtime_upgrade(0)
   //
-  // 链端签名：
+  // 链端签名(ADR-008 step3 双层凭证):
   //   pub fn propose_runtime_upgrade(
   //     origin,
-  //     reason: ReasonOf<T>,          // BoundedVec<u8>
-  //     code: CodeOf<T>,              // BoundedVec<u8> —— 实际 WASM
+  //     reason: ReasonOf<T>,                  // BoundedVec<u8>
+  //     code: CodeOf<T>,                      // BoundedVec<u8> —— 实际 WASM
   //     eligible_total: u64,
   //     snapshot_nonce: SnapshotNonceOf<T>,   // BoundedVec<u8>
   //     signature: SnapshotSignatureOf<T>,    // BoundedVec<u8>
+  //     province: BoundedVec<u8, ConstU32<64>>,   // ★ ADR-008 step3
+  //     signer_admin_pubkey: [u8; 32],            // ★ ADR-008 step3
   //   )
   //
   // SCALE 编码：
@@ -516,11 +556,15 @@ class PayloadDecoder {
   //   + u64_le eligible_total
   //   + Compact<u32> nonce_len  + nonce_bytes
   //   + Compact<u32> sig_len    + sig_bytes
+  //   + Compact<u32> province_len + province_bytes
+  //   + 32B signer_admin_pubkey
   //
   // display.fields 对齐 Registry: `reason` / `wasm_size` / `wasm_hash` /
-  // `eligible_total`。`wasm_hash` 由 decoder 现场 `sha256(wasm_bytes)` 计算,
+  // `eligible_total` / `province` / `signer_admin_pubkey`。
+  // `wasm_hash` 由 decoder 现场 `sha256(wasm_bytes)` 计算,
   // 与节点 Tauri UI 用同一算法生成的哈希逐字对齐 — 这样用户才能独立核对
-  // "我签的就是这份 WASM"。
+  // "我签的就是这份 WASM"。signer_admin_pubkey 用小写 0x hex 展示,
+  // 内部统一格式遵循 feedback_pubkey_format_rule.md。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeRuntimeUpgrade(Uint8List bytes) {
     if (bytes.length < 3) return null;
@@ -552,6 +596,33 @@ class PayloadDecoder {
     // eligible_total: u64_le
     if (offset + 8 > bytes.length) return null;
     final eligibleTotal = _readU64Le(bytes, offset);
+    offset += 8;
+
+    // snapshot_nonce: Vec<u8>(本卡只跳过)
+    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nonceLenSize;
+    if (offset + nonceLen > bytes.length) return null;
+    offset += nonceLen;
+
+    // signature: Vec<u8>(本卡只跳过)
+    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sigLenSize;
+    if (offset + sigLen > bytes.length) return null;
+    offset += sigLen;
+
+    // ADR-008 step3 ★ province: BoundedVec<u8, 64>(SCALE Vec)
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final province = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // ADR-008 step3 ★ signer_admin_pubkey: [u8; 32](固定 32 字节)
+    if (offset + 32 > bytes.length) return null;
+    final signerAdminPubkey = bytes.sublist(offset, offset + 32);
 
     return DecodedPayload(
       action: 'propose_runtime_upgrade',
@@ -562,6 +633,8 @@ class PayloadDecoder {
         'wasm_size': _formatWasmSize(wasmLen),
         'wasm_hash': '0x$wasmHash',
         'eligible_total': eligibleTotal.toString(),
+        'province': province,
+        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
       },
     );
   }
@@ -714,6 +787,240 @@ class PayloadDecoder {
         'admin_count': adminCount.toString(),
         'threshold': '$threshold/$adminCount',
         'amount_yuan': '$amountYuan GMB',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DuoqianManage(17) / propose_create_institution(5)
+  //
+  // 链端签名(ADR-008 step2b 双层凭证):
+  //   pub fn propose_create_institution(
+  //     origin,
+  //     sfid_id: SfidIdOf<T>,                 // BoundedVec<u8>
+  //     institution_name: AccountNameOf<T>,   // BoundedVec<u8>
+  //     accounts: InstitutionInitialAccountsOf<T>,
+  //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
+  //     admin_count: u32,
+  //     duoqian_admins: DuoqianAdminsOf<T>,   // BoundedVec<AccountId32>
+  //     threshold: u32,
+  //     register_nonce: RegisterNonceOf<T>,   // BoundedVec<u8>
+  //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
+  //     province: Vec<u8>,                    // ★ ADR-008 step2b 必填省份
+  //     signer_admin_pubkey: [u8; 32],        // ★ ADR-008 step2b 签名 admin
+  //     a3: A3Of<T>,                          // BoundedVec<u8> (3 ASCII chars)
+  //     sub_type: Option<SubTypeOf<T>>,       // Option<BoundedVec<u8>>
+  //     parent_sfid_id: Option<SfidIdOf<T>>,  // Option<BoundedVec<u8>>
+  //   )
+  //
+  // SCALE 顺序与上述完全一致;新字段位置在 register_nonce/signature 后、
+  // a3/sub_type/parent_sfid_id 前。链端 RuntimeSfidInstitutionVerifier 走
+  // sheng_signing_pubkey_for_admin(province, signer_admin_pubkey) 双层匹配。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    var offset = 2;
+
+    // sfid_id: BoundedVec<u8>
+    final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sfidLenSize;
+    if (offset + sfidLen > bytes.length) return null;
+    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen),
+        allowMalformed: true);
+    offset += sfidLen;
+
+    // institution_name: BoundedVec<u8>
+    final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nameLenSize;
+    if (offset + nameLen > bytes.length) return null;
+    final institutionName = utf8.decode(
+        bytes.sublist(offset, offset + nameLen),
+        allowMalformed: true);
+    offset += nameLen;
+
+    // accounts: BoundedVec<InstitutionInitialAccount>
+    //   每项 = (account_name: Vec<u8>, amount: u128)
+    final (accountsLen, accountsLenSize) = _decodeCompactU32(bytes, offset);
+    offset += accountsLenSize;
+    BigInt accountsTotal = BigInt.zero;
+    for (var i = 0; i < accountsLen; i++) {
+      final (subNameLen, subNameLenSize) = _decodeCompactU32(bytes, offset);
+      offset += subNameLenSize;
+      if (offset + subNameLen + 16 > bytes.length) return null;
+      offset += subNameLen;
+      accountsTotal += _readU128Le(bytes, offset);
+      offset += 16;
+    }
+
+    // admin_count: u32 (LE)
+    if (offset + 4 > bytes.length) return null;
+    final adminCount = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // duoqian_admins: BoundedVec<AccountId32> — 跳过 N × 32 bytes
+    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
+    offset += adminsLenSize;
+    if (offset + adminsLen * 32 > bytes.length) return null;
+    offset += adminsLen * 32;
+
+    // threshold: u32 (LE)
+    if (offset + 4 > bytes.length) return null;
+    final threshold = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
+    offset += 4;
+
+    // register_nonce: BoundedVec<u8> — 跳过
+    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nonceLenSize;
+    if (offset + nonceLen > bytes.length) return null;
+    offset += nonceLen;
+
+    // signature: BoundedVec<u8> — 跳过
+    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sigLenSize;
+    if (offset + sigLen > bytes.length) return null;
+    offset += sigLen;
+
+    // ADR-008 step2b ★ province: Vec<u8>
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final province = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // ADR-008 step2b ★ signer_admin_pubkey: [u8; 32]
+    if (offset + 32 > bytes.length) return null;
+    final signerAdminPubkey = bytes.sublist(offset, offset + 32);
+    offset += 32;
+
+    // a3: BoundedVec<u8> (3 ASCII chars - SFR/FFR/GFR/SF)
+    final (a3Len, a3LenSize) = _decodeCompactU32(bytes, offset);
+    offset += a3LenSize;
+    if (offset + a3Len > bytes.length) return null;
+    final a3 = utf8.decode(
+      bytes.sublist(offset, offset + a3Len),
+      allowMalformed: true,
+    );
+    offset += a3Len;
+
+    final amountYuan = _fenToYuan(accountsTotal);
+
+    return DecodedPayload(
+      action: 'propose_create_institution',
+      summary:
+          '创建机构多签账户「$institutionName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+      fields: {
+        'sfid_id': sfidId,
+        'institution_name': institutionName,
+        'admin_count': adminCount.toString(),
+        'threshold': '$threshold/$adminCount',
+        'amount_yuan': '$amountYuan GMB',
+        'a3': a3,
+        'province': province,
+        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // ResolutionIssuance(8) / propose_resolution_issuance(0)
+  //
+  // 链端签名(ADR-008 step3 双层凭证):
+  //   pub fn propose_resolution_issuance(
+  //     origin,
+  //     reason: ReasonOf<T>,                  // BoundedVec<u8>
+  //     total_amount: BalanceOf<T>,           // u128 LE
+  //     allocations: AllocationOf<T>,
+  //         // BoundedVec<{ recipient: AccountId32, amount: u128 }>
+  //     eligible_total: u64,
+  //     snapshot_nonce: SnapshotNonceOf<T>,   // BoundedVec<u8>
+  //     signature: SnapshotSignatureOf<T>,    // BoundedVec<u8>
+  //     province: BoundedVec<u8, ConstU32<64>>,   // ★ ADR-008 step3
+  //     signer_admin_pubkey: [u8; 32],            // ★ ADR-008 step3
+  //   )
+  //
+  // 链端 verifier 走 RuntimePopulationSnapshotVerifier(走
+  // sheng_signing_pubkey_for_admin)。decoder 仅展示给用户看,不做验签。
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeProposeResolutionIssuance(Uint8List bytes) {
+    if (bytes.length < 3) return null;
+    var offset = 2; // 跳过 pallet_index + call_index
+
+    // reason: Vec<u8>
+    final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
+    offset += reasonLenSize;
+    var reason = '';
+    if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
+      reason = utf8.decode(
+        bytes.sublist(offset, offset + reasonLen),
+        allowMalformed: true,
+      );
+    }
+    offset += reasonLen;
+
+    // total_amount: u128 LE(16B 非 Compact)
+    if (offset + 16 > bytes.length) return null;
+    final totalAmountFen = _readU128Le(bytes, offset);
+    offset += 16;
+
+    // allocations: BoundedVec<{ recipient(32) + amount(16) }>
+    final (allocLen, allocLenSize) = _decodeCompactU32(bytes, offset);
+    offset += allocLenSize;
+    if (offset + allocLen * 48 > bytes.length) return null;
+    offset += allocLen * 48;
+
+    // eligible_total: u64 LE
+    if (offset + 8 > bytes.length) return null;
+    final eligibleTotal = _readU64Le(bytes, offset);
+    offset += 8;
+
+    // snapshot_nonce: Vec<u8> — 跳过
+    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += nonceLenSize;
+    if (offset + nonceLen > bytes.length) return null;
+    offset += nonceLen;
+
+    // signature: Vec<u8> — 跳过
+    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
+    offset += sigLenSize;
+    if (offset + sigLen > bytes.length) return null;
+    offset += sigLen;
+
+    // ADR-008 step3 ★ province: BoundedVec<u8, 64>
+    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
+    offset += provinceLenSize;
+    if (offset + provinceLen > bytes.length) return null;
+    final province = utf8.decode(
+      bytes.sublist(offset, offset + provinceLen),
+      allowMalformed: true,
+    );
+    offset += provinceLen;
+
+    // ADR-008 step3 ★ signer_admin_pubkey: [u8; 32]
+    if (offset + 32 > bytes.length) return null;
+    final signerAdminPubkey = bytes.sublist(offset, offset + 32);
+
+    final amountYuan = _fenToYuan(totalAmountFen);
+
+    return DecodedPayload(
+      action: 'propose_resolution_issuance',
+      summary:
+          '决议发行 $amountYuan GMB（$allocLen 项分配,合格人数 $eligibleTotal）',
+      fields: {
+        'reason': reason,
+        'amount_yuan': '$amountYuan GMB',
+        'allocation_count': allocLen.toString(),
+        'eligible_total': eligibleTotal.toString(),
+        'province': province,
+        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
       },
     );
   }
@@ -1080,6 +1387,11 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // 工具方法
   // ---------------------------------------------------------------------------
+
+  /// 0x 小写 hex(feedback_pubkey_format_rule.md 铁律)。
+  static String _bytesToLowerHex(Uint8List bytes) {
+    return '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+  }
 
   static Uint8List _hexToBytes(String input) {
     final text = input.startsWith('0x') ? input.substring(2) : input;
