@@ -31,9 +31,6 @@ import { LoginView } from './auth/LoginView';
 import { InstitutionsView } from './institutions/InstitutionsView';
 import { OperatorsView } from './shi_admins/OperatorsView';
 import { ShengAdminsView } from './sheng_admins/ShengAdminsView';
-import { RosterPage } from './sheng_admins/chain_RosterPage';
-import { ActivationPage } from './sheng_admins/chain_ActivationPage';
-import { RotatePage } from './sheng_admins/chain_RotatePage';
 import { CitizensView } from './citizens/CitizensView';
 
 const { Header, Content } = Layout;
@@ -56,10 +53,7 @@ type ActiveView =
   | 'multisig'
   | 'system-settings'
   | 'sheng-admins'
-  | 'operators'
-  | 'sheng-roster'
-  | 'sheng-signer-activate'
-  | 'sheng-signer-rotate';
+  | 'operators';
 
 function AppInner() {
   const { auth, setAuth, capabilities } = useAuth();
@@ -258,7 +252,7 @@ function AppInner() {
               width: 'fit-content'
             }}
           >
-            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局 → 密钥管理 */}
+            {/* 中文注释:Tab 顺序 — 首页 → 私权机构 → 公权机构 → 公安局 → 注册局。省管理员链功能后续统一并入注册局页面。 */}
             {([
               { key: 'citizens' as const, label: '首页', visible: true, onClick: () => setActiveView('citizens') },
               {
@@ -280,21 +274,6 @@ function AppInner() {
                 key: 'system-settings' as const, label: '注册局',
                 visible: capabilities.canViewSystemSettings,
                 onClick: () => setActiveView('system-settings')
-              },
-              {
-                key: 'sheng-roster' as const, label: '省管理员名册',
-                visible: auth?.role === 'SHENG_ADMIN',
-                onClick: () => setActiveView('sheng-roster')
-              },
-              {
-                key: 'sheng-signer-activate' as const, label: '激活签名',
-                visible: auth?.role === 'SHENG_ADMIN',
-                onClick: () => setActiveView('sheng-signer-activate')
-              },
-              {
-                key: 'sheng-signer-rotate' as const, label: 'rotate 签名',
-                visible: auth?.role === 'SHENG_ADMIN',
-                onClick: () => setActiveView('sheng-signer-rotate')
               }
             ] as const)
               .filter((tab) => tab.visible)
@@ -332,12 +311,6 @@ function AppInner() {
             <InstitutionsView key="PRIVATE_INSTITUTION" auth={auth} category="PRIVATE_INSTITUTION" sfidMeta={sfidMeta} />
           ) : activeView === 'system-settings' && capabilities.canViewSystemSettings ? (
             <ShengAdminsView mode="system-settings" />
-          ) : activeView === 'sheng-roster' && auth?.role === 'SHENG_ADMIN' ? (
-            <RosterPage auth={auth} />
-          ) : activeView === 'sheng-signer-activate' && auth?.role === 'SHENG_ADMIN' ? (
-            <ActivationPage auth={auth} />
-          ) : activeView === 'sheng-signer-rotate' && auth?.role === 'SHENG_ADMIN' ? (
-            <RotatePage auth={auth} />
           ) : (
             <CitizensView />
           )}

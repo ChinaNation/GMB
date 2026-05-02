@@ -6,6 +6,7 @@
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
   - `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
+  - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
 
 ## 当前边界
 
@@ -51,6 +52,8 @@ sfid/frontend/
   - `chain_RotatePage.tsx`
   - `chain_sheng_admins.ts`
   - `chain_sheng_admins_types.ts`
+- `省管理员名册`、`激活签名`、`rotate 签名` 不再作为 `App.tsx` 顶层 Tab 暴露。
+  这些链交互页面/API 暂保留在 `sheng_admins/chain_*`,后续统一并入注册局页面承接。
 - 省管理员槽位 `ShengSlot` 属于链上 `ShengAdmins[Province][Slot]` 名册语义,
   因此放在 `sheng_admins/chain_sheng_admins_types.ts`,不再放全局 `types/`。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
