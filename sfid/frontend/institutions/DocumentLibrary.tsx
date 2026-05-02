@@ -13,8 +13,8 @@ import {
   type InstitutionDocument,
   listDocuments,
   uploadDocument,
-} from '../api/institution';
-import type { AdminAuth } from '../api/client';
+} from './api';
+import type { AdminAuth } from '../auth/types';
 
 interface Props {
   auth: AdminAuth;

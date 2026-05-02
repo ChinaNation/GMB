@@ -9,15 +9,13 @@ import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from '
 import { A3_LABEL, INSTITUTION_CODE_LABEL } from './locks';
 import {
   deleteAccount,
+  generateCpmsInstitutionSfid,
   getCpmsSiteByInstitution,
   getInstitution,
-  type InstitutionDetail,
-} from '../api/institution';
-import {
-  generateCpmsInstitutionSfid,
-  type AdminAuth,
   type CpmsSiteRow,
-} from '../api/client';
+  type InstitutionDetail,
+} from './api';
+import type { AdminAuth } from '../auth/types';
 import { AccountList } from './AccountList';
 import { CpmsRegisterModal } from './CpmsRegisterModal';
 import { CpmsSitePanel } from './CpmsSitePanel';

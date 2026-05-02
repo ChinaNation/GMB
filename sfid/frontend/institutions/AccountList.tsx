@@ -8,7 +8,7 @@ import { Button, Popconfirm, Space, Table, Tag } from 'antd';
 import {
   type MultisigAccount,
   type MultisigChainStatus,
-} from '../api/institution';
+} from './api';
 import { tryEncodeSs58 } from '../utils/ss58';
 
 /** 默认账户名称(与后端 `service::DEFAULT_ACCOUNT_NAMES` 对齐) */

@@ -86,7 +86,7 @@ duoqian_info/
 ### 1.2 `sheng_admins/` 目录边界(2026-05-02)
 
 `sheng_admins/` 是 `sfid-system` pallet 内省管理员相关纯类型与辅助逻辑目录,
-与 SFID 后端 `sfid/backend/src/chain/sheng_admins/`、前端
+与 SFID 后端 `sfid/backend/chain/sheng_admins/`、前端
 `sfid/frontend/chain/sheng_admins/` 同名对齐。FRAME storage 与 call 壳仍在
 `lib.rs`,纯类型、payload 与迁移提示下沉到本目录。
 
@@ -104,7 +104,7 @@ sheng_admins/
 
 - `types.rs` 承载链上 `ShengAdmins[Province][Slot]` 的 Slot 类型。
 - `payload.rs` 的 domain 常量和字段顺序必须与 SFID 后端
-  `sfid/backend/src/chain/sheng_admins/` 保持完全一致。
+  `sfid/backend/chain/sheng_admins/` 保持完全一致。
 - `lib.rs` 继续保留 storage、event、error、call 与 ValidateUnsigned,避免破坏
   FRAME pallet 宏边界。
 

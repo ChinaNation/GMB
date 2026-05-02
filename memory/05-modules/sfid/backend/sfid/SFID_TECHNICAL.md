@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-- 路径：`backend/src/sfid`
+- 路径：`backend/sfid`
 - 职责：统一提供 SFID 生成能力与行政区代码表能力。
 - 产物：标准化 SFID 编码字符串（含结构段与校验位）。
 
@@ -36,7 +36,7 @@
   - 43 省 `PROVINCES` 常量表,只保存 SFID 号码生成需要的省市代码
   - `province_code_by_name` / `city_code_by_name` / `province_name_by_code`
 - 省管理员 main 公钥、Slot、三槽名册等已移出本模块,统一位于
-  `backend/src/sheng_admins/province_admins.rs`。
+  `backend/sheng_admins/province_admins.rs`。
 - `admin.rs`
   - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
 - `city_codes/*.rs`
@@ -68,7 +68,7 @@
 
 - 当前统一模块名为 `sfid`。
 - 代码统一通过 `crate::sfid::*` 引用。
-- 模块目录为 `backend/src/sfid`。
+- 模块目录为 `backend/sfid`。
 
 ## 6. 历史
 

@@ -11,7 +11,7 @@
 //   - 在本文件里新增 useState / handler / 业务 JSX
 //   - 在本文件里写 api 调用 / 表单 / 扫码逻辑
 //
-// 新增业务功能一律下沉到一级业务目录;链交互页面放到 chain/<module>/。
+// 新增业务功能一律下沉到一级业务目录;链交互页面/接口放到所属模块的 chain_* 文件。
 // 详见 memory/05-modules/sfid/frontend/FRONTEND_LAYOUT.md。
 //
 // 历史:任务卡 20260408-sfid-frontend-app-tsx-split 把原 3431 行 App.tsx
@@ -24,15 +24,16 @@ import { Button, Card, Layout, Typography, message } from 'antd';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import { writeStoredAuth, clearStoredAuth } from './utils/storedAuth';
-import type { AdminAuth, SfidMetaResult } from './api/client';
-import { adminLogout, checkAdminAuth, getSfidMeta } from './api/client';
+import type { AdminAuth } from './auth/types';
+import { adminLogout, checkAdminAuth } from './auth/api';
+import { getSfidMeta, type SfidMetaResult } from './sfid/api';
 import { LoginView } from './auth/LoginView';
 import { InstitutionsView } from './institutions/InstitutionsView';
 import { OperatorsView } from './shi_admins/OperatorsView';
 import { ShengAdminsView } from './sheng_admins/ShengAdminsView';
-import { RosterPage } from './chain/sheng_admins/RosterPage';
-import { ActivationPage } from './chain/sheng_admins/ActivationPage';
-import { RotatePage } from './chain/sheng_admins/RotatePage';
+import { RosterPage } from './sheng_admins/chain_RosterPage';
+import { ActivationPage } from './sheng_admins/chain_ActivationPage';
+import { RotatePage } from './sheng_admins/chain_RotatePage';
 import { CitizensView } from './citizens/CitizensView';
 
 const { Header, Content } = Layout;

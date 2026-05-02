@@ -18,8 +18,9 @@ import { InstitutionListTable } from './InstitutionListTable';
 import { CreateInstitutionModal } from './CreateInstitutionModal';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { useScope } from '../hooks/useScope';
-import type { AdminAuth, SfidMetaResult } from '../api/client';
-import type { InstitutionCategory } from '../api/institution';
+import type { AdminAuth } from '../auth/types';
+import type { SfidMetaResult } from '../sfid/api';
+import type { InstitutionCategory } from './api';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 
 interface Props {

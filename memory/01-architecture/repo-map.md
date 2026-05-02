@@ -86,24 +86,26 @@ citizenchain/
 
 当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
 
-## 6b. SFID 前端目录策略
+## 6b. SFID 目录策略
 
-2026-05-02 起,`sfid/frontend/src/` 与 `sfid/frontend/src/views/` 已删除。
-SFID 前端直接以 `sfid/frontend/` 为代码根,页面和 API 按业务目录放置:
+2026-05-02 起,`sfid/backend/src/`、`sfid/frontend/src/`、`sfid/frontend/src/views/`、
+`sfid/backend/chain/`、`sfid/frontend/chain/`、`sfid/frontend/api/` 均已删除。
+SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 
-- `sfid/frontend/auth/`:登录、AuthContext、登录态类型。
-- `sfid/frontend/citizens/`:公民首页与绑定弹窗。
-- `sfid/frontend/institutions/`:机构创建、机构详情、账户名称、清算行资格前端页面。
-- `sfid/frontend/api/institution.ts`:机构本地数据 API。
-- `sfid/frontend/sheng_admins/`:非链上的省管理员后台页面。
-- `sfid/frontend/shi_admins/`:市管理员页面。
-- `sfid/frontend/chain/duoqian_info/`:机构与 DUOQIAN 链交互 UI/API。
-- `sfid/frontend/chain/sheng_admins/`:省管理员与 `sfid-system` 链交互 UI/API。
+- `sfid/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。
+- `sfid/backend/app_core/`:跨业务底层工具,含 `chain_*` 通用链工具。
+- `sfid/backend/citizens/`:公民身份业务和公民链交互 `chain_*`。
+- `sfid/backend/institutions/`:机构本地管理和机构链交互 `chain_duoqian_info*`。
+- `sfid/backend/sheng_admins/`:省管理员后台业务和省管理员链交互 `chain_*`。
+- `sfid/frontend/auth/`:登录、AuthContext、登录态类型和 `api.ts`。
+- `sfid/frontend/sfid/`:SFID 元数据 API。
+- `sfid/frontend/institutions/`:机构页面、机构 API 和 `chain_duoqian_info.ts`。
+- `sfid/frontend/sheng_admins/`:省管理员页面、API 和 `chain_*` 链交互页面/API。
 
 同名对齐规则:
 
-- 后端链交互目录:`sfid/backend/src/chain/sheng_admins/`
-- 前端链交互目录:`sfid/frontend/chain/sheng_admins/`
+- 后端链交互文件:`sfid/backend/<功能模块>/chain_*.rs`
+- 前端链交互文件:`sfid/frontend/<功能模块>/chain_*`
 - runtime 辅助目录:`citizenchain/runtime/otherpallet/sfid-system/src/sheng_admins/`
 
 ## 7. GitHub Actions 路径分流原则

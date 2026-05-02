@@ -1,9 +1,9 @@
 # SHENG_ADMINS_TECHNICAL
 
 > 2026-05-02 更新:代码目录统一使用下划线复数 `sheng_admins`。
-> 非链上的省管理员后台业务放 `sfid/backend/src/sheng_admins/`;与链交互的省管理员能力放
-> `sfid/backend/src/chain/sheng_admins/`。省管理员 main 公钥、Slot、三槽名册基线放
-> `sfid/backend/src/sheng_admins/province_admins.rs`。
+> 非链上的省管理员后台业务放 `sfid/backend/sheng_admins/`;与链交互的省管理员能力放
+> `sfid/backend/sheng_admins/chain_*.rs`。省管理员 main 公钥、Slot、三槽名册基线放
+> `sfid/backend/sheng_admins/province_admins.rs`。
 
 ## 0. 区块链端方案对齐（冻结，优先级最高）
 1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
@@ -22,17 +22,17 @@
 2. 不新增独立”管理员模块”或”机构模块”。
 
 - 代码归档：
-1. `backend/src/sheng_admins/catalog.rs`：省级管理员目录治理。
-2. `backend/src/sheng_admins/institutions.rs`：机构身份识别码与机构公钥治理。
-3. `backend/src/sheng_admins/province_admins.rs`：43 省 main 公钥、Slot、ProvinceAdmins。
-4. `backend/src/sheng_admins/signing_seed_store.rs`：省管理员签名 seed 加密持久化。
-5. `backend/src/chain/sheng_admins/`：省管理员三槽名册和签名公钥的链交互入口。
+1. `backend/sheng_admins/catalog.rs`：省级管理员目录治理。
+2. `backend/sheng_admins/institutions.rs`：机构身份识别码与机构公钥治理。
+3. `backend/sheng_admins/province_admins.rs`：43 省 main 公钥、Slot、ProvinceAdmins。
+4. `backend/sheng_admins/signing_seed_store.rs`：省管理员签名 seed 加密持久化。
+5. `backend/sheng_admins/chain_*.rs`：省管理员三槽名册和签名公钥的链交互入口。
 
 ## 2. 权限口径（当前冻结）
 1. `SHENG_ADMIN`（省管理员）：
    - 可管理本省机构和本省市管理员。
    - 必须具备省域作用域（`admin_province` 不能为空）。
-   - 省管理员三槽名册、签名公钥激活和轮换通过 `chain/sheng_admins/` 与链交互。
+   - 省管理员三槽名册、签名公钥激活和轮换通过 `sheng_admins/chain_*.rs` 与链交互。
 2. `SHI_ADMIN`（市管理员）：
    - 可读取自己作用域内的省/市管理员和机构信息。
    - 不具备创建、替换、禁用、撤销、删除等治理写权限。
@@ -154,7 +154,7 @@
 2. 标准流程固定为：`SFID 审批完成 -> 授权 Origin 发链上登记交易 -> 回写 tx_hash/block_number`。
 3. 本模块输出并冻结登记入参：`sfid_id`（即 `site_sfid`）及必要机构主数据；链上最终登记状态为唯一真值。
 4. 链侧登记成功后，SFID 必须回写 `tx_hash`、`block_number` 与回写时间，供审计与对账。
-5. 省管理员三槽名册和签名公钥生命周期由 `sheng_admins/` 与 `chain/sheng_admins/` 共同维护。
+5. 省管理员三槽名册和签名公钥生命周期由 `sheng_admins/` 与 `sheng_admins/chain_*.rs` 共同维护。
 
 ## 7. 前端对接口径（机构页）
 1. 列表列名为“身份识别码”，展示 `site_sfid`。
@@ -213,15 +213,15 @@
 | sfid_id | 符合 SFID 格式 | SFID_ID_MAX_BYTES | 5 段式格式校验 |
 
 ## 12. 路由挂载与文件索引
-1. 路由定义：`backend/src/main.rs`（`/api/v1/admin/*`）。
-2. 模块导出：`backend/src/sheng_admins/mod.rs`。
+1. 路由定义：`backend/main.rs`（`/api/v1/admin/*`）。
+2. 模块导出：`backend/sheng_admins/mod.rs`。
 3. 业务实现：
-   - `backend/src/sheng_admins/catalog.rs`（省级管理员目录）
-   - `backend/src/sheng_admins/institutions.rs`（机构管理）
-   - `backend/src/sheng_admins/province_admins.rs`（省管理员 main 公钥与三槽模型）
-   - `backend/src/chain/sheng_admins/`（省管理员链交互）
-4. 省域判定：`backend/src/scope/admin_province.rs`
-5. CPMS 状态扫码联动：`backend/src/citizens/status.rs`
+   - `backend/sheng_admins/catalog.rs`（省级管理员目录）
+   - `backend/sheng_admins/institutions.rs`（机构管理）
+   - `backend/sheng_admins/province_admins.rs`（省管理员 main 公钥与三槽模型）
+   - `backend/sheng_admins/chain_*.rs`（省管理员链交互）
+4. 省域判定：`backend/scope/admin_province.rs`
+5. CPMS 状态扫码联动：`backend/citizens/status.rs`
 
 
 ## ADR-008 Phase 23e 更新（2026-05-01）

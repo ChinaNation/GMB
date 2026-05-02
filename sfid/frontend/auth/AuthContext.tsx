@@ -4,8 +4,8 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
-import type { AdminAuth } from '../api/client';
-import { setOnUnauthorized } from '../api/client';
+import type { AdminAuth } from './types';
+import { setOnUnauthorized } from '../utils/http';
 import { clearStoredAuth, readStoredAuth, writeStoredAuth } from '../utils/storedAuth';
 
 export type RoleCapabilities = {

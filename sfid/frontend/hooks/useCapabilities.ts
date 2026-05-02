@@ -3,7 +3,7 @@
 // SHENG_ADMIN 三槽自治(Main/Backup1/Backup2)由 sheng_admin 视图自身处理,本 hook 只看角色不看槽位。
 
 import { useMemo } from 'react';
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
 
 export interface Capabilities {
   // 登录角色判断
