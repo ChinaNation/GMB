@@ -193,7 +193,9 @@ pub(crate) async fn app_get_institution(
         }
     };
 
-    let province_pair = match state.sheng_signer_cache.get(inst.province.as_str()) {
+    // ADR-008 Phase 23e:每省 3 把签名密钥(main / backup_1 / backup_2),
+    // chain pull 凭证签发只要本省任一 slot 在线即可,取 cache 中第一把命中本省的。
+    let province_pair = match state.sheng_signer_cache.any_for_province(inst.province.as_str()) {
         Some(pair) => pair,
         None => {
             return api_error(

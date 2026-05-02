@@ -10,8 +10,7 @@ use crate::scope::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
-/// 三角色均可访问,按 scope 过滤:
-/// - KEY_ADMIN:返回全部 43 省
+/// 二角色均可访问,按 scope 过滤(ADR-008 后无 KEY_ADMIN):
 /// - SHENG_ADMIN:仅返回自己所属省
 /// - SHI_ADMIN:仅返回自己上级省管理员所属省
 pub(crate) async fn list_sheng_admins(
@@ -74,7 +73,11 @@ pub(crate) async fn replace_sheng_admin(
     Path(province): Path<String>,
     Json(input): Json<ReplaceShengAdminInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_key_admin(&state, &headers) {
+    // ADR-008 Phase 23e(2026-05-01):KEY_ADMIN 整角色废止。
+    // 省管理员替换路径在 ADR-008 下应改走链上 `add_sheng_admin_backup` /
+    // `remove_sheng_admin_backup`(由现 main pubkey 签名授权,phase 4 子卡接入)。
+    // 本期临时保留旧 handler 仅供 ShengAdmin 在自治窗口内自行替换(本省 main slot)。
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -229,13 +232,11 @@ pub(crate) async fn replace_sheng_admin(
     );
     drop(store);
 
-    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 9：
-    // KEY_ADMIN 更换省登录管理员时，级联清理链上 signing pubkey + 内存 cache。
-    // 新管理员首次登录时会重新 bootstrap 新的密钥对并再次推链。
-    // 推链 helper 已搬到 chain/sheng_admin/clear_sheng_signing.rs,失败仅 warn 不中断。
-    crate::chain::sheng_admin::clear_sheng_signing_pubkey_on_chain(&state, province_name.as_str())
-        .await;
-    // 清理新管理员残留的密文（一般是 None）+ 驱逐本省 cache。
+    // ADR-008 Phase 23e(2026-05-01):清链上 ShengSigningPubkey 的旧路径
+    // (`chain/sheng_admin/clear_sheng_signing.rs`)已删除。链上真相由 phase 4
+    // 子卡的 `activate_sheng_signing_pubkey` / `rotate_sheng_signing_pubkey`
+    // 维护,本 handler 只更新 SFID 本地 admin 名册并驱逐本省签名 cache,
+    // 让新管理员首次登录时经 `bootstrap::ensure_signing_keypair` 重建 keypair。
     {
         if let Ok(mut store) = state.store.write() {
             if let Some(user) = store.admin_users_by_pubkey.get_mut(&new_pubkey) {

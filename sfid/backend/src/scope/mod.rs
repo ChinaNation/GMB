@@ -6,8 +6,7 @@
 //! 2. `let scope = scope::get_visible_scope(&ctx);`
 //! 3. `let filtered = scope::filter_by_scope(&rows, &scope);`
 //!
-//! 各角色范围:
-//! - KeyAdmin    → 全国,所有省市
+//! 各角色范围(ADR-008 后):
 //! - ShengAdmin  → 本省,所有市
 //! - ShiAdmin    → 本市
 //!

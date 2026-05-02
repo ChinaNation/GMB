@@ -838,7 +838,7 @@ pub(crate) async fn citizen_push_chain_bind(
 
     // 获取省级签名密钥
     let (province_pair, _province) =
-        match crate::key_admins::signer_router::resolve_business_signer(&state, &ctx) {
+        match crate::sheng_admins::signing_cache::resolve_business_signer(&state, &ctx) {
             Ok(v) => v,
             Err((status, msg)) => return api_error(status, 5001, &msg),
         };
@@ -926,7 +926,7 @@ pub(crate) async fn citizen_push_chain_unbind(
 
     // 获取省级签名密钥
     let (province_pair, _province) =
-        match crate::key_admins::signer_router::resolve_business_signer(&state, &ctx) {
+        match crate::sheng_admins::signing_cache::resolve_business_signer(&state, &ctx) {
             Ok(v) => v,
             Err((status, msg)) => return api_error(status, 5001, &msg),
         };

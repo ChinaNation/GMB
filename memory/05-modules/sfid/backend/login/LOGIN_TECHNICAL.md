@@ -76,3 +76,10 @@ src/login/
 - 新增登录需求必须先更新本文件再改代码，避免认证口径分叉。
 - 登录协议禁止再引入 `aud` 作为移动端扫码验签字段；网页上下文如需保留，只能作为服务端会话上下文单独保存。
 - SFID 二维码由 SFID 自身系统私钥签发；手机端使用二维码内的 `sys_pubkey` 验证 `sys_sig` 后，再进入管理员钱包签名步骤。
+
+
+## ADR-008 Phase 23e 更新（2026-05-01）
+
+KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
+本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
+实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。

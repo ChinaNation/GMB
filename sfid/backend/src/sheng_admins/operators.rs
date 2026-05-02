@@ -79,7 +79,7 @@ pub(crate) async fn create_operator(
     headers: HeaderMap,
     Json(input): Json<CreateOperatorInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -102,8 +102,8 @@ pub(crate) async fn create_operator(
         Err(resp) => return resp,
     };
     // ── 解析 created_by ──
-    // - ShengAdmin 调用：created_by 必须为空或等于自身
-    // - KeyAdmin 调用：created_by 可指定为任意已存在的 ShengAdmin pubkey
+    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,require_sheng_admin 已挡掉非 ShengAdmin。
+    // created_by 必须为空或等于调用者自身。
     let created_by_pubkey = match input.created_by.as_deref().map(str::trim) {
         None | Some("") => ctx.admin_pubkey.clone(),
         Some(raw) => {
@@ -114,30 +114,6 @@ pub(crate) async fn create_operator(
                 }
             };
             match ctx.role {
-                AdminRole::KeyAdmin => {
-                    let creator = store
-                        .admin_users_by_pubkey
-                        .iter()
-                        .find(|(k, _)| same_admin_pubkey(k.as_str(), normalized.as_str()))
-                        .map(|(_, v)| v.clone());
-                    match creator {
-                        Some(u) if u.role == AdminRole::ShengAdmin => normalized,
-                        Some(_) => {
-                            return api_error(
-                                StatusCode::BAD_REQUEST,
-                                1001,
-                                "created_by must be an ShengAdmin",
-                            )
-                        }
-                        None => {
-                            return api_error(
-                                StatusCode::NOT_FOUND,
-                                1004,
-                                "created_by ShengAdmin not found",
-                            )
-                        }
-                    }
-                }
                 AdminRole::ShengAdmin => {
                     if !same_admin_pubkey(normalized.as_str(), ctx.admin_pubkey.as_str()) {
                         return api_error(
@@ -249,7 +225,7 @@ pub(crate) async fn update_operator(
     Path(id): Path<u64>,
     Json(input): Json<UpdateOperatorInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -456,7 +432,7 @@ pub(crate) async fn delete_operator(
     headers: HeaderMap,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -544,7 +520,7 @@ pub(crate) async fn update_operator_status(
     Path(id): Path<u64>,
     Json(input): Json<UpdateOperatorStatusInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -655,9 +631,8 @@ fn can_manage_operator(
     actor_province: Option<&str>,
     operator: &AdminUser,
 ) -> bool {
-    if *actor_role == AdminRole::KeyAdmin {
-        return true;
-    }
+    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,本函数只剩本人 + 同省判断。
+    let _ = actor_role;
     if same_admin_pubkey(operator.created_by.as_str(), actor_pubkey) {
         return true;
     }

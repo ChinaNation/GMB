@@ -59,14 +59,6 @@ mod tests {
     }
 
     #[test]
-    fn key_admin_sees_all() {
-        let rows = vec![row("安徽省", "合肥市"), row("广东省", "广州市")];
-        let scope = VisibleScope::key_admin();
-        let filtered = filter_by_scope(&rows, &scope);
-        assert_eq!(filtered.len(), 2);
-    }
-
-    #[test]
     fn sheng_admin_only_own_province() {
         let rows = vec![
             row("安徽省", "合肥市"),

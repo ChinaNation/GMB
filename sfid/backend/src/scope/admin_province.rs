@@ -17,8 +17,8 @@ pub(crate) fn province_scope_for_role(
     admin_pubkey: &str,
     role: &AdminRole,
 ) -> Option<String> {
+    // ADR-008(2026-05-01)后只剩 ShengAdmin / ShiAdmin。
     match role {
-        AdminRole::KeyAdmin => None,
         AdminRole::ShengAdmin => find_province_by_pubkey(store, admin_pubkey),
         AdminRole::ShiAdmin => {
             let creator_pubkey = store

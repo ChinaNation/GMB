@@ -9,6 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 use hex::FromHex;
 use schnorrkel::{signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature};
 use serde::{Deserialize, Serialize};
+use sp_core::Pair;
 use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::warn;
 use uuid::Uuid;
@@ -470,18 +471,13 @@ pub(crate) async fn admin_auth_verify(
         });
     }
 
-    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 7：
-    // 省登录管理员验签成功后确保本省签名密钥就绪。
+    // ADR-008(2026-05-01)Phase 23e:省登录管理员 3-tier 自治,首次登录时通过
+    // `sheng_admins::bootstrap::ensure_signing_keypair` 把本 (province, admin_pubkey)
+    // 的签名 keypair 加载到进程内 cache。本期不推链(activate_sheng_signing_pubkey
+    // 留 Phase 4 子卡)。
     if admin_role == AdminRole::ShengAdmin {
         if let Some(province) = admin_province.as_deref() {
-            if let Err(e) =
-                crate::key_admins::bootstrap_sheng_signer(&state, admin_pubkey.as_str(), province)
-                    .await
-            {
-                tracing::error!(province, error = %e, "BOOTSTRAP FAILED: {}", e);
-            } else {
-                tracing::info!(province, "sheng signer ready for province");
-            }
+            bootstrap_sheng_signing_pair(&state, admin_pubkey.as_str(), province);
         }
     }
 
@@ -758,17 +754,7 @@ pub(crate) async fn admin_auth_qr_complete(
 
     if bootstrap_role == AdminRole::ShengAdmin {
         if let Some(province) = bootstrap_province.as_deref() {
-            if let Err(e) = crate::key_admins::bootstrap_sheng_signer(
-                &state,
-                bootstrap_pubkey.as_str(),
-                province,
-            )
-            .await
-            {
-                tracing::error!(province, error = %e, "BOOTSTRAP FAILED (qr): {}", e);
-            } else {
-                tracing::info!(province, "sheng signer ready for province (qr)");
-            }
+            bootstrap_sheng_signing_pair(&state, bootstrap_pubkey.as_str(), province);
         }
     }
 
@@ -892,7 +878,7 @@ fn admin_auth(
 ) -> Result<AdminAuthContext, axum::response::Response> {
     if let Some(token) = bearer_token(headers) {
         let now = Utc::now();
-        // ShiAdmin idle 超时(分钟),KeyAdmin/ShengAdmin 无 idle 限制
+        // ShiAdmin idle 超时(分钟),ShengAdmin 无 idle 限制(ADR-008 后无 KeyAdmin)
         let shi_idle_timeout_minutes = std::env::var("SFID_ADMIN_IDLE_TIMEOUT_MINUTES")
             .ok()
             .and_then(|v| v.parse::<i64>().ok())
@@ -911,6 +897,8 @@ fn admin_auth(
                 if let Ok(evicted) =
                     cleanup_sessions_from_global(&ss, Utc::now(), shi_idle_timeout_minutes).await
                 {
+                    // ADR-008(2026-05-01)Phase 23e:每省 3-tier,需要按 province 整省驱逐
+                    // (退化:本省任一 admin slot 被驱逐 → 本省 cache 全清)。
                     for province in evicted {
                         cache.unload_province(province.as_str());
                     }
@@ -936,7 +924,7 @@ fn admin_auth(
         };
 
         // ── 2. 验证过期 / idle 超时 ──
-        // KeyAdmin/ShengAdmin 无 idle 限制,仅检查 expire_at(8h);
+        // ShengAdmin 无 idle 限制,仅检查 expire_at(8h);
         // ShiAdmin 额外检查 idle 超时(默认 10 分钟)。
         let idle_expired = session.role == AdminRole::ShiAdmin
             && now > session.last_active_at + Duration::minutes(shi_idle_timeout_minutes);
@@ -976,14 +964,13 @@ fn admin_auth(
         let session_pubkey = session.admin_pubkey.clone();
 
         // ── 4. 查用户信息:优先 GlobalShard,fallback legacy store ──
-        // GlobalShard.global_admins 包含 KeyAdmin + ShengAdmin;
+        // GlobalShard.global_admins 包含 ShengAdmin(ADR-008 后无 KeyAdmin);
         // ShiAdmin 可能还未同步到 GlobalShard,fallback legacy。
         let user_info = state
             .sharded_store
             .read_global(|g| {
                 if let Some(user) = g.global_admins.get(&session_pubkey) {
                     let province = match &user.role {
-                        AdminRole::KeyAdmin => None,
                         AdminRole::ShengAdmin => g
                             .sheng_admin_province_by_pubkey
                             .get(&session_pubkey)
@@ -1022,7 +1009,7 @@ fn admin_auth(
                 api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e)
             })?;
 
-        // GlobalShard 命中:KeyAdmin / ShengAdmin(或已同步的 ShiAdmin)
+        // GlobalShard 命中:ShengAdmin(或已同步的 ShiAdmin;ADR-008 后无 KeyAdmin)
         // 未命中:fallback legacy store(ShiAdmin 可能尚未同步到 GlobalShard)
         let (
             admin_pubkey,
@@ -1091,7 +1078,7 @@ fn admin_auth(
 
 /// Phase 2:异步清理 GlobalShard 中的过期 session。
 /// 由 admin_auth 里的 60 秒节流触发,后台 tokio::task::spawn 执行。
-/// KeyAdmin/ShengAdmin 无 idle 限制(仅 expire_at),ShiAdmin 额外检查 idle。
+/// ShengAdmin 无 idle 限制(仅 expire_at),ShiAdmin 额外检查 idle(ADR-008 后无 KeyAdmin)。
 async fn cleanup_sessions_from_global(
     store: &std::sync::Arc<crate::store_shards::ShardedStore>,
     now: DateTime<Utc>,
@@ -1181,19 +1168,23 @@ pub(crate) fn require_admin_write(
     admin_auth(state, headers)
 }
 
-pub(crate) fn require_institution_or_key_admin(
+/// 中文注释:require_sheng_admin —— ADR-008 后机构管理类操作只允许 ShengAdmin。
+///
+/// 历史 `require_institution_or_key_admin` 接受 KeyAdmin + ShengAdmin 双角色,
+/// KEY_ADMIN 整角色废止后改为本函数,只放行 ShengAdmin。
+pub(crate) fn require_sheng_admin(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AdminAuthContext, axum::response::Response> {
     let ctx = admin_auth(state, headers)?;
-    if !matches!(ctx.role, AdminRole::ShengAdmin | AdminRole::KeyAdmin) {
+    if ctx.role != AdminRole::ShengAdmin {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "institution admin or key admin required",
+            "sheng admin required",
         ));
     }
-    if ctx.role == AdminRole::ShengAdmin && ctx.admin_province.is_none() {
+    if ctx.admin_province.is_none() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
@@ -1203,15 +1194,25 @@ pub(crate) fn require_institution_or_key_admin(
     Ok(ctx)
 }
 
-pub(crate) fn require_key_admin(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<AdminAuthContext, axum::response::Response> {
-    let ctx = admin_auth(state, headers)?;
-    if ctx.role != AdminRole::KeyAdmin {
-        return Err(api_error(StatusCode::FORBIDDEN, 1003, "key admin required"));
+/// 中文注释:ADR-008 Phase 23e —— 把 (province, admin_pubkey) 的签名 keypair
+/// 加载到进程内 cache。失败仅 warn,登录流程继续(运维下次登录会自然重试)。
+fn bootstrap_sheng_signing_pair(state: &AppState, admin_pubkey_hex: &str, province: &str) {
+    let Some(pubkey_bytes) = parse_sr25519_pubkey_bytes(admin_pubkey_hex) else {
+        tracing::warn!(
+            province,
+            admin_pubkey = admin_pubkey_hex,
+            "bootstrap sheng signer skipped: invalid admin_pubkey hex"
+        );
+        return;
+    };
+    match crate::sheng_admins::bootstrap::ensure_signing_keypair(
+        state.sheng_signer_cache.as_ref(),
+        province,
+        &pubkey_bytes,
+    ) {
+        Ok(_) => tracing::info!(province, "sheng signer ready for province"),
+        Err(e) => tracing::error!(province, error = %e, "bootstrap sheng signer failed"),
     }
-    Ok(ctx)
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
@@ -1268,16 +1269,13 @@ fn build_login_qr_system_signature(
     issued_at: i64,
     expires_at: i64,
 ) -> Result<(String, String), String> {
-    let sys_pubkey = state
-        .public_key_hex
-        .read()
-        .map_err(|_| "public key read lock poisoned".to_string())?
-        .clone();
-    let seed = state
-        .signing_seed_hex
-        .read()
-        .map_err(|_| "signing seed read lock poisoned".to_string())?
-        .clone();
+    // ADR-008 Phase 23e:登录二维码的"系统签名"由 SFID main signer(全局唯一)产出。
+    // signer 仍是 SFID main(SFID_SIGNING_SEED_HEX 派生),与省管理员 3-tier 无关。
+    let main_seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
+        .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
+    let signer = crate::crypto::sr25519::try_load_signing_key_from_seed(main_seed_hex.as_str())?;
+    let sys_pubkey = format!("0x{}", hex::encode(signer.public().0));
+    let _ = state; // state 不再持有 signing seed/pubkey,签名走 env + crypto helper
     let message = crate::qr::build_signature_message(
         crate::qr::QrKind::LoginChallenge,
         challenge,
@@ -1286,8 +1284,6 @@ fn build_login_qr_system_signature(
         &sys_pubkey,
     );
     let _ = issued_at; // 统一签名原文不再包含 issued_at
-    let signer =
-        crate::key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())?;
     let signature = signer.sign(message.as_bytes());
     Ok((sys_pubkey, format!("0x{}", hex::encode(signature.0))))
 }
@@ -1385,6 +1381,8 @@ fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) {
 /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 8：
 /// 返回本次被驱逐的 ShengAdmin session 所属 province 列表，供外层调用
 /// `state.sheng_signer_cache.unload_province` 释放内存 Pair。
+/// ADR-008 Phase 23e 后:cache 已迁到 `sheng_admins::signing_cache::ShengSigningCache`,
+/// `unload_province` 会清理本省所有 3-tier slot 的 keypair。
 #[allow(dead_code)]
 fn cleanup_admin_sessions(
     store: &mut Store,
@@ -1465,8 +1463,8 @@ pub(crate) fn build_admin_display_name(
     if let Some(name) = sheng_admin_display_name(admin_pubkey) {
         return name;
     }
+    // ADR-008 后只剩两角色。
     match role {
-        AdminRole::KeyAdmin => "密钥管理员".to_string(),
         AdminRole::ShiAdmin => "系统管理员".to_string(),
         AdminRole::ShengAdmin => "机构管理员".to_string(),
     }
