@@ -190,3 +190,122 @@ pub fn sheng_admin_display_name(pubkey: &str) -> Option<String> {
     let province_name = sheng_admin_province(pubkey)?;
     Some(format!("{province_name}省级管理员"))
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// 中文注释:省管理员 3-tier 槽位模型(ADR-008,2026-05-01)
+//
+// 每省 main / backup_1 / backup_2 三槽:
+// - main:由 PROVINCES 常量硬编码 43 把(沿用 pubkey 字段)
+// - backup_1 / backup_2:由 main 登录后通过 SFID 前端动态添加,链上
+//   ShengAdmins[Province][Slot] 持久化(链上写入留 Phase 4 实现)
+// 本结构是 SFID 端表达"某省当前生效三槽公钥"的纯数据载体,
+// fetch_backup_admins 暂为 mock,Phase 4 子卡接入真实链查。
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 省管理员槽位。链上 storage `ShengAdmins[Province][Slot]` 同语义。
+///
+/// 中文注释:Phase 3 阶段本枚举先以"独立类型 + 仅 sheng_admins 内部消费"
+/// 形态存在,主流程 handler 仍走 legacy AdminRole;Phase 4+5 子卡接入后
+/// allow(dead_code) 可以一并去掉。
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Main,
+    Backup1,
+    Backup2,
+}
+
+#[allow(dead_code)]
+impl Slot {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Slot::Main => "MAIN",
+            Slot::Backup1 => "BACKUP_1",
+            Slot::Backup2 => "BACKUP_2",
+        }
+    }
+}
+
+/// 某省当前生效的三槽管理员公钥。
+///
+/// - `main`:固定的 sfid/province.rs 常量 pubkey(0x 小写 hex)
+/// - `backup_1` / `backup_2`:None 表示该 slot 尚未注册;
+///   填充由 main 登录后通过 add_sheng_admin_backup 走链上(Phase 4)
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProvinceAdmins {
+    pub main: [u8; 32],
+    pub backup_1: Option<[u8; 32]>,
+    pub backup_2: Option<[u8; 32]>,
+}
+
+#[allow(dead_code)]
+impl ProvinceAdmins {
+    /// 构造仅含 main 的初始状态(backup 槽全空)。
+    pub fn from_main(main: [u8; 32]) -> Self {
+        Self {
+            main,
+            backup_1: None,
+            backup_2: None,
+        }
+    }
+
+    /// 给定 pubkey,定位它属于哪个 slot。
+    pub fn slot_of(&self, pubkey: &[u8; 32]) -> Option<Slot> {
+        if &self.main == pubkey {
+            return Some(Slot::Main);
+        }
+        if let Some(b) = self.backup_1.as_ref() {
+            if b == pubkey {
+                return Some(Slot::Backup1);
+            }
+        }
+        if let Some(b) = self.backup_2.as_ref() {
+            if b == pubkey {
+                return Some(Slot::Backup2);
+            }
+        }
+        None
+    }
+}
+
+/// 把 0x 小写 hex 字符串解析为 32 字节 pubkey。失败返回 None。
+#[allow(dead_code)]
+pub fn pubkey_from_hex(hex: &str) -> Option<[u8; 32]> {
+    let trimmed = hex
+        .trim()
+        .strip_prefix("0x")
+        .or_else(|| hex.trim().strip_prefix("0X"))
+        .unwrap_or_else(|| hex.trim());
+    let raw = ::hex::decode(trimmed).ok()?;
+    if raw.len() != 32 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&raw);
+    Some(out)
+}
+
+/// 中文注释:Phase 3 mock 实现,链上 backup 公钥目前固定返回 [None, None]。
+/// Phase 4 子卡接入 chain pull(ShengAdmins[Province][Backup1|Backup2])。
+///
+/// 调用方:`sheng_admins/login.rs` 在受理 backup 登录挑战时,需要查询
+/// 当前省 backup_1 / backup_2 公钥来判定签名合法性。
+#[allow(dead_code)]
+pub fn fetch_backup_admins(_province: &str) -> [Option<[u8; 32]>; 2] {
+    tracing::warn!("fetch_backup_admins mocked, awaiting Phase 4 chain pull");
+    [None, None]
+}
+
+/// 用 main const + mock backup 拼出本省 ProvinceAdmins。
+#[allow(dead_code)]
+pub fn province_admins_for(province_name: &str) -> Option<ProvinceAdmins> {
+    let p = PROVINCES.iter().find(|p| p.name == province_name)?;
+    let main = pubkey_from_hex(p.pubkey)?;
+    let [b1, b2] = fetch_backup_admins(province_name);
+    Some(ProvinceAdmins {
+        main,
+        backup_1: b1,
+        backup_2: b2,
+    })
+}

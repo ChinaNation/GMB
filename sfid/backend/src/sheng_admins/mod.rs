@@ -1,6 +1,12 @@
 pub(crate) mod catalog;
 pub(crate) mod institutions;
 pub(crate) mod operators;
+/// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008)。
+pub(crate) mod signing_cache;
+/// 中文注释:省管理员首登 bootstrap(seed 落盘 + cache 载入,推链留 Phase 4)。
+pub(crate) mod bootstrap;
+/// 中文注释:3-tier 名册 service(add/remove backup,推链全部 mock)。
+pub(crate) mod roster;
 
 pub(crate) use catalog::{list_sheng_admins, replace_sheng_admin};
 pub(crate) use institutions::{
