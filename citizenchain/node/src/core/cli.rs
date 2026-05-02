@@ -24,14 +24,14 @@ pub struct Cli {
     #[arg(long, value_name = "BANK_MAIN_SS58")]
     pub clearing_bank: Option<String>,
 
-    /// 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::keystore` 里清算行
+    /// 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::settlement::keystore` 里清算行
     /// 管理员 sr25519 私钥的密码。不提供时签名密钥保持 `None`,节点只保留
     /// 查询 RPC;扫码提交需要生成 L2 ACK 签名,packer 上链也需要批次签名,
     /// 二者都会 fail-fast,直到密码提供并重启。
     #[arg(long, value_name = "PASSWORD")]
     pub clearing_bank_password: Option<String>,
 
-    /// 扫码支付 Step 2b-iii-b 新增:`offchain::reserve` 主账对账触发周期(秒)。
+    /// 扫码支付 Step 2b-iii-b 新增:`offchain::settlement::reserve` 主账对账触发周期(秒)。
     /// 缺省 300(5 分钟)。设为 0 则关闭对账 worker(不推荐,仅用于排障)。
     /// 仅在 `--clearing-bank` 生效时启用。
     #[arg(long, value_name = "SECS")]

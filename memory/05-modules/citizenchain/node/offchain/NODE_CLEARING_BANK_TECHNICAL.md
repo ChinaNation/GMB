@@ -1,7 +1,9 @@
 # 节点桌面清算行 tab 技术说明
 
-- 日期: 2026-05-01
-- 任务卡: `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
+- 日期: 2026-05-02
+- 任务卡:
+  - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
+  - `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
 - 承接: `20260501-sfid-chain-folder-restructure.md`(SFID 端 chain/ 目录重构)
 
 ## 0. 概览
@@ -33,37 +35,37 @@ empty → add-input-sfid (debounce 自动搜,无"查询"按钮)
 | 文件 | 职责 |
 |---|---|
 | `section.tsx` | 状态机驱动;EmptyView / CheckMultisigView / WaitVoteView 子组件 |
-| `sfid.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
-| `institution_detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
-| `other_accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
-| `admin_list.tsx` | ClearingBankAdminListPage:管理员列表子页 |
-| `create_multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
-| `register.tsx` | ClearingBankDeclareNodePage(声明本机为清算行节点)|
+| `duoqian-manage/add-candidate.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
+| `duoqian-manage/institution-detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
+| `duoqian-manage/other-accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
+| `settlement/admin-unlock.tsx` | ClearingBankAdminListPage:管理员列表/解锁入口 |
+| `duoqian-manage/create-multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
+| `offchain-transaction/node-register.tsx` | ClearingBankDeclareNodePage(声明本机为清算行节点)|
 | `api.ts` / `types.ts` / `styles.css` | Tauri invoke / 类型 / 样式 |
 
-### 2026-05-01 删除清单
+### 2026-05-02 删除清单
 
 - `detail.tsx`(老 ClearingBankDetailPage):节点信息合入 `institution_detail.tsx` 内联卡片
-- `admin.tsx`(老 ClearingBankAdminListPage):被新 `admin_list.tsx` 取代
+- `admin.tsx`(老 ClearingBankAdminListPage):被 `settlement/admin-unlock.tsx` 取代
 - `node.tsx`(老 ClearingBankNodeInfoPanel):合入 `institution_detail.tsx` 内联展示
+- 根层 `sfid.tsx` / `institution_detail.tsx` / `other_accounts.tsx` / `admin_list.tsx` / `create_multisig.tsx` / `register.tsx`:迁入业务子目录后删除,不再保留双份文件。
 
-## 3. Tauri 命令(`offchain/commands.rs`)
+## 3. Tauri 命令目录
 
-新增 4 个 #[tauri::command]:
+Tauri 命令按业务拆分:
 
-| 命令 | 用途 |
+| 目录 | 命令 | 用途 |
 |---|---|
-| `fetch_clearing_bank_institution_detail(sfid_id)` | 链上查 `Institutions[sfid_id]` + `InstitutionAccounts[sfid_id, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
-| `fetch_clearing_bank_institution_proposals(sfid_id, start_id, page_size)` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
-| `fetch_clearing_bank_institution_credential(sfid_id)` | 调 SFID `GET /api/v1/app/institutions/:sfid_id` 拉机构信息 + chain pull 凭证(register_nonce + signature) |
-| `build_propose_create_institution_request(...)` | 构 propose_create_institution(pallet=17, call=5)QR 签名请求 |
-| `submit_propose_create_institution(...)` | 冷钱包回签后,提交 extrinsic 到链 |
+| `offchain/duoqian_manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
+| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_id]` + `InstitutionAccounts[sfid_id, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
+| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
+| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_credential` | 调 SFID `GET /api/v1/app/institutions/:sfid_id` 拉机构信息 + chain pull 凭证(register_nonce + signature) |
+| `offchain/duoqian_manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
+| `offchain/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
+| `offchain/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` / `submit_unregister_*` | 清算行节点注册、端点更新、注销 |
+| `offchain/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
 
-实现 + DTO 见 [`offchain/types.rs`](citizenchain/node/src/offchain/types.rs)
-+ [`offchain/chain.rs`](citizenchain/node/src/offchain/chain.rs)
-+ [`offchain/sfid.rs`](citizenchain/node/src/offchain/sfid.rs)
-+ [`offchain/signing.rs`](citizenchain/node/src/offchain/signing.rs)
-+ [`offchain/commands.rs`](citizenchain/node/src/offchain/commands.rs)。
+DTO 统一见 `offchain/common/types.rs`。
 
 ## 4. propose_create_institution(call_index 5)字节布局
 
@@ -88,7 +90,7 @@ parent_sfid_id: Option<BoundedVec<u8>>
                                     = 同 sub_type
 ```
 
-**任何字段顺序变更必须同步改 [`offchain/signing.rs::build_propose_create_institution_call_data`](citizenchain/node/src/offchain/signing.rs)**,否则 sr25519_verify 必败。
+**任何字段顺序变更必须同步改 `offchain/duoqian_manage/signing.rs::build_propose_create_institution_call_data`**,否则 sr25519_verify 必败。
 
 ## 5. 创建机构整体时序
 

@@ -5,7 +5,7 @@
 //! glob 在 `main.rs:51 pub(crate) use models::*;` 下行为零变化。
 //!
 //! - role:管理员角色 / 状态 / Operator DTO / ShengAdmin 行
-//! - slot:省管理员槽位枚举 re-export(实际定义在 `crate::sfid::province`)
+//! - slot:省管理员槽位枚举 re-export(实际定义在 `crate::sheng_admins::province_admins`)
 //! - session:登录态 DTO 占位(目前位于 `crate::login`)
 //! - permission:权限决策 DTO 占位(目前由 `crate::scope` 直接消费 AdminRole)
 //! - error:HTTP API 通用响应 / 错误 / 健康检查输出包装

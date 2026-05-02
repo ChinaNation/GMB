@@ -28,12 +28,12 @@ import type {
   EligibleClearingBankCandidate,
   InstitutionDetail,
 } from './types';
-import { ClearingBankAddPage } from './sfid';
-import { ClearingBankDeclareNodePage } from './register';
-import { ClearingBankInstitutionDetailPage } from './institution_detail';
-import { CreateMultisigInstitutionPage } from './create_multisig';
-import { OtherAccountsListPage } from './other_accounts';
-import { ClearingBankAdminListPage } from './admin_list';
+import { ClearingBankAddPage } from './duoqian-manage/add-candidate';
+import { ClearingBankDeclareNodePage } from './offchain-transaction/node-register';
+import { ClearingBankInstitutionDetailPage } from './duoqian-manage/institution-detail';
+import { CreateMultisigInstitutionPage } from './duoqian-manage/create-multisig';
+import { OtherAccountsListPage } from './duoqian-manage/other-accounts';
+import { ClearingBankAdminListPage } from './settlement/admin-unlock';
 import './styles.css';
 
 const STORAGE_KEY = 'gmb-clearing-bank-known-sfids';

@@ -8,10 +8,10 @@ use std::{
 };
 use tracing::warn;
 
-use crate::sfid::province::provinces;
+use crate::sheng_admins::province_admins::sheng_admin_mains;
 use crate::*;
 
-/// 首次初始化：从 province.rs 硬编码数据创建 43 个内置机构管理员
+/// 首次初始化：从 sheng_admins/province_admins.rs 硬编码数据创建 43 个内置省管理员。
 pub(crate) fn seed_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
@@ -24,7 +24,7 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
         return;
     }
     let now = Utc::now();
-    for (idx, item) in provinces().iter().enumerate() {
+    for (idx, item) in sheng_admin_mains().iter().enumerate() {
         let pubkey = item.pubkey.to_string();
         store.admin_users_by_pubkey.insert(
             pubkey.clone(),
@@ -46,13 +46,13 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
         );
         store
             .sheng_admin_province_by_pubkey
-            .insert(item.pubkey.to_string(), item.name.to_string());
+            .insert(item.pubkey.to_string(), item.province.to_string());
     }
 }
 
-/// 从 DB 加载后，补充 province.rs 中新增的省份（DB 中缺失的）
+/// 从 DB 加载后，补充 province_admins.rs 中新增的省管理员（DB 中缺失的）
 /// - DB 是唯一真实数据源，已有省份的公钥不会被覆盖
-/// - 只补缺：province.rs 中有但 DB 中没有的省份，用默认公钥创建
+/// - 只补缺：province_admins.rs 中有但 DB 中没有的省份，用默认公钥创建
 /// - 同时修正 role 字段（旧 DB 可能存的是 ShengAdmin）
 pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
     let mut store = match state.store.write() {
@@ -78,15 +78,15 @@ pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
         }
     }
 
-    // 补充 DB 中缺失的省份（province.rs 有但 DB 没有的）
+    // 补充 DB 中缺失的省份（province_admins.rs 有但 DB 没有的）
     let existing_provinces: std::collections::HashSet<String> = store
         .sheng_admin_province_by_pubkey
         .values()
         .cloned()
         .collect();
 
-    for item in provinces().iter() {
-        let province = item.name.to_string();
+    for item in sheng_admin_mains().iter() {
+        let province = item.province.to_string();
         if existing_provinces.contains(&province) {
             continue; // DB 已有该省份，不覆盖
         }

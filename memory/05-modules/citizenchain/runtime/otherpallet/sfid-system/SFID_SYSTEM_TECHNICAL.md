@@ -5,7 +5,8 @@
 `sfid-system` 的功能需求是：
 - 维护 SFID 与链上账户的一对一绑定关系。
 - 为公民投票提供基于 SFID 的资格校验与投票凭证验签能力。
-- 维护 SFID 验签主备账户，并支持受限轮换。
+- 维护省管理员 3-tier 名册 `ShengAdmins[Province][Slot]`。
+- 维护省级签名公钥 `ShengSigningPubkey[Province][AdminPubkey]`。
 - 为上游发行/治理模块提供统一、可复用的资格接口，避免多个模块各自保存一份 SFID 真值状态。
 - 将链上“是否为已认证公民”的判断收敛到单一真相源，避免链下口径和链上状态漂移。
 
@@ -27,7 +28,7 @@
 
 ### 0.4 安全与运维需求
 - 模块不得依赖链下“在线状态”或链下缓存来判断公民资格，资格判断必须完全可由链上状态重建。
-- SFID 验签主备账户轮换必须保证三把账户两两不同，避免主备塌缩成同一把密钥。
+- 省管理员三槽名册必须保证 Main 为本省 trust anchor,Backup1/Backup2 只能由 Main 签名授权增删。
 - 绑定凭证与投票凭证必须带链域隔离信息（`genesis_hash`），防止跨链重放。
 - 绑定 nonce（`UsedBindNonce`）当前为永久存储，无回收机制。以 `CITIZEN_ISSUANCE_MAX_COUNT` 为上界，存储增长有限。
 - 投票 nonce 当前没有按块自动回收机制，运维流程必须在提案结束时通过 `cleanup_vote_credentials` 触发清理，否则会产生长期状态膨胀。当前清理实现使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，需考虑分批清理。
@@ -42,10 +43,11 @@
 4. 绑定 nonce 防重放按 `hash(nonce)` 消费（代码锚点：`runtime/otherpallet/sfid-system/src/lib.rs:294`）。
 
 ## 1. 模块定位
-`sfid-system` 是一个 FRAME pallet，负责三件核心事：
+`sfid-system` 是一个 FRAME pallet，负责四件核心事：
 - SFID 与链上账户的一对一绑定/解绑。
 - 公民投票资格校验（基于 SFID 绑定关系 + SFID 系统签名凭证）。
-- 维护 SFID 验签主备账户（主账户验签、备用账户轮换）。
+- 维护省管理员三槽名册。
+- 维护每个省管理员槽独立的签名公钥。
 
 设计边界：
 - 本模块不保存 SFID 明文，只保存 `binding_id`。
@@ -54,6 +56,57 @@
 
 代码位置：
 - `/Users/rhett/GMB/citizenchain/runtime/otherpallet/sfid-system/src/lib.rs`
+- `/Users/rhett/GMB/citizenchain/runtime/otherpallet/sfid-system/src/duoqian_info/`
+- `/Users/rhett/GMB/citizenchain/runtime/otherpallet/sfid-system/src/sheng_admins/`
+
+### 1.1 `duoqian_info/` 目录边界(2026-05-02)
+
+`duoqian_info/` 是 DUOQIAN 链接收 SFID 机构信息的链上落点,先承接第 1 步机构备案的类型和基础校验。
+
+当前目录结构:
+
+```text
+duoqian_info/
+├── mod.rs       # 模块聚合与边界说明
+├── types.rs     # InstitutionFilingPayload / InstitutionFilingRecord
+├── validate.rs  # 备案三字段非空校验
+├── filing.rs    # 备案记录与 payload 对比辅助
+└── tests.rs     # 基础单测
+```
+
+边界:
+
+- 备案 payload 只包含 `sfid_id`、`institution_name`、`account_name`。
+- 备案记录不能写入 `duoqian-manage` 的正式机构 storage。
+- 备案记录不能激活机构账户。
+- 正式多签机构注册仍由后续 `duoqian-manage` 流程完成。
+
+---
+
+### 1.2 `sheng_admins/` 目录边界(2026-05-02)
+
+`sheng_admins/` 是 `sfid-system` pallet 内省管理员相关纯类型与辅助逻辑目录,
+与 SFID 后端 `sfid/backend/src/chain/sheng_admins/`、前端
+`sfid/frontend/chain/sheng_admins/` 同名对齐。FRAME storage 与 call 壳仍在
+`lib.rs`,纯类型、payload 与迁移提示下沉到本目录。
+
+当前目录结构:
+
+```text
+sheng_admins/
+├── mod.rs        # 模块聚合与边界说明
+├── types.rs      # Slot { Main, Backup1, Backup2 }
+├── payload.rs    # 4 个省管理员 unsigned extrinsic 的 domain 与 payload hash
+└── migration.rs  # ADR-008 历史 storage 清理提示
+```
+
+边界:
+
+- `types.rs` 承载链上 `ShengAdmins[Province][Slot]` 的 Slot 类型。
+- `payload.rs` 的 domain 常量和字段顺序必须与 SFID 后端
+  `sfid/backend/src/chain/sheng_admins/` 保持完全一致。
+- `lib.rs` 继续保留 storage、event、error、call 与 ValidateUnsigned,避免破坏
+  FRAME pallet 宏边界。
 
 ---
 
@@ -90,27 +143,23 @@ Runtime 配置与验签桥接：
   - 绑定凭证 `bind_nonce` 防重放（按 `hash(bind_nonce)` 记账）。
 - `UsedVoteNonce<(proposal_id, binding_id, nonce_hash) -> bool>`
   - 投票凭证防重放（提案 + 身份 + nonce 三维度）。
-- `SfidMainAccount<Option<AccountId>>`
-  - 当前 SFID 主验签账户。
-- `SfidBackupAccount1<Option<AccountId>>`
-- `SfidBackupAccount2<Option<AccountId>>`
+- `ShengAdmins<Province, Slot -> [u8; 32]>`
+  - 省管理员三槽名册。Main 首激活占位,Backup1/Backup2 由 Main 签名增删。
+- `ShengSigningPubkey<Province, AdminPubkey -> [u8; 32]>`
+  - 每个省管理员槽独立的业务签名公钥。
+- `UsedShengNonce<Hash -> ()>`
+  - 4 个省管理员 unsigned extrinsic 的 32 字节 nonce 防重放。
 
 ---
 
 ## 4. 创世配置与密钥模型
-`GenesisConfig` 包含三把 SFID 账户：
-- `sfid_main_account`
-- `sfid_backup_account_1`
-- `sfid_backup_account_2`
+ADR-008 后 `sfid-system` 不再通过 GenesisConfig 注入 KEY_ADMIN / SFID 主备账户。
+省管理员链上状态采用 first-come-first-serve:
 
-规则：
-1. 三个都不配置：允许（no-op）。
-2. 只要配置了任意一个：必须三把都配置。
-3. 三把账户必须两两不同。
-
-含义：
-- 主账户：当前验签公钥来源。
-- 两个备用账户：可发起轮换，把自己提升为主账户并补位新备用账户。
+1. 某省首次调用 `activate_sheng_signing_pubkey` 的 `admin_pubkey` 占据
+   `ShengAdmins[Province][Main]`。
+2. Backup1 / Backup2 后续只能由该省 Main 对 payload 签名授权后写入。
+3. 每个 admin slot 单独写入 `ShengSigningPubkey[Province][AdminPubkey]`。
 
 ---
 
@@ -140,9 +189,8 @@ weight：
 
 ### 5.2 `unbind_sfid(origin, target)`（call index = 1）— 管理员代解绑
 校验：
-1. `origin` 必须是签名账户。
-2. 调用者必须是 SFID 主账户（`SfidMainAccount`）或已注册的省级签名账户（`ProvinceBySigningPubkey` 中存在对应公钥）。
-3. `target` 必须当前已绑定（`NotBound`）。
+1. `origin` 必须满足 runtime 注入的 `T::UnbindOrigin`。
+2. `target` 必须当前已绑定（`NotBound`）。
 
 状态变更：
 1. 删除 `target` 的 `AccountToBindingId` 与 `BindingIdToAccount`。
@@ -151,17 +199,17 @@ weight：
 
 权限说明：用户不允许自行解绑，必须由 SFID 管理员发起。
 
-### 5.3 `rotate_sfid_keys(origin, new_backup)`（call index = 2）
-校验：
-1. 三把当前 SFID 账户都必须已配置。
-2. 调用者必须是 `backup_1` 或 `backup_2`（主账户不能直接调用）。
-3. `new_backup` 不能与 `main` / 调用者 / 幸存备用账户重复。
+### 5.3 省管理员 4 个 unsigned extrinsic（call index = 2..5）
 
-轮换规则：
-1. 调用者升级为新 `main`。
-2. 另一个备用账户成为新 `backup_1`。
-3. `new_backup` 成为新 `backup_2`。
-4. 发事件 `SfidKeysRotated`。
+| call | 说明 | 验签口径 |
+|---|---|---|
+| `add_sheng_admin_backup` | 写入 Backup1 / Backup2 槽 | Main 对 `ADD_BACKUP_DOMAIN + province + slot + new_pubkey + nonce` 签名 |
+| `remove_sheng_admin_backup` | 清空 Backup1 / Backup2 槽,并级联清签名公钥 | Main 对 `REMOVE_BACKUP_DOMAIN + province + slot + nonce` 签名 |
+| `activate_sheng_signing_pubkey` | 首激活 Main 或激活在册 admin 的签名公钥 | admin_pubkey 对 `ACTIVATE_DOMAIN + province + admin_pubkey + signing_pubkey + nonce` 签名 |
+| `rotate_sheng_signing_pubkey` | 轮换在册 admin 的签名公钥 | admin_pubkey 对 `ROTATE_DOMAIN + province + admin_pubkey + new_signing_pubkey + nonce` 签名 |
+
+这 4 个调用均为 unsigned + `Pays::No`,防重放统一走 `UsedShengNonce`。
+payload 代码锚点:`src/sheng_admins/payload.rs`。
 
 ---
 
@@ -242,18 +290,18 @@ weight：
 ### 功能 4：机构 SFID 登记（多签模块）
 需要提供：
 1. `sfid_id`
-2. 由 SFID 当前 `MAIN` 发起上链
+2. 由省级签名公钥签发的机构注册凭证
 
 说明：
 - 当前实现不校验“sfid_id 哈希与链下回传是否一致”这类二次证明；
-- 当前是“链上唯一性 + 当前 MAIN + 派生地址”模型。
+- 当前是“链上唯一性 + 省级签名凭证 + 派生地址”模型。
 
-### 功能 5：SFID 验签密钥运维（主备轮换）
+### 功能 5：省管理员名册与签名密钥运维
 需要提供：
-1. 创世阶段三把账户（主 + 备1 + 备2）
-2. 轮换时由备用账户发起 `rotate_sfid_keys`（链上标准 extrinsic）
-3. 新补位备用账户 `new_backup`
-4. 策略：先上链 backup，再提升为 main，再补位新 backup，全程记录审计事件与版本号。
+1. `activate_sheng_signing_pubkey` 首激活 Main 或激活在册 admin 签名公钥。
+2. `add_sheng_admin_backup` / `remove_sheng_admin_backup` 由 Main 授权维护 Backup1/Backup2。
+3. `rotate_sheng_signing_pubkey` 由当前 admin 自签轮换自身签名公钥。
+4. 4 个调用均走 unsigned + `Pays::No` + `UsedShengNonce` 防重放。
 
 ---
 
@@ -277,10 +325,9 @@ weight：
   - 投票：`UsedVoteNonce(proposal_id, (binding_id, hash(vote_nonce)))`（提案结束后可清理）
 - 链域隔离：payload 包含 `block_hash(0)`。
 - 域隔离：绑定/投票/快照使用不同 domain 常量。
-- 可轮换验签根：主备账户机制降低单点密钥风险。
+- 省级签名根可轮换：每个省管理员槽独立签名公钥,通过 `rotate_sheng_signing_pubkey` 更新。
 
 注意：
-- `current_sfid_verify_pubkey()` 要求 `AccountId` 编码长度恰好 32 字节，否则验签会失败。
 - `cleanup_vote_credentials` 当前使用 `clear_prefix(u32::MAX)` 一次性清除，如果单提案投票量极大，可能影响出块稳定性。
 
 ---

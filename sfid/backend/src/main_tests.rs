@@ -44,7 +44,7 @@ fn build_test_state() -> AppState {
             redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
         ),
         cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
-        sheng_signer_cache: Arc::new(sheng_admins::signing_cache::ShengSigningCache::new()),
+        sheng_admin_signing_cache: Arc::new(sheng_admins::signing_cache::ShengSigningCache::new()),
         sharded_store: {
             #[cfg(test)]
             {

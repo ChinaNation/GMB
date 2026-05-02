@@ -3,7 +3,7 @@
 //! ADR-008 决议(2026-05-01):每个 admin slot 独立签名密钥。
 //!
 //! 行为:
-//! 1. 若 store_shards/sheng_signer 已存在加密 seed → 解密 → 构造 Pair → 载入 cache
+//! 1. 若 signing_seed_store 已存在加密 seed → 解密 → 构造 Pair → 载入 cache
 //! 2. 否则 → 随机生成 32 字节 seed → 加密落盘 → 构造 Pair → 载入 cache
 //!
 //! 注意:本期**不**推链(`activate_sheng_signing_pubkey` 留 Phase 4 子卡)。
@@ -16,7 +16,7 @@ use sp_core::{sr25519, Pair};
 use zeroize::Zeroizing;
 
 use crate::sheng_admins::signing_cache::{ShengSigningCache, Sr25519Pair};
-use crate::store_shards::sheng_signer::{load_seed, save_seed};
+use crate::sheng_admins::signing_seed_store::{load_seed, save_seed};
 
 /// bootstrap 失败原因。
 #[derive(Debug)]
@@ -57,8 +57,7 @@ pub(crate) fn ensure_signing_keypair(
             let mut seed_arr: Zeroizing<[u8; 32]> = Zeroizing::new([0u8; 32]);
             getrandom::getrandom(seed_arr.as_mut_slice())
                 .map_err(|e| BootstrapError::Rng(e.to_string()))?;
-            save_seed(province, admin_pubkey, &seed_arr)
-                .map_err(BootstrapError::Persist)?;
+            save_seed(province, admin_pubkey, &seed_arr).map_err(BootstrapError::Persist)?;
             *seed_arr
         }
     };

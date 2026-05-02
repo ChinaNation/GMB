@@ -33,9 +33,10 @@
 - `cities.rs`
   - `cities_of(province)` / `real_cities_of(province)`:城市清单高层 API
 - `province.rs`
-  - 43 省 `PROVINCES` 常量表
+  - 43 省 `PROVINCES` 常量表,只保存 SFID 号码生成需要的省市代码
   - `province_code_by_name` / `city_code_by_name` / `province_name_by_code`
-  - `sheng_admin_province` / `sheng_admin_display_name`:省份公钥映射(超管归属推断)
+- 省管理员 main 公钥、Slot、三槽名册等已移出本模块,统一位于
+  `backend/src/sheng_admins/province_admins.rs`。
 - `admin.rs`
   - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
 - `city_codes/*.rs`
@@ -59,8 +60,9 @@
 
 - `main.rs` 路由将 `admin/sfid/*` 接口接入 `sfid::admin`。
 - `app_core/runtime_ops.rs` 的 `seed_demo_record` 也复用同一套生成工具，不再生成旧格式演示 `sfid`。
-- `sheng-admins/institutions.rs`：省级管理员生成机构 `site_sfid`。
-- `business/scope.rs` 与 `login/mod.rs`：使用省份公钥映射能力做角色展示和归属推断。
+- `sheng_admins/institutions.rs`：省级管理员生成机构 `site_sfid`。
+- `login/mod.rs` 与 `scope/admin_province.rs`：通过
+  `sheng_admins::province_admins` 做角色展示和归属推断。
 
 ## 5. 命名与引用
 

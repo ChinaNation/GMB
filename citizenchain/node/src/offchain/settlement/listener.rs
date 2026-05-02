@@ -28,7 +28,7 @@ use citizenchain as runtime;
 
 use crate::core::service::FullClient;
 
-use crate::offchain::ledger::OffchainLedger;
+use crate::offchain::offchain_transaction::ledger::OffchainLedger;
 
 /// 抽象的链上事件(Step 1 mock,Step 2 由 sc-client-api 解码得出)。
 #[derive(Clone, Debug)]

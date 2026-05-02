@@ -301,7 +301,7 @@ pub(crate) fn require_public_search_auth(
 // 中文注释:历史 require_chain_auth + 整套 chain HMAC 鉴权(x-chain-token /
 // x-chain-request-id / x-chain-nonce / x-chain-timestamp / x-chain-signature)
 // 与已下架的 /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,
-// 2026-05-01 一并下架。chain pull 端点(institution_info / joint_vote /
+// 2026-05-01 一并下架。chain pull 端点(duoqian_info / joint_vote /
 // citizen_vote)的安全模型是"返回签名凭证只对请求者 account_pubkey 有效",
 // 不需要请求侧 HMAC。
 

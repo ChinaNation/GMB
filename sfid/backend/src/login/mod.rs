@@ -14,10 +14,10 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::scope::pubkey::same_admin_pubkey;
 use crate::scope::admin_province::province_scope_for_role;
-use crate::sfid::province::sheng_admin_display_name;
-use crate::sfid::province::sheng_admin_province;
+use crate::scope::pubkey::same_admin_pubkey;
+use crate::sheng_admins::province_admins::sheng_admin_display_name;
+use crate::sheng_admins::province_admins::sheng_admin_province;
 use crate::*;
 
 const LOGIN_CHALLENGE_TTL_SECONDS: i64 = 90;
@@ -454,7 +454,7 @@ pub(crate) async fn admin_auth_verify(
     store
         .admin_sessions
         .insert(access_token.clone(), new_session.clone());
-    // 中文注释：先释放写锁，再执行 bootstrap_sheng_signer（含链上推送），避免
+    // 中文注释：先释放写锁，再执行 bootstrap_sheng_admin_signing（含链上推送），避免
     // 跨 await 持有 StoreWriteGuard。
     drop(store);
 
@@ -892,7 +892,7 @@ fn admin_auth(
         if now_ts - last > 60 {
             LAST_CLEANUP.store(now_ts, Ordering::Relaxed);
             let ss = state.sharded_store.clone();
-            let cache = state.sheng_signer_cache.clone();
+            let cache = state.sheng_admin_signing_cache.clone();
             tokio::task::spawn(async move {
                 if let Ok(evicted) =
                     cleanup_sessions_from_global(&ss, Utc::now(), shi_idle_timeout_minutes).await
@@ -1206,7 +1206,7 @@ fn bootstrap_sheng_signing_pair(state: &AppState, admin_pubkey_hex: &str, provin
         return;
     };
     match crate::sheng_admins::bootstrap::ensure_signing_keypair(
-        state.sheng_signer_cache.as_ref(),
+        state.sheng_admin_signing_cache.as_ref(),
         province,
         &pubkey_bytes,
     ) {
@@ -1380,7 +1380,7 @@ fn cleanup_expired_challenges(store: &mut Store, now: DateTime<Utc>) {
 ///
 /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 8：
 /// 返回本次被驱逐的 ShengAdmin session 所属 province 列表，供外层调用
-/// `state.sheng_signer_cache.unload_province` 释放内存 Pair。
+/// `state.sheng_admin_signing_cache.unload_province` 释放内存 Pair。
 /// ADR-008 Phase 23e 后:cache 已迁到 `sheng_admins::signing_cache::ShengSigningCache`,
 /// `unload_province` 会清理本省所有 3-tier slot 的 keypair。
 #[allow(dead_code)]

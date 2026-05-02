@@ -25,7 +25,13 @@ extern crate alloc;
 pub use pallet::*;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+pub mod duoqian_info;
+pub mod sheng_admins;
 pub mod weights;
+pub use sheng_admins::payload::{
+    ACTIVATE_DOMAIN, ADD_BACKUP_DOMAIN, REMOVE_BACKUP_DOMAIN, ROTATE_DOMAIN,
+};
+pub use sheng_admins::types::Slot;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::ConstU32;
@@ -137,48 +143,15 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
     fn cleanup_vote_credentials(_proposal_id: u64) {}
 }
 
-/// 中文注释:省管理员 3-tier 槽位枚举。
-/// - Main:首激活方占位;后续所有 backup 写入须由 Main 私钥签名。
-/// - Backup1 / Backup2:由 Main 通过 `add_sheng_admin_backup` 动态添加。
-#[derive(
-    Clone,
-    Copy,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-    RuntimeDebug,
-)]
-pub enum Slot {
-    Main,
-    Backup1,
-    Backup2,
-}
-
-/// 中文注释:ADR-008 Step 2 签名 payload domain 常量。
-/// 必须使用 `&[u8; N]` 数组类型(对应 feedback_scale_domain_must_be_array.md),
-/// 链上 verifier 验签时与 SFID 后端 sign 端必须严格一致。
-pub const ADD_BACKUP_DOMAIN: &[u8; 25] = b"add_sheng_admin_backup_v1";
-pub const REMOVE_BACKUP_DOMAIN: &[u8; 28] = b"remove_sheng_admin_backup_v1";
-pub const ACTIVATE_DOMAIN: &[u8; 32] = b"activate_sheng_signing_pubkey_v1";
-pub const ROTATE_DOMAIN: &[u8; 30] = b"rotate_sheng_signing_pubkey_v1";
-
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use alloc::vec::Vec;
-    use frame_support::{
-        pallet_prelude::*,
-        traits::EnsureOrigin,
-        Blake2_128Concat, Twox64Concat,
-    };
+    use frame_support::{pallet_prelude::*, traits::EnsureOrigin, Blake2_128Concat, Twox64Concat};
     use frame_system::pallet_prelude::*;
     use sp_core::sr25519;
-    use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
+    use sp_io::crypto::sr25519_verify;
     use sp_runtime::traits::Hash;
 
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
@@ -305,8 +278,7 @@ pub mod pallet {
     #[allow(clippy::unused_unit)]
     #[pallet::storage]
     #[pallet::getter(fn used_sheng_nonce)]
-    pub type UsedShengNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
+    pub type UsedShengNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
     // ADR-008 Step 2c:GenesisConfig 已彻底删除。
     // 链上 0 prior knowledge of SFID,创世 storage 全空,
@@ -362,12 +334,8 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_runtime_upgrade() -> Weight {
             // 中文注释:ADR-008 Step 2c。开发期裸升级路径,实际 storage 清理由
-            // chain 重启 + fresh genesis 完成。本 hook 输出 log 仅作可观测标记。
-            log::info!(
-                target: "sfid-system",
-                "ADR-008 Step 2c on_runtime_upgrade: legacy SFID storage (SfidMainAccount/Backup{{1,2}}, single-value ShengSigningPubkey, ProvinceBySigningPubkey, GenesisConfig) removed; fresh-genesis path expected"
-            );
-            T::DbWeight::get().reads(0)
+            // chain 重启 + fresh genesis 完成;提示文本归 sheng_admins/migration.rs 维护。
+            crate::sheng_admins::migration::log_legacy_storage_cleanup()
         }
     }
 
@@ -518,7 +486,12 @@ pub mod pallet {
                 Error::<T>::Sheng3TierNonceUsed
             );
 
-            let payload = Self::add_backup_payload(&province, slot, &new_pubkey, &nonce);
+            let payload = crate::sheng_admins::payload::add_backup_payload(
+                &province,
+                slot,
+                &new_pubkey,
+                &nonce,
+            );
             ensure!(
                 Self::verify_sr25519(&main_pubkey, &sig, &payload),
                 Error::<T>::Sheng3TierSignatureInvalid
@@ -567,7 +540,8 @@ pub mod pallet {
                 Error::<T>::Sheng3TierNonceUsed
             );
 
-            let payload = Self::remove_backup_payload(&province, slot, &nonce);
+            let payload =
+                crate::sheng_admins::payload::remove_backup_payload(&province, slot, &nonce);
             ensure!(
                 Self::verify_sr25519(&main_pubkey, &sig, &payload),
                 Error::<T>::Sheng3TierSignatureInvalid
@@ -611,8 +585,12 @@ pub mod pallet {
                 Error::<T>::Sheng3TierNonceUsed
             );
 
-            let payload =
-                Self::activate_payload(&province, &admin_pubkey, &signing_pubkey, &nonce);
+            let payload = crate::sheng_admins::payload::activate_payload(
+                &province,
+                &admin_pubkey,
+                &signing_pubkey,
+                &nonce,
+            );
             ensure!(
                 Self::verify_sr25519(&admin_pubkey, &sig, &payload),
                 Error::<T>::Sheng3TierSignatureInvalid
@@ -623,8 +601,7 @@ pub mod pallet {
                 None => true,
                 Some(_) => {
                     // 中文注释:Main 已占,本次只允许花名册内 admin 调用。
-                    let in_roster = ShengAdmins::<T>::get(&bounded, Slot::Main)
-                        .as_ref()
+                    let in_roster = ShengAdmins::<T>::get(&bounded, Slot::Main).as_ref()
                         == Some(&admin_pubkey)
                         || ShengAdmins::<T>::get(&bounded, Slot::Backup1).as_ref()
                             == Some(&admin_pubkey)
@@ -682,8 +659,12 @@ pub mod pallet {
             let old_signing_pubkey = ShengSigningPubkey::<T>::get(&bounded, admin_pubkey)
                 .ok_or(Error::<T>::Sheng3TierSigningNotActivated)?;
 
-            let payload =
-                Self::rotate_payload(&province, &admin_pubkey, &new_signing_pubkey, &nonce);
+            let payload = crate::sheng_admins::payload::rotate_payload(
+                &province,
+                &admin_pubkey,
+                &new_signing_pubkey,
+                &nonce,
+            );
             ensure!(
                 Self::verify_sr25519(&admin_pubkey, &sig, &payload),
                 Error::<T>::Sheng3TierSignatureInvalid
@@ -753,59 +734,6 @@ pub mod pallet {
             let pk = sr25519::Public::from_raw(*public);
             let signature = sr25519::Signature::from_raw(*sig);
             sr25519_verify(&signature, msg, &pk)
-        }
-
-        fn add_backup_payload(
-            province: &[u8],
-            slot: Slot,
-            new_pubkey: &[u8; 32],
-            nonce: &ShengNonce,
-        ) -> [u8; 32] {
-            let payload = (
-                ADD_BACKUP_DOMAIN,
-                province,
-                slot,
-                new_pubkey,
-                nonce,
-            );
-            blake2_256(&payload.encode())
-        }
-
-        fn remove_backup_payload(province: &[u8], slot: Slot, nonce: &ShengNonce) -> [u8; 32] {
-            let payload = (REMOVE_BACKUP_DOMAIN, province, slot, nonce);
-            blake2_256(&payload.encode())
-        }
-
-        fn activate_payload(
-            province: &[u8],
-            admin_pubkey: &[u8; 32],
-            signing_pubkey: &[u8; 32],
-            nonce: &ShengNonce,
-        ) -> [u8; 32] {
-            let payload = (
-                ACTIVATE_DOMAIN,
-                province,
-                admin_pubkey,
-                signing_pubkey,
-                nonce,
-            );
-            blake2_256(&payload.encode())
-        }
-
-        fn rotate_payload(
-            province: &[u8],
-            admin_pubkey: &[u8; 32],
-            new_signing_pubkey: &[u8; 32],
-            nonce: &ShengNonce,
-        ) -> [u8; 32] {
-            let payload = (
-                ROTATE_DOMAIN,
-                province,
-                admin_pubkey,
-                new_signing_pubkey,
-                nonce,
-            );
-            blake2_256(&payload.encode())
         }
     }
 
@@ -883,10 +811,11 @@ pub mod pallet {
         type Call = Call<T>;
 
         fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-            let (nonce, payload, signer_pubkey, sig, tag_seed) = match Self::extract_unsigned_parts(call) {
-                Some(v) => v,
-                None => return InvalidTransaction::Call.into(),
-            };
+            let (nonce, payload, signer_pubkey, sig, tag_seed) =
+                match Self::extract_unsigned_parts(call) {
+                    Some(v) => v,
+                    None => return InvalidTransaction::Call.into(),
+                };
 
             let nonce_hash = T::Hashing::hash(&nonce);
             if UsedShengNonce::<T>::contains_key(nonce_hash) {
@@ -942,7 +871,9 @@ pub mod pallet {
                 } => {
                     let bounded = ProvinceBound::try_from(province.clone()).ok()?;
                     let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
-                    let payload = Self::add_backup_payload(province, *slot, new_pubkey, nonce);
+                    let payload = crate::sheng_admins::payload::add_backup_payload(
+                        province, *slot, new_pubkey, nonce,
+                    );
                     Some((*nonce, payload, signer, *sig, b"add_backup"))
                 }
                 Call::remove_sheng_admin_backup {
@@ -953,7 +884,8 @@ pub mod pallet {
                 } => {
                     let bounded = ProvinceBound::try_from(province.clone()).ok()?;
                     let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
-                    let payload = Self::remove_backup_payload(province, *slot, nonce);
+                    let payload =
+                        crate::sheng_admins::payload::remove_backup_payload(province, *slot, nonce);
                     Some((*nonce, payload, signer, *sig, b"remove_backup"))
                 }
                 Call::activate_sheng_signing_pubkey {
@@ -963,8 +895,12 @@ pub mod pallet {
                     nonce,
                     sig,
                 } => {
-                    let payload =
-                        Self::activate_payload(province, admin_pubkey, signing_pubkey, nonce);
+                    let payload = crate::sheng_admins::payload::activate_payload(
+                        province,
+                        admin_pubkey,
+                        signing_pubkey,
+                        nonce,
+                    );
                     Some((*nonce, payload, *admin_pubkey, *sig, b"activate"))
                 }
                 Call::rotate_sheng_signing_pubkey {
@@ -974,8 +910,12 @@ pub mod pallet {
                     nonce,
                     sig,
                 } => {
-                    let payload =
-                        Self::rotate_payload(province, admin_pubkey, new_signing_pubkey, nonce);
+                    let payload = crate::sheng_admins::payload::rotate_payload(
+                        province,
+                        admin_pubkey,
+                        new_signing_pubkey,
+                        nonce,
+                    );
                     Some((*nonce, payload, *admin_pubkey, *sig, b"rotate"))
                 }
                 _ => None,
