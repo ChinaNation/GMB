@@ -89,11 +89,11 @@ pub(crate) async fn list_roster_admin(
         })
         .into_response(),
         Err(err) => {
-            tracing::warn!(province = %province, error = %err, "fetch_roster mock failed");
+            tracing::warn!(province = %province, error = %err, "fetch_roster failed");
             crate::api_error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 1502,
-                "chain pull mock failed",
+                "chain pull failed",
             )
         }
     }
@@ -126,11 +126,11 @@ pub(crate) async fn list_roster_public(
         })
         .into_response(),
         Err(err) => {
-            tracing::warn!(province = %province_name, error = %err, "fetch_roster mock failed");
+            tracing::warn!(province = %province_name, error = %err, "fetch_roster failed");
             crate::api_error(
                 StatusCode::SERVICE_UNAVAILABLE,
                 1502,
-                "chain pull mock failed",
+                "chain pull failed",
             )
         }
     }

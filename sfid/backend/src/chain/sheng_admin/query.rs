@@ -3,11 +3,11 @@
 //! ADR-008:每省 main / backup_1 / backup_2 三个 admin 槽位,链上 storage
 //! `ShengAdmins: DoubleMap<Province, Slot, Pubkey>`。
 //!
-//! ## phase45 mock 行为
+//! ## phase45 占位行为(留待 chain pull 全量切真任务卡)
 //!
 //! `fetch_roster` 直接读 `crate::sfid::province::PROVINCES` 常量取 main pubkey,
-//! backup_1 / backup_2 一律返回 `None`。phase7 切真:走 subxt `storage().fetch()`
-//! 真正读链。
+//! backup_1 / backup_2 一律返回 `None`。phase7 仅切了 4 个 push extrinsic,
+//! chain pull 接 subxt `storage().fetch()` 留独立任务卡。
 
 #![allow(dead_code)]
 
@@ -43,7 +43,7 @@ pub(crate) async fn fetch_roster(
         .find(|p| p.name == province)
         .ok_or(RosterQueryError::UnknownProvince)?;
     let main = pubkey_from_hex(entry.pubkey).ok_or(RosterQueryError::PubkeyDecode)?;
-    tracing::warn!(province = %province, "chain pull mocked, awaiting Step 2");
+    tracing::warn!(province = %province, "fetch_roster placeholder: backup slots return None until subxt storage().fetch() is wired");
     Ok([Some(main), None, None])
 }
 
