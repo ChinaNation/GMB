@@ -9,7 +9,7 @@ import type { AdminAuth } from '../../api/client';
 import { getRoster, addBackup, removeBackup, type RosterEntry, type ShengAdminRoster } from './api';
 import type { ShengSlot } from './types';
 import { ShengSlotLabel } from './types';
-import { glassCardStyle, glassCardHeadStyle } from '../../App';
+import { glassCardStyle, glassCardHeadStyle } from '../../common/cardStyles';
 
 interface Props {
   auth: AdminAuth;
