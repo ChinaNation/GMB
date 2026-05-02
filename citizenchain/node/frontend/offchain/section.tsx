@@ -1,27 +1,39 @@
 // 清算行 tab 主入口。8 视图状态机驱动添加/管理流程。
 //
-// empty            列表 + 顶部"添加清算行"按钮
-// add-input-sfid   输入 sfid_id 或搜索机构名,选中候选后进入 check-status
-// check-status     综合判定 SFID 状态 + 链上多签 + 节点声明,自动跳转
-// register-sfid    SFID 端未注册 → 提示去 SFID 系统注册(终止)
-// propose-create   未创建多签账户 → 复用治理 propose_create 流程
-// wait-vote        提案已发起 → 轮询投票结果
-// declare-node     多签 Active 但未声明节点 → 填 RPC 信息 + 自测 + 签名提交
-// detail           已声明节点 → 详情页(节点信息 + 管理员列表[解密] + 提案列表)
+// 重构(2026-05-01)后状态机:
+//   empty                        列表 + ＋添加清算行
+//   add-input-sfid               输入 sfid_id 自动 debounce 搜索 SFID 候选(不再带"查询"按钮)
+//   check-multisig               链上查 Institutions[sfid_id]
+//                                  ├─ 已存在 → institution-detail
+//                                  └─ 不存在 → create-multisig-institution
+//   institution-detail           机构详情 = 卡片栅格 + 折叠卡片(其他账户 / 管理员) + 节点信息
+//                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
+//   other-accounts-list          子页:其他账户列表
+//   admin-list                   子页:管理员列表
+//   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
+//   wait-vote                    等待管理员投票通过(轮询 Institutions[sfid_id].status === 'Active')
+//   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
 //
-// 已添加的清算行(本机已用过的 sfid_id)缓存在 localStorage,empty 视图列出。
+// 已下架(2026-05-01):
+//   - register-sfid info 终态(SFID 端没找到候选时改为内联红条)
+//   - propose-create info 终态("去 SFID 后台"长说明,改为直接进 create-multisig-institution)
+//   - 老 detail 视图(只展示节点信息),并入 institution-detail 内联节点信息卡
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { offchainApi } from './api';
 import type {
-  ClearingBankNodeOnChainInfo,
+  AccountWithBalance,
   ClearingBankView,
   EligibleClearingBankCandidate,
+  InstitutionDetail,
 } from './types';
 import { ClearingBankAddPage } from './sfid';
 import { ClearingBankDeclareNodePage } from './register';
-import { ClearingBankDetailPage } from './detail';
+import { ClearingBankInstitutionDetailPage } from './institution_detail';
+import { CreateMultisigInstitutionPage } from './create_multisig';
+import { OtherAccountsListPage } from './other_accounts';
+import { ClearingBankAdminListPage } from './admin_list';
 import './styles.css';
 
 const STORAGE_KEY = 'gmb-clearing-bank-known-sfids';
@@ -45,10 +57,18 @@ function loadKnownSfids(): KnownSfidEntry[] {
   }
 }
 
-function saveKnownSfid(entry: KnownSfidEntry) {
-  const list = loadKnownSfids().filter(e => e.sfidId !== entry.sfidId);
+/// 把已确认存在(链上有 Institutions[sfid_id] 或刚提交 propose_create_institution
+/// 成功)的机构入条目加入本机已添加列表。**不要**在用户只是选了候选时调本函数,
+/// 否则若链上没有 + 创建流程失败,EmptyView 会显示孤儿卡。
+export function saveKnownSfid(entry: KnownSfidEntry) {
+  const list = loadKnownSfids().filter((e) => e.sfidId !== entry.sfidId);
   list.unshift(entry);
-  // 上限 50 条
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
+}
+
+/// 从本机已添加列表中删除指定 sfid_id 条目(链上判定为 None 或用户主动移除时调)。
+function removeKnownSfid(sfidId: string) {
+  const list = loadKnownSfids().filter((e) => e.sfidId !== sfidId);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
 }
 
@@ -63,16 +83,19 @@ export function ClearingBankSection() {
 
   const goAdd = useCallback(() => setView({ kind: 'add-input-sfid' }), []);
 
-  const goCheckStatus = useCallback((sfidId: string) => {
-    setView({ kind: 'check-status', sfidId });
+  const goCheckMultisig = useCallback((sfidId: string, institutionName: string) => {
+    // 中文注释:**不在此处** saveKnownSfid。用户只是选了候选,链上未必存在,
+    // 创建流程也可能立即失败。只有 goInstitutionDetail(链上确认存在)与
+    // create_multisig.tsx 提案上链成功 callback 才能调 saveKnownSfid。
+    setView({ kind: 'check-multisig', sfidId, institutionName });
   }, []);
 
-  const goDetail = useCallback((sfidId: string, institutionName?: string) => {
+  const goInstitutionDetail = useCallback((sfidId: string, institutionName?: string) => {
     if (institutionName) {
       saveKnownSfid({ sfidId, institutionName });
+      setKnownSfids(loadKnownSfids());
     }
-    setKnownSfids(loadKnownSfids());
-    setView({ kind: 'detail', sfidId });
+    setView({ kind: 'institution-detail', sfidId });
   }, []);
 
   return (
@@ -81,43 +104,80 @@ export function ClearingBankSection() {
         <EmptyView
           knownSfids={knownSfids}
           onAdd={goAdd}
-          onOpen={(s) => goDetail(s.sfidId, s.institutionName)}
+          onOpen={(s) => goInstitutionDetail(s.sfidId, s.institutionName)}
         />
       )}
 
       {view.kind === 'add-input-sfid' && (
         <ClearingBankAddPage
           onBack={goEmpty}
-          onSelectCandidate={(c) => {
-            // 缓存机构名,后续 detail 页面就有显示文案
-            saveKnownSfid({ sfidId: c.sfidId, institutionName: c.institutionName });
-            goCheckStatus(c.sfidId);
-          }}
-          onSelectKnownSfid={(s) => goCheckStatus(s)}
+          onSelectCandidate={(c) => goCheckMultisig(c.sfidId, c.institutionName)}
+          onSelectKnownSfid={(s) => goCheckMultisig(s, '')}
         />
       )}
 
-      {view.kind === 'check-status' && (
-        <CheckStatusView
+      {view.kind === 'check-multisig' && (
+        <CheckMultisigView
+          sfidId={view.sfidId}
+          institutionName={view.institutionName}
+          onBack={goEmpty}
+          onExists={() => goInstitutionDetail(view.sfidId, view.institutionName)}
+          onMissing={() => setView({ kind: 'create-multisig-institution', sfidId: view.sfidId })}
+        />
+      )}
+
+      {view.kind === 'institution-detail' && (
+        <ClearingBankInstitutionDetailPage
           sfidId={view.sfidId}
           onBack={goEmpty}
-          onNext={(next) => setView(next)}
+          onOpenOtherAccounts={(detail) =>
+            setView({
+              kind: 'other-accounts-list',
+              sfidId: view.sfidId,
+              otherAccounts: detail.otherAccounts,
+            })
+          }
+          onOpenAdminList={(detail) =>
+            setView({
+              kind: 'admin-list',
+              sfidId: view.sfidId,
+              admins: detail.duoqianAdminsSs58,
+              threshold: detail.threshold,
+              adminCount: detail.adminCount,
+            })
+          }
+          onDeclareNode={(sfidId, institutionName) =>
+            setView({ kind: 'declare-node', sfidId, institutionName })
+          }
         />
       )}
 
-      {view.kind === 'register-sfid' && (
-        <InfoView
-          title="该机构尚未在 SFID 注册"
-          message={`机构身份码 ${view.candidate.sfidId} 尚未在 SFID 系统创建。请先去 SFID 系统(crcfrcn.com 后台)创建机构后再回到此处声明清算行节点。`}
-          onBack={goEmpty}
+      {view.kind === 'other-accounts-list' && (
+        <OtherAccountsListPage
+          sfidId={view.sfidId}
+          otherAccounts={view.otherAccounts}
+          onBack={() => setView({ kind: 'institution-detail', sfidId: view.sfidId })}
         />
       )}
 
-      {view.kind === 'propose-create' && (
-        <InfoView
-          title="多签账户尚未创建"
-          message={`机构 ${view.candidate.institutionName} (${view.candidate.sfidId}) 在链上尚未创建多签账户。请前往 SFID 后台执行"激活机构"流程,流程触发链上 register_sfid_institution(写入元数据)+ propose_create(投票创建多签)。投票通过后回到本页继续声明清算行节点。`}
+      {view.kind === 'admin-list' && (
+        <ClearingBankAdminListPage
+          sfidId={view.sfidId}
+          admins={view.admins}
+          threshold={view.threshold}
+          adminCount={view.adminCount}
+          onBack={() => setView({ kind: 'institution-detail', sfidId: view.sfidId })}
+        />
+      )}
+
+      {view.kind === 'create-multisig-institution' && (
+        <CreateMultisigInstitutionPage
+          sfidId={view.sfidId}
+          coldWallets={[]}
           onBack={goEmpty}
+          onSubmitted={(sfidId, institutionName) =>
+            setView({ kind: 'wait-vote', sfidId, institutionName })
+          }
         />
       )}
 
@@ -126,7 +186,9 @@ export function ClearingBankSection() {
           sfidId={view.sfidId}
           institutionName={view.institutionName}
           onBack={goEmpty}
-          onActivated={() => setView({ kind: 'declare-node', sfidId: view.sfidId, institutionName: view.institutionName })}
+          onActivated={() =>
+            setView({ kind: 'declare-node', sfidId: view.sfidId, institutionName: view.institutionName })
+          }
         />
       )}
 
@@ -135,15 +197,7 @@ export function ClearingBankSection() {
           sfidId={view.sfidId}
           institutionName={view.institutionName}
           onBack={goEmpty}
-          onSuccess={() => goDetail(view.sfidId, view.institutionName)}
-        />
-      )}
-
-      {view.kind === 'detail' && (
-        <ClearingBankDetailPage
-          sfidId={view.sfidId}
-          onBack={goEmpty}
-          onUnregistered={goEmpty}
+          onSuccess={() => goInstitutionDetail(view.sfidId, view.institutionName)}
         />
       )}
     </div>
@@ -151,8 +205,14 @@ export function ClearingBankSection() {
 }
 
 // ─── 子组件:空视图 + 已添加列表 ───
+//
+// 中文注释:挂载时自愈本地脏数据 ——— 对每个 knownSfid 条目调
+// fetchInstitutionDetail(sfidId);链上 None 即从 localStorage 移除。
+// 这样旧版本(2026-05-01 之前)误存的"选候选即落条目"的孤儿卡能自动消失。
+//
+// 链查失败(网络/节点未运行)时**保留**条目(避免误删合法记录)。
 function EmptyView({
-  knownSfids,
+  knownSfids: initialKnown,
   onAdd,
   onOpen,
 }: {
@@ -160,6 +220,32 @@ function EmptyView({
   onAdd: () => void;
   onOpen: (entry: KnownSfidEntry) => void;
 }) {
+  const [knownSfids, setKnownSfids] = useState<KnownSfidEntry[]>(initialKnown);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cleanup = async () => {
+      const next: KnownSfidEntry[] = [];
+      for (const entry of initialKnown) {
+        try {
+          const detail = await offchainApi.fetchInstitutionDetail(entry.sfidId);
+          if (detail !== null) {
+            next.push(entry); // 链上有(Pending / Active 都保留)
+          } else {
+            removeKnownSfid(entry.sfidId); // 链上明确不存在 → 移除孤儿
+          }
+        } catch {
+          next.push(entry); // 链查失败保守保留
+        }
+      }
+      if (!cancelled) setKnownSfids(next);
+    };
+    cleanup();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialKnown]);
+
   return (
     <>
       <div className="admin-list-header">
@@ -192,71 +278,39 @@ function EmptyView({
   );
 }
 
-// ─── 子组件:综合判定状态 ───
-function CheckStatusView({
+// ─── 子组件:链上查机构是否已存在,已存在跳详情,不存在跳创建 ───
+function CheckMultisigView({
   sfidId,
+  institutionName,
   onBack,
-  onNext,
+  onExists,
+  onMissing,
 }: {
   sfidId: string;
+  institutionName: string;
   onBack: () => void;
-  onNext: (next: ClearingBankView) => void;
+  onExists: () => void;
+  onMissing: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<ClearingBankNodeOnChainInfo | null>(null);
-  const [searchingCandidate, setSearchingCandidate] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    setSearchingCandidate(true);
-    Promise.all([
-      offchainApi.queryClearingBankNodeInfo(sfidId).catch(() => null),
-      offchainApi.searchEligibleClearingBanks(sfidId, 1).catch(() => [] as EligibleClearingBankCandidate[]),
-    ])
-      .then(([nodeInfo, candidates]) => {
+    offchainApi
+      .fetchInstitutionDetail(sfidId)
+      .then((detail) => {
         if (cancelled) return;
-        setInfo(nodeInfo);
-        setSearchingCandidate(false);
-
-        if (nodeInfo) {
-          // 已声明节点,直接进详情
-          onNext({ kind: 'detail', sfidId });
-          return;
-        }
-        const cand = candidates.find(c => c.sfidId === sfidId);
-        if (!cand) {
-          // SFID 未注册或非清算行候选
-          onNext({
-            kind: 'register-sfid',
-            candidate: {
-              sfidId,
-              institutionName: sfidId,
-              a3: '',
-              province: '',
-              city: '',
-              mainChainStatus: 'Inactive',
-            },
-          });
-          return;
-        }
-        if (cand.mainChainStatus === 'Inactive' || cand.mainChainStatus === 'Pending') {
-          // 多签未创建/待激活
-          onNext({ kind: 'propose-create', candidate: cand });
-          return;
-        }
-        if (cand.mainChainStatus === 'Failed') {
-          setError('链上多签账户激活失败,请回 SFID 后台重新激活');
-          return;
-        }
-        // Registered = 多签 Active 但未声明节点
-        onNext({ kind: 'declare-node', sfidId, institutionName: cand.institutionName });
+        if (detail) onExists();
+        else onMissing();
       })
       .catch((e) => {
         if (!cancelled) setError(sanitizeError(e));
       });
-    return () => { cancelled = true; };
-  }, [sfidId, onNext]);
+    return () => {
+      cancelled = true;
+    };
+  }, [sfidId, onExists, onMissing]);
 
   return (
     <>
@@ -264,20 +318,8 @@ function CheckStatusView({
       {error ? (
         <div className="error">{error}</div>
       ) : (
-        <p>正在判定 {sfidId} 状态…{info ? '(链上已声明节点)' : (searchingCandidate ? '' : '')}</p>
+        <p>正在判定 {institutionName || sfidId} 链上多签状态…</p>
       )}
-    </>
-  );
-}
-
-function InfoView({ title, message, onBack }: { title: string; message: string; onBack: () => void }) {
-  return (
-    <>
-      <button className="back-button" onClick={onBack}>← 返回</button>
-      <div className="admin-list-header">
-        <h2>{title}</h2>
-      </div>
-      <p>{message}</p>
     </>
   );
 }
@@ -301,15 +343,19 @@ function WaitVoteView({
     const id = setInterval(async () => {
       if (cancelled) return;
       try {
-        const cand = await offchainApi.searchEligibleClearingBanks(sfidId, 1);
-        const found = cand.find(c => c.sfidId === sfidId);
-        if (found && found.mainChainStatus === 'Registered') {
+        const detail = await offchainApi.fetchInstitutionDetail(sfidId);
+        if (detail && detail.status === 'Active') {
           onActivated();
         }
-      } catch (_) { /* 容忍轮询失败 */ }
+      } catch {
+        /* 容忍轮询失败 */
+      }
       setTick((t) => t + 1);
     }, 5000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [sfidId, onActivated]);
 
   return (
@@ -319,10 +365,14 @@ function WaitVoteView({
         <h2>等待管理员投票通过</h2>
       </div>
       <p>
-        机构 {institutionName} ({sfidId}) 的多签账户创建提案已发起,正在等待 13/19
-        国储会 ∨ 6/11 省储会等达成阈值。
+        机构 {institutionName} ({sfidId}) 的创建提案已发起,正在等待其他管理员
+        通过冷钱包投赞成达阈值。投票通过后链上 Institutions[sfid_id].status 由
+        Pending 变 Active,本页自动跳转到"声明本机为清算行节点"。
       </p>
       <p className="muted">每 5 秒自动检查 1 次链上状态(已检查 {tick} 次)…</p>
     </>
   );
 }
+
+// AccountWithBalance 来自 types(被 view kind 中的字段引用,确保 import 有效)。
+export type _Reexport = AccountWithBalance | EligibleClearingBankCandidate | InstitutionDetail;

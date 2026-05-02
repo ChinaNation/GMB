@@ -6,7 +6,32 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::institutions::model::MultisigInstitution;
 use crate::models::{InstitutionChainStatus, MultisigChainStatus};
+
+// ─── 单机构详情(带 chain pull 凭证) ────────────────────────
+
+/// `app_get_institution` 的响应包装:
+/// - `#[serde(flatten)]` 把 `MultisigInstitution` 全部既有字段平铺到顶层
+///   (institution_name / a3 / sub_type / parent_sfid_id / province / city / chain_status / category / ...)
+/// - 末尾追加 2 字段 `register_nonce` + `signature`,供节点桌面发起
+///   `propose_create_institution` extrinsic 时透传给链端 verifier
+///
+/// 旧调用方(钱包等仅展示场景)收到多 2 字段忽略即可。
+#[derive(Serialize)]
+pub(crate) struct InstitutionDetailWithCredential {
+    /// 既有 MultisigInstitution 全部字段,sserde flatten 不破坏旧结构。
+    #[serde(flatten)]
+    pub(crate) institution: MultisigInstitution,
+    /// 防重放 nonce(本次响应生成的 32 字节随机 hex)。
+    /// 链端 `UsedRegisterNonce[hash(nonce)]` 标记已用,同凭证不可重放。
+    pub(crate) register_nonce: String,
+    /// 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。
+    /// payload = `blake2_256(scale_encode(DUOQIAN_DOMAIN ++ OP_SIGN_INST ++ genesis_hash
+    ///                          ++ sfid_id ++ institution_name ++ register_nonce))`
+    /// 链端 `SfidInstitutionVerifier::verify_institution_registration` 重算并验签。
+    pub(crate) signature: String,
+}
 
 // ─── 通用机构搜索 ────────────────────────────────────────────
 

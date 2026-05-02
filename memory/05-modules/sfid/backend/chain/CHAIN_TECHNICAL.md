@@ -36,11 +36,29 @@ sfid/backend/src/chain/
 | `GET /api/v1/app/voters/count` | `joint_vote/` | citizenchain/node | 创建联合投票时拉人口快照 |
 | `POST /api/v1/app/vote/credential` | `citizen_vote/` | wuminapp | 公民投票时拉凭证再上链 |
 | `GET /api/v1/app/institutions/search` | `institution_info/` | wuminapp / 节点桌面 | 通用机构搜索 |
-| `GET /api/v1/app/institutions/:sfid_id` | `institution_info/` | 同上 | 单机构详情 |
+| `GET /api/v1/app/institutions/:sfid_id` ★ | `institution_info/` | 同上 + 节点桌面"创建多签机构" | 单机构详情 + chain pull 凭证(register_nonce + signature)|
 | `GET /api/v1/app/institutions/:sfid_id/accounts` | `institution_info/` | 同上 | 机构账户列表(脱敏) |
 | `GET /api/v1/app/clearing-banks/search` | `institution_info/` | wuminapp | 已激活清算行(分页) |
 | `GET /api/v1/app/clearing-banks/eligible-search` | `institution_info/` | 节点桌面 | 候选清算行(可未激活) |
 | `GET /api/v1/admin/chain/balance` | `balance/` | SFID admin keyring 视图 | 主账户链上余额展示 |
+
+### 2.1 `app_get_institution` 凭证响应增强(2026-05-01)
+
+`GET /api/v1/app/institutions/:sfid_id` 响应在既有 `MultisigInstitution` 字段
+之外**追加** 2 个签名字段:
+
+| 字段 | 用途 |
+|---|---|
+| `register_nonce` | 防重放 nonce(本次响应生成的 32 字节随机 hex)。链端 `UsedRegisterNonce[hash(nonce)]` 标记已用,同凭证不可重放 |
+| `signature` | **省级签名密钥**对凭证 payload 的 sr25519 签名(64 字节 hex)。链端 `propose_create_institution` 用 `signing_province` 反查 `ShengSigningPubkey[province]` 验签 |
+
+`signing_province` 字段**不下发**——节点桌面发起 extrinsic 时直接用响应里的
+`province` 字段塞 `signing_province` 入参(永远等同),避免冗余。
+
+旧调用方(钱包等仅展示场景)收到多 2 个字段忽略即可,展示路径无变化。
+
+实现位置:[chain/institution_info/handler.rs:`app_get_institution`](sfid/backend/src/chain/institution_info/handler.rs)
++ [chain/runtime_align.rs:`build_institution_credential_with_province`](sfid/backend/src/chain/runtime_align.rs)。
 
 ## 3. 凭证签发签名口径(冻结)
 

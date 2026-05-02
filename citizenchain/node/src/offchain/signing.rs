@@ -186,6 +186,220 @@ pub fn build_unregister_sign_request(
     )
 }
 
+// ─── 创建机构多签:propose_create_institution(pallet=17, call_index=5) ──────
+
+const DUOQIAN_PALLET_INDEX: u8 = 17;
+const CALL_PROPOSE_CREATE_INSTITUTION: u8 = 5;
+
+/// 创建机构时每个账户的初始资金条目(已派生 hex 地址 / 字符串金额"分")。
+#[derive(Debug, Clone)]
+pub struct InitialAccountInput {
+    pub account_name: String,
+    /// 初始资金,单位"分"(u128 字符串,避免 JS BigInt 跨语言传输精度问题)。
+    pub amount_fen: u128,
+}
+
+/// 把 32 字节公钥 hex 转 Vec<u8>(供管理员列表 / SignatureBoundedVec 编码用)。
+fn parse_account32(hex_str: &str) -> Result<Vec<u8>, String> {
+    let clean = hex_str
+        .strip_prefix("0x")
+        .unwrap_or(hex_str)
+        .to_ascii_lowercase();
+    if clean.len() != 64 {
+        return Err("account 公钥必须 32 字节(64 hex 字符)".to_string());
+    }
+    hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))
+}
+
+/// SCALE 编码 `Option<BoundedVec<u8>>`:`0x00`(None)或 `0x01 + Compact(len) + bytes`(Some)。
+fn encode_optional_bytes(value: Option<&[u8]>) -> Vec<u8> {
+    match value {
+        None => vec![0u8],
+        Some(b) => {
+            let mut out = Vec::with_capacity(1 + 1 + b.len());
+            out.push(1u8);
+            out.extend_from_slice(&encode_bytes_with_len(b));
+            out
+        }
+    }
+}
+
+/// SCALE 编码 u128 little-endian(16 字节)。
+fn encode_u128_le(v: u128) -> [u8; 16] {
+    v.to_le_bytes()
+}
+
+/// 构造 `propose_create_institution`(pallet=17, call=5)的 call_data。
+///
+/// 入参顺序与 [`citizenchain/runtime/transaction/duoqian-manage/src/lib.rs::propose_create_institution`]
+/// 严格一致(13 个字段)。任一字段顺序变更必须同步改本函数。
+#[allow(clippy::too_many_arguments)]
+pub fn build_propose_create_institution_call_data(
+    sfid_id: &str,
+    institution_name: &str,
+    accounts: &[InitialAccountInput],
+    admin_count: u32,
+    admin_pubkeys: &[String],
+    threshold: u32,
+    register_nonce: &str,
+    signature_hex: &str,
+    signing_province: &str,
+    a3: &str,
+    sub_type: Option<&str>,
+    parent_sfid_id: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    if sfid_id.is_empty() || sfid_id.len() > 64 {
+        return Err("sfid_id 长度需在 1..=64".to_string());
+    }
+    if institution_name.is_empty() || institution_name.len() > 128 {
+        return Err("institution_name 长度需在 1..=128".to_string());
+    }
+    if accounts.is_empty() {
+        return Err("accounts 至少 1 项(主账户)".to_string());
+    }
+    if admin_count < 2 {
+        return Err("admin_count 必须 >= 2".to_string());
+    }
+    if admin_pubkeys.len() as u32 != admin_count {
+        return Err(format!(
+            "admin_count={admin_count} 与 admin_pubkeys.len={} 不一致",
+            admin_pubkeys.len()
+        ));
+    }
+    let min_threshold = std::cmp::max(2, admin_count.saturating_add(1) / 2);
+    if threshold < min_threshold || threshold > admin_count {
+        return Err(format!(
+            "threshold 范围必须在 {min_threshold}..={admin_count}"
+        ));
+    }
+    let signature_bytes = hex::decode(signature_hex.strip_prefix("0x").unwrap_or(signature_hex))
+        .map_err(|e| format!("signature hex 解码失败:{e}"))?;
+    if signature_bytes.len() != 64 {
+        return Err(format!(
+            "signature 必须 64 字节,实际 {} 字节",
+            signature_bytes.len()
+        ));
+    }
+    if signing_province.is_empty() {
+        return Err("signing_province 不可为空".to_string());
+    }
+
+    let mut call: Vec<u8> = Vec::with_capacity(512);
+    call.push(DUOQIAN_PALLET_INDEX);
+    call.push(CALL_PROPOSE_CREATE_INSTITUTION);
+
+    // 1. sfid_id: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(sfid_id.as_bytes()));
+    // 2. institution_name: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(institution_name.as_bytes()));
+    // 3. accounts: BoundedVec<InstitutionInitialAccount> = Compact(N) + N × (account_name + amount)
+    call.extend_from_slice(&encode_compact_u32_pub(accounts.len() as u32));
+    for acc in accounts {
+        if acc.account_name.is_empty() || acc.account_name.len() > 128 {
+            return Err(format!(
+                "account_name 长度需在 1..=128:{}",
+                acc.account_name
+            ));
+        }
+        call.extend_from_slice(&encode_bytes_with_len(acc.account_name.as_bytes()));
+        call.extend_from_slice(&encode_u128_le(acc.amount_fen));
+    }
+    // 4. admin_count: u32 LE
+    call.extend_from_slice(&admin_count.to_le_bytes());
+    // 5. duoqian_admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
+    call.extend_from_slice(&encode_compact_u32_pub(admin_pubkeys.len() as u32));
+    for pk in admin_pubkeys {
+        let bytes = parse_account32(pk)?;
+        call.extend_from_slice(&bytes);
+    }
+    // 6. threshold: u32 LE
+    call.extend_from_slice(&threshold.to_le_bytes());
+    // 7. register_nonce: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(register_nonce.as_bytes()));
+    // 8. signature: BoundedVec<u8>(64 字节)
+    call.extend_from_slice(&encode_bytes_with_len(&signature_bytes));
+    // 9. signing_province: Option<Vec<u8>>(本流程必填,链端要查 ShengSigningPubkey[province])
+    call.extend_from_slice(&encode_optional_bytes(Some(signing_province.as_bytes())));
+    // 10. a3: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(a3.as_bytes()));
+    // 11. sub_type: Option<BoundedVec<u8>>
+    call.extend_from_slice(&encode_optional_bytes(sub_type.map(|s| s.as_bytes())));
+    // 12. parent_sfid_id: Option<BoundedVec<u8>>
+    call.extend_from_slice(&encode_optional_bytes(parent_sfid_id.map(|s| s.as_bytes())));
+
+    Ok(call)
+}
+
+/// `propose_create_institution` 的冷钱包 QR 签名请求。
+///
+/// SignDisplay 字段 key/value 与 wumin PayloadDecoder 输出 1:1 对齐(decoder
+/// 待 wumin 加分支,本任务作为 follow-up 任务卡;期间扫到本 action 在新两色识别
+/// 模型下会 🔴 红色拒签,需要 wumin 端补 decoder 后才能完整跑通。
+#[allow(clippy::too_many_arguments)]
+pub fn build_propose_create_institution_sign_request(
+    pubkey_hex: &str,
+    sfid_id: &str,
+    institution_name: &str,
+    accounts: &[InitialAccountInput],
+    admin_count: u32,
+    admin_pubkeys: &[String],
+    threshold: u32,
+    register_nonce: &str,
+    signature_hex: &str,
+    signing_province: &str,
+    a3: &str,
+    sub_type: Option<&str>,
+    parent_sfid_id: Option<&str>,
+) -> Result<VoteSignRequestResult, String> {
+    let (clean, bytes) = parse_pubkey(pubkey_hex)?;
+    let call_data = build_propose_create_institution_call_data(
+        sfid_id,
+        institution_name,
+        accounts,
+        admin_count,
+        admin_pubkeys,
+        threshold,
+        register_nonce,
+        signature_hex,
+        signing_province,
+        a3,
+        sub_type,
+        parent_sfid_id,
+    )?;
+    let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
+    let summary = format!("创建机构多签 {institution_name}({sfid_id})");
+    let mut fields = vec![
+        serde_json::json!({ "key": "sfid_id", "label": "机构身份码", "value": sfid_id }),
+        serde_json::json!({ "key": "institution_name", "label": "机构名称", "value": institution_name }),
+        serde_json::json!({ "key": "admin_count", "label": "管理员数量", "value": admin_count.to_string() }),
+        serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admin_count}") }),
+        serde_json::json!({
+            "key": "total_amount_yuan",
+            "label": "初始资金合计",
+            "value": format!("{}.{:02} GMB", total_amount_fen / 100, (total_amount_fen % 100) as u8),
+        }),
+    ];
+    for acc in accounts {
+        fields.push(serde_json::json!({
+            "key": format!("amount_{}", acc.account_name),
+            "label": format!("{} 初始资金", acc.account_name),
+            "value": format!(
+                "{}.{:02} GMB",
+                acc.amount_fen / 100,
+                (acc.amount_fen % 100) as u8
+            ),
+        }));
+    }
+    build_sign_request_from_call_data(
+        &clean,
+        &bytes,
+        &call_data,
+        "propose_create_institution",
+        &summary,
+        &serde_json::Value::Array(fields),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

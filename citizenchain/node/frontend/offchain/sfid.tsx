@@ -1,9 +1,7 @@
-// "添加清算行"页:输入 sfid_id 直查 + 关键字搜索 SFID 端候选机构。
+// "添加清算行"页:输入 sfid_id / 关键字 → debounce 自动搜 SFID 候选 → 选中即进入下一步。
 //
-// 输入框做两件事:
-// 1. 直接输 sfid_id(如 "SFR-12345-...") + 回车 → 直接进入综合判定
-// 2. 输入机构名/部分 sfid_id → 实时调 SFID `/clearing-banks/eligible-search`
-//    返回候选机构列表,点击进入综合判定
+// 2026-05-01 重构:删除"查询"按钮(input debounce 已自动搜),回车也直接选第一个候选,
+// 不再走 onSelectKnownSfid 走 sfidId 字符串透传(链上判定改由 check-multisig 视图统一处理)。
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../core/tauri';
@@ -13,10 +11,11 @@ import type { EligibleClearingBankCandidate } from './types';
 type Props = {
   onBack: () => void;
   onSelectCandidate: (c: EligibleClearingBankCandidate) => void;
+  /** 已知 sfid_id 直接进入下一步(empty 视图列表 → 直接 check-multisig)。 */
   onSelectKnownSfid: (sfidId: string) => void;
 };
 
-export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSfid }: Props) {
+export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSfid: _onSelectKnownSfid }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<EligibleClearingBankCandidate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,12 +43,6 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
     return () => clearTimeout(timer);
   }, [query]);
 
-  const directSubmit = () => {
-    const q = query.trim();
-    if (!q) return;
-    onSelectKnownSfid(q);
-  };
-
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
@@ -60,16 +53,14 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
         <input
           autoFocus
           type="text"
-          placeholder="机构身份码或名称关键字"
+          placeholder="机构身份码或名称关键字(自动搜索)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') directSubmit();
+            // 回车选中第一个候选(无候选时静默)
+            if (e.key === 'Enter' && results.length > 0) onSelectCandidate(results[0]);
           }}
         />
-        <button className="secondary-button" onClick={directSubmit} disabled={!query.trim()}>
-          查询
-        </button>
       </div>
 
       {loading && <p>搜索中…</p>}
@@ -88,21 +79,8 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
                 if (e.key === 'Enter') onSelectCandidate(r);
               }}
             >
-              <div>
-                <strong>{r.institutionName}</strong>
-                <span className={`status-badge status-${r.mainChainStatus.toLowerCase()}`} style={{ marginLeft: 8 }}>
-                  {r.mainChainStatus}
-                </span>
-              </div>
+              <strong>{r.institutionName}</strong>
               <code className="admin-card-address">{r.sfidId}</code>
-              <span className="muted">
-                {r.a3}{r.subType ? `-${r.subType}` : ''} · {r.province} · {r.city}
-              </span>
-              {r.parentSfidId && (
-                <span className="muted">
-                  所属:{r.parentInstitutionName ?? r.parentSfidId}
-                </span>
-              )}
             </div>
           ))}
         </div>

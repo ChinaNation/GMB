@@ -10,11 +10,14 @@ use axum::{
     Json,
 };
 
+use uuid::Uuid;
+
 use super::dto::{
     AppAccountEntry, AppClearingBankRow, AppClearingBankSearchOutput, AppClearingBankSearchQuery,
     AppInstitutionAccounts, AppInstitutionSearchQuery, AppInstitutionSearchRow,
-    EligibleClearingBankRow, EligibleClearingBankSearchQuery,
+    EligibleClearingBankRow, EligibleClearingBankSearchQuery, InstitutionDetailWithCredential,
 };
+use crate::chain::runtime_align::build_institution_credential_with_province;
 use crate::institutions::service::{can_delete_account, is_default_account_name};
 use crate::models::{ApiResponse, MultisigChainStatus};
 use crate::sfid::province::{province_name_by_code, PROVINCES};
@@ -121,6 +124,20 @@ pub(crate) async fn app_search_institutions(
 /// `GET /api/v1/app/institutions/:sfid_id`
 ///
 /// 区块链/钱包公开读取机构详情。机构名称变更后,链端重新调用本接口即可更新展示。
+///
+/// ## 响应字段
+///
+/// 既有的 `MultisigInstitution` 全部字段平铺在顶层,**额外**追加 2 字段:
+/// - `register_nonce`: 防重放 nonce(每次响应重新生成)
+/// - `signature`: 省级签名密钥对凭证 payload 的 sr25519 签名
+///
+/// 节点桌面"创建多签机构"流程发起 `propose_create_institution` extrinsic 时,
+/// 直接用本响应的 `institution_name` / `a3` / `sub_type` / `parent_sfid_id` /
+/// `province`(透传给 extrinsic 的 `signing_province` 入参)/ `register_nonce` /
+/// `signature` 7 个字段塞 extrinsic 入参,链端用对应省的 `ShengSigningPubkey`
+/// 验签。
+///
+/// 旧调用方(钱包仅展示)收到多 2 个签名字段可直接忽略,不影响展示路径。
 pub(crate) async fn app_get_institution(
     State(state): State<AppState>,
     Path(sfid_id): Path<String>,
@@ -153,10 +170,65 @@ pub(crate) async fn app_get_institution(
             )
         }
     };
+
+    // 中文注释:本响应携带"机构注册凭证"(register_nonce + signature),签名密钥
+    // 必须是机构所属省的省级签名密钥(从 sheng_signer_cache 取)。chain pull
+    // 单向铁律下,链端 propose_create_institution 验签依赖这两个字段。
+    //
+    // 机构名缺失(两步式未命名)→ 凭证无法签出,降级返回空 nonce/signature,
+    // 节点桌面应在 UI 层引导用户去 SFID 后台先完成命名。
+    let institution_name = match inst.institution_name.as_deref() {
+        Some(n) if !n.is_empty() => n.to_string(),
+        _ => {
+            return Json(ApiResponse {
+                code: 0,
+                message: "ok".to_string(),
+                data: InstitutionDetailWithCredential {
+                    institution: inst,
+                    register_nonce: String::new(),
+                    signature: String::new(),
+                },
+            })
+            .into_response();
+        }
+    };
+
+    let province_pair = match state.sheng_signer_cache.get(inst.province.as_str()) {
+        Some(pair) => pair,
+        None => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "province signing key not loaded; ask the province admin to login first",
+            )
+        }
+    };
+    let register_nonce = Uuid::new_v4().to_string();
+    let credential = match build_institution_credential_with_province(
+        &state,
+        sfid_id.as_str(),
+        institution_name.as_str(),
+        register_nonce.clone(),
+        &province_pair,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5002,
+                &format!("build institution credential failed: {e}"),
+            )
+        }
+    };
+
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: inst,
+        data: InstitutionDetailWithCredential {
+            institution: inst,
+            register_nonce: credential.register_nonce,
+            signature: credential.signature,
+        },
     })
     .into_response()
 }
