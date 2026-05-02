@@ -18,6 +18,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+pub mod anon_cert;
 pub mod derive;
 pub mod handler;
 pub mod model;

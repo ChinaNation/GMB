@@ -22,7 +22,6 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 mod app_core;
-mod business;
 mod chain;
 mod indexer;
 mod institutions;
@@ -38,8 +37,8 @@ mod sfid;
 mod sheng_admins;
 mod shi_admins;
 mod store_shards;
-use business::scope::in_scope_cpms_site;
 use key_admins::chain_keyring::ChainKeyringState;
+use scope::cpms::in_scope_cpms_site;
 
 pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
@@ -752,7 +751,7 @@ fn main() {
             .unwrap_or(false)
         {
             // 已有密钥，直接加载（不需要 tokio runtime）
-            match key_admins::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
+            match crate::institutions::anon_cert::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
                 Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
                 Err(e) => warn!("RSA anon cert keypair load failed: {e}"),
             }
@@ -767,9 +766,9 @@ fn main() {
         .expect("build tokio runtime");
     runtime.block_on(async move {
         // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
-        if key_admins::rsa_blind::get_public_key_pem().is_err() {
+        if crate::institutions::anon_cert::rsa_blind::get_public_key_pem().is_err() {
             info!("generating RSA anon cert keypair...");
-            match key_admins::rsa_blind::generate_keypair_pem() {
+            match crate::institutions::anon_cert::rsa_blind::generate_keypair_pem() {
                 Ok(new_pem) => {
                     if let Ok(mut store) = state.store.write() {
                         store.anon_rsa_private_key_pem = Some(new_pem);
@@ -994,11 +993,11 @@ fn main() {
             )
             .route(
                 "/api/v1/admin/audit-logs",
-                get(business::audit::admin_list_audit_logs),
+                get(scope::audit::admin_list_audit_logs),
             )
             .route(
                 "/api/v1/admin/citizens",
-                get(business::query::admin_list_citizens),
+                get(scope::query::admin_list_citizens),
             )
             // ── 公民身份绑定 ──
             .route(
@@ -1057,7 +1056,7 @@ fn main() {
             .route("/api/v1/health", get(health))
             .route(
                 "/api/v1/public/identity/search",
-                get(business::query::public_identity_search),
+                get(scope::query::public_identity_search),
             );
 
         // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
