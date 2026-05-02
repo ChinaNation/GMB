@@ -1,3 +1,8 @@
+//! 审计日志 list handler(三角色只读)
+//!
+//! 中文注释:本文件由 Phase 23c 从 `business/audit.rs` 物理搬迁而来。
+//! 路由仍由 main.rs 注册到 `/admin/audit-logs`。
+
 use axum::{
     extract::{Query, State},
     http::HeaderMap,

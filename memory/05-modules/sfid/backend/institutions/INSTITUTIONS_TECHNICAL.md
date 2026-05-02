@@ -1,5 +1,10 @@
 # institutions/ — SFID 机构与账户名称模型
 
+> 中文注释(phase23b, 2026-05-01):新增 `anon_cert/` 子模块(`rsa_blind.rs` 从
+> `key-admins/` 搬到此处),实现 RSA 盲签匿名凭证(RFC 9474 RSABSSA-SHA384-PSS-Randomized),
+> 由公安局 SFID 生成流程、CPMS QR4 绑定校验调用。
+> 见任务卡 `20260501-sfid-step1-phase23b-rsa-blind-relocate.md`。
+
 ## 定位
 
 SFID 系统只负责机构身份和账户名称:

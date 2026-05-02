@@ -13,8 +13,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::business::pubkey::same_admin_pubkey;
-use crate::business::scope::province_scope_for_role;
+use crate::scope::pubkey::same_admin_pubkey;
+use crate::scope::admin_province::province_scope_for_role;
 use crate::sfid::province::sheng_admin_display_name;
 use crate::sfid::province::sheng_admin_province;
 use crate::*;
