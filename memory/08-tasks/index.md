@@ -63,6 +63,10 @@
 - `memory/08-tasks/open/20260501-sfid-step1-phase45-chain-push-and-routes.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase6-frontend-3tier-views.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase7-acceptance-and-cleanup.md`
+- `memory/08-tasks/open/20260502-sfid-step2a-pallet-storage-and-extrinsic.md`
+- `memory/08-tasks/open/20260502-sfid-step2b-duoqian-manage-credential.md`
+- `memory/08-tasks/open/20260502-sfid-step2c-genesis-and-migration.md`
+- `memory/08-tasks/open/20260502-sfid-step2d-wumin-wuminapp-decoder.md`
 
 ## done
 
