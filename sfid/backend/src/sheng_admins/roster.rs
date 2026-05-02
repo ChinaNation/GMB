@@ -1,13 +1,14 @@
-//! 中文注释:省管理员 3-tier 名册(roster)操作 service。
+//! 中文注释:省管理员 3-tier 名册(roster)操作 service —— **已被 phase4/7 取代,无活跃调用方**。
 //!
 //! ADR-008 决议(2026-05-01):add_sheng_admin_backup / remove_sheng_admin_backup
 //! 必须由当前 main 公钥签名授权,链上 ShengAdmins[Province][Slot] storage 持久化。
 //!
-//! 本期推链全部 mock(留 Phase 4 子卡接真实 chain push)。
+//! Phase 4 起真实推链入口转移到 `crate::chain::sheng_admin::{add_backup, remove_backup}`,
+//! Phase 7 已切真。本文件保留作为 Phase 3 历史路径的占位,等 Phase 7 收尾时统一删除。
 //!
-//! 名册当前真相来源(Phase 3 mock 阶段):
+//! 名册当前真相来源:
 //! - main:`crate::sfid::province::PROVINCES[*].pubkey` 常量
-//! - backup_1 / backup_2:`fetch_backup_admins` mock 返回 [None, None]
+//! - backup_1 / backup_2:`fetch_backup_admins` 占位返回 [None, None]
 
 #![allow(dead_code)]
 
@@ -33,7 +34,7 @@ impl std::fmt::Display for RosterError {
                 write!(f, "slot {} already occupied", s.as_str())
             }
             RosterError::NotOccupied(s) => write!(f, "slot {} not occupied", s.as_str()),
-            RosterError::ChainMockUnavailable => write!(f, "chain push mock unavailable"),
+            RosterError::ChainMockUnavailable => write!(f, "legacy chain push placeholder unavailable"),
         }
     }
 }
@@ -45,8 +46,8 @@ pub(crate) fn read_roster(province: &str) -> Result<ProvinceAdmins, RosterError>
     province_admins_for(province).ok_or(RosterError::UnknownProvince)
 }
 
-/// 中文注释:Phase 3 mock —— 推链注册 backup 公钥。
-/// Phase 4 子卡负责切真实 `add_sheng_admin_backup` extrinsic。
+/// 中文注释:Phase 3 历史路径 —— 推链注册 backup 公钥。
+/// 已被 `crate::chain::sheng_admin::add_backup` 取代,无活跃调用方。
 pub(crate) async fn add_backup(
     province: &str,
     slot: Slot,
@@ -64,7 +65,7 @@ pub(crate) async fn add_backup(
     if occupied {
         return Err(RosterError::AlreadyOccupied(slot));
     }
-    push_chain_mock(&format!(
+    push_chain_placeholder(&format!(
         "add_sheng_admin_backup province={province} slot={} new_backup=0x{}",
         slot.as_str(),
         hex::encode(new_backup)
@@ -72,8 +73,8 @@ pub(crate) async fn add_backup(
     .await
 }
 
-/// 中文注释:Phase 3 mock —— 推链注销 backup 公钥。
-/// Phase 4 子卡负责切真实 `remove_sheng_admin_backup` extrinsic。
+/// 中文注释:Phase 3 历史路径 —— 推链注销 backup 公钥。
+/// 已被 `crate::chain::sheng_admin::remove_backup` 取代,无活跃调用方。
 pub(crate) async fn remove_backup(province: &str, slot: Slot) -> Result<(), RosterError> {
     if matches!(slot, Slot::Main) {
         return Err(RosterError::SlotInvalidForOp);
@@ -87,17 +88,17 @@ pub(crate) async fn remove_backup(province: &str, slot: Slot) -> Result<(), Rost
     if !occupied {
         return Err(RosterError::NotOccupied(slot));
     }
-    push_chain_mock(&format!(
+    push_chain_placeholder(&format!(
         "remove_sheng_admin_backup province={province} slot={}",
         slot.as_str()
     ))
     .await
 }
 
-/// Phase 3 推链 mock。Phase 4 子卡接入真实 chain extrinsic
-/// (显式 nonce + immortal + 等 InBestBlock,见 feedback_sfid_pow_chain_recipe.md)。
-async fn push_chain_mock(name: &str) -> Result<(), RosterError> {
-    tracing::warn!("chain push mocked for {name}, awaiting Phase 4 real impl");
+/// Phase 3 历史路径占位。真实推链已由 `crate::chain::sheng_admin::{add_backup, remove_backup}`
+/// 在 Phase 7 切真,无活跃调用方;保留仅为暂不破坏 module 边界,后续清理。
+async fn push_chain_placeholder(name: &str) -> Result<(), RosterError> {
+    tracing::warn!("legacy roster placeholder invoked for {name}; real path is chain::sheng_admin");
     let _ = fetch_backup_admins; // suppress dead_code warning of imported helper
     Ok(())
 }
