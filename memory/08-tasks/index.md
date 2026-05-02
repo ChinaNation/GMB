@@ -56,6 +56,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
 - `memory/08-tasks/done/20260501-sfid-chain-folder-restructure.md`
 - `memory/08-tasks/done/20260501-103245-修复-grandpakey-change-p1-p5-问题.md`
 - `memory/08-tasks/done/20260501-094149-新增首页交易矿工热钱包.md`
