@@ -30,24 +30,24 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// SCALE 编码 sfid_id 的 `BoundedVec<u8, ConstU32<64>>` 形式(用作 storage key data)。
+/// SCALE 编码 sfid_id 的 `BoundedVec<u8, ConstU32<96>>` 形式(用作 storage key data)。
 ///
 /// 字段编码:`Compact<u32>(len)` + `bytes`。
 fn encode_sfid_key_data(sfid_id: &str) -> Result<Vec<u8>, String> {
     let raw = sfid_id.as_bytes();
-    if raw.is_empty() || raw.len() > 64 {
-        return Err(format!("sfid_id 长度需在 1..=64 字节,实际:{}", raw.len()));
+    if raw.is_empty() || raw.len() > 96 {
+        return Err(format!("sfid_id 长度需在 1..=96 字节,实际:{}", raw.len()));
     }
-    let bv: BoundedVec<u8, ConstU32<64>> = raw
+    let bv: BoundedVec<u8, ConstU32<96>> = raw
         .to_vec()
         .try_into()
-        .map_err(|_| "sfid_id 超出链上 BoundedVec<u8, 64>".to_string())?;
+        .map_err(|_| "sfid_id 超出链上 BoundedVec<u8, 96>".to_string())?;
     Ok(bv.encode())
 }
 
 // ─── 机构详情查询(duoqian-manage::Institutions / InstitutionAccounts) ──────
 
-/// 链端 `InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName, A3, SubType, SfidId>`
+/// 链端 `InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName>`
 /// 在节点端的 SCALE 镜像。字段顺序必须与 [`citizenchain/runtime/transaction/duoqian-manage/src/institution/types.rs`]
 /// 严格一致(Encode/Decode 派生按声明顺序)。
 ///
@@ -56,9 +56,6 @@ fn encode_sfid_key_data(sfid_id: &str) -> Result<Vec<u8>, String> {
 /// - `AccountId = AccountId32`
 /// - `BlockNumber = u32`(citizenchain runtime)
 /// - `AccountName = BoundedVec<u8, ConstU32<128>>`
-/// - `A3 = BoundedVec<u8, ConstU32<8>>`
-/// - `SubType = BoundedVec<u8, ConstU32<32>>`
-/// - `SfidId = BoundedVec<u8, ConstU32<64>>`
 #[derive(Decode, Encode)]
 struct OnChainInstitution {
     institution_name: BoundedVec<u8, ConstU32<128>>,
@@ -71,9 +68,6 @@ struct OnChainInstitution {
     created_at: u32,
     status: OnChainInstitutionStatus,
     account_count: u32,
-    a3: BoundedVec<u8, ConstU32<8>>,
-    sub_type: Option<BoundedVec<u8, ConstU32<32>>>,
-    parent_sfid_id: Option<BoundedVec<u8, ConstU32<64>>>,
 }
 
 /// 与 [`citizenchain/runtime/transaction/duoqian-manage/src/institution/types.rs::InstitutionLifecycleStatus`] 对齐。
@@ -108,18 +102,6 @@ struct OnChainInstitutionAccount {
 /// 4 个 u32),紧接 16 字节 `data.free` u128。
 const ACCOUNT_INFO_HEADER_LEN: usize = 16;
 const ACCOUNT_INFO_FREE_LEN: usize = 16;
-
-/// 友好标签:由 a3 + sub_type 推。本地化文案,不参与链上验签。
-fn institution_type_label(a3: &[u8], _sub_type: Option<&[u8]>) -> String {
-    match a3 {
-        b"SFR" => "私法人多签".to_string(),
-        b"FFR" => "私非法人多签".to_string(),
-        b"GFR" => "公法人多签".to_string(),
-        b"GMR" => "公权多签".to_string(),
-        b"GAR" => "公安局多签".to_string(),
-        _ => String::from_utf8_lossy(a3).to_string(),
-    }
-}
 
 /// 把"分"格式化成 `xxx.xx`(沿用 chain/balance/handler.rs 同款约定)。
 fn format_yuan(min_units: u128) -> String {
@@ -244,28 +226,10 @@ pub fn fetch_institution_detail(sfid_id: &str) -> Result<Option<InstitutionDetai
 
     let institution_name = String::from_utf8(inst.institution_name.into_inner())
         .map_err(|_| "institution_name 非 UTF-8".to_string())?;
-    let a3_bytes = inst.a3.into_inner();
-    let sub_type_bytes = inst.sub_type.map(|v| v.into_inner());
-    let label = institution_type_label(&a3_bytes, sub_type_bytes.as_deref());
-    let a3 = String::from_utf8(a3_bytes).map_err(|_| "a3 非 UTF-8".to_string())?;
-    let sub_type = match sub_type_bytes {
-        Some(b) => Some(String::from_utf8(b).map_err(|_| "sub_type 非 UTF-8".to_string())?),
-        None => None,
-    };
-    let parent_sfid_id = match inst.parent_sfid_id {
-        Some(v) => Some(
-            String::from_utf8(v.into_inner()).map_err(|_| "parent_sfid_id 非 UTF-8".to_string())?,
-        ),
-        None => None,
-    };
 
     Ok(Some(InstitutionDetail {
         sfid_id: sfid_id.to_string(),
         institution_name,
-        institution_type_label: label,
-        a3,
-        sub_type,
-        parent_sfid_id,
         main_account,
         fee_account,
         other_accounts,
@@ -461,7 +425,7 @@ mod tests {
 
     #[test]
     fn over_long_sfid_rejected() {
-        let s = "a".repeat(65);
+        let s = "a".repeat(97);
         let err = encode_sfid_key_data(&s).unwrap_err();
         assert!(err.contains("长度"));
     }

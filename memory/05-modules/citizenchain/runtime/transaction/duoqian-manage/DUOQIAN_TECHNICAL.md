@@ -1,7 +1,7 @@
 # DUOQIAN_TECHNICAL
 
 模块：`duoqian-manage`  
-最新更新：2026-04-30
+最新更新：2026-05-02
 
 ## 1. 当前边界
 
@@ -42,7 +42,6 @@
 
 - `DuoqianAccounts<main_address, DuoqianAccount>`：只保存多签账户生命周期和创建时阈值快照，不作为管理员长期真源。
 - `SfidRegisteredAddress` / `AddressRegisteredSfid`：继续作为链上账户索引。
-- `InstitutionMetadata`：继续保存 a3、sub_type、parent_sfid_id。
 - `PersonalDuoqianInfo`：个人多签索引。
 
 管理员主体：
@@ -67,10 +66,8 @@ propose_create_institution(
   threshold,
   register_nonce,
   signature,
-  signing_province,
-  a3,
-  sub_type,
-  parent_sfid_id
+  province,
+  signer_admin_pubkey
 )
 ```
 
@@ -83,7 +80,9 @@ propose_create_institution(
 - 管理员数量必须 `>= 2`，阈值必须满足 `ceil(admin_count / 2) <= threshold <= admin_count` 且最小为 2。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
-- a3 / sub_type / parent_sfid_id 必须满足机构元数据形态规则。
+- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_id / institution_name / account_names[]`。
+- `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位省管理员派生签名公钥。
+- `a3 / sub_type / parent_sfid_id` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
 
@@ -127,6 +126,7 @@ runtime 适配：
 - 创建多签主体路径读取 `admins-change` 的 Pending 快照 API。
 - `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_subject_for_account` 映射到账户所属管理员主体。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
+- `DuoqianSfidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;SFID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 SFID 机构账户。
 
 ## 8. 测试覆盖
 
@@ -136,6 +136,7 @@ runtime 适配：
 - 机构级创建被拒绝后释放 reserve 并清理索引。
 - 缺少主账户时拒绝。
 - 账户初始余额低于最低金额时拒绝。
+- 批量 SFID 机构注册按 `institution_name + account_names[]` 验签并写入地址索引。
 - 个人多签路径可创建和激活。
 - 关闭、重复管理员、重放投票等回归路径通过。
 
@@ -144,3 +145,7 @@ runtime 适配：
 - `cargo test -p admins-change --lib`
 - `cargo test -p duoqian-transfer --lib`
 - `cargo test -p offchain-transaction --lib`
+
+## 9. 变更记录
+
+- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_id`,签名业务字段收口为 `sfid_id / institution_name / account_names[]`。

@@ -720,7 +720,8 @@ impl
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        account_name: &duoqian_manage::pallet::AccountNameOf<Runtime>,
+        institution_name: &duoqian_manage::pallet::AccountNameOf<Runtime>,
+        account_names: &[Vec<u8>],
         nonce: &duoqian_manage::pallet::RegisterNonceOf<Runtime>,
         signature: &duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
         province: &[u8],
@@ -730,7 +731,8 @@ impl
         {
             let _ = (province, signer_admin_pubkey);
             return !sfid_id.is_empty()
-                && !account_name.is_empty()
+                && !institution_name.is_empty()
+                && !account_names.is_empty()
                 && !nonce.is_empty()
                 && !signature.is_empty();
         }
@@ -758,15 +760,17 @@ impl
             sig_raw.copy_from_slice(sig_bytes);
             let signature = sr25519::Signature::from_raw(sig_raw);
 
-            // ADR-008 step2b payload：DUOQIAN_DOMAIN + OP_SIGN_INST + block_hash(0)
-            // + sfid_id + account_name + nonce + province + signer_admin_pubkey。
+            // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
+            // payload：DUOQIAN_DOMAIN + OP_SIGN_INST + genesis_hash + sfid_id
+            // + institution_name + account_names[] + nonce + province + signer_admin_pubkey。
             // signer_admin_pubkey 必须进 payload,否则同 province 下任意 admin 的签名可互换。
             let payload = (
                 primitives::core_const::DUOQIAN_DOMAIN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
                 sfid_id,
-                account_name.as_slice(),
+                institution_name.as_slice(),
+                account_names,
                 nonce.as_slice(),
                 province,
                 signer_admin_pubkey,
@@ -793,11 +797,6 @@ impl duoqian_manage::Config for Runtime {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
-    // Step 2(2026-04-27, ADR-007)新增:机构元数据字段长度上限。
-    // a3 为 SFR/FFR/GFR/SF 等三字符标识,8 字节足够。
-    type MaxA3Length = ConstU32<8>;
-    // sub_type 为 JOINT_STOCK / LIMITED_LIABILITY / NON_PROFIT 等枚举字符串。
-    type MaxSubTypeLength = ConstU32<32>;
     // sr25519 签名固定 64 字节。
     // Phase 2 整改后聚合签名 `finalize_create` 已删除,此类型仍保留为 `AdminSignatureOf`
     // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
@@ -902,7 +901,13 @@ impl
     ) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
-            let _ = (account, binding_id, proposal_id, province, signer_admin_pubkey);
+            let _ = (
+                account,
+                binding_id,
+                proposal_id,
+                province,
+                signer_admin_pubkey,
+            );
             return !nonce.is_empty() && !signature.is_empty();
         }
 
@@ -1161,41 +1166,22 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         )
     }
 
-    /// Step 2(2026-04-27, ADR-007)新增:清算行资格白名单判定。
-    ///
-    /// 委托查 `InstitutionMetadata` storage:
-    /// - SFR + sub_type=JOINT_STOCK            → ✅
-    /// - FFR + parent.SFR + parent.JOINT_STOCK → ✅(parent 元数据另查)
-    /// - 其他                                   → ❌
+    /// Step 2(2026-05-02):清算行资格由 SFID 系统的 eligible-search 负责筛选。
+    /// 链上不再保存 a3/sub_type/parent_sfid_id,这里只确认该地址属于已注册且 Active 的
+    /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
-        // 1. 反查地址所属的 sfid_id
         let registered = match duoqian_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             Some(info) => info,
             None => return false,
         };
-        // 2. 查机构元数据
-        let meta = match duoqian_manage::InstitutionMetadata::<Runtime>::get(&registered.sfid_id) {
-            Some(m) => m,
-            None => return false,
-        };
-        match meta.a3.as_slice() {
-            b"SFR" => meta.sub_type.as_ref().map(|s| s.as_slice()) == Some(&b"JOINT_STOCK"[..]),
-            b"FFR" => {
-                let parent_id = match meta.parent_sfid_id.as_ref() {
-                    Some(p) => p,
-                    None => return false,
-                };
-                let parent_meta =
-                    match duoqian_manage::InstitutionMetadata::<Runtime>::get(parent_id) {
-                        Some(m) => m,
-                        None => return false,
-                    };
-                parent_meta.a3.as_slice() == b"SFR"
-                    && parent_meta.sub_type.as_ref().map(|s| s.as_slice())
-                        == Some(&b"JOINT_STOCK"[..])
-            }
-            _ => false,
-        }
+        matches!(
+            duoqian_manage::InstitutionAccounts::<Runtime>::get(
+                &registered.sfid_id,
+                &registered.account_name,
+            )
+            .map(|account| account.status),
+            Some(duoqian_manage::InstitutionLifecycleStatus::Active)
+        )
     }
 
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
@@ -1885,13 +1871,7 @@ mod tests {
     //
     // 测试 helper:为 `liaoning` 省装入 main admin + backup1 admin,各自激活一把
     // ShengSigningPubkey,然后构造对应 credential 走 verifier 真实验签。
-    fn setup_step3_test_admins() -> (
-        sr25519::Pair,
-        [u8; 32],
-        sr25519::Pair,
-        [u8; 32],
-        Vec<u8>,
-    ) {
+    fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32], Vec<u8>) {
         let province: Vec<u8> = b"liaoning".to_vec();
         let bounded: sfid_system::pallet::ProvinceBound =
             province.clone().try_into().expect("province fits");
@@ -2028,8 +2008,7 @@ mod tests {
     #[test]
     fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
         new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let account = AccountId::new([31u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
 
@@ -2076,22 +2055,23 @@ mod tests {
                 123,
                 &pop_nonce,
             );
-            assert!(RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                &account,
-                123,
-                &pop_nonce,
-                &pop_signature,
-                &province,
-                &main_admin_pubkey,
-            ));
+            assert!(
+                RuntimePopulationSnapshotVerifier::verify_population_snapshot(
+                    &account,
+                    123,
+                    &pop_nonce,
+                    &pop_signature,
+                    &province,
+                    &main_admin_pubkey,
+                )
+            );
         });
     }
 
     #[test]
     fn bind_with_main_admin_signature_succeeds() {
         new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let account = AccountId::new([21u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-main");
             let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
@@ -2156,8 +2136,7 @@ mod tests {
     #[test]
     fn vote_double_layer_verify_succeeds() {
         new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let account = AccountId::new([24u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-vote");
             let nonce: sfid_system::pallet::NonceOf<Runtime> =
@@ -2187,8 +2166,7 @@ mod tests {
     fn vote_cross_province_admin_rejected() {
         new_test_ext().execute_with(|| {
             // 装入 liaoning 省的 admin。
-            let (main_signing_pair, main_admin_pubkey, _, _, _province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, _province) = setup_step3_test_admins();
             // 用 jilin 省查表(jilin 对应没有任何 ShengSigningPubkey 项)。
             let jilin: Vec<u8> = b"jilin".to_vec();
             let account = AccountId::new([25u8; 32]);
@@ -2221,8 +2199,7 @@ mod tests {
     #[test]
     fn population_snapshot_per_province_signature_verifies() {
         new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let who = AccountId::new([26u8; 32]);
             let pop_nonce: voting_engine::pallet::VoteNonceOf<Runtime> =
                 b"pop-pass-nonce".to_vec().try_into().expect("nonce");
@@ -2234,14 +2211,16 @@ mod tests {
                 500,
                 &pop_nonce,
             );
-            assert!(RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                &who,
-                500,
-                &pop_nonce,
-                &signature,
-                &province,
-                &main_admin_pubkey,
-            ));
+            assert!(
+                RuntimePopulationSnapshotVerifier::verify_population_snapshot(
+                    &who,
+                    500,
+                    &pop_nonce,
+                    &signature,
+                    &province,
+                    &main_admin_pubkey,
+                )
+            );
         });
     }
 
@@ -2250,8 +2229,7 @@ mod tests {
     #[test]
     fn runtime_sfid_eligibility_binding_and_vote_full_path() {
         new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) =
-                setup_step3_test_admins();
+            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let who = AccountId::new([41u8; 32]);
             let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
             sfid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
@@ -2377,11 +2355,13 @@ mod tests {
                     .to_vec()
                     .try_into()
                     .expect("nonce should fit");
-            let register_account_name: duoqian_manage::pallet::AccountNameOf<Runtime> =
-                b"test-account-name"
+            let institution_name: duoqian_manage::pallet::AccountNameOf<Runtime> =
+                b"test-institution"
                     .to_vec()
                     .try_into()
-                    .expect("account_name should fit");
+                    .expect("institution_name should fit");
+            let account_names: Vec<Vec<u8>> =
+                vec![b"main-account".to_vec(), b"fee-account".to_vec()];
 
             let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
                 let payload = (
@@ -2389,18 +2369,16 @@ mod tests {
                     primitives::core_const::OP_SIGN_INST,
                     frame_system::Pallet::<Runtime>::block_hash(0),
                     sfid_id,
-                    register_account_name.as_slice(),
+                    institution_name.as_slice(),
+                    &account_names,
                     register_nonce.as_slice(),
                     province_bytes.as_slice(),
                     admin_pubkey,
                 );
                 let msg = blake2_256(&payload.encode());
                 let sig = signing_pair.sign(&msg);
-                let bounded: duoqian_manage::pallet::RegisterSignatureOf<Runtime> = sig
-                    .0
-                    .to_vec()
-                    .try_into()
-                    .expect("signature should fit");
+                let bounded: duoqian_manage::pallet::RegisterSignatureOf<Runtime> =
+                    sig.0.to_vec().try_into().expect("signature should fit");
                 bounded
             };
 
@@ -2413,7 +2391,8 @@ mod tests {
                     duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
-                    &register_account_name,
+                    &institution_name,
+                    &account_names,
                     &register_nonce,
                     &main_signature,
                     province_bytes.as_slice(),
@@ -2431,7 +2410,8 @@ mod tests {
                     duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
-                    &register_account_name,
+                    &institution_name,
+                    &account_names,
                     &register_nonce,
                     &backup_signature,
                     province_bytes.as_slice(),
@@ -2449,7 +2429,8 @@ mod tests {
                     duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
-                    &register_account_name,
+                    &institution_name,
+                    &account_names,
                     &register_nonce,
                     &main_signature,
                     province_bytes.as_slice(),
@@ -2470,7 +2451,8 @@ mod tests {
                     duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
-                    &register_account_name,
+                    &institution_name,
+                    &account_names,
                     &register_nonce,
                     &main_signature,
                     province_bytes.as_slice(),
@@ -2494,7 +2476,8 @@ mod tests {
                     duoqian_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
-                    &register_account_name,
+                    &institution_name,
+                    &account_names,
                     &register_nonce,
                     &bad_signature,
                     province_bytes.as_slice(),

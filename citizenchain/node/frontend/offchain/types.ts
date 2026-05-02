@@ -32,11 +32,6 @@ export type AccountWithBalance = {
 export type InstitutionDetail = {
   sfidId: string;
   institutionName: string;
-  /** 由 a3 + sub_type 推得的中文标签:私法人多签 / 私非法人多签 / ...。 */
-  institutionTypeLabel: string;
-  a3: string;
-  subType?: string | null;
-  parentSfidId?: string | null;
 
   mainAccount: AccountWithBalance;
   feeAccount: AccountWithBalance;
@@ -67,25 +62,25 @@ export type InstitutionProposalPage = {
   hasMore: boolean;
 };
 
-/**
- * SFID `app_get_institution` 响应反序列化形态(snake_case 直传)。
- *
- * 节点桌面"创建多签机构"流程把本结构里的 register_nonce / signature /
- * province(透传给 signing_province)/ institution_name / a3 / sub_type /
- * parent_sfid_id 全部塞 propose_create_institution Tauri 命令。
- */
-export type InstitutionCredentialResp = {
+/** SFID `/registration-info` 响应形态(snake_case 直传)。 */
+export type InstitutionRegistrationInfoResp = {
   sfid_id: string;
-  institution_name?: string | null;
-  a3: string;
-  sub_type?: string | null;
-  parent_sfid_id?: string | null;
+  institution_name: string;
+  account_names: string[];
+  credential: InstitutionRegistrationCredentialResp;
+};
+
+/** SFID 对链上注册 payload 签发的凭证。 */
+export type InstitutionRegistrationCredentialResp = {
+  genesis_hash: string;
   province: string;
-  city: string;
   /** 防重放 nonce(本次响应生成的随机字符串)。 */
   register_nonce: string;
+  /** 本次签名所用省管理员公钥(32 字节 hex)。 */
+  signer_admin_pubkey: string;
   /** 省级签名密钥对凭证 payload 的 sr25519 签名(64 字节 hex)。 */
   signature: string;
+  meta?: unknown;
 };
 
 /** 创建机构时单账户的初始资金条目(单位"分"用字符串透传 BigInt)。 */

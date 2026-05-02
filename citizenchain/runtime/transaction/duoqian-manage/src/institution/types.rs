@@ -38,7 +38,7 @@ pub enum InstitutionLifecycleStatus {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList))]
-pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName, A3, SubType, SfidId> {
+pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
     pub institution_name: AccountName,
     pub main_address: AccountId,
     pub fee_address: AccountId,
@@ -49,9 +49,6 @@ pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName, A3, S
     pub created_at: BlockNumber,
     pub status: InstitutionLifecycleStatus,
     pub account_count: u32,
-    pub a3: A3,
-    pub sub_type: Option<SubType>,
-    pub parent_sfid_id: Option<SfidId>,
 }
 
 /// 机构下某个账户名对应的链上账户信息。
@@ -123,16 +120,8 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList, AccountList))]
-pub struct CreateInstitutionAction<
-    SfidId,
-    AccountName,
-    AccountId,
-    Balance,
-    AdminList,
-    AccountList,
-    A3,
-    SubType,
-> {
+pub struct CreateInstitutionAction<SfidId, AccountName, AccountId, Balance, AdminList, AccountList>
+{
     pub sfid_id: SfidId,
     pub institution_name: AccountName,
     pub main_address: AccountId,
@@ -145,9 +134,4 @@ pub struct CreateInstitutionAction<
     pub initial_total: Balance,
     pub fee: Balance,
     pub reserve_total: Balance,
-    pub a3: A3,
-    pub sub_type: Option<SubType>,
-    pub parent_sfid_id: Option<SfidId>,
-    /// 创建提案前是否已经存在该机构元数据；拒绝清理时据此避免误删旧数据。
-    pub metadata_was_existing: bool,
 }

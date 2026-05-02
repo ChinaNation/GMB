@@ -35,7 +35,7 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 /// 机构登记表查询抽象。
 ///
 /// 运行时由 `duoqian-manage` 的 `AddressRegisteredSfid` / `SfidRegisteredAddress` /
-/// `DuoqianAccounts` / `InstitutionMetadata` 四个 Storage 组合实现。测试可用 `()` 或 mock。
+/// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
 pub trait SfidAccountQuery<AccountId> {
     /// 地址 → (sfid_id 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
@@ -46,15 +46,12 @@ pub trait SfidAccountQuery<AccountId> {
     /// `who` 是否是 `bank` 对应 DuoqianAccount 的多签管理员之一。
     /// Step 2 新增:清算行费率提案 / 关闭等治理动作需校验管理员身份。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
-    /// Step 2(2026-04-27, ADR-007)新增:清算行资格白名单判定。
+    /// Step 2(2026-05-02)调整:清算行资格白名单判定。
     ///
-    /// 给定一个清算行主账户地址,判定其所属机构是否满足"私法人股份公司
-    /// 或其下属非法人"白名单:
-    /// - 主账户对应机构 a3 == "SFR" ∧ sub_type == "JOINT_STOCK"
-    /// - 或 a3 == "FFR" ∧ parent_sfid_id 指向 SFR + JOINT_STOCK 机构
+    /// SFID 系统在 eligible-search / registration-info 入口负责判断"私法人股份公司
+    /// 或其下属非法人"资格;链上不再保存机构类型和所属法人元数据。
     ///
-    /// 实现委托给 runtime 层查 `InstitutionMetadata` storage,trait 层不
-    /// 暴露 a3/sub_type/parent_sfid_id 等具体字段,保持 bank_check 解耦。
+    /// 实现层只确认地址属于已注册且 Active 的 SFID 机构账户,保持 bank_check 解耦。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     /// Step 2(2026-04-27, ADR-007)新增:节点是否已声明为清算行节点。
     ///
@@ -111,9 +108,8 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// 2. `account_name` 段等于 "主账户"
 /// 3. A3 ∈ {SFR, FFR}(字节级前缀判定)
 /// 4. 对应 `DuoqianAccount.status == Active`
-/// 5. **资格白名单**:满足 (SFR ∧ JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
-///    通过 `SfidAccountQuery::is_clearing_bank_eligible` 委托给 runtime 层查
-///    `InstitutionMetadata` storage(详见 ADR-007)
+/// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
+///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
 /// 6. **节点已声明**:`sfid_id ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
 pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T>> {

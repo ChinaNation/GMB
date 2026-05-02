@@ -37,7 +37,9 @@ use std::time::Duration;
 
 use crate::shared::sfid_config;
 
-use crate::offchain::common::types::{EligibleClearingBankCandidate, InstitutionCredentialResp};
+use crate::offchain::common::types::{
+    EligibleClearingBankCandidate, InstitutionRegistrationInfoResp,
+};
 
 const SFID_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -163,28 +165,28 @@ pub fn search_eligible_clearing_banks(
     Ok(body.data.into_iter().map(into_candidate).collect())
 }
 
-// ─── 拉机构注册凭证(链上 propose_create_institution 必备入参) ───────
+// ─── 拉机构注册信息(链上 propose_create_institution 必备入参) ───────
 
-/// `chain/institution_info::app_get_institution` 响应反序列化封装。
+/// SFID `registration-info` 响应反序列化封装。
 #[derive(Deserialize)]
-struct InstitutionCredentialEnvelope {
+struct InstitutionRegistrationInfoEnvelope {
     code: Option<u32>,
     #[serde(default)]
-    data: Option<InstitutionCredentialResp>,
+    data: Option<InstitutionRegistrationInfoResp>,
     #[serde(default)]
     message: Option<String>,
 }
 
-/// 调 SFID `GET /api/v1/app/institutions/:sfid_id` 拉机构详情 + chain pull 凭证。
+/// 调 SFID `GET /api/v1/app/institutions/:sfid_id/registration-info` 拉链上注册专用信息。
 ///
-/// 响应携带 `register_nonce + signature`(由本机构所属省的省级签名密钥签发),
-/// 节点桌面发起 `propose_create_institution` extrinsic 时直接透传。
-///
-/// 反序列化契约(snake_case)在 [`crate::offchain::common::types::InstitutionCredentialResp`] 锁定。
-pub fn fetch_institution_credential(sfid_id: &str) -> Result<InstitutionCredentialResp, String> {
+/// 中文注释:这里刻意不调用普通机构详情接口。普通详情可用于展示,但不能证明
+/// "机构名称 + 账户名称列表"确实由 SFID 系统签发给链上注册流程。
+pub fn fetch_institution_registration_info(
+    sfid_id: &str,
+) -> Result<InstitutionRegistrationInfoResp, String> {
     // sfid_id 字符集仅 ASCII 字母 + 数字 + `-`(SFID 生成器锁定),无需 URL 编码。
     let url = format!(
-        "{}/api/v1/app/institutions/{}",
+        "{}/api/v1/app/institutions/{}/registration-info",
         sfid_config::sfid_base_url(),
         sfid_id
     );
@@ -196,11 +198,11 @@ pub fn fetch_institution_credential(sfid_id: &str) -> Result<InstitutionCredenti
     let response = client
         .get(&url)
         .send()
-        .map_err(|e| format!("SFID 机构详情请求失败:{e}"))?;
+        .map_err(|e| format!("SFID 机构注册信息请求失败:{e}"))?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(format!("SFID 返回 HTTP {}", response.status()));
     }
-    let body: InstitutionCredentialEnvelope = response
+    let body: InstitutionRegistrationInfoEnvelope = response
         .json()
         .map_err(|e| format!("SFID 响应解析失败:{e}"))?;
     if body.code != Some(0) {
@@ -210,10 +212,19 @@ pub fn fetch_institution_credential(sfid_id: &str) -> Result<InstitutionCredenti
     let data = body
         .data
         .ok_or_else(|| "SFID 响应缺少 data 字段".to_string())?;
-    if data.register_nonce.is_empty() || data.signature.is_empty() {
-        return Err(
-            "SFID 未返回机构注册凭证(机构名为空 / 省级签名密钥未就绪),请联系运维".to_string(),
-        );
+    if data.institution_name.trim().is_empty() {
+        return Err("SFID 未返回机构名称,请先在 SFID 系统完善机构信息".to_string());
+    }
+    if data.account_names.is_empty() || data.account_names.iter().any(|name| name.trim().is_empty())
+    {
+        return Err("SFID 未返回有效账户名称列表,请先在 SFID 系统完善机构账户信息".to_string());
+    }
+    if data.credential.register_nonce.is_empty()
+        || data.credential.signature.is_empty()
+        || data.credential.province.is_empty()
+        || data.credential.signer_admin_pubkey.is_empty()
+    {
+        return Err("SFID 未返回完整机构注册凭证,请确认省级签名密钥已激活".to_string());
     }
     Ok(data)
 }
