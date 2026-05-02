@@ -95,3 +95,44 @@ SFID 三角色原设计:
 - Step 1 完工后:Grep `KeyAdmin|key-admin|key_admin` 在整个 GMB 工作区全部零结果
 - Step 2 完工后:链上 4 个 Pays::No extrinsic 可调用;SFID main 账户零余额下推链成功
 - 端到端:任意省 main / backup_1 / backup_2 登录,各自独立签名密钥,本省写权限,跨省只读
+
+## Step 2 详细方案(2026-05-02 增补)
+
+`citizenchain/runtime/otherpallet/sfid-system/` 1206 行 lib.rs 重写,**spec_version 暂不动(本期裸升级,等 chain 上线后再走 setCode 路径)**。
+
+### Storage 重设计(全在 sfid-system pallet 内,不新建 pallet)
+
+```rust
+pub enum Slot { Main, Backup1, Backup2 }
+
+ShengAdmins:        DoubleMap<Province, Slot, AdminPubkey>
+ShengSigningPubkey: DoubleMap<Province, AdminPubkey, SigningPubkey>
+```
+
+删除:`SfidMainAccount/Backup1/Backup2`、单值版 `ShengSigningPubkey`、`ProvinceBySigningPubkey`、genesis_config 全部。
+
+### Extrinsic 重排(全 `Pays::No` + `ensure_none(origin)` + sr25519 验签)
+
+| call_index | 名 | 鉴权 |
+|---|---|---|
+| 0 | `bind_sfid` | 保留 |
+| 1 | `unbind_sfid` | 保留 |
+| 2 | `add_sheng_admin_backup(province, slot, new_pubkey, sig_by_main)` | sig 由 ShengAdmins[province][Main] 签名 |
+| 3 | `remove_sheng_admin_backup(province, slot, sig_by_main)` | 同上 |
+| 4 | `activate_sheng_signing_pubkey(province, admin_pubkey, signing_pubkey, sig)` | first-come-first-serve(Main 空 → 占 Main;否则 admin_pubkey ∈ ShengAdmins[province][\*]) |
+| 5 | `rotate_sheng_signing_pubkey(province, admin_pubkey, new_signing_pubkey, sig)` | sig 由 admin_pubkey 私钥签 |
+
+删除:`rotate_sfid_keys`(call_index 2)、`set_sheng_signing_pubkey`(call_index 3)。
+
+`Pays::No` + `ensure_none` 是 1010 错误的根本规避方案(SFID main 账户零余额下也能成功)。
+
+### 拆 4 张子卡
+
+- **step2a**:sfid-system pallet storage + 4 extrinsic 重写
+- **step2b**:duoqian-manage 凭证字段加 `signer_admin_pubkey` + verifier 按 (province, admin_pubkey) 双层匹配
+- **step2c**:genesis_config_presets.rs 删 SFID 3 账户 + on_runtime_upgrade 清旧 storage(spec_version 不升)
+- **step2d**:wumin/wuminapp 扫码签名 decoder 同步加 `signer_admin_pubkey` 字段(`chat-protocol.md` 第 5 条:跨模块联动)
+
+### 阻塞下游
+
+step2a/b/c 完工后,SFID phase7 的 `chain/client.rs` mock 切真,e2e 联调通。step2d 完工后整套凭证签发上链路径打通。

@@ -1,14 +1,22 @@
 //! # SFID 绑定与资格校验模块 (sfid-system)
 //!
-//! 本模块负责三件核心事：
+//! 本模块负责四件核心事:
 //! - SFID 与链上账户的一对一绑定 / 解绑。
-//! - 公民投票资格校验（基于 SFID 绑定关系 + SFID 系统签名凭证）。
-//! - 维护 SFID 验签主备账户（主账户验签、备用账户轮换）。
+//! - 公民投票资格校验(基于 SFID 绑定关系 + SFID 系统签名凭证)。
+//! - 维护按省 3-tier 管理员花名册(`ShengAdmins[Province][Slot]`)。
+//! - 维护按省 + admin 二维独立的省级签名公钥(`ShengSigningPubkey[Province][AdminPubkey]`)。
 //!
-//! 设计边界：
-//! - 不保存 SFID 明文，只保存 `binding_id`。
+//! 架构边界(ADR-008):
+//! - **没有 KEY_ADMIN**:链上 0 prior knowledge of SFID,初始 storage 全空。
+//! - **首激活 first-come-first-serve**:任意省 admin 公钥首次调 `activate_sheng_signing_pubkey`
+//!   被记录到 `ShengAdmins[Province][Main]`,后续 backup 由 Main 签名授权。
+//! - **每省 3 把独立签名密钥**:Main / Backup1 / Backup2 各自一把,业务凭证签发互不共享。
+//! - **链 → SFID 单向 pull**;**SFID → 链 4 个 Pays::No extrinsic** (零余额可推链)。
+//!
+//! 设计边界:
+//! - 不保存 SFID 明文,只保存 `binding_id`。
 //! - 绑定成功后的奖励发行通过 `OnSfidBound` 回调给上游模块处理。
-//! - 投票凭证校验返回 `bool`，不抛 dispatch 错误，不污染治理模块语义。
+//! - 投票凭证校验返回 `bool`,不抛 dispatch 错误,不污染治理模块语义。
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -35,14 +43,14 @@ use sp_runtime::RuntimeDebug;
     TypeInfo,
     MaxEncodedLen,
 )]
-/// 中文注释：绑定凭证结构体，封装 binding_id、一次性 nonce 和 SFID 系统签名。
+/// 中文注释:绑定凭证结构体,封装 binding_id、一次性 nonce 和 SFID 系统签名。
 pub struct BindCredential<Hash, Nonce, Signature> {
     pub binding_id: Hash,
     pub bind_nonce: Nonce,
     pub signature: Signature,
 }
 
-/// 中文注释：SFID 系统绑定验签接口，由 Runtime 注入具体实现（sr25519 验签桥接）。
+/// 中文注释:SFID 系统绑定验签接口,由 Runtime 注入具体实现(sr25519 验签桥接)。
 pub trait SfidVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify(account: &AccountId, credential: &BindCredential<Hash, Nonce, Signature>) -> bool;
 }
@@ -53,7 +61,7 @@ impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Sig
     }
 }
 
-/// 中文注释：公民投票实时验签接口，绑定身份标识与提案 ID 必须一并进入签名载荷。
+/// 中文注释:公民投票实时验签接口,绑定身份标识与提案 ID 必须一并进入签名载荷。
 pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify_vote(
         account: &AccountId,
@@ -76,14 +84,14 @@ impl<AccountId, Hash, Nonce, Signature> SfidVoteVerifier<AccountId, Hash, Nonce,
     }
 }
 
-/// 中文注释：绑定成功后的钩子，用于让发行模块基于 binding_id 做一次性奖励判定。
+/// 中文注释:绑定成功后的钩子,用于让发行模块基于 binding_id 做一次性奖励判定。
 pub trait OnSfidBound<AccountId, Hash> {
     fn on_sfid_bound(_who: &AccountId, _binding_id: Hash) {}
 }
 
 impl<AccountId, Hash> OnSfidBound<AccountId, Hash> for () {}
 
-/// 中文注释：回调 weight 声明接口，供 bind_sfid 在申报 weight 时叠加回调预算。
+/// 中文注释:回调 weight 声明接口,供 bind_sfid 在申报 weight 时叠加回调预算。
 pub trait OnSfidBoundWeight {
     fn on_sfid_bound_weight() -> Weight {
         Weight::zero()
@@ -92,7 +100,7 @@ pub trait OnSfidBoundWeight {
 
 impl OnSfidBoundWeight for () {}
 
-/// 中文注释：给投票模块使用的统一资格接口。
+/// 中文注释:给投票模块使用的统一资格接口。
 pub trait SfidEligibilityProvider<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
@@ -107,19 +115,60 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
     fn cleanup_vote_credentials(_proposal_id: u64) {}
 }
 
+/// 中文注释:省管理员 3-tier 槽位枚举。
+/// - Main:首激活方占位;后续所有 backup 写入须由 Main 私钥签名。
+/// - Backup1 / Backup2:由 Main 通过 `add_sheng_admin_backup` 动态添加。
+#[derive(
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+    RuntimeDebug,
+)]
+pub enum Slot {
+    Main,
+    Backup1,
+    Backup2,
+}
+
+/// 中文注释:ADR-008 Step 2 签名 payload domain 常量。
+/// 必须使用 `&[u8; N]` 数组类型(对应 feedback_scale_domain_must_be_array.md),
+/// 链上 verifier 验签时与 SFID 后端 sign 端必须严格一致。
+pub const ADD_BACKUP_DOMAIN: &[u8; 25] = b"add_sheng_admin_backup_v1";
+pub const REMOVE_BACKUP_DOMAIN: &[u8; 28] = b"remove_sheng_admin_backup_v1";
+pub const ACTIVATE_DOMAIN: &[u8; 32] = b"activate_sheng_signing_pubkey_v1";
+pub const ROTATE_DOMAIN: &[u8; 30] = b"rotate_sheng_signing_pubkey_v1";
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use alloc::vec::Vec;
-    use frame_support::{pallet_prelude::*, Blake2_128Concat};
+    use frame_support::{
+        pallet_prelude::*,
+        traits::EnsureOrigin,
+        Blake2_128Concat, Twox64Concat,
+    };
     use frame_system::pallet_prelude::*;
+    use sp_core::sr25519;
+    use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
     use sp_runtime::traits::Hash;
 
     pub type NonceOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialNonceLength>;
     pub type SignatureOf<T> = BoundedVec<u8, <T as Config>::MaxCredentialSignatureLength>;
     pub type CredentialOf<T> =
         BindCredential<<T as frame_system::Config>::Hash, NonceOf<T>, SignatureOf<T>>;
+
+    /// 中文注释:省名上限 64 字节 UTF-8(支持多字节中文 / 拉丁拼音)。
+    pub type ProvinceBound = BoundedVec<u8, ConstU32<64>>;
+
+    /// 中文注释:Step 2a unsigned extrinsic 的 nonce(由 SFID 后端生成的 32 字节随机数)。
+    pub type ShengNonce = [u8; 32];
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
@@ -132,7 +181,7 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCredentialSignatureLength: Get<u32>;
 
-        /// 中文注释：SFID 系统绑定验签器（外部接口桥接点）。
+        /// 中文注释:SFID 系统绑定验签器(外部接口桥接点)。
         type SfidVerifier: SfidVerifier<
             Self::AccountId,
             Self::Hash,
@@ -140,7 +189,7 @@ pub mod pallet {
             SignatureOf<Self>,
         >;
 
-        /// 中文注释：公民投票实时验签器。
+        /// 中文注释:公民投票实时验签器。
         type SfidVoteVerifier: SfidVoteVerifier<
             Self::AccountId,
             Self::Hash,
@@ -148,39 +197,44 @@ pub mod pallet {
             SignatureOf<Self>,
         >;
 
-        /// 中文注释：绑定后回调到发行模块发放认证奖励。
+        /// 中文注释:绑定后回调到发行模块发放认证奖励。
         type OnSfidBound: OnSfidBound<Self::AccountId, Self::Hash> + OnSfidBoundWeight;
 
-        /// 权重信息：由 runtime 注入实际 benchmark 结果。
+        /// 中文注释:`unbind_sfid` 由谁可调用(治理 origin / Root / 受信任管理员)。
+        /// ADR-008 后链上不再硬编码 SFID admin pubkey,unbind 不能再用 SfidMainAccount,
+        /// 由 runtime 指定 origin(临时:可用 Root / 治理多签)。
+        type UnbindOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+        /// 权重信息:由 runtime 注入实际 benchmark 结果。
         type WeightInfo: crate::weights::WeightInfo;
     }
 
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    /// 中文注释：binding_id 到账户的正向映射，保证同一 binding_id 只能绑定一个账户。
+    /// 中文注释:binding_id 到账户的正向映射,保证同一 binding_id 只能绑定一个账户。
     #[pallet::storage]
     #[pallet::getter(fn binding_id_to_account)]
     pub type BindingIdToAccount<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, T::AccountId, OptionQuery>;
 
-    /// 中文注释：账户到 binding_id 的反向映射，用于快速查询账户当前绑定的身份标识。
+    /// 中文注释:账户到 binding_id 的反向映射,用于快速查询账户当前绑定的身份标识。
     #[pallet::storage]
     #[pallet::getter(fn account_to_binding_id)]
     pub type AccountToBindingId<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, T::Hash, OptionQuery>;
 
-    /// 中文注释：当前已绑定身份的账户数量，可用于公民投票基数。
+    /// 中文注释:当前已绑定身份的账户数量,可用于公民投票基数。
     #[pallet::storage]
     #[pallet::getter(fn bound_count)]
     pub type BoundCount<T> = StorageValue<_, u64, ValueQuery>;
 
-    /// 中文注释：已消费的绑定 nonce，防止同一条绑定消息重放。
+    /// 中文注释:已消费的绑定 nonce,防止同一条绑定消息重放。
     #[pallet::storage]
     #[pallet::getter(fn used_bind_nonce)]
     pub type UsedBindNonce<T: Config> = StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
-    /// 中文注释：公民投票验签 nonce（提案 + binding_id + nonce 三元维度）防重放。
+    /// 中文注释:公民投票验签 nonce(提案 + binding_id + nonce 三元维度)防重放。
     #[pallet::storage]
     #[pallet::getter(fn used_vote_nonce)]
     pub type UsedVoteNonce<T: Config> = StorageDoubleMap<
@@ -193,145 +247,152 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// 中文注释：SFID 当前主账户（用于绑定、投票与人口快照验签）。
+    /// 中文注释:省管理员 3-tier 花名册。
+    /// 索引:`(province, slot)` → admin sr25519 公钥(32 字节)。
+    /// 写入路径:`activate_sheng_signing_pubkey`(占 Main)/ `add_sheng_admin_backup`(占 Backup{1,2})。
+    /// 删除路径:`remove_sheng_admin_backup`(级联清 ShengSigningPubkey 同 admin 行)。
     #[pallet::storage]
-    #[pallet::getter(fn sfid_main_account)]
-    pub type SfidMainAccount<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+    #[pallet::getter(fn sheng_admins)]
+    pub type ShengAdmins<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        ProvinceBound,
+        Twox64Concat,
+        Slot,
+        [u8; 32],
+        OptionQuery,
+    >;
 
-    /// 中文注释：SFID 备用账户1（可发起轮换）。
-    #[pallet::storage]
-    #[pallet::getter(fn sfid_backup_account_1)]
-    pub type SfidBackupAccount1<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
-
-    /// 中文注释：SFID 备用账户2（可发起轮换）。
-    #[pallet::storage]
-    #[pallet::getter(fn sfid_backup_account_2)]
-    pub type SfidBackupAccount2<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
-
-    /// 中文注释：按省存储的省级签名密钥公钥（sr25519），由 KEY_ADMIN 主账户授权写入。
-    /// 用于机构登记（`register_sfid_institution`）按省分流验签。
+    /// 中文注释:按 (省, admin 公钥) 二维存储的省级签名公钥。
+    /// ADR-008:每省 3 把独立签名密钥(Main / Backup1 / Backup2 各一把),互不共享。
+    /// runtime verifier(`duoqian-manage` 等)按 (province, signer_admin_pubkey) 二元组查表验签。
     #[pallet::storage]
     #[pallet::getter(fn sheng_signing_pubkey_storage)]
-    pub type ShengSigningPubkey<T: Config> =
-        StorageMap<_, Blake2_128Concat, BoundedVec<u8, ConstU32<64>>, [u8; 32], OptionQuery>;
+    pub type ShengSigningPubkey<T: Config> = StorageDoubleMap<
+        _,
+        Blake2_128Concat,
+        ProvinceBound,
+        Blake2_128Concat,
+        [u8; 32],
+        [u8; 32],
+        OptionQuery,
+    >;
 
-    /// 中文注释：反向索引（公钥 → 省名），用于 O(1) 冲突检测和快速查省。
+    /// 中文注释:已使用的 unsigned extrinsic nonce(blake2_256 哈希),防 4 个 SFID 推链 extrinsic 重放。
+    /// 使用 `()` 值 + `ValueQuery` 仅为 substrate set-only 语义;clippy 关于 unit 返回值的提示无关紧要。
+    #[allow(clippy::unused_unit)]
     #[pallet::storage]
-    #[pallet::getter(fn province_by_signing_pubkey)]
-    pub type ProvinceBySigningPubkey<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 32], BoundedVec<u8, ConstU32<64>>, OptionQuery>;
+    #[pallet::getter(fn used_sheng_nonce)]
+    pub type UsedShengNonce<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::Hash, (), ValueQuery>;
 
+    /// 中文注释:**编译垫片** GenesisConfig(Step 2c 起删除)。
+    /// ADR-008 后链上 0 prior knowledge of SFID,创世不再写入任何 admin 公钥。
+    /// 留这个空 stub 是为了让 `runtime/src/genesis_config_presets.rs` 与
+    /// `RuntimeGenesisConfig::default()` 路径在 step2c 前继续编译;step2c 改完
+    /// genesis_config_presets.rs 后必须连同本 stub 一起删。
+    /// 字段保留旧 JSON 兼容键以让 `serde_json::from_value(patch["sfidSystem"])` 能 deserialize,
+    /// 但 build_genesis 主动忽略全部输入,不写任何 storage。
     #[pallet::genesis_config]
+    #[derive(frame_support::DefaultNoBound)]
     pub struct GenesisConfig<T: Config> {
+        #[serde(rename = "sfidMainAccount", default)]
         pub sfid_main_account: Option<T::AccountId>,
+        #[serde(rename = "sfidBackupAccount1", default)]
         pub sfid_backup_account_1: Option<T::AccountId>,
+        #[serde(rename = "sfidBackupAccount2", default)]
         pub sfid_backup_account_2: Option<T::AccountId>,
-    }
-
-    impl<T: Config> Default for GenesisConfig<T> {
-        fn default() -> Self {
-            Self {
-                sfid_main_account: None,
-                sfid_backup_account_1: None,
-                sfid_backup_account_2: None,
-            }
-        }
     }
 
     #[pallet::genesis_build]
     impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
         fn build(&self) {
-            if self.sfid_main_account.is_none()
-                && self.sfid_backup_account_1.is_none()
-                && self.sfid_backup_account_2.is_none()
-            {
-                return;
-            }
-
-            let main = self
-                .sfid_main_account
-                .clone()
-                .expect("SFID genesis requires sfid_main_account");
-            let backup_1 = self
-                .sfid_backup_account_1
-                .clone()
-                .expect("SFID genesis requires sfid_backup_account_1");
-            let backup_2 = self
-                .sfid_backup_account_2
-                .clone()
-                .expect("SFID genesis requires sfid_backup_account_2");
-
-            assert!(
-                main != backup_1 && main != backup_2 && backup_1 != backup_2,
-                "SFID genesis keys must be pairwise distinct"
-            );
-
-            SfidMainAccount::<T>::put(&main);
-            SfidBackupAccount1::<T>::put(&backup_1);
-            SfidBackupAccount2::<T>::put(&backup_2);
+            // 中文注释:ADR-008 后 SFID 不再有任何创世硬编码;输入字段保留只为兼容旧 JSON,build 阶段什么都不做。
+            // step2c 起本垫片连同字段一并删除。
         }
     }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 中文注释：SFID 绑定成功，记录账户、binding_id 和 nonce 哈希。
+        /// 中文注释:SFID 绑定成功,记录账户、binding_id 和 nonce 哈希。
         SfidBound {
             who: T::AccountId,
             binding_id: T::Hash,
             bind_nonce_hash: T::Hash,
         },
-        /// 中文注释：管理员代为解绑用户 SFID，记录管理员、被解绑用户和 binding_id。
+        /// 中文注释:管理员代为解绑用户 SFID,记录管理员、被解绑用户和 binding_id。
         SfidUnbound {
             admin: T::AccountId,
             who: T::AccountId,
             binding_id: T::Hash,
         },
-        /// 中文注释：SFID 验签密钥轮换完成，记录操作者和新的三把账户。
-        SfidKeysRotated {
-            operator: T::AccountId,
-            new_main: T::AccountId,
-            backup_1: T::AccountId,
-            backup_2: T::AccountId,
+        /// 中文注释:省管理员 backup 槽被占用(Main 已 activate 后由 Main 签名授权写入)。
+        ShengAdminBackupAdded {
+            province: ProvinceBound,
+            slot: Slot,
+            pubkey: [u8; 32],
         },
-        /// 中文注释：省级签名密钥公钥被写入或清除。
-        ShengSigningPubkeyUpdated {
-            province: BoundedVec<u8, ConstU32<64>>,
-            new_pubkey: Option<[u8; 32]>,
+        /// 中文注释:省管理员 backup 槽被清空(级联清同 admin 行 ShengSigningPubkey)。
+        ShengAdminBackupRemoved {
+            province: ProvinceBound,
+            slot: Slot,
+            pubkey: [u8; 32],
+        },
+        /// 中文注释:省级签名公钥首次激活(写入 ShengSigningPubkey;若 Main 槽空则同时占 Main)。
+        ShengSigningActivated {
+            province: ProvinceBound,
+            admin_pubkey: [u8; 32],
+            signing_pubkey: [u8; 32],
+        },
+        /// 中文注释:省级签名公钥轮换(替换同 admin 行的现有 signing pubkey)。
+        ShengSigningRotated {
+            province: ProvinceBound,
+            admin_pubkey: [u8; 32],
+            old_signing_pubkey: [u8; 32],
+            new_signing_pubkey: [u8; 32],
         },
     }
 
-    /// 中文注释：本模块无需 on_initialize / on_finalize 钩子，所有逻辑由 extrinsic 或内部接口驱动。
+    /// 中文注释:本模块无需 on_initialize / on_finalize 钩子。
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 中文注释：绑定凭证中 bind_nonce 为空。
+        /// 中文注释:绑定凭证中 bind_nonce 为空。
         EmptyBindNonce,
-        /// 中文注释：该 bind_nonce 已被使用（防重放）。
+        /// 中文注释:该 bind_nonce 已被使用(防重放)。
         BindNonceAlreadyUsed,
-        /// 中文注释：SFID 绑定签名验证失败。
+        /// 中文注释:SFID 绑定签名验证失败。
         InvalidSfidBindingSignature,
-        /// 中文注释：该 binding_id 已被另一个账户绑定。
+        /// 中文注释:该 binding_id 已被另一个账户绑定。
         BindingIdAlreadyBoundToAnotherAccount,
-        /// 中文注释：该账户已绑定到同一 binding_id，无需重复操作。
+        /// 中文注释:该账户已绑定到同一 binding_id,无需重复操作。
         SameBindingIdAlreadyBound,
-        /// 中文注释：账户当前未绑定 SFID，无法解绑。
+        /// 中文注释:账户当前未绑定 SFID,无法解绑。
         NotBound,
-        /// 中文注释：调用者不是 SFID 备用账户，无权发起轮换。
-        UnauthorizedSfidOperator,
-        /// 中文注释：新备用账户与现有三把账户之一重复。
-        DuplicateSfidKey,
-        /// 中文注释：省名长度超限（上限 64 字节 UTF-8）。
-        ProvinceTooLong,
-        /// 中文注释：新公钥已被其他省占用。
-        PubkeyAlreadyUsed,
+        /// 中文注释:Main 槽已被占用,activate 走 first-come-first-serve 失败。
+        Sheng3TierMainAlreadyActivated,
+        /// 中文注释:admin_pubkey 不在 ShengAdmins[province][\*] 任何槽中。
+        Sheng3TierAdminNotInRoster,
+        /// 中文注释:目标 backup 槽已被占用(必须先 remove)。
+        Sheng3TierSlotOccupied,
+        /// 中文注释:该 admin 当前没有有效签名公钥,不允许 rotate。
+        Sheng3TierSigningNotActivated,
+        /// 中文注释:sr25519 验签失败。
+        Sheng3TierSignatureInvalid,
+        /// 中文注释:nonce 已使用(防重放)。
+        Sheng3TierNonceUsed,
+        /// 中文注释:省名长度超限(>64 字节)。
+        Sheng3TierProvinceTooLong,
+        /// 中文注释:add_backup / remove_backup 只接受 Backup1 / Backup2,不能传 Main。
+        Sheng3TierInvalidSlotForBackup,
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 中文注释：使用 SFID 系统签发的绑定消息把钱包和 binding_id 绑定。
+        /// 中文注释:使用 SFID 系统签发的绑定消息把钱包和 binding_id 绑定。
         #[pallet::call_index(0)]
         #[pallet::weight(
             T::WeightInfo::bind_sfid()
@@ -363,7 +424,7 @@ pub mod pallet {
                 return Err(Error::<T>::SameBindingIdAlreadyBound.into());
             }
 
-            // 中文注释：账户允许换绑到新的 binding_id，但只释放旧映射，不减少当前绑定人数。
+            // 中文注释:账户允许换绑到新的 binding_id,但只释放旧映射,不减少当前绑定人数。
             if let Some(old_binding_id) = AccountToBindingId::<T>::get(&who) {
                 BindingIdToAccount::<T>::remove(old_binding_id);
             } else {
@@ -384,25 +445,13 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 中文注释：管理员代为解绑指定用户的 SFID 绑定关系。
-        /// 仅 SFID 主账户或已注册的省级签名账户可调用，用户不允许自行解绑。
+        /// 中文注释:管理员代为解绑指定用户的 SFID 绑定关系。
+        /// ADR-008 后改为由 `T::UnbindOrigin`(治理 / Root / 受信任管理员)鉴权,
+        /// 不再依赖已删除的 SfidMainAccount / 省级签名账户。
         #[pallet::call_index(1)]
         #[pallet::weight(T::WeightInfo::unbind_sfid())]
         pub fn unbind_sfid(origin: OriginFor<T>, target: T::AccountId) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            // 权限验证：仅 SFID 主账户或省级签名账户可调用
-            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
-            if who != main {
-                let who_bytes: [u8; 32] = who
-                    .encode()
-                    .try_into()
-                    .map_err(|_| Error::<T>::UnauthorizedSfidOperator)?;
-                ensure!(
-                    ProvinceBySigningPubkey::<T>::contains_key(&who_bytes),
-                    Error::<T>::UnauthorizedSfidOperator
-                );
-            }
+            T::UnbindOrigin::ensure_origin(origin)?;
 
             // 移除 target 的绑定映射
             let binding_id = AccountToBindingId::<T>::get(&target).ok_or(Error::<T>::NotBound)?;
@@ -411,135 +460,359 @@ pub mod pallet {
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
 
             Self::deposit_event(Event::<T>::SfidUnbound {
-                admin: who,
+                admin: target.clone(),
                 who: target,
                 binding_id,
             });
             Ok(())
         }
 
-        /// 中文注释：仅备用账户可发起轮换；发起者升级为主账户，并提交一个新备用账户补位。
+        /// 中文注释:由本省 Main 签名授权,在 Backup1 / Backup2 槽写入新 admin 公钥。
+        /// - origin = unsigned;鉴权全靠 sr25519 验签 + ValidateUnsigned 防重放。
+        /// - 调用前提:本省 ShengAdmins[Main] 必须已激活(否则没有 Main 私钥能签名)。
+        /// - slot ∈ {Backup1, Backup2};对应槽必须为空。
         #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::rotate_sfid_keys())]
-        pub fn rotate_sfid_keys(origin: OriginFor<T>, new_backup: T::AccountId) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
-            let backup_1 =
-                SfidBackupAccount1::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
-            let backup_2 =
-                SfidBackupAccount2::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
+        #[pallet::weight((T::WeightInfo::add_sheng_admin_backup(), DispatchClass::Normal, Pays::No))]
+        pub fn add_sheng_admin_backup(
+            origin: OriginFor<T>,
+            province: Vec<u8>,
+            slot: Slot,
+            new_pubkey: [u8; 32],
+            nonce: ShengNonce,
+            sig: [u8; 64],
+        ) -> DispatchResult {
+            ensure_none(origin)?;
+
             ensure!(
-                who == backup_1 || who == backup_2,
-                Error::<T>::UnauthorizedSfidOperator
+                matches!(slot, Slot::Backup1 | Slot::Backup2),
+                Error::<T>::Sheng3TierInvalidSlotForBackup
             );
 
-            let survivor = if who == backup_1 {
-                backup_2.clone()
-            } else {
-                backup_1.clone()
-            };
+            let bounded = Self::bounded_province(&province)?;
 
-            ensure!(new_backup != main, Error::<T>::DuplicateSfidKey);
-            ensure!(new_backup != who, Error::<T>::DuplicateSfidKey);
-            ensure!(new_backup != survivor, Error::<T>::DuplicateSfidKey);
+            let main_pubkey = ShengAdmins::<T>::get(&bounded, Slot::Main)
+                .ok_or(Error::<T>::Sheng3TierAdminNotInRoster)?;
 
-            SfidMainAccount::<T>::put(&who);
-            SfidBackupAccount1::<T>::put(&survivor);
-            SfidBackupAccount2::<T>::put(&new_backup);
+            ensure!(
+                ShengAdmins::<T>::get(&bounded, slot).is_none(),
+                Error::<T>::Sheng3TierSlotOccupied
+            );
 
-            Self::deposit_event(Event::<T>::SfidKeysRotated {
-                operator: who.clone(),
-                new_main: who,
-                backup_1: survivor,
-                backup_2: new_backup,
+            // 中文注释:nonce 已用过 → 防重放(ValidateUnsigned 已查一次,这里二次保险)。
+            let nonce_hash = T::Hashing::hash(&nonce);
+            ensure!(
+                !UsedShengNonce::<T>::contains_key(nonce_hash),
+                Error::<T>::Sheng3TierNonceUsed
+            );
+
+            let payload = Self::add_backup_payload(&province, slot, &new_pubkey, &nonce);
+            ensure!(
+                Self::verify_sr25519(&main_pubkey, &sig, &payload),
+                Error::<T>::Sheng3TierSignatureInvalid
+            );
+
+            UsedShengNonce::<T>::insert(nonce_hash, ());
+            ShengAdmins::<T>::insert(&bounded, slot, new_pubkey);
+
+            Self::deposit_event(Event::<T>::ShengAdminBackupAdded {
+                province: bounded,
+                slot,
+                pubkey: new_pubkey,
             });
             Ok(())
         }
 
-        /// 中文注释：由 SFID 主账户写入/更新/清除某省的省级签名密钥公钥。
-        /// `new_pubkey = Some` 写入或覆盖；`None` 清除。
-        /// 冲突规则：同一公钥不得同时绑定到两个省。
+        /// 中文注释:由本省 Main 签名授权,清空 Backup1 / Backup2 槽。
+        /// - 级联效应:同时清 ShengSigningPubkey[(province, removed_admin_pubkey)]。
         #[pallet::call_index(3)]
-        #[pallet::weight(
-            T::DbWeight::get().reads_writes(3, 3)
-                .saturating_add(Weight::from_parts(10_000, 0))
-        )]
-        pub fn set_sheng_signing_pubkey(
+        #[pallet::weight((T::WeightInfo::remove_sheng_admin_backup(), DispatchClass::Normal, Pays::No))]
+        pub fn remove_sheng_admin_backup(
             origin: OriginFor<T>,
             province: Vec<u8>,
-            new_pubkey: Option<[u8; 32]>,
+            slot: Slot,
+            nonce: ShengNonce,
+            sig: [u8; 64],
         ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            // 中文注释：只允许当前 SfidMainAccount 调用（KEY_ADMIN 主密钥）。
-            let main = SfidMainAccount::<T>::get().ok_or(Error::<T>::UnauthorizedSfidOperator)?;
-            ensure!(who == main, Error::<T>::UnauthorizedSfidOperator);
+            ensure_none(origin)?;
 
-            // 中文注释：省名长度限制 64 字节 UTF-8。
-            let bounded: BoundedVec<u8, ConstU32<64>> = province
-                .try_into()
-                .map_err(|_| Error::<T>::ProvinceTooLong)?;
+            ensure!(
+                matches!(slot, Slot::Backup1 | Slot::Backup2),
+                Error::<T>::Sheng3TierInvalidSlotForBackup
+            );
 
-            // 中文注释：清理旧反向索引。
-            if let Some(old_pub) = ShengSigningPubkey::<T>::get(&bounded) {
-                ProvinceBySigningPubkey::<T>::remove(&old_pub);
-            }
+            let bounded = Self::bounded_province(&province)?;
 
-            match new_pubkey {
-                Some(pub_key) => {
-                    // 中文注释：新 pubkey 不得已被其他省占用。
-                    ensure!(
-                        !ProvinceBySigningPubkey::<T>::contains_key(&pub_key),
-                        Error::<T>::PubkeyAlreadyUsed
-                    );
-                    ShengSigningPubkey::<T>::insert(&bounded, pub_key);
-                    ProvinceBySigningPubkey::<T>::insert(&pub_key, &bounded);
-                }
-                None => {
-                    ShengSigningPubkey::<T>::remove(&bounded);
-                }
-            }
+            let main_pubkey = ShengAdmins::<T>::get(&bounded, Slot::Main)
+                .ok_or(Error::<T>::Sheng3TierAdminNotInRoster)?;
 
-            Self::deposit_event(Event::<T>::ShengSigningPubkeyUpdated {
+            let removed_pubkey = ShengAdmins::<T>::get(&bounded, slot)
+                .ok_or(Error::<T>::Sheng3TierAdminNotInRoster)?;
+
+            let nonce_hash = T::Hashing::hash(&nonce);
+            ensure!(
+                !UsedShengNonce::<T>::contains_key(nonce_hash),
+                Error::<T>::Sheng3TierNonceUsed
+            );
+
+            let payload = Self::remove_backup_payload(&province, slot, &nonce);
+            ensure!(
+                Self::verify_sr25519(&main_pubkey, &sig, &payload),
+                Error::<T>::Sheng3TierSignatureInvalid
+            );
+
+            UsedShengNonce::<T>::insert(nonce_hash, ());
+            ShengAdmins::<T>::remove(&bounded, slot);
+            ShengSigningPubkey::<T>::remove(&bounded, removed_pubkey);
+
+            Self::deposit_event(Event::<T>::ShengAdminBackupRemoved {
                 province: bounded,
-                new_pubkey,
+                slot,
+                pubkey: removed_pubkey,
+            });
+            Ok(())
+        }
+
+        /// 中文注释:首次激活省级签名公钥。
+        /// 鉴权:sig 由 admin_pubkey 私钥签发。
+        /// 业务:
+        /// - 若 Main 槽空 → first-come-first-serve 占 Main 槽,同时写 ShengSigningPubkey。
+        /// - 若 Main 槽已被占 → admin_pubkey 必须 ∈ ShengAdmins[province][\*],写 ShengSigningPubkey。
+        /// - 若该 admin 已有 signing pubkey → 用 `rotate_sheng_signing_pubkey` 而非本入口。
+        #[pallet::call_index(4)]
+        #[pallet::weight((T::WeightInfo::activate_sheng_signing_pubkey(), DispatchClass::Normal, Pays::No))]
+        pub fn activate_sheng_signing_pubkey(
+            origin: OriginFor<T>,
+            province: Vec<u8>,
+            admin_pubkey: [u8; 32],
+            signing_pubkey: [u8; 32],
+            nonce: ShengNonce,
+            sig: [u8; 64],
+        ) -> DispatchResult {
+            ensure_none(origin)?;
+
+            let bounded = Self::bounded_province(&province)?;
+
+            let nonce_hash = T::Hashing::hash(&nonce);
+            ensure!(
+                !UsedShengNonce::<T>::contains_key(nonce_hash),
+                Error::<T>::Sheng3TierNonceUsed
+            );
+
+            let payload =
+                Self::activate_payload(&province, &admin_pubkey, &signing_pubkey, &nonce);
+            ensure!(
+                Self::verify_sr25519(&admin_pubkey, &sig, &payload),
+                Error::<T>::Sheng3TierSignatureInvalid
+            );
+
+            let main_existing = ShengAdmins::<T>::get(&bounded, Slot::Main);
+            let occupies_main = match main_existing {
+                None => true,
+                Some(_) => {
+                    // 中文注释:Main 已占,本次只允许花名册内 admin 调用。
+                    let in_roster = ShengAdmins::<T>::get(&bounded, Slot::Main)
+                        .as_ref()
+                        == Some(&admin_pubkey)
+                        || ShengAdmins::<T>::get(&bounded, Slot::Backup1).as_ref()
+                            == Some(&admin_pubkey)
+                        || ShengAdmins::<T>::get(&bounded, Slot::Backup2).as_ref()
+                            == Some(&admin_pubkey);
+                    ensure!(in_roster, Error::<T>::Sheng3TierAdminNotInRoster);
+                    false
+                }
+            };
+
+            UsedShengNonce::<T>::insert(nonce_hash, ());
+
+            if occupies_main {
+                ShengAdmins::<T>::insert(&bounded, Slot::Main, admin_pubkey);
+            }
+            ShengSigningPubkey::<T>::insert(&bounded, admin_pubkey, signing_pubkey);
+
+            Self::deposit_event(Event::<T>::ShengSigningActivated {
+                province: bounded,
+                admin_pubkey,
+                signing_pubkey,
+            });
+            Ok(())
+        }
+
+        /// 中文注释:轮换某 admin 的省级签名公钥。
+        /// 鉴权:sig 由 admin_pubkey 私钥签发。
+        /// 前提:admin_pubkey ∈ ShengAdmins[province][\*] 且 ShengSigningPubkey[(province, admin)] 已存在。
+        #[pallet::call_index(5)]
+        #[pallet::weight((T::WeightInfo::rotate_sheng_signing_pubkey(), DispatchClass::Normal, Pays::No))]
+        pub fn rotate_sheng_signing_pubkey(
+            origin: OriginFor<T>,
+            province: Vec<u8>,
+            admin_pubkey: [u8; 32],
+            new_signing_pubkey: [u8; 32],
+            nonce: ShengNonce,
+            sig: [u8; 64],
+        ) -> DispatchResult {
+            ensure_none(origin)?;
+
+            let bounded = Self::bounded_province(&province)?;
+
+            let nonce_hash = T::Hashing::hash(&nonce);
+            ensure!(
+                !UsedShengNonce::<T>::contains_key(nonce_hash),
+                Error::<T>::Sheng3TierNonceUsed
+            );
+
+            // admin 必须在花名册中
+            ensure!(
+                Self::is_sheng_admin(&province, &admin_pubkey).is_some(),
+                Error::<T>::Sheng3TierAdminNotInRoster
+            );
+
+            let old_signing_pubkey = ShengSigningPubkey::<T>::get(&bounded, admin_pubkey)
+                .ok_or(Error::<T>::Sheng3TierSigningNotActivated)?;
+
+            let payload =
+                Self::rotate_payload(&province, &admin_pubkey, &new_signing_pubkey, &nonce);
+            ensure!(
+                Self::verify_sr25519(&admin_pubkey, &sig, &payload),
+                Error::<T>::Sheng3TierSignatureInvalid
+            );
+
+            UsedShengNonce::<T>::insert(nonce_hash, ());
+            ShengSigningPubkey::<T>::insert(&bounded, admin_pubkey, new_signing_pubkey);
+
+            Self::deposit_event(Event::<T>::ShengSigningRotated {
+                province: bounded,
+                admin_pubkey,
+                old_signing_pubkey,
+                new_signing_pubkey,
             });
             Ok(())
         }
     }
 
     impl<T: Config> Pallet<T> {
-        /// 中文注释：查询账户是否已绑定 SFID。
+        /// 中文注释:查询账户是否已绑定 SFID。
         pub fn is_bound(who: &T::AccountId) -> bool {
             AccountToBindingId::<T>::contains_key(who)
         }
 
-        /// 中文注释：查询指定 binding_id 是否绑定到指定账户。
+        /// 中文注释:查询指定 binding_id 是否绑定到指定账户。
         pub fn is_binding_id_bound_to(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             BindingIdToAccount::<T>::get(binding_id)
                 .map(|owner| owner == *who)
                 .unwrap_or(false)
         }
 
-        /// 中文注释：读某省当前的省级签名密钥公钥；runtime verifier 用于按省分流验签。
-        pub fn sheng_signing_pubkey(province: &[u8]) -> Option<[u8; 32]> {
-            let bounded: BoundedVec<u8, ConstU32<64>> = province.to_vec().try_into().ok()?;
-            ShengSigningPubkey::<T>::get(&bounded)
+        /// 中文注释:按 (province, admin_pubkey) 二元组读省级签名公钥。
+        /// runtime verifier(`duoqian-manage` 等)按本入口验签。
+        pub fn sheng_signing_pubkey_for_admin(
+            province: &[u8],
+            admin_pubkey: &[u8; 32],
+        ) -> Option<[u8; 32]> {
+            let bounded = ProvinceBound::try_from(province.to_vec()).ok()?;
+            ShengSigningPubkey::<T>::get(&bounded, admin_pubkey)
         }
 
-        /// 中文注释：当前 SFID 主账户即验签公钥来源；仅当 AccountId 可还原为 32 字节原始公钥时返回。
+        /// 中文注释:判断 pubkey 是否在某省花名册中,返回所占槽位。
+        pub fn is_sheng_admin(province: &[u8], pubkey: &[u8; 32]) -> Option<Slot> {
+            let bounded = ProvinceBound::try_from(province.to_vec()).ok()?;
+            [Slot::Main, Slot::Backup1, Slot::Backup2]
+                .into_iter()
+                .find(|slot| ShengAdmins::<T>::get(&bounded, *slot).as_ref() == Some(pubkey))
+        }
+
+        /// 中文注释:判断 pubkey 是否为某省 Main(用于业务判定 + 治理快速路径)。
+        pub fn is_sheng_main(province: &[u8], pubkey: &[u8; 32]) -> bool {
+            let bounded = match ProvinceBound::try_from(province.to_vec()) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+            ShengAdmins::<T>::get(&bounded, Slot::Main).as_ref() == Some(pubkey)
+        }
+
+        /// 中文注释:**编译垫片**(Step 2b 起删除)。
+        /// ADR-008 后链上不再保留单一 SFID 主公钥,所有验签按 (province, admin_pubkey) 二元组进行。
+        /// 本 fn 临时返回 None 以保住下游(`runtime/src/configs/mod.rs` verifier fallback / 旧 RuntimeSfidVerifier)
+        /// 编译;Step 2b 改造完后必须连同 caller 一起删。
+        #[deprecated(note = "ADR-008 step2b: 改用 sheng_signing_pubkey_for_admin")]
         pub fn current_sfid_verify_pubkey() -> Option<[u8; 32]> {
-            let main = SfidMainAccount::<T>::get()?;
-            let encoded = main.encode();
-            if encoded.len() != 32 {
-                return None;
-            }
-            let mut raw = [0u8; 32];
-            raw.copy_from_slice(encoded.as_slice());
-            Some(raw)
+            None
+        }
+
+        /// 中文注释:**编译垫片**(Step 2b 起删除)。
+        /// 旧的"按省单一签名公钥"语义在 ADR-008 后退役,改为 `sheng_signing_pubkey_for_admin`。
+        #[deprecated(note = "ADR-008 step2b: 改用 sheng_signing_pubkey_for_admin")]
+        pub fn sheng_signing_pubkey(_province: &[u8]) -> Option<[u8; 32]> {
+            None
+        }
+
+        // ---- Helpers (内部) ----
+
+        fn bounded_province(province: &[u8]) -> Result<ProvinceBound, Error<T>> {
+            ProvinceBound::try_from(province.to_vec())
+                .map_err(|_| Error::<T>::Sheng3TierProvinceTooLong)
+        }
+
+        fn verify_sr25519(public: &[u8; 32], sig: &[u8; 64], msg: &[u8; 32]) -> bool {
+            let pk = sr25519::Public::from_raw(*public);
+            let signature = sr25519::Signature::from_raw(*sig);
+            sr25519_verify(&signature, msg, &pk)
+        }
+
+        fn add_backup_payload(
+            province: &[u8],
+            slot: Slot,
+            new_pubkey: &[u8; 32],
+            nonce: &ShengNonce,
+        ) -> [u8; 32] {
+            let payload = (
+                ADD_BACKUP_DOMAIN,
+                province,
+                slot,
+                new_pubkey,
+                nonce,
+            );
+            blake2_256(&payload.encode())
+        }
+
+        fn remove_backup_payload(province: &[u8], slot: Slot, nonce: &ShengNonce) -> [u8; 32] {
+            let payload = (REMOVE_BACKUP_DOMAIN, province, slot, nonce);
+            blake2_256(&payload.encode())
+        }
+
+        fn activate_payload(
+            province: &[u8],
+            admin_pubkey: &[u8; 32],
+            signing_pubkey: &[u8; 32],
+            nonce: &ShengNonce,
+        ) -> [u8; 32] {
+            let payload = (
+                ACTIVATE_DOMAIN,
+                province,
+                admin_pubkey,
+                signing_pubkey,
+                nonce,
+            );
+            blake2_256(&payload.encode())
+        }
+
+        fn rotate_payload(
+            province: &[u8],
+            admin_pubkey: &[u8; 32],
+            new_signing_pubkey: &[u8; 32],
+            nonce: &ShengNonce,
+        ) -> [u8; 32] {
+            let payload = (
+                ROTATE_DOMAIN,
+                province,
+                admin_pubkey,
+                new_signing_pubkey,
+                nonce,
+            );
+            blake2_256(&payload.encode())
         }
     }
 
-    /// 中文注释：实现投票资格接口，供治理模块统一判断公民身份和消费投票凭证。
+    /// 中文注释:实现投票资格接口,供治理模块统一判断公民身份和消费投票凭证。
     impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
         fn is_eligible(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             Self::is_binding_id_bound_to(binding_id, who)
@@ -561,8 +834,8 @@ pub mod pallet {
             }
 
             let nonce_hash = T::Hashing::hash(nonce);
-            let vote_nonce_key = (binding_id.clone(), nonce_hash);
-            if UsedVoteNonce::<T>::get(proposal_id, vote_nonce_key.clone()) {
+            let vote_nonce_key = (*binding_id, nonce_hash);
+            if UsedVoteNonce::<T>::get(proposal_id, vote_nonce_key) {
                 return false;
             }
 
@@ -577,7 +850,7 @@ pub mod pallet {
 
             if !T::SfidVoteVerifier::verify_vote(
                 who,
-                binding_id.clone(),
+                *binding_id,
                 proposal_id,
                 &nonce_bounded,
                 &signature_bounded,
@@ -597,610 +870,116 @@ pub mod pallet {
             );
         }
     }
+
+    /// 中文注释:Step 2a unsigned extrinsic 校验入口。
+    /// 4 个 SFID 推链 extrinsic 全部走 ensure_none + sr25519 验签;TxPool 提交前会先调
+    /// `validate_unsigned`,对应防重放 + 验签 + priority/longevity。
+    /// 进入 dispatch 前 `pre_dispatch` 再做一次原子查重以防同区块多笔同 nonce。
+    #[pallet::validate_unsigned]
+    impl<T: Config> ValidateUnsigned for Pallet<T> {
+        type Call = Call<T>;
+
+        fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+            let (nonce, payload, signer_pubkey, sig, tag_seed) = match Self::extract_unsigned_parts(call) {
+                Some(v) => v,
+                None => return InvalidTransaction::Call.into(),
+            };
+
+            let nonce_hash = T::Hashing::hash(&nonce);
+            if UsedShengNonce::<T>::contains_key(nonce_hash) {
+                return InvalidTransaction::Stale.into();
+            }
+
+            if !Self::verify_sr25519(&signer_pubkey, &sig, &payload) {
+                return InvalidTransaction::BadProof.into();
+            }
+
+            // 中文注释:tag = (b"sfid-system-step2a", tag_seed) 保证同 nonce 在 pool 内只允许一笔。
+            ValidTransaction::with_tag_prefix("SfidSystemStep2a")
+                .priority(TransactionPriority::MAX / 2)
+                .and_provides((tag_seed, nonce))
+                .longevity(64)
+                .propagate(true)
+                .build()
+        }
+
+        fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
+            let (nonce, payload, signer_pubkey, sig, _tag_seed) =
+                Self::extract_unsigned_parts(call).ok_or(InvalidTransaction::Call)?;
+
+            let nonce_hash = T::Hashing::hash(&nonce);
+            if UsedShengNonce::<T>::contains_key(nonce_hash) {
+                return Err(InvalidTransaction::Stale.into());
+            }
+
+            if !Self::verify_sr25519(&signer_pubkey, &sig, &payload) {
+                return Err(InvalidTransaction::BadProof.into());
+            }
+
+            Ok(())
+        }
+    }
+
+    /// 中文注释:Step 2a unsigned extrinsic 拆解结果。
+    /// 字段:(nonce, payload_hash, 签名公钥, sig, tag_seed)。
+    pub type UnsignedParts = (ShengNonce, [u8; 32], [u8; 32], [u8; 64], &'static [u8]);
+
+    impl<T: Config> Pallet<T> {
+        /// 中文注释:把 unsigned extrinsic 拆出 (nonce, payload_hash, 签名公钥, sig, tag_seed)。
+        /// - tag_seed 用于 ValidateUnsigned 的 tx pool tag 区分(避免同 nonce 跨 extrinsic 复用)。
+        /// - 返回 None 表示不是本模块 4 个 unsigned extrinsic 之一(InvalidTransaction::Call)。
+        fn extract_unsigned_parts(call: &Call<T>) -> Option<UnsignedParts> {
+            match call {
+                Call::add_sheng_admin_backup {
+                    province,
+                    slot,
+                    new_pubkey,
+                    nonce,
+                    sig,
+                } => {
+                    let bounded = ProvinceBound::try_from(province.clone()).ok()?;
+                    let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
+                    let payload = Self::add_backup_payload(province, *slot, new_pubkey, nonce);
+                    Some((*nonce, payload, signer, *sig, b"add_backup"))
+                }
+                Call::remove_sheng_admin_backup {
+                    province,
+                    slot,
+                    nonce,
+                    sig,
+                } => {
+                    let bounded = ProvinceBound::try_from(province.clone()).ok()?;
+                    let signer = ShengAdmins::<T>::get(&bounded, Slot::Main)?;
+                    let payload = Self::remove_backup_payload(province, *slot, nonce);
+                    Some((*nonce, payload, signer, *sig, b"remove_backup"))
+                }
+                Call::activate_sheng_signing_pubkey {
+                    province,
+                    admin_pubkey,
+                    signing_pubkey,
+                    nonce,
+                    sig,
+                } => {
+                    let payload =
+                        Self::activate_payload(province, admin_pubkey, signing_pubkey, nonce);
+                    Some((*nonce, payload, *admin_pubkey, *sig, b"activate"))
+                }
+                Call::rotate_sheng_signing_pubkey {
+                    province,
+                    admin_pubkey,
+                    new_signing_pubkey,
+                    nonce,
+                    sig,
+                } => {
+                    let payload =
+                        Self::rotate_payload(province, admin_pubkey, new_signing_pubkey, nonce);
+                    Some((*nonce, payload, *admin_pubkey, *sig, b"rotate"))
+                }
+                _ => None,
+            }
+        }
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use frame_support::pallet_prelude::ConstU32;
-    use frame_support::{assert_noop, assert_ok, derive_impl, parameter_types, BoundedVec};
-    use frame_system as system;
-    use sp_runtime::traits::Hash;
-    use sp_runtime::{traits::IdentityLookup, BuildStorage};
-
-    type Block = frame_system::mocking::MockBlock<Test>;
-
-    #[frame_support::runtime]
-    mod runtime {
-        #[runtime::runtime]
-        #[runtime::derive(
-            RuntimeCall,
-            RuntimeEvent,
-            RuntimeError,
-            RuntimeOrigin,
-            RuntimeFreezeReason,
-            RuntimeHoldReason,
-            RuntimeSlashReason,
-            RuntimeLockId,
-            RuntimeTask,
-            RuntimeViewFunction
-        )]
-        pub struct Test;
-
-        #[runtime::pallet_index(0)]
-        pub type System = frame_system;
-        #[runtime::pallet_index(1)]
-        pub type SfidSystem = super;
-    }
-
-    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
-    impl system::Config for Test {
-        type Block = Block;
-        type AccountId = u64;
-        type Lookup = IdentityLookup<Self::AccountId>;
-    }
-
-    pub struct TestSfidVerifier;
-    impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
-        for TestSfidVerifier
-    {
-        fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
-            !credential.bind_nonce.is_empty() && credential.signature.as_slice() == b"bind-ok"
-        }
-    }
-
-    pub struct TestSfidVoteVerifier;
-    impl
-        SfidVoteVerifier<
-            u64,
-            <Test as frame_system::Config>::Hash,
-            NonceOf<Test>,
-            SignatureOf<Test>,
-        > for TestSfidVoteVerifier
-    {
-        fn verify_vote(
-            _account: &u64,
-            _binding_id: <Test as frame_system::Config>::Hash,
-            _proposal_id: u64,
-            _nonce: &NonceOf<Test>,
-            signature: &SignatureOf<Test>,
-        ) -> bool {
-            signature.as_slice() == b"vote-ok"
-        }
-    }
-
-    parameter_types! {
-        pub const MaxCredentialNonceLength: u32 = 64;
-        pub const MaxCredentialSignatureLength: u32 = 64;
-    }
-
-    impl Config for Test {
-        type RuntimeEvent = RuntimeEvent;
-        type MaxCredentialNonceLength = MaxCredentialNonceLength;
-        type MaxCredentialSignatureLength = MaxCredentialSignatureLength;
-        type SfidVerifier = TestSfidVerifier;
-        type SfidVoteVerifier = TestSfidVoteVerifier;
-        type OnSfidBound = ();
-        type WeightInfo = ();
-    }
-
-    fn new_test_ext() -> sp_io::TestExternalities {
-        let mut storage = frame_system::GenesisConfig::<Test>::default()
-            .build_storage()
-            .expect("frame system genesis storage should build");
-        GenesisConfig::<Test> {
-            sfid_main_account: Some(10),
-            sfid_backup_account_1: Some(11),
-            sfid_backup_account_2: Some(12),
-        }
-        .assimilate_storage(&mut storage)
-        .expect("sfid genesis should assimilate");
-        let mut ext = sp_io::TestExternalities::new(storage);
-        ext.execute_with(|| System::set_block_number(1));
-        ext
-    }
-
-    fn binding_id(seed: &[u8]) -> <Test as frame_system::Config>::Hash {
-        <Test as frame_system::Config>::Hashing::hash(seed)
-    }
-
-    fn nonce(input: &str) -> NonceOf<Test> {
-        input
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .expect("nonce should fit")
-    }
-
-    fn signature(input: &str) -> SignatureOf<Test> {
-        input
-            .as_bytes()
-            .to_vec()
-            .try_into()
-            .expect("signature should fit")
-    }
-
-    fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Test> {
-        BindCredential {
-            binding_id: binding_id(seed),
-            bind_nonce: nonce(bind_nonce),
-            signature: signature(sig),
-        }
-    }
-
-    #[test]
-    fn bind_succeeds_and_tracks_binding_id() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-a", "nonce-a", "bind-ok");
-
-            assert_ok!(SfidSystem::bind_sfid(
-                RuntimeOrigin::signed(1),
-                credential.clone()
-            ));
-
-            assert_eq!(
-                BindingIdToAccount::<Test>::get(credential.binding_id),
-                Some(1)
-            );
-            assert_eq!(
-                AccountToBindingId::<Test>::get(1),
-                Some(credential.binding_id)
-            );
-            assert_eq!(BoundCount::<Test>::get(), 1);
-        });
-    }
-
-    #[test]
-    fn bind_rejects_reused_bind_nonce() {
-        new_test_ext().execute_with(|| {
-            let first = bind_credential(b"binding-a", "same-nonce", "bind-ok");
-            let second = bind_credential(b"binding-b", "same-nonce", "bind-ok");
-
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), first));
-            assert_noop!(
-                SfidSystem::bind_sfid(RuntimeOrigin::signed(2), second),
-                Error::<Test>::BindNonceAlreadyUsed
-            );
-        });
-    }
-
-    #[test]
-    fn bind_allows_account_rebinding_to_new_binding_id() {
-        new_test_ext().execute_with(|| {
-            let first = bind_credential(b"binding-a", "nonce-a", "bind-ok");
-            let second = bind_credential(b"binding-b", "nonce-b", "bind-ok");
-
-            assert_ok!(SfidSystem::bind_sfid(
-                RuntimeOrigin::signed(1),
-                first.clone()
-            ));
-            assert_ok!(SfidSystem::bind_sfid(
-                RuntimeOrigin::signed(1),
-                second.clone()
-            ));
-
-            assert!(BindingIdToAccount::<Test>::get(first.binding_id).is_none());
-            assert_eq!(BindingIdToAccount::<Test>::get(second.binding_id), Some(1));
-            assert_eq!(AccountToBindingId::<Test>::get(1), Some(second.binding_id));
-            assert_eq!(BoundCount::<Test>::get(), 1);
-        });
-    }
-
-    #[test]
-    fn vote_credential_is_consumed_once_per_proposal_and_binding_id() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-vote", "bind-nonce", "bind-ok");
-            let binding_id = credential.binding_id;
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
-
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::is_eligible(&binding_id, &1));
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &binding_id,
-                &1,
-                7,
-                b"vote-nonce",
-                b"vote-ok"
-            ));
-            assert!(!<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &binding_id,
-                &1,
-                7,
-                b"vote-nonce",
-                b"vote-ok"
-            ));
-        });
-    }
-
-    #[test]
-    fn vote_nonce_is_scoped_per_proposal_and_cannot_replay_within_same_proposal() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-replay", "bind-nonce", "bind-ok");
-            let binding_id = credential.binding_id;
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
-
-            let proposal_a = 10u64;
-            let proposal_b = 20u64;
-
-            // 提案 A 投票成功
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &binding_id,
-                &1,
-                proposal_a,
-                b"same-nonce",
-                b"vote-ok"
-            ));
-
-            // 同一 nonce 对同一提案重放 → 失败
-            assert!(!<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &binding_id,
-                &1,
-                proposal_a,
-                b"same-nonce",
-                b"vote-ok"
-            ));
-
-            // 同一 nonce 对不同提案 → 成功（nonce 按 proposal_id 分区存储，
-            // 生产环境中签名包含 proposal_id 所以无法跨提案重放签名）
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &binding_id,
-                &1,
-                proposal_b,
-                b"same-nonce",
-                b"vote-ok"
-            ));
-        });
-    }
-
-    #[test]
-    fn rotate_sfid_keys_keeps_two_distinct_backups() {
-        new_test_ext().execute_with(|| {
-            assert_ok!(SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(11), 20));
-            assert_eq!(SfidMainAccount::<Test>::get(), Some(11));
-            assert_eq!(SfidBackupAccount1::<Test>::get(), Some(12));
-            assert_eq!(SfidBackupAccount2::<Test>::get(), Some(20));
-        });
-    }
-
-    #[test]
-    fn current_sfid_verify_pubkey_reads_main_account_encoding() {
-        new_test_ext().execute_with(|| {
-            assert!(SfidSystem::current_sfid_verify_pubkey().is_none());
-        });
-    }
-
-    // ========================================================================
-    // 以下为补充的错误路径和边界测试
-    // ========================================================================
-
-    #[test]
-    fn bind_rejects_empty_nonce() {
-        new_test_ext().execute_with(|| {
-            let empty_credential = BindCredential {
-                binding_id: binding_id(b"id-empty"),
-                bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
-                signature: signature("bind-ok"),
-            };
-            assert_noop!(
-                SfidSystem::bind_sfid(RuntimeOrigin::signed(1), empty_credential),
-                Error::<Test>::EmptyBindNonce
-            );
-        });
-    }
-
-    #[test]
-    fn bind_rejects_invalid_signature() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"id-badsig", "nonce-badsig", "bad-sig");
-            assert_noop!(
-                SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential),
-                Error::<Test>::InvalidSfidBindingSignature
-            );
-        });
-    }
-
-    #[test]
-    fn bind_rejects_binding_id_owned_by_another_account() {
-        new_test_ext().execute_with(|| {
-            let credential_1 = bind_credential(b"shared-id", "nonce-1", "bind-ok");
-            let credential_2 = bind_credential(b"shared-id", "nonce-2", "bind-ok");
-
-            assert_ok!(SfidSystem::bind_sfid(
-                RuntimeOrigin::signed(1),
-                credential_1
-            ));
-            assert_noop!(
-                SfidSystem::bind_sfid(RuntimeOrigin::signed(2), credential_2),
-                Error::<Test>::BindingIdAlreadyBoundToAnotherAccount
-            );
-        });
-    }
-
-    #[test]
-    fn bind_rejects_same_binding_id_already_bound() {
-        new_test_ext().execute_with(|| {
-            let credential_1 = bind_credential(b"dup-id", "nonce-dup-1", "bind-ok");
-            let credential_2 = bind_credential(b"dup-id", "nonce-dup-2", "bind-ok");
-
-            assert_ok!(SfidSystem::bind_sfid(
-                RuntimeOrigin::signed(1),
-                credential_1
-            ));
-            assert_noop!(
-                SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential_2),
-                Error::<Test>::SameBindingIdAlreadyBound
-            );
-        });
-    }
-
-    #[test]
-    fn unbind_by_main_account_succeeds() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-unbind", "nonce-unbind", "bind-ok");
-            let bid = credential.binding_id;
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
-            assert_eq!(BoundCount::<Test>::get(), 1);
-
-            // 主账户（10）代为解绑用户 1
-            assert_ok!(SfidSystem::unbind_sfid(RuntimeOrigin::signed(10), 1));
-            assert!(AccountToBindingId::<Test>::get(1).is_none());
-            assert!(BindingIdToAccount::<Test>::get(bid).is_none());
-            assert_eq!(BoundCount::<Test>::get(), 0);
-        });
-    }
-
-    // 注意：省级签名账户权限检查依赖 AccountId 编码为 32 字节（生产环境 AccountId32 满足）。
-    // 测试环境 AccountId = u64（8 字节），无法直接测试省级账户路径。
-    // 省级账户权限检查的正确性由 runtime 集成测试覆盖。
-
-    #[test]
-    fn unbind_rejects_non_admin() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-reject", "nonce-reject", "bind-ok");
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
-
-            // 普通用户（包括被绑定用户本人）不允许解绑
-            assert_noop!(
-                SfidSystem::unbind_sfid(RuntimeOrigin::signed(1), 1),
-                Error::<Test>::UnauthorizedSfidOperator
-            );
-            assert_noop!(
-                SfidSystem::unbind_sfid(RuntimeOrigin::signed(99), 1),
-                Error::<Test>::UnauthorizedSfidOperator
-            );
-        });
-    }
-
-    #[test]
-    fn unbind_rejects_unbound_target() {
-        new_test_ext().execute_with(|| {
-            // 主账户解绑一个未绑定的用户 → NotBound
-            assert_noop!(
-                SfidSystem::unbind_sfid(RuntimeOrigin::signed(10), 99),
-                Error::<Test>::NotBound
-            );
-        });
-    }
-
-    #[test]
-    fn rotate_rejects_main_account_as_operator() {
-        new_test_ext().execute_with(|| {
-            // main = 10, 主账户不能直接发起轮换
-            assert_noop!(
-                SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(10), 20),
-                Error::<Test>::UnauthorizedSfidOperator
-            );
-        });
-    }
-
-    #[test]
-    fn rotate_from_backup_2_succeeds() {
-        new_test_ext().execute_with(|| {
-            // backup_2 = 12 发起轮换
-            assert_ok!(SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(12), 20));
-            assert_eq!(SfidMainAccount::<Test>::get(), Some(12));
-            assert_eq!(SfidBackupAccount1::<Test>::get(), Some(11));
-            assert_eq!(SfidBackupAccount2::<Test>::get(), Some(20));
-        });
-    }
-
-    #[test]
-    fn rotate_rejects_duplicate_new_backup() {
-        new_test_ext().execute_with(|| {
-            // new_backup == main (10)
-            assert_noop!(
-                SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(11), 10),
-                Error::<Test>::DuplicateSfidKey
-            );
-            // new_backup == caller (11)
-            assert_noop!(
-                SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(11), 11),
-                Error::<Test>::DuplicateSfidKey
-            );
-            // new_backup == survivor (12)
-            assert_noop!(
-                SfidSystem::rotate_sfid_keys(RuntimeOrigin::signed(11), 12),
-                Error::<Test>::DuplicateSfidKey
-            );
-        });
-    }
-
-    // ========================================================================
-    // 省级签名密钥（ShengSigningPubkey）相关测试
-    // ========================================================================
-
-    #[test]
-    fn set_sheng_signing_pubkey_works() {
-        new_test_ext().execute_with(|| {
-            // 主账户 = 10
-            let pubkey = [7u8; 32];
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"\xe8\xbe\xbd\xe5\xae\x81".to_vec(), // 辽宁
-                Some(pubkey),
-            ));
-            let province: BoundedVec<u8, ConstU32<64>> =
-                b"\xe8\xbe\xbd\xe5\xae\x81".to_vec().try_into().unwrap();
-            assert_eq!(ShengSigningPubkey::<Test>::get(&province), Some(pubkey));
-            assert_eq!(
-                ProvinceBySigningPubkey::<Test>::get(&pubkey),
-                Some(province.clone())
-            );
-            // 同时可以用 helper 查
-            assert_eq!(
-                SfidSystem::sheng_signing_pubkey(b"\xe8\xbe\xbd\xe5\xae\x81"),
-                Some(pubkey)
-            );
-        });
-    }
-
-    #[test]
-    fn set_sheng_signing_pubkey_rejects_non_main() {
-        new_test_ext().execute_with(|| {
-            // backup_1 = 11，不是 main，拒绝
-            assert_noop!(
-                SfidSystem::set_sheng_signing_pubkey(
-                    RuntimeOrigin::signed(11),
-                    b"liaoning".to_vec(),
-                    Some([1u8; 32]),
-                ),
-                Error::<Test>::UnauthorizedSfidOperator
-            );
-        });
-    }
-
-    #[test]
-    fn set_sheng_signing_pubkey_rejects_duplicate_pubkey() {
-        new_test_ext().execute_with(|| {
-            let shared = [3u8; 32];
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"liaoning".to_vec(),
-                Some(shared),
-            ));
-            // 同一 pubkey 再写给另一个省 → 冲突
-            assert_noop!(
-                SfidSystem::set_sheng_signing_pubkey(
-                    RuntimeOrigin::signed(10),
-                    b"jilin".to_vec(),
-                    Some(shared),
-                ),
-                Error::<Test>::PubkeyAlreadyUsed
-            );
-        });
-    }
-
-    #[test]
-    fn set_sheng_signing_pubkey_none_clears() {
-        new_test_ext().execute_with(|| {
-            let pubkey = [5u8; 32];
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"liaoning".to_vec(),
-                Some(pubkey),
-            ));
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"liaoning".to_vec(),
-                None,
-            ));
-            let province: BoundedVec<u8, ConstU32<64>> = b"liaoning".to_vec().try_into().unwrap();
-            assert!(ShengSigningPubkey::<Test>::get(&province).is_none());
-            assert!(ProvinceBySigningPubkey::<Test>::get(&pubkey).is_none());
-        });
-    }
-
-    #[test]
-    fn set_sheng_signing_pubkey_overwrite_cleans_old_reverse_index() {
-        new_test_ext().execute_with(|| {
-            let old = [8u8; 32];
-            let new = [9u8; 32];
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"liaoning".to_vec(),
-                Some(old),
-            ));
-            assert_ok!(SfidSystem::set_sheng_signing_pubkey(
-                RuntimeOrigin::signed(10),
-                b"liaoning".to_vec(),
-                Some(new),
-            ));
-            // 旧 pubkey 的反向索引已清
-            assert!(ProvinceBySigningPubkey::<Test>::get(&old).is_none());
-            // 新 pubkey 的反向索引已写
-            let province: BoundedVec<u8, ConstU32<64>> = b"liaoning".to_vec().try_into().unwrap();
-            assert_eq!(ProvinceBySigningPubkey::<Test>::get(&new), Some(province));
-        });
-    }
-
-    #[test]
-    fn set_sheng_signing_pubkey_rejects_too_long_province() {
-        new_test_ext().execute_with(|| {
-            let too_long = vec![0x41u8; 65];
-            assert_noop!(
-                SfidSystem::set_sheng_signing_pubkey(
-                    RuntimeOrigin::signed(10),
-                    too_long,
-                    Some([1u8; 32]),
-                ),
-                Error::<Test>::ProvinceTooLong
-            );
-        });
-    }
-
-    #[test]
-    fn cleanup_vote_credentials_removes_nonces() {
-        new_test_ext().execute_with(|| {
-            let credential = bind_credential(b"binding-cleanup", "nonce-cleanup", "bind-ok");
-            let bid = credential.binding_id;
-            assert_ok!(SfidSystem::bind_sfid(RuntimeOrigin::signed(1), credential));
-
-            // 消费一个投票 nonce
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &bid,
-                &1,
-                42,
-                b"vote-nonce-c",
-                b"vote-ok"
-            ));
-
-            // 清理提案 42 的 nonce
-            <Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::cleanup_vote_credentials(42);
-
-            // 同一 nonce 应该可以再次使用（已被清理）
-            assert!(<Pallet<Test> as SfidEligibilityProvider<
-                u64,
-                <Test as frame_system::Config>::Hash,
-            >>::verify_and_consume_vote_credential(
-                &bid,
-                &1,
-                42,
-                b"vote-nonce-c",
-                b"vote-ok"
-            ));
-        });
-    }
-}
+mod tests;
