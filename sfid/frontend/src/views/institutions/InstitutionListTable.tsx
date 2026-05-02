@@ -16,9 +16,8 @@ import {
   CLEARING_BANK_ELIGIBLE_LABEL,
 } from '../../utils/clearingBankEligible';
 
-// 创建者角色中文映射
+// 创建者角色中文映射(ADR-008 起 KEY_ADMIN 已删)
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
-  KEY_ADMIN: '密钥管理员',
   SHENG_ADMIN: '省级管理员',
   SHI_ADMIN: '市级管理员',
 };
@@ -118,7 +117,7 @@ export const InstitutionListTable: React.FC<Props> = ({
           const roleLabel = r.created_by_role
             ? CREATED_BY_ROLE_LABEL[r.created_by_role] ?? r.created_by_role
             : '';
-          // 三态:姓名+角色 / 仅角色(内置 KeyAdmin 未设姓名) / 完全未知
+          // 三态:姓名+角色 / 仅角色(内置管理员未设姓名)/ 完全未知
           if (r.created_by_name) {
             return (
               <span>

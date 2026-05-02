@@ -42,15 +42,18 @@ export function parseSignedLoginPayload(
   };
 }
 
-export type KeyringSignedPayload = {
+export type SignedReceiptPayload = {
   challenge_id: string;
   signature: string;
 };
 
-export function parseKeyringSignedPayload(
+// 中文注释:解析"挑战签名回执"二维码 payload。
+// 既兼容 WUMIN_QR_V1 envelope(login_receipt),也兼容裸字符串(纯 hex 签名)。
+// 返回结构供调用方提交后端 verify/commit。
+export function parseSignedReceiptPayload(
   raw: string,
   fallbackChallengeId: string,
-): KeyringSignedPayload {
+): SignedReceiptPayload {
   const trimmed = raw.trim();
   if (!trimmed) {
     throw new Error('签名二维码内容为空');

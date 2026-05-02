@@ -9,7 +9,7 @@ import type { AdminAuth, CitizenBindChallengeResult, CitizenRow } from '../../ap
 import { citizenBind, citizenBindChallenge } from '../../api/client';
 import { ScanAccountModal } from '../../components/ScanAccountModal';
 import { startCameraScanner } from '../../utils/cameraScanner';
-import { parseKeyringSignedPayload } from '../../utils/parseSignedPayload';
+import { parseSignedReceiptPayload } from '../../utils/parseSignedPayload';
 
 type BindMode = 'bind_archive' | 'bind_pubkey';
 type BindStep =
@@ -125,7 +125,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     if (!raw.trim()) { message.error('签名二维码识别失败'); return; }
     setBindQr4ScanLoading(true);
     try {
-      const payload = parseKeyringSignedPayload(raw.trim(), bindChallenge.challenge_id);
+      const payload = parseSignedReceiptPayload(raw.trim(), bindChallenge.challenge_id);
       setBindSignature(payload.signature);
       setBindScannerActive(false);
       stopBindScanner();

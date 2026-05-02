@@ -87,7 +87,7 @@ export interface InstitutionListRow {
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
   created_by_name?: string | null;
-  /** 创建者角色:KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN;未命中 null */
+  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN(ADR-008 起 KEY_ADMIN 已删);未命中 null */
   created_by_role?: string | null;
 }
 
@@ -96,7 +96,7 @@ export interface InstitutionDetail {
   accounts: MultisigAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
-  /** 创建者角色:KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN */
+  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN(ADR-008 起 KEY_ADMIN 已删) */
   created_by_role?: string | null;
 }
 
@@ -317,7 +317,7 @@ export async function listAccounts(
 
 /**
  * 任务卡 6:按 sfid 工具权威市清单对账公安局机构(增/删/改名)。
- * province 省略时 KeyAdmin 会对 43 省全量对账,其他角色按自己 scope 限制。
+ * province 由 SHENG_ADMIN/SHI_ADMIN 各自 scope 限制(ADR-008 起 KEY_ADMIN 已删,无全国全量对账分支)。
  * 进入公安局省详情页前调用,确保数据跟市清单同步。
  */
 export async function reconcilePublicSecurity(
