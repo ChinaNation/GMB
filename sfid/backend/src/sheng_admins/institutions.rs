@@ -489,17 +489,19 @@ pub(crate) async fn register_cpms(
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "blind hex decode failed"),
     };
-    let blind_anon_sig =
-        match crate::institutions::anon_cert::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
-            Ok(v) => v,
-            Err(e) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    &format!("blind sign failed: {e}"),
-                )
-            }
-        };
+    let blind_anon_sig = match crate::institutions::anon_cert::rsa_blind::blind_sign(
+        &blind_anon_req_bytes,
+        &province_code,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                &format!("blind sign failed: {e}"),
+            )
+        }
+    };
 
     // 构造 QR3
     let qr3 = serde_json::json!({
@@ -1102,7 +1104,7 @@ pub(crate) async fn list_cpms_keys(
             Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
         }
     } else {
-        // KEY_ADMIN：遍历所有省
+        // 中文注释:无省域 scope 的历史兜底路径;正常 SHENG/SHI 登录应带省域。
         let read_result = state
             .sharded_store
             .for_each_province(|_prov, shard| {

@@ -78,7 +78,6 @@ pub(crate) struct StoreShard {
 pub(crate) struct GlobalShard {
     // 中文注释:chain_keyring_state / keyring_rotate_challenges 已随 ADR-008
     // (KEY_ADMIN 整角色废止)+ phase23e 子卡(2026-05-01)删除。
-
     /// 全局管理员索引:ShengAdmin 本体(含 encrypted_signing_privkey)。
     /// ShiAdmin 不进这里,存在对应省的 `StoreShard.local_admins`。
     pub(crate) global_admins: HashMap<String, AdminUser>,

@@ -298,7 +298,11 @@ mod tests {
         let tx = TxHash::from_h256(h);
         assert_eq!(tx.hex.len(), 66);
         assert!(tx.hex.starts_with("0x"));
-        assert!(tx.hex.chars().skip(2).all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(tx
+            .hex
+            .chars()
+            .skip(2)
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
     }
 
     #[test]

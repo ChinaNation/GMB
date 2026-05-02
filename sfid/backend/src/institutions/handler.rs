@@ -1606,7 +1606,7 @@ pub(crate) async fn upload_document(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 校验机构存在 + scope 权限(KEY_ADMIN 全局,SHENG 本省,SHI 本市)
+    // 校验机构存在 + scope 权限(SHENG 本省,SHI 本市)。
     {
         let store = match store_read_or_500(&state) {
             Ok(v) => v,
