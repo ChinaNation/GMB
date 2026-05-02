@@ -1,20 +1,18 @@
 //! 中文注释:管理员角色 / 状态 / 实体 + Operator 列表与维护接口 DTO。
-//! AdminRole::KeyAdmin 在 ADR-008 决议下进入 Step 1 phase23e 子卡删除,本文件保留
-//! 是为了 phase23a/b/c/d 期间所有 caller 仍可正常 build。
+//!
+//! ADR-008(2026-05-01):KEY_ADMIN 整角色废止,只剩 ShengAdmin / ShiAdmin。
+//! 省管理员 3-tier 自治(main / backup_1 / backup_2),不再有"全国超级管理员"。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-// 中文注释:三种管理员角色(原命名铁律,见 feedback_sfid_three_roles_naming.md)
-//   - KeyAdmin  → 密钥管理员(全国 3 人)      目录 key-admins/  ★ ADR-008 决议:Step 1 全删
+// 中文注释:两种管理员角色(ADR-008 后)
 //   - ShengAdmin → 省级管理员(每省 3 人 main/backup_1/backup_2,自治) 目录 sheng_admins/
-//   - ShiAdmin   → 市级管理员(每市 N 人)      目录 shi_admins/
-// 序列化为 KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
-// KeyAdmin 仅在 Step 1 过渡期保留,Phase 2 删除。
+//   - ShiAdmin   → 市级管理员(每市 N 人)                              目录 shi_admins/
+// 序列化为 SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {
-    KeyAdmin,
     ShengAdmin,
     ShiAdmin,
 }
@@ -43,9 +41,9 @@ pub(crate) struct AdminUser {
     #[serde(default)]
     pub(crate) city: String,
     /// 中文注释:仅 ShengAdmin 使用。AES-256-GCM 加密的省签名私钥种子(32 字节明文)。
-    /// 格式:base64(nonce_12B || ciphertext || tag_16B)
-    /// Wrap key:HKDF-SHA256(SfidMainSeed, salt, info),见 key_admins::sheng_signer_cache。
-    /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 引入。
+    /// ADR-008 后 3-tier 模型下,seed 持久化已搬到 `store_shards/sheng_signer.rs`
+    /// (按 (province, admin_pubkey) 二级文件路径加密落盘),本字段在迁移完成后
+    /// 仅作为 legacy 兼容窗口保留,phase23e 之后由 sharded_store 接管。
     #[serde(default)]
     pub(crate) encrypted_signing_privkey: Option<String>,
     /// 中文注释:仅 ShengAdmin 使用。对应签名公钥 hex(便于对账/UI 显示)。
@@ -109,7 +107,6 @@ pub(crate) struct CreateOperatorInput {
     /// ShiAdmin 所属的市，必填，且必须属于 created_by 对应机构管理员的省份（不可为省辖市）
     pub(crate) city: String,
     /// 可选：指定该 operator 归属的机构管理员 pubkey。
-    /// 仅 KeyAdmin 可指定，且必须是已存在的 ShengAdmin。
     /// ShengAdmin 调用时若指定则必须等于自己 pubkey，否则 403。
     /// 不指定则默认为调用者自身。
     #[serde(default)]

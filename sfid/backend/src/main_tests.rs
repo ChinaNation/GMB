@@ -1,3 +1,19 @@
+// 中文注释:ADR-008 Phase 23e(2026-05-01)整体重写。
+//
+// 历史 main_tests.rs(966 行)包含大量 KEY_ADMIN keyring rotate / chain_keyring
+// / signing_seed_hex / known_key_seeds 测试,这些路径都已随 phase23e 删除。
+// 本文件保留:
+//   1. 三省 3-tier 签名 keypair 隔离测试(`sheng_signing_3tier_isolation`,
+//      ADR-008 决议核心保证)
+//   2. SHENG_ADMIN / SHI_ADMIN QR 登录、签名验签、admin scope、SFID/Bind 工具
+//      函数等与 KEY_ADMIN 解耦的旧测试
+//
+// 删除的测试:
+//   - keyring_rotate_*(整个 rotate 流程)
+//   - sync_key_admin_users_keeps_monotonic_ids
+//   - validate_active_main_signer_with_keyring_rejects_runtime_mismatch
+//   - require_admin_any_should_allow_all_three_roles 中的 KeyAdmin session 注入
+
 use super::*;
 use crate::login::AdminSession;
 use axum::{
@@ -13,18 +29,6 @@ fn hex_seed(byte: u8) -> String {
     format!("{byte:02x}").repeat(32)
 }
 
-fn rotate_commit_message(challenge_text: &str, new_backup_pubkey: &str) -> String {
-    let trimmed = new_backup_pubkey.trim();
-    let no_prefix = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed);
-    format!(
-        "{challenge_text}|phase=commit|new_backup=0x{}",
-        no_prefix.to_ascii_lowercase()
-    )
-}
-
 fn build_test_state() -> AppState {
     std::env::set_var("SFID_CHAIN_TOKEN", "test-chain-token");
     std::env::set_var(
@@ -32,37 +36,15 @@ fn build_test_state() -> AppState {
         "test-chain-signing-secret-at-least-32",
     );
     std::env::set_var("SFID_PUBLIC_SEARCH_TOKEN", "test-public-search-token");
-    let main_seed = hex_seed(0x11);
-    let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.as_str());
-    let public_key_hex = format!("0x{}", hex::encode(main_key.public().0));
-    let mut known_key_seeds = HashMap::new();
-    known_key_seeds.insert(
-        public_key_hex.clone(),
-        SensitiveSeed::from(main_seed.clone()),
-    );
+    // ADR-008 Phase 23e:测试态 SFID main signer 由 env 派生,与 AppState 解耦。
+    std::env::set_var("SFID_SIGNING_SEED_HEX", hex_seed(0x11));
     let state = AppState {
         store: StoreHandle::in_memory(),
-        signing_seed_hex: Arc::new(RwLock::new(SensitiveSeed::from(main_seed))),
-        known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
         rate_limit_redis: Arc::new(
             redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
         ),
         cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
-        key_id: "sfid-master-v1".to_string(),
-        key_version: "v1".to_string(),
-        key_alg: "sr25519".to_string(),
-        public_key_hex: Arc::new(RwLock::new(public_key_hex)),
-        sheng_signer_cache: {
-            let seed_bytes = hex::decode(hex_seed(0x11)).expect("test hex seed");
-            let mut seed_arr = [0u8; 32];
-            seed_arr.copy_from_slice(&seed_bytes);
-            Arc::new(
-                key_admins::sheng_signer_cache::ShengSignerCache::new_from_seed(&mut seed_arr)
-                    .expect("test sheng signer cache init"),
-            )
-        },
-        // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
-        // 测试态使用 mock backend,避免依赖真实 Postgres。
+        sheng_signer_cache: Arc::new(sheng_admins::signing_cache::ShengSigningCache::new()),
         sharded_store: {
             #[cfg(test)]
             {
@@ -79,8 +61,6 @@ fn build_test_state() -> AppState {
         },
     };
     seed_sheng_admins(&state);
-    key_admins::seed_chain_keyring(&state);
-    key_admins::seed_key_admins(&state);
     state
 }
 
@@ -103,397 +83,12 @@ fn qr_login_sign_message(challenge_payload: &str, pubkey_hex: &str) -> String {
 
 fn sign_with_test_sr25519(seed_byte: u8, message: &str) -> (String, String) {
     let seed = hex_seed(seed_byte);
-    let keypair = key_admins::chain_keyring::load_signing_key_from_seed(seed.as_str());
+    let keypair = crypto::sr25519::load_signing_key_from_seed(seed.as_str());
     let sig = keypair.sign(message.as_bytes());
     (
         format!("0x{}", hex::encode(keypair.public().0)),
         format!("0x{}", hex::encode(sig.0)),
     )
-}
-
-fn sign_rotation_challenge(seed_hex: &str, message: &str) -> String {
-    let keypair = key_admins::chain_keyring::load_signing_key_from_seed(seed_hex);
-    let sig = keypair.sign(message.as_bytes());
-    format!("0x{}", hex::encode(sig.0))
-}
-
-fn setup_rotation_test_state() -> (AppState, HeaderMap, String, String) {
-    let state = build_test_state();
-    let main_seed = hex_seed(0x21);
-    let backup_a_seed = hex_seed(0x22);
-    let backup_b_seed = hex_seed(0x23);
-    let new_backup_seed = hex_seed(0x24);
-    let main_pubkey = key_admins::chain_keyring::derive_pubkey_hex_from_seed(main_seed.as_str());
-    let backup_a_pubkey =
-        key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_a_seed.as_str());
-    let backup_b_pubkey =
-        key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_b_seed.as_str());
-
-    {
-        let mut seed_guard = state
-            .signing_seed_hex
-            .write()
-            .expect("signing seed write lock poisoned");
-        *seed_guard = SensitiveSeed::from(main_seed.clone());
-    }
-    {
-        let mut pubkey_guard = state
-            .public_key_hex
-            .write()
-            .expect("public key write lock poisoned");
-        *pubkey_guard = main_pubkey.clone();
-    }
-    {
-        let mut known = state
-            .known_key_seeds
-            .write()
-            .expect("known seeds write lock poisoned");
-        known.insert(main_pubkey.clone(), SensitiveSeed::from(main_seed.clone()));
-        known.insert(
-            backup_a_pubkey.clone(),
-            SensitiveSeed::from(backup_a_seed.clone()),
-        );
-        known.insert(
-            backup_b_pubkey.clone(),
-            SensitiveSeed::from(backup_b_seed.clone()),
-        );
-        known.insert(
-            key_admins::chain_keyring::derive_pubkey_hex_from_seed(new_backup_seed.as_str()),
-            SensitiveSeed::from(new_backup_seed.clone()),
-        );
-    }
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        store.chain_keyring_state = Some(ChainKeyringState::new(
-            main_pubkey,
-            backup_a_pubkey.clone(),
-            backup_b_pubkey,
-        ));
-        key_admins::sync_key_admin_users(&mut store);
-        let session = AdminSession {
-            token: "tok-rotate".to_string(),
-            admin_pubkey: backup_a_pubkey.clone(),
-            role: AdminRole::KeyAdmin,
-            expire_at: Utc::now() + Duration::hours(1),
-            last_active_at: Utc::now(),
-        };
-        store
-            .admin_sessions
-            .insert("tok-rotate".to_string(), session.clone());
-        // Phase 2: admin_auth 从 sharded_store 读 session,测试必须同步写入。
-        state
-            .sharded_store
-            .write_global_sync(|g| {
-                g.admin_sessions.insert("tok-rotate".to_string(), session);
-            })
-            .expect("write_global_sync");
-    }
-
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "authorization",
-        HeaderValue::from_str("Bearer tok-rotate").expect("header value"),
-    );
-    (state, headers, backup_a_seed, new_backup_seed)
-}
-
-// 说明：原 `setup_bind_confirm_test_state` 辅助函数及对应的 `bind_confirm_*` 测试
-// 依赖已废弃的 `citizens::binding::admin_bind_confirm` + `AdminBindInput` + 基于
-// `archive_index + qr_id` 的旧绑定流程。当前绑定流程已重构为 `citizen_bind`
-// （challenge + signature 模式），整个旧测试路径不再可复用，已整体删除。
-// 新流程的测试请在 `citizens::binding::citizen_bind` 的调用侧按新入参重写。
-
-#[tokio::test]
-async fn keyring_rotate_challenge_rejects_main_initiator() {
-    let (state, headers, _, _) = setup_rotation_test_state();
-    let main_pubkey = state
-        .public_key_hex
-        .read()
-        .expect("public key read lock poisoned")
-        .clone();
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        let session = store
-            .admin_sessions
-            .get_mut("tok-rotate")
-            .expect("rotation session should exist");
-        session.admin_pubkey = main_pubkey.clone();
-        let updated = session.clone();
-        state
-            .sharded_store
-            .write_global_sync(|g| {
-                g.admin_sessions.insert("tok-rotate".to_string(), updated);
-            })
-            .expect("write_global_sync");
-    }
-
-    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
-        State(state),
-        headers,
-        Json(KeyringRotateChallengeInput {
-            initiator_pubkey: main_pubkey,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(challenge_resp.status(), StatusCode::FORBIDDEN);
-    let body = parse_json(challenge_resp).await;
-    assert_eq!(
-        body["message"].as_str(),
-        Some("rotation initiator must be backup key")
-    );
-}
-
-// 说明：原 `bind_confirm_requires_pre_generated_sfid` 与
-// `bind_confirm_consumes_pre_generated_sfid_without_fallback` 两个测试已整体删除。
-// 原因：对应的 `admin_bind_confirm(AdminBindInput { account_pubkey, archive_index, qr_id })`
-// 接口已被 `citizen_bind(CitizenBindInput { user_address, challenge_id, signature })`
-// 新流程替代，旧测试的业务前提与 API 形态均已不存在，无法简单修补。
-// 新流程的对应测试请在业务路径稳定后按 challenge + signature 模式补回。
-
-#[tokio::test]
-async fn keyring_rotate_commit_requires_prior_verify() {
-    let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
-    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateChallengeInput {
-            initiator_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                backup_a_seed.as_str(),
-            ),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(challenge_resp.status(), StatusCode::OK);
-    let challenge_json = parse_json(challenge_resp).await;
-    let challenge_id = challenge_json["data"]["challenge_id"]
-        .as_str()
-        .expect("challenge_id")
-        .to_string();
-    let challenge_text = challenge_json["data"]["challenge_text"]
-        .as_str()
-        .expect("challenge_text")
-        .to_string();
-
-    let commit_resp = key_admins::admin_chain_keyring_rotate_commit(
-        State(state),
-        headers,
-        Json(KeyringRotateCommitInput {
-            challenge_id,
-            signature: sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str()),
-            new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                new_backup_seed.as_str(),
-            ),
-            new_backup_name: None,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(commit_resp.status(), StatusCode::CONFLICT);
-    let body = parse_json(commit_resp).await;
-    assert_eq!(
-        body["message"].as_str(),
-        Some("rotation challenge not verified")
-    );
-}
-
-#[tokio::test]
-async fn keyring_rotate_commit_reports_chain_submit_failure_and_keeps_local_state_unchanged() {
-    let previous_ws_url = std::env::var("SFID_CHAIN_WS_URL").ok();
-    std::env::remove_var("SFID_CHAIN_WS_URL");
-    let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
-    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateChallengeInput {
-            initiator_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                backup_a_seed.as_str(),
-            ),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(challenge_resp.status(), StatusCode::OK);
-    let challenge_json = parse_json(challenge_resp).await;
-    let challenge_id = challenge_json["data"]["challenge_id"]
-        .as_str()
-        .expect("challenge_id")
-        .to_string();
-    let challenge_text = challenge_json["data"]["challenge_text"]
-        .as_str()
-        .expect("challenge_text")
-        .to_string();
-    let verify_signature = sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str());
-
-    let verify_resp = key_admins::admin_chain_keyring_rotate_verify(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateVerifyInput {
-            challenge_id: challenge_id.clone(),
-            signature: verify_signature,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(verify_resp.status(), StatusCode::OK);
-
-    let new_backup_pubkey =
-        key_admins::chain_keyring::derive_pubkey_hex_from_seed(new_backup_seed.as_str());
-    let backup_a_pubkey =
-        key_admins::chain_keyring::derive_pubkey_hex_from_seed(backup_a_seed.as_str());
-    let commit_message = rotate_commit_message(challenge_text.as_str(), new_backup_pubkey.as_str());
-    let commit_signature = sign_rotation_challenge(backup_a_seed.as_str(), commit_message.as_str());
-    let commit_resp = key_admins::admin_chain_keyring_rotate_commit(
-        State(state.clone()),
-        headers,
-        Json(KeyringRotateCommitInput {
-            challenge_id,
-            signature: commit_signature,
-            new_backup_pubkey: new_backup_pubkey.clone(),
-            new_backup_name: None,
-        }),
-    )
-    .await
-    .into_response();
-
-    if let Some(value) = previous_ws_url {
-        std::env::set_var("SFID_CHAIN_WS_URL", value);
-    }
-
-    assert_eq!(commit_resp.status(), StatusCode::OK);
-    let body = parse_json(commit_resp).await;
-    assert_eq!(body["data"]["chain_submit_ok"].as_bool(), Some(false));
-    assert!(body["data"]["block_number"].is_null());
-    assert_eq!(
-        body["data"]["main_pubkey"].as_str(),
-        body["data"]["old_main_pubkey"].as_str()
-    );
-    assert_ne!(
-        body["data"]["main_pubkey"].as_str(),
-        Some(backup_a_pubkey.as_str())
-    );
-    let persisted_main = {
-        let store = state.store.read().expect("store read lock poisoned");
-        store
-            .chain_keyring_state
-            .as_ref()
-            .expect("keyring state")
-            .main_pubkey
-            .clone()
-    };
-    assert_eq!(
-        body["data"]["main_pubkey"].as_str(),
-        Some(persisted_main.as_str())
-    );
-}
-
-#[tokio::test]
-async fn keyring_rotate_verify_rejects_expired_challenge() {
-    let (state, headers, backup_a_seed, _) = setup_rotation_test_state();
-    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateChallengeInput {
-            initiator_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                backup_a_seed.as_str(),
-            ),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(challenge_resp.status(), StatusCode::OK);
-    let challenge_json = parse_json(challenge_resp).await;
-    let challenge_id = challenge_json["data"]["challenge_id"]
-        .as_str()
-        .expect("challenge_id")
-        .to_string();
-    let challenge_text = challenge_json["data"]["challenge_text"]
-        .as_str()
-        .expect("challenge_text")
-        .to_string();
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        let entry = store
-            .keyring_rotate_challenges
-            .get_mut(&challenge_id)
-            .expect("challenge exists");
-        entry.expire_at = Utc::now() - Duration::minutes(3);
-    }
-
-    let verify_resp = key_admins::admin_chain_keyring_rotate_verify(
-        State(state),
-        headers,
-        Json(KeyringRotateVerifyInput {
-            challenge_id,
-            signature: sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str()),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(verify_resp.status(), StatusCode::UNAUTHORIZED);
-    let body = parse_json(verify_resp).await;
-    assert_eq!(body["message"].as_str(), Some("rotation challenge expired"));
-}
-
-#[tokio::test]
-async fn keyring_rotate_commit_rejects_reused_verify_signature() {
-    let (state, headers, backup_a_seed, new_backup_seed) = setup_rotation_test_state();
-    let challenge_resp = key_admins::admin_chain_keyring_rotate_challenge(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateChallengeInput {
-            initiator_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                backup_a_seed.as_str(),
-            ),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(challenge_resp.status(), StatusCode::OK);
-    let challenge_json = parse_json(challenge_resp).await;
-    let challenge_id = challenge_json["data"]["challenge_id"]
-        .as_str()
-        .expect("challenge_id")
-        .to_string();
-    let challenge_text = challenge_json["data"]["challenge_text"]
-        .as_str()
-        .expect("challenge_text")
-        .to_string();
-
-    let verify_signature = sign_rotation_challenge(backup_a_seed.as_str(), challenge_text.as_str());
-    let verify_resp = key_admins::admin_chain_keyring_rotate_verify(
-        State(state.clone()),
-        headers.clone(),
-        Json(KeyringRotateVerifyInput {
-            challenge_id: challenge_id.clone(),
-            signature: verify_signature.clone(),
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(verify_resp.status(), StatusCode::OK);
-
-    let commit_resp = key_admins::admin_chain_keyring_rotate_commit(
-        State(state),
-        headers,
-        Json(KeyringRotateCommitInput {
-            challenge_id,
-            signature: verify_signature,
-            new_backup_pubkey: key_admins::chain_keyring::derive_pubkey_hex_from_seed(
-                new_backup_seed.as_str(),
-            ),
-            new_backup_name: None,
-        }),
-    )
-    .await
-    .into_response();
-    assert_eq!(commit_resp.status(), StatusCode::UNAUTHORIZED);
-    let body = parse_json(commit_resp).await;
-    assert_eq!(
-        body["message"].as_str(),
-        Some("rotation signature verify failed")
-    );
 }
 
 #[tokio::test]
@@ -747,23 +342,17 @@ async fn qr_login_rejects_signer_admin_mismatch() {
 }
 
 #[tokio::test]
-async fn require_admin_any_should_allow_all_three_roles() {
+async fn require_admin_any_should_allow_remaining_two_roles() {
+    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,本测试仅覆盖 ShengAdmin / ShiAdmin。
     let state = build_test_state();
-    let (institution_pubkey, key_pubkey) = {
+    let institution_pubkey = {
         let store = state.store.read().expect("store read lock poisoned");
-        let institution_pubkey = store
+        store
             .admin_users_by_pubkey
             .values()
             .find(|u| u.role == AdminRole::ShengAdmin)
             .map(|u| u.admin_pubkey.clone())
-            .expect("institution admin exists");
-        let key_pubkey = store
-            .admin_users_by_pubkey
-            .values()
-            .find(|u| u.role == AdminRole::KeyAdmin)
-            .map(|u| u.admin_pubkey.clone())
-            .expect("key admin exists");
-        (institution_pubkey, key_pubkey)
+            .expect("institution admin exists")
     };
     let system_pubkey = "0xTEST_SHI_ADMIN".to_string();
     {
@@ -793,7 +382,6 @@ async fn require_admin_any_should_allow_all_three_roles() {
                 AdminRole::ShengAdmin,
             ),
             ("tok-system", system_pubkey.clone(), AdminRole::ShiAdmin),
-            ("tok-key", key_pubkey.clone(), AdminRole::KeyAdmin),
         ];
         for (tok, pubkey, role) in &sessions {
             let session = AdminSession {
@@ -815,7 +403,7 @@ async fn require_admin_any_should_allow_all_three_roles() {
         }
     }
 
-    for token in ["tok-institution", "tok-system", "tok-key"] {
+    for token in ["tok-institution", "tok-system"] {
         let mut headers = HeaderMap::new();
         headers.insert(
             "authorization",
@@ -897,70 +485,79 @@ fn validate_bind_callback_url_rejects_localhost_and_private_literals() {
     assert!(private_ip.is_err());
 }
 
-// 中文注释:chain_signature_payload_and_hash_are_deterministic / chain_request_requires_replay_headers
-// / chain_request_rejects_duplicate_nonce 三个测试配套于已下架的 chain HMAC 鉴权(prepare_chain_request +
-// /api/v1/chain/* dead routes),2026-05-01 一并下架。chain pull 端点的安全模型不依赖
-// HMAC,无需替代测试。
-
-// 中文注释:legacy chain_bind_result_reuses_persisted_runtime_credential 测试已删除
-// (依赖 bindings_by_pubkey + get_bind_result,均已清除)。
-
-#[test]
-fn sync_key_admin_users_keeps_monotonic_ids() {
-    let state = build_test_state();
-    let replacement_seed = hex_seed(0x77);
-    let replacement_pubkey =
-        key_admins::chain_keyring::derive_pubkey_hex_from_seed(replacement_seed.as_str());
-    let old_max_id;
-    {
-        let mut store = state.store.write().expect("store write lock poisoned");
-        old_max_id = store
-            .admin_users_by_pubkey
-            .values()
-            .map(|u| u.id)
-            .max()
-            .expect("at least one admin user");
-        store.next_admin_user_id = old_max_id + 1;
-
-        let mut keyring = store
-            .chain_keyring_state
-            .as_ref()
-            .cloned()
-            .expect("keyring exists");
-        let removed_pubkey = keyring.backup_b_pubkey.clone();
-        store.admin_users_by_pubkey.remove(&removed_pubkey);
-        keyring.backup_b_pubkey = replacement_pubkey.clone();
-        store.chain_keyring_state = Some(keyring);
-        key_admins::sync_key_admin_users(&mut store);
-
-        let inserted = store
-            .admin_users_by_pubkey
-            .get(&replacement_pubkey)
-            .expect("replacement key admin inserted");
-        assert_eq!(inserted.id, old_max_id + 1);
-        assert_eq!(store.next_admin_user_id, old_max_id + 2);
-    }
-}
-
-#[test]
-fn validate_active_main_signer_with_keyring_rejects_runtime_mismatch() {
-    let (state, _, _, _) = setup_rotation_test_state();
-
-    {
-        let mut pubkey_guard = state
-            .public_key_hex
-            .write()
-            .expect("public key write lock poisoned");
-        *pubkey_guard = "0xdeadbeef".to_string();
-    }
-    let err = key_admins::validate_active_main_signer_with_keyring(&state)
-        .expect_err("mismatched runtime signer should be rejected");
-    assert!(err.contains("active signer state"));
-}
-
 #[test]
 fn sensitive_seed_debug_remains_redacted() {
     let raw_seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     let seed = SensitiveSeed::from(raw_seed);
     assert_eq!(format!("{seed:?}"), "SensitiveSeed(***)");
+}
+
+/// 中文注释:ADR-008 Phase 23e 核心保证 —— 三省 / 三 slot 各自独立 keypair。
+///
+/// 模拟三个不同 (province, admin_pubkey) 进 cache,断言:
+///   1. 各自从 cache 取出的 Pair 公钥唯一
+///   2. `any_for_province` 返回的是本省内某一 slot
+///   3. `unload_province` 清掉本省所有 slot,不影响其他省
+#[test]
+fn sheng_signing_3tier_isolation() {
+    let cache = sheng_admins::signing_cache::ShengSigningCache::new();
+
+    // 安徽省 main / backup_1 / backup_2(三 slot 模拟)
+    let ah_main_seed = hex_seed(0x41);
+    let ah_b1_seed = hex_seed(0x42);
+    let ah_b2_seed = hex_seed(0x43);
+    let ah_main_pair = crypto::sr25519::load_signing_key_from_seed(&ah_main_seed);
+    let ah_b1_pair = crypto::sr25519::load_signing_key_from_seed(&ah_b1_seed);
+    let ah_b2_pair = crypto::sr25519::load_signing_key_from_seed(&ah_b2_seed);
+    let ah_main_pk: [u8; 32] = ah_main_pair.public().0;
+    let ah_b1_pk: [u8; 32] = ah_b1_pair.public().0;
+    let ah_b2_pk: [u8; 32] = ah_b2_pair.public().0;
+
+    cache.load("安徽省".to_string(), ah_main_pk, ah_main_pair.clone());
+    cache.load("安徽省".to_string(), ah_b1_pk, ah_b1_pair.clone());
+    cache.load("安徽省".to_string(), ah_b2_pk, ah_b2_pair.clone());
+
+    // 广东省 main(独立省)
+    let gd_seed = hex_seed(0x51);
+    let gd_pair = crypto::sr25519::load_signing_key_from_seed(&gd_seed);
+    let gd_pk: [u8; 32] = gd_pair.public().0;
+    cache.load("广东省".to_string(), gd_pk, gd_pair.clone());
+
+    // 1. 三 slot 公钥彼此不等
+    assert_ne!(ah_main_pk, ah_b1_pk);
+    assert_ne!(ah_b1_pk, ah_b2_pk);
+    assert_ne!(ah_main_pk, ah_b2_pk);
+    assert_ne!(ah_main_pk, gd_pk);
+
+    // 2. 精确取(province, admin_pubkey)各自命中
+    let got_main = cache.get("安徽省", &ah_main_pk).expect("ah main present");
+    let got_b1 = cache.get("安徽省", &ah_b1_pk).expect("ah b1 present");
+    let got_b2 = cache.get("安徽省", &ah_b2_pk).expect("ah b2 present");
+    assert_eq!(got_main.public().0, ah_main_pk);
+    assert_eq!(got_b1.public().0, ah_b1_pk);
+    assert_eq!(got_b2.public().0, ah_b2_pk);
+
+    // 3. 跨省隔离:用安徽 admin pubkey 在广东省 cache 里取不到
+    assert!(cache.get("广东省", &ah_main_pk).is_none());
+
+    // 4. any_for_province 返回的是本省任一 slot
+    let any_ah = cache.any_for_province("安徽省").expect("ah any present");
+    let any_pk = any_ah.public().0;
+    assert!(
+        any_pk == ah_main_pk || any_pk == ah_b1_pk || any_pk == ah_b2_pk,
+        "any_for_province must return one of the loaded ah slots"
+    );
+
+    // 5. active_count 反映总 slot 数
+    assert_eq!(cache.active_count(), 4);
+
+    // 6. 驱逐安徽省 → 安徽 3 slot 全清,广东省不受影响
+    cache.unload_province("安徽省");
+    assert!(cache.get("安徽省", &ah_main_pk).is_none());
+    assert!(cache.get("安徽省", &ah_b1_pk).is_none());
+    assert!(cache.get("安徽省", &ah_b2_pk).is_none());
+    assert!(cache.any_for_province("安徽省").is_none());
+    let still_gd = cache.get("广东省", &gd_pk).expect("gd still present");
+    assert_eq!(still_gd.public().0, gd_pk);
+    assert_eq!(cache.active_count(), 1);
 }

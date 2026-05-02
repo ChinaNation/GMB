@@ -20,12 +20,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::institutions::{MultisigAccount, MultisigInstitution};
-use crate::key_admins::chain_keyring::ChainKeyringState;
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::models::{
     AdminUser, AuditLogEntry, BindCallbackJob, ChainRequestReceipt, CitizenBindChallenge,
-    CitizenRecord, CitizenStatus, CpmsSiteKeys, ImportedArchive, KeyringRotateChallenge,
-    PendingBindScan, RewardStateRecord, ServiceMetrics, VoteVerifyCacheEntry,
+    CitizenRecord, CitizenStatus, CpmsSiteKeys, ImportedArchive, PendingBindScan,
+    RewardStateRecord, ServiceMetrics, VoteVerifyCacheEntry,
 };
 
 /// 省级分片:按 province 名切分的业务数据。
@@ -35,7 +34,7 @@ pub(crate) struct StoreShard {
     /// 分片 key(省名)
     pub(crate) province: String,
 
-    // ── 本省管理员(仅 ShiAdmin;ShengAdmin/KeyAdmin 本体在 GlobalShard)──
+    // ── 本省管理员(仅 ShiAdmin;ShengAdmin 本体在 GlobalShard。ADR-008 后无 KeyAdmin)──
     pub(crate) local_admins: HashMap<String, AdminUser>,
 
     // ── 本省机构(两层模型)──
@@ -77,11 +76,10 @@ pub(crate) struct StoreShard {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct GlobalShard {
-    // ── KEY_ADMIN 密钥环状态 ──
-    pub(crate) chain_keyring_state: Option<ChainKeyringState>,
-    pub(crate) keyring_rotate_challenges: HashMap<String, KeyringRotateChallenge>,
+    // 中文注释:chain_keyring_state / keyring_rotate_challenges 已随 ADR-008
+    // (KEY_ADMIN 整角色废止)+ phase23e 子卡(2026-05-01)删除。
 
-    /// 全局管理员索引:KeyAdmin + ShengAdmin 本体(含 encrypted_signing_privkey)。
+    /// 全局管理员索引:ShengAdmin 本体(含 encrypted_signing_privkey)。
     /// ShiAdmin 不进这里,存在对应省的 `StoreShard.local_admins`。
     pub(crate) global_admins: HashMap<String, AdminUser>,
 

@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::fmt;
 use zeroize::Zeroize;
 
-use crate::key_admins::chain_keyring::ChainKeyringState;
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 
 use super::citizen::{
@@ -110,8 +109,6 @@ pub(crate) struct Store {
     /// RSABSSA 匿名证书签发 RSA 私钥 PEM（自动生成，持久化）。
     #[serde(default)]
     pub(crate) anon_rsa_private_key_pem: Option<String>,
-    pub(crate) chain_keyring_state: Option<ChainKeyringState>,
-    pub(crate) keyring_rotate_challenges: HashMap<String, KeyringRotateChallenge>,
     pub(crate) audit_logs: Vec<AuditLogEntry>,
     pub(crate) chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     pub(crate) chain_nonce_seen: HashMap<String, DateTime<Utc>>,
@@ -135,18 +132,10 @@ pub(crate) struct Store {
     pub(crate) next_document_id: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct KeyringRotateChallenge {
-    pub(crate) challenge_id: String,
-    pub(crate) keyring_version: u64,
-    pub(crate) initiator_pubkey: String,
-    pub(crate) challenge_text: String,
-    pub(crate) expire_at: DateTime<Utc>,
-    pub(crate) verified_at: Option<DateTime<Utc>>,
-    pub(crate) consumed: bool,
-    pub(crate) created_by: String,
-    pub(crate) created_at: DateTime<Utc>,
-}
+// 中文注释:KeyringRotateChallenge / KeyringStateOutput / KeyringRotate{Challenge,Verify,Commit}{Input,Output}
+// 已随 ADR-008 KEY_ADMIN 整角色废止 / phase23e 子卡(2026-05-01)一并删除。
+// 省级 3-tier 名册由 chain runtime 上 `ShengAdmins` storage 持有真相,SFID 不再
+// 维护本地 keyring_rotate 流程。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AuditLogEntry {
@@ -264,74 +253,6 @@ pub(crate) struct BindCallbackPayload {
     pub(crate) proof: SignatureEnvelope,
     pub(crate) client_request_id: Option<String>,
     pub(crate) callback_attestation: SignatureEnvelope,
-}
-
-// ── Keyring 轮换接口类型(管理员密钥环) ─────────────────
-
-#[derive(Serialize)]
-pub(crate) struct KeyringStateOutput {
-    pub(crate) version: u64,
-    pub(crate) main_pubkey: String,
-    pub(crate) main_name: String,
-    pub(crate) backup_a_pubkey: String,
-    pub(crate) backup_a_name: String,
-    pub(crate) backup_b_pubkey: String,
-    pub(crate) backup_b_name: String,
-    pub(crate) updated_at: i64,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct KeyringRotateChallengeInput {
-    pub(crate) initiator_pubkey: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct KeyringRotateChallengeOutput {
-    pub(crate) challenge_id: String,
-    pub(crate) keyring_version: u64,
-    pub(crate) challenge_text: String,
-    pub(crate) expire_at: i64,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct KeyringRotateCommitInput {
-    pub(crate) challenge_id: String,
-    pub(crate) signature: String,
-    pub(crate) new_backup_pubkey: String,
-    /// 新备用管理员姓名(必填)
-    #[serde(default)]
-    pub(crate) new_backup_name: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct KeyringRotateVerifyInput {
-    pub(crate) challenge_id: String,
-    pub(crate) signature: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct KeyringRotateVerifyOutput {
-    pub(crate) challenge_id: String,
-    pub(crate) initiator_pubkey: String,
-    pub(crate) keyring_version: u64,
-    pub(crate) verified: bool,
-    pub(crate) message: &'static str,
-}
-
-#[derive(Serialize)]
-pub(crate) struct KeyringRotateCommitOutput {
-    pub(crate) old_main_pubkey: String,
-    pub(crate) promoted_slot: String,
-    pub(crate) chain_tx_hash: String,
-    pub(crate) block_number: Option<u64>,
-    pub(crate) chain_submit_ok: bool,
-    pub(crate) chain_submit_error: Option<String>,
-    pub(crate) version: u64,
-    pub(crate) main_pubkey: String,
-    pub(crate) backup_a_pubkey: String,
-    pub(crate) backup_b_pubkey: String,
-    pub(crate) updated_at: i64,
-    pub(crate) message: String,
 }
 
 // ── 多签管理:机构 / 账户链上状态 ─────────────────────

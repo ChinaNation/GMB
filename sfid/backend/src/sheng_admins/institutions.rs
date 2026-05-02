@@ -89,7 +89,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     headers: HeaderMap,
     Json(input): Json<GenerateCpmsInstitutionSfidInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -395,7 +395,7 @@ pub(crate) async fn register_cpms(
     headers: HeaderMap,
     Json(input): Json<CpmsRegisterInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -558,7 +558,7 @@ pub(crate) async fn archive_import(
     headers: HeaderMap,
     Json(input): Json<CpmsArchiveImportInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -707,7 +707,7 @@ pub(crate) async fn revoke_install_token(
     headers: HeaderMap,
     Path(site_sfid): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -779,7 +779,7 @@ pub(crate) async fn reissue_install_token(
     headers: HeaderMap,
     Path(site_sfid): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -985,7 +985,7 @@ pub(crate) async fn delete_cpms_keys(
     headers: HeaderMap,
     Path(site_sfid): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -1077,7 +1077,7 @@ pub(crate) async fn list_cpms_keys(
     headers: HeaderMap,
     Query(query): Query<ListQuery>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -1157,7 +1157,7 @@ pub(crate) async fn get_cpms_site_by_institution(
     headers: HeaderMap,
     Path(sfid_id): Path<String>,
 ) -> impl IntoResponse {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -1249,7 +1249,7 @@ async fn update_cpms_site_status(
     target_status: CpmsSiteStatus,
     reason: Option<String>,
 ) -> axum::response::Response {
-    let ctx = match require_institution_or_key_admin(&state, &headers) {
+    let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -1409,8 +1409,8 @@ fn strip_pem_envelope(pem: &str) -> String {
 
 fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
     if let Some(admin) = store.admin_users_by_pubkey.get(pubkey) {
+        // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,只剩两角色。
         let role_label = match admin.role {
-            AdminRole::KeyAdmin => "密钥管理员",
             AdminRole::ShengAdmin => "机构管理员",
             AdminRole::ShiAdmin => "系统管理员",
         };
@@ -1439,19 +1439,24 @@ fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteSt
     )
 }
 
+// ADR-008 Phase 23e:`is_trusted_attestor_pubkey` 历史依赖
+// `validate_active_main_signer_with_keyring` + AppState.public_key_hex,这两条
+// 路径都已下架。该函数当前 dead code(`#[allow(dead_code)]`),保留接口签名供
+// 将来 chain pull 凭证回流校验使用,内部退化成"用 SFID main env seed 派生公钥
+// 做对比"的 fallback 行为。
 #[allow(dead_code)]
-fn is_trusted_attestor_pubkey(state: &AppState, public_key: &str) -> bool {
+fn is_trusted_attestor_pubkey(_state: &AppState, public_key: &str) -> bool {
     let Some(candidate) = parse_sr25519_pubkey(public_key) else {
         return false;
     };
-    if key_admins::validate_active_main_signer_with_keyring(state).is_err() {
+    let Ok(seed_hex) = std::env::var("SFID_SIGNING_SEED_HEX") else {
         return false;
-    }
-    let current = match state.public_key_hex.read() {
-        Ok(v) => v.clone(),
-        Err(_) => return false,
     };
-    parse_sr25519_pubkey(current.as_str())
+    let Ok(derived) = crate::crypto::sr25519::try_derive_pubkey_hex_from_seed(seed_hex.as_str())
+    else {
+        return false;
+    };
+    parse_sr25519_pubkey(derived.as_str())
         .map(|v| v == candidate)
         .unwrap_or(false)
 }
@@ -1470,12 +1475,15 @@ pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
 }
 
 /// 用 SFID 主密钥（sr25519）对消息签名，返回 hex 编码签名。
-fn sign_with_main_key(state: &AppState, message: &str) -> Result<String, String> {
-    let seed = state
-        .signing_seed_hex
-        .read()
-        .map_err(|_| "seed lock poisoned".to_string())?;
-    let keypair = key_admins::chain_keyring::try_load_signing_key_from_seed(seed.expose_secret())
+///
+/// ADR-008 Phase 23e:AppState 不再持有 signing seed,改从 SFID_SIGNING_SEED_HEX
+/// 环境变量按需加载。本函数只在 `generate_cpms_institution_sfid_qr` 路径上签发
+/// 二维码完整性签名,与省管理员 3-tier signing pubkey 无关。
+fn sign_with_main_key(_state: &AppState, message: &str) -> Result<String, String> {
+    use sp_core::Pair;
+    let seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
+        .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
+    let keypair = crate::crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
         .map_err(|e| format!("load signing key failed: {e}"))?;
     let sig = keypair.sign(message.as_bytes());
     Ok(format!("0x{}", hex::encode(sig.0)))

@@ -1,10 +1,11 @@
-//! 三角色权限范围规则
+//! 二角色权限范围规则(ADR-008 后)
 //!
 //! 中文注释:根据登录管理员的角色 + 所属省 + 所属市,派生该角色能看到和操作的
 //! 数据范围(VisibleScope)。所有 list/CRUD API 都应当先派生 scope,再用它
 //! 过滤数据。
 //!
-//! 见 `feedback_sfid_three_roles_naming.md` 的三角色命名铁律。
+//! ADR-008(2026-05-01):KEY_ADMIN 整角色废止,只剩 ShengAdmin / ShiAdmin。
+//! 见 `feedback_sfid_three_roles_naming.md` 的角色命名铁律。
 
 use crate::login::AdminAuthContext;
 use crate::models::AdminRole;
@@ -12,14 +13,13 @@ use crate::models::AdminRole;
 /// 登录管理员可见的数据范围。
 #[derive(Debug, Clone)]
 pub struct VisibleScope {
-    /// 可见省份列表。空 vec 表示"全国"(KEY_ADMIN)。
+    /// 可见省份列表。当前最少 1 个(本省),保留 Vec 是为了将来扩展跨省视图。
     pub provinces: Vec<String>,
-    /// 可见城市列表。空 vec 表示"不限市"(KEY_ADMIN + SHENG_ADMIN)。
+    /// 可见城市列表。空 vec 表示"不限市"(SHENG_ADMIN)。
     pub cities: Vec<String>,
-    /// 是否可以增删改。当前三角色在自己范围内都能写,保留字段为将来扩展只读角色。
+    /// 是否可以增删改。当前两角色在自己范围内都能写,保留字段为将来扩展只读角色。
     pub can_write: bool,
     /// 进入 tab 时是否跳过省份列表直接进入详情。
-    /// - KeyAdmin: false(看 43 省卡片)
     /// - ShengAdmin: true(直接进本省)
     /// - ShiAdmin: true(直接进本市,同时跳过市列表)
     pub skip_province_list: bool,
@@ -32,19 +32,6 @@ pub struct VisibleScope {
 }
 
 impl VisibleScope {
-    /// KeyAdmin:看全国,可写。
-    pub fn key_admin() -> Self {
-        Self {
-            provinces: vec![],
-            cities: vec![],
-            can_write: true,
-            skip_province_list: false,
-            skip_city_list: false,
-            locked_province: None,
-            locked_city: None,
-        }
-    }
-
     /// ShengAdmin:只看本省,可在本省写。
     pub fn sheng_admin(province: String) -> Self {
         Self {
@@ -89,7 +76,6 @@ impl VisibleScope {
 /// 避免误放行。调用方应当在 require_admin_* 里先校验必要字段。
 pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
     match ctx.role {
-        AdminRole::KeyAdmin => VisibleScope::key_admin(),
         AdminRole::ShengAdmin => {
             let province = ctx
                 .admin_province
@@ -114,14 +100,6 @@ pub fn get_visible_scope(ctx: &AdminAuthContext) -> VisibleScope {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn key_admin_sees_all() {
-        let s = VisibleScope::key_admin();
-        assert!(s.includes_province("任意省"));
-        assert!(s.includes_city("任意市"));
-        assert!(!s.skip_province_list);
-    }
 
     #[test]
     fn sheng_admin_limited_to_province() {

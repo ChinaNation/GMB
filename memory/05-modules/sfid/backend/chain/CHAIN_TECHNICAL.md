@@ -156,3 +156,10 @@ build_institution_credential(state, sfid_id, name, register_nonce)
 - 节点桌面输入 `FFR-AH001-ZG1C-887947508-20260430` 能搜到候选(P0 解决)
 - 全仓 grep 残留扫描:`subxt|chain_http_url|chain_ws_url` 仅在 `chain/` 子目录出现
 - `verify_vote_eligibility / chain_voters_count / chain_binding_validate / chain_reward / attestor_public_key / sync_institution_chain_state / clearing_bank_watcher` 全 SFID 后端零残留(只剩 ↑ 历史注释)
+
+
+## ADR-008 Phase 23e 更新（2026-05-01）
+
+KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
+本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
+实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。

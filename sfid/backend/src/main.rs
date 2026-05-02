@@ -8,7 +8,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
-use sp_core::Pair;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -24,10 +23,9 @@ use uuid::Uuid;
 mod app_core;
 mod chain;
 mod citizens;
+mod crypto;
 mod indexer;
 mod institutions;
-#[path = "key-admins/mod.rs"]
-mod key_admins;
 mod login;
 mod models;
 #[allow(dead_code)]
@@ -37,33 +35,27 @@ mod sfid;
 mod sheng_admins;
 mod shi_admins;
 mod store_shards;
-use key_admins::chain_keyring::ChainKeyringState;
 use scope::cpms::in_scope_cpms_site;
 
 pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_institution_or_key_admin, require_key_admin,
-    verify_admin_signature,
+    require_admin_write, require_sheng_admin, verify_admin_signature,
 };
 pub(crate) use models::*;
 
 #[derive(Clone)]
 struct AppState {
     store: StoreHandle,
-    signing_seed_hex: Arc<RwLock<SensitiveSeed>>,
-    known_key_seeds: Arc<RwLock<HashMap<String, SensitiveSeed>>>,
     rate_limit_redis: Arc<RedisClient>,
     #[allow(dead_code)]
     cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
-    key_id: String,
-    key_version: String,
-    key_alg: String,
-    public_key_hex: Arc<RwLock<String>>,
-    /// 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B：
-    /// 省级签名密钥内存缓存 + SFID MAIN 派生的 wrap key。
-    pub(crate) sheng_signer_cache: Arc<key_admins::sheng_signer_cache::ShengSignerCache>,
+    /// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008 Phase 23e)。
+    /// 历史 `key_admins::sheng_signer_cache::ShengSignerCache`(每省 1 把 + 全局
+    /// SFID MAIN 包装密钥)已删除,新缓存按 (province, admin_pubkey) 二级 key
+    /// 持有 3 把独立 keypair,seed 持久化由 `store_shards/sheng_signer.rs` 接管。
+    pub(crate) sheng_signer_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
     /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
     #[allow(dead_code)]
@@ -157,9 +149,10 @@ impl StoreBackend {
     }
 
     fn parse_admin_role(role: &str) -> AdminRole {
-        // 中文注释：统一到 key/sheng/shi 三角色(见 feedback_sfid_three_roles_naming.md)。
+        // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,只剩 SHENG_ADMIN / SHI_ADMIN。
+        // 历史 KEY_ADMIN 行(若残留)已被 db/migrations/014_drop_key_admins.sql 删除,
+        // 这里收到无法识别的 role 字符串时一律降级到 SHI_ADMIN(最严范围)。
         match role {
-            "KEY_ADMIN" => AdminRole::KeyAdmin,
             "SHENG_ADMIN" => AdminRole::ShengAdmin,
             "SHI_ADMIN" => AdminRole::ShiAdmin,
             _ => AdminRole::ShiAdmin,
@@ -175,7 +168,6 @@ impl StoreBackend {
 
     fn admin_role_text(role: &AdminRole) -> &'static str {
         match role {
-            AdminRole::KeyAdmin => "KEY_ADMIN",
             AdminRole::ShengAdmin => "SHENG_ADMIN",
             AdminRole::ShiAdmin => "SHI_ADMIN",
         }
@@ -218,7 +210,6 @@ impl StoreBackend {
 
         store.admin_users_by_pubkey.clear();
         store.sheng_admin_province_by_pubkey.clear();
-        store.chain_keyring_state = None;
 
         let admin_rows = conn
             .query(
@@ -277,44 +268,8 @@ impl StoreBackend {
                 .insert(pubkey, province);
         }
 
-        let key_rows = conn
-            .query(
-                "SELECT slot, admin_pubkey, keyring_version, updated_at
-                 FROM key_admin_keyring",
-                &[],
-            )
-            .map_err(|e| format!("load key_admin_keyring failed: {e}"))?;
-        let mut main_pubkey = String::new();
-        let mut backup_a_pubkey = String::new();
-        let mut backup_b_pubkey = String::new();
-        let mut version = 1_u64;
-        let mut latest_updated_at: Option<DateTime<Utc>> = None;
-        for row in key_rows {
-            let slot: String = row.get(0);
-            let pubkey: String = row.get(1);
-            let keyring_version: i64 = row.get(2);
-            let updated_at: DateTime<Utc> = row.get(3);
-            if keyring_version > 0 {
-                version = u64::try_from(keyring_version).unwrap_or(version);
-            }
-            if latest_updated_at.map(|v| updated_at > v).unwrap_or(true) {
-                latest_updated_at = Some(updated_at);
-            }
-            match slot.as_str() {
-                "MAIN" => main_pubkey = pubkey,
-                "BACKUP_A" => backup_a_pubkey = pubkey,
-                "BACKUP_B" => backup_b_pubkey = pubkey,
-                _ => {}
-            }
-        }
-        if !main_pubkey.is_empty() && !backup_a_pubkey.is_empty() && !backup_b_pubkey.is_empty() {
-            let mut kr = ChainKeyringState::new(main_pubkey, backup_a_pubkey, backup_b_pubkey);
-            kr.version = version;
-            if let Some(updated_at) = latest_updated_at {
-                kr.updated_at = updated_at.timestamp();
-            }
-            store.chain_keyring_state = Some(kr);
-        }
+        // ADR-008 Phase 23e(2026-05-01):key_admin_keyring 表已被 migration 014 删除,
+        // chain_keyring_state 字段也从内存 Store 中删除。
 
         Ok(store)
     }
@@ -323,7 +278,6 @@ impl StoreBackend {
         let mut misc = store.clone();
         misc.admin_users_by_pubkey.clear();
         misc.sheng_admin_province_by_pubkey.clear();
-        misc.chain_keyring_state = None;
         let payload =
             serde_json::to_value(&misc).map_err(|e| format!("encode runtime cache failed: {e}"))?;
         let payload_obj = payload
@@ -351,11 +305,10 @@ impl StoreBackend {
         tx.commit()
             .map_err(|e| format!("commit runtime cache transaction failed: {e}"))?;
 
+        // ADR-008 Phase 23e:key_admin_keyring 表已删(migration 014),不再 DELETE。
         let mut tx = conn
             .transaction()
             .map_err(|e| format!("begin admin sync transaction failed: {e}"))?;
-        tx.execute("DELETE FROM key_admin_keyring", &[])
-            .map_err(|e| format!("clear key_admin_keyring failed: {e}"))?;
         tx.execute("DELETE FROM shi_admin_scope", &[])
             .map_err(|e| format!("clear shi_admin_scope failed: {e}"))?;
         tx.execute("DELETE FROM sheng_admin_scope", &[])
@@ -433,29 +386,7 @@ impl StoreBackend {
             .map_err(|e| format!("insert shi_admin_scope failed: {e}"))?;
         }
 
-        if let Some(kr) = &store.chain_keyring_state {
-            let slots = [
-                ("MAIN", kr.main_pubkey.as_str()),
-                ("BACKUP_A", kr.backup_a_pubkey.as_str()),
-                ("BACKUP_B", kr.backup_b_pubkey.as_str()),
-            ];
-            for (slot, pubkey) in slots {
-                let Some(admin_id) = admin_id_by_pubkey.get(pubkey) else {
-                    continue;
-                };
-                tx.execute(
-                    "INSERT INTO key_admin_keyring(slot, admin_id, admin_pubkey, keyring_version, updated_at)
-                     VALUES ($1, $2, $3, $4, to_timestamp($5))
-                     ON CONFLICT (slot) DO UPDATE SET
-                       admin_id=excluded.admin_id,
-                       admin_pubkey=excluded.admin_pubkey,
-                       keyring_version=excluded.keyring_version,
-                       updated_at=excluded.updated_at",
-                    &[&slot, admin_id, &pubkey, &(kr.version as i64), &(kr.updated_at as f64)],
-                )
-                .map_err(|e| format!("upsert key_admin_keyring failed: {e}"))?;
-            }
-        }
+        // ADR-008 Phase 23e:chain_keyring_state 已删,不再写 key_admin_keyring 表。
 
         tx.commit()
             .map_err(|e| format!("commit admin sync transaction failed: {e}"))?;
@@ -665,11 +596,14 @@ fn main() {
     let redis_client = RedisClient::open(redis_url.as_str())
         .unwrap_or_else(|e| panic!("invalid SFID_REDIS_URL: {e}"));
 
-    let main_seed = SensitiveSeed::from(required_env("SFID_SIGNING_SEED_HEX"));
-    let main_key = key_admins::chain_keyring::load_signing_key_from_seed(main_seed.expose_secret());
-    let public_key_hex = format!("0x{}", hex::encode(main_key.public().0));
-    let mut known_key_seeds = HashMap::new();
-    known_key_seeds.insert(public_key_hex.clone(), main_seed.clone());
+    // ADR-008 Phase 23e:启动期仅校验 SFID_SIGNING_SEED_HEX 可解码(供 login QR 系统签名 +
+    // sheng_signer master KEK 派生用),不再把 seed / pubkey / 多份 known_key_seeds 装到
+    // AppState。SFID main signer 由 `crate::crypto::sr25519` helper 按需从环境变量加载。
+    {
+        let seed_hex = required_env("SFID_SIGNING_SEED_HEX");
+        crypto::sr25519::try_load_signing_key_from_seed(seed_hex.as_str())
+            .unwrap_or_else(|e| panic!("invalid SFID_SIGNING_SEED_HEX: {e}"));
+    }
     let database_url = required_env("DATABASE_URL");
     if database_url
         .to_ascii_lowercase()
@@ -685,21 +619,12 @@ fn main() {
         );
     }
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
-    // 中文注释：任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B：
-    // 从 SFID MAIN seed 构造省级签名密钥缓存。seed 字节在构造后立即被 zeroize。
-    let sheng_signer_cache = {
-        let seed_hex_str = main_seed.expose_secret().to_string();
-        let seed_bytes = hex::decode(seed_hex_str.trim_start_matches("0x"))
-            .unwrap_or_else(|e| panic!("SFID_SIGNING_SEED_HEX invalid hex: {e}"));
-        if seed_bytes.len() != 32 {
-            panic!("SFID_SIGNING_SEED_HEX must decode to 32 bytes");
-        }
-        let mut seed_arr = [0u8; 32];
-        seed_arr.copy_from_slice(&seed_bytes);
-        let cache = key_admins::sheng_signer_cache::ShengSignerCache::new_from_seed(&mut seed_arr)
-            .expect("init sheng signer cache failed");
-        Arc::new(cache)
-    };
+    // ADR-008 Phase 23e:省管理员 3-tier 签名 keypair 内存缓存。
+    // 缓存 key = (province, admin_pubkey_bytes),由各省 admin 登录时按需载入。
+    // seed 持久化由 `store_shards/sheng_signer.rs` 接管,wrap key 走 SFID_MASTER_KEK_HEX
+    // (fallback SFID_SIGNING_SEED_HEX)+ HKDF。本进程不再持有"全局 SFID MAIN signer Pair"。
+    let sheng_signer_cache: Arc<sheng_admins::signing_cache::ShengSigningCache> =
+        Arc::new(sheng_admins::signing_cache::ShengSigningCache::new());
     // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     // 基于现有 Postgres 连接池构造 ShardBackend 和 ShardedStore。
     // 此时只构造空壳,迁移 / bootstrap / preload 等到 tokio runtime 起来后再做。
@@ -717,21 +642,13 @@ fn main() {
     };
     let state = AppState {
         store,
-        signing_seed_hex: Arc::new(RwLock::new(main_seed)),
-        known_key_seeds: Arc::new(RwLock::new(known_key_seeds)),
         rate_limit_redis: Arc::new(redis_client),
         cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
-        key_id: required_env("SFID_KEY_ID"),
-        key_version: "v1".to_string(),
-        key_alg: "sr25519".to_string(),
-        public_key_hex: Arc::new(RwLock::new(public_key_hex)),
         sheng_signer_cache,
         sharded_store,
     };
     seed_sheng_admins(&state);
     sync_builtin_sheng_admins(&state);
-    key_admins::seed_chain_keyring(&state);
-    key_admins::seed_key_admins(&state);
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
@@ -915,11 +832,7 @@ fn main() {
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
                 put(sheng_admins::revoke_cpms_keys),
             )
-            // ── 链上余额查询(admin keyring 视图主账户行) ──
-            .route(
-                "/api/v1/admin/chain/balance",
-                get(chain::balance::admin_query_chain_balance),
-            )
+            // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
             // 中文注释:机构/账户两层模型的 API
             // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
             // - POST /api/v1/institution/create                          — 生成机构(不上链)
@@ -977,11 +890,8 @@ fn main() {
                 "/api/v1/institution/:sfid_id/documents/:doc_id",
                 delete(institutions::handler::delete_document),
             )
-            // 临时诊断:手动触发 bootstrap sheng signer
-            .route(
-                "/api/v1/admin/debug/bootstrap-signer",
-                post(debug_bootstrap_signer),
-            )
+            // ADR-008 Phase 23e:`/api/v1/admin/debug/bootstrap-signer` 已下架,
+            // bootstrap 行为已由 login::bootstrap_sheng_signing_pair 同步触发,无需诊断端点。
             // 任务卡 6:公安局跟 sfid 工具市清单对账
             .route(
                 "/api/v1/public-security/reconcile",
@@ -1026,22 +936,8 @@ fn main() {
                 "/api/v1/admin/sfid/cities",
                 get(sfid::admin::admin_sfid_cities),
             )
-            .route(
-                "/api/v1/admin/attestor/keyring",
-                get(key_admins::admin_get_chain_keyring),
-            )
-            .route(
-                "/api/v1/admin/attestor/rotate/challenge",
-                post(key_admins::admin_chain_keyring_rotate_challenge),
-            )
-            .route(
-                "/api/v1/admin/attestor/rotate/verify",
-                post(key_admins::admin_chain_keyring_rotate_verify),
-            )
-            .route(
-                "/api/v1/admin/attestor/rotate/commit",
-                post(key_admins::admin_chain_keyring_rotate_commit),
-            )
+            // ADR-008 Phase 23e:`/api/v1/admin/attestor/keyring` 与 rotate/challenge/verify/commit
+            // 端点已整段下架(KEY_ADMIN 角色废止,链上 ShengAdmins/ShengSigningPubkey 是真相)。
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 login::require_admin_session_middleware,
@@ -1133,12 +1029,10 @@ fn main() {
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");
 
-        key_admins::sync_chain_keyring_from_chain(&state)
-            .await
-            .unwrap_or_else(|e| panic!("failed to sync chain keyring from chain: {e}"));
-        key_admins::seed_key_admins(&state);
-        key_admins::validate_active_main_signer_with_keyring(&state)
-            .unwrap_or_else(|e| panic!("active main signer validation failed: {e}"));
+        // ADR-008 Phase 23e:链上 keyring 同步 / KEY_ADMIN 名册 seed / main signer 校验
+        // 全部下架。SFID 不再镜像 chain `KeyAdminKeyring` storage(已不存在);
+        // 省管理员 3-tier 真相在链上 `ShengAdmins[Province][Slot]` storage,
+        // SFID 内部 cache 由各省 admin 登录时按需 bootstrap。
 
         // 本地手机联调时必须监听到与 App 可访问的一致地址，避免只绑定回环导致超时。
         let addr = resolve_backend_bind_addr().expect("resolve sfid backend bind address");
@@ -1389,65 +1283,5 @@ pub(crate) fn store_write_or_500(
 #[cfg(test)]
 mod main_tests;
 
-/// 临时诊断端点:手动触发 bootstrap sheng signer，返回具体错误信息。
-async fn debug_bootstrap_signer(
-    axum::extract::State(state): axum::extract::State<AppState>,
-    headers: axum::http::HeaderMap,
-) -> impl axum::response::IntoResponse {
-    let ctx = match login::require_admin_any(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    if ctx.role != models::AdminRole::ShengAdmin {
-        return api_error(axum::http::StatusCode::FORBIDDEN, 1003, "only sheng admin");
-    }
-    let province = match ctx.admin_province.as_deref() {
-        Some(v) => v.to_string(),
-        None => return api_error(axum::http::StatusCode::BAD_REQUEST, 1001, "no province"),
-    };
-    // 先诊断 subxt metadata
-    let ws_url = match chain::url::chain_ws_url() {
-        Ok(v) => v,
-        Err(e) => {
-            return api_error(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                &format!("chain_ws_url: {e}"),
-            )
-        }
-    };
-    let diag = match subxt::OnlineClient::<subxt::PolkadotConfig>::from_insecure_url(&ws_url).await
-    {
-        Ok(client) => {
-            let metadata = client.metadata();
-            let pallets: Vec<String> = metadata.pallets().map(|p| p.name().to_string()).collect();
-            let sfid_calls: Vec<String> = metadata
-                .pallets()
-                .find(|p| p.name() == "SfidSystem")
-                .and_then(|p| p.call_variants())
-                .map(|calls| calls.iter().map(|c| c.name.clone()).collect())
-                .unwrap_or_default();
-            format!(
-                "ws_url={} pallets={} sfid_calls={:?}",
-                ws_url,
-                pallets.len(),
-                sfid_calls
-            )
-        }
-        Err(e) => format!("ws_url={} connect_error={}", ws_url, e),
-    };
-
-    match key_admins::bootstrap_sheng_signer(&state, &ctx.admin_pubkey, &province).await {
-        Ok(()) => axum::Json(ApiResponse {
-            code: 0,
-            message: "ok".to_string(),
-            data: format!("bootstrap success for {province} | diag: {diag}"),
-        })
-        .into_response(),
-        Err(e) => api_error(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            1004,
-            &format!("{e} | diag: {diag}"),
-        ),
-    }
-}
+// ADR-008 Phase 23e:`debug_bootstrap_signer` 端点已下架。bootstrap 行为由
+// `login::bootstrap_sheng_signing_pair` 在登录验签成功后同步触发,无需诊断端点。
