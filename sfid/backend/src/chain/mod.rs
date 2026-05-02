@@ -8,16 +8,19 @@
 //!    删除。本目录每处都标注了"过渡态保留",后续配套链端 chain pull 路径就绪
 //!    后再下架。
 //!
-//! ## 二级目录(4 个业务功能 + 2 个共享文件)
+//! ## 二级目录(6 个业务功能 + 3 个共享文件)
 //!
 //! - [institution_info] · 链/钱包 pull SFID 机构信息(含清算行)
 //! - [joint_vote]       · 联合投票:获取公民人数快照凭证
 //! - [citizen_binding]  · 公民身份绑定(过渡:含 admin push extrinsic)
 //! - [citizen_vote]     · 公民投票凭证签发
+//! - [sheng_admin]      · ADR-008 phase45:链上 ShengAdmins 名册操作(query/add/remove)
+//! - [sheng_signer]     · ADR-008 phase45:链上 ShengSigningPubkey 操作(activate/rotate)
 //!
 //! 共享文件:
 //! - [url]            · `SFID_CHAIN_WS_URL` 环境变量入口
 //! - [runtime_align]  · SCALE 编码 / 域常量 / genesis_hash 缓存,所有凭证签发函数也在此
+//! - [client]         · ADR-008 phase45:chain push 三件套 helper(mock,phase7 切真)
 //!
 //! ## ADR-008 Phase 23e(2026-05-01)删除清单
 //!
@@ -36,7 +39,10 @@
 
 pub(crate) mod citizen_binding;
 pub(crate) mod citizen_vote;
+pub(crate) mod client;
 pub(crate) mod institution_info;
 pub(crate) mod joint_vote;
 pub(crate) mod runtime_align;
+pub(crate) mod sheng_admin;
+pub(crate) mod sheng_signer;
 pub(crate) mod url;

@@ -938,6 +938,27 @@ fn main() {
             )
             // ADR-008 Phase 23e:`/api/v1/admin/attestor/keyring` 与 rotate/challenge/verify/commit
             // 端点已整段下架(KEY_ADMIN 角色废止,链上 ShengAdmins/ShengSigningPubkey 是真相)。
+            // ─── ADR-008 phase45:省管理员 3-tier 名册 + 签名密钥推链(全部 mock,phase7 切真) ───
+            .route(
+                "/api/v1/admin/sheng-admin/roster",
+                get(chain::sheng_admin::handler::list_roster_admin),
+            )
+            .route(
+                "/api/v1/admin/sheng-admin/roster/add-backup",
+                post(chain::sheng_admin::add_backup::handler),
+            )
+            .route(
+                "/api/v1/admin/sheng-admin/roster/remove-backup",
+                post(chain::sheng_admin::remove_backup::handler),
+            )
+            .route(
+                "/api/v1/admin/sheng-signer/activate",
+                post(chain::sheng_signer::activation::handler),
+            )
+            .route(
+                "/api/v1/admin/sheng-signer/rotate",
+                post(chain::sheng_signer::rotation::handler),
+            )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
                 login::require_admin_session_middleware,
@@ -1006,6 +1027,11 @@ fn main() {
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
                 get(chain::institution_info::app_search_eligible_clearing_banks),
+            )
+            // ── ADR-008 phase45:链反向调用,公开拉取本省 3 槽公钥 ──
+            .route(
+                "/api/v1/chain/sheng-admin/list",
+                get(chain::sheng_admin::handler::list_roster_public),
             );
 
         let app_state = state.clone();
