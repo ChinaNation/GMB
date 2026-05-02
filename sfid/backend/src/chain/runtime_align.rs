@@ -288,6 +288,56 @@ pub(crate) fn build_institution_credential(
     })
 }
 
+/// 用**省级签名密钥**签发机构注册凭证。
+///
+/// 与 [`build_institution_credential`] 的差异:本函数用调用方传入的 `province_pair`
+/// 签 payload,而非 SFID main 私钥。链端 `propose_create_institution` extrinsic
+/// 必须由所属省的签名密钥签发(`signing_province` 入参对应省的链上
+/// `ShengSigningPubkey[province]` 验签),所以 chain pull 凭证场景一律走本函数。
+///
+/// payload 字节布局严格与 [`build_institution_credential`] 一致(只是签名密钥不同):
+///   `blake2_256(scale_encode(DUOQIAN_DOMAIN ++ OP_SIGN_INST ++ genesis_hash
+///                          ++ sfid_id ++ institution_name ++ register_nonce))`
+///
+/// 任何字段顺序变更必须同步改链端 `SfidInstitutionVerifier::verify_institution_registration`,
+/// 否则 sr25519_verify 必败。
+pub(crate) fn build_institution_credential_with_province(
+    state: &AppState,
+    sfid_id: &str,
+    name: &str,
+    register_nonce: String,
+    province_pair: &sp_core::sr25519::Pair,
+) -> Result<RuntimeInstitutionCredential, String> {
+    if sfid_id.trim().is_empty() {
+        return Err("sfid_id is required".to_string());
+    }
+    if name.trim().is_empty() {
+        return Err("institution name is required".to_string());
+    }
+    if register_nonce.trim().is_empty() {
+        return Err("register_nonce is required".to_string());
+    }
+    let genesis_hash = resolve_chain_genesis_hash()?;
+    let payload = (
+        DUOQIAN_DOMAIN,
+        OP_SIGN_INST,
+        genesis_hash,
+        sfid_id.as_bytes(),
+        name.as_bytes(),
+        register_nonce.as_bytes(),
+    );
+    let payload_digest = blake2_256(&payload.encode());
+    let signature = province_pair.sign(&payload_digest).0;
+    Ok(RuntimeInstitutionCredential {
+        genesis_hash: hex::encode(genesis_hash),
+        sfid_id: sfid_id.to_string(),
+        name: name.to_string(),
+        register_nonce,
+        signature: hex::encode(signature),
+        meta: runtime_signature_meta(state),
+    })
+}
+
 #[allow(dead_code)]
 pub(crate) fn current_chain_genesis_hash_hex() -> Result<String, String> {
     resolve_chain_genesis_hash().map(hex::encode)

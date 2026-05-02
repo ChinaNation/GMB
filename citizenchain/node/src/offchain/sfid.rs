@@ -37,7 +37,7 @@ use std::time::Duration;
 
 use crate::shared::sfid_config;
 
-use super::types::EligibleClearingBankCandidate;
+use super::types::{EligibleClearingBankCandidate, InstitutionCredentialResp};
 
 const SFID_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -161,4 +161,60 @@ pub fn search_eligible_clearing_banks(
     }
 
     Ok(body.data.into_iter().map(into_candidate).collect())
+}
+
+// ─── 拉机构注册凭证(链上 propose_create_institution 必备入参) ───────
+
+/// `chain/institution_info::app_get_institution` 响应反序列化封装。
+#[derive(Deserialize)]
+struct InstitutionCredentialEnvelope {
+    code: Option<u32>,
+    #[serde(default)]
+    data: Option<InstitutionCredentialResp>,
+    #[serde(default)]
+    message: Option<String>,
+}
+
+/// 调 SFID `GET /api/v1/app/institutions/:sfid_id` 拉机构详情 + chain pull 凭证。
+///
+/// 响应携带 `register_nonce + signature`(由本机构所属省的省级签名密钥签发),
+/// 节点桌面发起 `propose_create_institution` extrinsic 时直接透传。
+///
+/// 反序列化契约(snake_case)在 [`super::types::InstitutionCredentialResp`] 锁定。
+pub fn fetch_institution_credential(sfid_id: &str) -> Result<InstitutionCredentialResp, String> {
+    // sfid_id 字符集仅 ASCII 字母 + 数字 + `-`(SFID 生成器锁定),无需 URL 编码。
+    let url = format!(
+        "{}/api/v1/app/institutions/{}",
+        sfid_config::sfid_base_url(),
+        sfid_id
+    );
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(SFID_REQUEST_TIMEOUT)
+        .timeout(SFID_REQUEST_TIMEOUT)
+        .build()
+        .map_err(|e| format!("创建 SFID HTTP 客户端失败:{e}"))?;
+    let response = client
+        .get(&url)
+        .send()
+        .map_err(|e| format!("SFID 机构详情请求失败:{e}"))?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(format!("SFID 返回 HTTP {}", response.status()));
+    }
+    let body: InstitutionCredentialEnvelope = response
+        .json()
+        .map_err(|e| format!("SFID 响应解析失败:{e}"))?;
+    if body.code != Some(0) {
+        let msg = body.message.unwrap_or_default();
+        return Err(format!("SFID 返回错误:code={:?}, message={msg}", body.code));
+    }
+    let data = body
+        .data
+        .ok_or_else(|| "SFID 响应缺少 data 字段".to_string())?;
+    if data.register_nonce.is_empty() || data.signature.is_empty() {
+        return Err(
+            "SFID 未返回机构注册凭证(机构名为空 / 省级签名密钥未就绪),请联系运维"
+                .to_string(),
+        );
+    }
+    Ok(data)
 }

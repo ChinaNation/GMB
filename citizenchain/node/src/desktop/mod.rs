@@ -92,7 +92,12 @@ pub fn run_desktop() {
             crate::offchain::commands::build_decrypt_admin_request,
             crate::offchain::commands::verify_and_decrypt_admin,
             crate::offchain::commands::list_decrypted_admins,
-            crate::offchain::commands::lock_decrypted_admin
+            crate::offchain::commands::lock_decrypted_admin,
+            crate::offchain::commands::fetch_clearing_bank_institution_detail,
+            crate::offchain::commands::fetch_clearing_bank_institution_proposals,
+            crate::offchain::commands::fetch_clearing_bank_institution_credential,
+            crate::offchain::commands::build_propose_create_institution_request,
+            crate::offchain::commands::submit_propose_create_institution
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
