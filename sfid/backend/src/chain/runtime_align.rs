@@ -343,11 +343,14 @@ pub(crate) fn current_chain_genesis_hash_hex() -> Result<String, String> {
     resolve_chain_genesis_hash().map(hex::encode)
 }
 
-fn runtime_signature_meta(state: &AppState) -> RuntimeSignatureMeta {
+fn runtime_signature_meta(_state: &AppState) -> RuntimeSignatureMeta {
+    // ADR-008 Phase 23e:AppState 不再持有 key_id / key_version / key_alg。
+    // 凭证 metadata 退化成固定标识(消费方只用 alg 校验签名算法,前两个字段
+    // 已无业务消费方,保留固定串避免 wire format 变更。)
     RuntimeSignatureMeta {
-        key_id: state.key_id.clone(),
-        key_version: state.key_version.clone(),
-        alg: state.key_alg.clone(),
+        key_id: "sfid-sheng-v1".to_string(),
+        key_version: "v1".to_string(),
+        alg: "sr25519".to_string(),
     }
 }
 
@@ -526,13 +529,15 @@ fn parse_hex_hash32(raw: &str) -> Result<[u8; 32], String> {
     Ok(arr)
 }
 
-fn sign_runtime_digest(state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
-    let seed = state
-        .signing_seed_hex
-        .read()
-        .map_err(|_| "signing seed read lock poisoned".to_string())?
-        .clone();
-    let signing_key = resolve_signing_keypair(seed.expose_secret())?;
+fn sign_runtime_digest(_state: &AppState, digest: &[u8; 32]) -> Result<String, String> {
+    // ADR-008 Phase 23e:SFID main signer 直接从环境变量 SFID_SIGNING_SEED_HEX
+    // 派生(由 `crate::crypto::sr25519` helper 加载),AppState 不再持有 seed。
+    // 本函数仅由 `build_*_credential`(非 *_with_province 变体)调用,后者已是
+    // dead code(全部 caller 改走 *_with_province 用省级签名密钥);保留只为
+    // 让 fallback path(全国级凭证)继续可用。
+    let seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")
+        .map_err(|_| "SFID_SIGNING_SEED_HEX not set".to_string())?;
+    let signing_key = resolve_signing_keypair(seed_hex.as_str())?;
     let signature = signing_key.sign(digest);
     Ok(hex::encode(signature.0))
 }
@@ -550,7 +555,7 @@ fn resolve_signing_keypair(seed_text: &str) -> Result<Arc<Sr25519Pair>, String> 
         }
     }
 
-    let loaded = Arc::new(key_admins::chain_keyring::try_load_signing_key_from_seed(
+    let loaded = Arc::new(crate::crypto::sr25519::try_load_signing_key_from_seed(
         seed_text,
     )?);
     let mut guard = cache

@@ -56,6 +56,26 @@ impl ShengSigningCache {
             .cloned()
     }
 
+    /// 中文注释:本省任意已登录 admin slot 的签名 Pair(chain pull 凭证签发用)。
+    ///
+    /// ADR-008:每省 3 把签名密钥(main / backup_1 / backup_2)。链端
+    /// `propose_create_institution` 验签时,只要凭证签名能对上链上记录的本省任一
+    /// 当前 ShengSigningPubkey,就放行。本函数返回 cache 中第一把命中本省的 Pair,
+    /// 调用方不应假定具体是哪一把。
+    pub(crate) fn any_for_province(&self, province: &str) -> Option<Sr25519Pair> {
+        let g = self.inner.lock().ok()?;
+        g.iter()
+            .find(|((p, _), _)| p == province)
+            .map(|(_, pair)| pair.clone())
+    }
+
+    /// 中文注释:驱逐本省所有 slot 的 cache(登出 / session 过期时使用)。
+    pub(crate) fn unload_province(&self, province: &str) {
+        if let Ok(mut g) = self.inner.lock() {
+            g.retain(|(p, _), _| p != province);
+        }
+    }
+
     /// 当前 cache 内活跃 (province, admin) 对总数。
     pub(crate) fn active_count(&self) -> usize {
         self.inner.lock().map(|g| g.len()).unwrap_or(0)
@@ -71,4 +91,40 @@ impl Default for ShengSigningCache {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// 中文注释:业务推链 signer 路由(ADR-008 Phase 23e)。
+///
+/// 历史 `key_admins::signer_router::resolve_business_signer` 等价替换:
+/// - ShengAdmin / ShiAdmin:取登录态对应省的 cache(ShengAdmin 用自己 pubkey,
+///   ShiAdmin 用其上级 sheng admin pubkey;后者实现走 `any_for_province` 退化)
+/// - 任何角色 cache 缺失:返回 503,提示让本省 admin 先登录
+pub(crate) fn resolve_business_signer(
+    state: &crate::AppState,
+    ctx: &crate::login::AdminAuthContext,
+) -> Result<(Sr25519Pair, String), (axum::http::StatusCode, String)> {
+    let province = ctx.admin_province.as_deref().ok_or_else(|| {
+        (
+            axum::http::StatusCode::BAD_REQUEST,
+            "管理员缺少省份信息".to_string(),
+        )
+    })?;
+    // 优先按 (province, ctx.admin_pubkey) 精确取(ShengAdmin 自己登录场景)
+    let admin_bytes = crate::login::parse_sr25519_pubkey_bytes(ctx.admin_pubkey.as_str());
+    if let Some(bytes) = admin_bytes {
+        if let Some(pair) = state.sheng_signer_cache.get(province, &bytes) {
+            return Ok((pair, province.to_string()));
+        }
+    }
+    // 退化:任意已上线 slot(ShiAdmin 推链场景,凭其上级 sheng 已登录)
+    state
+        .sheng_signer_cache
+        .any_for_province(province)
+        .map(|p| (p, province.to_string()))
+        .ok_or_else(|| {
+            (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                format!("本省({province})登录管理员未在线，暂无法推链"),
+            )
+        })
 }

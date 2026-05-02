@@ -215,3 +215,10 @@
    - `backend/src/sheng-admins/institutions.rs`（机构管理）
 4. 省域判定：`backend/src/business/scope.rs`
 5. CPMS 状态扫码联动：`backend/src/citizens/status.rs`
+
+
+## ADR-008 Phase 23e 更新（2026-05-01）
+
+KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
+本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
+实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。
