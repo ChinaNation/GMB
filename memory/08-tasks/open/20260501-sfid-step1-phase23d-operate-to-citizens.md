@@ -2,14 +2,14 @@
 
 - 状态:open
 - 创建日期:2026-05-01
-- 模块:`sfid/backend/src/{operate,citizens}/`
+- 模块:`sfid/backend/{operate,citizens}/`
 - 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
 - 前置依赖:phase23a
 - 阻塞下游:phase23e
 
 ## 任务需求
 
-`sfid/backend/src/operate/{binding.rs, cpms_qr.rs, status.rs, mod.rs}` 实际是公民身份业务,本卡迁入新建的 `citizens/` 目录,删 `operate/`。
+`sfid/backend/operate/{binding.rs, cpms_qr.rs, status.rs, mod.rs}` 实际是公民身份业务,本卡迁入新建的 `citizens/` 目录,删 `operate/`。
 
 ## 搬迁方案
 
@@ -49,9 +49,9 @@
 
 **搬迁动作**:
 
-- `git mv sfid/backend/src/operate/{binding,cpms_qr,status}.rs` → `sfid/backend/src/citizens/`
-- 删 `sfid/backend/src/operate/mod.rs` + `rmdir operate/`
-- 新建 `sfid/backend/src/citizens/{mod,handler,vote}.rs`(handler/vote 空骨架 + `//!` 中文用途说明)
+- `git mv sfid/backend/operate/{binding,cpms_qr,status}.rs` → `sfid/backend/citizens/`
+- 删 `sfid/backend/operate/mod.rs` + `rmdir operate/`
+- 新建 `sfid/backend/citizens/{mod,handler,vote}.rs`(handler/vote 空骨架 + `//!` 中文用途说明)
 - 三个迁入文件顶部补 `//!` 模块级文档注释
 
 **调用方更新**(13 处):
@@ -80,9 +80,9 @@
 - `cargo check` 全绿(3 baseline province dead_code warnings)
 - `cargo test` **79 passed / 0 failed / 0 ignored**
 - `cargo clippy --all-targets -- -D warnings` 59 errors = baseline(零新增)
-- `grep -rn "crate::operate\|operate::\|src/operate/" sfid/backend/src/` = **0 hit**
-- `grep -rn "crate::citizens\|citizens::" sfid/backend/src/` = **14 hit**(≥8 阈值)
-- `ls sfid/backend/src/operate/` = 不存在
+- `grep -rn "crate::operate\|operate::\|src/operate/" sfid/backend/` = **0 hit**
+- `grep -rn "crate::citizens\|citizens::" sfid/backend/` = **14 hit**(≥8 阈值)
+- `ls sfid/backend/operate/` = 不存在
 - `citizens/{handler,vote}.rs` 空骨架 + `//!` 中文用途说明
 
 **后续提醒**:

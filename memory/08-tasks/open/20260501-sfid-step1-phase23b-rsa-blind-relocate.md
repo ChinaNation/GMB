@@ -2,7 +2,7 @@
 
 - 状态:open
 - 创建日期:2026-05-01
-- 模块:`sfid/backend/src/`
+- 模块:`sfid/backend/`
 - 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
 - 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
 - 前置依赖:phase23a(models split)
@@ -14,7 +14,7 @@
 
 ## 搬迁方案
 
-- 新位置:`sfid/backend/src/institutions/anon_cert/`(新目录)
+- 新位置:`sfid/backend/institutions/anon_cert/`(新目录)
   - `mod.rs` re-export
   - `rsa_blind.rs`(从 `key-admins/` 整文件迁移,内容不动)
 - 调用方更新:`sheng_admins/institutions.rs` 把 `use crate::key_admins::rsa_blind` → `use crate::institutions::anon_cert::rsa_blind`
@@ -49,13 +49,13 @@
 
 **改动文件:**
 
-- `sfid/backend/src/institutions/anon_cert/mod.rs`(新建):中文 `//!` 用途说明 + `pub mod rsa_blind;`
-- `sfid/backend/src/institutions/anon_cert/rsa_blind.rs`(`git mv` 自 `key-admins/rsa_blind.rs`,内容零改动,148 行)
-- `sfid/backend/src/institutions/mod.rs`:加 `pub mod anon_cert;`
-- `sfid/backend/src/key-admins/mod.rs`:删 `pub(crate) mod rsa_blind;`
-- `sfid/backend/src/main.rs`:3 处 import 路径改为 `crate::institutions::anon_cert::rsa_blind::*`
-- `sfid/backend/src/sheng_admins/institutions.rs`:4 处同上(任务卡原估 6 处,实际是 4 处)
-- `sfid/backend/src/operate/binding.rs`:1 处同上(任务卡未列出,verify_anon_cert 调用)
+- `sfid/backend/institutions/anon_cert/mod.rs`(新建):中文 `//!` 用途说明 + `pub mod rsa_blind;`
+- `sfid/backend/institutions/anon_cert/rsa_blind.rs`(`git mv` 自 `key-admins/rsa_blind.rs`,内容零改动,148 行)
+- `sfid/backend/institutions/mod.rs`:加 `pub mod anon_cert;`
+- `sfid/backend/key-admins/mod.rs`:删 `pub(crate) mod rsa_blind;`
+- `sfid/backend/main.rs`:3 处 import 路径改为 `crate::institutions::anon_cert::rsa_blind::*`
+- `sfid/backend/sheng_admins/institutions.rs`:4 处同上(任务卡原估 6 处,实际是 4 处)
+- `sfid/backend/operate/binding.rs`:1 处同上(任务卡未列出,verify_anon_cert 调用)
 - `memory/05-modules/sfid/backend/key-admins/KEY_ADMINS_TECHNICAL.md`:顶部加注释指出 rsa_blind 已搬出
 - `memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md`:顶部加注释说明新增 anon_cert 子模块
 

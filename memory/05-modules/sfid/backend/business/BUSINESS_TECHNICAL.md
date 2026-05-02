@@ -2,12 +2,12 @@
 
 ## 1. 模块定位
 
-- 路径：`backend/src/business`
+- 路径：`backend/business`
 - 职责：承载“共用后台查询、审计、公钥归一化与作用域判定能力”。
 - 当前不再承载公民身份业务与区块链业务：
-  - 公民身份业务在 `backend/src/citizens`
-  - 区块链业务在 `backend/src/chain`
-  - SFID 管理端业务在 `backend/src/sfid/admin.rs`
+  - 公民身份业务在 `backend/citizens`
+  - 区块链交互代码跟随所属功能模块,文件名统一以 `chain_` 开头
+  - SFID 管理端业务在 `backend/sfid/admin.rs`
 
 ## 2. 模块结构
 

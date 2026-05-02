@@ -6,8 +6,8 @@
 //   - 失败时把错误写到 error,不抛到组件外
 
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminAuth, SfidMetaResult } from '../api/client';
-import { getSfidMeta } from '../api/client';
+import type { AdminAuth } from '../auth/types';
+import { getSfidMeta, type SfidMetaResult } from '../sfid/api';
 
 export interface UseSfidMetaResult {
   meta: SfidMetaResult | null;

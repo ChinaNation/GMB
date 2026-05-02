@@ -10,7 +10,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, message, Modal, QRCode, Space, Typography } from 'antd';
-import { registerCpms, type AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
+import { registerCpms } from './api';
 import { startCameraScanner } from '../utils/cameraScanner';
 
 interface Props {

@@ -100,7 +100,7 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<address 或 pubkey>
 - [ ] `cpms/frontend/web/src/qr/wuminQr.ts`:同上
 
 ### Step 4:Rust 后端新建统一类型
-- [ ] `sfid/backend/src/qr/envelope.rs`:`QrEnvelope<T>` + `QrKind`
+- [ ] `sfid/backend/qr/envelope.rs`:`QrEnvelope<T>` + `QrKind`
 - [ ] `cpms/backend/src/qr/envelope.rs`:同上
 
 ### Step 5:所有生成点切 envelope

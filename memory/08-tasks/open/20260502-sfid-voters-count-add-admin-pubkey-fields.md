@@ -12,7 +12,7 @@ step2d 后 wuminapp `ApiClient.fetchPopulationSnapshot` 解析期强制要求 `p
 
 ## 影响范围
 
-- `sfid/backend/src/chain/joint_vote/handler.rs`(或 app_voters_count handler 实际位置,grep 找)
+- `sfid/backend/chain/joint_vote/handler.rs`(或 app_voters_count handler 实际位置,grep 找)
 - 响应 DTO struct 加 2 字段
 - 数据来源:登录 session 的 `admin_province` + `unlocked_admin_pubkey`
 - 现有测试同步;新加 ≥ 1 测试断言响应含新字段

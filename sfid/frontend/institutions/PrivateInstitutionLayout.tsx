@@ -36,7 +36,7 @@ import {
   message,
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
 import {
   A3_LABEL,
   INSTITUTION_CODE_LABEL,
@@ -49,7 +49,7 @@ import {
   updateInstitution,
   type InstitutionDetail,
   type ParentInstitutionRow,
-} from '../api/institution';
+} from './api';
 import { AccountList } from './AccountList';
 import { CreateAccountModal } from './CreateAccountModal';
 import { DocumentLibrary } from './DocumentLibrary';

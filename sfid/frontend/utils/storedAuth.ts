@@ -2,7 +2,7 @@
 // 从 App.tsx 里抽出来的 readStoredAuth / writeStoredAuth / clearStoredAuth,
 // 语义保持一致(sessionStorage + 结构校验),供 AuthContext 和老 App.tsx 共用。
 
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
 
 const AUTH_STORAGE_KEY = 'sfid_admin_auth_v1';
 

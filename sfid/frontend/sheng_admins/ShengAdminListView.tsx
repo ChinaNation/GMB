@@ -1,7 +1,7 @@
 // 省级管理员列表视图 mode='list'(从 ShengAdminsView.tsx 拆分)
 
 import { Button, Card, Form, Input, Select, Table, Tag, Tooltip } from 'antd';
-import type { ShengAdminRow } from '../api/client';
+import type { ShengAdminRow } from './api';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { isSr25519HexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';

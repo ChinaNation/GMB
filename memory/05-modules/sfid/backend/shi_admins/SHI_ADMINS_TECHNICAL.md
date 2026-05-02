@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-- 路径：`backend/src/shi-admins`
+- 路径：`backend/shi-admins`
 - 职责：市级管理员（`ShiAdmin`，原 `OperatorAdmin`）角色入口模块。
 - 设计：本模块保持”轻路由适配”职责，核心业务实现下沉到业务模块，避免角色目录重复实现。
 - 角色变更说明：`OPERATOR_ADMIN`（操作管理员）已重命名为 `SHI_ADMIN`（市级管理员），负责日常操作。

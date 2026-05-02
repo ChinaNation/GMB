@@ -1,14 +1,14 @@
 # CITIZENS 模块技术文档
 
-> 历史:本模块由 phase23d(2026-05-01)从 `backend/src/operate/` 整体迁入,
+> 历史:本模块由 phase23d(2026-05-01)从 `backend/operate/` 整体迁入,
 > 业务上聚焦"公民身份"业务族,与 `sheng_admins` / `shi_admins` 等管理员模块平行。
 
 ## 1. 模块定位
 
-- 路径:`backend/src/citizens`
+- 路径:`backend/citizens`
 - 职责:承载公民身份相关业务,包括公民身份绑定凭证签发、链上绑定推送、
   CPMS 站点扫码状态更新,以及 wuminapp 自有的投票账户登记/查询。
-- 来源:phase23d 由原 `backend/src/operate/` 物理搬迁;原 `operate/` 整目录已删除。
+- 来源:phase23d 由原 `backend/operate/` 物理搬迁;原 `operate/` 整目录已删除。
 
 ## 2. 模块结构
 
@@ -17,6 +17,12 @@
   - `citizen_bind` / `citizen_unbind` 公民身份绑定/解绑
   - `citizen_push_chain_bind` / `citizen_push_chain_unbind` 推链
   - `app_vote_account_register` / `app_vote_account_status` wuminapp 投票账户
+- `chain_binding.rs`
+  - 公民绑定 / 解绑链上 extrinsic 提交 helper
+- `chain_vote.rs`
+  - wuminapp 公民投票凭证签发接口
+- `chain_joint_vote.rs`
+  - 联合投票人口快照凭证签发接口
 - `status.rs`
   - `admin_cpms_status_scan` CPMS 站点扫公民状态
 - `cpms_qr.rs`
@@ -36,6 +42,8 @@
 - `POST /api/v1/admin/citizen/unbind/push-chain` -> `citizens::binding::citizen_push_chain_unbind`
 - `POST /api/v1/app/vote-account/register` -> `citizens::binding::app_vote_account_register`
 - `GET  /api/v1/app/vote-account/status` -> `citizens::binding::app_vote_account_status`
+- `POST /api/v1/app/vote/credential` -> `citizens::chain_vote::app_vote_credential`
+- `GET  /api/v1/app/voters/count` -> `citizens::chain_joint_vote::app_voters_count`
 - `POST /api/v1/admin/cpms-status/scan` -> `citizens::status::admin_cpms_status_scan`
   (经由 `shi_admins::mod.rs` 转发)
 
@@ -44,12 +52,12 @@
 - 依赖:
   - `scope`(省域范围判断)
   - 全局公共能力(鉴权、审计、状态存储、签名封装)
-  - `chain::citizen_binding`(链上 `bind_sfid` / `unbind_sfid` extrinsic 推送)
+  - `citizens::chain_binding`(链上 `bind_sfid` / `unbind_sfid` extrinsic 推送)
   - `sheng_admins::institutions`(`resolve_site_province_via_shard`)
 - 边界:
   - `citizens` 仅负责公民身份业务。
-  - 链上交互能力在 `backend/src/chain/citizen_binding`。
-  - SFID 号生成入口在 `backend/src/sfid/generator.rs`。
+  - 链上交互能力在 `backend/citizens/chain_*`。
+  - SFID 号生成入口在 `backend/sfid/generator.rs`。
 
 ## 5. 关键一致性约束
 

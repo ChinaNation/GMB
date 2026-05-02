@@ -2,14 +2,14 @@
 
 - 状态:done(2026-05-02,与 phase23b 合并 commit 400dcdd 落地;Progress 详见末尾)
 - 创建日期:2026-05-01
-- 模块:`sfid/backend/src/{business,scope}/`
+- 模块:`sfid/backend/{business,scope}/`
 - 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
 - 前置依赖:phase23a
 - 阻塞下游:phase23e
 
 ## 任务需求
 
-`sfid/backend/src/business/`(5 文件:`audit.rs / mod.rs / pubkey.rs / query.rs / scope.rs`)与 `src/scope/`(3 文件:`mod / filter / rules`)职责重叠。`business::scope::in_scope_cpms_site` 在 `main.rs:43` 被引入。本卡按职责合并,删除 `business/`。
+`sfid/backend/business/`(5 文件:`audit.rs / mod.rs / pubkey.rs / query.rs / scope.rs`)与 `src/scope/`(3 文件:`mod / filter / rules`)职责重叠。`business::scope::in_scope_cpms_site` 在 `main.rs:43` 被引入。本卡按职责合并,删除 `business/`。
 
 ## 搬迁方案(按文件归位)
 
@@ -53,19 +53,19 @@
 phase23b 派工时 SFID Agent 越界推进 phase23c。修复后两卡合并落地:
 
 **phase23c 改动文件:**
-- 新建 `sfid/backend/src/scope/{pubkey,admin_province,cpms,audit,query}.rs`(从 `business/{pubkey,scope::province_scope_for_role,scope::in_scope_cpms_site,audit,query}` 迁入)
+- 新建 `sfid/backend/scope/{pubkey,admin_province,cpms,audit,query}.rs`(从 `business/{pubkey,scope::province_scope_for_role,scope::in_scope_cpms_site,audit,query}` 迁入)
 - `scope/mod.rs` 加 `pub mod admin_province; pub mod audit; pub mod cpms; pub mod pubkey; pub mod query;` + Phase 23c 注释
 - `main.rs`:删 `mod business;` + `use business::scope::in_scope_cpms_site;` → `use scope::cpms::in_scope_cpms_site;`;两处 audit/query 路由调用从 `business::` → `scope::`(public_identity_search、admin_list_audit_logs、admin_list_citizens 共 3 路由)
 - `key-admins/mod.rs`:`business::pubkey::same_admin_pubkey` → `scope::pubkey::same_admin_pubkey`
 - `login/mod.rs` / `sheng_admins/{catalog,operators}.rs` / `institutions/handler.rs`:`use crate::business::{pubkey, scope as adminscope}` → `use crate::scope::{pubkey, admin_province as adminscope}`(共多处,具体 grep `crate::scope::pubkey|crate::scope::admin_province` = 13 处)
-- `git rm -r sfid/backend/src/business/`(整目录 5 文件删除)
+- `git rm -r sfid/backend/business/`(整目录 5 文件删除)
 
 **验收终态:**
 - `cargo check`:全绿,3 baseline province dead_code 警告
 - `cargo test`:**79 passed / 0 failed**
 - `cargo clippy --all-targets -- -D warnings`:**59 errors,与 baseline 持平**
-- `grep -rn "crate::business::|business::scope::|src/business/" sfid/backend/src/` = **0**(达标)
-- `grep -rn "crate::scope::pubkey|crate::scope::audit|crate::scope::query|crate::scope::cpms|crate::scope::admin_province" sfid/backend/src/` = **13**
+- `grep -rn "crate::business::|business::scope::|src/business/" sfid/backend/` = **0**(达标)
+- `grep -rn "crate::scope::pubkey|crate::scope::audit|crate::scope::query|crate::scope::cpms|crate::scope::admin_province" sfid/backend/` = **13**
 
 **与 phase23b 合并 commit:** business 整改与 rsa_blind 搬迁原本两张卡,因 SFID Agent 越界已混合,统一作为一个 commit 落地。
 

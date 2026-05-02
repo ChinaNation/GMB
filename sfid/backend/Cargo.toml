@@ -3,6 +3,11 @@ name = "sfid-backend"
 version = "0.1.0"
 edition = "2021"
 
+# 中文注释:SFID 后端源码已平铺到 backend 根目录,不再使用 Cargo 默认的 src/main.rs。
+[[bin]]
+name = "sfid-backend"
+path = "main.rs"
+
 [dependencies]
 axum = { version = "0.7", features = ["multipart"] }
 chrono = { version = "0.4", features = ["serde"] }

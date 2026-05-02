@@ -18,8 +18,9 @@ import {
   createInstitution,
   type CreateInstitutionOutput,
   type InstitutionCategory,
-} from '../api/institution';
-import { listSfidCities, type AdminAuth, type SfidCityItem } from '../api/client';
+} from './api';
+import type { AdminAuth } from '../auth/types';
+import { listSfidCities, type SfidCityItem } from '../sfid/api';
 import { dynamicLocksForA3, locksForCategory } from './locks';
 
 interface Props {

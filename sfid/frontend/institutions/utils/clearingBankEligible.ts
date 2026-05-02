@@ -1,6 +1,6 @@
 // 清算行资格白名单(2026-04-24, ADR-007)— 前端复刻版本
 //
-// 与后端 sfid/backend/src/institutions/service.rs::is_clearing_bank_eligible 严格一致:
+// 与后端 sfid/backend/institutions/service.rs::is_clearing_bank_eligible 严格一致:
 //   - SFR + sub_type=JOINT_STOCK            → ✅
 //   - FFR + parent.SFR + parent.JOINT_STOCK → ✅
 //   - 其他                                   → ❌

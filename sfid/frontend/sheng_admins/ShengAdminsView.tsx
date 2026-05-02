@@ -8,17 +8,18 @@
 import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Select, Space, message } from 'antd';
 import { useAuth } from '../hooks/useAuth';
-import type { OperatorRow, ShengAdminRow, SfidCityItem } from '../api/client';
+import type { OperatorRow } from '../shi_admins/api';
+import type { ShengAdminRow } from './api';
+import type { SfidCityItem } from '../sfid/api';
 import {
   createOperator,
   deleteOperator,
   listOperators,
-  listSfidCities,
-  listShengAdmins,
-  replaceShengAdmin,
   updateOperator,
   updateOperatorStatus,
-} from '../api/client';
+} from '../shi_admins/api';
+import { listShengAdmins, replaceShengAdmin } from './api';
+import { listSfidCities } from '../sfid/api';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';

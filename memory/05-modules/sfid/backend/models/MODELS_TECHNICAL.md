@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-- 路径：`backend/src/models`
+- 路径：`backend/models`
 - 职责：统一维护 SFID 后端的数据结构定义（领域模型 + API DTO + 状态枚举）。
 - 目标：把数据协议与业务逻辑解耦，避免 `main.rs` 持续膨胀。
 

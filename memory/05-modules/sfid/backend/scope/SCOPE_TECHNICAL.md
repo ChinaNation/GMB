@@ -8,7 +8,7 @@ handler 手写 `if ctx.role == ...` 分支。
 ## 文件结构
 
 ```
-backend/src/scope/
+backend/scope/
 ├── mod.rs     — pub use 聚合
 ├── rules.rs   — VisibleScope 结构体 + get_visible_scope(ctx)
 └── filter.rs  — HasProvinceCity trait + filter_by_scope 泛型函数

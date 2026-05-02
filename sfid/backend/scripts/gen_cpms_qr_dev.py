@@ -2,7 +2,7 @@
 """
 Generate CPMS QR payloads for SFID local/dev integration.
 
-This script follows the current dev verification logic in backend/src/main.rs:
+This script follows the current dev verification logic in backend/main.rs:
 - Citizen/status QR signature: hex(blake2b_256("{pubkey}|{canonical_text}"))
 - Register checksum: hex(blake2b_256(register_canonical_text))
 """

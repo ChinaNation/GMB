@@ -20,8 +20,8 @@
 
 ## 建议模块
 
-- `sfid/backend/src/chain/`:新增 `sheng_admin/`(扩展)+ `sheng_signer/`
-- `sfid/backend/src/main.rs`:路由表收敛 + AppState 字段精简
+- `sfid/backend/chain/`:新增 `sheng_admin/`(扩展)+ `sheng_signer/`
+- `sfid/backend/main.rs`:路由表收敛 + AppState 字段精简
 
 ## 影响范围(文件级)
 

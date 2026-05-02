@@ -25,7 +25,7 @@ src/
 
 ## 3. 清算行合法性模型
 
-清算行 = **SFR 私法人** 或 **FFR 非法人**(两者皆私权机构),对应 `sfid/backend/src/sfid/category.rs:65` 的 `InstitutionCategory::PrivateInstitution`。
+清算行 = **SFR 私法人** 或 **FFR 非法人**(两者皆私权机构),对应 `sfid/backend/sfid/category.rs:65` 的 `InstitutionCategory::PrivateInstitution`。
 
 链上**不新增** SFID 枚举,而是直接对 `duoqian-manage::AddressRegisteredSfid` 存的 `sfid_id` 字符串做 A3 前缀匹配(前 3 字节)。
 

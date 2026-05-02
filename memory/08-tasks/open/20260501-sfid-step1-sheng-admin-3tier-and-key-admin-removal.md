@@ -7,8 +7,8 @@
 
 ### 2026-05-01 Phase 1 完成
 
-- 重命名 `sfid/backend/src/sheng-admins/` → `sheng_admins/`
-- 重命名 `sfid/backend/src/shi-admins/` → `shi_admins/`
+- 重命名 `sfid/backend/sheng-admins/` → `sheng_admins/`
+- 重命名 `sfid/backend/shi-admins/` → `shi_admins/`
 - `main.rs` 删除两个 `#[path]` shim,改用标准 `mod sheng_admins;` `mod shi_admins;`
 - 同步重命名文档目录 `memory/05-modules/sfid/backend/sheng-admins/` → `sheng_admins/`(及 `shi-admins`)
 - 更新 `models/mod.rs` / `sfid/generator.rs` 注释里的旧路径指引
@@ -57,7 +57,7 @@ phase23 已细分为 5 张连环子卡(每张 build 绿),按字母顺序连跑:
 
 ## 建议模块
 
-- `sfid/backend/src/`(目录重组 + 删 KEY_ADMIN + 新增 sheng_signer 业务 + chain 推链能力)
+- `sfid/backend/`(目录重组 + 删 KEY_ADMIN + 新增 sheng_signer 业务 + chain 推链能力)
 - `sfid/frontend/src/views/`(删 keyring 视图 + 加 sheng_admin 名册页 / 激活页 / rotate 页)
 
 ## 影响范围

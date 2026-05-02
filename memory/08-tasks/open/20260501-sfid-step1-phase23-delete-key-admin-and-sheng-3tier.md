@@ -20,7 +20,7 @@
 
 ## 建议模块
 
-- `sfid/backend/src/`:全后端 KEY_ADMIN 拆除 + 省管理员 3-tier 业务实现
+- `sfid/backend/`:全后端 KEY_ADMIN 拆除 + 省管理员 3-tier 业务实现
 
 ## 影响范围(文件级)
 
@@ -138,10 +138,10 @@
   - `cargo check` 全绿(3 warnings,均为 sfid/province.rs 的 ProvinceCode 字段 `name/code/villages/towns` dead_code,这些是 baseline 既有,与本卡无关)
   - `cargo test` 79 passed / 0 failed(含本卡新增 2 条 sheng_signer 测试,含 main_tests 全部通过)
   - `cargo clippy --all-targets -- -D warnings` 59 errors —— **基线既有 59,本卡未引入新错**(本卡新增的 dead_code 全部加 `#[allow(dead_code)]` 显式抑制,bootstrap.rs `&*seed_arr` 已修为 `&seed_arr`)
-- **残留 grep(本卡未做大刀阔斧的删除,故仍有大量残留,本节如实记录,在 `sfid/backend/src/` 范围)**
+- **残留 grep(本卡未做大刀阔斧的删除,故仍有大量残留,本节如实记录,在 `sfid/backend/` 范围)**
   - `KeyAdmin|key-admin|key_admin|key-admins` 合计:**178 条**(分布于 `key-admins/` 整目录、`chain/key_admins/`、`chain/balance/`、`models/mod.rs::AdminRole::KeyAdmin`、`main.rs` 路由 + AppState 字段、`sheng_admins/{catalog,operators,institutions}.rs` 调用、`login/mod.rs` 多分支、`chain/runtime_align.rs`、`institutions/handler.rs` 几处分支、`store_shards/{shard_types.rs,migration.rs}`、`scope/rules.rs`、`sfid/generator.rs` 注释、`main_tests.rs`(966 行测试))
   - `#[path` 合计:**44 条**(43 条全部在 `sfid/province.rs` 加载 43 个 `city_codes/*.rs`,与 KEY_ADMIN/sheng_admins 重命名无关;**1 条目标**:`main.rs:29 #[path = "key-admins/mod.rs"]` 仍在,删除 `key-admins/` 整目录后这条会一并消失)
-  - 含 `-` 的目录/文件(排除 city_codes):**仍剩 1 条** `sfid/backend/src/key-admins`(目录),其他已是 Phase 1 完工状态
+  - 含 `-` 的目录/文件(排除 city_codes):**仍剩 1 条** `sfid/backend/key-admins`(目录),其他已是 Phase 1 完工状态
   - `operate::|operate/|business::|business/` 合计:**32 条**(`operate/`、`business/` 整目录 + 各 caller)
   - `chain/balance|chain/key_admins` 合计:**10 条**(`main.rs:922 / 1032 / 1036 / 1040 / 1044 / 1137 / 1141`、`runtime_align.rs:553`、`sheng_admins/institutions.rs:269/493/594/796/1413/1447/1478`、`chain/sheng_admin/clear_sheng_signing.rs:10`)
   - **本卡新增的 `Slot/ProvinceAdmins/fetch_backup_admins/province_admins_for/pubkey_from_hex` + `signing_cache.rs/bootstrap.rs/roster.rs/store_shards/sheng_signer.rs` + 014 SQL** 全部 build 通过 + 测试通过 + clippy 不污染基线;其余删除全部留给 phase23a-e 5 张子卡(见下)

@@ -10,12 +10,13 @@ import { useAuth } from '../hooks/useAuth';
 import { writeStoredAuth } from '../utils/storedAuth';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { parseSignedLoginPayload } from '../utils/parseSignedPayload';
-import type { AdminAuth, AdminQrChallengeResult } from '../api/client';
+import type { AdminAuth } from './types';
+import type { AdminQrChallengeResult } from './api';
 import {
   completeAdminQrLogin,
   createAdminQrChallenge,
   queryAdminQrLoginResult,
-} from '../api/client';
+} from './api';
 
 function createSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

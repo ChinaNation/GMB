@@ -38,10 +38,10 @@ GFR / SF 等其他 a3 一律 ❌。
 
 | 资产 | 文件 |
 |---|---|
-| 资格判定函数 | [sfid/backend/src/institutions/service.rs](../../../sfid/backend/src/institutions/service.rs) `is_clearing_bank_eligible` |
-| 已激活清算行搜索 | [sfid/backend/src/institutions/handler.rs](../../../sfid/backend/src/institutions/handler.rs) `app_search_clearing_banks`（收紧版） |
-| 候选清算行搜索（含未激活） | [sfid/backend/src/institutions/handler.rs](../../../sfid/backend/src/institutions/handler.rs) `app_search_eligible_clearing_banks` |
-| 路由 | [sfid/backend/src/main.rs](../../../sfid/backend/src/main.rs) `/api/v1/app/clearing-banks/search` 与 `/api/v1/app/clearing-banks/eligible-search` |
+| 资格判定函数 | [sfid/backend/institutions/service.rs](../../../sfid/backend/institutions/service.rs) `is_clearing_bank_eligible` |
+| 已激活清算行搜索 | [sfid/backend/institutions/handler.rs](../../../sfid/backend/institutions/handler.rs) `app_search_clearing_banks`（收紧版） |
+| 候选清算行搜索（含未激活） | [sfid/backend/institutions/handler.rs](../../../sfid/backend/institutions/handler.rs) `app_search_eligible_clearing_banks` |
+| 路由 | [sfid/backend/main.rs](../../../sfid/backend/main.rs) `/api/v1/app/clearing-banks/search` 与 `/api/v1/app/clearing-banks/eligible-search` |
 
 ## 跨省 parent 查询机制
 

@@ -33,7 +33,7 @@
 
 ### SFID 后端(若 institution_credential 接口未返回 admin pubkey)
 
-- `sfid/backend/src/chain/institution_info/handler.rs` 或 `chain/institution_info/dto.rs` 凭证响应加字段
+- `sfid/backend/chain/institution_info/handler.rs` 或 `chain/institution_info/dto.rs` 凭证响应加字段
 - 数据来源:登录 session `unlocked_admin_pubkey`
 
 ## 验收

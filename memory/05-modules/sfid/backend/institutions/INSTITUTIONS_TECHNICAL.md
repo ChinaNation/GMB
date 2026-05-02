@@ -13,7 +13,9 @@ SFID 系统只负责机构身份和账户名称:
 - `institution_name`:机构展示名称,创建后可设置和修改。
 - `account_name`:DUOQIAN_V1 协议定义的账户名称,与 `sfid_id` 一起派生链上地址。
 
-SFID 系统不负责链上注册、链上注销、管理员阈值签名和账户激活。链上事实由 `runtime/node` 产生,再通过链路签名接口同步回 SFID。
+SFID 系统不直接发起链上机构注册、链上注销、管理员阈值签名和账户激活。
+链端需要注册机构时,应通过 `institutions::chain_duoqian_info` 公开接口 pull
+`sfid_id / institution_name / account_names[]` 注册信息凭证。
 
 开发期按彻底改造执行，当前文档只描述现行接口和状态机。
 
@@ -92,53 +94,14 @@ SFID 不能单方面删除仍在链上的账户名称。
 | 方法 | 路径 | 功能 |
 |---|---|---|
 | GET | `/api/v1/app/institutions/search?q=xxx&limit=20` | 按 SFID 或机构名称搜索机构 |
-| GET | `/api/v1/app/institutions/:sfid_id` | 读取机构详情与最新机构名称 |
+| GET | `/api/v1/app/institutions/:sfid_id` | 读取机构详情与最新机构名称,不带注册凭证 |
+| GET | `/api/v1/app/institutions/:sfid_id/registration-info` | 链端注册信息凭证,业务字段仅 `sfid_id/institution_name/account_names[]` |
 | GET | `/api/v1/app/institutions/:sfid_id/accounts` | 读取账户列表、地址、链上状态、删除许可 |
-| POST | `/api/v1/app/institutions/:sfid_id/chain-sync` | 受信任链路同步链上注册/注销结果 |
 | GET | `/api/v1/app/clearing-banks/search` | wuminapp 搜索已上链且已加入清算网络的清算行 |
 | GET | `/api/v1/app/clearing-banks/eligible-search` | 桌面节点搜索具备清算行资格的 SFID 机构 |
 
-`chain-sync` 必须携带链路签名头:
-
-```text
-x-chain-token
-x-chain-request-id
-x-chain-nonce
-x-chain-timestamp
-x-chain-signature
-```
-
-同步体示例:
-
-```json
-{
-  "institution_status": "REGISTERED",
-  "chain_tx_hash": "0x...",
-  "chain_block_number": 123,
-  "accounts": [
-    {
-      "account_name": "主账户",
-      "chain_status": "ACTIVE_ON_CHAIN",
-      "duoqian_address": "...",
-      "chain_tx_hash": "0x...",
-      "chain_block_number": 123
-    }
-  ]
-}
-```
-
-机构注销时可以传:
-
-```json
-{
-  "institution_status": "REVOKED_ON_CHAIN",
-  "chain_tx_hash": "0x...",
-  "chain_block_number": 456,
-  "accounts": []
-}
-```
-
-此时 SFID 会把该机构下已经上链或上链中的账户统一标记为 `REVOKED_ON_CHAIN`。
+历史 `POST /api/v1/app/institutions/:sfid_id/chain-sync` 已下架,不得作为新功能入口。
+后续如需回写链上事实,必须另起任务设计可信同步边界。
 
 ## 前端规则
 
@@ -150,8 +113,11 @@ x-chain-signature
 ## 文件结构
 
 ```text
-backend/src/institutions/
+backend/institutions/
 ├── mod.rs       — pub use 聚合
+├── chain_duoqian_info.rs         — 机构与区块链/钱包交互的模块入口
+├── chain_duoqian_info_dto.rs     — 机构链交互 DTO
+├── chain_duoqian_info_handler.rs — 机构链交互 HTTP handler
 ├── model.rs     — 机构、账户、链上同步 DTO
 ├── store.rs     — 机构/账户 store 读写层
 ├── service.rs   — 校验、分类、默认账户、删除许可规则

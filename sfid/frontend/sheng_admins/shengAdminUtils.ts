@@ -1,7 +1,9 @@
 // 省级管理员视图共享工具函数与类型
 
 import type { FormInstance } from 'antd';
-import type { OperatorRow, ShengAdminRow, SfidCityItem } from '../api/client';
+import type { SfidCityItem } from '../sfid/api';
+import type { OperatorRow } from '../shi_admins/api';
+import type { ShengAdminRow } from './api';
 
 /** 检查是否为合法 Sr25519 hex 公钥(32 字节十六进制) */
 export function isSr25519HexPubkey(value: string): boolean {

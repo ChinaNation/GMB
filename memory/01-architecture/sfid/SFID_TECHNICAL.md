@@ -167,43 +167,36 @@
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
 5. `key_admin_keyring`
-- 角色逻辑分层目录（已落地）：
-1. `backend/src/key-admins/`：密钥管理员逻辑（密钥轮换、省级管理员替换、链证明签名/公钥输出）。
-2. `backend/src/sheng-admins/`：省级管理员逻辑（已拆分为 `operators.rs` 管理员管理、`institutions.rs` 机构管理）。
-3. `backend/src/shi-admins/`：市级管理员入口逻辑（角色入口与路由适配）。
-4. `backend/src/business/`：共用后台查询与审计能力（查询、审计、省域隔离）。
-5. `backend/src/operate/`：操作业务逻辑（管理员绑定流程、状态扫码、CPMS 二维码验签）。
-6. `backend/src/chain/`：区块链业务接口逻辑（公钥绑定、公民数获取、投票验证、链侧校验/回执）。
-7. `backend/src/sfid/`：SFID 生成与元数据模块（码生成工具 + 管理端 SFID 业务接口）。
-8. `backend/src/models/`：统一数据结构模块（领域模型、接口 DTO、状态枚举）。
-9. `backend/src/main.rs`：路由装配与启动骨架（核心能力已下沉到模块）。
-- 架构冻结口径：管理员治理与机构治理继续在 `sheng-admins` 目录内演进，不新增独立模块。
+- 当前后端功能目录（2026-05-02 平铺后）：
+1. `backend/main.rs`：路由装配与启动骨架。
+2. `backend/app_core/`：跨业务底层工具,含 HTTP 安全、运行期工具与 `chain_*` 通用链工具。
+3. `backend/citizens/`：公民身份、绑定、投票凭证、CPMS 状态扫码。
+4. `backend/institutions/`：机构创建、机构资料、账户名称、机构链交互 `chain_duoqian_info*`。
+5. `backend/sheng_admins/`：省管理员后台业务和省管理员链交互 `chain_*`。
+6. `backend/shi_admins/`：市级管理员入口逻辑。
+7. `backend/scope/`：省/市可见范围与写权限判断。
+8. `backend/sfid/`：SFID 生成与元数据模块。
+9. `backend/models/`：统一数据结构模块。
+- 架构冻结口径：SFID 后端不再恢复 `backend/src/`、`backend/chain/`、`backend/key-admins/`、`backend/operate/` 等旧目录。
 
 ### 7.3 签名与密钥
-- 当前版本按角色目录管理签名密钥与验签流程：密钥管理与链证明在 `key-admins`，机构登记校验在 `sheng-admins`，CPMS 业务二维码验签在 `shi-admins`。
+- 当前版本按业务目录管理签名密钥与验签流程：省管理员三槽签名密钥在 `sheng_admins`，机构登记与机构链交互在 `institutions`，公民绑定/投票凭证在 `citizens`。
 - CPMS 机构密钥方案：每个市级机构（`site_sfid`）维护 3 套二维码签名密钥。
 - SFID 信任库存储维度：`site_sfid + key_id + pubkey`，按机构隔离验签。
 - 密钥分期：
 1. v1.0：国家级单签名私钥。
 2. v2.0：Root + 省级分层密钥。
 
-### 7.4 角色目录能力分配（已落地）
-- `backend/src/key-admins/chain_keyring.rs`：SFID 区块链签名密钥（一主两备）管理、轮换状态机、轮换签名验签。
-- `backend/src/key-admins/chain_proof.rs`：区块链业务证明签名封装（公民数、投票资格、公钥绑定/SFID/奖励相关证明）与公钥输出。
-- `backend/src/sheng-admins/institutions.rs`：CPMS 机构管理与登记校验（`site_sfid` 与机构公钥信任建立）。
-- `backend/src/operate/binding.rs`：管理员绑定扫码/确认/解绑实现。
-- `backend/src/operate/status.rs`：CPMS 状态变更扫码业务。
-- `backend/src/business/query.rs`：身份信息查询、按公钥查询等后台查询能力。
-- `backend/src/operate/cpms_qr.rs`：CPMS 二维码原文规范化与验签共用方法。
-- `backend/src/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
-- `backend/src/business/audit.rs`：审计日志查询共用实现。
-- `backend/src/business/scope.rs`：省域隔离与作用域判定共用实现。
-- `backend/src/chain/binding.rs`：链侧公钥绑定请求/结果、绑定校验、奖励回执与状态查询。
-- `backend/src/chain/voters.rs`：链侧公民数获取。
-- `backend/src/chain/vote.rs`：链侧投票资格验证。
-- `backend/src/chain/CHAIN_TECHNICAL.md`：链侧接口与参数对齐说明（含绑定凭证/投票凭证/人口快照对齐口径）。
-- `backend/src/sfid/mod.rs`：SFID 码生成工具主实现（由管理端生成接口调用）。
-- `backend/src/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
+### 7.4 目录能力分配（已落地）
+- `backend/institutions/chain_duoqian_info*.rs`：机构查询、注册信息凭证、清算行候选。
+- `backend/citizens/chain_binding.rs`：公民身份绑定/解绑推链。
+- `backend/citizens/chain_vote.rs`：公民投票凭证。
+- `backend/citizens/chain_joint_vote.rs`：联合投票人口快照凭证。
+- `backend/sheng_admins/chain_*.rs`：省管理员三槽名册、签名公钥激活/轮换与冷钱包待签缓存。
+- `backend/app_core/chain_*.rs`：跨业务链底层工具。
+- `backend/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
+- `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
+- `backend/models/mod.rs`：后端统一数据结构定义（Store、DTO、状态枚举）。
 - 主密钥轮换规则（强约束）：
 1. 区块链验证只使用主公钥（`main`）。
 2. 功能 1/2/3/4 的链上可信输出统一只认当前 `main`。
@@ -345,7 +338,7 @@
 - 鉴权方式：请求头 `x-app-token`，服务端与环境变量 `SFID_APP_TOKEN` 比对。
 - 用途：为移动端（wuminapp）提供专用接口，采用静态 Token 鉴权，无需链路 HMAC 签名，认证复杂度低于区块链接口。
 - 限流：共享全局限流器，与其他接口统一限流策略。
-- 源码位置：`sfid/backend/src/chain/app_api.rs`
+- 源码位置：App API 已按功能拆入 `sfid/backend/citizens/chain_*` 与 `sfid/backend/institutions/chain_duoqian_info*`。
 
 #### 9.9.1 人口快照查询
 - `GET /api/v1/app/voters/count?who=<pubkey_hex>`
@@ -597,9 +590,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 14.1 SFID码生成工具（Rust）
 #### 14.1.1 代码位置
-- 工具主模块：`backend/src/sfid/mod.rs`
-- 省定义：`backend/src/sfid/province.rs`
-- 市级代码表：`backend/src/sfid/city_codes/01_ZS.rs` 至 `backend/src/sfid/city_codes/43_HJ.rs`
+- 工具主模块：`backend/sfid/mod.rs`
+- 省定义：`backend/sfid/province.rs`
+- 市级代码表：`backend/sfid/city_codes/01_ZS.rs` 至 `backend/sfid/city_codes/43_HJ.rs`
 
 #### 14.1.2 生成输入
 - `account_pubkey`（必填）
@@ -640,7 +633,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 15.3 P2（运维与结构优化）
 - 可观测完善：增加扫码验签失败率、登录验签失败率、绑定成功率、链查询 P95、重放拦截次数（链路 P95/P99、重放拦截、链请求失败、回调失败已落地）。
-- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。角色专属逻辑归档在 `backend/src/key-admins`、`backend/src/sheng-admins`、`backend/src/shi-admins`，共用后台查询与审计归档在 `backend/src/business`，操作业务归档在 `backend/src/operate`，区块链业务归档在 `backend/src/chain`，SFID 生成与元数据归档在 `backend/src/sfid`，统一数据结构归档在 `backend/src/models`。
+- 工程结构已采用：`frontend`（前端）、`backend`（后端）、`deploy`；数据库与脚本统一归档在 `backend/db`、`backend/scripts`，测试归档在 `backend/tests`。后端源码直接平铺在 `backend/` 根目录，功能模块按 `app_core`、`citizens`、`institutions`、`scope`、`sfid`、`sheng_admins`、`shi_admins`、`models` 等目录归属；链交互能力放在所属功能目录的 `chain_*.rs` 文件内。
 
 ## 16. 开发步骤（执行版）
 ### 16.1 里程碑 0：规格冻结（0.5 天）
