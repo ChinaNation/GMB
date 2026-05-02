@@ -16,7 +16,7 @@ import {
   updateOperatorStatus,
 } from '../api/client';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
-import { glassCardStyle, glassCardHeadStyle } from '../App';
+import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { ScanAccountModal } from '../common/ScanAccountModal';
 
 function isSr25519HexPubkey(value: string): boolean {

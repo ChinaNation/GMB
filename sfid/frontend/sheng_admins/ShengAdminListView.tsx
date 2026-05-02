@@ -2,7 +2,7 @@
 
 import { Button, Card, Form, Input, Select, Table, Tag, Tooltip } from 'antd';
 import type { ShengAdminRow } from '../api/client';
-import { glassCardStyle, glassCardHeadStyle } from '../App';
+import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { isSr25519HexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 

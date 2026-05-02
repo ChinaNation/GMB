@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
 import type { OperatorRow, SfidCityItem } from '../api/client';
 import { tryEncodeSs58 } from '../utils/ss58';
-import { glassCardStyle, glassCardHeadStyle } from '../App';
+import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { sameHexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import { AddOperatorModal } from './AddOperatorModal';
