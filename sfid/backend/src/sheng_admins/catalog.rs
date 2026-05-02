@@ -25,13 +25,13 @@ pub(crate) async fn list_sheng_admins(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // scope:KEY_ADMIN → None(全局), SHENG/SHI → Some(province)
+    // ADR-008 后只保留 SHENG/SHI,按登录管理员省域 scope 过滤。
     let scope_province = province_scope_for_role(&store, &ctx.admin_pubkey, &ctx.role);
     let mut rows: Vec<ShengAdminRow> = store
         .sheng_admin_province_by_pubkey
         .iter()
         .filter_map(|(pubkey, province)| {
-            // scope 过滤:非 KEY_ADMIN 只能看自己所属省
+            // scope 过滤:有省域的管理员只能看自己所属省。
             if let Some(ref scope) = scope_province {
                 if province != scope {
                     return None;

@@ -21,7 +21,6 @@ use zeroize::Zeroize;
 
 const NONCE_LEN: usize = 12;
 const STORAGE_DIR_ENV: &str = "SFID_SHENG_ADMIN_SIGNING_SEED_DIR";
-const LEGACY_STORAGE_DIR_ENV: &str = "SFID_SHENG_SIGNER_DIR";
 const STORAGE_DIR_DEFAULT: &str = "storage/sheng_admins/signing_seeds";
 
 /// 取 SFID_MASTER_KEK 32 字节。
@@ -56,7 +55,6 @@ fn derive_wrap_key(master: &[u8; 32], admin_pubkey: &[u8; 32]) -> Result<[u8; 32
 
 fn storage_dir() -> PathBuf {
     std::env::var(STORAGE_DIR_ENV)
-        .or_else(|_| std::env::var(LEGACY_STORAGE_DIR_ENV))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(STORAGE_DIR_DEFAULT))
 }

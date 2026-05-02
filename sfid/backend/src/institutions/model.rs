@@ -226,7 +226,7 @@ pub struct InstitutionListRow {
     /// 命中:admin_name;未命中:None(前端显示为"未知")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"KEY_ADMIN" / "SHENG_ADMIN" / "SHI_ADMIN" / None
+    /// 创建者角色:"SHENG_ADMIN" / "SHI_ADMIN" / None
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }
@@ -252,7 +252,7 @@ pub struct InstitutionDetailOutput {
     /// 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_name: Option<String>,
-    /// 创建者角色:"KEY_ADMIN" / "SHENG_ADMIN" / "SHI_ADMIN"
+    /// 创建者角色:"SHENG_ADMIN" / "SHI_ADMIN"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_by_role: Option<String>,
 }

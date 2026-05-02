@@ -268,8 +268,7 @@ impl StoreBackend {
                 .insert(pubkey, province);
         }
 
-        // ADR-008 Phase 23e(2026-05-01):key_admin_keyring 表已被 migration 014 删除,
-        // chain_keyring_state 字段也从内存 Store 中删除。
+        // ADR-008 Phase 23e(2026-05-01):旧全局密钥环表和内存状态已删除。
 
         Ok(store)
     }
@@ -305,7 +304,7 @@ impl StoreBackend {
         tx.commit()
             .map_err(|e| format!("commit runtime cache transaction failed: {e}"))?;
 
-        // ADR-008 Phase 23e:key_admin_keyring 表已删(migration 014),不再 DELETE。
+        // ADR-008 Phase 23e:旧全局密钥环表已删,不再执行兼容清理。
         let mut tx = conn
             .transaction()
             .map_err(|e| format!("begin admin sync transaction failed: {e}"))?;
@@ -386,7 +385,7 @@ impl StoreBackend {
             .map_err(|e| format!("insert shi_admin_scope failed: {e}"))?;
         }
 
-        // ADR-008 Phase 23e:chain_keyring_state 已删,不再写 key_admin_keyring 表。
+        // ADR-008 Phase 23e:旧全局密钥环状态已删,不再写兼容表。
 
         tx.commit()
             .map_err(|e| format!("commit admin sync transaction failed: {e}"))?;
@@ -940,7 +939,7 @@ fn main() {
             )
             // ADR-008 Phase 23e:`/api/v1/admin/attestor/keyring` 与 rotate/challenge/verify/commit
             // 端点已整段下架(KEY_ADMIN 角色废止,链上 ShengAdmins/ShengSigningPubkey 是真相)。
-            // ─── ADR-008 phase45:省管理员 3-tier 名册 + 签名密钥推链(全部 mock,phase7 切真) ───
+            // ─── ADR-008:省管理员 3-tier 名册 + 签名密钥链交互入口 ───
             .route(
                 "/api/v1/admin/sheng-admin/roster",
                 get(chain::sheng_admins::handler::list_roster_admin),
