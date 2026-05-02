@@ -95,7 +95,7 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
   let body: React.ReactNode;
 
   if (!effectiveProvince) {
-    // ── KeyAdmin 首屏:省份列表 ──
+    // ── 首屏:省份列表(SHENG/SHI 角色 effectiveProvince 一定有值,此分支留作未来扩展) ──
     title = '省份列表';
     body = <ProvinceGrid provinces={provinces} onPick={(p) => setSelectedProvince(p)} />;
   } else if (isPublicSecurity) {

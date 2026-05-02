@@ -26,8 +26,8 @@ import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
 
 export interface ShengAdminsViewProps {
-  /// 'list' = 顶层 sheng-admins 列表分支;
-  /// 'system-settings' = 注册局分支(KeyAdmin 省份网格 / 机构详情页)
+  /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
+  /// 'system-settings' = 注册局分支(省份网格 / 机构详情页)
   mode: 'list' | 'system-settings';
 }
 
@@ -94,7 +94,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
 
   // 首次挂载 / auth 变化时加载数据。
   // 角色分流由 ProvinceDetailView + useScope 自动处理,这里只负责加载数据
-  // 和为非 KEY_ADMIN 设置 selectedShengAdmin。
+  // 和按当前登录角色定位 selectedShengAdmin。
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -106,7 +106,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       // system-settings
       const [rows, ops] = await Promise.all([refreshShengAdmins(), refreshOperators()]);
       if (cancelled) return;
-      // 非 KEY_ADMIN 自动定位到自己所属省的 ShengAdmin
+      // 自动定位到当前登录角色所属省的 ShengAdmin
       if (!selectedShengAdmin) {
         let target: ShengAdminRow | null = null;
         if (auth.role === 'SHENG_ADMIN') {

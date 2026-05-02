@@ -1,44 +1,60 @@
-// 中文注释:前端对齐后端 scope::rules::VisibleScope,三角色范围派生。
-// 铁律:feedback_scope_auto_filter.md(KEY=全国 / SHENG=本省 / SHI=本市)
+// 中文注释:前端对齐后端 scope::rules::VisibleScope,两角色范围派生(ADR-008 删 KEY_ADMIN)。
+// 铁律:feedback_scope_auto_filter.md(SHENG=本省 / SHI=本市)
 //
-// 任务卡 4 的 views/ 子组件在进入 tab 时用本 hook 做三种分流:
-//   - KeyAdmin:  显示 43 省卡片
-//   - ShengAdmin: skipProvinceList=true,直接进本省的市列表
-//   - ShiAdmin:   skipCityList=true,直接进本市的详情页
+// sheng_admin / shi_admin 两个视图的 Dashboard 走"全局视图(43 省可看)+ 跨省按钮置灰":
+//   - SHENG_ADMIN: skipProvinceList=true → 直接进本省的市列表,只读其他省
+//   - SHI_ADMIN:   skipCityList=true     → 直接进本市的详情页,只读其他市
 
 import { useMemo } from 'react';
 import type { AdminAuth } from '../api/client';
 
 export interface VisibleScope {
-  /** 可见省份列表。空数组 = "全国"(仅 KeyAdmin)。 */
+  /** 可见省份列表。空数组保留含义"全国可见(只读)"——当前只用于未登录场景占位。 */
   provinces: string[];
-  /** 可见市列表。空数组 = "不限市"(KeyAdmin + ShengAdmin)。 */
+  /** 可见市列表。空数组 = "不限市"(SHENG_ADMIN)。 */
   cities: string[];
-  /** 是否可以增删改。 */
+  /** 是否可以增删改(本省/本市内才有写权限)。 */
   canWrite: boolean;
-  /** 进 tab 时跳过省列表直接进入省详情(ShengAdmin + ShiAdmin)。 */
+  /** 进 tab 时跳过省列表直接进入省详情(SHENG_ADMIN + SHI_ADMIN)。 */
   skipProvinceList: boolean;
-  /** 进 tab 时跳过市列表直接进入市详情(仅 ShiAdmin)。 */
+  /** 进 tab 时跳过市列表直接进入市详情(仅 SHI_ADMIN)。 */
   skipCityList: boolean;
-  /** 锁定的省份(非 KeyAdmin 必填)。 */
+  /** 锁定的省份(必填)。 */
   lockedProvince: string | null;
-  /** 锁定的市(仅 ShiAdmin 必填)。 */
+  /** 锁定的市(仅 SHI_ADMIN 必填)。 */
   lockedCity: string | null;
 
-  /** 判断某省是否在范围内。 */
+  /** 判断某省是否在可见范围内。 */
   includesProvince(province: string): boolean;
-  /** 判断某市是否在范围内。 */
+  /** 判断某市是否在可见范围内。 */
   includesCity(city: string): boolean;
+  /** 判断某省是否允许写操作(跨省一律置灰)。 */
+  canWriteProvince(province: string): boolean;
+  /** 判断某市是否允许写操作(跨市一律置灰,SHENG_ADMIN 本省内任意市可写)。 */
+  canWriteCity(province: string, city: string): boolean;
 }
 
-function makeScope(base: Omit<VisibleScope, 'includesProvince' | 'includesCity'>): VisibleScope {
+function makeScope(base: Omit<VisibleScope, 'includesProvince' | 'includesCity' | 'canWriteProvince' | 'canWriteCity'>): VisibleScope {
   return {
     ...base,
-    includesProvince(province: string) {
-      return base.provinces.length === 0 || base.provinces.includes(province);
+    includesProvince(_province: string) {
+      // ADR-008 起前端 Dashboard 全局视图:任意省都"可见",只是写权限按 lockedProvince 收紧。
+      return true;
     },
-    includesCity(city: string) {
-      return base.cities.length === 0 || base.cities.includes(city);
+    includesCity(_city: string) {
+      return true;
+    },
+    canWriteProvince(province: string) {
+      if (!base.canWrite) return false;
+      if (!base.lockedProvince) return false;
+      return province === base.lockedProvince;
+    },
+    canWriteCity(province: string, city: string) {
+      if (!base.canWrite) return false;
+      if (!base.lockedProvince || province !== base.lockedProvince) return false;
+      // SHENG_ADMIN 本省内任意市;SHI_ADMIN 必须等于自己 lockedCity
+      if (base.lockedCity && city !== base.lockedCity) return false;
+      return true;
     },
   };
 }
@@ -58,16 +74,6 @@ export function useScope(auth: AdminAuth | null): VisibleScope {
       });
     }
     switch (auth.role) {
-      case 'KEY_ADMIN':
-        return makeScope({
-          provinces: [],
-          cities: [],
-          canWrite: true,
-          skipProvinceList: false,
-          skipCityList: false,
-          lockedProvince: null,
-          lockedCity: null,
-        });
       case 'SHENG_ADMIN': {
         const province = auth.admin_province || '__SHENG_ADMIN_MISSING_PROVINCE__';
         return makeScope({

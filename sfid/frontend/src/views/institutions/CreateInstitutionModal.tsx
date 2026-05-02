@@ -26,7 +26,7 @@ interface Props {
   auth: AdminAuth;
   category: InstitutionCategory;
   open: boolean;
-  /** 父视图锁定的省份(ShengAdmin/ShiAdmin 会有值,KeyAdmin 在省详情页也会有值) */
+  /** 父视图锁定的省份(ShengAdmin/ShiAdmin 都有值;ADR-008 起 KeyAdmin 已删) */
   lockedProvince: string | null;
   /** 父视图锁定的市(ShiAdmin 会有值,其他需要用户在弹窗内选) */
   lockedCity: string | null;
