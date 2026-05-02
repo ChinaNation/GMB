@@ -46,6 +46,8 @@ mod benchmarks {
         let nonce_bytes = b"benchmark-nonce".to_vec();
         let nonce: NonceOf<T> = nonce_bytes.try_into().expect("nonce should fit");
 
+        // ADR-008 step3:bind_credential payload 必须把 province + signer_admin_pubkey 进 hash。
+        let bench_signer_pubkey: [u8; 32] = public.0;
         let genesis_block = BlockNumberFor::<T>::zero();
         let payload = (
             primitives::core_const::DUOQIAN_DOMAIN,
@@ -54,6 +56,8 @@ mod benchmarks {
             &caller,
             binding_id,
             nonce.as_slice(),
+            BENCH_PROVINCE,
+            &bench_signer_pubkey,
         );
         let msg = BlakeTwo256::hash_of(&payload);
         let signature: SignatureOf<T> = sr25519_sign(key_type, &public, msg.as_fixed_bytes())
@@ -66,6 +70,8 @@ mod benchmarks {
         let credential = BindCredential {
             binding_id,
             bind_nonce: nonce,
+            province: BENCH_PROVINCE.to_vec().try_into().expect("province fits"),
+            signer_admin_pubkey: bench_signer_pubkey,
             signature,
         };
 

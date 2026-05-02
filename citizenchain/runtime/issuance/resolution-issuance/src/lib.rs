@@ -251,6 +251,8 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 创建“决议发行”联合投票提案。
+        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
+        /// 由 voting-engine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]
         pub fn propose_resolution_issuance(
@@ -261,6 +263,8 @@ pub mod pallet {
             eligible_total: u64,
             snapshot_nonce: SnapshotNonceOf<T>,
             signature: SnapshotSignatureOf<T>,
+            province: BoundedVec<u8, ConstU32<64>>,
+            signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
             Self::create_resolution_issuance_proposal(
@@ -271,6 +275,8 @@ pub mod pallet {
                 eligible_total,
                 snapshot_nonce,
                 signature,
+                province,
+                signer_admin_pubkey,
             )
         }
 

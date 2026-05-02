@@ -28,9 +28,15 @@ mod benchmarks;
 pub mod weights;
 
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
+use frame_support::pallet_prelude::ConstU32;
 use frame_support::weights::Weight;
+use frame_support::BoundedVec;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
+
+/// 中文注释:省名上限 64 字节(对应 sfid-system pallet 内 `ProvinceBound` 容量)。
+/// 在 trait 层面公开,避免外部业务模块重复定义。
+pub type ProvinceBoundOuter = BoundedVec<u8, ConstU32<64>>;
 
 #[derive(
     Clone,
@@ -43,10 +49,17 @@ use sp_runtime::RuntimeDebug;
     TypeInfo,
     MaxEncodedLen,
 )]
-/// 中文注释:绑定凭证结构体,封装 binding_id、一次性 nonce 和 SFID 系统签名。
+/// 中文注释:绑定凭证结构体,封装 binding_id、一次性 nonce、ADR-008 step3 双层
+/// (province, signer_admin_pubkey) 字段以及 SFID 系统签名。
+/// SCALE 顺序固定:`binding_id → bind_nonce → province → signer_admin_pubkey → signature`,
+/// wumin / wuminapp / SFID 后端三处签发流程必须按本顺序序列化。
 pub struct BindCredential<Hash, Nonce, Signature> {
     pub binding_id: Hash,
     pub bind_nonce: Nonce,
+    /// ADR-008 step3:与 `signer_admin_pubkey` 配合在 `ShengSigningPubkey` 双映射中查派生签名公钥。
+    pub province: ProvinceBoundOuter,
+    /// ADR-008 step3:签发本绑定凭证的省级 admin 公钥(花名册内三槽之一)。
+    pub signer_admin_pubkey: [u8; 32],
     pub signature: Signature,
 }
 
@@ -61,7 +74,8 @@ impl<AccountId, Hash, Nonce, Signature> SfidVerifier<AccountId, Hash, Nonce, Sig
     }
 }
 
-/// 中文注释:公民投票实时验签接口,绑定身份标识与提案 ID 必须一并进入签名载荷。
+/// 中文注释:公民投票实时验签接口。ADR-008 step3 起,签名载荷与公钥派生路径
+/// 都按 (province, signer_admin_pubkey) 双层匹配,绑定身份标识与提案 ID 同步进 payload。
 pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
     fn verify_vote(
         account: &AccountId,
@@ -69,6 +83,8 @@ pub trait SfidVoteVerifier<AccountId, Hash, Nonce, Signature> {
         proposal_id: u64,
         nonce: &Nonce,
         signature: &Signature,
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 }
 
@@ -79,6 +95,8 @@ impl<AccountId, Hash, Nonce, Signature> SfidVoteVerifier<AccountId, Hash, Nonce,
         _proposal_id: u64,
         _nonce: &Nonce,
         _signature: &Signature,
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -101,6 +119,8 @@ pub trait OnSfidBoundWeight {
 impl OnSfidBoundWeight for () {}
 
 /// 中文注释:给投票模块使用的统一资格接口。
+/// ADR-008 step3:`verify_and_consume_vote_credential` 加 (province, signer_admin_pubkey)
+/// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
 pub trait SfidEligibilityProvider<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
@@ -109,6 +129,8 @@ pub trait SfidEligibilityProvider<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 
     /// 清理某个提案维度下的投票凭证防重放状态。
@@ -788,6 +810,8 @@ pub mod pallet {
     }
 
     /// 中文注释:实现投票资格接口,供治理模块统一判断公民身份和消费投票凭证。
+    /// ADR-008 step3:消费凭证时把 (province, signer_admin_pubkey) 透传到 verifier,
+    /// runtime verifier 会按 `ShengSigningPubkey` 双映射查派生签名公钥并验签。
     impl<T: Config> crate::SfidEligibilityProvider<T::AccountId, T::Hash> for Pallet<T> {
         fn is_eligible(binding_id: &T::Hash, who: &T::AccountId) -> bool {
             Self::is_binding_id_bound_to(binding_id, who)
@@ -799,8 +823,10 @@ pub mod pallet {
             proposal_id: u64,
             nonce: &[u8],
             signature: &[u8],
+            province: &[u8],
+            signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            if nonce.is_empty() || signature.is_empty() {
+            if nonce.is_empty() || signature.is_empty() || province.is_empty() {
                 return false;
             }
 
@@ -829,6 +855,8 @@ pub mod pallet {
                 proposal_id,
                 &nonce_bounded,
                 &signature_bounded,
+                province,
+                signer_admin_pubkey,
             ) {
                 return false;
             }

@@ -53,6 +53,8 @@ impl<T: Config> Pallet<T> {
         eligible_total: u64,
         snapshot_nonce: SnapshotNonceOf<T>,
         signature: SnapshotSignatureOf<T>,
+        province: BoundedVec<u8, ConstU32<64>>,
+        signer_admin_pubkey: [u8; 32],
     ) -> DispatchResult {
         ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
         Self::validate_proposal_allocations(&total_amount, allocations.as_slice())?;
@@ -73,6 +75,8 @@ impl<T: Config> Pallet<T> {
                 eligible_total,
                 snapshot_nonce.as_slice(),
                 signature.as_slice(),
+                province.as_slice(),
+                &signer_admin_pubkey,
                 crate::MODULE_TAG,
                 encoded,
             ) {

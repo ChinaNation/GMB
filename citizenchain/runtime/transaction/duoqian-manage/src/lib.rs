@@ -2584,6 +2584,8 @@ mod tests {
             _proposal_id: u64,
             _nonce: &[u8],
             _signature: &[u8],
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -2602,6 +2604,8 @@ mod tests {
             _eligible_total: u64,
             _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
             _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }

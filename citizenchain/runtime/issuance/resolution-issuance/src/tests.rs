@@ -96,8 +96,14 @@ impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, DispatchError> {
-        if eligible_total == 0 || snapshot_nonce.is_empty() || signature.is_empty() {
+        if eligible_total == 0
+            || snapshot_nonce.is_empty()
+            || signature.is_empty()
+            || province.is_empty()
+        {
             return Err(DispatchError::Other("bad snapshot"));
         }
         NEXT_JOINT_ID.with(|id| {
@@ -113,11 +119,19 @@ impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
         eligible_total: u64,
         snapshot_nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id =
-            Self::create_joint_proposal(who, eligible_total, snapshot_nonce, signature)?;
+        let proposal_id = Self::create_joint_proposal(
+            who,
+            eligible_total,
+            snapshot_nonce,
+            signature,
+            province,
+            signer_admin_pubkey,
+        )?;
         let bounded_data: frame_support::BoundedVec<
             u8,
             <Test as voting_engine::Config>::MaxProposalDataLen,
@@ -149,6 +163,8 @@ impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>:
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -167,6 +183,8 @@ impl
         _eligible_total: u64,
         _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
         _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         true
     }
@@ -327,6 +345,17 @@ fn sig_ok() -> pallet::SnapshotSignatureOf<Test> {
         .expect("signature should fit")
 }
 
+/// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
+/// 仅在 `TestPopulationSnapshotVerifier` / `TestJointVoteEngine` 内做空字段非空检验,
+/// 不参与真实 sr25519 验签(真实验签覆盖留 runtime 层测试)。
+fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
+    b"liaoning".to_vec().try_into().expect("province should fit")
+}
+
+fn signer_admin_pubkey_ok() -> [u8; 32] {
+    [7u8; 32]
+}
+
 fn reserve_council_accounts() -> Vec<AccountId32> {
     primitives::china::china_cb::CHINA_CB
         .iter()
@@ -360,7 +389,9 @@ fn only_authorized_admin_can_propose() {
                 allocations_ok(4300),
                 10,
                 nonce_ok(),
-                sig_ok()
+                sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
             ),
             sp_runtime::DispatchError::BadOrigin
         );
@@ -383,7 +414,9 @@ fn reject_invalid_allocation_count() {
                 alloc,
                 10,
                 nonce_ok(),
-                sig_ok()
+                sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
             ),
             pallet::Error::<Test>::InvalidAllocationCount
         );
@@ -400,7 +433,9 @@ fn approved_callback_executes_issuance() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         insert_engine_proposal(100);
@@ -428,7 +463,9 @@ fn callback_rejects_non_finalizable_engine_status() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         insert_engine_proposal_with_status(100, voting_engine::STATUS_VOTING);
@@ -452,7 +489,9 @@ fn callback_requires_voting_engine_scope() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         insert_engine_proposal(100);
@@ -475,7 +514,9 @@ fn second_callback_after_executed_is_rejected() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         insert_engine_proposal(100);
@@ -505,7 +546,9 @@ fn rejected_callback_does_not_issue() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         insert_engine_proposal_with_status(100, voting_engine::STATUS_REJECTED);
@@ -526,7 +569,9 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
 
         overwrite_proposal_data(
@@ -559,7 +604,9 @@ fn clear_executed_does_not_allow_replay() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));
@@ -592,7 +639,9 @@ fn pause_blocks_approved_execution() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
         assert_ok!(ResolutionIssuance::set_paused(RuntimeOrigin::root(), true));
         insert_engine_proposal(100);
@@ -619,7 +668,9 @@ fn set_allowed_recipients_rejected_when_voting_exists() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
         let recipients: BoundedVec<AccountId32, ConstU32<64>> = reserve_council_accounts()
             .try_into()
@@ -641,7 +692,9 @@ fn issuance_event_comes_from_unified_pallet() {
             allocations_ok(4300),
             10,
             nonce_ok(),
-            sig_ok()
+            sig_ok(),
+            province_ok(),
+            signer_admin_pubkey_ok()
         ));
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));

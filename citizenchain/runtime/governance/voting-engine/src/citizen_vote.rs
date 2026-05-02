@@ -21,6 +21,8 @@ impl VoteCredentialCleanup {
     }
 }
 
+/// ADR-008 step3:`verify_and_consume_vote_credential` 加 `(province, signer_admin_pubkey)`
+/// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
 pub trait SfidEligibility<AccountId, Hash> {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
     fn verify_and_consume_vote_credential(
@@ -29,6 +31,8 @@ pub trait SfidEligibility<AccountId, Hash> {
         proposal_id: u64,
         nonce: &[u8],
         signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 
     /// 清理某个联合/公民提案对应的投票凭证防重放状态。
@@ -54,6 +58,8 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
         _proposal_id: u64,
         _nonce: &[u8],
         _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -77,12 +83,15 @@ pub fn is_citizen_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
 
 impl<T: Config> Pallet<T> {
     /// 公民投票执行：由外部 SFID 系统判定资格，链上负责去重计票。
+    /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
     pub(crate) fn do_citizen_vote(
         who: T::AccountId,
         proposal_id: u64,
         binding_id: T::Hash,
         nonce: crate::pallet::VoteNonceOf<T>,
         signature: crate::pallet::VoteSignatureOf<T>,
+        province: frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>>,
+        signer_admin_pubkey: [u8; 32],
         approve: bool,
     ) -> DispatchResult {
         let proposal = Self::ensure_open_proposal(proposal_id)?;
@@ -115,7 +124,9 @@ impl<T: Config> Pallet<T> {
                 &who,
                 proposal_id,
                 nonce.as_slice(),
-                signature.as_slice()
+                signature.as_slice(),
+                province.as_slice(),
+                &signer_admin_pubkey,
             ),
             Error::<T>::InvalidSfidVoteCredential
         );
