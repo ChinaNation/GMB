@@ -74,16 +74,23 @@ impl<AccountId> ProtectedSourceChecker<AccountId> for () {
     }
 }
 
-/// SFID 机构登记验签抽象：链上按省分流验签。
-/// - `signing_province = Some(p)`：runtime 查该省的省级签名公钥（`ShengSigningPubkey[p]`）验签；
-/// - `signing_province = None`：使用 `SfidMainAccount` 当前主公钥验签。
+/// SFID 机构登记验签抽象（ADR-008 step2b 起按 (province, admin_pubkey) 二元组验签）。
+///
+/// runtime 查 `sfid_system::ShengSigningPubkey[(province, signer_admin_pubkey)]` 取得签名公钥后
+/// 验签；该省 admin 在 `ShengAdmins` 花名册之外或尚未 activate signing pubkey 时验签必须失败。
+///
+/// 与 ADR-008 前的差异：
+/// - 删除"用 SfidMainAccount 主公钥兜底"分支（链上 0 prior knowledge of SFID）；
+/// - `province` 从可选项改为必填；
+/// - 新增 `signer_admin_pubkey` 显式指明本次签名的省管理员公钥（main 或 backup_{1,2}）。
 pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
     fn verify_institution_registration(
         sfid_id: &[u8],
         account_name: &AccountName,
         nonce: &Nonce,
         signature: &Signature,
-        signing_province: Option<&[u8]>,
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
     ) -> bool;
 }
 
@@ -93,7 +100,8 @@ impl<AccountName, Nonce, Signature> SfidInstitutionVerifier<AccountName, Nonce, 
         _account_name: &AccountName,
         _nonce: &Nonce,
         _signature: &Signature,
-        _signing_province: Option<&[u8]>,
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
         false
     }
@@ -698,6 +706,8 @@ pub mod pallet {
         EmptySfidId,
         /// 机构登记 nonce 已被使用
         RegisterNonceAlreadyUsed,
+        /// ADR-008 step2b 新增:机构登记凭证缺省份(province 改必填后空字节串拒绝)
+        EmptyProvince,
         /// Step 2 新增:a3 为空(机构元数据必填)
         EmptyA3,
         /// Step 2 新增:SFR 必须传 sub_type
@@ -949,6 +959,13 @@ pub mod pallet {
         /// - `a3`:必填,字节串(SFR/FFR/GFR/SF)
         /// - `sub_type`:仅 a3==SFR 时有值;否则必须 None
         /// - `parent_sfid_id`:仅 a3==FFR 时必填;否则必须 None
+        ///
+        /// ADR-008 step2b:
+        /// - `province` 改为必填(取代旧 `signing_province: Option<Vec<u8>>`);
+        /// - 新增 `signer_admin_pubkey: [u8; 32]`,指明本次凭证由该省哪一位 admin
+        ///   (main / backup_1 / backup_2)派生的省级签名密钥签发。runtime verifier
+        ///   按 (province, signer_admin_pubkey) 在 `ShengSigningPubkey` 中查公钥,
+        ///   未 activate 即拒签。
         #[pallet::call_index(2)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::register_sfid_institution())]
         pub fn register_sfid_institution(
@@ -957,8 +974,13 @@ pub mod pallet {
             account_name: AccountNameOf<T>,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            // 中文注释：可选的省名（UTF-8 字节），传入即按省签名密钥验签；不传则使用 SfidMainAccount。
-            signing_province: Option<Vec<u8>>,
+            // ADR-008 step2b：必填省份(UTF-8 字节)。runtime 在 (province, signer_admin_pubkey)
+            // 二元组下查省级签名公钥,无对应记录即拒签。
+            province: Vec<u8>,
+            // ADR-008 step2b：本次凭证签发方公钥(省级 main / backup_1 / backup_2 之一,
+            // 由 SFID 后端登录态决定)。runtime verifier 据此在 ShengSigningPubkey 双映射中
+            // 找派生的签名公钥;未 activate 时拒绝。内部统一 [u8; 32] hex 字节,前端展示 SS58。
+            signer_admin_pubkey: [u8; 32],
             // Step 2 新增:机构元数据(SFID 后端推链时一并上链)。
             a3: A3Of<T>,
             sub_type: Option<SubTypeOf<T>>,
@@ -968,6 +990,8 @@ pub mod pallet {
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
             ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
             ensure!(!a3.is_empty(), Error::<T>::EmptyA3);
+            // ADR-008 step2b: province 必填(空字节串视作非法,不允许走"无省"兜底分支)。
+            ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
             // a3 与 sub_type / parent_sfid_id 的形态一致性校验:
             // - SFR: sub_type 必填, parent_sfid_id 必须 None
             // - FFR: sub_type 必须 None, parent_sfid_id 必填
@@ -997,7 +1021,8 @@ pub mod pallet {
                     &account_name,
                     &register_nonce,
                     &signature,
-                    signing_province.as_deref(),
+                    province.as_slice(),
+                    &signer_admin_pubkey,
                 ),
                 Error::<T>::InvalidSfidInstitutionSignature
             );
@@ -1079,7 +1104,9 @@ pub mod pallet {
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            signing_province: Option<Vec<u8>>,
+            // ADR-008 step2b：必填省份 + 签名 admin pubkey,与 register_sfid_institution 同义。
+            province: Vec<u8>,
+            signer_admin_pubkey: [u8; 32],
             a3: A3Of<T>,
             sub_type: Option<SubTypeOf<T>>,
             parent_sfid_id: Option<SfidIdOf<T>>,
@@ -1096,7 +1123,8 @@ pub mod pallet {
                     threshold,
                     register_nonce,
                     signature,
-                    signing_province,
+                    province,
+                    signer_admin_pubkey,
                     a3,
                     sub_type,
                     parent_sfid_id,
@@ -1757,7 +1785,8 @@ pub mod pallet {
             threshold: u32,
             register_nonce: RegisterNonceOf<T>,
             signature: RegisterSignatureOf<T>,
-            signing_province: Option<Vec<u8>>,
+            province: Vec<u8>,
+            signer_admin_pubkey: [u8; 32],
             a3: A3Of<T>,
             sub_type: Option<SubTypeOf<T>>,
             parent_sfid_id: Option<SfidIdOf<T>>,
@@ -1768,6 +1797,7 @@ pub mod pallet {
             );
             ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
             ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
+            ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
             ensure!(
                 !Institutions::<T>::contains_key(&sfid_id),
                 Error::<T>::InstitutionAlreadyExists
@@ -1786,7 +1816,8 @@ pub mod pallet {
                     &institution_name,
                     &register_nonce,
                     &signature,
-                    signing_province.as_deref(),
+                    province.as_slice(),
+                    &signer_admin_pubkey,
                 ),
                 Error::<T>::InvalidSfidInstitutionSignature
             );
@@ -2456,6 +2487,23 @@ mod tests {
         }
     }
 
+    // ADR-008 step2b mock：模拟链端 (province, admin_pubkey) 双层匹配。
+    // 默认行为(无注入):仅按"signature == register-ok + province 非空 + admin_pubkey 非全 0"形状校验。
+    // 测试可通过 ACTIVATED_ROSTER thread-local 注入"已 activate 的 (province, admin)"集合,
+    // 一旦注入,verifier 转入严格模式:必须命中集合才放行(对应链端 ShengSigningPubkey 查到的语义)。
+    thread_local! {
+        static ACTIVATED_ROSTER: core::cell::RefCell<Option<sp_std::vec::Vec<(sp_std::vec::Vec<u8>, [u8; 32])>>>
+            = const { core::cell::RefCell::new(None) };
+    }
+
+    fn set_activated_roster(entries: sp_std::vec::Vec<(sp_std::vec::Vec<u8>, [u8; 32])>) {
+        ACTIVATED_ROSTER.with(|r| *r.borrow_mut() = Some(entries));
+    }
+
+    fn clear_activated_roster() {
+        ACTIVATED_ROSTER.with(|r| *r.borrow_mut() = None);
+    }
+
     pub struct TestSfidInstitutionVerifier;
     impl
         SfidInstitutionVerifier<
@@ -2469,9 +2517,27 @@ mod tests {
             _account_name: &AccountNameOf<Test>,
             nonce: &RegisterNonceOf<Test>,
             signature: &RegisterSignatureOf<Test>,
-            _signing_province: Option<&[u8]>,
+            province: &[u8],
+            signer_admin_pubkey: &[u8; 32],
         ) -> bool {
-            !nonce.is_empty() && signature.as_slice() == b"register-ok"
+            if nonce.is_empty()
+                || province.is_empty()
+                || signer_admin_pubkey == &[0u8; 32]
+                || signature.as_slice() != b"register-ok"
+            {
+                return false;
+            }
+            // 严格模式:若注入了 ACTIVATED_ROSTER,则 (province, admin_pubkey) 必须命中。
+            let strict_hit = ACTIVATED_ROSTER.with(|r| match &*r.borrow() {
+                Some(entries) => Some(entries.iter().any(|(p, k)| {
+                    p.as_slice() == province && k == signer_admin_pubkey
+                })),
+                None => None,
+            });
+            match strict_hit {
+                Some(hit) => hit,
+                None => true,
+            }
         }
     }
 
@@ -2771,13 +2837,15 @@ mod tests {
             .expect("register signature should fit");
         // Step 2:测试默认用 GFR(公权机构),无 sub_type / parent。
         let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
+        // ADR-008 step2b：province 必填,signer_admin_pubkey 必填非全 0。mock verifier 仅做形态校验。
         assert_ok!(Duoqian::register_sfid_institution(
             RuntimeOrigin::signed(relayer()),
             sfid.clone(),
             account_name.clone(),
             register_nonce,
             signature,
-            None,
+            b"LN".to_vec(),
+            [1u8; 32],
             a3,
             None,
             None,
@@ -2889,7 +2957,8 @@ mod tests {
                     account_name,
                     register_nonce,
                     bad_signature,
-                    None,
+                    b"LN".to_vec(),
+                    [1u8; 32],
                     a3,
                     None,
                     None,
@@ -3387,7 +3456,8 @@ mod tests {
                 2,
                 b"institution-create-1".to_vec().try_into().unwrap(),
                 b"register-ok".to_vec().try_into().unwrap(),
-                None,
+                b"AH".to_vec(),
+                [1u8; 32],
                 b"GFR".to_vec().try_into().unwrap(),
                 None,
                 None,
@@ -3479,7 +3549,8 @@ mod tests {
                 2,
                 b"institution-create-2".to_vec().try_into().unwrap(),
                 b"register-ok".to_vec().try_into().unwrap(),
-                None,
+                b"AH".to_vec(),
+                [1u8; 32],
                 b"GFR".to_vec().try_into().unwrap(),
                 None,
                 None,
@@ -3541,7 +3612,8 @@ mod tests {
                     2,
                     b"institution-create-3".to_vec().try_into().unwrap(),
                     b"register-ok".to_vec().try_into().unwrap(),
-                    None,
+                    b"AH".to_vec(),
+                    [1u8; 32],
                     b"GFR".to_vec().try_into().unwrap(),
                     None,
                     None,
@@ -3578,12 +3650,125 @@ mod tests {
                     2,
                     b"institution-create-4".to_vec().try_into().unwrap(),
                     b"register-ok".to_vec().try_into().unwrap(),
-                    None,
+                    b"AH".to_vec(),
+                    [1u8; 32],
                     b"GFR".to_vec().try_into().unwrap(),
                     None,
                     None,
                 ),
                 Error::<Test>::AccountInitialAmountBelowMinimum
+            );
+        });
+    }
+
+    // ──── ADR-008 step2b：register_sfid_institution 按 (province, admin_pubkey) 双层匹配 ────
+
+    /// 辅助:用任意 (province, admin_pubkey) 调 register_sfid_institution。
+    fn register_with_admin(
+        tag: &str,
+        province: &[u8],
+        admin_pubkey: [u8; 32],
+    ) -> sp_runtime::DispatchResult {
+        let sfid: SfidIdOf<Test> = format!("GFR-AH001-CB0C-{}-20260502", tag)
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("sfid id should fit");
+        let account_name: AccountNameOf<Test> = format!("Inst-{}", tag)
+            .as_bytes()
+            .to_vec()
+            .try_into()
+            .expect("account_name should fit");
+        let register_nonce: RegisterNonceOf<Test> = format!("nonce-{}", tag)
+            .into_bytes()
+            .try_into()
+            .expect("register nonce should fit");
+        let signature: RegisterSignatureOf<Test> = b"register-ok"
+            .to_vec()
+            .try_into()
+            .expect("register signature should fit");
+        let a3: A3Of<Test> = b"GFR".to_vec().try_into().expect("a3 should fit");
+        Duoqian::register_sfid_institution(
+            RuntimeOrigin::signed(relayer()),
+            sfid,
+            account_name,
+            register_nonce,
+            signature,
+            province.to_vec(),
+            admin_pubkey,
+            a3,
+            None,
+            None,
+        )
+    }
+
+    /// step2b T1:main admin 派生签名 → 验签通过 → register 成功。
+    #[test]
+    fn register_with_main_admin_signature_succeeds() {
+        new_test_ext().execute_with(|| {
+            let main_admin: [u8; 32] = [11u8; 32];
+            set_activated_roster(vec![(b"AH".to_vec(), main_admin)]);
+            assert_ok!(register_with_admin("MAIN", b"AH", main_admin));
+            clear_activated_roster();
+        });
+    }
+
+    /// step2b T2:backup admin(同省第二把已 activate 的签名密钥)派生签名 → 验签通过。
+    #[test]
+    fn register_with_backup_admin_signature_succeeds() {
+        new_test_ext().execute_with(|| {
+            let main_admin: [u8; 32] = [11u8; 32];
+            let backup_admin: [u8; 32] = [22u8; 32];
+            set_activated_roster(vec![
+                (b"AH".to_vec(), main_admin),
+                (b"AH".to_vec(), backup_admin),
+            ]);
+            // 用 backup_admin 注册一个机构 → 必须 ok(同省 main + backup 各自独立签名密钥)。
+            assert_ok!(register_with_admin("BACKUP", b"AH", backup_admin));
+            clear_activated_roster();
+        });
+    }
+
+    /// step2b T3:admin pubkey 不在 ShengAdmins 花名册 → 验签失败。
+    #[test]
+    fn register_with_admin_not_in_roster_rejected() {
+        new_test_ext().execute_with(|| {
+            // 花名册仅 main_admin,outsider 不在。
+            let main_admin: [u8; 32] = [11u8; 32];
+            set_activated_roster(vec![(b"AH".to_vec(), main_admin)]);
+            let outsider: [u8; 32] = [99u8; 32];
+            assert_noop!(
+                register_with_admin("OUTSIDER", b"AH", outsider),
+                Error::<Test>::InvalidSfidInstitutionSignature
+            );
+            clear_activated_roster();
+        });
+    }
+
+    /// step2b T4:admin 在花名册但 ShengSigningPubkey 尚未 activate → 验签失败。
+    /// 注:mock 把"未 activate"等价于"不在 activated_roster",链端真实 verifier 走
+    /// `ShengSigningPubkey::get((province, admin))` → None → reject。
+    #[test]
+    fn register_signing_not_activated_for_admin_rejected() {
+        new_test_ext().execute_with(|| {
+            // 注入空 roster:即"链上花名册存在但 SigningPubkey 全部未 activate"。
+            set_activated_roster(vec![]);
+            let admin_pubkey: [u8; 32] = [11u8; 32];
+            assert_noop!(
+                register_with_admin("NOT-ACTIVATED", b"AH", admin_pubkey),
+                Error::<Test>::InvalidSfidInstitutionSignature
+            );
+            clear_activated_roster();
+        });
+    }
+
+    /// step2b T5:province 改必填后,空省直接 EmptyProvince(verifier 之前)。
+    #[test]
+    fn register_with_empty_province_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                register_with_admin("EMPTY-PROV", b"", [1u8; 32]),
+                Error::<Test>::EmptyProvince
             );
         });
     }
