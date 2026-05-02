@@ -166,6 +166,16 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
       if (!mounted) return;
       setState(() => _fetchingSnapshot = false);
 
+      // ADR-008 step3:SFID 后端在 fetchPopulationSnapshot 一并下发
+      // (province, signer_admin_pubkey)。在线端透传到 chain extrinsic,
+      // 链端 RuntimePopulationSnapshotVerifier 走双层匹配验签。
+      final province = snapshot.province;
+      final signerAdminHex = snapshot.signerAdminPubkey; // 0x 小写 hex
+      final signerAdminBytes = Uint8List.fromList(_hexToBytes(signerAdminHex));
+      if (signerAdminBytes.length != 32) {
+        throw Exception('SFID 返回的 signer_admin_pubkey 不是 32 字节');
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
         // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
@@ -176,9 +186,34 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
           specVersion: rv.specVersion,
-          display: const SignDisplay(
+          display: SignDisplay(
             action: 'propose_runtime_upgrade',
             summary: '提交运行时升级提案',
+            // ADR-008 step3:province + signer_admin_pubkey 与冷钱包 decoder
+            // 解出的同名字段逐字对齐 → 两色识别走绿色路径。
+            // 字段 key 用英文与 wumin PayloadDecoder 输出对齐,label 中文。
+            fields: [
+              SignDisplayField(
+                key: 'reason',
+                label: '升级理由',
+                value: _reasonController.text.trim(),
+              ),
+              SignDisplayField(
+                key: 'eligible_total',
+                label: '合格人数',
+                value: snapshot.eligibleTotal.toString(),
+              ),
+              SignDisplayField(
+                key: 'province',
+                label: '省份',
+                value: province,
+              ),
+              SignDisplayField(
+                key: 'signer_admin_pubkey',
+                label: '签名管理员公钥',
+                value: signerAdminHex,
+              ),
+            ],
           ),
         );
         final requestJson = qrSigner.encodeRequest(request);
@@ -209,6 +244,8 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
             int.parse(sigClean.substring(i * 2, i * 2 + 2), radix: 16);
       }
 
+      final provinceBytes = Uint8List.fromList(utf8.encode(province));
+
       final service = RuntimeUpgradeService();
       await service.submitProposeRuntimeUpgrade(
         reason: _reasonController.text.trim(),
@@ -216,6 +253,8 @@ class _RuntimeUpgradePageState extends State<RuntimeUpgradePage> {
         eligibleTotal: snapshot.eligibleTotal,
         snapshotNonce: nonceBytes,
         signature: sigBytes,
+        province: provinceBytes,
+        signerAdminPubkey: signerAdminBytes,
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
         sign: signCallback,

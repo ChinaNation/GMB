@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -114,15 +115,21 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes citizen_vote (pallet=9 call=2)', () {
+    test('decodes citizen_vote (pallet=9 call=2) ADR-008 step3 双层凭证', () {
       // Phase 2 重排：citizen_vote 由原 call=4 迁到 call=2。
+      // ADR-008 step3：SCALE 末尾在 approve 前加 (province, signer_admin_pubkey)。
+      final province = utf8.encode('安徽省');
+      final adminPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
       final payload = Uint8List.fromList([
         0x09, 0x02,
-        99, 0, 0, 0, 0, 0, 0, 0,
-        ...List.filled(32, 0),
-        0, // Vec nonce len=0
-        0, // Vec sig len=0
-        1,
+        99, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 99 u64_le
+        ...List.filled(32, 0), // binding_id = 0x00 × 32
+        0, // Vec nonce len = 0
+        0, // Vec sig len = 0
+        // ★ ADR-008 step3 新字段
+        province.length << 2, ...province, // Compact(len) + utf8 bytes
+        ...adminPubkey, // [u8;32]
+        1, // approve = true
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
@@ -132,6 +139,29 @@ void main() {
       expect(decoded!.action, 'citizen_vote');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
+      expect(decoded.fields['province'], '安徽省');
+      expect(
+        decoded.fields['signer_admin_pubkey'],
+        '0x${adminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+    });
+
+    test('citizen_vote 旧 SCALE 字节流(无 province/admin)拒绝解码', () {
+      // ADR-008 step3 后 SCALE 必须含新字段。旧字节流长度不足 → null。
+      // feedback_no_compatibility:不留兼容垫片,老凭证不识别即拒绝。
+      final payload = Uint8List.fromList([
+        0x09, 0x02,
+        99, 0, 0, 0, 0, 0, 0, 0,
+        ...List.filled(32, 0),
+        0,
+        0,
+        1, // 旧版只到 approve, 长度 = 45
+      ]);
+      final hex =
+          '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      expect(decoded, isNull,
+          reason: '旧凭证长度 45 < 78 必须被拒绝, 防止白盲签');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -465,12 +495,20 @@ void main() {
       );
     });
 
-    test('decodes propose_runtime_upgrade 含 wasm_hash + eligible_total', () {
+    test(
+        'decodes propose_runtime_upgrade 含 wasm_hash + eligible_total + province + signer_admin_pubkey',
+        () {
       // reason="ok" + wasm="abcd" + eligible_total=1234567
       // sha256("abcd") 同上 test。
+      // ADR-008 step3:SCALE 末尾在 signature 后加 (province, signer_admin_pubkey)。
       final reasonBytes = 'ok'.codeUnits; // 2 字节
       final wasmBytes = [0x61, 0x62, 0x63, 0x64]; // 4 字节
       const eligibleTotal = 1234567;
+      // 模拟 SFID 后端返回的 nonce + 64 字节 sr25519 签名
+      final nonceBytes = utf8.encode('snap-2026-05-01-AH');
+      final sigBytes = List<int>.filled(64, 0xCC);
+      final province = utf8.encode('安徽省');
+      final adminPubkey = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
 
       final payload = Uint8List.fromList([
         0x0d, 0x00, // pallet=13 call=0
@@ -484,6 +522,18 @@ void main() {
         (eligibleTotal >> 16) & 0xff,
         (eligibleTotal >> 24) & 0xff,
         0, 0, 0, 0,
+        // snapshot_nonce: Vec<u8>
+        (nonceBytes.length << 2) & 0xff,
+        ...nonceBytes,
+        // signature: Vec<u8> (64 字节, len=64=0x40 → Compact mode 1: (0x40<<2)|1 = 0x101 → 两字节)
+        // 0x101 = 0x01 0x01 LE
+        0x01, 0x01,
+        ...sigBytes,
+        // ★ province: Vec<u8>
+        (province.length << 2) & 0xff,
+        ...province,
+        // ★ signer_admin_pubkey: [u8;32]
+        ...adminPubkey,
       ]);
       final decoded =
           PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
@@ -496,6 +546,235 @@ void main() {
         '0x88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589',
       );
       expect(decoded.fields['eligible_total'], '1234567');
+      expect(decoded.fields['province'], '安徽省');
+      expect(
+        decoded.fields['signer_admin_pubkey'],
+        '0x${adminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // ADR-008 step2d 新加 decoder:
+    // - propose_create_institution(17.5):机构多签账户创建提案
+    //   (走 SFID 后端 ShengSigningPubkey 双层签发凭证)
+    // - propose_resolution_issuance(8.0):决议发行联合提案
+    //   (走 PopulationSnapshotVerifier 双层签发)
+    // -----------------------------------------------------------------------
+
+    test('decodes propose_create_institution (pallet=17 call=5) 含 province + signer_admin_pubkey',
+        () {
+      final sfid = utf8.encode('SFR-AH001-1234567890-20260501');
+      final instName = utf8.encode('安徽省储行');
+      // accounts: 1 个账户 = (name="主", amount=10_000_00 fen = 10000 元)
+      final accountName = utf8.encode('主');
+      final amountFen = BigInt.from(1000000); // 10000.00 GMB
+      final amountLeBytes = List<int>.filled(16, 0);
+      var tmp = amountFen;
+      for (var i = 0; i < 16; i++) {
+        amountLeBytes[i] = (tmp & BigInt.from(0xFF)).toInt();
+        tmp = tmp >> 8;
+      }
+      final adminPubkeys = [
+        List<int>.filled(32, 0x11),
+        List<int>.filled(32, 0x22),
+      ];
+      final registerNonce = utf8.encode('reg-nonce-001');
+      final signature = List<int>.filled(64, 0xDD);
+      final province = utf8.encode('安徽省');
+      final signerAdminPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final a3 = utf8.encode('SFR');
+      final subType = utf8.encode('SHENG_BANK');
+
+      final payload = Uint8List.fromList([
+        0x11, 0x05, // pallet=17 call=5
+        // sfid_id: Vec<u8>
+        (sfid.length << 2) & 0xff,
+        ...sfid,
+        // institution_name: Vec<u8>
+        (instName.length << 2) & 0xff,
+        ...instName,
+        // accounts: Vec<{name, amount}> count=1
+        (1 << 2) & 0xff,
+        // account[0].name
+        (accountName.length << 2) & 0xff,
+        ...accountName,
+        // account[0].amount: u128 LE
+        ...amountLeBytes,
+        // admin_count: u32 LE
+        2, 0, 0, 0,
+        // duoqian_admins: BoundedVec<AccountId32> count=2
+        (2 << 2) & 0xff,
+        ...adminPubkeys[0],
+        ...adminPubkeys[1],
+        // threshold: u32 LE = 2
+        2, 0, 0, 0,
+        // register_nonce: Vec<u8>
+        (registerNonce.length << 2) & 0xff,
+        ...registerNonce,
+        // signature: Vec<u8> 64B (Compact mode 1)
+        0x01, 0x01,
+        ...signature,
+        // ★ province: Vec<u8>
+        (province.length << 2) & 0xff,
+        ...province,
+        // ★ signer_admin_pubkey: [u8;32]
+        ...signerAdminPubkey,
+        // a3: Vec<u8>
+        (a3.length << 2) & 0xff,
+        ...a3,
+        // sub_type: Option<Vec<u8>> = Some(...)
+        0x01,
+        (subType.length << 2) & 0xff,
+        ...subType,
+        // parent_sfid_id: Option<Vec<u8>> = None
+        0x00,
+      ]);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_create_institution');
+      expect(decoded.fields['sfid_id'], 'SFR-AH001-1234567890-20260501');
+      expect(decoded.fields['institution_name'], '安徽省储行');
+      expect(decoded.fields['admin_count'], '2');
+      expect(decoded.fields['threshold'], '2/2');
+      expect(decoded.fields['amount_yuan'], '10,000.00 GMB');
+      expect(decoded.fields['a3'], 'SFR');
+      expect(decoded.fields['province'], '安徽省');
+      expect(
+        decoded.fields['signer_admin_pubkey'],
+        '0x${signerAdminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // ADR-008 step2d 双端字节一致性 fixture(test/fixtures/step2d_credential_payload.json):
+    // 三组凭证的 SCALE 字节流由 Python 生成器(链端 codec.encode 等价产出)固化,
+    // wumin / wuminapp / 链端 runtime 三处必须产出同一序列。
+    // 任何一端编码漂移 → 这里直接断言失败。
+    // -----------------------------------------------------------------------
+
+    Map<String, dynamic> readFixture() {
+      final file = File('test/fixtures/step2d_credential_payload.json');
+      final raw = file.readAsStringSync();
+      return jsonDecode(raw) as Map<String, dynamic>;
+    }
+
+    test('fixture step2d citizen_vote: decoder 解出 province + signer_admin_pubkey',
+        () {
+      final fixture = readFixture();
+      final caseEntry = (fixture['cases'] as List)
+          .firstWhere((e) => e['name'] == 'citizen_vote');
+      final hex = caseEntry['expected_call_data_hex'] as String;
+      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'citizen_vote');
+      expect(decoded.fields['proposal_id'], '99');
+      expect(decoded.fields['approve'], 'true');
+      expect(decoded.fields['province'],
+          (caseEntry['fields'] as Map)['province_utf8']);
+      expect(decoded.fields['signer_admin_pubkey'],
+          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
+    });
+
+    test('fixture step2d propose_runtime_upgrade: decoder 解出新字段',
+        () {
+      final fixture = readFixture();
+      final caseEntry = (fixture['cases'] as List)
+          .firstWhere((e) => e['name'] == 'propose_runtime_upgrade');
+      final hex = caseEntry['expected_call_data_hex'] as String;
+      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_runtime_upgrade');
+      expect(decoded.fields['province'],
+          (caseEntry['fields'] as Map)['province_utf8']);
+      expect(decoded.fields['signer_admin_pubkey'],
+          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
+      expect(decoded.fields['eligible_total'],
+          (caseEntry['fields'] as Map)['eligible_total'].toString());
+    });
+
+    test('fixture step2d propose_resolution_issuance: decoder 解出新字段',
+        () {
+      final fixture = readFixture();
+      final caseEntry = (fixture['cases'] as List)
+          .firstWhere((e) => e['name'] == 'propose_resolution_issuance');
+      final hex = caseEntry['expected_call_data_hex'] as String;
+      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_resolution_issuance');
+      expect(decoded.fields['province'],
+          (caseEntry['fields'] as Map)['province_utf8']);
+      expect(decoded.fields['signer_admin_pubkey'],
+          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
+      expect(decoded.fields['eligible_total'],
+          (caseEntry['fields'] as Map)['eligible_total'].toString());
+      expect(decoded.fields['allocation_count'], '2');
+    });
+
+    test('decodes propose_resolution_issuance (pallet=8 call=0) 含 province + signer_admin_pubkey',
+        () {
+      final reason = utf8.encode('紧急救灾');
+      final totalFen = BigInt.from(50000000); // 500_000.00 GMB
+      final totalLe = List<int>.filled(16, 0);
+      var tmp = totalFen;
+      for (var i = 0; i < 16; i++) {
+        totalLe[i] = (tmp & BigInt.from(0xFF)).toInt();
+        tmp = tmp >> 8;
+      }
+      // allocations: 2 项, 每项 32B + 16B = 48B
+      final alloc1 = [
+        ...List<int>.filled(32, 0xA1),
+        ...List<int>.filled(16, 0x00),
+      ];
+      final alloc2 = [
+        ...List<int>.filled(32, 0xA2),
+        ...List<int>.filled(16, 0x00),
+      ];
+      const eligible = 7654321;
+      final nonceBytes = utf8.encode('snap-001');
+      final sigBytes = List<int>.filled(64, 0xEE);
+      final province = utf8.encode('安徽省');
+      final signerAdmin = List<int>.generate(32, (i) => 0xD0 + (i & 0x0F));
+
+      final payload = Uint8List.fromList([
+        0x08, 0x00, // pallet=8 call=0
+        (reason.length << 2) & 0xff,
+        ...reason,
+        ...totalLe,
+        // allocations Vec count=2
+        (2 << 2) & 0xff,
+        ...alloc1,
+        ...alloc2,
+        // eligible_total u64 LE
+        eligible & 0xff,
+        (eligible >> 8) & 0xff,
+        (eligible >> 16) & 0xff,
+        (eligible >> 24) & 0xff,
+        0, 0, 0, 0,
+        // snapshot_nonce
+        (nonceBytes.length << 2) & 0xff,
+        ...nonceBytes,
+        // signature 64B (Compact mode 1)
+        0x01, 0x01,
+        ...sigBytes,
+        // ★ province
+        (province.length << 2) & 0xff,
+        ...province,
+        // ★ signer_admin_pubkey
+        ...signerAdmin,
+      ]);
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_resolution_issuance');
+      expect(decoded.fields['reason'], '紧急救灾');
+      expect(decoded.fields['allocation_count'], '2');
+      expect(decoded.fields['eligible_total'], '7654321');
+      expect(decoded.fields['province'], '安徽省');
+      expect(
+        decoded.fields['signer_admin_pubkey'],
+        '0x${signerAdmin.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+      );
     });
   });
 }
