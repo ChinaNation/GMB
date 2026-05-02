@@ -24,8 +24,6 @@ use crate::AccountId;
 #[cfg(feature = "std")]
 use codec::Decode;
 #[cfg(feature = "std")]
-use hex_literal::hex;
-#[cfg(feature = "std")]
 use primitives::{
     china::china_cb::CHINA_CB,
     china::china_ch::CHINA_CH,
@@ -155,16 +153,9 @@ fn build_genesis() -> Value {
         })
         .collect();
 
-    // 中文注释：SFID 三把创世账户固定为已确认公钥；不依赖 primitives 常量命名。
-    let sfid_main = AccountId::new(hex!(
-        "14e4f684453a0ccf9ebb3113d05ae1da934b7f7b2dbd3b9dcdf4138357ab1607"
-    ));
-    let sfid_backup_1 = AccountId::new(hex!(
-        "9084bbff7d86275a50a3f460a435ce4d89c49e659df30a52bce67d9c7e614303"
-    ));
-    let sfid_backup_2 = AccountId::new(hex!(
-        "502a1021f41e025c8c86cb5f486ae9cb83fb8cadd9db29d2dde354baa650f73a"
-    ));
+    // ADR-008 Step 2c:删除 SFID main / backup_1 / backup_2 三把创世账户硬编码。
+    // 链上 0 prior knowledge of SFID,创世 storage 全空,activation 走
+    // first-come-first-serve(SFID main 后端首次推链占 ShengAdmins[Province][Main])。
 
     // 中文注释：决议发行合法收款账户改为链上存储初始化，后续可由治理动态更新。
     let issuance_allowed_recipients_json: Vec<Value> = CHINA_CB
@@ -203,14 +194,8 @@ fn build_genesis() -> Value {
             "authorities": grandpa_authorities_json,
         }),
     );
-    root.insert(
-        "sfidSystem".into(),
-        json!({
-            "sfidMainAccount": account_to_genesis_ss58(&sfid_main),
-            "sfidBackupAccount1": account_to_genesis_ss58(&sfid_backup_1),
-            "sfidBackupAccount2": account_to_genesis_ss58(&sfid_backup_2),
-        }),
-    );
+    // ADR-008 Step 2c:sfidSystem 创世段彻底删除(GenesisConfig 已删,
+    // 链上 ShengAdmins / ShengSigningPubkey 创世空,走 first-come-first-serve activation)。
     root.insert(
         "resolutionIssuance".into(),
         json!({
@@ -436,19 +421,7 @@ mod tests {
             );
         }
 
-        for field in [
-            "sfidMainAccount",
-            "sfidBackupAccount1",
-            "sfidBackupAccount2",
-        ] {
-            let account = patch["sfidSystem"][field].clone();
-            let parsed: Result<AccountId, _> = serde_json::from_value(account.clone());
-            assert!(
-                parsed.is_ok(),
-                "sfid account should deserialize: field={field} value={account:?} err={:?}",
-                parsed.err()
-            );
-        }
+        // ADR-008 Step 2c:sfidSystem 创世段已删,本处不再校验 sfid* 字段。
     }
 
     #[test]
@@ -479,12 +452,6 @@ mod tests {
             resolution_issuance.err()
         );
 
-        let sfid: Result<sfid_system::GenesisConfig<crate::Runtime>, _> =
-            serde_json::from_value(patch["sfidSystem"].clone());
-        assert!(
-            sfid.is_ok(),
-            "sfidSystem should deserialize: {:?}",
-            sfid.err()
-        );
+        // ADR-008 Step 2c:sfid_system::GenesisConfig 已删,本处不再校验。
     }
 }
