@@ -263,3 +263,4 @@
 - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
 - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
 - `memory/08-tasks/done/20260502-sfid-institution-filing-fields.md`
+- `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
