@@ -52,10 +52,10 @@ struct AppState {
     #[allow(dead_code)]
     cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008 Phase 23e)。
-    /// 历史 `key_admins::sheng_signer_cache::ShengSignerCache`(每省 1 把 + 全局
-    /// SFID MAIN 包装密钥)已删除,新缓存按 (province, admin_pubkey) 二级 key
-    /// 持有 3 把独立 keypair,seed 持久化由 `store_shards/sheng_signer.rs` 接管。
-    pub(crate) sheng_signer_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
+    /// 历史 KEY_ADMIN 签名缓存(每省 1 把 + 全局 SFID MAIN 包装密钥)已删除,
+    /// 新缓存按 (province, admin_pubkey) 二级 key
+    /// 持有 3 把独立 keypair,seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
+    pub(crate) sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
     /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
     #[allow(dead_code)]
@@ -621,9 +621,9 @@ fn main() {
     let store = StoreHandle::from_database_url(database_url.as_str()).expect("init store handle");
     // ADR-008 Phase 23e:省管理员 3-tier 签名 keypair 内存缓存。
     // 缓存 key = (province, admin_pubkey_bytes),由各省 admin 登录时按需载入。
-    // seed 持久化由 `store_shards/sheng_signer.rs` 接管,wrap key 走 SFID_MASTER_KEK_HEX
+    // seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管,wrap key 走 SFID_MASTER_KEK_HEX
     // (fallback SFID_SIGNING_SEED_HEX)+ HKDF。本进程不再持有"全局 SFID MAIN signer Pair"。
-    let sheng_signer_cache: Arc<sheng_admins::signing_cache::ShengSigningCache> =
+    let sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache> =
         Arc::new(sheng_admins::signing_cache::ShengSigningCache::new());
     // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     // 基于现有 Postgres 连接池构造 ShardBackend 和 ShardedStore。
@@ -644,7 +644,7 @@ fn main() {
         store,
         rate_limit_redis: Arc::new(redis_client),
         cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
-        sheng_signer_cache,
+        sheng_admin_signing_cache,
         sharded_store,
     };
     seed_sheng_admins(&state);
@@ -668,7 +668,9 @@ fn main() {
             .unwrap_or(false)
         {
             // 已有密钥，直接加载（不需要 tokio runtime）
-            match crate::institutions::anon_cert::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
+            match crate::institutions::anon_cert::rsa_blind::init_from_pem(
+                existing_pem.as_deref().unwrap(),
+            ) {
                 Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
                 Err(e) => warn!("RSA anon cert keypair load failed: {e}"),
             }
@@ -941,23 +943,23 @@ fn main() {
             // ─── ADR-008 phase45:省管理员 3-tier 名册 + 签名密钥推链(全部 mock,phase7 切真) ───
             .route(
                 "/api/v1/admin/sheng-admin/roster",
-                get(chain::sheng_admin::handler::list_roster_admin),
+                get(chain::sheng_admins::handler::list_roster_admin),
             )
             .route(
                 "/api/v1/admin/sheng-admin/roster/add-backup",
-                post(chain::sheng_admin::add_backup::handler),
+                post(chain::sheng_admins::add_backup::handler),
             )
             .route(
                 "/api/v1/admin/sheng-admin/roster/remove-backup",
-                post(chain::sheng_admin::remove_backup::handler),
+                post(chain::sheng_admins::remove_backup::handler),
             )
             .route(
                 "/api/v1/admin/sheng-signer/activate",
-                post(chain::sheng_signer::activation::handler),
+                post(chain::sheng_admins::activate_signer::handler),
             )
             .route(
                 "/api/v1/admin/sheng-signer/rotate",
-                post(chain::sheng_signer::rotation::handler),
+                post(chain::sheng_admins::rotate_signer::handler),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -978,7 +980,7 @@ fn main() {
 
         // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
         //
-        // 全部端点都汇集在 chain/ 子目录(institution_info / joint_vote / citizen_vote)。
+        // 全部端点都汇集在 chain/ 子目录(duoqian_info / joint_vote / citizen_vote)。
         // wuminapp 自有功能(钱包交易索引、投票账户绑定)继续留 indexer / citizens 模块。
         let app_routes = Router::new()
             // ── 联合投票:获取公民人数快照凭证 ──
@@ -1008,30 +1010,30 @@ fn main() {
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 账户列表 ──
             .route(
                 "/api/v1/app/institutions/search",
-                get(chain::institution_info::app_search_institutions),
+                get(chain::duoqian_info::app_search_institutions),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_id",
-                get(chain::institution_info::app_get_institution),
+                get(chain::duoqian_info::app_get_institution),
             )
             .route(
                 "/api/v1/app/institutions/:sfid_id/accounts",
-                get(chain::institution_info::app_list_accounts),
+                get(chain::duoqian_info::app_list_accounts),
             )
             // ── 清算行搜索(已激活,wuminapp 绑定清算行用):资格白名单 + 主账户 ACTIVE_ON_CHAIN ──
             .route(
                 "/api/v1/app/clearing-banks/search",
-                get(chain::institution_info::app_search_clearing_banks),
+                get(chain::duoqian_info::app_search_clearing_banks),
             )
             // ── 候选清算行搜索(可未激活,节点桌面"添加清算行"用):仅资格白名单过滤 ──
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
-                get(chain::institution_info::app_search_eligible_clearing_banks),
+                get(chain::duoqian_info::app_search_eligible_clearing_banks),
             )
             // ── ADR-008 phase45:链反向调用,公开拉取本省 3 槽公钥 ──
             .route(
                 "/api/v1/chain/sheng-admin/list",
-                get(chain::sheng_admin::handler::list_roster_public),
+                get(chain::sheng_admins::handler::list_roster_public),
             );
 
         let app_state = state.clone();
@@ -1077,7 +1079,7 @@ fn main() {
 
 // 中文注释:历史 ensure_chain_request_db / prepare_chain_request 与已下架的
 // /api/v1/chain/* + /api/v1/vote/verify dead routes 配套使用,2026-05-01 一并下架。
-// 链端 chain pull 端点(institution_info / joint_vote / citizen_vote)无 attestor
+// 链端 chain pull 端点(duoqian_info / joint_vote / citizen_vote)无 attestor
 // 鉴权需求,全局 rate limiter 已防滥用,凭证签名本身就是反伪造保护。
 
 #[allow(dead_code)]

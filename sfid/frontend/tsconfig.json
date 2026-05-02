@@ -11,7 +11,22 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": "."
   },
-  "include": ["src"]
+  "include": [
+    "main.tsx",
+    "App.tsx",
+    "vite-env.d.ts",
+    "api",
+    "auth",
+    "chain",
+    "citizens",
+    "common",
+    "hooks",
+    "institutions",
+    "qr",
+    "sheng_admins",
+    "shi_admins",
+    "theme",
+    "utils"
+  ]
 }

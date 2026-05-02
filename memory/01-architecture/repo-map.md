@@ -86,6 +86,26 @@ citizenchain/
 
 当前结构已经完成物理整合，后续新增 桌面节点 Rust 后端功能直接放在 `citizenchain/node/src/<功能名>`，前端功能放在 `citizenchain/node/frontend/<功能名>`；新增 runtime 相关 crate 与文档均直接放在 `citizenchain/runtime/` 下，不再回到旧顶层目录。
 
+## 6b. SFID 前端目录策略
+
+2026-05-02 起,`sfid/frontend/src/` 与 `sfid/frontend/src/views/` 已删除。
+SFID 前端直接以 `sfid/frontend/` 为代码根,页面和 API 按业务目录放置:
+
+- `sfid/frontend/auth/`:登录、AuthContext、登录态类型。
+- `sfid/frontend/citizens/`:公民首页与绑定弹窗。
+- `sfid/frontend/institutions/`:机构创建、机构详情、账户名称、清算行资格前端页面。
+- `sfid/frontend/api/institution.ts`:机构本地数据 API。
+- `sfid/frontend/sheng_admins/`:非链上的省管理员后台页面。
+- `sfid/frontend/shi_admins/`:市管理员页面。
+- `sfid/frontend/chain/duoqian_info/`:机构与 DUOQIAN 链交互 UI/API。
+- `sfid/frontend/chain/sheng_admins/`:省管理员与 `sfid-system` 链交互 UI/API。
+
+同名对齐规则:
+
+- 后端链交互目录:`sfid/backend/src/chain/sheng_admins/`
+- 前端链交互目录:`sfid/frontend/chain/sheng_admins/`
+- runtime 辅助目录:`citizenchain/runtime/otherpallet/sfid-system/src/sheng_admins/`
+
 ## 7. GitHub Actions 路径分流原则
 
 GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：

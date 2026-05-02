@@ -18,8 +18,6 @@ pub(crate) mod backend;
 pub(crate) mod migration;
 pub(crate) mod pg_backend;
 pub(crate) mod shard_types;
-/// 中文注释:省管理员 3-tier 签名 seed 加密持久化(ADR-008)。
-pub(crate) mod sheng_signer;
 
 use std::sync::{Arc, RwLock};
 

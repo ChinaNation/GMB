@@ -1,4 +1,9 @@
-# SUPER_ADMINS_TECHNICAL
+# SHENG_ADMINS_TECHNICAL
+
+> 2026-05-02 更新:代码目录统一使用下划线复数 `sheng_admins`。
+> 非链上的省管理员后台业务放 `sfid/backend/src/sheng_admins/`;与链交互的省管理员能力放
+> `sfid/backend/src/chain/sheng_admins/`。省管理员 main 公钥、Slot、三槽名册基线放
+> `sfid/backend/src/sheng_admins/province_admins.rs`。
 
 ## 0. 区块链端方案对齐（冻结，优先级最高）
 1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
@@ -13,12 +18,15 @@
 2. 机构管理（身份识别码生成、扫码录入公钥、查询、更新、禁用、撤销、删除）。
 
 - 架构口径（冻结）：
-1. 管理员功能与机构管理功能继续保持在 `sheng-admins` 模块内迭代。
+1. 管理员功能与机构管理功能继续保持在 `sheng_admins` 模块内迭代。
 2. 不新增独立”管理员模块”或”机构模块”。
 
 - 代码归档：
-1. `backend/src/sheng-admins/catalog.rs`：省级省级管理员目录治理。
-2. `backend/src/sheng-admins/institutions.rs`：机构身份识别码与机构公钥治理。
+1. `backend/src/sheng_admins/catalog.rs`：省级管理员目录治理。
+2. `backend/src/sheng_admins/institutions.rs`：机构身份识别码与机构公钥治理。
+3. `backend/src/sheng_admins/province_admins.rs`：43 省 main 公钥、Slot、ProvinceAdmins。
+4. `backend/src/sheng_admins/signing_seed_store.rs`：省管理员签名 seed 加密持久化。
+5. `backend/src/chain/sheng_admins/`：省管理员三槽名册和签名公钥的链交互入口。
 
 ## 2. 权限口径（当前冻结）
 1. `SHENG_ADMIN`（省级管理员，原 `SUPER_ADMIN`）：
@@ -209,11 +217,13 @@
 
 ## 12. 路由挂载与文件索引
 1. 路由定义：`backend/src/main.rs`（`/api/v1/admin/*`）。
-2. 模块导出：`backend/src/sheng-admins/mod.rs`。
+2. 模块导出：`backend/src/sheng_admins/mod.rs`。
 3. 业务实现：
-   - `backend/src/sheng-admins/catalog.rs`（省级管理员目录）
-   - `backend/src/sheng-admins/institutions.rs`（机构管理）
-4. 省域判定：`backend/src/business/scope.rs`
+   - `backend/src/sheng_admins/catalog.rs`（省级管理员目录）
+   - `backend/src/sheng_admins/institutions.rs`（机构管理）
+   - `backend/src/sheng_admins/province_admins.rs`（省管理员 main 公钥与三槽模型）
+   - `backend/src/chain/sheng_admins/`（省管理员链交互）
+4. 省域判定：`backend/src/scope/admin_province.rs`
 5. CPMS 状态扫码联动：`backend/src/citizens/status.rs`
 
 

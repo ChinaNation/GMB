@@ -3,7 +3,7 @@
 //! ADR-008 决议(2026-05-01):每省 3 把独立签名密钥(每个 admin slot 各一把,
 //! 互不共享)。登录时根据 (province, admin_pubkey) 载入 Pair,登出/idle 驱逐。
 //!
-//! 与旧 `key_admins::sheng_signer_cache` 区别:
+//! 与旧 KEY_ADMIN 签名缓存区别:
 //! - 旧:每省 1 把签名密钥,key 是 province
 //! - 新:每省 3 把(main / backup_1 / backup_2),key 是 (province, admin_pubkey)
 //!
@@ -112,13 +112,13 @@ pub(crate) fn resolve_business_signer(
     // 优先按 (province, ctx.admin_pubkey) 精确取(ShengAdmin 自己登录场景)
     let admin_bytes = crate::login::parse_sr25519_pubkey_bytes(ctx.admin_pubkey.as_str());
     if let Some(bytes) = admin_bytes {
-        if let Some(pair) = state.sheng_signer_cache.get(province, &bytes) {
+        if let Some(pair) = state.sheng_admin_signing_cache.get(province, &bytes) {
             return Ok((pair, province.to_string()));
         }
     }
     // 退化:任意已上线 slot(ShiAdmin 推链场景,凭其上级 sheng 已登录)
     state
-        .sheng_signer_cache
+        .sheng_admin_signing_cache
         .any_for_province(province)
         .map(|p| (p, province.to_string()))
         .ok_or_else(|| {

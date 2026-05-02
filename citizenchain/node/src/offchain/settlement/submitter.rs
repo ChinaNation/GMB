@@ -33,9 +33,8 @@ use citizenchain as runtime;
 use offchain_transaction::batch_item::OffchainBatchItemV2;
 
 use crate::core::service::FullClient;
-use crate::offchain::keystore::SigningKey;
-
 use super::packer::BatchSubmitter;
+use super::keystore::SigningKey;
 
 /// 具体 pool 别名。与 `service.rs` 里 `Service` 第 5 项严格对齐:
 /// `TransactionPoolHandle<opaque::Block, FullClient>`。

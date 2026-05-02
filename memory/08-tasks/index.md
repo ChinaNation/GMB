@@ -53,7 +53,10 @@
 - `memory/08-tasks/open/20260501-091854-修复-onchain-transaction-l1-l2-l4-明确-no-refund-协议-fee-percent-保底日志-feepaid-tip-源码说明.md`
 - `memory/08-tasks/open/20260501-092408-准备-benchmark-runtime-wasm-并重新生成-resolution-权重.md`
 - `memory/08-tasks/open/20260501-093040-修复-onchain-transaction-l3-安全基金账户热路径重复-decode-改为-runtime-provider-注入.md`
-- `memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`
+- `memory/08-tasks/open/20260501-094334-检查-issuance-runtime-benchmarks-feature-传播缺口.md`
+- `memory/08-tasks/open/20260501-094932-修复-issuance-runtime-benchmarks-feature-下游传播缺口.md`
+- `memory/08-tasks/open/20260501-095643-检查-onchain-transaction-n1-n2-n3-事件断言-乘法可读性与-router-bound-收紧.md`
+- `memory/08-tasks/open/20260501-100019-修复-onchain-transaction-n1-n2-补充-feeshareburnt-测试断言与-fee-乘法防御注释.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase23a-models-mod-split.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase23b-rsa-blind-relocate.md`
@@ -63,17 +66,20 @@
 - `memory/08-tasks/open/20260501-sfid-step1-phase45-chain-push-and-routes.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase6-frontend-3tier-views.md`
 - `memory/08-tasks/open/20260501-sfid-step1-phase7-acceptance-and-cleanup.md`
+- `memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`
+- `memory/08-tasks/open/20260502-111829-检查-sfid-系统省管理员和签名密钥的实现方式与实现目录.md`
+- `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
+- `memory/08-tasks/open/20260502-citizenchain-step3-credential-double-layer.md`
 - `memory/08-tasks/open/20260502-sfid-step2a-pallet-storage-and-extrinsic.md`
 - `memory/08-tasks/open/20260502-sfid-step2b-duoqian-manage-credential.md`
 - `memory/08-tasks/open/20260502-sfid-step2c-genesis-and-migration.md`
 - `memory/08-tasks/open/20260502-sfid-step2d-wumin-wuminapp-decoder.md`
+- `memory/08-tasks/open/20260502-sfid-voters-count-add-admin-pubkey-fields.md`
+- `memory/08-tasks/open/20260502-step2e-cold-wallet-sign-4-extrinsics.md`
+- `memory/08-tasks/open/20260502-wuminapp-propose-create-institution-caller-fix.md`
 
 ## done
 
-- `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
-- `memory/08-tasks/done/20260501-sfid-chain-folder-restructure.md`
-- `memory/08-tasks/done/20260501-103245-修复-grandpakey-change-p1-p5-问题.md`
-- `memory/08-tasks/done/20260501-094149-新增首页交易矿工热钱包.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -243,3 +249,11 @@
 - `memory/08-tasks/done/20260501-090444-检查-runtime-issuance-模块权重占位-cargo-迁移和-shengbank-利率溢出事件问题.md`
 - `memory/08-tasks/done/20260501-091136-修复-issuance-权重占位-cargo-冗余-迁移兜底与利率溢出审计.md`
 - `memory/08-tasks/done/20260501-091450-修复-onchain-transaction-手续费公式入口和销毁审计事件.md`
+- `memory/08-tasks/done/20260501-094149-新增首页交易矿工热钱包.md`
+- `memory/08-tasks/done/20260501-102629-检查-resolution-destro-p0-p1-p2-残留权重错误码机构约定与-wuminapp-空目录.md`
+- `memory/08-tasks/done/20260501-103245-修复-grandpakey-change-p1-p5-问题.md`
+- `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
+- `memory/08-tasks/done/20260501-sfid-chain-folder-restructure.md`
+- `memory/08-tasks/done/20260502-node-offchain-clearing-dir-refactor.md`
+- `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
+- `memory/08-tasks/done/20260502-sfid-institution-filing-fields.md`

@@ -404,9 +404,9 @@ pub fn new_full(
     gpu_device: Option<usize>,
     // 扫码支付 Step 2b-ii-β-2-b 新增:清算行主账户 SS58(None=本节点不做清算行角色)
     clearing_bank: Option<String>,
-    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::keystore` 的密码
+    // 扫码支付 Step 2b-ii-β-2-b 新增:解锁 `offchain::settlement::keystore` 的密码
     clearing_bank_password: Option<String>,
-    // 扫码支付 Step 2b-iii-b 新增:offchain::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
+    // 扫码支付 Step 2b-iii-b 新增:offchain::settlement::reserve 对账周期(秒),None=默认 300,Some(0)=关闭
     clearing_reserve_monitor_interval_secs: Option<u64>,
 ) -> Result<TaskManager, ServiceError> {
     // 生成或加载 TLS 自签证书，注入到网络配置中。
@@ -525,8 +525,8 @@ pub fn new_full(
         }
     };
 
-    // 清算行启动细节归入 `offchain::bootstrap`,service.rs 只做节点通用接线。
-    let clearing_rpc_impl = crate::offchain::bootstrap::start_from_cli(
+    // 清算行启动细节归入 `offchain::settlement::bootstrap`,service.rs 只做节点通用接线。
+    let clearing_rpc_impl = crate::offchain::settlement::bootstrap::start_from_cli(
         clearing_bank.as_deref(),
         clearing_bank_password.as_deref(),
         clearing_reserve_monitor_interval_secs,

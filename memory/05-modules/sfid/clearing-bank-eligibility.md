@@ -56,10 +56,10 @@ GFR / SF 等其他 a3 一律 ❌。
 
 | 资产 | 文件 |
 |---|---|
-| 前端版资格判定 | [sfid/frontend/src/utils/clearingBankEligible.ts](../../../sfid/frontend/src/utils/clearingBankEligible.ts) |
-| 列表 badge | [sfid/frontend/src/views/institutions/InstitutionListTable.tsx](../../../sfid/frontend/src/views/institutions/InstitutionListTable.tsx) |
-| 详情 badge | [sfid/frontend/src/views/institutions/InstitutionDetailPage.tsx](../../../sfid/frontend/src/views/institutions/InstitutionDetailPage.tsx) |
-| 第二步选 sub_type 时提示 | [sfid/frontend/src/views/institutions/PrivateInstitutionLayout.tsx](../../../sfid/frontend/src/views/institutions/PrivateInstitutionLayout.tsx) |
+| 前端版资格判定 | [sfid/frontend/institutions/utils/clearingBankEligible.ts](../../../sfid/frontend/institutions/utils/clearingBankEligible.ts) |
+| 列表 badge | [sfid/frontend/institutions/InstitutionListTable.tsx](../../../sfid/frontend/institutions/InstitutionListTable.tsx) |
+| 详情 badge | [sfid/frontend/institutions/InstitutionDetailPage.tsx](../../../sfid/frontend/institutions/InstitutionDetailPage.tsx) |
+| 第二步选 sub_type 时提示 | [sfid/frontend/institutions/PrivateInstitutionLayout.tsx](../../../sfid/frontend/institutions/PrivateInstitutionLayout.tsx) |
 
 **前端 badge 显示规则**：
 - SFR + JOINT_STOCK → 蓝色 badge `可作为清算行`（直接判定，单条机构信息足够）
@@ -106,7 +106,7 @@ GFR / SF 等其他 a3 一律 ❌。
 
 ## 桌面节点调用地址规则
 
-桌面节点的"添加清算行"页通过 `citizenchain/node/src/offchain/sfid.rs`
+桌面节点的"添加清算行"页通过 `citizenchain/node/src/offchain/duoqian_manage/sfid.rs`
 转发调用 `/api/v1/app/clearing-banks/eligible-search`。
 
 SFID 基地址由 `citizenchain/node/src/sfid_config.rs` 统一决定：

@@ -9,7 +9,7 @@
 //!     - 距上次打包 ≥ `PACK_BLOCK_THRESHOLD` 区块
 //! - 签名 + 提交路径通过 **两个 trait** 解耦:
 //!     - `BatchSigner`:Step 2b-ii-α 默认 `NoopBatchSigner`,Step 2b-ii-β 接
-//!       `offchain::keystore::SigningKey` 后实现 `KeystoreBatchSigner`。
+//!       `settlement::keystore::SigningKey` 后实现 `KeystoreBatchSigner`。
 //!     - `BatchSubmitter`:Step 2b-ii-α 默认 `NoopBatchSubmitter`,Step 2b-ii-β
 //!       接 substrate `TransactionPool` 后实现 `PoolBatchSubmitter`。
 //! - `pack_and_submit` 失败时调用 `ledger.reject_pending` 回滚本地 pending,
@@ -25,7 +25,7 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::offchain::ledger::{OffchainLedger, PendingPayment};
+use crate::offchain::offchain_transaction::ledger::{OffchainLedger, PendingPayment};
 
 /// 打包触发阈值:笔数上限(与链上 `PACK_TX_THRESHOLD` 对齐)。
 pub const PACK_TX_THRESHOLD: usize = 100_000;
@@ -81,7 +81,7 @@ impl From<PendingPayment> for NodeBatchItem {
 
 /// 批次签名提供者。清算行多签管理员对 batch 签名的入口。
 ///
-/// Step 2b-ii-α:`NoopBatchSigner` 占位;Step 2b-ii-β 接入 `offchain::keystore`
+/// Step 2b-ii-α:`NoopBatchSigner` 占位;Step 2b-ii-β 接入 `settlement::keystore`
 /// 里存的清算行管理员私钥。
 pub trait BatchSigner: Send + Sync {
     /// 对 `message = blake2_256(DOMAIN || institution || batch_seq || batch.encode())`
@@ -281,7 +281,7 @@ fn blake2_256(data: &[u8]) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::offchain::ledger::PendingPayment;
+    use crate::offchain::offchain_transaction::ledger::PendingPayment;
     use std::fs;
     use std::sync::Mutex;
 

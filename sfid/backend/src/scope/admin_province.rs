@@ -5,7 +5,7 @@
 //! 用于尚未走 ctx.admin_province 的旧路径,从 pubkey 兜底查省。
 
 use crate::scope::pubkey::same_admin_pubkey;
-use crate::sfid::province::sheng_admin_province;
+use crate::sheng_admins::province_admins::sheng_admin_province;
 use crate::{AdminRole, Store};
 
 /// 根据 pubkey + role 解析该管理员所属省份。
