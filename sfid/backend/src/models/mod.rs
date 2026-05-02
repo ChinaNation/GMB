@@ -124,11 +124,12 @@ pub(crate) struct Store {
     pub(crate) next_document_id: u64,
 }
 
-// 中文注释:三种管理员角色(命名铁律,见任务卡 0.5 / feedback_sfid_three_roles_naming.md)
-//   - KeyAdmin  → 密钥管理员(全国 3 人)      目录 key-admins/
-//   - ShengAdmin → 省级管理员(每省 1 人)      目录 sheng-admins/
-//   - ShiAdmin   → 市级管理员(每市 N 人)      目录 shi-admins/
+// 中文注释:三种管理员角色(原命名铁律,见 feedback_sfid_three_roles_naming.md)
+//   - KeyAdmin  → 密钥管理员(全国 3 人)      目录 key-admins/  ★ ADR-008 决议:Step 1 全删
+//   - ShengAdmin → 省级管理员(每省 3 人 main/backup_1/backup_2,自治) 目录 sheng_admins/
+//   - ShiAdmin   → 市级管理员(每市 N 人)      目录 shi_admins/
 // 序列化为 KEY_ADMIN / SHENG_ADMIN / SHI_ADMIN,数据库字段值同。
+// KeyAdmin 仅在 Step 1 过渡期保留,Phase 2 删除。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum AdminRole {

@@ -1,0 +1,44 @@
+# SFID Step 1 / Phase 23d:`operate/` 迁入 `citizens/` + 删 `operate/`
+
+- 状态:open
+- 创建日期:2026-05-01
+- 模块:`sfid/backend/src/{operate,citizens}/`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
+- 前置依赖:phase23a
+- 阻塞下游:phase23e
+
+## 任务需求
+
+`sfid/backend/src/operate/{binding.rs, cpms_qr.rs, status.rs, mod.rs}` 实际是公民身份业务,本卡迁入新建的 `citizens/` 目录,删 `operate/`。
+
+## 搬迁方案
+
+| 原 | 新 | 说明 |
+|---|---|---|
+| `operate/binding.rs` | `citizens/binding.rs` | 公民身份绑定凭证 |
+| `operate/status.rs` | `citizens/status.rs`(或并入 `citizens/binding.rs`) | 公民状态查询 |
+| `operate/cpms_qr.rs` | `citizens/cpms_qr.rs` | **边界讨论**:cpms_qr 涉及 CPMS 站点扫码,业务上接近 citizens(用户身份扫码)。**本卡先 conservatively 迁入 citizens/,phase7 可再评是否拆 `cpms/` 子模块** |
+| `operate/mod.rs` | 删除 | |
+| 新建 `citizens/{mod,handler,vote}.rs` | (handler/vote 留空骨架,后续 Phase 业务补) | 仅注册 mod |
+
+## 影响范围
+
+- 新增:`citizens/{mod,binding,status,cpms_qr,handler,vote}.rs`
+- 修改:`main.rs` `mod operate;` → `mod citizens;`,所有 `use operate::` → `use citizens::`
+- 修改:调用方 import 路径(grep 全量替换)
+- 删除:`src/operate/`(整目录)
+
+## 主要风险点
+
+- **`bootstrap_sheng_signer` 在 binding 路径中调用?**:phase23 progress 显示 `login/mod.rs` 才是 bootstrap 调用方,operate 只用 signing pair。验证 binding/status 不直接依赖 KEY_ADMIN
+- **cpms_qr 归属**:本卡先按 citizens 迁入,边界争议留 phase7
+
+## 验收清单
+
+- `cargo check` + `cargo test` + `cargo clippy` baseline 持平
+- Grep `crate::operate::|src/operate/` 零结果
+- 整目录 `operate/` 物理删除
+
+## 工作量
+
+~1 agent round
