@@ -95,7 +95,7 @@ pub fn run_desktop() {
             crate::offchain::settlement::commands::lock_decrypted_admin,
             crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_detail,
             crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_proposals,
-            crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_credential,
+            crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_registration_info,
             crate::offchain::duoqian_manage::commands::build_propose_create_institution_request,
             crate::offchain::duoqian_manage::commands::submit_propose_create_institution
         ])

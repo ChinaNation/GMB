@@ -7,9 +7,9 @@ import type {
   DecryptedAdminInfo,
   EligibleClearingBankCandidate,
   InitialAccountInputDto,
-  InstitutionCredentialResp,
   InstitutionDetail,
   InstitutionProposalPage,
+  InstitutionRegistrationInfoResp,
 } from './types';
 
 // 清算行 offchain 页面专用 Tauri API。全局 api.ts 不再承载清算行业务命令。
@@ -161,10 +161,13 @@ export const offchainApi = {
       pageSize,
     }),
 
-  // ── 创建机构多签:拉 SFID 凭证 + 构 extrinsic + 提交 ──
+  // ── 创建机构多签:拉 SFID registration-info + 构 extrinsic + 提交 ──
 
-  fetchInstitutionCredential: (sfidId: string) =>
-    invoke<InstitutionCredentialResp>('fetch_clearing_bank_institution_credential', { sfidId }),
+  fetchInstitutionRegistrationInfo: (sfidId: string) =>
+    invoke<InstitutionRegistrationInfoResp>(
+      'fetch_clearing_bank_institution_registration_info',
+      { sfidId },
+    ),
 
   buildProposeCreateInstitutionRequest: (params: {
     pubkeyHex: string;
@@ -176,9 +179,7 @@ export const offchainApi = {
     registerNonce: string;
     signatureHex: string;
     signingProvince: string;
-    a3: string;
-    subType?: string | null;
-    parentSfidId?: string | null;
+    signerAdminPubkey: string;
   }) =>
     invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
       pubkeyHex: params.pubkeyHex,
@@ -190,9 +191,7 @@ export const offchainApi = {
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
       signingProvince: params.signingProvince,
-      a3: params.a3,
-      subType: params.subType ?? null,
-      parentSfidId: params.parentSfidId ?? null,
+      signerAdminPubkey: params.signerAdminPubkey,
     }),
 
   submitProposeCreateInstitution: (params: {
@@ -207,9 +206,7 @@ export const offchainApi = {
     registerNonce: string;
     signatureHex: string;
     signingProvince: string;
-    a3: string;
-    subType?: string | null;
-    parentSfidId?: string | null;
+    signerAdminPubkey: string;
     signNonce: number;
     signBlockNumber: number;
     responseJson: string;
@@ -226,9 +223,7 @@ export const offchainApi = {
       registerNonce: params.registerNonce,
       signatureHex: params.signatureHex,
       signingProvince: params.signingProvince,
-      a3: params.a3,
-      subType: params.subType ?? null,
-      parentSfidId: params.parentSfidId ?? null,
+      signerAdminPubkey: params.signerAdminPubkey,
       signNonce: params.signNonce,
       signBlockNumber: params.signBlockNumber,
       responseJson: params.responseJson,

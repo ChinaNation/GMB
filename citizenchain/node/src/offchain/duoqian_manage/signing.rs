@@ -52,19 +52,6 @@ fn parse_account32(hex_str: &str) -> Result<Vec<u8>, String> {
     hex::decode(&clean).map_err(|e| format!("公钥解码失败:{e}"))
 }
 
-/// SCALE 编码 `Option<BoundedVec<u8>>`:`0x00`(None)或 `0x01 + Compact(len) + bytes`(Some)。
-fn encode_optional_bytes(value: Option<&[u8]>) -> Vec<u8> {
-    match value {
-        None => vec![0u8],
-        Some(b) => {
-            let mut out = Vec::with_capacity(1 + 1 + b.len());
-            out.push(1u8);
-            out.extend_from_slice(&encode_bytes_with_len(b));
-            out
-        }
-    }
-}
-
 /// SCALE 编码 u128 little-endian(16 字节)。
 fn encode_u128_le(v: u128) -> [u8; 16] {
     v.to_le_bytes()
@@ -73,7 +60,7 @@ fn encode_u128_le(v: u128) -> [u8; 16] {
 /// 构造 `propose_create_institution`(pallet=17, call=5)的 call_data。
 ///
 /// 入参顺序与 [`citizenchain/runtime/transaction/duoqian-manage/src/lib.rs::propose_create_institution`]
-/// 严格一致(13 个字段)。任一字段顺序变更必须同步改本函数。
+/// 严格一致(10 个字段)。任一字段顺序变更必须同步改本函数。
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_call_data(
     sfid_id: &str,
@@ -85,12 +72,10 @@ pub fn build_propose_create_institution_call_data(
     register_nonce: &str,
     signature_hex: &str,
     signing_province: &str,
-    a3: &str,
-    sub_type: Option<&str>,
-    parent_sfid_id: Option<&str>,
+    signer_admin_pubkey: &str,
 ) -> Result<Vec<u8>, String> {
-    if sfid_id.is_empty() || sfid_id.len() > 64 {
-        return Err("sfid_id 长度需在 1..=64".to_string());
+    if sfid_id.is_empty() || sfid_id.len() > 96 {
+        return Err("sfid_id 长度需在 1..=96".to_string());
     }
     if institution_name.is_empty() || institution_name.len() > 128 {
         return Err("institution_name 长度需在 1..=128".to_string());
@@ -124,6 +109,7 @@ pub fn build_propose_create_institution_call_data(
     if signing_province.is_empty() {
         return Err("signing_province 不可为空".to_string());
     }
+    let signer_admin_pubkey_bytes = parse_account32(signer_admin_pubkey)?;
 
     let mut call: Vec<u8> = Vec::with_capacity(512);
     call.push(DUOQIAN_PALLET_INDEX);
@@ -159,14 +145,10 @@ pub fn build_propose_create_institution_call_data(
     call.extend_from_slice(&encode_bytes_with_len(register_nonce.as_bytes()));
     // 8. signature: BoundedVec<u8>(64 字节)
     call.extend_from_slice(&encode_bytes_with_len(&signature_bytes));
-    // 9. signing_province: Option<Vec<u8>>(本流程必填,链端要查 ShengSigningPubkey[province])
-    call.extend_from_slice(&encode_optional_bytes(Some(signing_province.as_bytes())));
-    // 10. a3: BoundedVec<u8>
-    call.extend_from_slice(&encode_bytes_with_len(a3.as_bytes()));
-    // 11. sub_type: Option<BoundedVec<u8>>
-    call.extend_from_slice(&encode_optional_bytes(sub_type.map(|s| s.as_bytes())));
-    // 12. parent_sfid_id: Option<BoundedVec<u8>>
-    call.extend_from_slice(&encode_optional_bytes(parent_sfid_id.map(|s| s.as_bytes())));
+    // 9. province: Vec<u8>(本流程必填,链端要查 ShengSigningPubkey[province])
+    call.extend_from_slice(&encode_bytes_with_len(signing_province.as_bytes()));
+    // 10. signer_admin_pubkey: [u8; 32](固定 32 字节,无长度前缀)
+    call.extend_from_slice(&signer_admin_pubkey_bytes);
 
     Ok(call)
 }
@@ -184,9 +166,7 @@ pub fn build_propose_create_institution_sign_request(
     register_nonce: &str,
     signature_hex: &str,
     signing_province: &str,
-    a3: &str,
-    sub_type: Option<&str>,
-    parent_sfid_id: Option<&str>,
+    signer_admin_pubkey: &str,
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_propose_create_institution_call_data(
@@ -199,9 +179,7 @@ pub fn build_propose_create_institution_sign_request(
         register_nonce,
         signature_hex,
         signing_province,
-        a3,
-        sub_type,
-        parent_sfid_id,
+        signer_admin_pubkey,
     )?;
     let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
     let summary = format!("创建清算行机构多签 {institution_name}({sfid_id})");

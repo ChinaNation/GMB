@@ -15,8 +15,9 @@ use voting_engine::STATUS_PASSED;
 
 use crate::{
     pallet::{
-        A3Of, AccountNameOf, AddressRegisteredSfid, DuoqianAccounts, DuoqianAdminsOf,
-        RegisterNonceOf, RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+        AccountNameOf, AddressRegisteredSfid, DuoqianAccounts, DuoqianAdminsOf,
+        InstitutionAccountNamesOf, RegisterNonceOf, RegisterSignatureOf, SfidIdOf,
+        SfidRegisteredAddress,
     },
     BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
     ProtectedSourceChecker,
@@ -63,13 +64,6 @@ fn bench_account_name<T: Config>() -> Result<AccountNameOf<T>, BenchmarkError> {
         .map_err(|_| BenchmarkError::Stop("benchmark account_name should fit"))
 }
 
-fn bench_a3<T: Config>() -> Result<A3Of<T>, BenchmarkError> {
-    b"GFR"
-        .to_vec()
-        .try_into()
-        .map_err(|_| BenchmarkError::Stop("benchmark a3 should fit"))
-}
-
 fn register_institution<T: Config>(
     relayer: &T::AccountId,
     sfid_id: &SfidIdOf<T>,
@@ -82,17 +76,18 @@ fn register_institution<T: Config>(
     let signature: RegisterSignatureOf<T> = vec![1u8; 64]
         .try_into()
         .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
-    let a3 = bench_a3::<T>()?;
+    let account_names: InstitutionAccountNamesOf<T> = vec![account_name.clone()]
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
     Pallet::<T>::register_sfid_institution(
         RawOrigin::Signed(relayer.clone()).into(),
         sfid_id.clone(),
         account_name.clone(),
+        account_names,
         register_nonce,
         signature,
-        None,
-        a3,
-        None,
-        None,
+        b"LN".to_vec(),
+        [1u8; 32],
     )?;
     SfidRegisteredAddress::<T>::get(sfid_id, &account_name)
         .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
@@ -164,19 +159,20 @@ mod benchmarks {
         let signature: RegisterSignatureOf<T> = vec![1u8; 64]
             .try_into()
             .map_err(|_| BenchmarkError::Stop("benchmark register signature should fit"))?;
-        let a3 = bench_a3::<T>()?;
+        let account_names: InstitutionAccountNamesOf<T> = vec![account_name.clone()]
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
 
         #[extrinsic_call]
         register_sfid_institution(
             RawOrigin::Signed(relayer.clone()),
             sfid_id.clone(),
             account_name.clone(),
+            account_names,
             register_nonce,
             signature,
-            None,
-            a3,
-            None,
-            None,
+            b"LN".to_vec(),
+            [1u8; 32],
         );
 
         assert_eq!(
