@@ -198,7 +198,7 @@ pub(crate) async fn citizen_bind(
                 .mr
                 .as_deref()
                 .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
-            let cert_valid = match key_admins::rsa_blind::verify_anon_cert(
+            let cert_valid = match crate::institutions::anon_cert::rsa_blind::verify_anon_cert(
                 &qr4.cert.prov,
                 &qr4.cert.pk,
                 &sfid_sig_bytes,

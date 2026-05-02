@@ -266,7 +266,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     };
 
     // 获取 RSA 公钥 PEM
-    let rsa_pubkey_pem = match key_admins::rsa_blind::get_public_key_pem() {
+    let rsa_pubkey_pem = match crate::institutions::anon_cert::rsa_blind::get_public_key_pem() {
         Ok(v) => v,
         Err(_) => {
             return api_error(
@@ -490,7 +490,7 @@ pub(crate) async fn register_cpms(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "blind hex decode failed"),
     };
     let blind_anon_sig =
-        match key_admins::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
+        match crate::institutions::anon_cert::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
             Ok(v) => v,
             Err(e) => {
                 return api_error(
@@ -591,7 +591,7 @@ pub(crate) async fn archive_import(
         .mr
         .as_deref()
         .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
-    let cert_valid = match key_admins::rsa_blind::verify_anon_cert(
+    let cert_valid = match crate::institutions::anon_cert::rsa_blind::verify_anon_cert(
         &qr4.cert.prov,
         &qr4.cert.pk,
         &sfid_sig_bytes,
@@ -793,7 +793,7 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
     };
-    let rsa_pubkey_pem = match key_admins::rsa_blind::get_public_key_pem() {
+    let rsa_pubkey_pem = match crate::institutions::anon_cert::rsa_blind::get_public_key_pem() {
         Ok(v) => v,
         Err(_) => {
             return api_error(

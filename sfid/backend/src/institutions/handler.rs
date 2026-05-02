@@ -113,7 +113,7 @@ fn resolve_province_from_sfid_id(sfid_id: &str) -> Option<String> {
 /// 反查 `created_by` pubkey → (管理员姓名, 角色枚举字符串)。
 /// 未命中两者均为 `None`(前端显示"未知")。
 fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Option<String>) {
-    let norm = match crate::business::pubkey::normalize_admin_pubkey(created_by) {
+    let norm = match crate::scope::pubkey::normalize_admin_pubkey(created_by) {
         Some(v) => v,
         None => return (None, None),
     };
@@ -125,7 +125,7 @@ fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Op
         }
     };
     for user in store.admin_users_by_pubkey.values() {
-        let Some(user_norm) = crate::business::pubkey::normalize_admin_pubkey(&user.admin_pubkey)
+        let Some(user_norm) = crate::scope::pubkey::normalize_admin_pubkey(&user.admin_pubkey)
         else {
             continue;
         };
@@ -973,7 +973,7 @@ pub(crate) async fn list_institutions(
                 .admin_users_by_pubkey
                 .values()
                 .filter_map(|u| {
-                    let key = crate::business::pubkey::normalize_admin_pubkey(&u.admin_pubkey)?;
+                    let key = crate::scope::pubkey::normalize_admin_pubkey(&u.admin_pubkey)?;
                     let role_str: &'static str = match u.role {
                         crate::models::AdminRole::KeyAdmin => "KEY_ADMIN",
                         crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
@@ -1106,7 +1106,7 @@ pub(crate) async fn list_institutions(
     for row in rows.iter_mut() {
         let raw_created_by = row.created_by_role.take();
         let Some(raw) = raw_created_by else { continue };
-        let Some(norm) = crate::business::pubkey::normalize_admin_pubkey(&raw) else {
+        let Some(norm) = crate::scope::pubkey::normalize_admin_pubkey(&raw) else {
             continue;
         };
         if let Some((name_opt, role)) = admin_lookup.get(&norm) {

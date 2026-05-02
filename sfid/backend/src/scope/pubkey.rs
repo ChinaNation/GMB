@@ -1,3 +1,9 @@
+//! sr25519 pubkey 规范化与等值比较
+//!
+//! 中文注释:本文件由 Phase 23c 从 `business/pubkey.rs` 物理搬迁而来。
+//! 内部统一 0x 小写 hex,前端展示 SS58(prefix=2027),禁止混用——
+//! 见 feedback_pubkey_format_rule.md。
+
 use crate::login::{parse_sr25519_pubkey, parse_sr25519_pubkey_bytes};
 
 pub(crate) fn normalize_admin_pubkey(input: &str) -> Option<String> {

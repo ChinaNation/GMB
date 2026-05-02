@@ -1,5 +1,11 @@
 # KEY_ADMINS_TECHNICAL
 
+> 中文注释(phase23b, 2026-05-01):`rsa_blind.rs`(RSA 盲签匿名凭证)已搬到
+> `sfid/backend/src/institutions/anon_cert/rsa_blind.rs`,与 KEY_ADMIN 角色无关,
+> 历史上误放本目录。本目录其余内容(chain_keyring/sheng_signer_cache/signer_router)
+> 留待 phase23e 整体清理,见 ADR-008、任务卡
+> `20260501-sfid-step1-phase23b-rsa-blind-relocate.md`。
+
 ## 0. 区块链端方案对齐（冻结，优先级最高）
 1. 本文档第 0 步严格按《SFID-Chain 五项能力对齐技术方案（Runtime 对齐版）》执行。
 2. 功能 5 轮换以链上标准 extrinsic 为准（如 `sfid-system::rotate_sfid_keys`），不依赖私有 RPC 方法。

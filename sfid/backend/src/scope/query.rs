@@ -1,3 +1,8 @@
+//! 公民列表 / 公开身份查询 handlers
+//!
+//! 中文注释:本文件由 Phase 23c 从 `business/query.rs` 物理搬迁而来。
+//! 路由仍由 main.rs 注册到 `/admin/citizens` 与 `/public/identity-search`。
+
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},

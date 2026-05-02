@@ -14,10 +14,16 @@
 //! 详细规则见 `rules.rs` 的 `VisibleScope`。
 //!
 //! 任务卡 2 建立。feedback_scope_auto_filter.md 固化。
+//! Phase 23c(2026-05-02)合并 `business/` 下 5 文件:cpms / admin_province / pubkey / audit / query。
 
 #![allow(dead_code)]
 
+pub mod admin_province;
+pub mod audit;
+pub mod cpms;
 pub mod filter;
+pub mod pubkey;
+pub mod query;
 pub mod rules;
 
 pub use filter::{filter_by_scope, HasProvinceCity};

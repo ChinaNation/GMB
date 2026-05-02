@@ -6,8 +6,8 @@ use axum::{
 };
 use chrono::Utc;
 
-use crate::business::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
-use crate::business::scope::province_scope_for_role;
+use crate::scope::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
+use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
 /// 三角色均可访问,按 scope 过滤:

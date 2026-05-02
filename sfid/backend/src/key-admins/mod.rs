@@ -1,5 +1,4 @@
 pub(crate) mod chain_keyring;
-pub(crate) mod rsa_blind;
 pub(crate) mod sheng_signer_cache;
 pub(crate) mod signer_router;
 
@@ -119,7 +118,7 @@ pub(crate) async fn admin_get_chain_keyring(
         store
             .admin_users_by_pubkey
             .iter()
-            .find(|(k, _)| crate::business::pubkey::same_admin_pubkey(k.as_str(), pubkey))
+            .find(|(k, _)| crate::scope::pubkey::same_admin_pubkey(k.as_str(), pubkey))
             .map(|(_, u)| u.admin_name.clone())
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| "密钥管理员".to_string())

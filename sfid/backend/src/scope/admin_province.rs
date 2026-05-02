@@ -1,6 +1,12 @@
-use crate::business::pubkey::same_admin_pubkey;
+//! 按 pubkey + role 解析管理员所属省份
+//!
+//! 中文注释:本文件由 Phase 23c 从 `business/scope.rs` 物理搬迁而来。
+//! 这两个函数与 `rules.rs::get_visible_scope`(从 ctx 派生 VisibleScope)互补,
+//! 用于尚未走 ctx.admin_province 的旧路径,从 pubkey 兜底查省。
+
+use crate::scope::pubkey::same_admin_pubkey;
 use crate::sfid::province::sheng_admin_province;
-use crate::{AdminRole, CpmsSiteKeys, Store};
+use crate::{AdminRole, Store};
 
 /// 根据 pubkey + role 解析该管理员所属省份。
 ///
@@ -34,11 +40,4 @@ fn find_province_by_pubkey(store: &Store, pubkey: &str) -> Option<String> {
         .find(|(k, _)| same_admin_pubkey(k.as_str(), pubkey))
         .map(|(_, province)| province.clone())
         .or_else(|| sheng_admin_province(pubkey).map(|v| v.to_string()))
-}
-
-pub(crate) fn in_scope_cpms_site(site: &CpmsSiteKeys, admin_province: Option<&str>) -> bool {
-    match admin_province {
-        Some(scope) => site.admin_province == scope,
-        None => true,
-    }
 }
