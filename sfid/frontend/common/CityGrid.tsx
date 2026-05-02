@@ -3,7 +3,8 @@
 // 过滤掉 code="000" 的"本省统一"占位。
 
 import React, { useEffect, useState } from 'react';
-import { listSfidCities, type AdminAuth, type SfidCityItem } from '../api/client';
+import type { AdminAuth } from '../auth/types';
+import { listSfidCities, type SfidCityItem } from '../sfid/api';
 
 interface Props {
   auth: AdminAuth;

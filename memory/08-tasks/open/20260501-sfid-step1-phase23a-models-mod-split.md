@@ -2,7 +2,7 @@
 
 - 状态:open
 - 创建日期:2026-05-01
-- 模块:`sfid/backend/src/models/`
+- 模块:`sfid/backend/models/`
 - 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
 - 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
 - 前置依赖:Phase 1(完成)+ Phase 3 增量基础设施(完成,见 phase23 progress)
@@ -10,7 +10,7 @@
 
 ## 任务需求
 
-`sfid/backend/src/models/mod.rs` 当前 1021 行,把 5 类(role / slot / session / permission / error)定义下沉到独立子文件,`mod.rs` 保留为 re-export facade,所有 `pub use models::*` 调用方零感知。**纯重构,业务行为零变化**。
+`sfid/backend/models/mod.rs` 当前 1021 行,把 5 类(role / slot / session / permission / error)定义下沉到独立子文件,`mod.rs` 保留为 re-export facade,所有 `pub use models::*` 调用方零感知。**纯重构,业务行为零变化**。
 
 ## 拆分方案
 
@@ -28,7 +28,7 @@
 
 ## 影响范围
 
-- 仅 `sfid/backend/src/models/`
+- 仅 `sfid/backend/models/`
 - `main.rs:53 pub(crate) use models::*;` 不变
 - 其他模块零感知
 
@@ -124,7 +124,7 @@
 - `cargo test` ⇒ **79 passed / 0 failed**(含 `keyring_rotate_*`、`sync_key_admin_users_keeps_monotonic_ids`、`store_shards::*`、`sheng_signer::*` 等全部 main_tests + 子模块测试)
 - `cargo clippy --all-targets -- -D warnings` ⇒ **59 errors,与 baseline 完全一致**;其中 `models/` 命中 4 条全部为搬迁过来的旧错(`role.rs:16` AdminRole 同后缀 / `store.rs:352` InstitutionChainStatus 可 derive Default / `store.rs:365` MultisigChainStatus 同后缀 / `store.rs:372` MultisigChainStatus 可 derive Default),与原 `mod.rs` 在搬迁前完全一致,本卡未引入新错
 - `wc -l models/mod.rs` = **41 行**(≤ 80 验收线 ✓)
-- `grep -rn "crate::models::" sfid/backend/src/ | wc -l` = **20 条**(institutions/* / store_shards/* / scope/rules.rs / key-admins/signer_router.rs / chain/institution_info/* / app_core/runtime_ops.rs),路径名零变化,facade wildcard re-export 透出全部公开类型 ⇒ caller 零感知
+- `grep -rn "crate::models::" sfid/backend/ | wc -l` = **20 条**(institutions/* / store_shards/* / scope/rules.rs / key-admins/signer_router.rs / chain/institution_info/* / app_core/runtime_ops.rs),路径名零变化,facade wildcard re-export 透出全部公开类型 ⇒ caller 零感知
 
 ### 状态
 
@@ -144,7 +144,7 @@
 - `cargo test --no-fail-fast` ⇒ **79 passed / 0 failed / 0 ignored / 0 measured / 0 filtered out**(含 `main_tests::keyring_rotate_*`、`key_admins::rsa_blind::*`、`store_shards/sheng_signer::*` 等全部子集)
 - `cargo clippy --all-targets -- -D warnings` ⇒ **54 bin errors + 57 bin+test errors = 59 unique** ⇆ phase23 progress 与第 2 轮记录的基线**逐字相同**,本轮未引入新错
 - `wc -l models/mod.rs` = **41 行**(验收线 ≤ 80 ✓)
-- `grep -rn "crate::models::" sfid/backend/src/ | wc -l` = **20 条**,路径名零变化(facade re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等全部公开类型)
+- `grep -rn "crate::models::" sfid/backend/ | wc -l` = **20 条**,路径名零变化(facade re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等全部公开类型)
 
 ### 结论
 
@@ -155,7 +155,7 @@
 ### 现状
 
 - 接到主入口"按任务卡执行,完工 cargo check/clippy/test 全绿,把 progress 回写任务卡尾"指令(本轮启动文件名 `phase45-models-mod-split.md`,实为同一卡 `phase23a-models-mod-split.md` 的别名;按文件实际内容执行)
-- `git status sfid/backend/src/models/` ⇒ `mod.rs` modified + `citizen/cpms/error/meta/permission/role/session/slot/store.rs` 9 个 untracked,与第 2/3 轮记录完全一致,无新增/丢失文件
+- `git status sfid/backend/models/` ⇒ `mod.rs` modified + `citizen/cpms/error/meta/permission/role/session/slot/store.rs` 9 个 untracked,与第 2/3 轮记录完全一致,无新增/丢失文件
 - 子文件总行数 1110(role 145 / slot 6 / session 5 / permission 6 / error 24 / meta 34 / cpms 199 / citizen 274 / store 376 / mod 41),mod.rs 仅 41 行 facade
 
 ### 三件套重跑(本轮终态)
@@ -164,7 +164,7 @@
 - `cargo test --quiet` ⇒ **79 passed / 0 failed / 0 ignored / 0 measured / 0 filtered out**(0.56s)
 - `cargo clippy --all-targets --quiet -- -D warnings` ⇒ **59 errors**,逐字命中 phase23 baseline + 第 1/2/3 轮记录,本轮未引入新错
 - `wc -l models/mod.rs` ⇒ **41 行**(≤ 80 验收线 ✓)
-- `grep -rn "crate::models::" sfid/backend/src/` ⇒ **20 条 callsite**(`institutions/{handler,model,service,store}.rs` × 4+3 / `store_shards/{shard_types,migration}.rs` × 2 / `scope/rules.rs` / `key-admins/signer_router.rs` / `chain/institution_info/{handler,dto}.rs` × 2 / `app_core/runtime_ops.rs` / `models/{slot,mod}.rs` 自身注释 × 2),全部解析正常,facade glob re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等
+- `grep -rn "crate::models::" sfid/backend/` ⇒ **20 条 callsite**(`institutions/{handler,model,service,store}.rs` × 4+3 / `store_shards/{shard_types,migration}.rs` × 2 / `scope/rules.rs` / `key-admins/signer_router.rs` / `chain/institution_info/{handler,dto}.rs` × 2 / `app_core/runtime_ops.rs` / `models/{slot,mod}.rs` 自身注释 × 2),全部解析正常,facade glob re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等
 
 ### 结论
 

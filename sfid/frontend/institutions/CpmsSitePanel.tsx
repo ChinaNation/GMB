@@ -13,9 +13,9 @@ import {
   enableCpmsKeys,
   reissueInstallToken,
   revokeCpmsKeys,
-  type AdminAuth,
   type CpmsSiteRow,
-} from '../api/client';
+} from './api';
+import type { AdminAuth } from '../auth/types';
 import { downloadQr } from '../utils/downloadQr';
 
 interface Props {

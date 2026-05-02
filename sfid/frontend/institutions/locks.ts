@@ -14,7 +14,7 @@
 //   GFR → 政府/立法/司法/监察/教委(移除 CB 储备委员会)
 //   SFR/FFR → ZG/TG(移除 CH 储备银行,死规则全局删除)
 
-import type { InstitutionCategory } from '../api/institution';
+import type { InstitutionCategory } from './api';
 
 export type ChoiceItem = { value: string; label: string };
 

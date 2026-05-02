@@ -69,7 +69,9 @@
 - `memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`
 - `memory/08-tasks/open/20260502-111829-检查-sfid-系统省管理员和签名密钥的实现方式与实现目录.md`
 - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
+- `memory/08-tasks/open/20260502-132457-分三步完善机构信息交互闭环-第1步先检查并分析-sfid-端创建机构-sfid-完善机构名称-机构类型-所属法人-账.md`
 - `memory/08-tasks/open/20260502-citizenchain-step3-credential-double-layer.md`
+- `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
 - `memory/08-tasks/open/20260502-sfid-step2a-pallet-storage-and-extrinsic.md`
 - `memory/08-tasks/open/20260502-sfid-step2b-duoqian-manage-credential.md`
 - `memory/08-tasks/open/20260502-sfid-step2c-genesis-and-migration.md`
@@ -254,6 +256,10 @@
 - `memory/08-tasks/done/20260501-103245-修复-grandpakey-change-p1-p5-问题.md`
 - `memory/08-tasks/done/20260501-node-clearing-bank-institution-detail-and-create.md`
 - `memory/08-tasks/done/20260501-sfid-chain-folder-restructure.md`
+- `memory/08-tasks/done/20260502-134646-在-gmb-ai-编程系统中增加强制规则-每次输出技术方案时-必须输出本次预计修改的目录-并为每个目录附中文.md`
 - `memory/08-tasks/done/20260502-node-offchain-clearing-dir-refactor.md`
+- `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
+- `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
 - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
+- `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
 - `memory/08-tasks/done/20260502-sfid-institution-filing-fields.md`

@@ -6,7 +6,7 @@
 //   - SHI_ADMIN:   skipCityList=true     → 直接进本市的详情页,只读其他市
 
 import { useMemo } from 'react';
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
 
 export interface VisibleScope {
   /** 可见省份列表。空数组保留含义"全国可见(只读)"——当前只用于未登录场景占位。 */

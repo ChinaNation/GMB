@@ -9,7 +9,7 @@
 
 ### 1.1 新增 RSA 密钥管理
 
-**新文件：** `sfid/backend/src/key-admins/rsa_blind.rs`
+**新文件：** `sfid/backend/key-admins/rsa_blind.rs`
 
 - 生成 RSA 密钥对（启动时从环境变量 `SFID_ANON_RSA_PRIVATE_KEY_PEM` 加载，或首次启动时生成并持久化）
 - 实现 RSABSSA-SHA384-PSS-Randomized（RFC 9474）盲签名
@@ -22,7 +22,7 @@
 
 ### 1.2 数据模型变更
 
-**文件：** `sfid/backend/src/models/mod.rs`
+**文件：** `sfid/backend/models/mod.rs`
 
 **CpmsSiteKeys 改造：**
 
@@ -72,7 +72,7 @@ struct ImportedArchive {
 
 ### 1.3 API 端点变更
 
-**文件：** `sfid/backend/src/sheng-admins/institutions.rs` + `sfid/backend/src/main.rs`
+**文件：** `sfid/backend/sheng-admins/institutions.rs` + `sfid/backend/main.rs`
 
 #### 去掉的端点
 
@@ -196,7 +196,7 @@ struct ImportedArchive {
 - "扫描注册请求"按钮 → 扫 QR2 → 调 `/cpms/register` → 页面展示 QR3 二维码供 CPMS 扫描
 - "扫描档案二维码"按钮 → 扫 QR4 → 调 `/cpms/archive/import` → 显示录入结果
 
-**文件：** `sfid/frontend/src/api/client.ts`
+**文件：** `sfid/frontend/institutions/api.ts`
 
 去掉：
 - `updateCpmsKeys()`
@@ -373,18 +373,18 @@ ALTER TABLE system_install ADD COLUMN blinding_factor BYTEA;
 
 | 文件 | 操作 |
 |------|------|
-| `sfid/backend/src/key-admins/rsa_blind.rs` | 新建 — RSA 盲签名模块 |
-| `sfid/backend/src/models/mod.rs` | 改造 — 去掉 pubkey，加 install_token，新增 ImportedArchive |
-| `sfid/backend/src/sheng-admins/institutions.rs` | 改造 — generate 改为 QR1，去掉旧 register/update，新增 register + archive/import + revoke + reissue |
-| `sfid/backend/src/main.rs` | 改造 — 新增路由 |
+| `sfid/backend/key-admins/rsa_blind.rs` | 新建 — RSA 盲签名模块 |
+| `sfid/backend/models/mod.rs` | 改造 — 去掉 pubkey，加 install_token，新增 ImportedArchive |
+| `sfid/backend/sheng-admins/institutions.rs` | 改造 — generate 改为 QR1，去掉旧 register/update，新增 register + archive/import + revoke + reissue |
+| `sfid/backend/main.rs` | 改造 — 新增路由 |
 | `sfid/backend/Cargo.toml` | 改造 — 新增 rsa / blind-rsa-signatures 依赖 |
 
 ### SFID 前端
 
 | 文件 | 操作 |
 |------|------|
-| `sfid/frontend/src/api/client.ts` | 改造 — 去掉 updateCpmsKeys/registerScan，新增 register/import/revoke/reissue |
-| `sfid/frontend/src/components/App.tsx` | 改造 — 去掉公钥列，改为令牌状态，新增扫码入口 |
+| `sfid/frontend/institutions/api.ts` | 改造 — 去掉 updateCpmsKeys/registerScan，新增 register/import/revoke/reissue |
+| `sfid/frontend/institutions/CpmsSitePanel.tsx` / `CpmsRegisterModal.tsx` | 改造 — 去掉公钥列，改为令牌状态，新增扫码入口 |
 
 ### CPMS 后端
 

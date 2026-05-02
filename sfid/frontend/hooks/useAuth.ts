@@ -3,7 +3,7 @@
 // 本 hook 只是语义糖,返回 { auth, setAuth, logout } 以及 capabilities。
 // 业务子组件继续 import { useAuth } 即可。
 
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
 import { useAuthContext, type RoleCapabilities } from '../auth/AuthContext';
 
 export interface UseAuthResult {

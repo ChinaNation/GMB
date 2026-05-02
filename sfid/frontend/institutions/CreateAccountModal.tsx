@@ -12,8 +12,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Input, message, Modal, Typography } from 'antd';
-import { createAccount, type MultisigAccount } from '../api/institution';
-import type { AdminAuth } from '../api/client';
+import type { AdminAuth } from '../auth/types';
+import { createAccount, type MultisigAccount } from './api';
 
 interface Props {
   auth: AdminAuth;

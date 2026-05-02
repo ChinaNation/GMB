@@ -9,8 +9,8 @@ import {
   listInstitutions,
   type InstitutionCategory,
   type InstitutionListRow,
-} from '../api/institution';
-import type { AdminAuth } from '../api/client';
+} from './api';
+import type { AdminAuth } from '../auth/types';
 import {
   isSelfEligibleClearingBank,
   CLEARING_BANK_ELIGIBLE_LABEL,

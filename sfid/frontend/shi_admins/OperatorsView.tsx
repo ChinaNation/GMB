@@ -7,14 +7,15 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Form, Input, Modal, Select, Space, Table, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useAuth } from '../hooks/useAuth';
-import type { OperatorRow, SfidCityItem } from '../api/client';
+import type { SfidCityItem } from '../sfid/api';
 import {
   createOperator,
   deleteOperator,
   listOperators,
+  type OperatorRow,
   updateOperator,
   updateOperatorStatus,
-} from '../api/client';
+} from './api';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { ScanAccountModal } from '../common/ScanAccountModal';

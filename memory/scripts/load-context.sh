@@ -189,8 +189,8 @@ case "$MODULE" in
     print_base_context
     print_if_exists "sfid/README.md"
     print_if_exists "sfid/SFID_TECHNICAL.md"
-    print_if_exists "sfid/backend/src/BUSINESS_TECHNICAL.md"
-    print_if_exists "sfid/backend/src/business/BUSINESS_TECHNICAL.md"
+    print_if_exists "memory/05-modules/sfid/backend/BACKEND_LAYOUT.md"
+    print_if_exists "memory/05-modules/sfid/backend/business/BUSINESS_TECHNICAL.md"
     ;;
   cpms|cpms/backend|cpms/frontend|cpms/deploy)
     print_base_context

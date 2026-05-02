@@ -5,8 +5,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Form, Input, Modal, QRCode, Typography, message } from 'antd';
 
-import type { AdminAuth, CitizenBindChallengeResult, CitizenRow } from '../api/client';
-import { citizenBind, citizenBindChallenge } from '../api/client';
+import type { AdminAuth } from '../auth/types';
+import {
+  citizenBind,
+  citizenBindChallenge,
+  type CitizenBindChallengeResult,
+  type CitizenRow,
+} from './api';
 import { ScanAccountModal } from '../common/ScanAccountModal';
 import { startCameraScanner } from '../utils/cameraScanner';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
