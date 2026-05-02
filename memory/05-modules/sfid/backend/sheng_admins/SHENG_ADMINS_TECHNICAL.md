@@ -29,47 +29,46 @@
 5. `backend/src/chain/sheng_admins/`：省管理员三槽名册和签名公钥的链交互入口。
 
 ## 2. 权限口径（当前冻结）
-1. `SHENG_ADMIN`（省级管理员，原 `SUPER_ADMIN`）：
-   - 可管理机构（生成机构身份识别码、扫码录入机构公钥、更新/禁用/撤销/删除、查询）。
+1. `SHENG_ADMIN`（省管理员）：
+   - 可管理本省机构和本省市管理员。
    - 必须具备省域作用域（`admin_province` 不能为空）。
-2. `KEY_ADMIN`（密钥管理员）：
-   - 拥有全部权限，包括机构管理。
-   - 可查询并更换 43 省省级管理员。
-   - 可管理市级管理员。
-3. `SHI_ADMIN`（市级管理员，原 `OPERATOR_ADMIN`）：
-   - 不属于本模块治理角色；仅可执行绑定/解绑/状态扫码等日常操作业务接口。
+   - 省管理员三槽名册、签名公钥激活和轮换通过 `chain/sheng_admins/` 与链交互。
+2. `SHI_ADMIN`（市管理员）：
+   - 可读取自己作用域内的省/市管理员和机构信息。
+   - 不具备创建、替换、禁用、撤销、删除等治理写权限。
+3. 本系统不再存在全局密钥管理员角色；任何接口不得依赖全局管理员绕过省域边界。
 
 ## 3. 省域隔离口径
-1. `SHENG_ADMIN` 受 `admin_province` 约束，不能管理外省机构/外省业务数据。
-2. `KEY_ADMIN` 不受省域隔离，拥有全部权限包括机构管理。
-3. 市级管理员列表与治理：`SHENG_ADMIN` 仅能查看/操作本省市级管理员；`KEY_ADMIN` 可跨省治理。
+1. `SHENG_ADMIN` 受 `admin_province` 约束，只能管理本省机构、本省市管理员和本省链上三槽名册。
+2. `SHI_ADMIN` 继承其上级省管理员的省域，并按市域进一步收窄日常业务视图。
+3. 不存在跨省全局治理分支；跨省视图只能由只读统计、公开 pull 或链上查询承接，不能复活全局后台写权限。
 
 ## 4. API 矩阵（已实现）
 
 ### 4.1 省级省级管理员目录（catalog）
 1. `GET /api/v1/admin/sheng-admins`
-   - 权限：`KEY_ADMIN | SHENG_ADMIN | SHI_ADMIN`
-   - 功能：查询省级省级管理员列表。
+   - 权限：`SHENG_ADMIN | SHI_ADMIN`
+   - 功能：查询省管理员列表，按登录管理员作用域过滤。
    - 对外行 `ShengAdminRow` 字段：`id / province / admin_pubkey / admin_name / built_in / created_at`。
    - **不返回 `status` 字段**：机构永久存在（43 个省份固定），省级管理员只是当前替机构发声的人，被替换即彻底失效，不存在停用 / 状态切换的概念。
 2. `PUT /api/v1/admin/sheng-admins/:province`
-   - 权限：`KEY_ADMIN`
-   - 功能：按省更换省级管理员公钥；迁移相关市级管理员 `created_by`；清理旧管理员会话；写审计 `SUPER_ADMIN_REPLACE`。
+   - 权限：`SHENG_ADMIN`
+   - 功能：过渡期本省自治替换入口；正式三槽名册增删应走 `/api/v1/admin/sheng-admin/roster/*` 链交互端点。
    - 输入校验：`province` 必须在 43 省编码表内（含中枢省）；`admin_pubkey` 必须通过 `sr25519` 公钥格式校验。
    - 数据保持：保留 `created_at`，刷新 `updated_at`；底层 `AdminUser.status` 字段不对外暴露。
 
 ### 4.2 机构管理（institutions）
 1. `GET /api/v1/admin/cpms-keys`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
-   - 范围：`SHENG_ADMIN` 仅本省机构；`KEY_ADMIN` 全局。
+   - 权限：`SHENG_ADMIN`
+   - 范围：仅本省机构。
    - 返回：分页对象（`total/limit/offset/rows`），列表行不包含 `init_qr_payload`。
 2. `POST /api/v1/admin/cpms-keys/sfid/generate`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：调用 `sfid` 生成机构身份识别码（`A3=GFR`,`P1=0`），并生成 SFID 签名初始化二维码。
    - 链侧字段对齐：机构识别码对链口径统一为 `sfid_id`，对应本系统内部字段 `site_sfid`。
    - `sfid_id` 规范：长度、字符集、大小写规则由 SFID 与链侧双端校验（同一规则集）。
-3. `POST /api/v1/admin/cpms-keys/register-scan`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+3. `POST /api/v1/admin/cpms/register`
+   - 权限：`SHENG_ADMIN`
    - 功能：扫码录入 CPMS 初始化后产生的机构公钥二维码，生成 proof 字段 `genesis_hash + sfid_id + register_nonce + signature`，并调用链上 `DuoqianManage.register_sfid_institution(sfid_id, register_nonce, signature)`，成功后写审计 `CPMS_KEYS_REGISTER_SCAN`。
    - 主公钥约束：初始化二维码验签与功能 4 proof 签名统一只认当前 SFID `MAIN`；备用公钥不能代替功能 4 出具 proof。
    - 并发控制：同一登记二维码 `replay_token` 在链上提交阶段采用进程内 in-flight 占位，重复并发请求直接拒绝（`register qr is being processed`），避免双重链上提交。
@@ -77,37 +76,36 @@
    - 失败处理：链上提交失败写审计（`CPMS_KEYS_REGISTER_SCAN` + `CHAIN_SUBMIT_FAILED`）并立即持久化，再返回网关错误。
    - 返回：必须包含 proof 字段 `genesis_hash | sfid_id | register_nonce | signature`，以及链上回执字段 `chain_register_tx_hash`、`chain_register_block_number`。
 4. `PUT /api/v1/admin/cpms-keys/:site_sfid`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：仅允许 `ACTIVE` 机构更新三把公钥；写审计 `CPMS_KEYS_UPDATE`。
    - 输入校验：三把公钥必须通过 `sr25519` 格式校验，且三把公钥必须互不相同。
    - 审计详情：记录更新前后三把公钥（old/new）。
 5. `PUT /api/v1/admin/cpms-keys/:site_sfid/disable`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：机构状态置为 `DISABLED`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 6. `PUT /api/v1/admin/cpms-keys/:site_sfid/enable`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：仅允许 `DISABLED -> ACTIVE`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 7. `PUT /api/v1/admin/cpms-keys/:site_sfid/revoke`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：机构状态置为 `REVOKED`；写审计 `CPMS_KEYS_STATUS_UPDATE`。
 8. `DELETE /api/v1/admin/cpms-keys/:site_sfid`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 功能：仅允许删除 `PENDING` 机构记录；写审计 `CPMS_KEYS_DELETE`。
 
 ### 4.3 市级管理员（operators）
 1. `POST /api/v1/admin/operators`
-   - 权限：`SHENG_ADMIN | KEY_ADMIN`
+   - 权限：`SHENG_ADMIN`
    - 输入：`admin_pubkey`（hex）、`admin_name`、`city`（必填）、`created_by`（可选）
    - `city` 校验：必须属于 `created_by` 对应省级管理员的省份且 `code != "000"`（不可为省辖市），通过 `sfid::province::city_code_by_name` 查表
    - `created_by` 解析：
-     - `KEY_ADMIN` 调用：可指定为任意已存在的 `ShengAdmin` pubkey；找不到 → 404；不是 `ShengAdmin` → 400
      - `SHENG_ADMIN` 调用：传了必须等于自己 pubkey，否则 403
      - 不传 → 默认为调用者自身
 2. `PUT /api/v1/admin/operators/:id`
-   - 权限：同上
+   - 权限：`SHENG_ADMIN`
    - 输入：`admin_pubkey?`、`admin_name?`、`city?`（均可选）
    - `city` 校验同上，省份从 `operator.created_by` 反查
-3. `GET /api/v1/admin/operators` / `DELETE /:id` / `PUT /:id/status`：保持原语义，返回行新增 `city` 字段
+3. `GET /api/v1/admin/operators` 权限为 `SHENG_ADMIN | SHI_ADMIN`，按 scope 过滤；`DELETE /:id` / `PUT /:id/status` 权限为 `SHENG_ADMIN`。
 4. **`OperatorRow` 行**：`id / admin_pubkey / admin_name / role / status / built_in / created_by / created_by_name / created_at / city`
    - 与 `ShengAdminRow` 不同，**`OperatorRow` 保留 `status` 字段**：市级管理员有启用/停用语义
 
@@ -127,7 +125,7 @@
 ## 6. 关键流程（机构）
 
 ### 6.1 生成机构身份识别码
-1. `SHENG_ADMIN` 或 `KEY_ADMIN` 在机构管理页发起”生成身份识别码”。
+1. `SHENG_ADMIN` 在机构管理页发起”生成身份识别码”。
 2. 后端调用 `sfid` 生成 `site_sfid`：
    - 不输入机构公钥。
    - `A3` 固定 `GFR`，`P1` 固定 `0`。
@@ -137,13 +135,13 @@
 ### 6.2 CPMS 初始化与扫码录入机构
 1. 用户携带 SFID 系统生成的机构二维码去 CPMS 做初始化。
 2. CPMS 用该二维码完成初始化并生成自身机构公钥登记二维码（含 3 把公钥 + `init_qr_payload` 绑定信息）。
-3. `SHENG_ADMIN` 或 `KEY_ADMIN` 在 SFID 机构页扫码录入。
+3. `SHENG_ADMIN` 在 SFID 机构页扫码录入。
 4. SFID 校验点：
    - `register` 二维码结构与时间窗口。
    - `checksum` 必须绑定 `init_qr_payload` 哈希，且必须是 `64` 位十六进制字符串。
    - 三把机构公钥必须通过 `sr25519` 格式校验，且三把公钥互不相同。
    - `init_qr_payload` 必须是 SFID 可信签名公钥签发且验签通过。
-   - `SHENG_ADMIN` 必须具备省域作用域，且作用域必须等于 `init_qr_payload.province`（`KEY_ADMIN` 不受省域限制）。
+   - `SHENG_ADMIN` 必须具备省域作用域，且作用域必须等于 `init_qr_payload.province`。
    - `site_sfid` 必须已存在且当前为 `PENDING`。
    - 录入时提交的 `init_qr_payload` 必须与该 `site_sfid` 生成阶段保存值一致。
 5. 通过首轮校验后，写入 in-flight 占位（按 `replay_token`）再提交链上机构登记交易（`register_sfid_institution`）；提交 signer 必须与链上当前 `MAIN` 完全一致。
@@ -156,7 +154,7 @@
 2. 标准流程固定为：`SFID 审批完成 -> 授权 Origin 发链上登记交易 -> 回写 tx_hash/block_number`。
 3. 本模块输出并冻结登记入参：`sfid_id`（即 `site_sfid`）及必要机构主数据；链上最终登记状态为唯一真值。
 4. 链侧登记成功后，SFID 必须回写 `tx_hash`、`block_number` 与回写时间，供审计与对账。
-5. 主备账户来源与轮换能力由 `key-admins` 模块维护；本模块不维护主备账户状态机，但消费其授权结果。
+5. 省管理员三槽名册和签名公钥生命周期由 `sheng_admins/` 与 `chain/sheng_admins/` 共同维护。
 
 ## 7. 前端对接口径（机构页）
 1. 列表列名为“身份识别码”，展示 `site_sfid`。
@@ -171,17 +169,16 @@
 ## 8. 前端导航标签页
 - 顶层导航顺序：`首页 | 公权机构 | 多签管理 | 密钥管理 | 机构管理`
 - 旧"省级管理员 / 市级管理员"独立标签页已合并到"机构管理"主 tab：
-  - **`KEY_ADMIN`** 进入"机构管理"看到 43 个机构卡片网格，点击任意卡片进入详情页。
   - **`SHENG_ADMIN`** 进入"机构管理"自动跳到自己的机构详情页（无返回按钮）。
   - **`SHI_ADMIN`** 进入"机构管理"自动跳到所属机构的详情页（只读）。
 - 机构详情页内置 sub-tab：`市级管理员列表`（默认） / `省级管理员`。
-  - "省级管理员" sub-tab 上半部分是省级管理员基本信息，仅 `KEY_ADMIN` 在 extra 区域看到"更换省级管理员"表单。
-  - "市级管理员列表" sub-tab 显示该机构的市级管理员表格（受控分页 10/页），含完整 CRUD（仅 `KEY_ADMIN` 或本省级管理员可写）。
+  - "省级管理员" sub-tab 展示省管理员基本信息和三槽名册入口。
+  - "市级管理员列表" sub-tab 显示该机构的市级管理员表格（受控分页 10/页），完整 CRUD 仅本省省管理员可写。
 - 新增市级管理员通过居中 Modal 弹窗触发，表单包含：姓名 / 市（下拉，过滤省辖市 code=000）/ 账户（SS58）。
 
 ## 9. 安全与一致性
-1. 机构接口统一使用 `require_institution_or_key_admin`（原 `require_super_or_key_admin`）。
-2. `require_institution_or_key_admin` 对 `SHENG_ADMIN` 执行 `admin_province` 非空防御校验。
+1. 本模块写接口统一使用 `require_sheng_admin`；读接口按需使用 `require_admin_any` 后再走 scope 过滤。
+2. `SHENG_ADMIN` 写接口必须执行 `admin_province` 非空防御校验。
 3. 省域隔离由 `in_scope_cpms_site` 强校验。
 4. 机构登记二维码有防重放 token（24 小时窗口）。
 5. 只有 `ACTIVE` 机构可用于后续 CPMS 业务二维码验签。
@@ -229,6 +226,5 @@
 
 ## ADR-008 Phase 23e 更新（2026-05-01）
 
-KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
-本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
-实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。
+全局密钥管理员角色已废止；省管理员采用 3-tier 自治（main / backup_1 / backup_2）。
+本文档正文已按当前代码口径更新；历史任务卡中的旧角色、旧目录和旧 keyring 名称只作为变更记录保留。

@@ -6,8 +6,8 @@ use axum::{
 };
 use chrono::Utc;
 
-use crate::scope::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::scope::admin_province::province_scope_for_role;
+use crate::scope::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::sfid::province::city_code_by_name;
 use crate::*;
 
@@ -639,9 +639,13 @@ fn can_manage_operator(
     let Some(scope) = actor_province else {
         return false;
     };
-    crate::scope::admin_province::province_scope_for_role(store, &operator.admin_pubkey, &operator.role)
-        .map(|operator_scope| operator_scope == scope)
-        .unwrap_or(false)
+    crate::scope::admin_province::province_scope_for_role(
+        store,
+        &operator.admin_pubkey,
+        &operator.role,
+    )
+    .map(|operator_scope| operator_scope == scope)
+    .unwrap_or(false)
 }
 
 fn creator_display_name(store: &Store, creator_pubkey: &str) -> String {

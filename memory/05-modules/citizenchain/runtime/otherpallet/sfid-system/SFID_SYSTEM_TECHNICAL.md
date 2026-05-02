@@ -153,7 +153,7 @@ Runtime 配置与验签桥接：
 ---
 
 ## 4. 创世配置与密钥模型
-ADR-008 后 `sfid-system` 不再通过 GenesisConfig 注入 KEY_ADMIN / SFID 主备账户。
+ADR-008 后 `sfid-system` 不再通过 GenesisConfig 注入旧全局管理员 / SFID 主备账户。
 省管理员链上状态采用 first-come-first-serve:
 
 1. 某省首次调用 `activate_sheng_signing_pubkey` 的 `admin_pubkey` 占据
