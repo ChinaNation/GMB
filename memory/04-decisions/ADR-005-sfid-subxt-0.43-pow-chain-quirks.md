@@ -67,7 +67,6 @@ SCALE 编码不同（`&[u8]` 多写 1 字节 Compact 长度前缀），导致
 落地代码位置：
 
 - `sfid/backend/src/sheng-admins/institutions.rs::submit_register_sfid_institution_extrinsic`
-- `sfid/backend/src/key-admins/mod.rs::submit_rotate_sfid_keys_extrinsic`
 - `sfid/backend/src/chain/runtime_align.rs` 顶部 `*_DOMAIN` 常量段及注释
 
 ## 影响

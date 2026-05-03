@@ -1,9 +1,8 @@
 // 省级管理员列表视图 mode='list'(从 ShengAdminsView.tsx 拆分)
 
-import { Button, Card, Form, Input, Select, Table, Tag, Tooltip } from 'antd';
+import { Card, Table, Tag, Tooltip } from 'antd';
 import type { ShengAdminRow } from './api';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
-import { isSr25519HexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 
 interface ShengAdminListViewProps {
@@ -14,9 +13,6 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
   const {
     shengAdmins,
     shengAdminsLoading,
-    replaceSuperLoading,
-    replaceSuperForm,
-    onReplaceShengAdmin,
   } = state;
 
   return (
@@ -25,53 +21,6 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
       bordered={false}
       style={glassCardStyle}
       headStyle={glassCardHeadStyle}
-      extra={
-        <Form
-          form={replaceSuperForm}
-          layout="inline"
-          onFinish={onReplaceShengAdmin}
-          style={{ rowGap: 8 }}
-        >
-          <Form.Item
-            name="province"
-            rules={[{ required: true, message: '请选择省份' }]}
-            style={{ marginBottom: 0 }}
-          >
-            <Select
-              style={{ width: 160 }}
-              placeholder="选择省份"
-              options={shengAdmins.map((item) => ({ value: item.province, label: item.province }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="admin_name"
-            rules={[{ required: true, message: '请输入姓名' }]}
-            style={{ marginBottom: 0 }}
-          >
-            <Input style={{ width: 140 }} placeholder="新管理员姓名" />
-          </Form.Item>
-          <Form.Item
-            name="admin_pubkey"
-            rules={[
-              { required: true, message: '请输入新省级管理员公钥' },
-              {
-                validator: async (_rule, value) => {
-                  if (!value || isSr25519HexPubkey(String(value))) return;
-                  throw new Error('公钥格式必须为 32 字节十六进制');
-                },
-              },
-            ]}
-            style={{ marginBottom: 0 }}
-          >
-            <Input style={{ width: 420, maxWidth: '60vw' }} placeholder="新省级管理员公钥" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" loading={replaceSuperLoading}>
-              更换省级管理员
-            </Button>
-          </Form.Item>
-        </Form>
-      }
     >
       <Table<ShengAdminRow>
         rowKey={(r) => `${r.province}-${r.admin_pubkey}`}
@@ -105,7 +54,6 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
               );
             },
           },
-          { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
           {
             title: '类型',
             width: 100,

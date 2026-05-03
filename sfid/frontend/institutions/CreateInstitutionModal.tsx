@@ -27,7 +27,7 @@ interface Props {
   auth: AdminAuth;
   category: InstitutionCategory;
   open: boolean;
-  /** 父视图锁定的省份(ShengAdmin/ShiAdmin 都有值;ADR-008 起 KeyAdmin 已删) */
+  /** 父视图锁定的省份(ShengAdmin/ShiAdmin 都有值) */
   lockedProvince: string | null;
   /** 父视图锁定的市(ShiAdmin 会有值,其他需要用户在弹窗内选) */
   lockedCity: string | null;
@@ -195,8 +195,6 @@ export const CreateInstitutionModal: React.FC<Props> = ({
       const raw = err instanceof Error ? err.message : '创建机构失败';
       if (raw.includes('本省') && raw.includes('未在线')) {
         message.error('本省登录管理员未在线,请联系省管理员登录后重试');
-      } else if (raw.includes('密钥管理员不能直接推送')) {
-        message.error('请以省或市管理员身份操作');
       } else if (raw.includes('已被使用') || raw.includes('同名机构')) {
         message.error('该市已存在同名机构，请更换名称');
         setNameAvailable(false);

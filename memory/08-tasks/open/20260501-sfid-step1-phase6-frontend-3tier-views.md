@@ -3,13 +3,12 @@
 - 状态:open
 - 创建日期:2026-05-01
 - 模块:`sfid/frontend`
-- 上游:`memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`(主卡)
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier.md`(主卡)
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:Phase 4+5 卡(后端 API endpoint 必须落地)
 
 ## 任务需求
 
-SFID 前端从"KEY_ADMIN 主导单 admin"模型切换到"省管理员 3-tier 自治"模型。删除 keyring 视图,新增省管理员名册管理 / 激活 / rotate 三页,机构表单按 ADR-008 拆为三类策略子表单。
 
 ## 建议模块
 
@@ -22,7 +21,6 @@ SFID 前端从"KEY_ADMIN 主导单 admin"模型切换到"省管理员 3-tier 自
 
 | 路径 | 说明 |
 |---|---|
-| `views/keyring/`(整目录) | KEY_ADMIN 顶级签名管理视图 |
 | Header 角色切换 KEY 选项 | 改为只 SHENG / SHI 两选项 |
 
 ### 重命名
@@ -91,12 +89,10 @@ SFID 前端从"KEY_ADMIN 主导单 admin"模型切换到"省管理员 3-tier 自
 10. 浏览器手动:main 登录 → activation → roster 加 backup_1 → backup_1 登录 → activation
 11. **更新文档**:`memory/05-modules/sfid/frontend/` 加新视图说明
 12. **完善注释**:新页面顶部 1-3 行中文用途
-13. **清理残留**:Grep `keyring|KeyAdmin` in `sfid/frontend/src/` 零结果
 
 ## 验收清单
 
 - `tsc --noEmit` + `npm run lint` + `npm run build` 全绿
-- Grep 残留 0:`KeyAdmin|key-admin|key_admin|keyring`(以及 `views/sheng-admins|views/operators` 任何引用)
 - 浏览器 e2e:三 slot admin 登录 + 激活 + 加 backup + rotate
 - 全局视图 + 跨省置灰按钮符合预期
 

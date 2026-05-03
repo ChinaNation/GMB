@@ -1,4 +1,4 @@
-//! sfid 系统三角色权限过滤
+//! SFID 系统二角色权限范围过滤
 //!
 //! 中文注释:此模块是所有 list/CRUD API 进行角色范围过滤的**唯一入口**。
 //! 业务 handler 只需:
@@ -12,17 +12,13 @@
 //!
 //! 详细规则见 `rules.rs` 的 `VisibleScope`。
 //!
-//! 任务卡 2 建立。feedback_scope_auto_filter.md 固化。
-//! Phase 23c(2026-05-02)合并 `business/` 下 5 文件:cpms / admin_province / pubkey / audit / query。
+//! 2026-05-02 models/scope 边界整改后,本目录只保留权限范围规则。
+//! HTTP handler、CPMS 专用判断、pubkey 工具已归还对应业务模块。
 
 #![allow(dead_code)]
 
 pub mod admin_province;
-pub mod audit;
-pub mod cpms;
 pub mod filter;
-pub mod pubkey;
-pub mod query;
 pub mod rules;
 
 pub use filter::{filter_by_scope, HasProvinceCity};

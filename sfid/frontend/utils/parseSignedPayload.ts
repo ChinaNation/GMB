@@ -3,7 +3,7 @@
 // 使用 WUMIN_QR_V1 envelope,不再有任何字段别名兼容。
 
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
-import type { LoginReceiptBody } from '../qr/wuminQr';
+import type { LoginReceiptBody, SignResponseBody } from '../qr/wuminQr';
 
 export type SignedLoginPayload = {
   challenge_id: string;
@@ -45,6 +45,8 @@ export function parseSignedLoginPayload(
 export type SignedReceiptPayload = {
   challenge_id: string;
   signature: string;
+  signer_pubkey?: string;
+  payload_hash?: string;
 };
 
 // 中文注释:解析"挑战签名回执"二维码 payload。
@@ -68,15 +70,27 @@ export function parseSignedReceiptPayload(
       }
       throw e;
     }
-    if (env.kind !== 'login_receipt') {
-      throw new Error(`期望 login_receipt,实际: ${env.kind}`);
+    if (env.kind !== 'login_receipt' && env.kind !== 'sign_response') {
+      throw new Error(`期望 login_receipt/sign_response,实际: ${env.kind}`);
+    }
+    const challenge_id = env.id || fallbackChallengeId;
+    if (env.kind === 'sign_response') {
+      const body = env.body as SignResponseBody;
+      if (!challenge_id || !body.signature || !body.pubkey) {
+        throw new Error('签名二维码缺少必要字段(id/pubkey/signature)');
+      }
+      return {
+        challenge_id,
+        signature: body.signature,
+        signer_pubkey: body.pubkey,
+        payload_hash: body.payload_hash,
+      };
     }
     const body = env.body as LoginReceiptBody;
-    const challenge_id = env.id || fallbackChallengeId;
     if (!challenge_id || !body.signature) {
       throw new Error('签名二维码缺少必要字段(id/signature)');
     }
-    return { challenge_id, signature: body.signature };
+    return { challenge_id, signature: body.signature, signer_pubkey: body.pubkey };
   }
   return {
     challenge_id: fallbackChallengeId,

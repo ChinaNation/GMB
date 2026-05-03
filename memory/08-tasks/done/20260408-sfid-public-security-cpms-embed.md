@@ -20,8 +20,6 @@
   - 输入:`multisig_institutions.sfid_id`(机构主键,**不是 CPMS site_sfid**)
   - 逻辑:读机构拿 `(province, city, institution_code)`,线性扫描
     `cpms_site_keys.values()` 找匹配三元组的首条记录,返回 `CpmsSiteKeysListRow` 或 `null`
-  - 权限:KeyAdmin 全通过,ShengAdmin 限本省,ShiAdmin 限本市(走
-    `require_institution_or_key_admin` 内置的 `admin_province` 检查)
 
 ### 新增启动钩子
 - `app_core::runtime_ops::cleanup_orphan_cpms_sites(state)`
@@ -115,11 +113,9 @@ INFO sfid_backend::app_core::runtime_ops: cleaned up orphan CPMS sites (no match
 
 - 不动 citizenchain 链码
 - 不动 `operate/cpms_qr.rs`(QR 协议签名/验签核心)
-- 不动 `key-admins/rsa_blind.rs`(RSA 盲签发)
 - 不动数据库 schema / 任何现有迁移文件
 - 不动 QR4 citizen 档案绑定流程(跟本任务无关,归属业务员模块)
 - 不动摄像头扫码组件(后续 App.tsx 拆分任务搬)
-- 不提供全局 CPMS 总览视图(KeyAdmin 跟其他角色一样逐市查看)
 
 ## 相关文档
 

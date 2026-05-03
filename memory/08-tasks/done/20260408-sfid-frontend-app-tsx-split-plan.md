@@ -47,8 +47,6 @@ src/
 │   │   ├── ShengAdminsView.tsx          # 省管理员列表 + 替换
 │   │   └── ReplaceShengAdminModal.tsx
 │   ├── keyring/
-│   │   ├── KeyringView.tsx              # KeyAdmin 密钥轮换
-│   │   └── KeyringRotateModal.tsx
 │   ├── multisig-legacy/
 │   │   ├── LegacyMultisigView.tsx       # 老表(保留作兜底,后续可删)
 │   │   └── GenerateMultisigModal.tsx
@@ -132,7 +130,6 @@ src/
 
 ---
 
-### 模块 5:`keyring/` — 密钥管理员轮换
 
 **State**:
 - `keyringState` / `keyringLoading` / `keyringActionLoading` / `keyringChallenge` / `keyringSignedPayload`
@@ -141,11 +138,9 @@ src/
 - `keyringScanAccountOpen` / `accountScanTarget`
 
 **Handlers**:
-- `refreshKeyringState` / `stopKeyringScanner` / `onCreateKeyringRotateChallenge` / `onCompleteKeyringRotate` / `onToggleKeyringScanner`
 
 **文件**:
 - `views/keyring/KeyringView.tsx`
-- `views/keyring/KeyringRotateModal.tsx`
 
 ---
 
@@ -166,7 +161,6 @@ src/
 
 ### 模块 7:`system-settings/` — **不存在,跳过**
 
-**背景重判**:`mainAccountBalance` 实际属于 keyring 模块(密钥管理页面展示主账户链上余额);`activeView === 'system-settings'` 分支渲染的是 KeyAdmin 的省管理员列表 / 详情页,归属 operators + sheng-admins 模块。**本方案不创建 system-settings view**。
 
 ---
 

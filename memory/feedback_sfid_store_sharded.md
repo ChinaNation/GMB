@@ -7,14 +7,12 @@
 - `multisig_institutions` / `multisig_accounts` / `cpms_site_keys` 三个字段的 HTTP handler 层 **全部走 `state.sharded_store`(ShardedStore)**
 - 读:用 `sharded_store.read_province(&province, |shard| {...}).await`
 - 写:用 `sharded_store.write_province(&province, |shard| {...}).await`
-- 跨省查询(KEY_ADMIN):用 `sharded_store.for_each_province(|prov, shard| {...}).await`
 - **禁止**在 handler 层直接走 `state.store.read()` / `state.store.write()` 访问这三个字段
 
 ## 省份定位
 
 - 从 `ctx.admin_province`(handler 已有的 AdminAuthContext)
 - 或从 sfid_id 字符串解析:第二段省代码(如 `AH`)→ `province_name_by_code`
-- KEY_ADMIN 无 province 时走 `for_each_province` 遍历
 
 ## legacy store 保留路径(过渡期)
 

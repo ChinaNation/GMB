@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`citizenchain/runtime/genesis/` + `citizenchain/runtime/otherpallet/sfid-system/`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:step2a + step2b
 - 阻塞下游:SFID phase7(链端就绪后切真)
 
@@ -58,13 +58,11 @@ impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 
 ### configs/mod.rs
 
-如果 `runtime/src/configs/mod.rs` 有 `pallet_sfid_system::Config` 注入项需要清理 KEY_ADMIN 相关 const,本卡处理。
 
 ### 文件级
 
 - `citizenchain/runtime/src/genesis_config_presets.rs`(删 SFID 3 账户硬编码)
 - `citizenchain/runtime/otherpallet/sfid-system/src/lib.rs`(加 on_runtime_upgrade)
-- `citizenchain/runtime/src/configs/mod.rs`(若需,删 KEY_ADMIN 相关 const)
 - `citizenchain/runtime/src/lib.rs`:**spec_version 不动**(本卡明确)
 
 ## 主要风险点

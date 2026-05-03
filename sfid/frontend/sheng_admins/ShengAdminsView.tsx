@@ -1,7 +1,6 @@
 // 省级管理员视图 —— 调度器:持有所有状态和副作用,
 // 按 mode 分派到 ShengAdminListView / ProvinceDetailView。
-// system-settings 三层导航:
-//   - 密钥管理员: 省列表 → 市列表 → 市详情(该市管理员列表)
+// system-settings 两层导航:
 //   - 省管理员: 市列表 → 市详情(该市管理员列表)
 //   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
@@ -18,7 +17,7 @@ import {
   updateOperator,
   updateOperatorStatus,
 } from '../shi_admins/api';
-import { listShengAdmins, replaceShengAdmin } from './api';
+import { listShengAdmins } from './api';
 import { listSfidCities } from '../sfid/api';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { sameHexPubkey } from './shengAdminUtils';
@@ -40,7 +39,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [selectedShengAdmin, setSelectedShengAdmin] = useState<ShengAdminRow | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'super-admin'>('operators');
-  const [replaceSuperLoading, setReplaceSuperLoading] = useState(false);
 
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
@@ -55,7 +53,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [accountScanTarget, setAccountScanTarget] = useState<AccountScanTarget>(null);
 
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
-  const [replaceSuperForm] = Form.useForm<{ province: string; admin_name: string; admin_pubkey: string }>();
 
   // ── 数据加载 ──
 
@@ -157,35 +154,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   }, [selectedShengAdmin?.admin_pubkey, auth?.access_token]);
 
   // ── 事件处理 ──
-
-  const onReplaceShengAdmin = async (values: { province: string; admin_name?: string; admin_pubkey: string }) => {
-    if (!auth) return;
-    const inputAddr = values.admin_pubkey.trim();
-    let hexPubkey: string;
-    try {
-      hexPubkey = decodeSs58(inputAddr);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '账户格式无效');
-      return;
-    }
-    setReplaceSuperLoading(true);
-    try {
-      await replaceShengAdmin(auth, values.province.trim(), hexPubkey, values.admin_name);
-      message.success(`已更新 ${values.province} 省级管理员`);
-      replaceSuperForm.resetFields();
-      const updatedList = await refreshShengAdmins();
-      // 同步更新当前选中省的详情(否则页面显示旧数据)
-      if (selectedShengAdmin) {
-        const updated = updatedList.find((r) => r.province === selectedShengAdmin.province);
-        if (updated) setSelectedShengAdmin(updated);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '更换省级管理员失败';
-      message.error(msg);
-    } finally {
-      setReplaceSuperLoading(false);
-    }
-  };
 
   const onCreateOperator = async (values: { operator_pubkey: string; operator_name: string; city?: string; created_by?: string }) => {
     if (!auth) return;
@@ -359,7 +327,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     setSelectedCity,
     adminDetailTab,
     setAdminDetailTab,
-    replaceSuperLoading,
     operators,
     operatorsLoading,
     operatorListPage,
@@ -372,8 +339,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     accountScanTarget,
     setAccountScanTarget,
     addOperatorForm,
-    replaceSuperForm,
-    onReplaceShengAdmin,
     onCreateOperator,
     onToggleOperatorStatus,
     onUpdateOperator,

@@ -4,7 +4,7 @@
 //! 数据范围(VisibleScope)。所有 list/CRUD API 都应当先派生 scope,再用它
 //! 过滤数据。
 //!
-//! ADR-008(2026-05-01):KEY_ADMIN 整角色废止,只剩 ShengAdmin / ShiAdmin。
+//! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
 //! 见 `feedback_sfid_three_roles_naming.md` 的角色命名铁律。
 
 use crate::login::AdminAuthContext;

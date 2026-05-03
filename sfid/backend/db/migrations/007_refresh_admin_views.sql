@@ -1,14 +1,7 @@
 BEGIN;
 
-DROP VIEW IF EXISTS v_key_admins;
 DROP VIEW IF EXISTS v_super_admins;
 DROP VIEW IF EXISTS v_operator_admins;
-
-CREATE OR REPLACE VIEW v_key_admins AS
-SELECT a.*, k.slot, k.keyring_version, k.updated_at AS slot_updated_at
-FROM admins a
-JOIN key_admin_keyring k ON k.admin_id = a.admin_id
-WHERE a.role = 'KEY_ADMIN';
 
 CREATE OR REPLACE VIEW v_super_admins AS
 SELECT a.*, s.province_name, s.scope_no

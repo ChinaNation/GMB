@@ -16,7 +16,7 @@ import {
   CLEARING_BANK_ELIGIBLE_LABEL,
 } from './utils/clearingBankEligible';
 
-// 创建者角色中文映射(ADR-008 起 KEY_ADMIN 已删)
+// 创建者角色中文映射。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   SHENG_ADMIN: '省级管理员',
   SHI_ADMIN: '市级管理员',

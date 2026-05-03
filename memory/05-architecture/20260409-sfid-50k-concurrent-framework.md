@@ -32,7 +32,6 @@
 
 ### 2. 后端进程内 nonce 并行
 
-- 当前单 KEY_ADMIN signer:任何时刻只有一个 "待上链 nonce",串行
 - 43 省独立 signer 后:43 条并行 nonce 通道
 - 每省平均 ~1160 并发 SHI_ADMIN,每 1 分钟 ~19 tx/秒/省 → 单省 **~19 TPS**,
   在链端接受度内但依然是省内串行瓶颈
@@ -157,10 +156,7 @@ pub(crate) struct AppState {
 - 起步 3 实例(每实例负责 ~14 省,~16K 并发 SHI_ADMIN)
 - 压测后根据 CPU 使用率调整到 6~8 实例
 
-**实例间通信**:**不需要**。每省数据强归属单实例,跨省请求极少(KEY_ADMIN 全局操作)。
 
-**KEY_ADMIN 操作路由**:
-- KEY_ADMIN 请求 sticky 到"leader 实例"(预设第一个)
 - 修改 `sheng_admin_pubkey` 等操作由 leader 处理,写入自己负责的 shards + 调链
 - 其他实例通过**链上事件订阅**(`ShengAdminPubkeyUpdated` event)感知变化并刷新自己的省级 signer cache
 
@@ -193,7 +189,6 @@ pub(crate) struct AppState {
 
 **5.3 软限流**:
 - 单省 queue depth >500 时返回 `429 Too Many Requests`,前端 exponential backoff
-- KEY_ADMIN 白名单不被限流
 
 **5.4 熔断**:
 - 某省链端连续失败 3 次 → 该省队列暂停 30 秒 → 告警 → 自动重试
@@ -206,7 +201,6 @@ pub(crate) struct AppState {
 **不要试图一次把所有层都上**。按优先级分期落地:
 
 ### Phase 0(当前状态)
-- 单 KEY_ADMIN signer,单 Store RwLock,单进程,每请求全量 load
 - 可承载:~50 并发 SHI_ADMIN
 - **距 50K 目标:** 1000 倍缺口
 
@@ -252,7 +246,6 @@ pub(crate) struct AppState {
 |---|---|---|
 | 签名密钥隔离粒度 | **按省(43 份)** | 匹配业务行政边界 + 链上审计可追溯 + 运维成本合理 |
 | 密钥冗余 | **无冗余(1 key per province)** | 用户明确简化 + 轮换 = 替换,不需要备份 |
-| 密钥存储位置 | **后端加密存储** | 信任模型下 KEY_ADMIN 本就是最高权威 + 运维单体 |
 | 加密算法 | **AES-256-GCM + HKDF-SHA256** | 用户拍板统一 |
 | 链端升级方式 | **on-chain setCode** | `feedback_chainspec_frozen` 铁律 |
 | 批处理粒度 | **50 tx / batch** | 链 weight 上限约束下的最大聚合量 |
@@ -274,7 +267,6 @@ pub(crate) struct AppState {
 | 后端实例重启 → queue 里未 flush 的 jobs 丢失 | 中 | 入队前先 WAL 到 PG,实例启动时恢复 |
 | 链上 nonce 与后端预期 nonce 不一致(重启后) | 中 | 启动时拉链上 nonce 作为初始值,不信本地 cache |
 | sticky routing 的 province 偏斜(某省 SHI_ADMIN 特别多) | 低 | 预留手动 override 路由表,紧急情况直接拉偏 |
-| KEY_ADMIN 下线后无法 unlock 新启动的实例 | 中 | 实例启动后 fallback 到"仅 KEY_ADMIN 兜底"模式(慢但不断服务) |
 | 链停摆(PoW 算力不足) | 高 | 超出本框架范围,属于链端运维 |
 
 ---
@@ -299,7 +291,6 @@ pub(crate) struct AppState {
 | `citizenchain/frame/sfid-system/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
 | `citizenchain/frame/sfid-system/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
 | `sfid/backend/src/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
-| `sfid/backend/src/key-admins/` | 1 | 新 `signer_cache.rs`(42 省 cache) |
 | `sfid/backend/src/sheng-admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
 | `sfid/backend/src/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
 | `sfid/backend/src/models/store.rs`(新建) | 2 | 43 shard 数据结构 |

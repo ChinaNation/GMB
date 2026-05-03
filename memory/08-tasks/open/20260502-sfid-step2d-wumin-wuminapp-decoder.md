@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`wumin/`(Flutter 冷钱包)+ `wuminapp/`(Flutter 在线端)
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:step2a + step2b 完成(链端凭证字段已固定)
 - 跨模块协议触发:**`memory/07-ai/chat-protocol.md` 第 5 条**(runtime 凭证签名/验签改动必须双端联动)
 
