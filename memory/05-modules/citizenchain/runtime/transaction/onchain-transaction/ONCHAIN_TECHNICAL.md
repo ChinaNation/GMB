@@ -177,6 +177,8 @@
 
 这使模块可在不同 runtime 配置下复用。
 
+当前 CitizenChain runtime 的治理类金额提取规则中，`VotingEngine::internal_vote(proposal_id, approve)` 返回 `Amount(100_000)`，按固定 1 元/次作为管理员主动投票操作计费。若该票触发内部治理提案达阈值，后续 executor 自动回调仍属于同一笔 extrinsic 的执行路径，不再单独产生第二笔 `CallAmount` 提取。
+
 ---
 
 ## 8. 专项 Benchmark

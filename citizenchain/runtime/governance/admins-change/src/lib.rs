@@ -31,7 +31,8 @@ use primitives::count_const::{
 use voting_engine::{
     internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome,
-    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
+    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
+    STATUS_REJECTED, STATUS_VOTING,
 };
 
 pub use pallet::*;
@@ -123,7 +124,43 @@ pub struct AdminInstitution<AdminList, AccountId, BlockNumber> {
     pub status: AdminSubjectStatus,
 }
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+/// 管理员主体生命周期写入口。
+///
+/// 中文注释：这里是跨 pallet 唯一允许写 Pending/Active/Closed 生命周期的 API。
+/// 裸存储 mutator 保持 crate 内私有；调用方必须提供 voting-engine 提案上下文，
+/// 由 admins-change 再校验 owner、机构、状态和回调作用域。
+pub trait SubjectLifecycle<AccountId> {
+    fn create_pending_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+        org: u8,
+        kind: AdminSubjectKind,
+        admins: Vec<AccountId>,
+        threshold: u32,
+        creator: AccountId,
+    ) -> DispatchResult;
+
+    fn activate_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult;
+
+    fn remove_pending_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult;
+
+    fn close_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult;
+}
+
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
 fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
@@ -206,7 +243,6 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        #[cfg(feature = "std")]
         fn integrity_test() {
             let required = NRC_ADMIN_COUNT.max(PRC_ADMIN_COUNT).max(PRB_ADMIN_COUNT);
             assert!(
@@ -374,6 +410,8 @@ pub mod pallet {
         InvalidThreshold,
         /// 管理员重复
         DuplicateAdmin,
+        /// 管理员主体生命周期写入缺少有效 voting-engine 提案作用域
+        InvalidSubjectLifecycleScope,
     }
 
     #[pallet::call]
@@ -388,6 +426,14 @@ pub mod pallet {
             new_admin: T::AccountId,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
+
+            // 中文注释：本入口只治理制度内置主体(NRC/PRC/PRB)的管理员替换。
+            // ORG_DUOQIAN 的个人/机构多签主体由 duoqian-manage 维护生命周期,
+            // 不能从通用管理员替换入口绕出第二条治理路径。
+            ensure!(
+                matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
+                Error::<T>::InvalidSubjectKind
+            );
 
             // 1) 校验管理员主体已激活且 org 匹配。
             let subject =
@@ -414,8 +460,7 @@ pub mod pallet {
                     old_admin: old_admin.clone(),
                     new_admin: new_admin.clone(),
                 };
-                let mut encoded = Vec::from(crate::MODULE_TAG);
-                encoded.extend_from_slice(&action.encode());
+                let encoded = action.encode();
                 let proposal_id = match T::InternalVoteEngine::create_admin_set_mutation_internal_proposal_with_data(
                     who.clone(),
                     org,
@@ -516,9 +561,53 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 写入 Pending 管理员主体。创建多签机构/个人多签时先调用本方法，
-        /// 让投票引擎能在创建提案时锁定管理员快照。
-        pub fn create_pending_subject(
+        pub(crate) fn ensure_lifecycle_proposal(
+            proposal_id: u64,
+            module_tag: &[u8],
+            institution: InstitutionPalletId,
+            org: u8,
+            expected_status: u8,
+            require_callback_scope: bool,
+        ) -> DispatchResult {
+            ensure!(
+                voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, module_tag),
+                Error::<T>::InvalidSubjectLifecycleScope
+            );
+            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::InvalidSubjectLifecycleScope)?;
+            ensure!(
+                proposal.kind == PROPOSAL_KIND_INTERNAL,
+                Error::<T>::InvalidSubjectLifecycleScope
+            );
+            ensure!(
+                proposal.stage == STAGE_INTERNAL,
+                Error::<T>::InvalidSubjectLifecycleScope
+            );
+            ensure!(
+                proposal.internal_institution == Some(institution),
+                Error::<T>::ProposalInstitutionMismatch
+            );
+            ensure!(
+                proposal.internal_org == Some(org),
+                Error::<T>::ProposalOrgMismatch
+            );
+            ensure!(
+                proposal.status == expected_status,
+                Error::<T>::InvalidSubjectLifecycleScope
+            );
+            if require_callback_scope {
+                ensure!(
+                    voting_engine::Pallet::<T>::is_callback_execution_scope(proposal_id),
+                    Error::<T>::InvalidSubjectLifecycleScope
+                );
+            }
+            Ok(())
+        }
+
+        /// 写入 Pending 管理员主体。
+        ///
+        /// 中文注释：生命周期写入只能经 `SubjectLifecycle` trait 做提案上下文校验后进入。
+        pub(crate) fn do_create_pending_subject(
             institution: InstitutionPalletId,
             org: u8,
             kind: AdminSubjectKind,
@@ -565,7 +654,7 @@ pub mod pallet {
         }
 
         /// 将 Pending 管理员主体激活。
-        pub fn activate_subject(institution: InstitutionPalletId) -> DispatchResult {
+        pub(crate) fn do_activate_subject(institution: InstitutionPalletId) -> DispatchResult {
             Institutions::<T>::try_mutate(institution, |maybe| -> DispatchResult {
                 let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
                 ensure!(
@@ -581,7 +670,9 @@ pub mod pallet {
         }
 
         /// 清理尚未激活的 Pending 管理员主体。
-        pub fn remove_pending_subject(institution: InstitutionPalletId) -> DispatchResult {
+        pub(crate) fn do_remove_pending_subject(
+            institution: InstitutionPalletId,
+        ) -> DispatchResult {
             if let Some(subject) = Institutions::<T>::get(institution) {
                 ensure!(
                     subject.status == AdminSubjectStatus::Pending,
@@ -594,7 +685,7 @@ pub mod pallet {
         }
 
         /// 关闭已激活管理员主体。
-        pub fn close_subject(institution: InstitutionPalletId) -> DispatchResult {
+        pub(crate) fn do_close_subject(institution: InstitutionPalletId) -> DispatchResult {
             Institutions::<T>::try_mutate(institution, |maybe| -> DispatchResult {
                 let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
                 ensure!(
@@ -794,17 +885,100 @@ pub mod pallet {
     }
 }
 
+impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
+    fn create_pending_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+        org: u8,
+        kind: AdminSubjectKind,
+        admins: Vec<T::AccountId>,
+        threshold: u32,
+        creator: T::AccountId,
+    ) -> DispatchResult {
+        Self::ensure_lifecycle_proposal(
+            proposal_id,
+            module_tag,
+            institution,
+            org,
+            STATUS_VOTING,
+            false,
+        )?;
+        Self::do_create_pending_subject(institution, org, kind, admins, threshold, creator)
+    }
+
+    fn activate_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult {
+        let subject = pallet::Institutions::<T>::get(institution)
+            .ok_or(pallet::Error::<T>::InvalidInstitution)?;
+        Self::ensure_lifecycle_proposal(
+            proposal_id,
+            module_tag,
+            institution,
+            subject.org,
+            STATUS_PASSED,
+            true,
+        )?;
+        Self::do_activate_subject(institution)
+    }
+
+    fn remove_pending_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult {
+        let subject = pallet::Institutions::<T>::get(institution)
+            .ok_or(pallet::Error::<T>::InvalidInstitution)?;
+        let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+            .ok_or(pallet::Error::<T>::InvalidSubjectLifecycleScope)?;
+        ensure!(
+            matches!(proposal.status, STATUS_REJECTED | STATUS_EXECUTION_FAILED),
+            pallet::Error::<T>::InvalidSubjectLifecycleScope
+        );
+        Self::ensure_lifecycle_proposal(
+            proposal_id,
+            module_tag,
+            institution,
+            subject.org,
+            proposal.status,
+            false,
+        )?;
+        Self::do_remove_pending_subject(institution)
+    }
+
+    fn close_subject_for_proposal(
+        proposal_id: u64,
+        module_tag: &[u8],
+        institution: InstitutionPalletId,
+    ) -> DispatchResult {
+        let subject = pallet::Institutions::<T>::get(institution)
+            .ok_or(pallet::Error::<T>::InvalidInstitution)?;
+        Self::ensure_lifecycle_proposal(
+            proposal_id,
+            module_tag,
+            institution,
+            subject.org,
+            STATUS_PASSED,
+            true,
+        )?;
+        Self::do_close_subject(institution)
+    }
+}
+
 // ──── 投票终态回调:把已通过的管理员替换提案落地到链上 ────
 //
 // Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
 // 通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
-// 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方返回 Ignored。
+// 本 Executor 按 `ProposalOwner` 认领本模块提案，`ProposalData` 只保存裸业务 action。
 //
 // 设计要点:
 // - `approved = true` 时执行 `try_execute_replacement`,失败发 `AdminReplacementExecutionFailed`
 //   事件但不返回 Err(否则投票引擎会回滚状态,票数白投);
 // - `approved = false` 下本模块没有独立存储需要清理,直接 Ok(()) 返回;
-// - 数据层异常(解码失败、MODULE_TAG 不匹配)返回 Err,触发 set_status_and_emit 回滚,
+// - 数据层异常(ProposalOwner 匹配但 data 缺失/解码失败)返回 Err,触发 set_status_and_emit 回滚,
 //   避免错误状态被提交。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
@@ -813,11 +987,12 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         proposal_id: u64,
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
-        // Step 1:认领 — 检查 ProposalData 是否以 MODULE_TAG 开头。
-        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
-            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
-            _ => return Ok(ProposalExecutionOutcome::Ignored), // 非本模块提案
-        };
+        // Step 1:认领 — 检查 ProposalOwner，避免再依赖 ProposalData 的 MODULE_TAG 前缀。
+        if !voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG) {
+            return Ok(ProposalExecutionOutcome::Ignored);
+        }
+        let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
+            .ok_or(pallet::Error::<T>::ProposalActionNotFound)?;
 
         if !approved {
             // 否决:无独立存储需清理(ProposalData 由投票引擎延迟清理)。
@@ -825,9 +1000,8 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action =
-            AdminReplacementAction::<T::AccountId>::decode(&mut &raw[crate::MODULE_TAG.len()..])
-                .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+        let action = AdminReplacementAction::<T::AccountId>::decode(&mut &raw[..])
+            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。
         match pallet::Pallet::<T>::try_execute_replacement_from_action(proposal_id, action) {
@@ -913,6 +1087,8 @@ mod tests {
             _proposal_id: u64,
             _nonce: &[u8],
             _signature: &[u8],
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -931,6 +1107,8 @@ mod tests {
             _eligible_total: u64,
             _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
             _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -976,6 +1154,8 @@ mod tests {
         type MaxInternalProposalMutexBindings = ConstU32<256>;
         type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<256>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -983,6 +1163,7 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
@@ -1111,7 +1292,7 @@ mod tests {
             let admin_a = AccountId32::new([211u8; 32]);
             let admin_b = AccountId32::new([212u8; 32]);
 
-            assert_ok!(AdminsChange::create_pending_subject(
+            assert_ok!(AdminsChange::do_create_pending_subject(
                 institution,
                 ORG_DUOQIAN,
                 AdminSubjectKind::PersonalDuoqian,
@@ -1136,7 +1317,7 @@ mod tests {
                 Some(2)
             );
 
-            assert_ok!(AdminsChange::activate_subject(institution));
+            assert_ok!(AdminsChange::do_activate_subject(institution));
             assert!(AdminsChange::is_active_subject_admin(
                 ORG_DUOQIAN,
                 institution,
@@ -1150,6 +1331,60 @@ mod tests {
     }
 
     #[test]
+    fn subject_lifecycle_trait_requires_voting_engine_scope_for_activation() {
+        new_test_ext().execute_with(|| {
+            let institution = pending_subject_id();
+            let admin_a = AccountId32::new([201u8; 32]);
+            let admin_b = AccountId32::new([202u8; 32]);
+            let proposal_id = <voting_engine::Pallet<Test> as InternalVoteEngine<
+                AccountId32,
+            >>::create_pending_subject_internal_proposal_with_snapshot_data(
+                admin_a.clone(),
+                ORG_DUOQIAN,
+                institution,
+                vec![admin_a.clone(), admin_b.clone()],
+                2,
+                b"dq-mgmt",
+                b"subject-create".to_vec(),
+            )
+            .expect("pending subject proposal should be created");
+
+            assert_ok!(AdminsChange::create_pending_subject_for_proposal(
+                proposal_id,
+                b"dq-mgmt",
+                institution,
+                ORG_DUOQIAN,
+                AdminSubjectKind::PersonalDuoqian,
+                vec![admin_a.clone(), admin_b],
+                2,
+                admin_a.clone()
+            ));
+
+            assert_noop!(
+                AdminsChange::activate_subject_for_proposal(proposal_id, b"dq-mgmt", institution),
+                Error::<Test>::InvalidSubjectLifecycleScope
+            );
+
+            voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                let proposal = maybe.as_mut().expect("proposal should exist");
+                proposal.status = STATUS_PASSED;
+            });
+            assert_noop!(
+                AdminsChange::activate_subject_for_proposal(proposal_id, b"dq-mgmt", institution),
+                Error::<Test>::InvalidSubjectLifecycleScope
+            );
+
+            voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+            assert_ok!(AdminsChange::activate_subject_for_proposal(
+                proposal_id,
+                b"dq-mgmt",
+                institution
+            ));
+            voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+        });
+    }
+
+    #[test]
     fn builtin_subjects_cannot_be_closed() {
         new_test_ext().execute_with(|| {
             for (institution, org, admin) in [
@@ -1158,7 +1393,7 @@ mod tests {
                 (prb_pallet_id(), ORG_PRB, prb_admin(0)),
             ] {
                 assert_noop!(
-                    AdminsChange::close_subject(institution),
+                    AdminsChange::do_close_subject(institution),
                     Error::<Test>::BuiltinSubjectCannotClose
                 );
 
@@ -1187,7 +1422,7 @@ mod tests {
                 let admin_a = AccountId32::new([221u8.saturating_add(offset); 32]);
                 let admin_b = AccountId32::new([231u8.saturating_add(offset); 32]);
 
-                assert_ok!(AdminsChange::create_pending_subject(
+                assert_ok!(AdminsChange::do_create_pending_subject(
                     institution,
                     ORG_DUOQIAN,
                     kind,
@@ -1195,8 +1430,8 @@ mod tests {
                     2,
                     admin_a.clone()
                 ));
-                assert_ok!(AdminsChange::activate_subject(institution));
-                assert_ok!(AdminsChange::close_subject(institution));
+                assert_ok!(AdminsChange::do_activate_subject(institution));
+                assert_ok!(AdminsChange::do_close_subject(institution));
 
                 let subject = Institutions::<Test>::get(institution)
                     .expect("dynamic subject should remain stored");
@@ -1208,6 +1443,43 @@ mod tests {
                     &admin_a
                 ));
                 assert!(AdminsChange::active_subject_admins(ORG_DUOQIAN, institution).is_none());
+            }
+        });
+    }
+
+    #[test]
+    fn duoqian_subjects_cannot_use_admin_replacement_entry() {
+        new_test_ext().execute_with(|| {
+            for (offset, kind) in [
+                (0u8, AdminSubjectKind::PersonalDuoqian),
+                (1u8, AdminSubjectKind::SfidInstitution),
+            ] {
+                let mut institution = pending_subject_id();
+                institution[0] = institution[0].saturating_add(10u8.saturating_add(offset));
+                let admin_a = AccountId32::new([41u8.saturating_add(offset); 32]);
+                let admin_b = AccountId32::new([51u8.saturating_add(offset); 32]);
+                let new_admin = AccountId32::new([61u8.saturating_add(offset); 32]);
+
+                assert_ok!(AdminsChange::do_create_pending_subject(
+                    institution,
+                    ORG_DUOQIAN,
+                    kind,
+                    vec![admin_a.clone(), admin_b.clone()],
+                    2,
+                    admin_a.clone()
+                ));
+                assert_ok!(AdminsChange::do_activate_subject(institution));
+
+                assert_noop!(
+                    AdminsChange::propose_admin_replacement(
+                        RuntimeOrigin::signed(admin_a.clone()),
+                        ORG_DUOQIAN,
+                        institution,
+                        admin_b,
+                        new_admin
+                    ),
+                    Error::<Test>::InvalidSubjectKind
+                );
             }
         });
     }
@@ -1492,9 +1764,10 @@ mod tests {
             );
             let data = voting_engine::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
-            let tag = MODULE_TAG;
-            assert!(data.len() >= tag.len() && &data[..tag.len()] == tag);
-            let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[tag.len()..])
+            assert!(voting_engine::Pallet::<Test>::is_proposal_owner(
+                pid, MODULE_TAG
+            ));
+            let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
             assert_noop!(
                 AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),

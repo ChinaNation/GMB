@@ -1313,7 +1313,7 @@ mod tests {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
-                    voting_engine::internal_vote::governance_org_pass_threshold(org)
+                    voting_engine::internal_vote::fixed_governance_pass_threshold(org)
                 }
                 ORG_DUOQIAN => {
                     let account = AccountId32::decode(&mut &institution[..32]).ok()?;
@@ -1379,6 +1379,9 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

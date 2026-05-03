@@ -68,6 +68,8 @@ const NORMAL_DISPATCH_RATIO: Perbill =
 
 parameter_types! {
     pub const BlockHashCount: BlockNumber = BLOCK_HASH_COUNT;
+    /// 中文注释：使用 BlockNumber 类型声明重试宽限期，避免与具体 u32 常量类型耦合。
+    pub const VotingExecutionRetryGraceBlocks: BlockNumber = 21_600;
     pub const Version: RuntimeVersion = VERSION;
 
     /// 每个区块允许 60 秒计算预算（weight ref_time）。
@@ -392,13 +394,14 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                     _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
-            // 投票引擎:拆分"内部投票"(免费,鼓励管理员踊跃履职)与其他调用(付费)。
+            // 投票引擎:内部投票可能在达阈值时同步触发业务回调,不能再作为免费入口。
             // Phase 2 后公开 call 只剩 4 个:internal_vote / joint_vote / citizen_vote / finalize_proposal。
             RuntimeCall::VotingEngine(ref ve_call) => {
                 match ve_call {
-                    // 免费:管理员内部投票(最高频路径,0 gas 降门槛)
+                    // 付费:管理员内部投票(1 元/次)。收费对象是本次投票 extrinsic,
+                    // 达阈值后的 executor 自动回调不再产生另一笔用户提交交易。
                     voting_engine::pallet::Call::internal_vote { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
+                        onchain_transaction::AmountExtractResult::Amount(100000)
                     }
                     // 免费:终结已完成提案(任意人都可调,推动清理)
                     voting_engine::pallet::Call::finalize_proposal { .. } => {
@@ -423,15 +426,8 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                     _ => onchain_transaction::AmountExtractResult::Amount(100000),
                 }
             }
-            RuntimeCall::RuntimeUpgrade(ref ru_call) => {
-                match ru_call {
-                    // 免费：Root 权限终结联合投票
-                    runtime_upgrade::pallet::Call::finalize_joint_vote { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费：管理员主动提案/开发升级
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
-                }
+            RuntimeCall::RuntimeUpgrade(_) => {
+                onchain_transaction::AmountExtractResult::Amount(100000)
             }
             RuntimeCall::ResolutionDestro(ref rd_call) => {
                 match rd_call {
@@ -798,7 +794,7 @@ impl duoqian_manage::Config for Runtime {
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
     // sr25519 签名固定 64 字节。
-    // Phase 2 整改后聚合签名 `finalize_create` 已删除,此类型仍保留为 `AdminSignatureOf`
+    // Phase 2 整改后旧聚合创建入口已删除,此类型仍保留为 `AdminSignatureOf`
     // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
     type MaxAdminSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<16>;
@@ -1396,9 +1392,12 @@ impl voting_engine::Config for Runtime {
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 * 1024 }>;
     type MaxModuleTagLen = ConstU32<32>;
     type MaxManualExecutionAttempts = ConstU32<3>;
-    type ExecutionRetryGraceBlocks = ConstU32<21_600>;
+    type ExecutionRetryGraceBlocks = VotingExecutionRetryGraceBlocks;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<2_048>;
+    type MaxPendingRetryExpirationsPerBlock = ConstU32<256>;
     type MaxCleanupStepsPerBlock = ConstU32<8>;
+    type MaxCleanupQueueBucketLimit = ConstU32<512>;
+    type MaxCleanupScheduleOffset = ConstU32<1_024>;
     type CleanupKeysPerStep = ConstU32<256>;
     type SfidEligibility = RuntimeSfidEligibility;
     type PopulationSnapshotVerifier = RuntimePopulationSnapshotVerifier;
@@ -1642,6 +1641,23 @@ mod tests {
             match amount {
                 onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
                 _ => panic!("expected amount path"),
+            }
+
+            let internal_vote_call =
+                RuntimeCall::VotingEngine(voting_engine::pallet::Call::internal_vote {
+                    proposal_id: 1,
+                    approve: true,
+                });
+            let vote_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+                AccountId,
+                RuntimeCall,
+                Balance,
+            >>::amount(&who, &internal_vote_call);
+            match vote_amount {
+                // 中文注释：internal_vote 达阈值时会同步触发业务 executor,
+                // 因此投票 extrinsic 本身按治理用户操作固定 1 元计费。
+                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 100_000),
+                _ => panic!("expected internal_vote amount"),
             }
         });
     }

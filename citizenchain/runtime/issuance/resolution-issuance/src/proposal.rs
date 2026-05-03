@@ -112,9 +112,7 @@ impl<T: Config> Pallet<T> {
 
     /// 判断指定提案是否属于本模块。
     pub fn owns_proposal(proposal_id: u64) -> bool {
-        voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
-            .map(|raw| raw.starts_with(crate::MODULE_TAG))
-            .unwrap_or(false)
+        voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
     }
 
     fn decode_tagged_data(raw: &[u8]) -> Option<IssuanceProposalData<T::AccountId, BalanceOf<T>>> {

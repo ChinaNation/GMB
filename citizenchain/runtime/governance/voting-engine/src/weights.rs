@@ -6,6 +6,13 @@
 //! WORST CASE MAP SIZE: `1000000`
 //! HOSTNAME: `runnervm46oaq`, CPU: `AMD EPYC 7763 64-Core Processor`
 //! WASM-EXECUTION: `Compiled`, CHAIN: `Some("citizenchain")`, DB CACHE: 1024
+//!
+//! NOTE: `internal_vote` was manually raised after Phase 2 callback integration.
+//! The generic pallet benchmark covers the voting engine hot path, while runtime
+//! production can synchronously enter one of five business executors when the
+//! last vote reaches a threshold. Until a benchmark runtime fixture covers the
+//! heaviest business callback branch, `internal_vote` uses a deliberately high
+//! conservative fallback instead of the stale generated value.
 
 // Executed Command:
 // /home/runner/work/GMB/GMB/citizenchain/target/release/node
@@ -69,18 +76,21 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(1))
 			.saturating_add(T::DbWeight::get().writes(3))
 	}
-	/// 内部投票(占位:与 `joint_vote` 同量级);Phase 2 业务模块改造完成后由
-	/// benchmark-cli 重跑生成精确值。
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Storage: `VotingEngine::InternalVotesByAccount` (r:1 w:1)
 	/// Storage: `VotingEngine::InternalTallies` (r:1 w:1)
 	/// Storage: `VotingEngine::AdminSnapshot` (r:1 w:0)
 	/// Storage: `VotingEngine::InternalThresholdSnapshot` (r:1 w:0)
+	/// Storage: `VotingEngine::ProposalData` (r:up to 5 w:0)
+	/// Storage: business callback storages (conservative upper bound)
 	fn internal_vote() -> Weight {
-		Weight::from_parts(30_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(T::DbWeight::get().reads(7))
-			.saturating_add(T::DbWeight::get().writes(3))
+		// 中文注释：达阈值的最后一票会同步进入 5 个业务 Executor 的认领链路,
+		// 并可能执行对应业务动作。正式 benchmark fixture 覆盖最重回调前,
+		// 这里使用偏高保守上界，避免继续沿用 `joint_vote` 同量级的低估值。
+		Weight::from_parts(1_000_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 200_000))
+			.saturating_add(T::DbWeight::get().reads(80))
+			.saturating_add(T::DbWeight::get().writes(50))
 	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
@@ -178,12 +188,11 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(1))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}
-	/// 内部投票(占位;Phase 2 后由 benchmark-cli 重跑精确值)。
 	fn internal_vote() -> Weight {
-		Weight::from_parts(30_000_000, 0)
-			.saturating_add(Weight::from_parts(0, 3559))
-			.saturating_add(RocksDbWeight::get().reads(7))
-			.saturating_add(RocksDbWeight::get().writes(3))
+		Weight::from_parts(1_000_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 200_000))
+			.saturating_add(RocksDbWeight::get().reads(80))
+			.saturating_add(RocksDbWeight::get().writes(50))
 	}
 	/// Storage: `VotingEngine::Proposals` (r:1 w:0)
 	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)

@@ -245,6 +245,12 @@ impl<T: Config> Pallet<T> {
                     }
                 }
             }
+            if !Self::is_admin_in_snapshot(id, proposer_institution, &who) {
+                frame_support::defensive!(
+                    "do_create_joint_proposal: proposer is missing from admin snapshot"
+                );
+                return TransactionOutcome::Rollback(Err(Error::<T>::NoPermission.into()));
+            }
 
             UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
             Proposals::<T>::insert(id, proposal);

@@ -23,7 +23,7 @@
 - 发行执行不再作为独立外部模块暴露，只有 `voting-engine` 的 `JointVoteResultCallback::on_joint_vote_finalized` 回调路径可以触发实际铸币。
 - `propose_resolution_issuance` 保持 call index `0`，降低冷钱包签名路径的变更范围。
 - `finalize_joint_vote` 手工 extrinsic 已删除，call index `1` 保持空缺，避免 Root 或误配 origin 绕过投票引擎。
-- 提案核心数据、owner、业务 data 和投票凭证清理由 `voting-engine` 终态清理队列统一处理，本模块不再调用已废弃的 `cleanup_joint_proposal`。
+- 提案核心数据、owner、业务 data 和投票凭证清理由 `voting-engine` 终态清理队列统一处理，本模块不再持有独立清理入口。
 - 旧 index `7` 不再注册任何 pallet。
 - 当前链处于开发期 fresh genesis 口径，合并不做历史 storage 迁移；`migration.rs` 只推进 `StorageVersion`，不再为 `AllowedRecipients` 保留运行期兜底写入。如果未来已有运行链数据，必须单独设计显式迁移。
 
@@ -120,7 +120,7 @@ WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmar
 
 ## 10. 权重状态
 
-- `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口。
+- `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口；`propose_resolution_issuance` benchmark 已同步 ADR-008 step3 的 `province` 与 `signer_admin_pubkey` 参数，避免 runtime-benchmarks 聚合编译时继续走旧签名。
 - Cargo feature：`runtime-benchmarks` 会向 `pallet-balances` 与 `voting-engine` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 - 当前本地尝试生成正式 `weights.rs` 时，普通 CI WASM 缺少 Benchmark Runtime API；`WASM_BUILD_FROM_SOURCE=1` 又被 `wasm32v1-none` 下 `serde_core` / `byte-slice-cast` 的 `std` feature 问题阻塞。
 - 因此 `weights.rs` 暂时采用偏高保守 fallback，发布前必须准备 benchmark runtime WASM 后重新生成。

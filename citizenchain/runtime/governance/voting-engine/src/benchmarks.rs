@@ -4,14 +4,15 @@
 
 use codec::Decode;
 use frame_benchmarking::{v2::*, BenchmarkError};
+use frame_support::{pallet_prelude::ConstU32, BoundedVec};
 use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
 use sp_runtime::traits::{Hash as HashT, SaturatedConversion, Saturating};
 
 use crate::{
     CitizenTallies, CitizenVotesByBindingId, Config, InstitutionPalletId, InternalTallies,
-    InternalVotesByAccount, JointInstitutionTallies, JointTallies, Pallet, Proposal, Proposals,
-    VoteCountU32, VoteCountU64, VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL,
-    PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
+    InternalVotesByAccount, JointTallies, Pallet, Proposal, Proposals, VoteCountU32, VoteCountU64,
+    VoteNonceOf, VoteSignatureOf, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN,
+    STAGE_INTERNAL, STAGE_JOINT, STATUS_VOTING,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkError> {
@@ -22,6 +23,17 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> Result<T::AccountId, BenchmarkErr
 fn nrc_institution() -> Result<InstitutionPalletId, BenchmarkError> {
     reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
         .ok_or(BenchmarkError::Stop("NRC institution id should decode"))
+}
+
+fn bench_province() -> Result<BoundedVec<u8, ConstU32<64>>, BenchmarkError> {
+    b"liaoning"
+        .to_vec()
+        .try_into()
+        .map_err(|_| BenchmarkError::Stop("benchmark province should fit"))
+}
+
+fn bench_signer_admin_pubkey() -> [u8; 32] {
+    [7u8; 32]
 }
 
 #[benchmarks]
@@ -78,34 +90,31 @@ mod benchmarks {
     fn joint_vote() -> Result<(), BenchmarkError> {
         let who = decode_account::<T>(CHINA_CB[0].duoqian_admins[0])?;
         let institution = nrc_institution()?;
-        let now = frame_system::Pallet::<T>::block_number();
-        let end = now.saturating_add(100u32.saturated_into());
-        Proposals::<T>::insert(
-            1u64,
-            Proposal {
-                kind: PROPOSAL_KIND_JOINT,
-                stage: STAGE_JOINT,
-                status: STATUS_VOTING,
-                internal_org: None,
-                internal_institution: None,
-                start: now,
-                end,
-                citizen_eligible_total: 1_000,
-            },
-        );
-        JointInstitutionTallies::<T>::insert(1u64, institution, VoteCountU32 { yes: 0, no: 0 });
-        // 写入管理员快照，否则 do_joint_vote 权限校验会失败。
-        Pallet::<T>::snapshot_institution_admins(
-            1u64,
-            crate::internal_vote::ORG_NRC,
-            institution,
-            false,
+        let snapshot_nonce: VoteNonceOf<T> = b"bench-snapshot-nonce"
+            .to_vec()
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("snapshot nonce should fit"))?;
+        let signature: VoteSignatureOf<T> = b"snapshot-ok"
+            .to_vec()
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("snapshot signature should fit"))?;
+        let province = bench_province()?;
+        let signer_admin_pubkey = bench_signer_admin_pubkey();
+        // 中文注释：benchmark setup 走真实创建路径，确保联合投票覆盖真实提案形态、
+        // 管理员快照和互斥锁，而不是手写一个生产路径不存在的 Proposal。
+        let proposal_id = Pallet::<T>::do_create_joint_proposal(
+            who.clone(),
+            1_000,
+            snapshot_nonce,
+            signature,
+            province.as_slice(),
+            &signer_admin_pubkey,
         )
-        .map_err(|_| BenchmarkError::Stop("admin snapshot should succeed"))?;
+        .map_err(|_| BenchmarkError::Stop("create joint proposal should succeed"))?;
 
         #[block]
         {
-            Pallet::<T>::do_joint_vote(who, 1u64, institution, true)
+            Pallet::<T>::do_joint_vote(who, proposal_id, institution, true)
                 .map_err(|_| BenchmarkError::Stop("joint vote should succeed"))?;
         }
 
@@ -132,20 +141,31 @@ mod benchmarks {
             },
         );
         CitizenTallies::<T>::insert(proposal_id, VoteCountU64 { yes: 0, no: 0 });
-        let binding_id = T::Hashing::hash(b"bench-sfid");
+        let binding_id = T::Hashing::hash(b"sfid-ok");
         let nonce: VoteNonceOf<T> = b"bench-nonce"
             .to_vec()
             .try_into()
             .map_err(|_| BenchmarkError::Stop("nonce should fit"))?;
-        let signature: VoteSignatureOf<T> = b"bench-signature"
+        let signature: VoteSignatureOf<T> = b"vote-ok"
             .to_vec()
             .try_into()
             .map_err(|_| BenchmarkError::Stop("signature should fit"))?;
+        let province = bench_province()?;
+        let signer_admin_pubkey = bench_signer_admin_pubkey();
 
         #[block]
         {
-            Pallet::<T>::do_citizen_vote(who, proposal_id, binding_id, nonce, signature, true)
-                .map_err(|_| BenchmarkError::Stop("citizen vote should succeed"))?;
+            Pallet::<T>::do_citizen_vote(
+                who,
+                proposal_id,
+                binding_id,
+                nonce,
+                signature,
+                province,
+                signer_admin_pubkey,
+                true,
+            )
+            .map_err(|_| BenchmarkError::Stop("citizen vote should succeed"))?;
         }
 
         assert!(CitizenVotesByBindingId::<T>::contains_key(

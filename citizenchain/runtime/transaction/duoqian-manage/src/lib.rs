@@ -11,6 +11,7 @@ pub mod institution;
 pub mod personal;
 pub mod weights;
 
+use admins_change::SubjectLifecycle;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::storage::with_transaction;
 use frame_support::{
@@ -810,27 +811,6 @@ pub mod pallet {
 
             let now = frame_system::Pallet::<T>::block_number();
 
-            Self::create_pending_admin_subject(
-                &duoqian_address,
-                admins_change::AdminSubjectKind::SfidInstitution,
-                &duoqian_admins,
-                threshold,
-                &who,
-            )?;
-
-            // 预写入 pending 状态的 DuoqianAccounts，用于账户生命周期状态查询。
-            DuoqianAccounts::<T>::insert(
-                &duoqian_address,
-                DuoqianAccount {
-                    admin_count,
-                    threshold,
-                    duoqian_admins: duoqian_admins.clone(),
-                    creator: who.clone(),
-                    created_at: now,
-                    status: DuoqianStatus::Pending,
-                },
-            );
-
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
             let action = CreateDuoqianAction::<T::AccountId, BalanceOf<T>> {
@@ -843,15 +823,43 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
-            // 中文注释：创建提案时由 voting-engine 原子绑定 owner/data/meta，防止跨模块覆写。
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+            // 中文注释：投票引擎先用显式管理员列表写快照，再由 admins-change 在同一事务内写 Pending 主体。
+            let proposal_id = with_transaction(|| {
+                DuoqianAccounts::<T>::insert(
+                    &duoqian_address,
+                    DuoqianAccount {
+                        admin_count,
+                        threshold,
+                        duoqian_admins: duoqian_admins.clone(),
+                        creator: who.clone(),
+                        created_at: now,
+                        status: DuoqianStatus::Pending,
+                    },
+                );
+                let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
                     who.clone(),
                     org,
                     institution,
+                    duoqian_admins.iter().cloned().collect(),
+                    threshold,
                     crate::MODULE_TAG,
                     data,
-                )?;
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
+                if let Err(err) = Self::create_pending_admin_subject_for_proposal(
+                    proposal_id,
+                    &duoqian_address,
+                    admins_change::AdminSubjectKind::SfidInstitution,
+                    &duoqian_admins,
+                    threshold,
+                    &who,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+                TransactionOutcome::Commit(Ok(proposal_id))
+            })?;
 
             // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -1209,36 +1217,7 @@ pub mod pallet {
                 Error::<T>::ProtectedSource
             );
 
-            // 预写入 DuoqianAccounts（pending 状态）
             let now = frame_system::Pallet::<T>::block_number();
-            Self::create_pending_admin_subject(
-                &duoqian_address,
-                admins_change::AdminSubjectKind::PersonalDuoqian,
-                &duoqian_admins,
-                threshold,
-                &who,
-            )?;
-            DuoqianAccounts::<T>::insert(
-                &duoqian_address,
-                DuoqianAccount {
-                    admin_count,
-                    threshold,
-                    duoqian_admins: duoqian_admins.clone(),
-                    creator: who.clone(),
-                    created_at: now,
-                    status: DuoqianStatus::Pending,
-                },
-            );
-
-            // 写入个人多签元数据
-            PersonalDuoqianInfo::<T>::insert(
-                &duoqian_address,
-                PersonalDuoqianMeta {
-                    creator: who.clone(),
-                    account_name: account_name.clone(),
-                },
-            );
-
             let institution = account_to_institution_id(&duoqian_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
             let action = CreateDuoqianAction {
@@ -1251,14 +1230,49 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE);
             data.extend_from_slice(&action.encode());
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+            let proposal_id = with_transaction(|| {
+                DuoqianAccounts::<T>::insert(
+                    &duoqian_address,
+                    DuoqianAccount {
+                        admin_count,
+                        threshold,
+                        duoqian_admins: duoqian_admins.clone(),
+                        creator: who.clone(),
+                        created_at: now,
+                        status: DuoqianStatus::Pending,
+                    },
+                );
+                PersonalDuoqianInfo::<T>::insert(
+                    &duoqian_address,
+                    PersonalDuoqianMeta {
+                        creator: who.clone(),
+                        account_name: account_name.clone(),
+                    },
+                );
+                let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
                     who.clone(),
                     org,
                     institution,
+                    duoqian_admins.iter().cloned().collect(),
+                    threshold,
                     crate::MODULE_TAG,
                     data,
-                )?;
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
+                if let Err(err) = Self::create_pending_admin_subject_for_proposal(
+                    proposal_id,
+                    &duoqian_address,
+                    admins_change::AdminSubjectKind::PersonalDuoqian,
+                    &duoqian_admins,
+                    threshold,
+                    &who,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+                TransactionOutcome::Commit(Ok(proposal_id))
+            })?;
 
             // 从投票引擎回读提案超时区块,便于 wuminapp 倒计时。
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
@@ -1314,7 +1328,7 @@ pub mod pallet {
                     .map_err(|_| Error::<T>::ProposalActionNotFound)?;
                     DuoqianAccounts::<T>::remove(&action.duoqian_address);
                     PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                    Self::remove_pending_admin_subject(&action.duoqian_address);
+                    Self::remove_pending_admin_subject(proposal_id, &action.duoqian_address);
                 }
                 ACTION_CREATE_INSTITUTION => {
                     let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
@@ -1473,14 +1487,17 @@ pub mod pallet {
             Ok(())
         }
 
-        fn create_pending_admin_subject(
+        fn create_pending_admin_subject_for_proposal(
+            proposal_id: u64,
             subject_address: &T::AccountId,
             kind: admins_change::AdminSubjectKind,
             admins: &DuoqianAdminsOf<T>,
             threshold: u32,
             creator: &T::AccountId,
         ) -> DispatchResult {
-            admins_change::Pallet::<T>::create_pending_subject(
+            admins_change::Pallet::<T>::create_pending_subject_for_proposal(
+                proposal_id,
+                crate::MODULE_TAG,
                 account_to_institution_id(subject_address),
                 voting_engine::internal_vote::ORG_DUOQIAN,
                 kind,
@@ -1490,18 +1507,34 @@ pub mod pallet {
             )
         }
 
-        fn activate_admin_subject(subject_address: &T::AccountId) -> DispatchResult {
-            admins_change::Pallet::<T>::activate_subject(account_to_institution_id(subject_address))
+        fn activate_admin_subject(
+            proposal_id: u64,
+            subject_address: &T::AccountId,
+        ) -> DispatchResult {
+            admins_change::Pallet::<T>::activate_subject_for_proposal(
+                proposal_id,
+                crate::MODULE_TAG,
+                account_to_institution_id(subject_address),
+            )
         }
 
-        pub(crate) fn remove_pending_admin_subject(subject_address: &T::AccountId) {
-            let _ = admins_change::Pallet::<T>::remove_pending_subject(account_to_institution_id(
-                subject_address,
-            ));
+        pub(crate) fn remove_pending_admin_subject(
+            proposal_id: u64,
+            subject_address: &T::AccountId,
+        ) {
+            let _ = admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
+                proposal_id,
+                crate::MODULE_TAG,
+                account_to_institution_id(subject_address),
+            );
         }
 
-        fn close_admin_subject(subject_address: &T::AccountId) -> DispatchResult {
-            admins_change::Pallet::<T>::close_subject(account_to_institution_id(subject_address))
+        fn close_admin_subject(proposal_id: u64, subject_address: &T::AccountId) -> DispatchResult {
+            admins_change::Pallet::<T>::close_subject_for_proposal(
+                proposal_id,
+                crate::MODULE_TAG,
+                account_to_institution_id(subject_address),
+            )
         }
 
         /// 从任意多签账户反查其管理员主体。
@@ -1715,73 +1748,7 @@ pub mod pallet {
                 Error::<T>::InsufficientAmount
             );
 
-            T::Currency::reserve(&who, reserve_total).map_err(|_| Error::<T>::ReserveFailed)?;
-
             let now = frame_system::Pallet::<T>::block_number();
-            Institutions::<T>::insert(
-                &sfid_id,
-                InstitutionInfo {
-                    institution_name: institution_name.clone(),
-                    main_address: main_address.clone(),
-                    fee_address: fee_address.clone(),
-                    admin_count,
-                    threshold,
-                    duoqian_admins: duoqian_admins.clone(),
-                    creator: who.clone(),
-                    created_at: now,
-                    status: InstitutionLifecycleStatus::Pending,
-                    account_count: created_accounts.len() as u32,
-                },
-            );
-
-            for account in created_accounts.iter() {
-                InstitutionAccounts::<T>::insert(
-                    &sfid_id,
-                    &account.account_name,
-                    InstitutionAccountInfo {
-                        address: account.address.clone(),
-                        initial_balance: account.amount,
-                        status: InstitutionLifecycleStatus::Pending,
-                        is_default: account.is_default,
-                        created_at: now,
-                    },
-                );
-                SfidRegisteredAddress::<T>::insert(
-                    &sfid_id,
-                    &account.account_name,
-                    &account.address,
-                );
-                AddressRegisteredSfid::<T>::insert(
-                    &account.address,
-                    RegisteredInstitution {
-                        sfid_id: sfid_id.clone(),
-                        account_name: account.account_name.clone(),
-                    },
-                );
-            }
-
-            Self::create_pending_admin_subject(
-                &main_address,
-                admins_change::AdminSubjectKind::SfidInstitution,
-                &duoqian_admins,
-                threshold,
-                &who,
-            )?;
-
-            // 投票引擎当前按 institution_id 反查管理员。机构模型以主账户作为治理索引，
-            // 但主账户不再代表“唯一机构账户”，只是该机构的默认治理入口。
-            DuoqianAccounts::<T>::insert(
-                &main_address,
-                DuoqianAccount {
-                    admin_count,
-                    threshold,
-                    duoqian_admins: duoqian_admins.clone(),
-                    creator: who.clone(),
-                    created_at: now,
-                    status: DuoqianStatus::Pending,
-                },
-            );
-
             let institution = account_to_institution_id(&main_address);
             let org = voting_engine::internal_vote::ORG_DUOQIAN;
             let action = CreateInstitutionAction {
@@ -1801,16 +1768,93 @@ pub mod pallet {
             let mut data = sp_std::vec::Vec::from(crate::MODULE_TAG);
             data.push(ACTION_CREATE_INSTITUTION);
             data.extend_from_slice(&action.encode());
-            let proposal_id =
-                <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_data(
+            let proposal_id = with_transaction(|| {
+                if T::Currency::reserve(&who, reserve_total).is_err() {
+                    return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
+                }
+                Institutions::<T>::insert(
+                    &sfid_id,
+                    InstitutionInfo {
+                        institution_name: institution_name.clone(),
+                        main_address: main_address.clone(),
+                        fee_address: fee_address.clone(),
+                        admin_count,
+                        threshold,
+                        duoqian_admins: duoqian_admins.clone(),
+                        creator: who.clone(),
+                        created_at: now,
+                        status: InstitutionLifecycleStatus::Pending,
+                        account_count: created_accounts.len() as u32,
+                    },
+                );
+
+                for account in created_accounts.iter() {
+                    InstitutionAccounts::<T>::insert(
+                        &sfid_id,
+                        &account.account_name,
+                        InstitutionAccountInfo {
+                            address: account.address.clone(),
+                            initial_balance: account.amount,
+                            status: InstitutionLifecycleStatus::Pending,
+                            is_default: account.is_default,
+                            created_at: now,
+                        },
+                    );
+                    SfidRegisteredAddress::<T>::insert(
+                        &sfid_id,
+                        &account.account_name,
+                        &account.address,
+                    );
+                    AddressRegisteredSfid::<T>::insert(
+                        &account.address,
+                        RegisteredInstitution {
+                            sfid_id: sfid_id.clone(),
+                            account_name: account.account_name.clone(),
+                        },
+                    );
+                }
+
+                // 投票引擎当前按 institution_id 反查管理员。机构模型以主账户作为治理索引，
+                // 但主账户不再代表“唯一机构账户”，只是该机构的默认治理入口。
+                DuoqianAccounts::<T>::insert(
+                    &main_address,
+                    DuoqianAccount {
+                        admin_count,
+                        threshold,
+                        duoqian_admins: duoqian_admins.clone(),
+                        creator: who.clone(),
+                        created_at: now,
+                        status: DuoqianStatus::Pending,
+                    },
+                );
+
+                // 中文注释：先让投票引擎用显式管理员列表固化快照，再把同一 proposal_id 写入 admins-change Pending 主体。
+                let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
                     who.clone(),
                     org,
                     institution,
+                    duoqian_admins.iter().cloned().collect(),
+                    threshold,
                     crate::MODULE_TAG,
                     data,
-                )?;
-            PendingInstitutionCreate::<T>::insert(proposal_id, &action);
-            UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                };
+                PendingInstitutionCreate::<T>::insert(proposal_id, &action);
+                UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
+                if let Err(err) = Self::create_pending_admin_subject_for_proposal(
+                    proposal_id,
+                    &main_address,
+                    admins_change::AdminSubjectKind::SfidInstitution,
+                    &duoqian_admins,
+                    threshold,
+                    &who,
+                ) {
+                    return TransactionOutcome::Rollback(Err(err));
+                }
+                TransactionOutcome::Commit(Ok(proposal_id))
+            })?;
 
             let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
                 .map(|p| p.end)
@@ -1848,7 +1892,7 @@ pub mod pallet {
                 AddressRegisteredSfid::<T>::remove(&account.address);
             }
             DuoqianAccounts::<T>::remove(&action.main_address);
-            Self::remove_pending_admin_subject(&action.main_address);
+            Self::remove_pending_admin_subject(proposal_id, &action.main_address);
             if emit_event {
                 Self::deposit_event(Event::<T>::InstitutionCreateRejected {
                     proposal_id,
@@ -1917,7 +1961,7 @@ pub mod pallet {
                     account.status = DuoqianStatus::Active;
                 }
             });
-            Self::activate_admin_subject(&action.main_address)?;
+            Self::activate_admin_subject(proposal_id, &action.main_address)?;
             PendingInstitutionCreate::<T>::remove(proposal_id);
 
             Self::deposit_event(Event::<T>::InstitutionCreated {
@@ -1970,7 +2014,7 @@ pub mod pallet {
                     account.status = DuoqianStatus::Active;
                 }
             });
-            Self::activate_admin_subject(&action.duoqian_address)?;
+            Self::activate_admin_subject(proposal_id, &action.duoqian_address)?;
 
             Self::deposit_event(Event::<T>::DuoqianCreated {
                 proposal_id,
@@ -2036,7 +2080,7 @@ pub mod pallet {
             DuoqianAccounts::<T>::remove(&action.duoqian_address);
             // 清理个人多签元数据（机构多签无此条目，remove 为 no-op）。
             PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-            Self::close_admin_subject(&action.duoqian_address)?;
+            Self::close_admin_subject(proposal_id, &action.duoqian_address)?;
             // 清除活跃关闭提案记录。
             PendingCloseProposal::<T>::remove(&action.duoqian_address);
 
@@ -2177,7 +2221,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     ) {
                         DuoqianAccounts::<T>::remove(&action.duoqian_address);
                         PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                        pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
+                        pallet::Pallet::<T>::remove_pending_admin_subject(
+                            proposal_id,
+                            &action.duoqian_address,
+                        );
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::DuoqianCreateRejected {
                                 proposal_id,
@@ -2228,7 +2275,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                 DuoqianAccounts::<T>::remove(&action.duoqian_address);
                 PersonalDuoqianInfo::<T>::remove(&action.duoqian_address);
-                pallet::Pallet::<T>::remove_pending_admin_subject(&action.duoqian_address);
+                pallet::Pallet::<T>::remove_pending_admin_subject(
+                    proposal_id,
+                    &action.duoqian_address,
+                );
             }
             ACTION_CREATE_INSTITUTION => {
                 let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
@@ -2540,7 +2590,7 @@ mod tests {
 
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_DUOQIAN {
-                return voting_engine::internal_vote::governance_org_pass_threshold(org);
+                return voting_engine::internal_vote::fixed_governance_pass_threshold(org);
             }
             admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
         }
@@ -2585,6 +2635,9 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
     }

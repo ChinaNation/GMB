@@ -118,7 +118,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
   - `duoqian-manage`: 17/17
   - `duoqian-transfer`: 20/20
   - **合计 135/135 通过**
-- ✅ 全仓 `grep 'finalize_create\|finalize_transfer\|finalize_safety_fund\|finalize_sweep\|vote_admin_replacement\|vote_destroy\|vote_replace_grandpa_key\|vote_close' citizenchain/runtime/` → 只剩 `runtime_upgrade::finalize_joint_vote` / `resolution_issuance_gov::finalize_joint_vote`(联合投票回调,合理保留)
+- ✅ 全仓 `grep 'finalize_create\|finalize_transfer\|finalize_safety_fund\|finalize_sweep\|vote_admin_replacement\|vote_destroy\|vote_replace_grandpa_key\|vote_close' citizenchain/runtime/` → 空。后续任务已删除 `resolution-issuance` 与 `runtime-upgrade` 的手工 `finalize_joint_vote` extrinsic，仅保留 voting-engine 回调路径。
 - ✅ 全仓 `grep 'TransferVoteIntent\|CreateVoteIntent\|OP_SIGN_(CREATE|TRANSFER|SAFETY_FUND|SWEEP)\|verify_and_cast_votes' citizenchain/` → 空
 - ✅ 全仓 `grep 'cast_internal_vote' citizenchain/runtime/` → 空
 

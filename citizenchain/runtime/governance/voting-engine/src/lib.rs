@@ -183,8 +183,6 @@ pub trait JointVoteEngine<AccountId> {
             "JointVoteEngineObjectStoreNotConfigured",
         ))
     }
-
-    fn cleanup_joint_proposal(_proposal_id: u64) {}
 }
 
 impl<AccountId> JointVoteEngine<AccountId> for () {
@@ -257,6 +255,20 @@ pub trait InternalVoteEngine<AccountId> {
         ))
     }
 
+    fn create_pending_subject_internal_proposal_with_snapshot_data(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _admins: sp_std::vec::Vec<AccountId>,
+        _threshold: u32,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "PendingSubjectSnapshotVoteEngineNotConfigured",
+        ))
+    }
+
     fn create_admin_set_mutation_internal_proposal(
         _who: AccountId,
         _org: u8,
@@ -278,8 +290,6 @@ pub trait InternalVoteEngine<AccountId> {
             "AdminSetMutationVoteEngineNotConfigured",
         ))
     }
-
-    fn cleanup_internal_proposal(_proposal_id: u64) {}
 }
 
 impl<AccountId> InternalVoteEngine<AccountId> for () {
@@ -686,6 +696,15 @@ impl<
 }
 
 /// 中文注释：内部管理员动态提供器（可由其他治理模块提供最新管理员集合）。
+///
+/// 一致性契约：
+/// - `is_internal_admin(org, institution, who) == true` 时，同一链上状态读取到的
+///   `get_admin_list(org, institution)` 必须包含 `who`。
+/// - Pending 版本的 `is_pending_internal_admin` 与 `get_pending_admin_list`
+///   必须满足同样强一致关系。
+///
+/// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
+/// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
     fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId) -> bool;
 
@@ -897,6 +916,14 @@ pub mod pallet {
         #[pallet::constant]
         type MaxCleanupStepsPerBlock: Get<u32>;
 
+        /// 单个延迟清理到期桶最多挂载多少个 proposal_id。
+        #[pallet::constant]
+        type MaxCleanupQueueBucketLimit: Get<u32>;
+
+        /// 延迟清理登记时最多向后顺延多少个区块桶。
+        #[pallet::constant]
+        type MaxCleanupScheduleOffset: Get<u32>;
+
         /// 每个清理步骤最多删除多少条前缀项。
         #[pallet::constant]
         type CleanupKeysPerStep: Get<u32>;
@@ -924,6 +951,10 @@ pub mod pallet {
         /// 单个区块最多处理多少个执行重试超时提案。
         #[pallet::constant]
         type MaxExecutionRetryDeadlinesPerBlock: Get<u32>;
+
+        /// 每块最多处理多少个因 deadline 重排失败进入待处理队列的 retry 提案。
+        #[pallet::constant]
+        type MaxPendingRetryExpirationsPerBlock: Get<u32>;
 
         type SfidEligibility: SfidEligibility<Self::AccountId, Self::Hash>;
         type PopulationSnapshotVerifier: PopulationSnapshotVerifier<
@@ -1125,6 +1156,14 @@ pub mod pallet {
     pub type ProposalExecutionRetryStates<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, ExecutionRetryState<BlockNumberFor<T>>, OptionQuery>;
 
+    /// 执行重试 deadline 重排失败后的待处理队列。
+    ///
+    /// 中文注释：只要提案仍处于 PASSED + retry state，就必须保留一个可观测入口；
+    /// 不能因为 deadline 桶连续满而丢失后续 on_initialize 处理机会。
+    #[pallet::storage]
+    pub type PendingExecutionRetryExpirations<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
+
     /// 执行重试超时队列：retry_deadline → proposal_id 列表。
     #[pallet::storage]
     #[pallet::getter(fn execution_retry_deadlines)]
@@ -1160,7 +1199,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         BlockNumberFor<T>,
-        BoundedVec<u64, ConstU32<50>>,
+        BoundedVec<u64, T::MaxCleanupQueueBucketLimit>,
         ValueQuery,
     >;
 
@@ -1230,6 +1269,11 @@ pub mod pallet {
         },
         /// 中文注释：PASSED 可重试提案超过宽限期，转入执行失败终态。
         ProposalExecutionRetryExpired { proposal_id: u64 },
+        /// retry deadline 无法重新登记到 deadline 桶，已进入待处理重试队列。
+        ProposalExecutionRetryExpirationQueued {
+            proposal_id: u64,
+            retry_deadline: BlockNumberFor<T>,
+        },
         /// 中文注释：管理员取消 PASSED 可重试提案，转入执行失败终态。
         ProposalExecutionCancelled { proposal_id: u64 },
         /// 中文注释：内部投票已投出一票。
@@ -1370,6 +1414,8 @@ pub mod pallet {
                     }
                 }
             }
+
+            weight = weight.saturating_add(Self::process_pending_execution_retry_expirations(n));
 
             weight = weight.saturating_add(Self::process_execution_retry_deadlines(n));
 
@@ -1558,9 +1604,11 @@ pub mod pallet {
                 }
             }
             for proposal_id in retry_ids {
-                proposal_ids
-                    .try_push(proposal_id)
-                    .expect("retry ids come from the drained expiry bucket and must fit");
+                if proposal_ids.try_push(proposal_id).is_err() {
+                    frame_support::defensive!(
+                        "auto_finalize_expiry_bucket: retry id should fit drained expiry bucket"
+                    );
+                }
             }
 
             let has_remaining = !proposal_ids.is_empty();
@@ -1817,11 +1865,14 @@ pub mod pallet {
             let now = frame_system::Pallet::<T>::block_number();
             proposal_cleanup::schedule_cleanup::<T>(proposal_id, now)?;
             ProposalExecutionRetryStates::<T>::remove(proposal_id);
+            PendingExecutionRetryExpirations::<T>::remove(proposal_id);
             if status == STATUS_EXECUTION_FAILED {
                 if let Some(proposal) = Proposals::<T>::get(proposal_id) {
                     // 中文注释：清理登记成功后再通知业务模块释放 pending 锁，
                     // 避免先产生业务侧副作用、再发现链上清理无法登记。
-                    let _ = Self::notify_execution_failed_terminal(proposal_id, proposal.kind);
+                    let _ = Self::with_callback_execution_scope(proposal_id, || {
+                        Self::notify_execution_failed_terminal(proposal_id, proposal.kind)
+                    });
                 }
             }
             if let Some(proposal) = Proposals::<T>::get(proposal_id) {
@@ -1846,18 +1897,26 @@ pub mod pallet {
             })?)
         }
 
-        fn reschedule_execution_retry_deadline(proposal_id: u64, from: BlockNumberFor<T>) -> bool {
+        fn reschedule_execution_retry_deadline(
+            proposal_id: u64,
+            from: BlockNumberFor<T>,
+        ) -> DispatchResult {
             let mut target = from;
             for _ in 0..100u32 {
                 if Self::queue_execution_retry_deadline(proposal_id, target).is_ok() {
-                    return true;
+                    return Ok(());
                 }
                 target = target.saturating_add(BlockNumberFor::<T>::one());
             }
-            frame_support::defensive!(
-                "reschedule_execution_retry_deadline: all retry deadline queues full"
-            );
-            false
+            Err(Error::<T>::TooManyExecutionRetryDeadlines.into())
+        }
+
+        fn queue_pending_retry_expiration(proposal_id: u64, retry_deadline: BlockNumberFor<T>) {
+            PendingExecutionRetryExpirations::<T>::insert(proposal_id, retry_deadline);
+            Self::deposit_event(Event::<T>::ProposalExecutionRetryExpirationQueued {
+                proposal_id,
+                retry_deadline,
+            });
         }
 
         fn finish_terminal_status(proposal_id: u64, status: u8) -> DispatchResult {
@@ -1938,7 +1997,9 @@ pub mod pallet {
                 retry_deadline,
                 last_attempt_at: None,
             };
-            Self::queue_execution_retry_deadline(proposal_id, retry_deadline)?;
+            if Self::reschedule_execution_retry_deadline(proposal_id, retry_deadline).is_err() {
+                Self::queue_pending_retry_expiration(proposal_id, retry_deadline);
+            }
             ProposalExecutionRetryStates::<T>::insert(proposal_id, state);
             Self::deposit_event(Event::<T>::ProposalExecutionRetryScheduled {
                 proposal_id,
@@ -1986,10 +2047,11 @@ pub mod pallet {
                     continue;
                 };
                 if state.retry_deadline > now {
-                    let _ = Self::reschedule_execution_retry_deadline(
-                        proposal_id,
-                        state.retry_deadline,
-                    );
+                    if Self::reschedule_execution_retry_deadline(proposal_id, state.retry_deadline)
+                        .is_err()
+                    {
+                        Self::queue_pending_retry_expiration(proposal_id, state.retry_deadline);
+                    }
                     continue;
                 }
                 let Some(proposal) = Proposals::<T>::get(proposal_id) else {
@@ -2015,7 +2077,72 @@ pub mod pallet {
                 });
                 if result.is_err() {
                     let next_block = now.saturating_add(BlockNumberFor::<T>::one());
-                    let _ = Self::reschedule_execution_retry_deadline(proposal_id, next_block);
+                    if Self::reschedule_execution_retry_deadline(proposal_id, next_block).is_err() {
+                        Self::queue_pending_retry_expiration(proposal_id, state.retry_deadline);
+                    }
+                }
+            }
+            weight
+        }
+
+        fn process_pending_execution_retry_expirations(now: BlockNumberFor<T>) -> Weight {
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads(1);
+            let max = T::MaxPendingRetryExpirationsPerBlock::get() as usize;
+            if max == 0 {
+                return weight;
+            }
+
+            let pending: sp_std::vec::Vec<_> = PendingExecutionRetryExpirations::<T>::iter()
+                .take(max)
+                .collect();
+            for (proposal_id, retry_deadline) in pending {
+                weight = weight.saturating_add(db_weight.reads_writes(3, 4));
+                let Some(state) = ProposalExecutionRetryStates::<T>::get(proposal_id) else {
+                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+                    continue;
+                };
+                if state.retry_deadline > now {
+                    if Self::reschedule_execution_retry_deadline(proposal_id, state.retry_deadline)
+                        .is_ok()
+                    {
+                        PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+                    } else {
+                        PendingExecutionRetryExpirations::<T>::insert(
+                            proposal_id,
+                            state.retry_deadline,
+                        );
+                    }
+                    continue;
+                }
+                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+                    continue;
+                };
+                if proposal.status != STATUS_PASSED {
+                    ProposalExecutionRetryStates::<T>::remove(proposal_id);
+                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+                    continue;
+                }
+
+                let result = with_transaction(|| {
+                    let result = (|| -> DispatchResult {
+                        Self::set_proposal_status(proposal_id, STATUS_EXECUTION_FAILED)?;
+                        Self::deposit_event(Event::<T>::ProposalExecutionRetryExpired {
+                            proposal_id,
+                        });
+                        Self::finish_terminal_status(proposal_id, STATUS_EXECUTION_FAILED)
+                    })();
+                    match result {
+                        Ok(()) => TransactionOutcome::Commit(Ok(())),
+                        Err(err) => TransactionOutcome::Rollback(Err(err)),
+                    }
+                });
+                if result.is_ok() {
+                    PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+                } else {
+                    PendingExecutionRetryExpirations::<T>::insert(proposal_id, retry_deadline);
                 }
             }
             weight
@@ -2043,8 +2170,9 @@ pub mod pallet {
                         Error::<T>::ManualExecutionAttemptsExceeded
                     );
 
-                    let outcome =
-                        Self::invoke_execution_callback(proposal_id, proposal.kind, true)?;
+                    let outcome = Self::with_callback_execution_scope(proposal_id, || {
+                        Self::invoke_execution_callback(proposal_id, proposal.kind, true)
+                    })?;
                     match outcome {
                         ProposalExecutionOutcome::Executed => {
                             Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
@@ -2129,6 +2257,13 @@ pub mod pallet {
         /// 兼容层：旧业务 cancel_xxx extrinsic 必须委托到统一取消状态机。
         pub fn cancel_passed_proposal_for(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
             Self::cancel_passed_proposal_inner(who, proposal_id)
+        }
+
+        /// 查询当前是否处于某个提案的业务回调/终态清理作用域。
+        ///
+        /// 中文注释：业务 pallet 用它保护敏感生命周期写入，避免普通 runtime 调用绕过投票引擎。
+        pub fn is_callback_execution_scope(proposal_id: u64) -> bool {
+            CallbackExecutionScopes::<T>::contains_key(proposal_id)
         }
 
         fn with_callback_execution_scope<F, R>(
@@ -2535,6 +2670,41 @@ pub mod pallet {
             ProposalData::<T>::get(proposal_id).map(|v| v.into_inner())
         }
 
+        /// 判断提案是否由指定业务模块认领。
+        ///
+        /// 中文注释：业务 executor 应优先使用 ProposalOwner 判断归属，ProposalData 只承载
+        /// 业务参数本体，避免再次把 MODULE_TAG 当作数据前缀依赖。
+        pub fn is_proposal_owner(proposal_id: u64, module_tag: &[u8]) -> bool {
+            let Some(owner) = ProposalOwner::<T>::get(proposal_id) else {
+                return false;
+            };
+            match Self::bounded_module_tag(module_tag) {
+                Ok(expected) => owner == expected,
+                Err(_) => false,
+            }
+        }
+
+        /// Benchmark 专用：把提案切入 PASSED + retry 状态，避免跨 pallet 直接改私有结构。
+        #[cfg(feature = "runtime-benchmarks")]
+        pub fn force_retryable_passed_for_benchmark(proposal_id: u64) -> DispatchResult {
+            Proposals::<T>::try_mutate(proposal_id, |maybe| -> DispatchResult {
+                let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                proposal.status = STATUS_PASSED;
+                Ok(())
+            })?;
+            let now = frame_system::Pallet::<T>::block_number();
+            ProposalExecutionRetryStates::<T>::insert(
+                proposal_id,
+                ExecutionRetryState {
+                    manual_attempts: 0,
+                    first_auto_failed_at: now,
+                    retry_deadline: now,
+                    last_attempt_at: None,
+                },
+            );
+            Ok(())
+        }
+
         /// 存储提案大对象（例如 runtime wasm）。
         pub(crate) fn store_proposal_object(
             proposal_id: u64,
@@ -2713,11 +2883,6 @@ impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
             }
         })
     }
-
-    fn cleanup_joint_proposal(_proposal_id: u64) {
-        // 已弃用：清理现在由 set_status_and_emit 在终态转换时自动注册。
-        // 保留空实现以兼容 trait 定义。
-    }
 }
 
 impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
@@ -2784,6 +2949,37 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         })
     }
 
+    fn create_pending_subject_internal_proposal_with_snapshot_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        admins: sp_std::vec::Vec<T::AccountId>,
+        threshold: u32,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_pending_subject_internal_proposal_with_snapshot(
+                    who,
+                    org,
+                    institution,
+                    admins,
+                    threshold,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
     fn create_admin_set_mutation_internal_proposal(
         who: T::AccountId,
         org: u8,
@@ -2817,11 +3013,6 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
                 Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             }
         })
-    }
-
-    fn cleanup_internal_proposal(_proposal_id: u64) {
-        // 清理现在由 set_status_and_emit 在终态转换时自动注册。
-        // 保留空实现以兼容 trait 定义。
     }
 }
 
@@ -2887,6 +3078,8 @@ mod tests {
         type MaxInternalProposalMutexBindings = ConstU32<256>;
         type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<3>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
         type CleanupKeysPerStep = ConstU32<2>;
         type MaxProposalDataLen = ConstU32<4096>;
         type MaxProposalObjectLen = ConstU32<10_240>;
@@ -2894,6 +3087,7 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = TestJointVoteResultCallback;
@@ -3443,7 +3637,10 @@ mod tests {
     /// `TestPopulationSnapshotVerifier` / `TestSfidEligibility` 仅做空字段非空检验,
     /// 真实 sr25519 验签覆盖留 runtime 层。
     fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-        b"liaoning".to_vec().try_into().expect("province should fit")
+        b"liaoning"
+            .to_vec()
+            .try_into()
+            .expect("province should fit")
     }
 
     fn signer_admin_pubkey_ok() -> [u8; 32] {
@@ -3581,10 +3778,40 @@ mod tests {
             .expect("test cleanup bucket should fit capacity")
     }
 
+    fn full_retry_deadline_bucket(seed: u64) -> BoundedVec<u64, ConstU32<128>> {
+        (0..128u64)
+            .map(|index| 2_000_000 + seed.saturating_mul(128) + index)
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("test retry deadline bucket should fit capacity")
+    }
+
     fn fill_cleanup_schedule_window(current_block: u64) {
         let base = current_block.saturating_add(cleanup_retention_blocks());
         for offset in 0..100u64 {
             CleanupQueue::<Test>::insert(base + offset, full_cleanup_bucket(offset));
+        }
+    }
+
+    fn clear_cleanup_schedule_window(current_block: u64) {
+        let base = current_block.saturating_add(cleanup_retention_blocks());
+        for offset in 0..100u64 {
+            CleanupQueue::<Test>::remove(base + offset);
+        }
+    }
+
+    fn fill_retry_deadline_window(from: u64) {
+        for offset in 0..100u64 {
+            ExecutionRetryDeadlines::<Test>::insert(
+                from + offset,
+                full_retry_deadline_bucket(offset),
+            );
+        }
+    }
+
+    fn clear_retry_deadline_window(from: u64) {
+        for offset in 0..100u64 {
+            ExecutionRetryDeadlines::<Test>::remove(from + offset);
         }
     }
 
@@ -4599,7 +4826,7 @@ mod tests {
             assert!(has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
 
             // set_status_and_emit(STATUS_REJECTED) 在 on_initialize(6) 中被调用时
-            // 已自动注册 90 天后清理，无需手动调用 cleanup_joint_proposal。
+            // 已自动注册 90 天后清理，无需业务模块手动清理。
             // cleanup_at = 6 + retention
             let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
             let cleanup_block = 6 + retention;
@@ -4702,7 +4929,7 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_joint_proposal_cleans_used_vote_nonce_after_retention() {
+    fn delayed_cleanup_cleans_used_vote_nonce_after_retention() {
         new_test_ext().execute_with(|| {
             insert_citizen_proposal(0, 10, 100);
             CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
@@ -5253,7 +5480,58 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_joint_proposal_chunks_cleanup_across_blocks() {
+    fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                internal_vote::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+            fill_cleanup_schedule_window(deadline);
+            fill_retry_deadline_window(deadline + 1);
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_some());
+            assert_eq!(
+                PendingExecutionRetryExpirations::<Test>::get(proposal_id),
+                Some(deadline)
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_PASSED
+            );
+
+            clear_cleanup_schedule_window(deadline + 1);
+            clear_retry_deadline_window(deadline + 1);
+            System::set_block_number(deadline + 1);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline + 1);
+
+            assert!(PendingExecutionRetryExpirations::<Test>::get(proposal_id).is_none());
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+        });
+    }
+
+    #[test]
+    fn delayed_cleanup_chunks_cleanup_across_blocks() {
         new_test_ext().execute_with(|| {
             let proposal_id = 42u64;
             let citizen_hashes = [

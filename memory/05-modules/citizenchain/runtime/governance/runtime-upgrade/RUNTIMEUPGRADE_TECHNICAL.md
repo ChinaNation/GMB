@@ -67,8 +67,8 @@ Runtime 配置位置：
 - `WeightInfo = runtime_upgrade::weights::SubstrateWeight<Runtime>`
 
 说明：
-- `finalize_joint_vote` 当前仅允许 `Root` 手工回放；
-- 正常生产路径由投票引擎通过 `JointVoteResultCallback` 自动回调本模块。
+- `finalize_joint_vote` 手工 extrinsic 已删除，call index `1` 保持空缺。
+- 正常生产路径只能由投票引擎通过 `JointVoteResultCallback` 自动回调本模块，避免 Root 手工回放形成第二条执行入口。
 
 ## 3. 核心数据结构
 ### 3.1 ProposalStatus
@@ -110,25 +110,22 @@ Runtime 配置位置：
 5. 不再通过 caller-supplied `MODULE_TAG` 调用投票引擎后续写接口，避免跨模块覆写对象层。
 6. 发出 `RuntimeUpgradeProposed` 事件。
 
-### 5.2 `finalize_joint_vote`（call index = 1）
-说明：
-- 该入口仅作为 `Root` 手工补偿/回放入口。
-- 正常情况下由投票引擎回调 `on_joint_vote_finalized` 进入同一套逻辑。
+### 5.2 call index 1 空缺
+原 `finalize_joint_vote` 手工入口已删除。该位置保持空缺，不再注册任何 extrinsic。
 
-流程：
-1. 校验 `Root`。
-2. 从 `ProposalData` 加载提案摘要；若投票引擎 `Proposals` 存在，则要求其状态与本次回调方向一致（通过为 `STATUS_PASSED`，否决为 `STATUS_REJECTED`）。
-3. 若 `approved=false`：
+Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_joint_vote_finalized` 进入：
+1. 从 `ProposalData` 加载提案摘要；若投票引擎 `Proposals` 存在，则要求其状态与本次回调方向一致（通过为 `STATUS_PASSED`，否决为 `STATUS_REJECTED`）。
+2. 若 `approved=false`：
    - 不改写业务摘要，保持创建时快照
    - 返回 `ProposalExecutionOutcome::Executed`，投票引擎保持 `STATUS_REJECTED`
    - 发出 `JointVoteFinalized`
-4. 若 `approved=true`：
+3. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
    - 成功：回调返回 `ProposalExecutionOutcome::Executed`
    - 失败：回调返回 `ProposalExecutionOutcome::FatalFailed`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
-5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
+4. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
 ### 5.3 `developer_direct_upgrade`（call index = 2）
 说明：
@@ -213,12 +210,11 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
-- `finalize_joint_vote` 拆分为 `approved/rejected` 两条 benchmark
-- `finalize_joint_vote` benchmark 的断言已改为先跳过 `MODULE_TAG` 再解码 `ProposalData`，避免把带标签摘要误当成裸 `Proposal` 解析
-- 由于 benchmark 环境不会真的改写链上 `:code`，`finalize_joint_vote(approved)` 在权重声明中会额外叠加 `frame_system::set_code()` 的系统权重
+- `propose_runtime_upgrade` benchmark 已同步 ADR-008 step3 的 `province` 与 `signer_admin_pubkey` 参数，避免 runtime-benchmarks 聚合编译时继续走旧签名
+- `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `voting-engine` 的联合投票终态回调路径覆盖。
 
-### 7.5 推荐改进
-1. 当前 `finalize_joint_vote` 手工入口使用 `Root`，权限已经足够严格；若后续想与其他模块统一，可评估抽象出专用 `JointVoteFinalizeOrigin`。
+### 7.5 已收口入口
+1. `finalize_joint_vote` 手工 Root 入口已删除，只保留 voting-engine callback。
 
 ## 8. 中文注释覆盖重点
 本模块当前已在以下关键位置补充中文注释：
