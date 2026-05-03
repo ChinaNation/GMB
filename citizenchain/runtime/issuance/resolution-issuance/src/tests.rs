@@ -220,6 +220,9 @@ impl voting_engine::Config for Test {
     type MaxManualExecutionAttempts = ConstU32<3>;
     type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
     type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+    type MaxCleanupQueueBucketLimit = ConstU32<50>;
+    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
     type SfidEligibility = TestSfidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
@@ -349,7 +352,10 @@ fn sig_ok() -> pallet::SnapshotSignatureOf<Test> {
 /// 仅在 `TestPopulationSnapshotVerifier` / `TestJointVoteEngine` 内做空字段非空检验,
 /// 不参与真实 sr25519 验签(真实验签覆盖留 runtime 层测试)。
 fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-    b"liaoning".to_vec().try_into().expect("province should fit")
+    b"liaoning"
+        .to_vec()
+        .try_into()
+        .expect("province should fit")
 }
 
 fn signer_admin_pubkey_ok() -> [u8; 32] {

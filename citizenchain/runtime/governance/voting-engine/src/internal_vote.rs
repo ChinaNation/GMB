@@ -1,6 +1,6 @@
 use frame_support::{
     ensure,
-    pallet_prelude::DispatchResult,
+    pallet_prelude::{BoundedVec, DispatchResult},
     storage::{with_transaction, TransactionOutcome},
 };
 use sp_runtime::traits::{SaturatedConversion, Saturating};
@@ -15,8 +15,8 @@ use primitives::count_const::{
 
 use crate::{
     pallet::{
-        Config, Error, Event, InternalTallies, InternalThresholdSnapshot, InternalVotesByAccount,
-        Pallet, Proposals,
+        AdminSnapshot, Config, Error, Event, InternalTallies, InternalThresholdSnapshot,
+        InternalVotesByAccount, Pallet, Proposals,
     },
     InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
     InternalThresholdProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
@@ -42,11 +42,6 @@ pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
         ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
         _ => None,
     }
-}
-
-/// 兼容旧调用名；语义等同于 `fixed_governance_pass_threshold`。
-pub fn governance_org_pass_threshold(org: u8) -> Option<u32> {
-    fixed_governance_pass_threshold(org)
 }
 
 use crate::nrc_pallet_id_bytes;
@@ -161,6 +156,82 @@ impl<T: Config> Pallet<T> {
         )
     }
 
+    pub(crate) fn do_create_pending_subject_internal_proposal_with_snapshot(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        admins: sp_std::vec::Vec<T::AccountId>,
+        threshold: u32,
+    ) -> Result<u64, sp_runtime::DispatchError> {
+        ensure!(org == ORG_DUOQIAN, Error::<T>::InvalidInternalOrg);
+        ensure!(!admins.is_empty(), Error::<T>::MissingAdminSnapshot);
+        ensure!(
+            admins.iter().any(|admin| admin == &who),
+            Error::<T>::NoPermission
+        );
+        for i in 0..admins.len() {
+            for j in i.saturating_add(1)..admins.len() {
+                ensure!(admins[i] != admins[j], Error::<T>::InvalidInstitution);
+            }
+        }
+        let admin_count = admins.len() as u32;
+        ensure!(
+            threshold > 0 && threshold <= admin_count,
+            Error::<T>::InvalidInternalOrg
+        );
+        let bounded_admins: BoundedVec<T::AccountId, T::MaxAdminsPerInstitution> = admins
+            .try_into()
+            .map_err(|_| Error::<T>::InvalidInstitution)?;
+
+        let now = <frame_system::Pallet<T>>::block_number();
+        let end = now.saturating_add(Self::internal_stage_duration());
+        let proposal = Proposal {
+            kind: PROPOSAL_KIND_INTERNAL,
+            stage: STAGE_INTERNAL,
+            status: crate::STATUS_VOTING,
+            internal_org: Some(org),
+            internal_institution: Some(institution),
+            start: now,
+            end,
+            citizen_eligible_total: 0,
+        };
+
+        with_transaction(|| {
+            let id = match Self::allocate_proposal_id() {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            if let Err(err) =
+                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            if let Err(err) = Self::acquire_internal_proposal_mutex(
+                id,
+                org,
+                institution,
+                InternalProposalMutexKind::Regular,
+            ) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+
+            // 中文注释：Pending 主体尚未写入 admins-change 时，由业务入口提供待注册管理员快照。
+            AdminSnapshot::<T>::insert(id, institution, bounded_admins);
+            InternalThresholdSnapshot::<T>::insert(id, threshold);
+            Proposals::<T>::insert(id, proposal);
+            if let Err(err) = Self::schedule_proposal_expiry(id, end) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            Self::deposit_event(Event::<T>::ProposalCreated {
+                proposal_id: id,
+                kind: PROPOSAL_KIND_INTERNAL,
+                stage: STAGE_INTERNAL,
+                end,
+            });
+            TransactionOutcome::Commit(Ok(id))
+        })
+    }
+
     pub(crate) fn do_create_admin_set_mutation_internal_proposal(
         who: T::AccountId,
         org: u8,
@@ -236,6 +307,12 @@ impl<T: Config> Pallet<T> {
                 Self::snapshot_institution_admins(id, org, institution, pending_subject)
             {
                 return TransactionOutcome::Rollback(Err(err));
+            }
+            if !Self::is_admin_in_snapshot(id, institution, &who) {
+                frame_support::defensive!(
+                    "do_create_internal_proposal: proposer is missing from admin snapshot"
+                );
+                return TransactionOutcome::Rollback(Err(Error::<T>::NoPermission.into()));
             }
             InternalThresholdSnapshot::<T>::insert(id, threshold);
 

@@ -8,7 +8,7 @@
 //! - 提案完成（通过/拒绝/过期）时，调用 `schedule_cleanup` 注册延迟清理
 //! - 清理时间 = 完成时区块 + 90 天区块数
 //! - 每个区块 `on_initialize` 检查 `CleanupQueue[当前区块]`，到期后触发清理
-//! - 单个到期桶最多 50 个提案，全部有界触发进入分块清理状态机
+//! - 单个到期桶容量由 runtime 配置，全部有界触发进入分块清理状态机
 //!
 //! ## 清理执行
 //!
@@ -32,9 +32,6 @@ use sp_runtime::traits::{One, Saturating};
 /// 提案完成后保留天数。
 const RETENTION_DAYS: u32 = 90;
 
-/// 最多向后查找多少个清理桶。
-const MAX_CLEANUP_SCHEDULE_OFFSET: u32 = 100;
-
 /// 计算保留期限对应的区块数。
 fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
     let blocks_per_day: BlockNumberFor<T> = (primitives::pow_const::BLOCKS_PER_DAY as u32).into();
@@ -43,17 +40,18 @@ fn retention_blocks<T: Config>() -> BlockNumberFor<T> {
 }
 
 /// 注册延迟清理：提案完成时调用，90 天后自动清理。
-/// 如果目标区块的队列已满（50 个），自动顺延到下一个区块。
-/// 连续 100 个区块都满时返回错误，调用方必须回滚终态写入。
+/// 如果目标区块的队列已满，自动顺延到下一个区块。
+/// 连续候选区块都满时返回错误，调用方必须回滚终态写入。
 pub fn schedule_cleanup<T: Config>(
     proposal_id: u64,
     current_block: BlockNumberFor<T>,
 ) -> frame_support::pallet_prelude::DispatchResult {
     let base = current_block.saturating_add(retention_blocks::<T>());
     let mut target = base;
+    let max_offset = T::MaxCleanupScheduleOffset::get().max(1);
 
     // 中文注释：只有真实写入 CleanupQueue 后才返回成功，避免终态提案静默失去清理入口。
-    for _ in 0..MAX_CLEANUP_SCHEDULE_OFFSET {
+    for _ in 0..max_offset {
         if pallet::CleanupQueue::<T>::try_mutate(target, |ids| {
             ids.try_push(proposal_id)
                 .map_err(|_| pallet::Error::<T>::CleanupQueueFull)
@@ -70,7 +68,7 @@ pub fn schedule_cleanup<T: Config>(
 
 /// 在 `on_initialize` 中调用。
 /// 检查当前区块是否有到期清理任务，有则触发（注册到 PendingProposalCleanups）。
-/// 单桶容量固定为 50，因此当前桶全部触发，投票明细删除仍由后续状态机分块执行。
+/// 单桶容量由 runtime 配置，因此当前桶全部触发，投票明细删除仍由后续状态机分块执行。
 pub fn process_cleanup_queue<T: Config>(now: BlockNumberFor<T>) -> Weight {
     let db_weight = T::DbWeight::get();
     let mut weight = db_weight.reads(1); // 读取 CleanupQueue[now]

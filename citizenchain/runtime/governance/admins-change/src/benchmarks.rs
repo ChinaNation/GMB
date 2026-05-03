@@ -15,7 +15,6 @@ use codec::Decode;
 use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
-use voting_engine::STATUS_PASSED;
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
@@ -117,21 +116,11 @@ mod benchmarks {
             admins[old_pos] = temp_admin.clone();
         });
 
-        // 中文注释：benchmark 只准备统一重试状态，不再调用 voting-engine 内部状态推进函数。
-        voting_engine::Proposals::<T>::mutate(proposal_id, |maybe| {
-            if let Some(proposal) = maybe {
-                proposal.status = STATUS_PASSED;
-            }
-        });
-        let now = frame_system::Pallet::<T>::block_number();
-        voting_engine::ProposalExecutionRetryStates::<T>::insert(
-            proposal_id,
-            voting_engine::ExecutionRetryState {
-                manual_attempts: 0,
-                first_auto_failed_at: now,
-                retry_deadline: now,
-                last_attempt_at: None,
-            },
+        // 中文注释：benchmark 通过 voting-engine 专用 helper 准备统一重试状态，
+        // 避免跨 pallet 直接依赖投票引擎内部 storage 结构。
+        assert!(
+            voting_engine::Pallet::<T>::force_retryable_passed_for_benchmark(proposal_id).is_ok(),
+            "benchmark retry state should prepare"
         );
 
         // 再还原 old_admin(让 execute 逻辑有合法 old_admin 可查)。

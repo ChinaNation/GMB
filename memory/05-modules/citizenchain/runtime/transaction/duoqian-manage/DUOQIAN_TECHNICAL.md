@@ -46,10 +46,10 @@
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，写入 `admins-change::Institutions` 的 `Pending` 主体。
-- 个人多签创建提案发起时，个人多签地址会写入 `PersonalDuoqian` 类型的 `Pending` 主体。
+- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 voting-engine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
-- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_data`，由 Pending 快照 API 锁定管理员和阈值，并在同一事务中绑定 owner/data/meta。
+- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_snapshot_data`，由显式管理员列表和阈值先锁定投票快照，再在同一事务中调用 `SubjectLifecycle::create_pending_subject_for_proposal` 写 Pending 主体、绑定 owner/data/meta。
 - 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal_with_data`，只接受 Active 主体。
 
 ## 5. 机构创建入口
@@ -102,6 +102,7 @@ propose_create_institution(
 
 - `approved = true`：调用 `execute_create_institution`，激活 `Institutions`、`InstitutionAccounts`、主账户生命周期记录和管理员主体。
 - `approved = false`：调用 `cleanup_pending_institution_create`，释放创建者 reserve，删除机构 pending storage、SFID 地址索引和管理员主体。
+- 管理员主体的激活、拒绝清理、执行失败终态清理和关闭都必须带 `proposal_id` 调用 `admins-change::SubjectLifecycle`，由 admins-change 校验提案 owner、状态和 callback 作用域。
 
 执行成功事件：
 
@@ -134,6 +135,7 @@ runtime 适配：
 
 - 机构级创建通过后激活所有账户，并把 reserve 资金划入对应账户。
 - 机构级创建被拒绝后释放 reserve 并清理索引。
+- 机构级创建提案在提案、Pending 主体、reserve、地址索引任一步失败时整体回滚。
 - 缺少主账户时拒绝。
 - 账户初始余额低于最低金额时拒绝。
 - 批量 SFID 机构注册按 `institution_name + account_names[]` 验签并写入地址索引。
@@ -149,3 +151,4 @@ runtime 适配：
 ## 9. 变更记录
 
 - 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_id`,签名业务字段收口为 `sfid_id / institution_name / account_names[]`。
+- 2026-05-02:创建 Pending 多签主体改为 voting-engine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
