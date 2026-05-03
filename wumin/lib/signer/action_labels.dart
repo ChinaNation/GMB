@@ -25,7 +25,7 @@ const Map<String, String> actionLabels = {
   'propose_transfer': '发起转账提案',
   'propose_safety_fund_transfer': '安全基金转账提案',
   'propose_sweep_to_main': '手续费划转提案',
-  'propose_create': '创建多签账户',
+  // 'propose_create': 已废弃 (2026-05-03),单账户机构创建入口已删除。
   'propose_create_personal': '创建个人多签',
   'propose_create_institution': '创建机构多签账户',
   'propose_close': '关闭多签提案',

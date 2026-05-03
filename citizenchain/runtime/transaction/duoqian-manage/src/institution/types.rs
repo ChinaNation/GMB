@@ -3,6 +3,26 @@ use frame_support::pallet_prelude::DecodeWithMemTracking;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
+/// SFID 机构登记反向索引项：duoqian_address → (sfid_id, account_name)。
+///
+/// 由 `register_sfid_institution` extrinsic 写入,后续创建/查询机构多签时
+/// 用作反向校验。
+#[derive(
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Clone,
+    RuntimeDebug,
+    TypeInfo,
+    MaxEncodedLen,
+    PartialEq,
+    Eq,
+)]
+pub struct RegisteredInstitution<SfidId, AccountName> {
+    pub sfid_id: SfidId,
+    pub account_name: AccountName,
+}
+
 /// 机构及机构账户生命周期。
 #[derive(
     Encode,

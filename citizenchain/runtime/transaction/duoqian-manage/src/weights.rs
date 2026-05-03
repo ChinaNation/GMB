@@ -14,7 +14,7 @@ use frame_support::{
 /// Weight functions for `duoqian_manage`.
 pub trait WeightInfo {
 	fn register_sfid_institution() -> Weight;
-	fn propose_create() -> Weight;
+	fn propose_create_institution() -> Weight;
 	fn propose_create_personal() -> Weight;
 	/// `n` = 聚合的签名数量(= 管理员投票数)。
 	fn propose_close() -> Weight;
@@ -29,7 +29,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(3))
 			.saturating_add(T::DbWeight::get().writes(2))
 	}
-	fn propose_create() -> Weight {
+	fn propose_create_institution() -> Weight {
 		Weight::from_parts(80_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(T::DbWeight::get().reads(8))
@@ -62,7 +62,7 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(3))
 			.saturating_add(RocksDbWeight::get().writes(2))
 	}
-	fn propose_create() -> Weight {
+	fn propose_create_institution() -> Weight {
 		Weight::from_parts(80_000_000, 0)
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(8))

@@ -93,8 +93,9 @@ class PalletRegistry {
   static const int developerDirectUpgradeCall = 2;
 
   // ---- DuoqianManage (17) ----
+  // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 物理删除,
+  // 留洞不复用。机构多签最少 2 账户,统一走 call_index=5。
   static const int duoqianManagePallet = 17;
-  static const int proposeCreateCall = 0;
   static const int proposeCloseCall = 1;
   static const int registerSfidInstitutionCall = 2;
   static const int proposeCreatePersonalCall = 3;

@@ -83,6 +83,8 @@
 
 ## done
 
+- `memory/08-tasks/done/20260503-000000-duoqian-manage-创建路径重构-8项.md`
+- `memory/08-tasks/done/20260502-230000-duoqian-manage-按个人机构子目录拆分.md`
 - `memory/08-tasks/done/20260502-220000-治理-runtime-审计-4-项后续修复.md`
 - `memory/08-tasks/done/20260502-201823-清除治理runtime五项已完成清单.md`
 - `memory/08-tasks/done/20260502-fix-admins-lifecycle-voting-retry-cleanup.md`

@@ -233,6 +233,26 @@ pub trait InternalVoteEngine<AccountId> {
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
+    /// 创建普通内部提案,**显式传 threshold**(不走 InternalThresholdProvider 反查)。
+    ///
+    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 ORG_DUOQIAN 多签,
+    /// 业务规则要求**全员通过**(threshold = admins.len()),不是用户自定义 m-of-n。
+    ///
+    /// admins 仍从 active 主体反查(InternalAdminProvider::get_admin_list),
+    /// 仅 threshold 显式传入。
+    fn create_internal_proposal_with_threshold_and_data(
+        _who: AccountId,
+        _org: u8,
+        _institution: InstitutionPalletId,
+        _threshold: u32,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other(
+            "InternalProposalWithThresholdNotConfigured",
+        ))
+    }
+
     fn create_pending_subject_internal_proposal(
         _who: AccountId,
         _org: u8,
@@ -2894,6 +2914,35 @@ impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
         frame_support::storage::with_transaction(|| {
             let proposal_id =
                 match pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_internal_proposal_with_threshold_and_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        threshold: u32,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_internal_proposal_with_explicit_threshold(
+                    who,
+                    org,
+                    institution,
+                    threshold,
+                ) {
                     Ok(proposal_id) => proposal_id,
                     Err(err) => {
                         return frame_support::storage::TransactionOutcome::Rollback(Err(err))

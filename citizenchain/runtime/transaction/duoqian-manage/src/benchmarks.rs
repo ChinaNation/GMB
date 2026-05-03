@@ -183,50 +183,13 @@ mod benchmarks {
         Ok(())
     }
 
-    #[benchmark]
-    fn propose_create() -> Result<(), BenchmarkError> {
-        let relayer: T::AccountId = frame_benchmarking::account("relayer", 1, 0);
-
-        let (sfid_id, _) = find_safe_sfid::<T>()?;
-        let duoqian_address = register_institution::<T>(&relayer, &sfid_id)?;
-
-        let admin1: T::AccountId = frame_benchmarking::account("admin", 0, 0);
-        let admin2: T::AccountId = frame_benchmarking::account("admin", 1, 0);
-        let admin3: T::AccountId = frame_benchmarking::account("admin", 2, 0);
-
-        let admins: DuoqianAdminsOf<T> = vec![admin1.clone(), admin2.clone(), admin3.clone()]
-            .try_into()
-            .map_err(|_| BenchmarkError::Stop("benchmark admins should fit"))?;
-
-        let amount: BalanceOf<T> = 1_000u128.saturated_into();
-        let funding: BalanceOf<T> = 1_000_000u128.saturated_into();
-        let _ = T::Currency::deposit_creating(&admin1, funding);
-
-        let account_name = bench_account_name::<T>()?;
-
-        #[extrinsic_call]
-        propose_create(
-            RawOrigin::Signed(admin1.clone()),
-            sfid_id,
-            account_name,
-            3,
-            admins,
-            2,
-            amount,
-        );
-
-        assert!(DuoqianAccounts::<T>::contains_key(&duoqian_address));
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
-        Ok(())
-    }
+    // propose_create (call_index=0) benchmark 已废弃 (2026-05-03):
+    // 单账户机构创建入口已删除,机构最少 2 账户走 propose_create_institution。
 
     #[benchmark]
     fn propose_close() -> Result<(), BenchmarkError> {
-        let relayer: T::AccountId = frame_benchmarking::account("relayer", 3, 0);
-
-        let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
-        let _ = register_institution::<T>(&relayer, &sfid_id)?;
-
+        // 用个人多签创建提案准备 setup,关闭逻辑对个人/机构共用,benchmark
+        // 的执行路径相同。
         let admin1: T::AccountId = frame_benchmarking::account("admin", 20, 0);
         let admin2: T::AccountId = frame_benchmarking::account("admin", 21, 0);
 
@@ -238,12 +201,14 @@ mod benchmarks {
         let funding: BalanceOf<T> = 1_000_000u128.saturated_into();
         let _ = T::Currency::deposit_creating(&admin1, funding);
 
-        let account_name = bench_account_name::<T>()?;
+        let account_name: AccountNameOf<T> = b"Benchmark Close"
+            .to_vec()
+            .try_into()
+            .map_err(|_| BenchmarkError::Stop("benchmark account_name should fit"))?;
 
-        // Create 提案 → 推到 PASSED 触发 Executor.execute_create → DuoqianAccounts 激活。
-        assert!(Pallet::<T>::propose_create(
+        // 创建个人多签提案 → 推到 PASSED → Executor 激活 DuoqianAccounts。
+        assert!(Pallet::<T>::propose_create_personal(
             RawOrigin::Signed(admin1.clone()).into(),
-            sfid_id,
             account_name,
             2,
             admins,
@@ -253,6 +218,12 @@ mod benchmarks {
         .is_ok());
         pass_proposal::<T>(0)?;
 
+        // 个人多签地址 = derive_personal_duoqian_address(admin1, account_name)
+        let duoqian_address = Pallet::<T>::derive_personal_duoqian_address(
+            &admin1,
+            b"Benchmark Close",
+        )
+        .map_err(|_| BenchmarkError::Stop("derive personal duoqian address"))?;
         let beneficiary = find_safe_beneficiary::<T>(&duoqian_address)?;
 
         #[extrinsic_call]
