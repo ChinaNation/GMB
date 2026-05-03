@@ -180,9 +180,8 @@ class PayloadDecoder {
       // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
       // ADR-008 step2b/step2d 后凭证带 (province, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.duoqianManagePallet) {
-        if (callIndex == PalletRegistry.proposeCreateCall) {
-          return _decodeProposeCreate(bytes);
-        }
+        // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 废弃,
+        // 机构多签最少 2 账户,统一走 call_index=5 propose_create_institution。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           return _decodeProposeClose(bytes);
         }
@@ -733,70 +732,8 @@ class PayloadDecoder {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // DuoqianManage(17) / propose_create(0)
-  // 格式：[17][0][BoundedVec sfid_id][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeCreate(Uint8List bytes) {
-    if (bytes.length < 10) return null;
-    var offset = 2;
-
-    // sfid_id: BoundedVec<u8>
-    final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
-    offset += sfidLenSize;
-    if (offset + sfidLen > bytes.length) return null;
-    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen),
-        allowMalformed: true);
-    offset += sfidLen;
-
-    // account_name: BoundedVec<u8>
-    final (accountNameLen, accountNameLenSize) =
-        _decodeCompactU32(bytes, offset);
-    offset += accountNameLenSize;
-    if (offset + accountNameLen > bytes.length) return null;
-    final accountName = utf8.decode(
-        bytes.sublist(offset, offset + accountNameLen),
-        allowMalformed: true);
-    offset += accountNameLen;
-
-    // admin_count: u32
-    if (offset + 4 > bytes.length) return null;
-    final adminCount = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
-
-    // admins: BoundedVec<AccountId32> — 跳过
-    final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
-    offset += adminsLenSize;
-    offset += adminsLen * 32;
-    if (offset + 4 + 16 > bytes.length) return null;
-
-    // threshold: u32
-    final threshold = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
-
-    // amount: u128
-    final amountFen = _readU128Le(bytes, offset);
-    final amountYuan = _fenToYuan(amountFen);
-
-    return DecodedPayload(
-      action: 'propose_create',
-      summary:
-          '创建多签账户「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
-      fields: {
-        'sfid_id': sfidId,
-        'account_name': accountName,
-        'admin_count': adminCount.toString(),
-        'threshold': '$threshold/$adminCount',
-        'amount_yuan': '$amountYuan GMB',
-      },
-    );
-  }
+  // _decodeProposeCreate (DuoqianManage / propose_create call=0) 已于
+  // 2026-05-03 废弃: 单账户机构创建入口已删除,机构最少 2 账户走 propose_create_institution。
 
   // ---------------------------------------------------------------------------
   // DuoqianManage(17) / propose_create_institution(5)

@@ -246,6 +246,96 @@ impl<T: Config> Pallet<T> {
         )
     }
 
+    /// 创建普通内部提案,但**显式传 threshold**(不走 `internal_threshold` 反查)。
+    ///
+    /// 用于"主体生命周期"语义的内部提案——业务规则要求全员通过(threshold = admins.len()),
+    /// 而不是用户自定义 m-of-n。admins 仍从 active 主体反查并写入 AdminSnapshot。
+    ///
+    /// 业务方在 ORG_DUOQIAN 的关闭场景调用,传 `subject.admins.len() as u32`。
+    pub(crate) fn do_create_internal_proposal_with_explicit_threshold(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        threshold: u32,
+    ) -> Result<u64, sp_runtime::DispatchError> {
+        ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
+        ensure!(
+            is_valid_internal_institution::<T>(org, institution, false),
+            Error::<T>::InvalidInstitution
+        );
+        ensure!(
+            is_internal_admin::<T>(org, institution, &who, false),
+            Error::<T>::NoPermission
+        );
+        ensure!(threshold > 0, Error::<T>::InvalidInternalOrg);
+
+        let now = <frame_system::Pallet<T>>::block_number();
+        let end = now.saturating_add(Self::internal_stage_duration());
+
+        let proposal = Proposal {
+            kind: PROPOSAL_KIND_INTERNAL,
+            stage: STAGE_INTERNAL,
+            status: crate::STATUS_VOTING,
+            internal_org: Some(org),
+            internal_institution: Some(institution),
+            start: now,
+            end,
+            citizen_eligible_total: 0,
+        };
+
+        with_transaction(|| {
+            let id = match Self::allocate_proposal_id() {
+                Ok(id) => id,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+
+            if let Err(err) =
+                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+            {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            if let Err(err) = Self::acquire_internal_proposal_mutex(
+                id,
+                org,
+                institution,
+                InternalProposalMutexKind::Regular,
+            ) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+
+            if let Err(err) = Self::snapshot_institution_admins(id, org, institution, false) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            if !Self::is_admin_in_snapshot(id, institution, &who) {
+                frame_support::defensive!(
+                    "do_create_internal_proposal_with_explicit_threshold: proposer is missing from admin snapshot"
+                );
+                return TransactionOutcome::Rollback(Err(Error::<T>::NoPermission.into()));
+            }
+            // 中文注释:校验 threshold 不超过快照管理员数量。
+            let snapshot_size =
+                AdminSnapshot::<T>::get(id, institution).map(|admins| admins.len() as u32);
+            if let Some(size) = snapshot_size {
+                if threshold > size {
+                    return TransactionOutcome::Rollback(Err(Error::<T>::InvalidInternalOrg.into()));
+                }
+            }
+            InternalThresholdSnapshot::<T>::insert(id, threshold);
+
+            Proposals::<T>::insert(id, proposal);
+            if let Err(err) = Self::schedule_proposal_expiry(id, end) {
+                return TransactionOutcome::Rollback(Err(err));
+            }
+            Self::deposit_event(Event::<T>::ProposalCreated {
+                proposal_id: id,
+                kind: PROPOSAL_KIND_INTERNAL,
+                stage: STAGE_INTERNAL,
+                end,
+            });
+            TransactionOutcome::Commit(Ok(id))
+        })
+    }
+
     fn do_create_internal_proposal_with_subject_status(
         who: T::AccountId,
         org: u8,
