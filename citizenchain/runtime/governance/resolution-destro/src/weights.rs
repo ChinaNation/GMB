@@ -49,7 +49,6 @@ use frame_support::{
 /// Weight functions for `resolution_destro`.
 pub trait WeightInfo {
 	fn propose_destroy() -> Weight;
-	fn execute_destroy() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
@@ -78,32 +77,6 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(4))
 			.saturating_add(T::DbWeight::get().writes(6))
 	}
-	/// Storage: `ResolutionDestro::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestro::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1 w:1)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestro::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngine::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngine::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestro::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestro::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn execute_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `818`
-		//  Estimated: `3593`
-		// Minimum execution time: 71_804_000 picoseconds.
-		Weight::from_parts(73_547_000, 0)
-			.saturating_add(Weight::from_parts(0, 3593))
-			.saturating_add(T::DbWeight::get().reads(4))
-			.saturating_add(T::DbWeight::get().writes(8))
-	}
 }
 
 impl WeightInfo for () {
@@ -130,31 +103,5 @@ impl WeightInfo for () {
 			.saturating_add(Weight::from_parts(0, 19871))
 			.saturating_add(RocksDbWeight::get().reads(4))
 			.saturating_add(RocksDbWeight::get().writes(6))
-	}
-	/// Storage: `ResolutionDestro::ProposalActions` (r:1 w:1)
-	/// Proof: `ResolutionDestro::ProposalActions` (`max_values`: None, `max_size`: Some(88), added: 2563, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::Proposals` (r:1 w:1)
-	/// Proof: `VotingEngine::Proposals` (`max_values`: None, `max_size`: Some(94), added: 2569, mode: `MaxEncodedLen`)
-	/// Storage: `System::Account` (r:1 w:1)
-	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ActiveProposalByInstitution` (r:1 w:1)
-	/// Proof: `ResolutionDestro::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::PendingProposalCleanups` (r:0 w:1)
-	/// Proof: `VotingEngine::PendingProposalCleanups` (`max_values`: None, `max_size`: Some(25), added: 2500, mode: `MaxEncodedLen`)
-	/// Storage: `VotingEngine::InternalTallies` (r:0 w:1)
-	/// Proof: `VotingEngine::InternalTallies` (`max_values`: None, `max_size`: Some(32), added: 2507, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ProposalPassedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestro::ProposalPassedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	/// Storage: `ResolutionDestro::ProposalCreatedAt` (r:0 w:1)
-	/// Proof: `ResolutionDestro::ProposalCreatedAt` (`max_values`: None, `max_size`: Some(28), added: 2503, mode: `MaxEncodedLen`)
-	fn execute_destroy() -> Weight {
-		// Proof Size summary in bytes:
-		//  Measured:  `818`
-		//  Estimated: `3593`
-		// Minimum execution time: 71_804_000 picoseconds.
-		Weight::from_parts(73_547_000, 0)
-			.saturating_add(Weight::from_parts(0, 3593))
-			.saturating_add(RocksDbWeight::get().reads(4))
-			.saturating_add(RocksDbWeight::get().writes(8))
 	}
 }

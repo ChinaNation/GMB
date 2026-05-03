@@ -84,13 +84,13 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 - `with_transaction` 回滚所有状态变更
 - 触发 SafetyFundExecutionFailed 事件
 - 提案保持 `STATUS_PASSED` 并进入 voting-engine retry state
-- 快照管理员可通过 `execute_safety_fund_transfer` 或 `VotingEngine::retry_passed_proposal` 手动重试
+- 快照管理员通过 `VotingEngine::retry_passed_proposal` 手动重试（`execute_safety_fund_transfer` 已于 2026-05-02 废弃）
 - 3 次手动失败或超过 `ExecutionRetryGraceBlocks` 后，投票引擎统一转 `STATUS_EXECUTION_FAILED`
 
 ## 源码位置
 
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
   - `propose_safety_fund_transfer`(call_index=1)
-  - `execute_safety_fund_transfer`(call_index=4，兼容重试入口)
+  - (call_index=4 已废弃 2026-05-02): 原 `execute_safety_fund_transfer` 已统一到 `VotingEngine::retry_passed_proposal`
   - `try_execute_safety_fund_from_callback`(内部方法)
 - `citizenchain/runtime/primitives/china/china_cb.rs` - NRC_ANQUAN_ADDRESS 定义

@@ -565,37 +565,9 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 快照管理员触发"已通过转账提案"的执行(自动执行失败后的补救重试)。
-        ///
-        /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
-        /// 通过后由本模块的 `InternalVoteExecutor` 自动触发 `try_execute_transfer`。
-        /// 执行失败会发 `TransferExecutionFailed` 事件且保留 PASSED 状态,
-        /// 本 call 委托 voting-engine 统一校验管理员权限、重试次数和截止区块。
-        #[pallet::call_index(3)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
-        pub fn execute_transfer(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
-
-        /// 快照管理员触发"已通过安全基金提案"的执行。
-        #[pallet::call_index(4)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
-        pub fn execute_safety_fund_transfer(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
-
-        /// 快照管理员触发"已通过手续费划转提案"的执行。
-        #[pallet::call_index(5)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(6, 6))]
-        pub fn execute_sweep_to_main(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
+        // call_index = 3, 4, 5 已废弃: execute_transfer /
+        // execute_safety_fund_transfer / execute_sweep_to_main 已统一到
+        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎入口。
     }
 
     impl<T: Config> Pallet<T> {
@@ -2079,7 +2051,7 @@ mod tests {
             // 补充余额后手动执行
             let _ = Balances::deposit_creating(&inst_account, 9_000);
             assert_eq!(Balances::free_balance(&inst_account), 10_000);
-            assert_ok!(DuoqianTransfer::execute_transfer(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -2107,7 +2079,7 @@ mod tests {
 
             // 提案仍在投票中，不能手动执行
             assert_noop!(
-                DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::Error::<Test>::ProposalNotRetryable
             );
         });
@@ -2161,7 +2133,7 @@ mod tests {
 
             // 统一重试入口只允许快照管理员手动重试。
             assert_noop!(
-                DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(outsider), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(outsider), pid),
                 voting_engine::Error::<Test>::NoPermission
             );
             assert_eq!(Balances::free_balance(&dest), 0);
@@ -2208,7 +2180,7 @@ mod tests {
 
             // 再次调用 execute_transfer 应被拒绝
             assert_noop!(
-                DuoqianTransfer::execute_transfer(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::Error::<Test>::ProposalNotRetryable
             );
         });

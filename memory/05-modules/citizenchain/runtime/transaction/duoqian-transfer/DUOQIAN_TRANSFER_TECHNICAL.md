@@ -9,7 +9,7 @@
 - 投票通过后由 `InternalVoteExecutor` 自动执行。
 - 自动执行成功返回 `ProposalExecutionOutcome::Executed`，投票引擎转 `STATUS_EXECUTED`。
 - 自动执行失败返回 `ProposalExecutionOutcome::RetryableFailed`，提案保持 `STATUS_PASSED` 并进入统一 retry state。
-- 手动重试入口保留为兼容 call，但内部委托 `VotingEngine::retry_passed_proposal_for`，由投票引擎统一校验快照管理员权限、最多 3 次手动失败和 retry deadline。
+- **统一入口（2026-05-02 整改）**：execute_xxx wrapper extrinsic 已物理删除。前端直接调用 `VotingEngine::retry_passed_proposal(proposal_id)`，由投票引擎统一校验快照管理员权限、最多 3 次手动失败和 retry deadline。
 
 ### 入口对照
 
@@ -18,9 +18,9 @@
 | 0 | `propose_transfer` | 发起普通机构转账提案 |
 | 1 | `propose_safety_fund_transfer` | 发起安全基金转账提案 |
 | 2 | `propose_sweep_to_main` | 发起费用账户划转主账户提案 |
-| 3 | `execute_transfer` | 兼容手动重试入口，委托 voting-engine |
-| 4 | `execute_safety_fund_transfer` | 兼容手动重试入口，委托 voting-engine |
-| 5 | `execute_sweep_to_main` | 兼容手动重试入口，委托 voting-engine |
+| 3 | (已废弃 2026-05-02) | 原 `execute_transfer` 已统一到 `VotingEngine::retry_passed_proposal` |
+| 4 | (已废弃 2026-05-02) | 原 `execute_safety_fund_transfer` 已统一到 `VotingEngine::retry_passed_proposal` |
+| 5 | (已废弃 2026-05-02) | 原 `execute_sweep_to_main` 已统一到 `VotingEngine::retry_passed_proposal` |
 
 ## 0. 功能需求
 
@@ -135,28 +135,14 @@ VotingEngine::internal_vote(origin, proposal_id, approve)
 
 投票引擎根据提案创建时的管理员快照和阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
 
-### 2.3 execute_transfer — 手动执行已通过的转账提案
+### 2.3 已废弃: execute_transfer / execute_safety_fund_transfer / execute_sweep_to_main
 
-```rust
-pub fn execute_transfer(
-    origin: OriginFor<T>,
-    proposal_id: u64,
-) -> DispatchResult
-```
+2026-05-02 unified voting entry 整改后，本 pallet 的所有 `execute_xxx` wrapper extrinsic 物理删除。前端必须直接调用 voting-engine 公开 extrinsic：
 
-**用途：** 当投票通过后自动执行失败（如余额不足），可在补充余额后通过此接口重试。
+- 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`
+- 取消失败提案: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`
 
-**校验规则：**
-
-1. `origin` 必须是 `signed` 且为提案快照管理员。
-2. `proposal_id` 必须存在，状态必须为 `STATUS_PASSED`。
-3. 提案必须存在 retry state，未超过 `ExecutionRetryGraceBlocks`。
-4. 手动失败次数必须小于 `MaxManualExecutionAttempts`。
-5. 提案数据（`TransferAction`）必须存在且可解码。
-
-**执行逻辑：** 兼容入口直接委托 `VotingEngine::retry_passed_proposal_for`。投票引擎再次调用本模块 callback，执行成功后转 `STATUS_EXECUTED`；失败未满 3 次保持 `STATUS_PASSED`；第 3 次失败转 `STATUS_EXECUTION_FAILED`。
-
-**设计说明：** 手动重试权限、次数和超时统一由投票引擎管理，业务模块不再各自实现重试状态机。
+投票引擎在 `InternalVoteExecutor` 回调阶段会自动调用本 pallet 的 `try_execute_transfer_from_callback` 完成业务执行；手动重试也走相同回调。
 
 ## 3. 存储项
 
@@ -201,7 +187,7 @@ pub enum Event<T: Config> {
         remark: BoundedVec<u8, T::MaxRemarkLen>,
         expires_at: BlockNumberFor<T>,                  // 投票超时区块
     },
-    /// 投票通过但执行失败(可通过 execute_transfer 手动重试)
+    /// 投票通过但执行失败(可通过 VotingEngine::retry_passed_proposal 手动重试)
     TransferExecutionFailed { proposal_id: u64, institution: InstitutionPalletId },
     /// 转账已执行(含手续费分账)
     TransferExecuted {
@@ -256,7 +242,7 @@ pub enum Error<T> {
     ProposalActionNotFound,          // 提案不存在或数据解码失败
     InstitutionAccountDecodeFailed,  // 机构地址解码失败
     InsufficientBalance,             // 余额不足(amount + fee + ED)
-    ProposalNotPassed,               // 提案未通过(execute_transfer 校验)
+    ProposalNotPassed,               // 提案未通过(retry/cancel 校验由 VotingEngine 承担)
     TransferFailed,                  // 转账执行失败
     // safety_fund / sweep 专有
     SafetyFundProposalNotFound, SafetyFundInsufficientBalance, SafetyFundProposalNotPassed,
@@ -320,7 +306,7 @@ pub enum Error<T> {
 ```
 VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
                 ↓ 执行失败
-           保持 PASSED（可通过 execute_transfer 重试）
+           保持 PASSED（可通过 VotingEngine::retry_passed_proposal 重试）
                 ↓ 3 次手动失败或 deadline 到期
            EXECUTION_FAILED（终态）
 ```
@@ -420,13 +406,10 @@ pub trait Config:
 | Extrinsic | 预估 Weight | DB 读 | DB 写 |
 | --- | --- | --- | --- |
 | `propose_transfer` | ~55 ms | 5 | 7 |
-| `execute_transfer`(手动重试) | ~75 ms | 4 | 4 |
 | `propose_safety_fund_transfer` | 待 benchmark | - | - |
 | `propose_sweep_to_main` | 待 benchmark | - | - |
-| `execute_safety_fund_transfer`(手动重试) | 待 benchmark | - | - |
-| `execute_sweep_to_main`(手动重试) | 待 benchmark | - | - |
 
-说明：投票权重由 `voting-engine::internal_vote` 承担；本模块 execute 兼容入口主要是委托投票引擎 retry 并触发业务执行。正式数值需重新跑 benchmark 生成。
+说明：投票权重由 `voting-engine::internal_vote` 承担；手动重试走 `VotingEngine::retry_passed_proposal`，权重由投票引擎统一计入。本模块 2026-05-02 起不再保留 `execute_xxx` wrapper。正式数值需重新跑 benchmark 生成。
 
 ## 12. 文件清单
 

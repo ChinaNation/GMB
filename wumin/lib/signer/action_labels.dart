@@ -5,6 +5,11 @@
 /// Phase 3（2026-04-22）：
 /// - 所有管理员投票统一 action = `internal_vote`，业务 `vote_X` 标签全部删除。
 /// - 联合投票、公民投票、任意人触发的终态执行单独保留。
+///
+/// Phase 4（2026-05-02）：
+/// - 业务 pallet 的 `execute_xxx` / `cancel_failed_xxx` wrapper 全部删除，
+///   统一到 `retry_passed_proposal` / `cancel_passed_proposal`，对应 7 个旧
+///   action label 一并下线。
 const Map<String, String> actionLabels = {
   'transfer': '转账',
 
@@ -13,6 +18,8 @@ const Map<String, String> actionLabels = {
   'joint_vote': '联合投票',
   'citizen_vote': '公民投票',
   'finalize_proposal': '触发提案执行',
+  'retry_passed_proposal': '手动执行已通过提案',
+  'cancel_passed_proposal': '取消已通过但不可执行的提案',
 
   // 业务提案创建（propose_X）
   'propose_transfer': '发起转账提案',
@@ -27,14 +34,10 @@ const Map<String, String> actionLabels = {
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
   'propose_resolution_issuance': '决议发行提案',
 
-  // 业务提案执行重试（execute_X）
-  'execute_transfer': '执行机构转账',
-  'execute_safety_fund_transfer': '执行安全基金转账',
-  'execute_sweep_to_main': '执行手续费划转',
-  'execute_destroy': '执行决议销毁',
-  'execute_admin_replacement': '执行管理员替换',
-  'execute_replace_grandpa_key': '执行 GRANDPA 密钥替换',
-  'cancel_failed_replace_grandpa_key': '取消失败的 GRANDPA 替换',
+  // 业务提案幂等入口
+  // Phase 4(2026-05-02): execute_xxx / cancel_failed_xxx 的 7 个旧 label
+  // 已删除,所有手动重试/取消统一显示为 retry_passed_proposal /
+  // cancel_passed_proposal(在 voting-engine 段已声明)。
   'cleanup_rejected_proposal': '清理被否决提案',
   'register_sfid_institution': '登记 SFID 机构信息',
 
