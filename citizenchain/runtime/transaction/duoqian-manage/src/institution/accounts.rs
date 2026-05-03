@@ -24,8 +24,7 @@ use crate::address::InstitutionAccountRole;
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionAccountsOf, DuoqianAccounts, Error,
-    InstitutionAccountNamesOf, InstitutionInitialAccountsOf, Pallet, SfidIdOf,
-    SfidRegisteredAddress,
+    InstitutionInitialAccountsOf, Pallet, SfidIdOf, SfidRegisteredAddress,
 };
 use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
@@ -45,17 +44,9 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
     Ok(names)
 }
 
-/// 把批量 register 入口的 account_names 抽成验签 payload。
-pub(crate) fn account_names_payload_from_names<T: Config>(
-    account_names: &InstitutionAccountNamesOf<T>,
-) -> Result<Vec<Vec<u8>>, DispatchError> {
-    let mut names: Vec<Vec<u8>> = Vec::with_capacity(account_names.len());
-    for account_name in account_names.iter() {
-        ensure!(!account_name.is_empty(), Error::<T>::EmptyAccountName);
-        names.push(account_name.as_slice().to_vec());
-    }
-    Ok(names)
-}
+// 中文注释:批量 register 入口用的 account_names_payload_from_names 实现保留在
+// lib.rs 内 `Pallet::<T>::account_names_payload_from_names`(register.rs 直接调),
+// 此处不重复。
 
 /// 校验机构初始账户列表合法性,派生地址,返回:
 /// - 固化的 `CreateInstitutionAccountsOf<T>`(已派生完地址)

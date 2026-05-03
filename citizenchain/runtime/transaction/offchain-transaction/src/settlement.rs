@@ -42,10 +42,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 type BalanceOf<T> =
     <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
 
-/// `OFFCHAIN_MIN_FEE_FEN`:单笔最低手续费(分),与 `primitives::core_const::OFFCHAIN_MIN_FEE` 对齐。
-pub const MIN_FEE_FEN: u128 = 1;
-
-/// 计算本笔按收款方清算行费率应收的手续费(分),最低 1 分。
+/// 计算本笔按收款方清算行费率应收的手续费(分),最低取 `primitives::fee_policy::OFFCHAIN_MIN_FEE`。
 fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     let numerator = transfer_amount
         .checked_mul(rate_bp as u128)
@@ -57,7 +54,7 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     } else {
         quotient
     };
-    Ok(core::cmp::max(rounded, MIN_FEE_FEN))
+    Ok(core::cmp::max(rounded, primitives::fee_policy::OFFCHAIN_MIN_FEE))
 }
 
 /// 清算行批次上链的完整执行。

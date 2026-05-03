@@ -14,7 +14,8 @@
 | 文件 | 职责 |
 |------|------|
 | `src/lib.rs` | 模块声明入口 |
-| `src/core_const.rs` | 货币基础参数、手续费模型、利率模型、安全参数 |
+| `src/core_const.rs` | 货币基础参数、利率模型、安全参数、统一签名/派生域 |
+| `src/fee_policy.rs` | **费率规则常量单一权威源**：链上/链下/投票统一价 + 三方分账比例 |
 | `src/pow_const.rs` | PoW 难度、全节点发行、区块时间参数 |
 | `src/citizen_const.rs` | 公民认证发行常量 |
 | `src/count_const.rs` | 投票治理常量（机构数量、投票阈值、期限） |
@@ -69,14 +70,24 @@
 | CITIZEN_ISSUANCE_HIGH_REWARD | 999,900 分 | 前期 9,999 元/节点 |
 | CITIZEN_ISSUANCE_NORMAL_REWARD | 99,900 分 | 后期 999 元/节点 |
 
-### 2.6 交易手续费
+### 2.6 交易手续费(2026-05-03 后单一权威源 = `primitives::fee_policy`)
 | 常量 | 值 | 白皮书对应 |
 |------|-----|-----------|
 | ONCHAIN_FEE_RATE | 0.1% | 链上交易费率 |
 | ONCHAIN_MIN_FEE | 10 分 | 最低 0.1 元 |
-| 全节点分成 | 80% | — |
-| 国储会分成 | 10% | — |
-| 安全���金 | 10% | NRC_ANQUAN_ADDRESS |
+| VOTE_FLAT_FEE | 100 分 | 投票/治理统一价 1 元/次 |
+| OFFCHAIN_FEE_RATE_MIN/MAX | 0.01% / 0.1% | 清算行个体费率上下限 |
+| OFFCHAIN_MIN_FEE | 1 分 | 链下最低 0.01 元 |
+| OPERATIONAL_FEE_MULTIPLIER | 1 | 运营类不额外加价 |
+| ONCHAIN_FEE_FULLNODE_PERCENT | 80% | 铸块全节点分成 |
+| ONCHAIN_FEE_NRC_PERCENT | 10% | 国储会分成 |
+| ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 NRC_ANQUAN_ADDRESS |
+
+**4 类链上 extrinsic 计费规则**(由 `runtime/src/configs/mod.rs::OnchainTxAmountExtractor` 强制):
+- 免费 Free:System / Timestamp / ShengBankInterest / CitizenIssuance / ResolutionIssuance / ResolutionDestro / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / DuoqianManage::register_sfid_institution
+- 投票 Vote(`VOTE_FLAT_FEE = 1 元`):VotingEngine 5 个投票入口 + 业务 pallet propose_X / cleanup_X + SfidSystem 全部 + FullnodeIssuance bind/rebind
+- 链上交易 OnchainTx(`max(amount × 0.1%, 0.1 元)`):Balances 全部转账 + DuoqianManage propose_create_personal/institution/close + DuoqianTransfer 3 个 propose_X + OffchainTransaction deposit/withdraw/submit_offchain_batch_v2
+- 未识别 Unknown:拒绝交易,不入块
 
 ### 2.7 投票治理
 | 常量 | 值 | 说明 |
@@ -118,8 +129,12 @@
 当前覆盖：
 - `citizens_sum_matches_genesis_total` — 43 省人口汇总 = GENESIS_CITIZEN_MAX
 - `stake_sum_matches_population_basis` — 43 省质押 = 人口 × 10,000
-- `fee_percents_sum_to_100` — 链上手续费分成比例总和 = 100
 - `joint_vote_total_matches_threshold` — 联合投票总票数 = 通过阈值
 - `fullnode_total_issuance_is_consistent` — 全节点发行总量 = 区块奖励 × 区块数
 - `genesis_issuance_matches_population` — 创世发行 = 人口 × 10,000
 - `all_china_ch_main_addresses_are_unique` — 43 省 main_address 全部唯一
+- **`fee_policy::onchain_fee_percents_sum_to_100`** — 链上手续费分成比例总和 = 100
+- **`fee_policy::vote_flat_fee_equals_one_yuan`** — 投票统一价 = 1 元 = 100 FEN
+- **`fee_policy::offchain_rate_bounds_consistent`** — 链下费率上下限合法
+- **`fee_policy::min_fees_positive`** — 最低费用 > 0,防零费用攻击
+- **`fee_policy::onchain_rate_positive`** — 链上费率 > 0,防零费率绕过

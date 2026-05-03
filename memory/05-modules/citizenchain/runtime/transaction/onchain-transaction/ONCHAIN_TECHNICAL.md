@@ -121,7 +121,7 @@
 ## 5. 分账路由（OnUnbalanced）
 `OnchainFeeRouter::on_nonzero_unbalanced`：
 
-分账比例（来自 `primitives::core_const`）：
+分账比例（来自 `primitives::fee_policy`，2026-05-03 起单一权威源）：
 - 全节点分成：`ONCHAIN_FEE_FULLNODE_PERCENT`（80%）
 - 国储会手续费账户分成：`ONCHAIN_FEE_NRC_PERCENT`（10%）
 - 安全基金账户分成：`ONCHAIN_FEE_SAFETY_FUND_PERCENT`（10%）

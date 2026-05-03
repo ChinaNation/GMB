@@ -72,19 +72,19 @@ pub mod pallet {
 const EXPECTED_FEE_PERCENT_TOTAL: u32 = 100;
 
 const _: () = {
-    let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
+    let total_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT
+        .saturating_add(primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT)
+        .saturating_add(primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
     assert!(
         total_percent == EXPECTED_FEE_PERCENT_TOTAL,
         "fee distribution percents must sum to 100"
     );
     assert!(
-        primitives::core_const::ONCHAIN_MIN_FEE > 0,
+        primitives::fee_policy::ONCHAIN_MIN_FEE > 0,
         "ONCHAIN_MIN_FEE must be positive"
     );
     assert!(
-        primitives::core_const::ONCHAIN_FEE_RATE.deconstruct() > 0,
+        primitives::fee_policy::ONCHAIN_FEE_RATE.deconstruct() > 0,
         "ONCHAIN_FEE_RATE must be non-zero"
     );
 };
@@ -284,9 +284,9 @@ where
     SafetyFundProvider: SafetyFundAccountProvider<T::AccountId>,
 {
     fn on_nonzero_unbalanced(amount: Credit<T::AccountId, Currency>) {
-        let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT;
-        let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT;
-        let safety_fund_percent = primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT;
+        let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT;
+        let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -428,8 +428,8 @@ where
 /// 公式：`max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)`
 /// 返回值单位为"分"。
 pub fn calculate_onchain_fee(amount: u128) -> u128 {
-    let by_rate = mul_perbill_round(amount, primitives::core_const::ONCHAIN_FEE_RATE);
-    by_rate.max(primitives::core_const::ONCHAIN_MIN_FEE)
+    let by_rate = mul_perbill_round(amount, primitives::fee_policy::ONCHAIN_FEE_RATE);
+    by_rate.max(primitives::fee_policy::ONCHAIN_MIN_FEE)
 }
 
 fn mul_perbill_round(amount: u128, rate: sp_runtime::Perbill) -> u128 {
@@ -686,17 +686,17 @@ mod tests {
     fn onchain_fee_round_and_min_work() {
         let rate = Perbill::from_parts(1_000_000); // 0.1%
                                                    // 1分*0.1%=0.001分 => round=0分，应用最低10分
-        let fee_small = mul_perbill_round(1, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+        let fee_small = mul_perbill_round(1, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
         assert_eq!(fee_small, 10);
 
         // 10000分(100元)*0.1%=10分，刚好最低线
         let fee_boundary =
-            mul_perbill_round(10_000, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+            mul_perbill_round(10_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
         assert_eq!(fee_boundary, 10);
 
         // 50000分(500元)*0.1%=50分，大于最低线按实际收取
         let fee_large =
-            mul_perbill_round(50_000, rate).max(primitives::core_const::ONCHAIN_MIN_FEE);
+            mul_perbill_round(50_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
         assert_eq!(fee_large, 50);
     }
 
@@ -840,10 +840,10 @@ mod tests {
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -896,10 +896,10 @@ mod tests {
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -958,10 +958,10 @@ mod tests {
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1015,10 +1015,10 @@ mod tests {
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 100u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1073,10 +1073,10 @@ mod tests {
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let total_fee = 50u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1146,10 +1146,10 @@ mod tests {
                 .expect("nrc account must exist for resolve failure test");
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let total_fee = 500u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1212,10 +1212,10 @@ mod tests {
             let nrc = MockNrcAccountProvider::nrc_account().expect("nrc account must exist");
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let total_fee = 500u128;
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1290,10 +1290,10 @@ mod tests {
             let safety_fund = AccountId32::new(primitives::china::china_cb::NRC_ANQUAN_ADDRESS);
             let issuance_before = Balances::total_issuance();
             let total_fee = 55u128; // base 50 + tip 5
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
@@ -1407,10 +1407,10 @@ mod tests {
             MOCK_AUTHOR.with(|v| *v.borrow_mut() = Some(miner));
 
             let total_fee = 15u128; // base 10 + tip 5
-            let fullnode_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
-            let nrc_percent = primitives::core_const::ONCHAIN_FEE_NRC_PERCENT as u128;
+            let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
+            let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
             let safety_fund_percent =
-                primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+                primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
             let total_percent = fullnode_percent
                 .saturating_add(nrc_percent)
                 .saturating_add(safety_fund_percent);
