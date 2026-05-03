@@ -60,7 +60,7 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      expect(PalletRegistry.proposeCreateCall, 0);
+      // call_index=0 (proposeCreate 单账户机构) 已于 2026-05-03 废弃,留洞。
       expect(PalletRegistry.proposeCloseCall, 1);
       expect(PalletRegistry.registerSfidInstitutionCall, 2);
       expect(PalletRegistry.proposeCreatePersonalCall, 3);
