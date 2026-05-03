@@ -10,7 +10,7 @@ use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
 // 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
-use crate::sfid::{generate_sfid_code, validate_sfid_id_format, GenerateSfidInput};
+use crate::sfid::validate_sfid_id_format;
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
@@ -155,16 +155,14 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             "institution_name too long (max 30)",
         );
     }
-    // ── 查找已有机构,确定 site_sfid ──
-    // 公安局由 reconcile 预创建,sfid_finalized=false 表示尚未固化;
-    // 首次生成 QR1 时重新生成 sfid_id 并固化,此后永久复用。
-    let (old_sfid_id, already_finalized) = match state.store.read() {
+    // ── 查找已有机构,直接读机构当前 sfid_id,无第二阶段 ──
+    let site_sfid = match state.store.read() {
         Ok(store) => {
             let found = store.multisig_institutions.values().find(|i| {
                 i.province == province && i.city == city && i.institution_code == institution
             });
             match found {
-                Some(inst) => (inst.sfid_id.clone(), inst.sfid_finalized),
+                Some(inst) => inst.sfid_id.clone(),
                 None => {
                     return api_error(
                         StatusCode::NOT_FOUND,
@@ -179,76 +177,6 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
         }
     };
-
-    let site_sfid = if already_finalized {
-        // sfid 已固化,直接复用
-        old_sfid_id.clone()
-    } else {
-        // 首次生成 QR1:生成新 sfid_id 并替换
-        let random_account = Uuid::new_v4().to_string();
-        let new_sfid = match generate_sfid_code(GenerateSfidInput {
-            account_pubkey: random_account.as_str(),
-            a3: "GFR",
-            p1: "0",
-            province: province.as_str(),
-            city: city.as_str(),
-            institution: institution.as_str(),
-        }) {
-            Ok(v) => v,
-            Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
-        };
-        let new_sfid = match validate_sfid_id_format(new_sfid.as_str()) {
-            Ok(v) => v,
-            Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
-        };
-
-        // 替换 legacy store: remove 旧 key → insert 新 key,设 sfid_finalized=true
-        match state.store.write() {
-            Ok(mut store) => {
-                if let Some(mut inst) = store.multisig_institutions.remove(&old_sfid_id) {
-                    inst.sfid_id = new_sfid.clone();
-                    inst.sfid_finalized = true;
-                    store.multisig_institutions.insert(new_sfid.clone(), inst);
-                }
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "store write failed for sfid finalize");
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    "store write failed",
-                );
-            }
-        }
-
-        // 替换 sharded_store 分片
-        let old_key = old_sfid_id.clone();
-        let new_key = new_sfid.clone();
-        let replace_result = state
-            .sharded_store
-            .write_province(&province, move |shard| {
-                if let Some(mut inst) = shard.multisig_institutions.remove(&old_key) {
-                    inst.sfid_id = new_key.clone();
-                    inst.sfid_finalized = true;
-                    shard.multisig_institutions.insert(new_key, inst);
-                }
-                Ok::<(), &str>(())
-            })
-            .await;
-        if let Err(e) = replace_result {
-            tracing::warn!(error = %e, "shard write failed for sfid finalize (legacy already committed)");
-        }
-
-        tracing::info!(
-            old_sfid = %old_sfid_id,
-            new_sfid = %new_sfid,
-            province = %province,
-            city = %city,
-            "sfid_id finalized on first QR1 generation"
-        );
-        new_sfid
-    };
-
     let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
@@ -371,8 +299,8 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         None,
         "SUCCESS",
         format!(
-            "site_sfid={} province={} city={} institution={} province_code={} finalized={}",
-            site_sfid, province, city, institution, province_code, !already_finalized,
+            "site_sfid={} province={} city={} institution={} province_code={}",
+            site_sfid, province, city, institution, province_code,
         ),
     );
     Json(ApiResponse {

@@ -30,7 +30,6 @@ export interface RosterEntry {
 export interface ShengAdminRoster {
   province: string;
   current_admin_pubkey: string;
-  current_slot?: ShengSlot | null;
   entries: RosterEntry[];
 }
 
@@ -41,4 +40,16 @@ export async function getRoster(
 ): Promise<ShengAdminRoster> {
   const qs = province ? `?province=${encodeURIComponent(province)}` : '';
   return adminRequest<ShengAdminRoster>(`/api/v1/admin/sheng-admin/roster${qs}`, auth);
+}
+
+/** POST /api/v1/admin/sheng-admin/backup */
+export async function setBackupAdmin(
+  auth: AdminAuth,
+  input: { slot: Exclude<ShengSlot, 'Main'>; admin_pubkey: string; admin_name: string },
+): Promise<ShengAdminRoster> {
+  return adminRequest<ShengAdminRoster>('/api/v1/admin/sheng-admin/backup', auth, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }

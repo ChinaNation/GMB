@@ -53,7 +53,6 @@ pub(crate) struct AppInstitutionDetail {
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_sfid_id: Option<String>,
-    pub(crate) sfid_finalized: bool,
     pub(crate) chain_status: InstitutionChainStatus,
 }
 
@@ -379,7 +378,6 @@ pub(crate) async fn app_get_institution(
             institution_code: inst.institution_code,
             sub_type: inst.sub_type,
             parent_sfid_id: inst.parent_sfid_id,
-            sfid_finalized: inst.sfid_finalized,
             chain_status: inst.chain_status,
         },
     })

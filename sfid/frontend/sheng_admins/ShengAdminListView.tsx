@@ -38,7 +38,7 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
           { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 180 },
           { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
           {
-            title: '签名密钥状态',
+            title: '签名密钥',
             width: 140,
             align: 'center',
             render: (_v: unknown, row: ShengAdminRow) => {

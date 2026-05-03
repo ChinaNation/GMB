@@ -7,6 +7,7 @@
   - `memory/08-tasks/done/20260502-sfid-institutions粗粒度整合.md`
   - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
   - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
+  - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
 
 ## 当前边界
 
@@ -62,6 +63,8 @@ sfid/backend/
 - `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
 - 省管理员只有“更换省管理员/主备交换”需要链交互时,才允许新增
   `sheng_admins/chain_replace_admin.rs`。
+- 省管理员备用槽的本地姓名/账户保存归 `sheng_admins/roster.rs`,
+  不因为页面新增按钮而创建 `chain_` 文件。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
 - 非源码目录 `db/`、`scripts/`、`tests/`、`target/` 不参与业务模块平铺。
 

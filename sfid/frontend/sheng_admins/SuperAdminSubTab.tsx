@@ -1,15 +1,17 @@
 // 中文注释:注册局-省级管理员页。一主两备名册和本人签名密钥操作统一在这里展示。
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Modal, QRCode, Space, Tag, Typography, message } from 'antd';
+import { Button, Input, Modal, QRCode, Space, Tag, Typography, message } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { serializeQrEnvelope } from '../qr/wuminQr';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { startCameraScanner } from '../utils/cameraScanner';
-import { tryEncodeSs58 } from '../utils/ss58';
+import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
+import { ScanAccountModal } from '../common/ScanAccountModal';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import {
   getRoster,
+  setBackupAdmin,
   type RosterEntry,
   type ShengAdminRoster,
 } from './roster_api';
@@ -31,6 +33,13 @@ type SigningModalState = {
   step: 'show_qr' | 'scan_response';
 };
 
+type AddBackupState = {
+  slot: Exclude<ShengSlot, 'Main'>;
+  adminName: string;
+  adminPubkey: string | null;
+  scanOpen: boolean;
+};
+
 const slotTitle: Record<ShengSlot, string> = {
   Main: '主管理员',
   Backup1: '备用管理员 1',
@@ -45,6 +54,7 @@ export function SuperAdminSubTab({
   const [loading, setLoading] = useState(false);
   const [operationLoading, setOperationLoading] = useState(false);
   const [signingModal, setSigningModal] = useState<SigningModalState | null>(null);
+  const [addBackup, setAddBackup] = useState<AddBackupState | null>(null);
   const [scannerActive, setScannerActive] = useState(false);
   const [scannerReady, setScannerReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -137,23 +147,74 @@ export function SuperAdminSubTab({
 
   const entries = roster?.entries ?? fallbackEntries(selectedShengAdmin);
 
+  const openAddBackup = (slot: Exclude<ShengSlot, 'Main'>) => {
+    setAddBackup({
+      slot,
+      adminName: '',
+      adminPubkey: null,
+      scanOpen: false,
+    });
+  };
+
+  const handleBackupScanResolved = (address: string) => {
+    try {
+      const adminPubkey = decodeSs58(address);
+      setAddBackup((prev) =>
+        prev
+          ? {
+              ...prev,
+              adminPubkey,
+              scanOpen: false,
+            }
+          : prev,
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '账户二维码解析失败');
+    }
+  };
+
+  const submitBackupAdmin = async () => {
+    if (!auth || !addBackup) return;
+    const adminName = addBackup.adminName.trim();
+    if (!adminName) {
+      message.error('请填写管理员姓名');
+      return;
+    }
+    if (!addBackup.adminPubkey) {
+      message.error('请扫码填入管理员账户');
+      return;
+    }
+    setOperationLoading(true);
+    try {
+      const data = await setBackupAdmin(auth, {
+        slot: addBackup.slot,
+        admin_name: adminName,
+        admin_pubkey: addBackup.adminPubkey,
+      });
+      setRoster(data);
+      setAddBackup(null);
+      message.success('备用管理员已新增');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '新增备用管理员失败');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
   return (
     <>
       <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography.Text type="secondary">
-            {roster?.province ?? selectedShengAdmin.province}
-            {roster?.current_slot ? <Tag color="cyan" style={{ marginLeft: 8 }}>当前槽位：{slotTitle[roster.current_slot]}</Tag> : null}
-          </Typography.Text>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
           <Button onClick={() => void reload()} loading={loading}>刷新</Button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
           {entries.map((entry) => (
             <AdminSlotPanel
               key={entry.slot}
               entry={entry}
               loading={operationLoading}
+              onAddBackup={buildAddBackupHandler(entry.slot, openAddBackup)}
               onGenerate={() => void openSigningModal('GENERATE')}
               onReplace={() => void openSigningModal('REPLACE')}
             />
@@ -210,18 +271,79 @@ export function SuperAdminSubTab({
           )
         ) : null}
       </Modal>
+
+      <Modal
+        title={addBackup ? `新增${slotTitle[addBackup.slot]}` : '新增备用管理员'}
+        open={!!addBackup}
+        onCancel={() => setAddBackup(null)}
+        destroyOnClose
+        okText="确认新增"
+        cancelText="取消"
+        confirmLoading={operationLoading}
+        onOk={() => void submitBackupAdmin()}
+      >
+        {addBackup ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <div>
+              <Typography.Text type="secondary">管理员姓名</Typography.Text>
+              <Input
+                value={addBackup.adminName}
+                maxLength={200}
+                placeholder="请输入管理员姓名"
+                onChange={(event) =>
+                  setAddBackup((prev) =>
+                    prev ? { ...prev, adminName: event.target.value } : prev,
+                  )
+                }
+              />
+            </div>
+            <div>
+              <Typography.Text type="secondary">账户</Typography.Text>
+              <div style={{ display: 'grid', gap: 8, marginTop: 6 }}>
+                <Typography.Text code style={{ wordBreak: 'break-all' }}>
+                  {addBackup.adminPubkey ? tryEncodeSs58(addBackup.adminPubkey) : '请扫码填入'}
+                </Typography.Text>
+                <Button type="primary" onClick={() => setAddBackup((prev) => (prev ? { ...prev, scanOpen: true } : prev))}>
+                  扫码填入账户
+                </Button>
+              </div>
+            </div>
+          </Space>
+        ) : null}
+      </Modal>
+
+      <ScanAccountModal
+        open={!!addBackup?.scanOpen}
+        onClose={() => setAddBackup((prev) => (prev ? { ...prev, scanOpen: false } : prev))}
+        onResolved={handleBackupScanResolved}
+      />
     </>
   );
+}
+
+function isBackupSlot(slot: ShengSlot): slot is Exclude<ShengSlot, 'Main'> {
+  return slot === 'Backup1' || slot === 'Backup2';
+}
+
+function buildAddBackupHandler(
+  slot: ShengSlot,
+  openAddBackup: (slot: Exclude<ShengSlot, 'Main'>) => void,
+) {
+  if (!isBackupSlot(slot)) return undefined;
+  const backupSlot = slot;
+  return () => openAddBackup(backupSlot);
 }
 
 function AdminSlotPanel({
   entry,
   loading,
+  onAddBackup,
   onGenerate,
   onReplace,
 }: {
   entry: RosterEntry;
   loading: boolean;
+  onAddBackup?: () => void;
   onGenerate: () => void;
   onReplace: () => void;
 }) {
@@ -229,6 +351,7 @@ function AdminSlotPanel({
   const canOperate = !!entry.can_operate_signing && entry.signing_status !== 'UNSET';
   const showGenerate = canOperate && (!entry.signing_pubkey || entry.signing_status === 'NOT_INITIALIZED');
   const showReplace = canOperate && !!entry.signing_pubkey && entry.signing_status !== 'NOT_INITIALIZED';
+  const showAddBackup = entry.slot !== 'Main' && !entry.admin_pubkey && !!entry.can_manage_roster && !!onAddBackup;
 
   return (
     <section style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 14, background: 'rgba(255,255,255,0.72)' }}>
@@ -236,11 +359,14 @@ function AdminSlotPanel({
         <Typography.Text strong>{slotTitle[entry.slot]}</Typography.Text>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '76px 1fr', rowGap: 8, columnGap: 10, alignItems: 'center' }}>
-        <Typography.Text type="secondary">状态</Typography.Text>
+        <Typography.Text type="secondary">管理员姓名</Typography.Text>
+        <Typography.Text>{entry.admin_name?.trim() || '-'}</Typography.Text>
+        <Typography.Text type="secondary">签名密钥</Typography.Text>
         <Space size={8} wrap>
           {status}
           {showGenerate ? <Button size="small" type="primary" loading={loading} onClick={onGenerate}>生成</Button> : null}
           {showReplace ? <Button size="small" loading={loading} onClick={onReplace}>更换</Button> : null}
+          {showAddBackup ? <Button size="small" type="primary" loading={loading} onClick={onAddBackup}>新增</Button> : null}
         </Space>
         <Typography.Text type="secondary">生成时间</Typography.Text>
         <Typography.Text>{entry.signing_created_at ? new Date(entry.signing_created_at).toLocaleString('zh-CN') : '-'}</Typography.Text>

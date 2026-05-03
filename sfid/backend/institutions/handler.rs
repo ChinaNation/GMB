@@ -490,7 +490,6 @@ pub(crate) async fn create_institution(
             institution_code: institution_code.clone(),
             sub_type: validated_sub_type.clone(),
             parent_sfid_id: None, // 两步式:FFR 的所属法人由 update_institution 设置
-            sfid_finalized: true,
             chain_status: InstitutionChainStatus::NotRegistered,
             chain_tx_hash: None,
             chain_block_number: None,

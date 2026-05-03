@@ -100,11 +100,6 @@ pub struct MultisigInstitution {
     /// 非法人机构必须挂在某个法人机构下,全国范围可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_sfid_id: Option<String>,
-    /// sfid_id 是否已通过首次 QR1 生成固化。
-    /// reconcile 批量创建时为 false,首次生成 QR1 时设为 true 并替换 sfid_id,
-    /// 此后永久不变。
-    #[serde(default)]
-    pub sfid_finalized: bool,
     /// 机构链上注册状态。SFID 只记录链上同步结果,不在后台手动注册机构。
     #[serde(default)]
     pub chain_status: InstitutionChainStatus,
