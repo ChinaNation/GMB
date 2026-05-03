@@ -4,7 +4,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
-import 'package:wuminapp_mobile/qr/bodies/user_duoqian_body.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
 import 'package:wuminapp_mobile/user/user_service.dart';
 
@@ -135,13 +134,12 @@ class _QrScanPageState extends State<QrScanPage> {
 
       switch (widget.mode) {
         case QrScanMode.transfer:
-          // 扫码支付:接受 user_transfer / user_contact / user_duoqian / 裸地址
+          // 扫码支付:接受 user_transfer / user_contact / 裸地址
+          // (user_duoqian 协议已于 2026-05-03 下线 — 多签发现走反向索引)
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
           } else if (result.type == QrRouteType.userContact) {
             _handleContactAsRecipient(result);
-          } else if (result.type == QrRouteType.userDuoqian) {
-            _handleDuoqianAsRecipient(result);
           } else if (result.type == QrRouteType.legacyAddress) {
             _handleLegacyAddress(result.extractedAddress!);
           } else {
@@ -207,12 +205,6 @@ class _QrScanPageState extends State<QrScanPage> {
   void _handleContactAsRecipient(QrRouteResult result) {
     if (!mounted) return;
     final body = result.envelope!.body as UserContactBody;
-    Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
-  }
-
-  void _handleDuoqianAsRecipient(QrRouteResult result) {
-    if (!mounted) return;
-    final body = result.envelope!.body as UserDuoqianBody;
     Navigator.of(context).pop(QrScanTransferResult(toAddress: body.address));
   }
 

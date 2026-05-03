@@ -12,9 +12,6 @@ enum QrRouteType {
   /// 用户码 - 收款码(user_transfer)
   userTransfer,
 
-  /// 用户码 - 多签账户(user_duoqian)
-  userDuoqian,
-
   /// 交易签名请求(sign_request)
   signRequest,
 
@@ -76,7 +73,6 @@ class QrRouter {
           QrKind.signResponse => QrRouteType.signResponse,
           QrKind.userContact => QrRouteType.userContact,
           QrKind.userTransfer => QrRouteType.userTransfer,
-          QrKind.userDuoqian => QrRouteType.userDuoqian,
         };
         return QrRouteResult(type: type, raw: raw, envelope: env);
       } on FormatException {

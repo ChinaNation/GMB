@@ -218,10 +218,10 @@ class _InstitutionDuoqianCreatePageState
     );
     if (result == null || !mounted) return;
 
-    // 解析 WUMIN_QR_V1 user_contact 或 user_duoqian
+    // 解析 WUMIN_QR_V1 user_contact(user_duoqian 已于 2026-05-03 下线 → 多签发现走反向索引)
     try {
       final env = QrEnvelope.parse(result.trim());
-      if (env.kind == QrKind.userContact || env.kind == QrKind.userDuoqian) {
+      if (env.kind == QrKind.userContact) {
         final address = (env.body as dynamic).address?.toString() ?? '';
         if (address.isEmpty) throw const FormatException('缺少 address 字段');
         final pubkey = Keyring().decodeAddress(address);

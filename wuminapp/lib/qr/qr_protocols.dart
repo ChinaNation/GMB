@@ -18,8 +18,7 @@ enum QrKind {
   signRequest('sign_request', temporary: true),
   signResponse('sign_response', temporary: true),
   userContact('user_contact', temporary: false),
-  userTransfer('user_transfer', temporary: true),
-  userDuoqian('user_duoqian', temporary: false);
+  userTransfer('user_transfer', temporary: true);
 
   const QrKind(this.wire, {required this.temporary});
 

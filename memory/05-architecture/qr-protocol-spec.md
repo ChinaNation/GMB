@@ -51,7 +51,8 @@
 | `sign_response` | 临时 | wumin | wuminapp | 离线签名回执 |
 | `user_contact` | **固定** | wuminapp | wuminapp / citizenchain / sfid 前端 | 个人联系码 |
 | `user_transfer` | 临时 | wuminapp | wuminapp / citizenchain | 临时收款码 |
-| `user_duoqian` | **固定** | wuminapp | wuminapp | 多签账户码 |
+
+> 注:`user_duoqian` 协议已于 **2026-05-03 下线** — wuminapp 改为通过链上反向索引(遍历 `AdminsChange::Institutions` 过滤本钱包持有的 admin 账户)自动发现多签,不再需要手动扫码加入。
 
 ## 4. body 字段字典(按 kind 派发)
 
@@ -193,27 +194,17 @@
 | `memo` | string | 是 | 备注,允许空串 |
 | `bank` | string | 是 | 清算省储行标识,允许空串 |
 
-### 4.7 `user_duoqian`(**固定**,无时效)
+### 4.7 `user_duoqian` — **已下线**(2026-05-03)
 
-```jsonc
-{
-  "proto": "WUMIN_QR_V1",
-  "kind":  "user_duoqian",
-  "body": {
-    "address":     "<多签 SS58>",
-    "name":        "<多签账户名>",
-    "proposal_id": 0
-  }
-}
-```
+原本用于创建者把多签信息分享给其他 admin 扫码加入本地列表。**已被链上反向索引完全替代**:wuminapp 启动期遍历 `AdminsChange::Institutions`,自动发现本钱包账户作为 admin 的所有多签(个人 + SFID 机构),无需 QR 协议。
 
-**注意顶层无 `id` / `issued_at` / `expires_at`**。
-
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `address` | string | 是 | 多签账户 SS58 地址 |
-| `name` | string | 是 | 多签账户名 |
-| `proposal_id` | int | 是 | 关联提案 ID,`0` 表示无 |
+相关代码下线清单:
+- `lib/qr/bodies/user_duoqian_body.dart` — 删除整文件
+- `lib/duoqian/shared/duoqian_qr_sheet.dart` — 删除整文件
+- `lib/qr/qr_protocols.dart::QrKind.userDuoqian` — 枚举值删除
+- `lib/qr/envelope.dart::QrKind.userDuoqian` 解析分支 — 删除
+- `lib/qr/qr_router.dart::QrRouteType.userDuoqian` — 枚举值删除
+- `memory/05-architecture/qr-protocol-fixtures/user_duoqian.json` — 删除
 
 ## 5. 签名原文拼接(统一函数)
 
@@ -305,8 +296,9 @@ memory/05-architecture/qr-protocol-fixtures/sign_request.json
 memory/05-architecture/qr-protocol-fixtures/sign_response.json
 memory/05-architecture/qr-protocol-fixtures/user_contact.json
 memory/05-architecture/qr-protocol-fixtures/user_transfer.json
-memory/05-architecture/qr-protocol-fixtures/user_duoqian.json
 ```
+
+> 注:`user_duoqian.json` 已于 2026-05-03 删除(协议下线,改走链上反向索引)。
 
 ## 10. 修改规范的流程
 

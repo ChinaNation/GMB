@@ -7072,13 +7072,23 @@ const PersonalDuoqianEntitySchema = CollectionSchema(
       name: r'creatorAddress',
       type: IsarType.string,
     ),
-    r'duoqianAddress': PropertySchema(
+    r'discoveredViaAdmin': PropertySchema(
       id: 2,
+      name: r'discoveredViaAdmin',
+      type: IsarType.bool,
+    ),
+    r'duoqianAddress': PropertySchema(
+      id: 3,
       name: r'duoqianAddress',
       type: IsarType.string,
     ),
+    r'matchedAdminPubkeys': PropertySchema(
+      id: 4,
+      name: r'matchedAdminPubkeys',
+      type: IsarType.stringList,
+    ),
     r'name': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'name',
       type: IsarType.string,
     )
@@ -7114,6 +7124,19 @@ const PersonalDuoqianEntitySchema = CollectionSchema(
           caseSensitive: false,
         )
       ],
+    ),
+    r'discoveredViaAdmin': IndexSchema(
+      id: 7499132730782160372,
+      name: r'discoveredViaAdmin',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'discoveredViaAdmin',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
     )
   },
   links: {},
@@ -7132,6 +7155,13 @@ int _personalDuoqianEntityEstimateSize(
   var bytesCount = offsets.last;
   bytesCount += 3 + object.creatorAddress.length * 3;
   bytesCount += 3 + object.duoqianAddress.length * 3;
+  bytesCount += 3 + object.matchedAdminPubkeys.length * 3;
+  {
+    for (var i = 0; i < object.matchedAdminPubkeys.length; i++) {
+      final value = object.matchedAdminPubkeys[i];
+      bytesCount += value.length * 3;
+    }
+  }
   bytesCount += 3 + object.name.length * 3;
   return bytesCount;
 }
@@ -7144,8 +7174,10 @@ void _personalDuoqianEntitySerialize(
 ) {
   writer.writeLong(offsets[0], object.addedAtMillis);
   writer.writeString(offsets[1], object.creatorAddress);
-  writer.writeString(offsets[2], object.duoqianAddress);
-  writer.writeString(offsets[3], object.name);
+  writer.writeBool(offsets[2], object.discoveredViaAdmin);
+  writer.writeString(offsets[3], object.duoqianAddress);
+  writer.writeStringList(offsets[4], object.matchedAdminPubkeys);
+  writer.writeString(offsets[5], object.name);
 }
 
 PersonalDuoqianEntity _personalDuoqianEntityDeserialize(
@@ -7157,9 +7189,11 @@ PersonalDuoqianEntity _personalDuoqianEntityDeserialize(
   final object = PersonalDuoqianEntity();
   object.addedAtMillis = reader.readLong(offsets[0]);
   object.creatorAddress = reader.readString(offsets[1]);
-  object.duoqianAddress = reader.readString(offsets[2]);
+  object.discoveredViaAdmin = reader.readBool(offsets[2]);
+  object.duoqianAddress = reader.readString(offsets[3]);
   object.id = id;
-  object.name = reader.readString(offsets[3]);
+  object.matchedAdminPubkeys = reader.readStringList(offsets[4]) ?? [];
+  object.name = reader.readString(offsets[5]);
   return object;
 }
 
@@ -7175,8 +7209,12 @@ P _personalDuoqianEntityDeserializeProp<P>(
     case 1:
       return (reader.readString(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 3:
+      return (reader.readString(offset)) as P;
+    case 4:
+      return (reader.readStringList(offset) ?? []) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -7270,6 +7308,15 @@ extension PersonalDuoqianEntityQueryWhereSort
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'addedAtMillis'),
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhere>
+      anyDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'discoveredViaAdmin'),
       );
     });
   }
@@ -7482,6 +7529,51 @@ extension PersonalDuoqianEntityQueryWhere on QueryBuilder<PersonalDuoqianEntity,
       ));
     });
   }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      discoveredViaAdminEqualTo(bool discoveredViaAdmin) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'discoveredViaAdmin',
+        value: [discoveredViaAdmin],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterWhereClause>
+      discoveredViaAdminNotEqualTo(bool discoveredViaAdmin) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [],
+              upper: [discoveredViaAdmin],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [discoveredViaAdmin],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [discoveredViaAdmin],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [],
+              upper: [discoveredViaAdmin],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
 }
 
 extension PersonalDuoqianEntityQueryFilter on QueryBuilder<
@@ -7681,6 +7773,16 @@ extension PersonalDuoqianEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> discoveredViaAdminEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'discoveredViaAdmin',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
       QAfterFilterCondition> duoqianAddressEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -7875,6 +7977,235 @@ extension PersonalDuoqianEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'matchedAdminPubkeys',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      matchedAdminPubkeysElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+          QAfterFilterCondition>
+      matchedAdminPubkeysElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'matchedAdminPubkeys',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'matchedAdminPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'matchedAdminPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity,
       QAfterFilterCondition> nameEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -8050,6 +8381,20 @@ extension PersonalDuoqianEntityQuerySortBy
   }
 
   QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      sortByDiscoveredViaAdminDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
       sortByDuoqianAddress() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.asc);
@@ -8105,6 +8450,20 @@ extension PersonalDuoqianEntityQuerySortThenBy
       thenByCreatorAddressDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'creatorAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QAfterSortBy>
+      thenByDiscoveredViaAdminDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
     });
   }
 
@@ -8169,10 +8528,24 @@ extension PersonalDuoqianEntityQueryWhereDistinct
   }
 
   QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'discoveredViaAdmin');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
       distinctByDuoqianAddress({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'duoqianAddress',
           caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, PersonalDuoqianEntity, QDistinct>
+      distinctByMatchedAdminPubkeys() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'matchedAdminPubkeys');
     });
   }
 
@@ -8206,10 +8579,24 @@ extension PersonalDuoqianEntityQueryProperty on QueryBuilder<
     });
   }
 
+  QueryBuilder<PersonalDuoqianEntity, bool, QQueryOperations>
+      discoveredViaAdminProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'discoveredViaAdmin');
+    });
+  }
+
   QueryBuilder<PersonalDuoqianEntity, String, QQueryOperations>
       duoqianAddressProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'duoqianAddress');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianEntity, List<String>, QQueryOperations>
+      matchedAdminPubkeysProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'matchedAdminPubkeys');
     });
   }
 
@@ -10343,18 +10730,28 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
       name: r'addedAtMillis',
       type: IsarType.long,
     ),
-    r'duoqianAddress': PropertySchema(
+    r'discoveredViaAdmin': PropertySchema(
       id: 1,
+      name: r'discoveredViaAdmin',
+      type: IsarType.bool,
+    ),
+    r'duoqianAddress': PropertySchema(
+      id: 2,
       name: r'duoqianAddress',
       type: IsarType.string,
     ),
+    r'matchedAdminPubkeys': PropertySchema(
+      id: 3,
+      name: r'matchedAdminPubkeys',
+      type: IsarType.stringList,
+    ),
     r'name': PropertySchema(
-      id: 2,
+      id: 4,
       name: r'name',
       type: IsarType.string,
     ),
     r'sfidId': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'sfidId',
       type: IsarType.string,
     )
@@ -10390,6 +10787,19 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
           caseSensitive: false,
         )
       ],
+    ),
+    r'discoveredViaAdmin': IndexSchema(
+      id: 7499132730782160372,
+      name: r'discoveredViaAdmin',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'discoveredViaAdmin',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
     )
   },
   links: {},
@@ -10407,6 +10817,13 @@ int _duoqianInstitutionEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   bytesCount += 3 + object.duoqianAddress.length * 3;
+  bytesCount += 3 + object.matchedAdminPubkeys.length * 3;
+  {
+    for (var i = 0; i < object.matchedAdminPubkeys.length; i++) {
+      final value = object.matchedAdminPubkeys[i];
+      bytesCount += value.length * 3;
+    }
+  }
   bytesCount += 3 + object.name.length * 3;
   bytesCount += 3 + object.sfidId.length * 3;
   return bytesCount;
@@ -10419,9 +10836,11 @@ void _duoqianInstitutionEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeLong(offsets[0], object.addedAtMillis);
-  writer.writeString(offsets[1], object.duoqianAddress);
-  writer.writeString(offsets[2], object.name);
-  writer.writeString(offsets[3], object.sfidId);
+  writer.writeBool(offsets[1], object.discoveredViaAdmin);
+  writer.writeString(offsets[2], object.duoqianAddress);
+  writer.writeStringList(offsets[3], object.matchedAdminPubkeys);
+  writer.writeString(offsets[4], object.name);
+  writer.writeString(offsets[5], object.sfidId);
 }
 
 DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
@@ -10432,10 +10851,12 @@ DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
 ) {
   final object = DuoqianInstitutionEntity();
   object.addedAtMillis = reader.readLong(offsets[0]);
-  object.duoqianAddress = reader.readString(offsets[1]);
+  object.discoveredViaAdmin = reader.readBool(offsets[1]);
+  object.duoqianAddress = reader.readString(offsets[2]);
   object.id = id;
-  object.name = reader.readString(offsets[2]);
-  object.sfidId = reader.readString(offsets[3]);
+  object.matchedAdminPubkeys = reader.readStringList(offsets[3]) ?? [];
+  object.name = reader.readString(offsets[4]);
+  object.sfidId = reader.readString(offsets[5]);
   return object;
 }
 
@@ -10449,10 +10870,14 @@ P _duoqianInstitutionEntityDeserializeProp<P>(
     case 0:
       return (reader.readLong(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
+      return (reader.readStringList(offset) ?? []) as P;
+    case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -10547,6 +10972,15 @@ extension DuoqianInstitutionEntityQueryWhereSort on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
         const IndexWhereClause.any(indexName: r'addedAtMillis'),
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterWhere>
+      anyDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'discoveredViaAdmin'),
       );
     });
   }
@@ -10759,6 +11193,51 @@ extension DuoqianInstitutionEntityQueryWhere on QueryBuilder<
       ));
     });
   }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> discoveredViaAdminEqualTo(bool discoveredViaAdmin) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'discoveredViaAdmin',
+        value: [discoveredViaAdmin],
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterWhereClause> discoveredViaAdminNotEqualTo(bool discoveredViaAdmin) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [],
+              upper: [discoveredViaAdmin],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [discoveredViaAdmin],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [discoveredViaAdmin],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'discoveredViaAdmin',
+              lower: [],
+              upper: [discoveredViaAdmin],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
 }
 
 extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
@@ -10815,6 +11294,16 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> discoveredViaAdminEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'discoveredViaAdmin',
+        value: value,
       ));
     });
   }
@@ -11010,6 +11499,235 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
         upper: upper,
         includeUpper: includeUpper,
       ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'matchedAdminPubkeys',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      matchedAdminPubkeysElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'matchedAdminPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+          QAfterFilterCondition>
+      matchedAdminPubkeysElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'matchedAdminPubkeys',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'matchedAdminPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'matchedAdminPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
+      QAfterFilterCondition> matchedAdminPubkeysLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'matchedAdminPubkeys',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
     });
   }
 
@@ -11313,6 +12031,20 @@ extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      sortByDiscoveredViaAdminDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
       sortByDuoqianAddress() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'duoqianAddress', Sort.asc);
@@ -11368,6 +12100,20 @@ extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
       thenByAddedAtMillisDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
+      thenByDiscoveredViaAdminDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'discoveredViaAdmin', Sort.desc);
     });
   }
 
@@ -11438,10 +12184,24 @@ extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctByDiscoveredViaAdmin() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'discoveredViaAdmin');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
       distinctByDuoqianAddress({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'duoqianAddress',
           caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
+      distinctByMatchedAdminPubkeys() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'matchedAdminPubkeys');
     });
   }
 
@@ -11475,10 +12235,24 @@ extension DuoqianInstitutionEntityQueryProperty on QueryBuilder<
     });
   }
 
+  QueryBuilder<DuoqianInstitutionEntity, bool, QQueryOperations>
+      discoveredViaAdminProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'discoveredViaAdmin');
+    });
+  }
+
   QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
       duoqianAddressProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'duoqianAddress');
+    });
+  }
+
+  QueryBuilder<DuoqianInstitutionEntity, List<String>, QQueryOperations>
+      matchedAdminPubkeysProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'matchedAdminPubkeys');
     });
   }
 

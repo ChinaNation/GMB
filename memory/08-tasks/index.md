@@ -286,3 +286,4 @@
 - `memory/08-tasks/done/20260503-114604-检查注册机构多签模块完成度.md`
 - `memory/08-tasks/done/20260503-150000-个人多签模块边界测试补全.md`
 - `memory/08-tasks/done/20260503-160000-wuminapp-个人多签详情页UI改造.md`
+- `memory/08-tasks/done/20260503-180000-wuminapp-多签反向索引发现.md`

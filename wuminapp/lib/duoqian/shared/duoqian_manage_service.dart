@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart'
     show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
@@ -5,6 +7,7 @@ import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
 import 'duoqian_manage_models.dart';
 
@@ -215,6 +218,96 @@ class DuoqianManageService {
   // 投票动作已迁移到 `InternalVoteService`（Phase 3, pallet=9 call=0）。
 
   // ──── 链上查询 ────
+
+  /// 查询个人多签 meta(creator + account_name)。
+  ///
+  /// 链上 SCALE 布局(`PersonalDuoqianMeta`):
+  ///   creator: AccountId32(32B) + account_name: BoundedVec<u8>(Compact len + bytes)
+  ///
+  /// 返回 null 表示该 personal_address 不存在 PersonalDuoqianInfo entry。
+  Future<({String creatorAddressHex, String accountName})?> fetchPersonalMeta(
+    String personalAddressHex,
+  ) async {
+    final key = _buildStorageKey(
+      'DuoqianManage',
+      'PersonalDuoqianInfo',
+      _hexDecode(personalAddressHex),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 33) return null;
+
+    final creator = _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
+    var offset = 32;
+    final (nameLen, nameLenBytes) = _decodeCompact(data, offset);
+    offset += nameLenBytes;
+    if (offset + nameLen > data.length) return null;
+    final nameBytes = data.sublist(offset, offset + nameLen);
+    final name = _utf8Decode(nameBytes);
+    return (creatorAddressHex: creator, accountName: name);
+  }
+
+  /// 翻页查询某 SFID 机构下的全部 (account_name, duoqian_address)。
+  ///
+  /// 内部:`state_getKeysPaged` prefix = twox128("DuoqianManage")
+  ///       || twox128("SfidRegisteredAddress")
+  ///       || blake2_128_concat(sfid_id);每个 key 后段:
+  ///       blake2_128(account_name)(16B) || account_name 真值(变长 BoundedVec)。
+  ///       value = duoqian_address(32B)。
+  Future<List<({String accountName, String duoqianAddressHex})>>
+      listSfidAccounts(Uint8List sfidId) async {
+    final palletHash = Hasher.twoxx128.hashString('DuoqianManage');
+    final storageHash = Hasher.twoxx128.hashString('SfidRegisteredAddress');
+    final sfidKeyHash = _blake2128Concat(sfidId);
+    final prefix = Uint8List(
+      palletHash.length + storageHash.length + sfidKeyHash.length,
+    );
+    var offset = 0;
+    prefix.setAll(offset, palletHash);
+    offset += palletHash.length;
+    prefix.setAll(offset, storageHash);
+    offset += storageHash.length;
+    prefix.setAll(offset, sfidKeyHash);
+
+    final results = <({String accountName, String duoqianAddressHex})>[];
+    String? startKey;
+    const pageSize = 256;
+    final prefixHex = '0x${_hexEncode(prefix)}';
+    final prefixHexLen = prefixHex.length;
+
+    while (true) {
+      final keysRaw =
+          await SmoldotClientManager.instance.request('state_getKeysPaged', [
+        prefixHex,
+        pageSize,
+        startKey,
+        null,
+      ]);
+      if (keysRaw is! List || keysRaw.isEmpty) break;
+      final keys = keysRaw.cast<String>();
+
+      for (final keyHex in keys) {
+        // 双 key:prefix + blake2_128(name)(16B 32 hex) + name 真值(变长)
+        // 截掉 prefix(64 hex)和 name 哈希(32 hex)即可得 name 真字节
+        if (keyHex.length < prefixHexLen + 32) continue;
+        final nameHex = keyHex.substring(prefixHexLen + 32);
+        final nameBytes = _hexDecode(nameHex);
+        final accountName = _utf8Decode(Uint8List.fromList(nameBytes));
+
+        final value = await _rpc.fetchStorage(keyHex);
+        if (value == null || value.length < 32) continue;
+        final duoqianAddrHex = _hexEncode(Uint8List.fromList(value.sublist(0, 32)));
+        results.add((
+          accountName: accountName,
+          duoqianAddressHex: duoqianAddrHex,
+        ));
+      }
+
+      if (keys.length < pageSize) break;
+      startKey = keys.last;
+    }
+
+    return results;
+  }
 
   /// 查询 SFID (sfid_id + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
   Future<String?> fetchSfidRegisteredAddress(
@@ -546,6 +639,8 @@ class DuoqianManageService {
     final bd = ByteData.sublistView(data);
     return bd.getUint32(offset, Endian.little);
   }
+
+  String _utf8Decode(Uint8List bytes) => utf8.decode(bytes, allowMalformed: true);
 
   (int, int) _decodeCompact(Uint8List data, int offset) {
     final first = data[offset];

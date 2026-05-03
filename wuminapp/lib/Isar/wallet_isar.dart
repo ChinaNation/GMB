@@ -114,6 +114,15 @@ class PersonalDuoqianEntity {
   /// 添加时间戳（毫秒）。
   @Index()
   late int addedAtMillis;
+
+  /// true = 通过反向索引发现的(钱包账户作为 admin 命中);false = 本机创建/手动添加。
+  /// 反向校验只会删除 true 的 entity,false 的永不被自动清理。
+  @Index()
+  bool discoveredViaAdmin = false;
+
+  /// 本钱包持有的 admin 公钥列表(快照,UI 显示"我作为 N 位管理员之一参与")。
+  /// 仅在 discoveredViaAdmin=true 时填充;false 时空列表。
+  List<String> matchedAdminPubkeys = const [];
 }
 
 /// 个人多签提案历史快照（本地持久化）。
@@ -179,6 +188,15 @@ class DuoqianInstitutionEntity {
   /// 添加时间戳（毫秒），用于排序。
   @Index()
   late int addedAtMillis;
+
+  /// true = 通过反向索引发现的(钱包账户作为 admin 命中);false = 本机创建/手动添加。
+  /// 反向校验只会删除 true 的 entity,false 的永不被自动清理。
+  @Index()
+  bool discoveredViaAdmin = false;
+
+  /// 本钱包持有的 admin 公钥列表(快照,UI 显示"我作为 N 位管理员之一参与")。
+  /// 仅在 discoveredViaAdmin=true 时填充;false 时空列表。
+  List<String> matchedAdminPubkeys = const [];
 }
 
 /// 本地交易记录（持久化存储，去中心化设计，不依赖 SFID 服务器）。
