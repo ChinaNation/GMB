@@ -257,7 +257,7 @@ impl pallet_transaction_payment::Config for Runtime {
         OnchainTxAmountExtractor,
         RuntimeFeePayerExtractor,
     >;
-    type OperationalFeeMultiplier = ConstU8<{ primitives::core_const::OPERATIONAL_FEE_MULTIPLIER }>;
+    type OperationalFeeMultiplier = ConstU8<{ primitives::fee_policy::OPERATIONAL_FEE_MULTIPLIER }>;
     type WeightToFee = ConstantMultiplier<Balance, ConstU128<0>>;
     type LengthToFee = ConstantMultiplier<Balance, ConstU128<0>>;
     type FeeMultiplierUpdate = ConstFeeMultiplier<FeeMultiplier>;
@@ -343,10 +343,7 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                 );
                 onchain_transaction::AmountExtractResult::Amount(value)
             }
-            RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create {
-                amount,
-                ..
-            }) => onchain_transaction::AmountExtractResult::Amount(*amount),
+            // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 物理删除,机构走 propose_create_institution。
             RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create_personal {
                 amount,
                 ..
@@ -357,7 +354,10 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                 let mut total: Balance = 0;
                 for account in accounts.iter() {
                     let Some(next) = total.checked_add(account.amount) else {
-                        return onchain_transaction::AmountExtractResult::Amount(100_000);
+                        // 溢出兜底:按 1 元固定费收取(理论上链上参数校验不会触发)。
+                        return onchain_transaction::AmountExtractResult::Amount(
+                            primitives::fee_policy::VOTE_FLAT_FEE,
+                        );
                     };
                     total = next;
                 }
@@ -373,94 +373,70 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             RuntimeCall::DuoqianManage(
                 duoqian_manage::pallet::Call::register_sfid_institution { .. },
             ) => onchain_transaction::AmountExtractResult::NoAmount,
-            // 付费调用交易：多签管理其他操作（propose_create_personal、cleanup 等）
-            RuntimeCall::DuoqianManage(_) => {
-                onchain_transaction::AmountExtractResult::Amount(100000)
-            }
-            // 免费调用交易：系统内部调用
+            // 付费调用交易：多签管理其他操作（cleanup_X 等）按投票统一价 1 元/次
+            RuntimeCall::DuoqianManage(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // 免费调用交易：系统内部 / 自动化 / 货币政策类
             RuntimeCall::System(_) => onchain_transaction::AmountExtractResult::NoAmount,
             RuntimeCall::Timestamp(_) => onchain_transaction::AmountExtractResult::NoAmount,
             RuntimeCall::ShengBankInterest(_) => onchain_transaction::AmountExtractResult::NoAmount,
-            // 付费调用交易：治理/用户操作（1 元/次）
-            RuntimeCall::ResolutionIssuance(ref ri_call) => {
-                match ri_call {
-                    // 免费：Root 维护类操作；决议发行 finalize 只允许 voting-engine 回调，不再暴露 call。
-                    resolution_issuance::pallet::Call::set_allowed_recipients { .. }
-                    | resolution_issuance::pallet::Call::clear_executed { .. }
-                    | resolution_issuance::pallet::Call::set_paused { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费：管理员主动发起增发提案
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
-                }
-            }
-            // 投票引擎:内部投票可能在达阈值时同步触发业务回调,不能再作为免费入口。
-            // Phase 2 后公开 call 只剩 4 个:internal_vote / joint_vote / citizen_vote / finalize_proposal。
-            RuntimeCall::VotingEngine(ref ve_call) => {
-                match ve_call {
-                    // 付费:管理员内部投票(1 元/次)。收费对象是本次投票 extrinsic,
-                    // 达阈值后的 executor 自动回调不再产生另一笔用户提交交易。
-                    voting_engine::pallet::Call::internal_vote { .. } => {
-                        onchain_transaction::AmountExtractResult::Amount(100000)
-                    }
-                    // 免费:终结已完成提案(任意人都可调,推动清理)
-                    voting_engine::pallet::Call::finalize_proposal { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费:用户主动参与联合/公民投票(1 元/次)
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
-                }
-            }
-            RuntimeCall::SfidSystem(_) => onchain_transaction::AmountExtractResult::Amount(100000),
             RuntimeCall::CitizenIssuance(_) => onchain_transaction::AmountExtractResult::NoAmount,
-            RuntimeCall::FullnodeIssuance(_) => {
-                onchain_transaction::AmountExtractResult::Amount(100000)
-            }
-            RuntimeCall::AdminsChange(ref ag_call) => {
-                match ag_call {
-                    // 免费：触发已通过提案的执行
-                    admins_change::pallet::Call::execute_admin_replacement { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费：管理员主动提案/投票
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
+            // GRANDPA pallet:report_equivocation(签名版)/ report_equivocation_unsigned(unsigned 路径
+            // 不走 ChargeTransactionPayment) / note_stalled(Root,本链无 sudo 实际不可达)。
+            // 等价证据上报本就属公益保护链稳定运行,统一免费。
+            RuntimeCall::Grandpa(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            // 货币政策类(决议发行 / 决议销毁)整体免费:不属于交易范畴。
+            // ResolutionIssuance 仅 Root/管理员维护类 + propose_resolution_issuance(增发提案);
+            // ResolutionDestro 仅 propose_destroy(销毁提案)。两者都是货币政策不入费率公式。
+            RuntimeCall::ResolutionIssuance(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            RuntimeCall::ResolutionDestro(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            // 投票引擎:Phase 2 后公开 call 仅 5 个 — internal_vote / joint_vote / citizen_vote /
+            // retry_passed_proposal / cancel_passed_proposal 全部按 VOTE_FLAT_FEE 收费;
+            // finalize_proposal 任意人可调用、推动清理,免费。
+            RuntimeCall::VotingEngine(ref ve_call) => match ve_call {
+                voting_engine::pallet::Call::finalize_proposal { .. } => {
+                    onchain_transaction::AmountExtractResult::NoAmount
                 }
-            }
-            RuntimeCall::RuntimeUpgrade(_) => {
-                onchain_transaction::AmountExtractResult::Amount(100000)
-            }
-            RuntimeCall::ResolutionDestro(ref rd_call) => {
-                match rd_call {
-                    // 免费：触发已通过提案的执行
-                    resolution_destro::pallet::Call::execute_destroy { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费：管理员主动提案/投票
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
+                _ => onchain_transaction::AmountExtractResult::Amount(
+                    primitives::fee_policy::VOTE_FLAT_FEE,
+                ),
+            },
+            // SfidSystem 全部 6 个 extrinsic(含 bind_sfid / unbind_sfid 等)按投票统一价 1 元/次。
+            RuntimeCall::SfidSystem(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // FullnodeIssuance bind_reward_wallet / rebind_reward_wallet:1 元/次。
+            RuntimeCall::FullnodeIssuance(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // 业务治理 pallet 的 execute_xxx / cancel_failed_xxx wrapper 已于 2026-05-02
+            // (Phase 4) 物理删除,手动重试/取消统一收口至 voting_engine::retry_passed_proposal /
+            // cancel_passed_proposal(已在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
+            // 业务 pallet 剩下的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
+            RuntimeCall::AdminsChange(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            RuntimeCall::RuntimeUpgrade(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            RuntimeCall::GrandpaKeyChange(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // 多签转账模块 3 个 propose_X 全部按金额计费(amount × 0.1%, ≥0.1 元)。
+            RuntimeCall::DuoqianTransfer(ref dt_call) => match dt_call {
+                duoqian_transfer::pallet::Call::propose_transfer { amount, .. }
+                | duoqian_transfer::pallet::Call::propose_safety_fund_transfer {
+                    amount, ..
                 }
-            }
-            RuntimeCall::GrandpaKeyChange(ref gk_call) => {
-                match gk_call {
-                    // 免费：触发已通过提案的执行 + 取消失败变更
-                    grandpakey_change::pallet::Call::execute_replace_grandpa_key { .. }
-                    | grandpakey_change::pallet::Call::cancel_failed_replace_grandpa_key {
-                        ..
-                    } => onchain_transaction::AmountExtractResult::NoAmount,
-                    // 付费：管理员主动提案/投票
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
+                | duoqian_transfer::pallet::Call::propose_sweep_to_main { amount, .. } => {
+                    onchain_transaction::AmountExtractResult::Amount(*amount)
                 }
-            }
-            // 机构转账模块：拆分执行（免费）和提案/投票（付费）
-            RuntimeCall::DuoqianTransfer(ref dt_call) => {
-                match dt_call {
-                    // 免费：触发已通过提案的执行（手续费在执行时从机构内部扣）
-                    duoqian_transfer::pallet::Call::execute_transfer { .. } => {
-                        onchain_transaction::AmountExtractResult::NoAmount
-                    }
-                    // 付费：管理员主动提案/投票（1 元/次）
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
-                }
-            }
+                // 兜底:未来若新增非金额型管理 extrinsic 按投票统一价 1 元/次。
+                _ => onchain_transaction::AmountExtractResult::Amount(
+                    primitives::fee_policy::VOTE_FLAT_FEE,
+                ),
+            },
             // 清算行(L2)扫码支付清算:Step 2b-iv-b 清理后只剩新体系 Call。
             RuntimeCall::OffchainTransaction(ref offchain_call) => {
                 match offchain_call {
@@ -471,7 +447,7 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                     offchain_transaction::pallet::Call::withdraw { amount } => {
                         onchain_transaction::AmountExtractResult::Amount(*amount)
                     }
-                    // 清算行批次 V2 上链:按 sum(fee_amount) 计费(链下资金交易)
+                    // 清算行批次 V2 上链:按 Σ batch[i].fee_amount 计费(链下资金交易)
                     offchain_transaction::pallet::Call::submit_offchain_batch_v2 {
                         batch, ..
                     } => {
@@ -486,13 +462,18 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                         onchain_transaction::AmountExtractResult::NoAmount
                     }
                     // 其他付费调用(bind_clearing_bank / switch_bank / propose_l2_fee_rate):
-                    // 固定 1 元/次
-                    _ => onchain_transaction::AmountExtractResult::Amount(100000),
+                    // 按投票统一价 1 元/次
+                    _ => onchain_transaction::AmountExtractResult::Amount(
+                        primitives::fee_policy::VOTE_FLAT_FEE,
+                    ),
                 }
             }
-            // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝，避免”有金额但漏提取”。
+            // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
+            //
+            // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
+            // 将来新增 pallet 若忘记归类会编译期 non-exhaustive match 报错,
+            // 强制开发者显式选择 Free / Vote / OnchainTx 之一。
             RuntimeCall::Balances(_) => onchain_transaction::AmountExtractResult::Unknown,
-            _ => onchain_transaction::AmountExtractResult::Unknown,
         }
     }
 }
@@ -1655,8 +1636,10 @@ mod tests {
             >>::amount(&who, &internal_vote_call);
             match vote_amount {
                 // 中文注释：internal_vote 达阈值时会同步触发业务 executor,
-                // 因此投票 extrinsic 本身按治理用户操作固定 1 元计费。
-                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 100_000),
+                // 因此投票 extrinsic 本身按治理用户操作固定 1 元计费 = VOTE_FLAT_FEE。
+                onchain_transaction::AmountExtractResult::Amount(v) => {
+                    assert_eq!(v, primitives::fee_policy::VOTE_FLAT_FEE)
+                }
                 _ => panic!("expected internal_vote amount"),
             }
         });
@@ -1673,30 +1656,27 @@ mod tests {
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
-            let sfid_id: duoqian_manage::pallet::SfidIdOf<Runtime> =
-                b"GFR-LN001-CB0C-runtime-20260222"
-                    .to_vec()
-                    .try_into()
-                    .expect("sfid id should fit");
             let admins: duoqian_manage::pallet::DuoqianAdminsOf<Runtime> =
                 vec![who.clone(), admin2.clone()]
                     .try_into()
                     .expect("admins should fit");
-            // 中文注释：propose_create 新接口需要账户名称，本测试只覆盖金额提取路径。
-            let account_name: duoqian_manage::pallet::AccountNameOf<Runtime> = b"runtime-test-main"
-                .to_vec()
-                .try_into()
-                .expect("account_name should fit");
+            // 中文注释:propose_create 单账户机构入口已于 2026-05-03 删除,
+            // 本测试改用 propose_create_personal 验证"按 amount 字段计费"规则。
+            let account_name: duoqian_manage::pallet::AccountNameOf<Runtime> =
+                b"runtime-test-personal"
+                    .to_vec()
+                    .try_into()
+                    .expect("account_name should fit");
 
-            let create_call =
-                RuntimeCall::DuoqianManage(duoqian_manage::pallet::Call::propose_create {
-                    sfid_id,
+            let create_call = RuntimeCall::DuoqianManage(
+                duoqian_manage::pallet::Call::propose_create_personal {
                     account_name,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
                     threshold: 2,
                     amount: 1_000,
-                });
+                },
+            );
             let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
                 AccountId,
                 RuntimeCall,
