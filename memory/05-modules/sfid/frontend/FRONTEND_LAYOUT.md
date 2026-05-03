@@ -8,6 +8,7 @@
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
+  - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
 
 ## 当前边界
 
@@ -51,8 +52,9 @@ sfid/frontend/
 ## 省管理员目录规则
 
 - `sheng_admins/`:放普通后台业务页面,例如省管理员列表、注册局视图、市管理员维护。
-- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,直接展示一主两备 3 个板块。
-- `roster_api.ts` 只做页面展示查询,不是链交互。
+- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,竖向展示一主两备 3 个板块。
+- 空备用管理员卡片只提供“扫码填入账户”的新增入口。
+- `roster_api.ts` 做页面展示查询和本地备用管理员保存,不是链交互。
 - `signing_keys_api.ts` 只做本人本地 signing seed 生成/更换,不是链交互。
 - 省管理员只有“更换省管理员/主备交换”后续接入区块链时,才允许新增
   `chain_replace_admin.ts`。

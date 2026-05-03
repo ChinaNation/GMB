@@ -734,7 +734,6 @@ fn main() {
 
         // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store 后，清理孤儿需要 async
         app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
-        app_core::runtime_ops::cleanup_stale_cpms_sites(&state).await;
 
         // 2026-04-21:reconcile 是同步调用,只写 legacy store,新增的公安局机构 +
         // 主账户/费用账户 不会自动落到 sharded_store,前端按省读分片看不到。
@@ -933,6 +932,10 @@ fn main() {
             .route(
                 "/api/v1/admin/sheng-admin/roster",
                 get(sheng_admins::roster::list_roster_admin),
+            )
+            .route(
+                "/api/v1/admin/sheng-admin/backup",
+                post(sheng_admins::roster::set_backup_admin),
             )
             .route(
                 "/api/v1/admin/sheng-signer/prepare",

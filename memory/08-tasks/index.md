@@ -83,6 +83,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
 - `memory/08-tasks/done/20260502-sfid-legacy-role-text-cleanup.md`
 - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
 - `memory/08-tasks/done/20260502-sfid-institutions粗粒度整合.md`
