@@ -1,6 +1,6 @@
 # ADMINS_ORIGIN_GOV Technical Notes
 
-最新更新：2026-04-30，新增管理员更换互斥、执行失败终态、创建事务回滚、回调最终事件收口，固化内置治理机构不可关闭规则，并将管理员替换提案 `MODULE_TAG` 升级为 `adm-rep-v1`。
+最新更新：2026-05-02，生命周期写状态入口收口到 `SubjectLifecycle` trait，原始存储 mutator 仅保留 `pub(crate)`，并由 voting-engine 提案上下文约束调用。
 
 ## 1. 模块定位
 
@@ -18,7 +18,9 @@
 
 ## 2. 存储模型
 
-`STORAGE_VERSION = 2`。
+`STORAGE_VERSION = 1`。
+
+说明：当前模块没有 V0/V1 到 V2 的运行期迁移代码，版本号不得超前声明。未来真实修改存储布局时，再配套 `OnRuntimeUpgrade` 迁移并推进到 V2。
 
 核心存储：
 
@@ -45,21 +47,30 @@ Institutions<InstitutionPalletId, AdminInstitution>
 ## 3. 生命周期
 
 - `Pending`：多签创建提案已发起，投票引擎可以锁定管理员快照。
-- `Active`：创建提案通过并执行成功，主体可继续发起转账、清算、管理员替换等内部投票。
+- `Active`：创建提案通过并执行成功，主体可继续发起转账、清算等内部投票；管理员替换入口仅面向制度内置治理主体。
 - `Closed`：主体已关闭，管理员不再有效。
 
-`duoqian-manage` 在创建机构多签或个人多签时调用：
+`duoqian-manage` 在创建机构多签或个人多签时只能通过 `SubjectLifecycle` trait 调用生命周期写状态：
 
-- `create_pending_subject`
-- `activate_subject`
-- `remove_pending_subject`
-- `close_subject`
+- `create_pending_subject_for_proposal`
+- `activate_subject_for_proposal`
+- `remove_pending_subject_for_proposal`
+- `close_subject_for_proposal`
+
+底层直接写 `Institutions` 的函数已收口为 `pub(crate) do_*`，不得作为跨 pallet 公共 API 暴露。
+
+生命周期 trait 的上下文约束：
+
+- 所有调用都必须传入 `proposal_id + module_tag + institution`，并校验该提案属于调用模块。
+- `create_pending_subject_for_proposal` 要求提案为 `PROPOSAL_KIND_INTERNAL / STAGE_INTERNAL / STATUS_VOTING`。
+- `activate_subject_for_proposal` 与 `close_subject_for_proposal` 要求提案为 `STATUS_PASSED`，且当前处于 voting-engine callback 执行作用域。
+- `remove_pending_subject_for_proposal` 仅接受 `STATUS_REJECTED / STATUS_EXECUTION_FAILED`，用于拒绝或执行失败终态清理。
 
 关闭规则：
 
 - `close_subject` 只允许关闭动态主体：`SfidInstitution / PersonalDuoqian`。
 - `BuiltinInstitution` 代表国储会、省储会、省储行等制度内置治理主体，永远不能进入 `Closed` 状态。
-- 该规则由 `close_subject` 自身校验，不能只依赖调用方约束，避免未来 runtime caller 误传 NRC/PRC/PRB 的 `InstitutionPalletId`。
+- 该规则由 `do_close_subject` 自身校验，不能只依赖调用方约束，避免未来 runtime caller 误传 NRC/PRC/PRB 的 `InstitutionPalletId`。
 
 ## 4. 管理员读取 API
 
@@ -93,17 +104,23 @@ Pending 快照专用 API：
 
 `propose_admin_replacement(org, institution, old_admin, new_admin)`：
 
+入口边界：
+
+- 只允许 `ORG_NRC / ORG_PRC / ORG_PRB`。
+- `ORG_DUOQIAN` 的 `SfidInstitution / PersonalDuoqian` 主体不能走本入口替换管理员；该类主体的创建、激活、关闭等生命周期由 `duoqian-manage` 维护，避免出现第二条多签治理入口。
+
 1. 读取 `Institutions[institution]`。
-2. 校验主体为 `Active` 且 `subject.org == org`。
-3. 校验发起人是当前管理员。
-4. 校验 `old_admin` 存在、`new_admin` 不存在。
-5. 在同一个 `with_transaction` 中调 `voting-engine` 的管理员集合变更内部提案入口创建投票（只接受 Active 主体，并申请同主体独占锁）。
-6. 在同一事务中将 `AdminReplacementAction` 写入投票引擎 `ProposalData`，写入 `ProposalMeta`，并发出 `AdminReplacementProposed`。
+2. 校验 `org` 属于制度内置治理主体范围。
+3. 校验主体为 `Active` 且 `subject.org == org`。
+4. 校验发起人是当前管理员。
+5. 校验 `old_admin` 存在、`new_admin` 不存在。
+6. 在同一个 `with_transaction` 中调 `voting-engine` 的管理员集合变更内部提案入口创建投票（只接受 Active 主体，并申请同主体独占锁）。
+7. 在同一事务中将 `AdminReplacementAction` 写入投票引擎 `ProposalData`，写入 `ProposalMeta`，并发出 `AdminReplacementProposed`。
 
 提案数据格式：
 
-- `MODULE_TAG = b"adm-rep-v1"`。
-- `ProposalData = MODULE_TAG + AdminReplacementAction(SCALE)`。
+- `ProposalOwner = b"adm-rep-v1"`。
+- `ProposalData = AdminReplacementAction(SCALE)`，不再重复嵌入 `MODULE_TAG` 前缀。
 - 开发期不兼容旧 `adm-rep` 提案数据；如果未来升级 action schema，必须继续增加版本后缀。
 
 创建事务语义：
@@ -126,6 +143,11 @@ Pending 快照专用 API：
 - 内置机构仍校验固定人数：国储会 19，省储会 9，省储行 9。
 - 动态多签主体校验人数在 `2..=MaxAdminsPerInstitution`。
 - 执行成功后写回 `Institutions[institution].admins` 并更新 `updated_at`。
+
+## 5b. Runtime Integrity
+
+`Hooks::integrity_test` 会校验 `MaxAdminsPerInstitution >= max(NRC_ADMIN_COUNT, PRC_ADMIN_COUNT, PRB_ADMIN_COUNT)`。
+该断言不再包裹 `std` feature，确保 wasm runtime 编译也能守住内置治理机构管理员数量上限。
 
 互斥规则：
 
@@ -168,7 +190,7 @@ cargo test -p admins-change --lib
 
 当前结果：
 
-- 24 passed。
+- 28 passed。
 
 覆盖重点：
 
@@ -178,6 +200,7 @@ cargo test -p admins-change --lib
 - 替换后新管理员可继续发起提案。
 - 无效机构、旧管理员缺失、新管理员已存在等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
+- 生命周期 trait 拒绝脱离 voting-engine 提案上下文的激活/关闭调用。
 - NRC/PRC/PRB 等 `BuiltinInstitution` 调用 `close_subject` 会被拒绝，状态保持 `Active`。
 - `PersonalDuoqian / SfidInstitution` 等动态主体激活后仍可通过 `close_subject` 正常关闭。
 - 执行路径拒绝 kind / stage / org / institution 与 `AdminReplacementAction` 不一致的提案。

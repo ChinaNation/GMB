@@ -227,31 +227,14 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 联合投票回调：保持与其他治理模块一致，Root 可手工回放。
-        #[pallet::call_index(1)]
-        #[pallet::weight(if *approved {
-            <T as Config>::WeightInfo::finalize_joint_vote_approved().saturating_add(
-                <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
-            )
-        } else {
-            <T as Config>::WeightInfo::finalize_joint_vote_rejected()
-        })]
-        pub fn finalize_joint_vote(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approved: bool,
-        ) -> DispatchResult {
-            ensure_root(origin)?;
-            Self::apply_joint_vote_result(proposal_id, approved).map(|_| ())
-        }
+        // call_index = 1 保持空缺：联合投票终结只能由 voting-engine 回调进入，
+        // 不再暴露 Root 手工回放 extrinsic，避免形成第二条执行入口。
     }
 
     impl<T: Config> Pallet<T> {
-        /// 快速判断 proposal_id 是否属于本模块（通过 MODULE_TAG 前缀匹配）。
+        /// 快速判断 proposal_id 是否属于本模块（通过 ProposalOwner 匹配）。
         pub fn owns_proposal(proposal_id: u64) -> bool {
-            voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
-                .map(|raw| raw.starts_with(crate::MODULE_TAG))
-                .unwrap_or(false)
+            voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
         }
 
         /// 从投票引擎 ProposalData 中读取并解码本模块的提案摘要。
@@ -560,6 +543,8 @@ mod tests {
         type MaxInternalProposalMutexBindings = ConstU32<256>;
         type MaxActiveProposals = ConstU32<10>;
         type MaxCleanupStepsPerBlock = ConstU32<8>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
         type CleanupKeysPerStep = ConstU32<64>;
         type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
         type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -567,6 +552,7 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type SfidEligibility = ();
         type PopulationSnapshotVerifier = ();
         type JointVoteResultCallback = ();
@@ -675,7 +661,10 @@ mod tests {
     /// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
     /// `TestJointVoteEngine` 仅做空字段非空检验,真实 sr25519 验签覆盖留 runtime 层。
     fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-        b"liaoning".to_vec().try_into().expect("province should fit")
+        b"liaoning"
+            .to_vec()
+            .try_into()
+            .expect("province should fit")
     }
 
     fn signer_admin_pubkey_ok() -> [u8; 32] {
@@ -921,7 +910,7 @@ mod tests {
     }
 
     #[test]
-    fn finalize_joint_vote_requires_voting_status() {
+    fn joint_vote_callback_requires_voting_status() {
         new_test_ext().execute_with(|| {
             propose_ok();
             insert_engine_proposal(100);

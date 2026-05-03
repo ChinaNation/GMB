@@ -631,6 +631,8 @@ mod tests {
             _proposal_id: u64,
             _nonce: &[u8],
             _signature: &[u8],
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             false
         }
@@ -650,6 +652,8 @@ mod tests {
             _eligible_total: u64,
             _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
             _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _province: &[u8],
+            _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
             true
         }
@@ -718,6 +722,9 @@ mod tests {
         type MaxManualExecutionAttempts = ConstU32<3>;
         type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
         type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+        type MaxCleanupQueueBucketLimit = ConstU32<50>;
+        type MaxCleanupScheduleOffset = ConstU32<100>;
+        type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
