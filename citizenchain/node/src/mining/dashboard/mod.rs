@@ -493,15 +493,15 @@ fn reward_wallet_bound_at_block(miner_account_hex: &str, block_hash: &str) -> Re
 }
 
 fn fullnode_fee_income_fen(total_fee_fen: u128) -> u128 {
-    let total_percent = primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_NRC_PERCENT)
-        .saturating_add(primitives::core_const::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
+    let total_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT
+        .saturating_add(primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT)
+        .saturating_add(primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT);
     if total_percent == 0 {
         return 0;
     }
     // 中文注释：与 runtime 的 `Imbalance::ration(80, 20)` 对齐，采用整数向下取整。
     total_fee_fen.saturating_mul(u128::from(
-        primitives::core_const::ONCHAIN_FEE_FULLNODE_PERCENT,
+        primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT,
     )) / u128::from(total_percent)
 }
 

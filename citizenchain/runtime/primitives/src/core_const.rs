@@ -1,6 +1,7 @@
-//! 核心常量=core_const.rs
-
-use sp_runtime::Perbill;
+//! 核心常量 = core_const.rs
+//!
+//! 包含:货币基础参数(1)、省储行年利率模型(3)、安全与反滥用参数(4)、统一签名/派生域(5)。
+//! 第 (2) 段"交易手续费模型"已于 2026-05-03 整体迁出至 `primitives::fee_policy`。
 
 /// 1. 货币基础参数（Economic Base）
 pub const TOKEN_SYMBOL: &str = "GMB"; // 公民币符号
@@ -14,16 +15,9 @@ pub const BLOCK_HASH_COUNT: u32 = 2400; // 最近区块哈希保留数量
 pub const NORMAL_DISPATCH_PERCENT: u32 = 75; // 普通交易可用区块权重比例
 pub const MAX_BLOCK_BYTES: u32 = 100 * 1024 * 1024; // 单区块最大字节数：100MB
 
-/// 2. 交易手续费模型（Fee Model）
-pub const ONCHAIN_FEE_RATE: Perbill = Perbill::from_parts(1_000_000); // 链上交易费率：0.1%
-pub const ONCHAIN_MIN_FEE: u128 = 10; // 链上交易单笔最小手续费：0.1 元
-pub const ONCHAIN_FEE_FULLNODE_PERCENT: u32 = 80; // 链上交易费铸块全节点分成比例：80%
-pub const ONCHAIN_FEE_NRC_PERCENT: u32 = 10; // 链上交易费国储会手续费账户分成比例：10%
-pub const ONCHAIN_FEE_SAFETY_FUND_PERCENT: u32 = 10; // 链上交易费安全基金账户分成比例：10%
-pub const OFFCHAIN_MIN_FEE: u128 = 1; // 链下交易单笔最小手续费：0.01 元
-pub const OFFCHAIN_FEE_RATE_MIN: Perbill = Perbill::from_parts(100_000); // 链下交易费率下限：0.01%
-pub const OFFCHAIN_FEE_RATE_MAX: Perbill = Perbill::from_parts(1_000_000); // 链下交易费率上限：0.1%
-pub const OPERATIONAL_FEE_MULTIPLIER: u8 = 1; // 运营类交易费乘数（1=不额外加价）
+// 2. 交易手续费模型(Fee Model)已于 2026-05-03 整体迁出至
+//    `primitives::fee_policy` —— 全链费率规则的单一权威源。
+//    含 ONCHAIN_*, OFFCHAIN_*, VOTE_FLAT_FEE, OPERATIONAL_FEE_MULTIPLIER。
 
 /// 3. 省储行质押年利率模型 (Annual Interest Rate)
 pub const SHENGBANK_INITIAL_INTEREST_BP: u32 = 100; // 省储行初始年利率（第一年）：1.00%
@@ -66,18 +60,4 @@ pub const OP_SIGN_INST: u8 = 0x13; // SFID 机构登记
                                    // 不再持有 `finalize_X` / `vote_X` 聚合签名接口。
                                    // 新业务从 0x18 起分配,签名域 op_tag 空间共 0x10-0x1F。
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fee_percents_sum_to_100() {
-        // 中文注释：链上手续费分成比例必须恰好为 100%。
-        assert_eq!(
-            ONCHAIN_FEE_FULLNODE_PERCENT
-                + ONCHAIN_FEE_NRC_PERCENT
-                + ONCHAIN_FEE_SAFETY_FUND_PERCENT,
-            100
-        );
-    }
-}
+// 注:费率分账测试已随 Fee Model 迁出,见 `primitives::fee_policy::tests`。

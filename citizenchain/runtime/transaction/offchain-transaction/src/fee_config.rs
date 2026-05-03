@@ -15,11 +15,17 @@ use sp_std::vec::Vec;
 use crate::bank_check::{self, SfidAccountQuery};
 use crate::{Config, Error, Event, L2FeeRateBp, L2FeeRateProposed, MaxL2FeeRateBp, Pallet};
 
-/// 费率下限(bp),1 bp = 0.01%。
-pub const L2_FEE_RATE_BP_MIN: u32 = 1;
+/// Perbill 单位换算:1 bp = 0.01% = `Perbill::from_parts(100_000)`,
+/// 因此 `bp = Perbill.deconstruct() / 100_000`。
+const PERBILL_PARTS_PER_BP: u32 = 100_000;
 
-/// 费率上限(bp),10 bp = 0.1%,对应白皮书 5.4.2。
-pub const L2_FEE_RATE_BP_MAX: u32 = 10;
+/// 费率下限(bp),由 `primitives::fee_policy::OFFCHAIN_FEE_RATE_MIN`(0.01%)推导。
+pub const L2_FEE_RATE_BP_MIN: u32 =
+    primitives::fee_policy::OFFCHAIN_FEE_RATE_MIN.deconstruct() / PERBILL_PARTS_PER_BP;
+
+/// 费率上限(bp),由 `primitives::fee_policy::OFFCHAIN_FEE_RATE_MAX`(0.1%)推导,对应白皮书 5.4.2。
+pub const L2_FEE_RATE_BP_MAX: u32 =
+    primitives::fee_policy::OFFCHAIN_FEE_RATE_MAX.deconstruct() / PERBILL_PARTS_PER_BP;
 
 /// 费率变更延迟生效期,沿用 `primitives::pow_const` 里 30 秒/块的定义。
 /// 7 天 × 24 × 120 = **20160 块**。

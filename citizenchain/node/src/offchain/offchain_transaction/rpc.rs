@@ -108,7 +108,7 @@ pub struct SubmitPaymentResp {
 pub struct FeeRateResp {
     /// 清算行当前生效费率(万分之一)。runtime 未配置时为 0,调用方应拒绝提交。
     pub rate_bp: u32,
-    /// 最低手续费(分),与 runtime `settlement::MIN_FEE_FEN` 常量一致(当前 1)。
+    /// 最低手续费(分),= `primitives::fee_policy::OFFCHAIN_MIN_FEE`(当前 1 分 = 0.01 元)。
     pub min_fee_fen: u128,
 }
 
@@ -335,18 +335,15 @@ impl OffchainClearingRpcServer for OffchainClearingRpcImpl {
         let rate_bp = self.read_fee_rate(&bank)?;
         Ok(FeeRateResp {
             rate_bp,
-            min_fee_fen: MIN_FEE_FEN,
+            min_fee_fen: primitives::fee_policy::OFFCHAIN_MIN_FEE,
         })
     }
 }
 
-/// 与 runtime `settlement::MIN_FEE_FEN` 常量逐字节一致的最低手续费。改动必须同改 runtime。
-const MIN_FEE_FEN: u128 = 1;
-
 /// 清算行 ACK 签名域,供 wuminapp 验证"节点确实接受了该支付意图"。
 const L2_ACK_SIGNING_DOMAIN: &[u8] = b"GMB_L2_ACK_V1";
 
-/// 与 runtime `settlement::calc_fee` 保持一致:按万分比四舍五入,最低 1 分。
+/// 与 runtime `settlement::calc_fee` 保持一致:按万分比四舍五入,最低取 `primitives::fee_policy::OFFCHAIN_MIN_FEE`。
 fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     let numerator = transfer_amount
         .checked_mul(rate_bp as u128)
@@ -358,7 +355,10 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     } else {
         quotient
     };
-    Ok(std::cmp::max(rounded, MIN_FEE_FEN))
+    Ok(std::cmp::max(
+        rounded,
+        primitives::fee_policy::OFFCHAIN_MIN_FEE,
+    ))
 }
 
 /// 构造 L2 ACK 签名消息:
@@ -567,7 +567,10 @@ mod tests {
     #[test]
     fn calc_fee_matches_runtime_rounding() {
         assert_eq!(calc_fee(10_000, 5).unwrap(), 5);
-        assert_eq!(calc_fee(1, 1).unwrap(), MIN_FEE_FEN);
+        assert_eq!(
+            calc_fee(1, 1).unwrap(),
+            primitives::fee_policy::OFFCHAIN_MIN_FEE
+        );
         assert_eq!(calc_fee(15_000, 1).unwrap(), 2);
         assert!(calc_fee(u128::MAX, 10_000).is_err());
     }
