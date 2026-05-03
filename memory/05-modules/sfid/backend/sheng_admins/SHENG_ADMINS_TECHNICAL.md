@@ -3,6 +3,7 @@
 - 最后更新:2026-05-02
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
+  - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
 
 ## 0. 模块边界
 
@@ -10,6 +11,7 @@
 
 - 省管理员目录查询。
 - 注册局-省级管理员页面的一主两备展示。
+- 主管理员在本省本地新增/设置备用管理员姓名和扫码账户。
 - 省管理员本人 signing seed 的自动加载、手动生成、更换。
 - 市管理员 CRUD、启用/停用、删除。
 - 43 省内置主管理员公钥与省份归属基线。
@@ -28,7 +30,7 @@ sfid/backend/sheng_admins/
 ├── catalog.rs                # 省管理员目录查询
 ├── operators.rs              # 市管理员 CRUD 与状态治理
 ├── province_admins.rs        # 43 省主管理员公钥、槽位模型、省份归属
-├── roster.rs                 # 注册局-省级管理员页面一主两备展示
+├── roster.rs                 # 注册局-省级管理员页面一主两备展示与本地备用槽维护
 ├── signing_cache.rs          # 省管理员 signing keypair 进程缓存
 ├── signing_keys.rs           # 本人 signing seed 自动加载、生成、更换接口
 └── signing_seed_store.rs     # signing seed 加密持久化
@@ -40,6 +42,7 @@ sfid/backend/sheng_admins/
 |---|---|---|
 | `GET /api/v1/admin/sheng-admins` | `catalog::list_sheng_admins` | 省管理员目录查询,按登录作用域过滤 |
 | `GET /api/v1/admin/sheng-admin/roster` | `roster::list_roster_admin` | 注册局页面一主两备展示 |
+| `POST /api/v1/admin/sheng-admin/backup` | `roster::set_backup_admin` | 主管理员扫码新增/设置本省备用管理员 |
 | `POST /api/v1/admin/sheng-signer/prepare` | `signing_keys::prepare` | 生成本人 signing seed 操作的扫码签名 payload |
 | `POST /api/v1/admin/sheng-signer/submit` | `signing_keys::submit` | 校验本人签名后生成/更换本地 signing seed |
 | `GET /api/v1/admin/operators` | `operators::list_operators` | 市管理员列表 |
@@ -55,6 +58,8 @@ sfid/backend/sheng_admins/
 
 - `SHENG_ADMIN` 只能管理本省市管理员和本省页面展示。
 - `SHI_ADMIN` 只能读取自己作用域内的省/市管理员信息。
+- 只有本省主管理员可以新增/设置备用管理员。
+- 备用管理员账户必须由前端扫码填入。
 - 省管理员 signing seed 只能由本人登录自动加载或本人手动生成/更换。
 - 主管理员不得替备用管理员生成或更换 signing seed。
 - 后端不得用本地 signing keypair 代替管理员账户私钥发起省管理员名册链上操作。
@@ -62,7 +67,8 @@ sfid/backend/sheng_admins/
 ## 4. 状态来源
 
 - 省管理员主管理员公钥来自 `province_admins.rs` 的内置 43 省基线。
-- 备用管理员槽位当前等待后续链上更换/主备交换能力接入。
+- 备用管理员槽位先由 `Store.sheng_admin_rosters` 本地保存姓名和账户。
+- 后续链上更换/主备交换能力接入后,再把链上名册作为最终真源。
 - signing seed 真私钥只落在 `signing_seed_store.rs` 的加密文件中。
 - 页面展示用的 `signing_pubkey/signing_created_at` 由 `signing_keys.rs`
   写回管理员索引。

@@ -95,6 +95,11 @@ pub(crate) struct Store {
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     pub(crate) admin_users_by_pubkey: HashMap<String, super::role::AdminUser>,
     pub(crate) sheng_admin_province_by_pubkey: HashMap<String, String>,
+    /// 中文注释:省管理员一主两备的 SFID 本地备用槽记录。
+    /// main 仍来自内置省级管理员基线;backup_1 / backup_2 先在 SFID 本地保存,
+    /// 后续链上更换省管理员能力落地后再对齐链上真相。
+    #[serde(default)]
+    pub(crate) sheng_admin_rosters: HashMap<String, ShengAdminRosterLocal>,
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
@@ -130,6 +135,23 @@ pub(crate) struct Store {
     /// 文档自增 ID。
     #[serde(default)]
     pub(crate) next_document_id: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub(crate) struct ShengAdminRosterLocal {
+    pub(crate) backup_1: Option<ShengAdminSlotLocal>,
+    pub(crate) backup_2: Option<ShengAdminSlotLocal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ShengAdminSlotLocal {
+    pub(crate) admin_pubkey: String,
+    pub(crate) admin_name: String,
+    pub(crate) created_by: String,
+    pub(crate) created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub(crate) updated_at: Option<DateTime<Utc>>,
 }
 
 // 中文注释:旧签名轮换 DTO 已删除。省级 3-tier 名册由 chain runtime 上

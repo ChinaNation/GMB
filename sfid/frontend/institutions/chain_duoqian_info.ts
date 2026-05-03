@@ -26,7 +26,6 @@ export interface InstitutionInfoDetail {
   institution_code: string;
   sub_type?: string | null;
   parent_sfid_id?: string | null;
-  sfid_finalized: boolean;
   chain_status: InstitutionChainStatus;
 }
 
