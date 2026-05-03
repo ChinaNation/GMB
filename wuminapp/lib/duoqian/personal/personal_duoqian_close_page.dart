@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
+import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
@@ -16,6 +17,7 @@ import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import '../shared/duoqian_manage_service.dart';
+import 'personal_proposal_history_service.dart';
 
 /// 关闭个人多签账户提案页面。
 ///
@@ -168,12 +170,29 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
+      // 提前查链上 NextProposalId 作为本次关闭提案的预测 ID(req 5 历史保留)。
+      final predictedProposalId =
+          await TransferProposalService().fetchNextProposalId();
+
       final result = await _manageService.submitProposeClosePersonal(
         duoqianAddress: widget.institution.duoqianAddress,
         beneficiaryAddress: beneficiary,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
+      );
+
+      // 写入 Isar `PersonalDuoqianProposalEntity`,详情页提案列表才能显示。
+      await PersonalProposalHistoryService().recordOrUpdate(
+        personalAddressHex: widget.institution.duoqianAddress,
+        proposalId: predictedProposalId,
+        action: PersonalProposalAction.close,
+        status: PersonalProposalStatus.voting,
+        yesVotes: 0,
+        noVotes: 0,
+        snapshot: {
+          'beneficiary': beneficiary,
+        },
       );
 
       if (!mounted) return;

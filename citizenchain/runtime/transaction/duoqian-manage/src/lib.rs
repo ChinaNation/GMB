@@ -2633,4 +2633,276 @@ mod tests {
             assert_eq!(Balances::free_balance(&duoqian_address), 1_000);
         });
     }
+
+    // ──── 个人多签边界测试补全(2026-05-03)─────────────────────────────────
+    // 覆盖 8 个边界 case:account_name 长度 / admins 数量上下界 / threshold 三态 /
+    // amount 最低门槛 / 重复创建 / 投票否决清理 / 非法 beneficiary。
+
+    /// account_name 长度边界:正好 128 字节(MaxAccountNameLength)接受,
+    /// 129 字节由 BoundedVec 在构造期拒绝。
+    #[test]
+    fn account_name_length_boundary() {
+        new_test_ext().execute_with(|| {
+            // 128 字节正好等于 MaxAccountNameLength → BoundedVec 接受
+            let exact: AccountNameOf<Test> = vec![b'a'; 128]
+                .try_into()
+                .expect("128 bytes should fit MaxAccountNameLength");
+            let admins = make_admins(&[1, 2, 3]);
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admin(1)),
+                exact.clone(),
+                3,
+                admins,
+                2,
+                1_000,
+            ));
+
+            // 129 字节超出 MaxAccountNameLength → BoundedVec::try_from 拒绝
+            let too_long: Result<AccountNameOf<Test>, _> = vec![b'a'; 129].try_into();
+            assert!(too_long.is_err(), "129 bytes must exceed MaxAccountNameLength");
+        });
+    }
+
+    /// admins.len() = 1 不足:`ensure_admin_config` 要求 admin_count >= 2,
+    /// 触发 `InvalidAdminCount`。
+    #[test]
+    fn admin_count_below_minimum_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let account_name: AccountNameOf<Test> = b"Single Admin"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
+            let admins: DuoqianAdminsOf<Test> = vec![admin(1)]
+                .try_into()
+                .expect("admins should fit");
+            assert_noop!(
+                Duoqian::propose_create_personal(
+                    RuntimeOrigin::signed(admin(1)),
+                    account_name,
+                    1,
+                    admins,
+                    1,
+                    1_000,
+                ),
+                Error::<Test>::InvalidAdminCount
+            );
+        });
+    }
+
+    /// admins.len() = MaxAdmins (10) 上界:配合合法 threshold(min=ceil(10/2)=5)
+    /// 应接受。验证多 admin 路径不破。
+    #[test]
+    fn admin_count_at_max_admins_works() {
+        new_test_ext().execute_with(|| {
+            let account_name: AccountNameOf<Test> = b"Ten Admins"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
+            let admins: DuoqianAdminsOf<Test> = (1u8..=10)
+                .map(admin)
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("10 admins should fit MaxAdmins=10");
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admin(1)),
+                account_name,
+                10,
+                admins,
+                5, // min_threshold = max(2, ceil(10/2)) = 5
+                1_000,
+            ));
+        });
+    }
+
+    /// threshold 三态超界:
+    /// - threshold = 0 < min_threshold(=2) → InvalidThreshold
+    /// - threshold = 1 < min_threshold(=2) → InvalidThreshold
+    /// - threshold = 4 > admin_count(=3) → InvalidThreshold
+    #[test]
+    fn threshold_outside_valid_range_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let account_name: AccountNameOf<Test> = b"Bad Threshold"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
+            let admins = make_admins(&[1, 2, 3]);
+            for bad_threshold in [0u32, 1, 4] {
+                assert_noop!(
+                    Duoqian::propose_create_personal(
+                        RuntimeOrigin::signed(admin(1)),
+                        account_name.clone(),
+                        3,
+                        admins.clone(),
+                        bad_threshold,
+                        1_000,
+                    ),
+                    Error::<Test>::InvalidThreshold
+                );
+            }
+        });
+    }
+
+    /// amount 最低门槛边界:
+    /// - amount = MinCreateAmount - 1 (=110) → CreateAmountBelowMinimum
+    /// - amount = MinCreateAmount (=111)     → 接受
+    #[test]
+    fn amount_minimum_boundary() {
+        new_test_ext().execute_with(|| {
+            let admins = make_admins(&[1, 2, 3]);
+
+            // 110 = MinCreateAmount - 1,严格低于
+            let name_below: AccountNameOf<Test> = b"Below Min"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
+            assert_noop!(
+                Duoqian::propose_create_personal(
+                    RuntimeOrigin::signed(admin(1)),
+                    name_below,
+                    3,
+                    admins.clone(),
+                    2,
+                    110,
+                ),
+                Error::<Test>::CreateAmountBelowMinimum
+            );
+
+            // 111 = MinCreateAmount,等于下界,应接受
+            let name_eq: AccountNameOf<Test> = b"Equal Min"
+                .to_vec()
+                .try_into()
+                .expect("account_name should fit");
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admin(1)),
+                name_eq,
+                3,
+                admins,
+                2,
+                111,
+            ));
+        });
+    }
+
+    /// 同 creator + 同 account_name 派生地址相同 → 第二次 propose 必被
+    /// `PersonalDuoqianAlreadyExists` 拦截(防并发重复创建,即使第一笔仍在 Pending)。
+    #[test]
+    fn duplicate_creator_and_account_name_is_rejected() {
+        new_test_ext().execute_with(|| {
+            let (account_name, _duoqian_address, admins, _pairs) =
+                setup_personal_duoqian("DUP001", &[1, 2, 3]);
+
+            // 第一次 propose 成功
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admins[0].clone()),
+                account_name.clone(),
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+
+            // 第二次 same (creator, account_name) → 同地址 → 已存在(Pending)
+            assert_noop!(
+                Duoqian::propose_create_personal(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    account_name,
+                    3,
+                    admins,
+                    2,
+                    1_000,
+                ),
+                Error::<Test>::PersonalDuoqianAlreadyExists
+            );
+        });
+    }
+
+    /// 投票否决路径:STATUS_REJECTED 后 `cleanup_rejected_proposal` 必须:
+    /// 1. unreserve 发起人的 (amount + fee)
+    /// 2. 删 DuoqianAccounts / PersonalDuoqianInfo / PendingPersonalCreate 三张 storage
+    /// 3. 发 `DuoqianCreateRejected` 事件
+    #[test]
+    fn cleanup_rejected_proposal_releases_reserve_and_clears_all_storage() {
+        new_test_ext().execute_with(|| {
+            let (account_name, duoqian_address, admins, _pairs) =
+                setup_personal_duoqian("REJ001", &[1, 2, 3]);
+
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admins[0].clone()),
+                account_name.clone(),
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let pid = last_proposal_id();
+
+            // 创建后状态:reserve = amount + fee = 1_000 + 10 = 1_010,3 张 storage 写入
+            assert_eq!(Balances::reserved_balance(&admins[0]), 1_010);
+            assert!(DuoqianAccounts::<Test>::contains_key(&duoqian_address));
+            assert!(PersonalDuoqianInfo::<Test>::contains_key(&duoqian_address));
+            assert!(PendingPersonalCreate::<Test>::contains_key(pid));
+
+            // 模拟投票引擎将提案置为 REJECTED
+            voting_engine::Proposals::<Test>::mutate(pid, |maybe| {
+                if let Some(proposal) = maybe {
+                    proposal.status = voting_engine::STATUS_REJECTED;
+                }
+            });
+
+            // 清理
+            assert_ok!(Duoqian::cleanup_rejected_proposal(
+                RuntimeOrigin::signed(admins[0].clone()),
+                pid,
+            ));
+
+            // 清理后:reserve 释放,3 张 storage 全清
+            assert_eq!(Balances::reserved_balance(&admins[0]), 0);
+            assert!(!DuoqianAccounts::<Test>::contains_key(&duoqian_address));
+            assert!(!PersonalDuoqianInfo::<Test>::contains_key(&duoqian_address));
+            assert!(!PendingPersonalCreate::<Test>::contains_key(pid));
+        });
+    }
+
+    /// 关闭路径非法 beneficiary 防御:beneficiary == duoqian_address 自身 → InvalidBeneficiary。
+    /// (其他几路:reserved 地址 / 无效地址 / 受保护源,均通过同一 ensure! 链触发,
+    /// 与本 case 共用错误码,此处只断 self 收款。)
+    #[test]
+    fn propose_close_rejects_self_beneficiary() {
+        new_test_ext().execute_with(|| {
+            let (account_name, duoqian_address, admins, pairs) =
+                setup_personal_duoqian("SELF001", &[1, 2, 3]);
+
+            // 创建并激活
+            assert_ok!(Duoqian::propose_create_personal(
+                RuntimeOrigin::signed(admins[0].clone()),
+                account_name.clone(),
+                3,
+                admins.clone(),
+                2,
+                1_000,
+            ));
+            let create_pid = last_proposal_id();
+            assert_ok!(finalize_with(
+                admins[0].clone(),
+                create_pid,
+                &duoqian_address,
+                &admins[0],
+                &admins,
+                &pairs,
+                2,
+                1_000,
+                3,
+            ));
+
+            // beneficiary 设为 duoqian_address 自身 → InvalidBeneficiary
+            assert_noop!(
+                Duoqian::propose_close(
+                    RuntimeOrigin::signed(admins[0].clone()),
+                    duoqian_address.clone(),
+                    duoqian_address,
+                ),
+                Error::<Test>::InvalidBeneficiary
+            );
+        });
+    }
 }

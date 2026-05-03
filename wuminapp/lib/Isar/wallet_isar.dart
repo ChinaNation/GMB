@@ -116,6 +116,51 @@ class PersonalDuoqianEntity {
   late int addedAtMillis;
 }
 
+/// 个人多签提案历史快照（本地持久化）。
+///
+/// 链上 voting-engine 90 天后清理终态提案 (REJECTED/EXECUTED/EXECUTION_FAILED)，
+/// wuminapp 端必须在本地永久保留历史，详情页提案列表才能在历史段始终可见。
+///
+/// 写入时机:
+/// 1. 本机发起提案后(propose_create_personal / propose_transfer / propose_close)
+/// 2. 详情页打开时同步链上活跃提案最新状态（upsert）
+/// 3. 本机投票后刷新该提案的 status / yesVotes / noVotes
+@collection
+class PersonalDuoqianProposalEntity {
+  Id id = Isar.autoIncrement;
+
+  /// 多签地址公钥 hex(32 字节,不含 0x 前缀)。复合索引 key 之一。
+  @Index(composite: [CompositeIndex('proposalId')], unique: true, replace: true)
+  late String personalAddress;
+
+  /// 链上提案 ID。
+  late int proposalId;
+
+  /// 提案动作:'create' / 'transfer' / 'close'。
+  @Index()
+  late String action;
+
+  /// 提案状态最新快照:'voting' / 'passed' / 'rejected' / 'executed' / 'execution_failed'。
+  @Index()
+  late String status;
+
+  /// 投票计数 yes(每次刷新链上状态时同步)。
+  late int yesVotes;
+
+  /// 投票计数 no。
+  late int noVotes;
+
+  /// 提案首次记录时间(本机发起或首次发现)。
+  @Index()
+  late int createdAtMillis;
+
+  /// 终态时间:rejected / executed / execution_failed 时写入;voting 期间为 null。
+  int? finalStatusAtMillis;
+
+  /// 业务快照(JSON 字符串):转账金额 / 关闭 beneficiary / 创建账户名等,便于扩展。
+  String? snapshotJson;
+}
+
 /// 用户添加的多签机构（本地持久化）。
 @collection
 class DuoqianInstitutionEntity {
@@ -246,6 +291,7 @@ class WalletIsar {
       AppKvEntitySchema,
       DuoqianInstitutionEntitySchema,
       PersonalDuoqianEntitySchema,
+      PersonalDuoqianProposalEntitySchema,
       LocalTxEntitySchema,
     ];
     final isar =

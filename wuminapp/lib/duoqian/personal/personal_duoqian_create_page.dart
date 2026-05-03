@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
@@ -18,6 +19,7 @@ import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import '../shared/duoqian_manage_service.dart';
+import 'personal_proposal_history_service.dart';
 
 /// 个人多签账户创建页面（无需 SFID）。
 class PersonalDuoqianCreatePage extends StatefulWidget {
@@ -284,6 +286,12 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
+      // 提前查链上 NextProposalId,作为本次创建提案的预测 ID。
+      // 写入 Isar `PersonalDuoqianProposalEntity` 时使用,后续详情页打开
+      // 通过 PersonalProposalHistoryService 同步链上状态时按此 ID 校准。
+      final predictedProposalId =
+          await TransferProposalService().fetchNextProposalId();
+
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,
         adminCount: _adminPubkeys.length,
@@ -308,6 +316,22 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
             ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
           await isar.personalDuoqianEntitys.put(entity);
         });
+
+        // 同步记录创建提案到 PersonalDuoqianProposalEntity(req 5 历史保留)
+        await PersonalProposalHistoryService().recordOrUpdate(
+          personalAddressHex: addrHex,
+          proposalId: predictedProposalId,
+          action: PersonalProposalAction.create,
+          status: PersonalProposalStatus.voting,
+          yesVotes: 0,
+          noVotes: 0,
+          snapshot: {
+            'name': nameText,
+            'admin_count': _adminPubkeys.length,
+            'threshold': threshold,
+            'amount_fen': amountFen.toString(),
+          },
+        );
       }
 
       if (!mounted) return;

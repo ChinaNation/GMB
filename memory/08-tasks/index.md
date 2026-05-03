@@ -83,11 +83,6 @@
 
 ## done
 
-- `memory/08-tasks/done/20260503-000000-duoqian-manage-创建路径重构-8项.md`
-- `memory/08-tasks/done/20260502-230000-duoqian-manage-按个人机构子目录拆分.md`
-- `memory/08-tasks/done/20260502-220000-治理-runtime-审计-4-项后续修复.md`
-- `memory/08-tasks/done/20260502-201823-清除治理runtime五项已完成清单.md`
-- `memory/08-tasks/done/20260502-fix-admins-lifecycle-voting-retry-cleanup.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -267,8 +262,12 @@
 - `memory/08-tasks/done/20260502-192535-治理-runtime-问题核查.md`
 - `memory/08-tasks/done/20260502-193144-修复-voting-engine-benchmark-internal-vote-权重和-duoqian-治理边界.md`
 - `memory/08-tasks/done/20260502-195022-治理-runtime-核查问题修复.md`
+- `memory/08-tasks/done/20260502-201823-清除治理runtime五项已完成清单.md`
+- `memory/08-tasks/done/20260502-220000-治理-runtime-审计-4-项后续修复.md`
+- `memory/08-tasks/done/20260502-230000-duoqian-manage-按个人机构子目录拆分.md`
 - `memory/08-tasks/done/20260502-check-admins-voting-api-retry-cleanup.md`
 - `memory/08-tasks/done/20260502-duoqian-registration-info-align.md`
+- `memory/08-tasks/done/20260502-fix-admins-lifecycle-voting-retry-cleanup.md`
 - `memory/08-tasks/done/20260502-node-offchain-clearing-dir-refactor.md`
 - `memory/08-tasks/done/20260502-node-offchain-duplicate-cleanup.md`
 - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
@@ -282,3 +281,8 @@
 - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
 - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
 - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
+- `memory/08-tasks/done/20260503-000000-duoqian-manage-创建路径重构-8项.md`
+- `memory/08-tasks/done/20260503-110000-费率规则常量统一到-fee-policy.md`
+- `memory/08-tasks/done/20260503-114604-检查注册机构多签模块完成度.md`
+- `memory/08-tasks/done/20260503-150000-个人多签模块边界测试补全.md`
+- `memory/08-tasks/done/20260503-160000-wuminapp-个人多签详情页UI改造.md`
