@@ -83,6 +83,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260502-220000-治理-runtime-审计-4-项后续修复.md`
 - `memory/08-tasks/done/20260502-201823-清除治理runtime五项已完成清单.md`
 - `memory/08-tasks/done/20260502-fix-admins-lifecycle-voting-retry-cleanup.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`

@@ -193,16 +193,8 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 任意人触发"已通过提案"的销毁执行,用于自动执行失败后的补救重试。
-        ///
-        /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
-        /// 通过后由本模块的 `InternalVoteExecutor` 自动执行销毁。
-        #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_destroy())]
-        pub fn execute_destroy(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
+        // call_index = 1 已废弃: execute_destroy 已统一到
+        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎入口。
     }
 
     impl<T: Config> Pallet<T> {
@@ -714,7 +706,7 @@ mod tests {
                 1_000
             );
             assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
-            assert_ok!(ResolutionDestro::execute_destroy(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -753,7 +745,7 @@ mod tests {
 
             // 如果不校验 ED，这里会被销毁到 0 并触发账户 reap。
             assert_eq!(Balances::free_balance(&account), 1_000);
-            assert_ok!(ResolutionDestro::execute_destroy(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -836,7 +828,7 @@ mod tests {
 
             // 补充余额后手动重试执行
             let _ = Balances::deposit_creating(&account, 200);
-            assert_ok!(ResolutionDestro::execute_destroy(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -909,10 +901,10 @@ mod tests {
             }
             let _ = Balances::deposit_creating(&account, 200);
             assert_noop!(
-                ResolutionDestro::execute_destroy(RuntimeOrigin::signed(outsider), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(outsider), pid),
                 voting_engine::pallet::Error::<Test>::NoPermission
             );
-            assert_ok!(ResolutionDestro::execute_destroy(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));

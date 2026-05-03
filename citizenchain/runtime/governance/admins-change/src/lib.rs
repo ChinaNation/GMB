@@ -241,6 +241,53 @@ pub mod pallet {
         }
     }
 
+    /// 构造内置机构（国储会/省储会/省储行）创世记录。
+    ///
+    /// 中文注释：创世期 panic 是设计意图——`CHINA_CB` / `CHINA_CH` 常量错配
+    /// 或 `MaxAdminsPerInstitution` 不足时立即拒绝起链，绝不允许带病启动。
+    /// 所有 panic 都携带 `shenfen_id` 便于运维定位是哪条记录出错。
+    fn build_builtin_institution<T: Config>(
+        shenfen_id: &'static str,
+        org: u8,
+        raw_admins: &'static [[u8; 32]],
+    ) -> AdminInstitutionOf<T> {
+        let admins: Vec<T::AccountId> = raw_admins
+            .iter()
+            .map(|raw| {
+                T::AccountId::decode(&mut &raw[..]).unwrap_or_else(|_| {
+                    panic!(
+                        "genesis: shenfen_id {} 管理员账号 decode 失败",
+                        shenfen_id
+                    )
+                })
+            })
+            .collect();
+        let bounded: AdminsOf<T> = admins.try_into().unwrap_or_else(|_| {
+            panic!(
+                "genesis: shenfen_id {} 管理员数量超过 MaxAdminsPerInstitution",
+                shenfen_id
+            )
+        });
+        let creator = bounded.first().cloned().unwrap_or_else(|| {
+            panic!(
+                "genesis: shenfen_id {} 内置机构必须至少 1 个管理员",
+                shenfen_id
+            )
+        });
+        let threshold = default_threshold(org)
+            .unwrap_or_else(|| panic!("genesis: org {} 没有默认阈值", org));
+        AdminInstitution {
+            org,
+            kind: AdminSubjectKind::BuiltinInstitution,
+            admins: bounded,
+            threshold,
+            creator,
+            created_at: Zero::zero(),
+            updated_at: Zero::zero(),
+            status: AdminSubjectStatus::Active,
+        }
+    }
+
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn integrity_test() {
@@ -264,34 +311,9 @@ pub mod pallet {
                 } else {
                     ORG_PRC
                 };
-                let admins: Vec<T::AccountId> = node
-                    .duoqian_admins
-                    .iter()
-                    .map(|raw| {
-                        T::AccountId::decode(&mut &raw[..])
-                            .expect("reserve admin account must decode")
-                    })
-                    .collect();
-                let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> =
-                    admins
-                        .try_into()
-                        .expect("reserve admins must fit MaxAdminsPerInstitution");
-                let creator = bounded
-                    .get(0)
-                    .cloned()
-                    .expect("builtin institution must have admins");
                 Institutions::<T>::insert(
                     institution,
-                    AdminInstitution {
-                        org,
-                        kind: AdminSubjectKind::BuiltinInstitution,
-                        admins: bounded,
-                        threshold: default_threshold(org).expect("builtin org has threshold"),
-                        creator,
-                        created_at: Zero::zero(),
-                        updated_at: Zero::zero(),
-                        status: AdminSubjectStatus::Active,
-                    },
+                    build_builtin_institution::<T>(node.shenfen_id, org, node.duoqian_admins),
                 );
             }
 
@@ -299,34 +321,13 @@ pub mod pallet {
                 let Some(institution) = shengbank_pallet_id_to_bytes(node.shenfen_id) else {
                     continue;
                 };
-                let admins: Vec<T::AccountId> = node
-                    .duoqian_admins
-                    .iter()
-                    .map(|raw| {
-                        T::AccountId::decode(&mut &raw[..])
-                            .expect("shengbank admin account must decode")
-                    })
-                    .collect();
-                let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> =
-                    admins
-                        .try_into()
-                        .expect("shengbank admins must fit MaxAdminsPerInstitution");
-                let creator = bounded
-                    .get(0)
-                    .cloned()
-                    .expect("builtin institution must have admins");
                 Institutions::<T>::insert(
                     institution,
-                    AdminInstitution {
-                        org: ORG_PRB,
-                        kind: AdminSubjectKind::BuiltinInstitution,
-                        admins: bounded,
-                        threshold: default_threshold(ORG_PRB).expect("PRB has threshold"),
-                        creator,
-                        created_at: Zero::zero(),
-                        updated_at: Zero::zero(),
-                        status: AdminSubjectStatus::Active,
-                    },
+                    build_builtin_institution::<T>(
+                        node.shenfen_id,
+                        ORG_PRB,
+                        node.duoqian_admins,
+                    ),
                 );
             }
         }
@@ -484,17 +485,9 @@ pub mod pallet {
             })
         }
 
-        /// 任意人触发"已通过提案"的执行。
-        ///
-        /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
-        /// 通过后由本模块的 `InternalVoteExecutor` 自动触发 `try_execute_replacement`。
-        /// 自动执行失败会进入 `STATUS_EXECUTION_FAILED` 终态,本 call 不再允许跨时期重试。
-        #[pallet::call_index(1)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::execute_admin_replacement())]
-        pub fn execute_admin_replacement(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
+        // call_index = 1 已废弃: execute_admin_replacement 已统一到
+        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎
+        // 的 retry/cancel 入口,业务 pallet 不再保留任何 wrapper extrinsic。
     }
 
     impl<T: Config> Pallet<T> {
@@ -1770,7 +1763,7 @@ mod tests {
             let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
             assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
@@ -1871,7 +1864,7 @@ mod tests {
             }
 
             assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
@@ -1969,7 +1962,7 @@ mod tests {
             });
 
             assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::pallet::Error::<Test>::ProposalNotRetryable
             );
             let admins = current_admins(institution);
@@ -1998,7 +1991,7 @@ mod tests {
                 proposal.kind = voting_engine::PROPOSAL_KIND_JOINT;
             });
             assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::pallet::Error::<Test>::ProposalOwnerMissing
             );
 
@@ -2007,7 +2000,7 @@ mod tests {
                 proposal.kind = voting_engine::PROPOSAL_KIND_INTERNAL;
                 proposal.stage = voting_engine::STAGE_JOINT;
             });
-            assert_ok!(AdminsChange::execute_admin_replacement(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -2040,7 +2033,7 @@ mod tests {
                 proposal.internal_institution = Some(prc_pallet_id());
             });
             assert_noop!(
-                AdminsChange::execute_admin_replacement(RuntimeOrigin::signed(nrc_admin(0)), pid),
+                VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
                 voting_engine::pallet::Error::<Test>::NoPermission
             );
 
@@ -2049,7 +2042,7 @@ mod tests {
                 proposal.internal_institution = Some(institution);
                 proposal.internal_org = Some(ORG_PRC);
             });
-            assert_ok!(AdminsChange::execute_admin_replacement(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
@@ -2102,6 +2095,126 @@ mod tests {
                     AccountId32::new([205u8; 32])
                 ),
                 Error::<Test>::InvalidInstitution
+            );
+        });
+    }
+
+    /// 全员替换循环：连续替换 NRC 后六位管理员（idx 13..19），保持
+    /// 前 13 位作为投票者。验证 admin 数量恒为 NRC_ADMIN_COUNT、
+    /// 新人入名单、旧人出名单、互斥锁每轮正确释放。
+    #[test]
+    fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+            assert_eq!(
+                current_admins(institution).len() as u32,
+                NRC_ADMIN_COUNT
+            );
+
+            for i in 13..NRC_ADMIN_COUNT as usize {
+                let old_admin = nrc_admin(i);
+                let new_admin = AccountId32::new([180u8 + i as u8; 32]);
+
+                assert_ok!(AdminsChange::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    old_admin.clone(),
+                    new_admin.clone()
+                ));
+                let pid = last_proposal_id();
+                for v in 0..NRC_INTERNAL_THRESHOLD as usize {
+                    assert_ok!(cast_vote(nrc_admin(v), pid, true));
+                }
+
+                let admins = current_admins(institution);
+                assert_eq!(
+                    admins.len() as u32,
+                    NRC_ADMIN_COUNT,
+                    "round {i}: admin count must stay at NRC_ADMIN_COUNT"
+                );
+                assert!(admins.contains(&new_admin), "round {i}: new admin must be in list");
+                assert!(!admins.contains(&old_admin), "round {i}: old admin must be out");
+                assert!(
+                    voting_engine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
+                        .is_none(),
+                    "round {i}: mutex must be released after finalize"
+                );
+            }
+        });
+    }
+
+    /// 互斥锁回归：同机构、同 org 在第一个 admin-replacement 提案
+    /// 进行中时,第二个 propose 必须被 AdminSetMutationProposalActive 拦下。
+    #[test]
+    fn concurrent_nrc_admin_replacements_blocked_by_mutex() {
+        new_test_ext().execute_with(|| {
+            let institution = nrc_pallet_id();
+
+            assert_ok!(AdminsChange::propose_admin_replacement(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                nrc_admin(13),
+                AccountId32::new([220u8; 32])
+            ));
+
+            assert_noop!(
+                AdminsChange::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    ORG_NRC,
+                    institution,
+                    nrc_admin(14),
+                    AccountId32::new([221u8; 32])
+                ),
+                voting_engine::pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+
+            assert_noop!(
+                AdminsChange::propose_admin_replacement(
+                    RuntimeOrigin::signed(nrc_admin(1)),
+                    ORG_NRC,
+                    institution,
+                    nrc_admin(13),
+                    AccountId32::new([222u8; 32])
+                ),
+                voting_engine::pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+        });
+    }
+
+    /// 跨省隔离：PRC 一个省的管理员替换不得影响另一个省的管理员名单。
+    #[test]
+    fn prc_replacement_isolates_provinces() {
+        new_test_ext().execute_with(|| {
+            let prc_a = prc_pallet_id();
+            // CHINA_CB[0]=NRC, [1]=辽宁(prc_pallet_id), 取另一省作为对照。
+            let prc_b = reserve_pallet_id_to_bytes(CHINA_CB[2].shenfen_id)
+                .expect("second prc institution should map");
+            let prc_b_initial = current_admins(prc_b);
+
+            let old_admin = prc_admin(1);
+            let new_admin = AccountId32::new([240u8; 32]);
+            assert_ok!(AdminsChange::propose_admin_replacement(
+                RuntimeOrigin::signed(prc_admin(0)),
+                ORG_PRC,
+                prc_a,
+                old_admin.clone(),
+                new_admin.clone()
+            ));
+            let pid = last_proposal_id();
+            for i in 0..PRC_INTERNAL_THRESHOLD as usize {
+                assert_ok!(cast_vote(prc_admin(i), pid, true));
+            }
+
+            let prc_a_after = current_admins(prc_a);
+            assert!(prc_a_after.contains(&new_admin));
+            assert!(!prc_a_after.contains(&old_admin));
+
+            let prc_b_after = current_admins(prc_b);
+            assert_eq!(
+                prc_b_initial, prc_b_after,
+                "B 省管理员名单不得被 A 省替换影响"
             );
         });
     }

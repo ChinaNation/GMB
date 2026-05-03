@@ -14,7 +14,7 @@
 - `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
 - `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
 - 并发控制由 `voting-engine` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
-- 同一把 `new_key` 若被多个活跃提案占用，第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败，可通过 `cancel_failed_replace_grandpa_key` 清理。
+- 同一把 `new_key` 若被多个活跃提案占用，第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败，可通过 `VotingEngine::cancel_passed_proposal` 清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
 
 ### 0.3 执行与失败恢复需求
 - 提案达到通过阈值后，应自动尝试执行 GRANDPA 密钥替换。
@@ -24,7 +24,7 @@
 
 ### 0.4 生命周期与清理需求
 - 被拒绝的提案由 `voting-engine` 的过期/清理机制处理。
-- 已通过但确定不可执行的提案，通过 `cancel_failed_replace_grandpa_key` 手动清理。
+- 已通过但确定不可执行的提案，通过 `VotingEngine::cancel_passed_proposal` 手动清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
 - 注意：旧版的 `cancel_stale_replace_grandpa_key`（call_index=3）已移除，stale 清理由投票引擎统一承载。
 
 ## 1. 模块定位
@@ -94,21 +94,21 @@ Runtime 配置位置：
 - 自动执行遇到 `GrandpaChangePending` 时发出 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，提案保留在 `STATUS_PASSED` 供后续重试。
 - 自动执行遇到 `OldAuthorityNotFound`、`NewKeyAlreadyUsed` 等确定不可执行错误时发出 `GrandpaKeyExecutionFailed`，返回 `FatalFailed`，由投票引擎推进到 `STATUS_EXECUTION_FAILED`。
 
-### 5.3 `execute_replace_grandpa_key`（index = 1）
-约束：
-- 兼容入口：委托 `VotingEngine::retry_passed_proposal_for`
-- 仅提案快照管理员可手动执行，重试次数、deadline 与状态推进由投票引擎统一校验
-- 用于“已通过但自动执行暂时失败”的重试
+### 5.3 已废弃: `execute_replace_grandpa_key`（原 index = 1）
+2026-05-02 unified voting entry 整改后，本模块的 `execute_replace_grandpa_key` wrapper extrinsic 物理删除。手动重试统一走：
 
-### 5.4 `cancel_failed_replace_grandpa_key`（index = 2）
+- `VotingEngine::retry_passed_proposal(proposal_id)`
+
+仅提案快照管理员可触发；重试次数、deadline 与状态推进由投票引擎统一校验。用于“已通过但自动执行暂时失败”的重试。
+
+### 5.4 已废弃: `cancel_failed_replace_grandpa_key`（原 index = 2）
 注意：旧版 `cancel_stale_replace_grandpa_key`（index = 3）已移除，stale 清理由投票引擎统一承载。
 
-当前 `cancel_failed_replace_grandpa_key`（index = 2）：
-约束：
-- 兼容入口：委托 `VotingEngine::cancel_passed_proposal_for`
-- 仅提案快照管理员可清理
-- 仅可清理“已通过但当前确定不可执行”的提案
-- 清理时由投票引擎将状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`
+2026-05-02 unified voting entry 整改后，`cancel_failed_replace_grandpa_key` wrapper extrinsic 物理删除。失败提案清理统一走：
+
+- `VotingEngine::cancel_passed_proposal(proposal_id, reason)`
+
+仅提案快照管理员可清理；仅可清理“已通过但当前确定不可执行”的提案；清理时由投票引擎将状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`。
 
 ## 6. 执行路径与 GRANDPA 交互
 `try_execute_from_action` 关键步骤：
@@ -122,7 +122,7 @@ Runtime 配置位置：
 8. 返回 `ProposalExecutionOutcome::Executed`，由投票引擎统一标记 `STATUS_EXECUTED`
 
 提案状态流转：`VOTING → PASSED → EXECUTED`（执行成功）/ `VOTING → REJECTED`（否决）/ `VOTING → PASSED → EXECUTION_FAILED`（已通过但确认不可执行）。
-注：`cancel_failed_replace_grandpa_key` 会将已通过但不可执行的提案设置为 `STATUS_EXECUTION_FAILED` 后清理。
+注：`VotingEngine::cancel_passed_proposal` 会将已通过但不可执行的提案设置为 `STATUS_EXECUTION_FAILED` 后清理。
 
 ## 7. 关键错误与语义
 - `GrandpaChangePending`：当前已有待生效 authority set 变更
@@ -133,9 +133,9 @@ Runtime 配置位置：
 ## 8. 风险控制与并发策略
 - 并发冲突：两个提案若同时执行，后者会因 `GrandpaChangePending` 返回 `RetryableFailed`，等待下次重试；若重试时已经确定不可执行，则进入 `STATUS_EXECUTION_FAILED` 或由人工取消失败提案。
 - 立即切换风险：通过 `GrandpaAuthoritySetChangeDelay=30` 降低。
-- 长期卡死风险：通过 `cancel_failed_replace_grandpa_key` 消除。
+- 长期卡死风险：通过 `VotingEngine::cancel_passed_proposal` 消除。
 - 已修复风险：过去只校验 `new_key` “能解压为曲线点”，未拒绝 small-order 弱公钥；现在已显式拒绝 weak key。
-- 并发 new_key 冲突：当前设计不在提案创建时拦截（旧版 `PendingProposalByNewKey` 已移除），而是在执行时通过 `validate_action` 的 `BTreeSet` 唯一性检查拒绝。冲突的提案可通过 `cancel_failed_replace_grandpa_key` 清理。
+- 并发 new_key 冲突：当前设计不在提案创建时拦截（旧版 `PendingProposalByNewKey` 已移除），而是在执行时通过 `validate_action` 的 `BTreeSet` 唯一性检查拒绝。冲突的提案可通过 `VotingEngine::cancel_passed_proposal` 清理。
 
 ## 9. 创世公钥严格校验（按“严格要求”）
 位置：
@@ -158,7 +158,7 @@ Runtime 配置位置：
 1. 新 key 上线顺序：先注入本机 keystore，再等待治理通过并生效。
 2. 换钥提案通过后若执行失败：
 - 先查是否 `GrandpaChangePending`，等待 pending change 落地后重试执行。
-- 若已确定不可执行，可用 `cancel_failed_replace_grandpa_key` 清理。
+- 若已确定不可执行，可用 `VotingEngine::cancel_passed_proposal` 清理。
 3. 生产节点应监控：
 - `GrandpaKeyExecutionFailed`
 - `GrandpaKeyReplaced`

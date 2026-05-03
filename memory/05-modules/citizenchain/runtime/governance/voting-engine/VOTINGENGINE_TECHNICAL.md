@@ -202,7 +202,7 @@ any → unknown
 
 手动执行流程：
 
-1. 业务模块保留的 `execute_xxx` 兼容入口必须委托 `VotingEngine::retry_passed_proposal_for`；也可直接调用投票引擎公开 extrinsic `retry_passed_proposal`。
+1. **统一入口（2026-05-02 整改）**：所有业务 pallet 的 `execute_xxx` wrapper extrinsic 已物理删除。前端必须直接调用投票引擎公开 extrinsic `VotingEngine::retry_passed_proposal(proposal_id)`，业务 pallet 不再保留任何兼容层。
 2. 投票引擎校验提案存在、状态为 `STATUS_PASSED`、caller 是提案快照管理员、未超过 `retry_deadline`、手动失败次数未达到 `MaxManualExecutionAttempts`。
 3. 执行成功转 `STATUS_EXECUTED`。
 4. 执行失败且未满 3 次时递增 `manual_attempts`，保持 `STATUS_PASSED`。
@@ -210,7 +210,7 @@ any → unknown
 
 手动取消流程：
 
-1. 业务模块保留的 `cancel_xxx` 兼容入口必须委托 `VotingEngine::cancel_passed_proposal_for`；也可直接调用投票引擎公开 extrinsic `cancel_passed_proposal`。
+1. **统一入口（2026-05-02 整改）**：所有业务 pallet 的 `cancel_xxx` wrapper extrinsic 已物理删除。前端必须直接调用投票引擎公开 extrinsic `VotingEngine::cancel_passed_proposal(proposal_id, reason)`。
 2. 投票引擎校验状态、权限，并调用 owner callback 的 `can_cancel_passed_proposal`。
 3. callback 默认返回 `Ignored`，只有 owner 模块显式返回 `ProposalCancelDecision::Allow` 才能取消；否则返回 `ProposalCancellationNotAllowed`。
 4. 取消成功后转 `STATUS_EXECUTION_FAILED`。
@@ -349,6 +349,21 @@ proposal_id = UTC 公历年份 × 1,000,000 + 年内计数器
 - 联合投票在管理员参与阶段占用所有参与机构的普通锁。
 - 联合投票进入公民投票阶段后释放管理员互斥锁，避免长期公民投票阻塞管理员更换。
 - `STATUS_PASSED` 的管理员集合变更提案不会释放独占锁，必须进入 `STATUS_EXECUTED / STATUS_REJECTED / STATUS_EXECUTION_FAILED` 后释放。
+
+### 5.12 业务 wrapper 物理删除（2026-05-02）
+unified voting entry 整改最后一步把所有业务 pallet 的 `execute_xxx` / `cancel_xxx` wrapper extrinsic 物理删除。涉及范围：
+
+- `duoqian-transfer`：`execute_transfer` / `execute_safety_fund_transfer` / `execute_sweep_to_main`
+- `resolution-destro`：`execute_destroy`
+- `grandpakey-change`：`execute_replace_grandpa_key` / `cancel_failed_replace_grandpa_key`
+- `admins-change` / `runtime-upgrade`：保持 propose/vote 单一入口，不再保留任何手动 retry/cancel wrapper
+
+整改后，前端（citizenchain/node Tauri UI、wuminapp 热钱包、wumin 冷钱包等）必须统一调用投票引擎公开 extrinsic：
+
+- 手动重试：`VotingEngine::retry_passed_proposal(proposal_id)`
+- 取消失败：`VotingEngine::cancel_passed_proposal(proposal_id, reason)`
+
+权限校验、最多 3 次手动失败、retry deadline、`STATUS_PASSED → STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 状态推进全部由 voting-engine 统一承担。业务 pallet 仅保留 propose 和 callback（`InternalVoteExecutor::try_execute_*_from_callback`），不再暴露任何兼容层。
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo

@@ -394,68 +394,73 @@ void main() {
     String encodeHex(Uint8List bytes) =>
         '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
-    test('decodes execute_transfer (pallet=19 call=3)', () {
-      final payload = buildProposalIdPayload(0x13, 0x03, 100);
+    test('decodes retry_passed_proposal (pallet=9 call=4)', () {
+      // Phase 4(2026-05-02): 业务 pallet 的 execute_xxx wrapper 全部物理删除,
+      // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
+      final payload = buildProposalIdPayload(0x09, 0x04, 100);
       final decoded =
           PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_transfer');
+      expect(decoded!.action, 'retry_passed_proposal');
       expect(decoded.fields['proposal_id'], '100');
       expect(decoded.summary, contains('#100'));
     });
 
-    test('decodes execute_safety_fund_transfer (pallet=19 call=4)', () {
-      final payload = buildProposalIdPayload(0x13, 0x04, 101);
+    test('decodes cancel_passed_proposal with empty reason (pallet=9 call=5)',
+        () {
+      // SCALE: [0x09][0x05][proposal_id u64_le][Compact<u32> 0]
+      final builder = BytesBuilder()
+        ..add([0x09, 0x05])
+        ..add(Uint8List.fromList(buildProposalIdPayload(0x09, 0x05, 401)
+            .sublist(2, 10)))
+        ..add([0x00]); // Compact<u32> 0 (空 reason)
+      final payload = builder.toBytes();
       final decoded =
           PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_safety_fund_transfer');
-      expect(decoded.fields['proposal_id'], '101');
-    });
-
-    test('decodes execute_sweep_to_main (pallet=19 call=5)', () {
-      final payload = buildProposalIdPayload(0x13, 0x05, 102);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_sweep_to_main');
-      expect(decoded.fields['proposal_id'], '102');
-    });
-
-    test('decodes execute_destroy (pallet=14 call=1)', () {
-      final payload = buildProposalIdPayload(0x0e, 0x01, 200);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_destroy');
-      expect(decoded.fields['proposal_id'], '200');
-    });
-
-    test('decodes execute_admin_replacement (pallet=12 call=1)', () {
-      final payload = buildProposalIdPayload(0x0c, 0x01, 300);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_admin_replacement');
-      expect(decoded.fields['proposal_id'], '300');
-    });
-
-    test('decodes execute_replace_grandpa_key (pallet=16 call=1)', () {
-      final payload = buildProposalIdPayload(0x10, 0x01, 400);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'execute_replace_grandpa_key');
-      expect(decoded.fields['proposal_id'], '400');
-    });
-
-    test('decodes cancel_failed_replace_grandpa_key (pallet=16 call=2)', () {
-      final payload = buildProposalIdPayload(0x10, 0x02, 401);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'cancel_failed_replace_grandpa_key');
+      expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '401');
+      expect(decoded.fields['reason'], '');
+    });
+
+    test('decodes cancel_passed_proposal with utf8 reason (pallet=9 call=5)',
+        () {
+      final reason = utf8.encode('密钥不可执行');
+      // Compact<u32> for reason length (small => single byte mode, len << 2)
+      final compactLen = reason.length << 2;
+      final builder = BytesBuilder()
+        ..add([0x09, 0x05])
+        ..add(Uint8List.fromList(buildProposalIdPayload(0x09, 0x05, 402)
+            .sublist(2, 10)))
+        ..add([compactLen])
+        ..add(reason);
+      final payload = builder.toBytes();
+      final decoded =
+          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'cancel_passed_proposal');
+      expect(decoded.fields['proposal_id'], '402');
+      expect(decoded.fields['reason'], '密钥不可执行');
+    });
+
+    test('rejects deleted business wrappers (pallet=19/14/12/16)', () {
+      // Phase 4 物理删除的旧 call_index 不应再被解码识别。
+      final cases = <List<int>>[
+        [0x13, 0x03], // execute_transfer
+        [0x13, 0x04], // execute_safety_fund_transfer
+        [0x13, 0x05], // execute_sweep_to_main
+        [0x0e, 0x01], // execute_destroy
+        [0x0c, 0x01], // execute_admin_replacement
+        [0x10, 0x01], // execute_replace_grandpa_key
+        [0x10, 0x02], // cancel_failed_replace_grandpa_key
+      ];
+      for (final c in cases) {
+        final payload = buildProposalIdPayload(c[0], c[1], 999);
+        final decoded =
+            PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+        expect(decoded, isNull,
+            reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
+      }
     });
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
