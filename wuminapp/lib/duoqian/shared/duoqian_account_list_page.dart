@@ -1,3 +1,15 @@
+// 多签账户合并列表页(req 3 + 入口合并 + 删除扫描加入)。
+//
+// 设计要点:
+// - 个人多签 + SFID 机构多签合并展示,每条 ListTile 用 icon 区分(Icons.person /
+//   Icons.business)。
+// - 启动期/进入页面时后台静默触发 [DuoqianDiscoveryService.discoverByMyWallets],
+//   30 分钟内重复进入不再扫(force=false 节流);下拉刷新强制全扫。
+// - 反向校验:Isar 中 discoveredViaAdmin=true 但本次未命中的 entity 删除;
+//   discoveredViaAdmin=false(本机创建/手动添加)永不被自动删除。
+// - 右上角 "+" → bottom sheet:创建个人多签 / 创建机构多签(2 个选项)。
+// - "扫码加入多签账户"已下线 — 反向索引发现完全替代,不再需要手动 QR 扫描。
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,30 +18,15 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../../Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import '../../qr/bodies/user_duoqian_body.dart';
-import '../../qr/envelope.dart';
-import '../../qr/pages/qr_scan_page.dart' show QrScanMode, QrScanPage;
-import '../../qr/qr_protocols.dart';
 import '../../ui/app_theme.dart';
 import '../../wallet/core/wallet_manager.dart';
 import '../institution/institution_duoqian_create_page.dart';
 import '../personal/personal_duoqian_create_page.dart';
 import 'duoqian_account_info_page.dart';
-import 'duoqian_account_type.dart';
-import 'duoqian_manage_models.dart';
-import 'duoqian_manage_service.dart';
+import 'duoqian_discovery_service.dart';
 
-/// 单类型多签账户列表页。
-///
-/// 交易页会分别进入机构多签与个人多签，本页只展示一种账户类型；
-/// 扫码加入时也按当前入口写入对应本地表，保持手机端心智一致。
 class DuoqianAccountListPage extends StatefulWidget {
-  const DuoqianAccountListPage({
-    super.key,
-    required this.accountType,
-  });
-
-  final DuoqianAccountType accountType;
+  const DuoqianAccountListPage({super.key});
 
   @override
   State<DuoqianAccountListPage> createState() => _DuoqianAccountListPageState();
@@ -38,8 +35,8 @@ class DuoqianAccountListPage extends StatefulWidget {
 class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   List<_DuoqianListItem> _items = [];
   bool _loading = true;
-
-  bool get _isPersonal => widget.accountType == DuoqianAccountType.personal;
+  bool _scanning = false;
+  String? _scanProgress;
 
   @override
   void initState() {
@@ -47,39 +44,72 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool runDiscovery = true}) async {
     setState(() => _loading = true);
     try {
-      final isar = await WalletIsar.instance.db();
-      final items = <_DuoqianListItem>[];
-
-      if (_isPersonal) {
-        final personals = await isar.personalDuoqianEntitys.where().findAll();
-        items.addAll(personals.map((e) => _DuoqianListItem(
-              duoqianAddress: e.duoqianAddress,
-              name: e.name,
-              addedAtMillis: e.addedAtMillis,
-            )));
-      } else {
-        final institutions =
-            await isar.duoqianInstitutionEntitys.where().findAll();
-        items.addAll(institutions.map((e) => _DuoqianListItem(
-              duoqianAddress: e.duoqianAddress,
-              name: e.name,
-              addedAtMillis: e.addedAtMillis,
-            )));
-      }
-
-      items.sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
-      if (!mounted) return;
-      setState(() {
-        _items = items;
-        _loading = false;
-      });
+      await _readFromIsar();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      // ignore;空列表也允许进入页面
     }
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (runDiscovery) {
+      // 后台静默 discovery,完成后再次刷新
+      // ignore: discarded_futures
+      _runBackgroundDiscovery();
+    }
+  }
+
+  Future<void> _readFromIsar() async {
+    final isar = await WalletIsar.instance.db();
+    final personals = await isar.personalDuoqianEntitys.where().findAll();
+    final institutions = await isar.duoqianInstitutionEntitys.where().findAll();
+    final items = <_DuoqianListItem>[
+      ...personals.map((e) => _DuoqianListItem.personal(e)),
+      ...institutions.map((e) => _DuoqianListItem.institution(e)),
+    ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
+    if (!mounted) return;
+    setState(() => _items = items);
+  }
+
+  Future<void> _runBackgroundDiscovery({bool force = false}) async {
+    if (_scanning) return;
+    setState(() {
+      _scanning = true;
+      _scanProgress = '扫描中...';
+    });
+    try {
+      final stats = await DuoqianDiscoveryService().discoverByMyWallets(
+        force: force,
+        onProgress: (s, t, m) {
+          if (mounted) {
+            setState(() {
+              _scanProgress =
+                  '扫描中 $s${t == null ? '' : '/$t'} · 已发现 $m';
+            });
+          }
+        },
+      );
+      if (stats.newlyAdded > 0 || stats.orphansRemoved > 0) {
+        await _readFromIsar();
+      }
+    } catch (e) {
+      // 扫描失败不阻断 UI,Isar 已知列表照常显示
+      debugPrint('[DuoqianListPage] discovery 失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _scanning = false;
+          _scanProgress = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _onPullRefresh() async {
+    await _readFromIsar();
+    await _runBackgroundDiscovery(force: true);
   }
 
   void _showCreateMenu() {
@@ -90,32 +120,28 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(
-                _isPersonal ? Icons.person : Icons.business,
-                color: _isPersonal ? AppTheme.accent : AppTheme.info,
+              leading: const Icon(
+                Icons.person_outline,
+                color: AppTheme.accent,
               ),
-              title: Text(widget.accountType.createTitle),
-              subtitle: Text(_isPersonal ? '无需 SFID，直接设置管理员' : '需要 SFID 机构标识'),
+              title: const Text('创建个人多签'),
+              subtitle: const Text('无需 SFID,直接设置管理员'),
               onTap: () {
                 Navigator.pop(ctx);
-                if (_isPersonal) {
-                  _openCreatePersonal();
-                } else {
-                  _openCreateInstitution();
-                }
+                _openCreatePersonal();
               },
             ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(
-                Icons.qr_code_scanner,
-                color: AppTheme.primaryDark,
+                Icons.business_outlined,
+                color: AppTheme.info,
               ),
-              title: const Text('扫码加入多签账户'),
-              subtitle: const Text('扫描多签账户二维码加入当前列表'),
+              title: const Text('创建机构多签'),
+              subtitle: const Text('需要 SFID 机构标识'),
               onTap: () {
                 Navigator.pop(ctx);
-                _scanJoinDuoqian();
+                _openCreateInstitution();
               },
             ),
           ],
@@ -125,7 +151,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   }
 
   Future<void> _openCreateInstitution() async {
-    final wallets = await _getWallets();
+    final wallets = await WalletManager().getWallets();
     if (!mounted || wallets.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,163 +188,24 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     if (created == true) await _load();
   }
 
-  Future<void> _scanJoinDuoqian() async {
-    final result = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => QrScanPage(
-          mode: QrScanMode.raw,
-          customTitle: '扫码加入${widget.accountType.title}',
-        ),
-      ),
-    );
-    if (result == null || !mounted) return;
-
-    UserDuoqianBody qrBody;
-    try {
-      final env = QrEnvelope.parse(result.trim());
-      if (env.kind != QrKind.userDuoqian) {
-        throw const FormatException('不是多签账户码');
-      }
-      qrBody = env.body as UserDuoqianBody;
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('请扫描多签账户二维码：$e'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-      return;
-    }
-
-    String hexAddress;
-    try {
-      final pubkey = Keyring().decodeAddress(qrBody.address);
-      hexAddress = _toHex(pubkey);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('多签地址无效'), backgroundColor: AppTheme.danger),
-      );
-      return;
-    }
-
-    final isar = await WalletIsar.instance.db();
-    final existsPersonal = await isar.personalDuoqianEntitys
-        .filter()
-        .duoqianAddressEqualTo(hexAddress)
-        .findFirst();
-    final existsInstitution = await isar.duoqianInstitutionEntitys
-        .filter()
-        .duoqianAddressEqualTo(hexAddress)
-        .findFirst();
-    if (existsPersonal != null || existsInstitution != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该多签账户已在列表中')),
-      );
-      return;
-    }
-
-    final manageService = DuoqianManageService();
-    final accountInfo = await manageService.fetchDuoqianAccount(hexAddress);
-    if (accountInfo == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('链上未找到该多签账户'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-      return;
-    }
-
-    final wallets = await _getWallets();
-    WalletProfile? matchedWallet;
-    for (final w in wallets) {
-      var pk = w.pubkeyHex.toLowerCase();
-      if (pk.startsWith('0x')) pk = pk.substring(2);
-      if (accountInfo.adminPubkeys.contains(pk)) {
-        matchedWallet = w;
-        break;
-      }
-    }
-    if (matchedWallet == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('你不是该多签账户的管理员'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-      return;
-    }
-
-    await _saveDuoqianToLocal(hexAddress, qrBody.name);
-    if (!mounted) return;
-    final statusText = accountInfo.status == DuoqianStatus.active
-        ? '已加入${widget.accountType.title}「${qrBody.name}」'
-        : '已加入「${qrBody.name}」，该账户待投票激活';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(statusText),
-        backgroundColor: accountInfo.status == DuoqianStatus.active
-            ? AppTheme.success
-            : AppTheme.warning,
-      ),
-    );
-    await _load();
-  }
-
-  Future<void> _saveDuoqianToLocal(String hexAddress, String name) async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
-      if (_isPersonal) {
-        final entity = PersonalDuoqianEntity()
-          ..duoqianAddress = hexAddress
-          ..name = name
-          ..creatorAddress = ''
-          ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await isar.personalDuoqianEntitys.put(entity);
-        return;
-      }
-
-      // 中文注释：多签账户 QR 本身不携带机构/个人类型，机构入口扫码加入时
-      // 按当前入口归入机构多签，本地 sfidId 用注册多签 identity 占位。
-      final entity = DuoqianInstitutionEntity()
-        ..duoqianAddress = hexAddress
-        ..sfidId = registeredDuoqianIdentity(hexAddress)
-        ..name = name
-        ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
-      await isar.duoqianInstitutionEntitys.put(entity);
-    });
-  }
-
-  Future<List<WalletProfile>> _getWallets() async {
-    final wm = WalletManager();
-    return wm.getWallets();
-  }
-
   void _onCardTap(_DuoqianListItem item) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => DuoqianAccountInfoPage(
           institution: _itemToInstitutionInfo(item),
-          isPersonal: _isPersonal,
+          isPersonal: item.isPersonal,
         ),
       ),
     ).then((_) {
-      if (mounted) _load();
+      if (mounted) _load(runDiscovery: false);
     });
   }
 
   InstitutionInfo _itemToInstitutionInfo(_DuoqianListItem item) {
     return InstitutionInfo(
       name: item.name,
-      shenfenId: _isPersonal
+      shenfenId: item.isPersonal
           ? 'personal:${item.duoqianAddress}'
           : registeredDuoqianIdentity(item.duoqianAddress),
       orgType: OrgType.duoqian,
@@ -331,9 +218,9 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          widget.accountType.title,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        title: const Text(
+          '多签交易',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -343,37 +230,78 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
+            tooltip: '创建多签',
             onPressed: _showCreateMenu,
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _items.isEmpty
-              ? _buildEmpty()
-              : _buildList(),
+      body: Column(
+        children: [
+          if (_scanning && _scanProgress != null) _buildScanBanner(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _items.isEmpty
+                    ? _buildEmpty()
+                    : _buildList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanBanner() {
+    return Container(
+      width: double.infinity,
+      color: AppTheme.primaryDark.withValues(alpha: 0.06),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _scanProgress!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    return RefreshIndicator(
+      onRefresh: _onPullRefresh,
+      child: ListView(
+        children: const [
+          SizedBox(height: 80),
           Icon(
-            _isPersonal ? Icons.person_outline : Icons.business_outlined,
+            Icons.account_tree_outlined,
             size: 64,
             color: AppTheme.border,
           ),
-          const SizedBox(height: 12),
-          Text(
-            widget.accountType.emptyTitle,
-            style: const TextStyle(fontSize: 16, color: AppTheme.textTertiary),
+          SizedBox(height: 12),
+          Center(
+            child: Text(
+              '暂无多签账户',
+              style: TextStyle(fontSize: 16, color: AppTheme.textTertiary),
+            ),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            '点击右上角 + 创建或扫码加入',
-            style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+          SizedBox(height: 6),
+          Center(
+            child: Text(
+              '点击右上角 + 创建多签;\n你作为管理员参与的多签会自动出现在此',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: AppTheme.textTertiary),
+            ),
           ),
         ],
       ),
@@ -382,7 +310,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
 
   Widget _buildList() {
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _onPullRefresh,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         itemCount: _items.length,
@@ -394,7 +322,12 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
 
   Widget _buildCard(_DuoqianListItem item) {
     final ss58 = _hexToSs58(item.duoqianAddress);
-    final color = _isPersonal ? AppTheme.accent : AppTheme.info;
+    final color = item.isPersonal ? AppTheme.accent : AppTheme.info;
+    final subtitleParts = <String>[
+      _truncateAddress(ss58),
+      if (item.discoveredViaAdmin)
+        '我作为 ${item.matchedAdminCount} 位管理员之一参与',
+    ];
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -417,7 +350,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  _isPersonal ? Icons.person : Icons.business,
+                  item.isPersonal ? Icons.person : Icons.business,
                   size: 20,
                   color: color,
                 ),
@@ -438,7 +371,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _truncateAddress(ss58),
+                      subtitleParts.join(' · '),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.textTertiary,
@@ -472,20 +405,43 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
   }
-
-  String _toHex(List<int> bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
 }
 
+/// 列表项视图模型(个人/机构合并)。
 class _DuoqianListItem {
   const _DuoqianListItem({
+    required this.isPersonal,
     required this.duoqianAddress,
     required this.name,
     required this.addedAtMillis,
+    required this.discoveredViaAdmin,
+    required this.matchedAdminCount,
   });
 
+  factory _DuoqianListItem.personal(PersonalDuoqianEntity e) =>
+      _DuoqianListItem(
+        isPersonal: true,
+        duoqianAddress: e.duoqianAddress,
+        name: e.name,
+        addedAtMillis: e.addedAtMillis,
+        discoveredViaAdmin: e.discoveredViaAdmin,
+        matchedAdminCount: e.matchedAdminPubkeys.length,
+      );
+
+  factory _DuoqianListItem.institution(DuoqianInstitutionEntity e) =>
+      _DuoqianListItem(
+        isPersonal: false,
+        duoqianAddress: e.duoqianAddress,
+        name: e.name,
+        addedAtMillis: e.addedAtMillis,
+        discoveredViaAdmin: e.discoveredViaAdmin,
+        matchedAdminCount: e.matchedAdminPubkeys.length,
+      );
+
+  final bool isPersonal;
   final String duoqianAddress;
   final String name;
   final int addedAtMillis;
+  final bool discoveredViaAdmin;
+  final int matchedAdminCount;
 }

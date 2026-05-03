@@ -16,7 +16,6 @@ import '../personal/personal_duoqian_close_page.dart';
 import '../personal/personal_proposal_list_section.dart';
 import 'duoqian_manage_models.dart';
 import 'duoqian_manage_service.dart';
-import 'duoqian_qr_sheet.dart';
 
 /// 多签机构详情页。
 ///
@@ -82,24 +81,6 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         _loading = false;
       });
     }
-  }
-
-  // ──── 账户二维码 ────
-
-  void _showDuoqianQr() {
-    final duoqianSs58 = _pubkeyToSS58(widget.institution.duoqianAddress);
-    final name = widget.institution.name;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => DuoqianQrSheet(
-        address: duoqianSs58,
-        name: name,
-      ),
-    );
   }
 
   // ──── 关闭 ────
@@ -242,20 +223,9 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
-              if (value == 'qr') _showDuoqianQr();
               if (value == 'delete') _showDeleteMenu();
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'qr',
-                child: Row(
-                  children: [
-                    Icon(Icons.qr_code, size: 20, color: AppTheme.primaryDark),
-                    SizedBox(width: 8),
-                    Text('账户二维码'),
-                  ],
-                ),
-              ),
               PopupMenuItem(
                 value: 'delete',
                 child: Row(
@@ -619,12 +589,6 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
       return registeredDuoqianAddressFromIdentity(shenfenId) ?? shenfenId;
     }
     return shenfenId;
-  }
-
-  String _pubkeyToSS58(String pubkeyHex) {
-    final hex = pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
-    final bytes = _hexDecode(hex);
-    return Keyring().encodeAddress(bytes, 2027);
   }
 
   String _hexToSs58(String hex) {

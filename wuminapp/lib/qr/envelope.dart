@@ -7,7 +7,6 @@ import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_response_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
-import 'package:wuminapp_mobile/qr/bodies/user_duoqian_body.dart';
 
 /// WUMIN_QR_V1 统一 envelope。
 ///
@@ -121,8 +120,6 @@ class QrEnvelope<T extends QrBody> {
         body = UserContactBody.fromJson(bodyRaw);
       case QrKind.userTransfer:
         body = UserTransferBody.fromJson(bodyRaw);
-      case QrKind.userDuoqian:
-        body = UserDuoqianBody.fromJson(bodyRaw);
     }
 
     return QrEnvelope<QrBody>(

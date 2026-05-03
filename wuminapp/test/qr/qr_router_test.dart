@@ -63,20 +63,6 @@ void main() {
       expect(result.type, QrRouteType.userContact);
     });
 
-    test('should route user_duoqian (fixed)', () {
-      final raw = jsonEncode({
-        'proto': QrProtocols.v1,
-        'kind': 'user_duoqian',
-        'body': {
-          'address': '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
-          'name': '多签账户',
-          'proposal_id': 0,
-        },
-      });
-      final result = router.route(raw);
-      expect(result.type, QrRouteType.userDuoqian);
-    });
-
     test('should route sign_request', () {
       final raw = jsonEncode({
         'proto': QrProtocols.v1,
