@@ -1,18 +1,8 @@
 // 中文注释:ADR-008 Phase 23e(2026-05-01)整体重写。
 //
-// 历史 main_tests.rs(966 行)包含大量 KEY_ADMIN keyring rotate / chain_keyring
-// / signing_seed_hex / known_key_seeds 测试,这些路径都已随 phase23e 删除。
-// 本文件保留:
-//   1. 三省 3-tier 签名 keypair 隔离测试(`sheng_signing_3tier_isolation`,
-//      ADR-008 决议核心保证)
-//   2. SHENG_ADMIN / SHI_ADMIN QR 登录、签名验签、admin scope、SFID/Bind 工具
-//      函数等与 KEY_ADMIN 解耦的旧测试
-//
-// 删除的测试:
-//   - keyring_rotate_*(整个 rotate 流程)
-//   - sync_key_admin_users_keeps_monotonic_ids
-//   - validate_active_main_signer_with_keyring_rejects_runtime_mismatch
-//   - require_admin_any_should_allow_all_three_roles 中的 KeyAdmin session 注入
+// 本文件只保留当前二角色模型相关测试:
+//   1. 三省 3-tier 签名 keypair 隔离测试(`sheng_signing_3tier_isolation`)。
+//   2. SHENG_ADMIN / SHI_ADMIN QR 登录、签名验签、admin scope、SFID/Bind 工具函数。
 
 use super::*;
 use crate::login::AdminSession;
@@ -343,7 +333,7 @@ async fn qr_login_rejects_signer_admin_mismatch() {
 
 #[tokio::test]
 async fn require_admin_any_should_allow_remaining_two_roles() {
-    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,本测试仅覆盖 ShengAdmin / ShiAdmin。
+    // 中文注释:当前只覆盖 ShengAdmin / ShiAdmin 两个管理员角色。
     let state = build_test_state();
     let institution_pubkey = {
         let store = state.store.read().expect("store read lock poisoned");

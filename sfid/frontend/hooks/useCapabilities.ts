@@ -1,5 +1,5 @@
 // 中文注释:从 auth.role 派生出前端各 tab 的能力标志,方便 业务子组件做条件渲染。
-// ADR-008(2026-05-01)起 KEY_ADMIN 角色已彻底删除,仅保留 SHENG_ADMIN / SHI_ADMIN。
+// 中文注释:当前仅保留 SHENG_ADMIN / SHI_ADMIN。
 // SHENG_ADMIN 三槽自治(Main/Backup1/Backup2)由 sheng_admin 视图自身处理,本 hook 只看角色不看槽位。
 
 import { useMemo } from 'react';

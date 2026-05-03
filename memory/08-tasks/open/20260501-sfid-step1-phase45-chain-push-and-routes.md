@@ -3,8 +3,8 @@
 - 状态:open
 - 创建日期:2026-05-01
 - 模块:`sfid/backend`
-- 上游:`memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier-and-key-admin-removal.md`(主卡)
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-sheng-admin-3tier.md`(主卡)
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:Phase 2+3 卡(本卡需要 `sheng_admins/` 业务先就绪)
 - 阻塞下游:Phase 6(前端 API 对接)
 - 联调依赖:Step 2(citizenchain runtime)— 链上 4 个 Pays::No extrinsic 落地后才能去 mock
@@ -87,11 +87,7 @@ GET  /chain/sheng-admin/list[?province=AH]
 
 ### `AppState` 字段精简
 
-- 删除:`signing_seed_hex`(KEY_ADMIN 全局 seed,不再需要)
-- 删除:`known_key_seeds`(KEY_ADMIN 已知 seed cache)
 - 保留:`rate_limit_redis` / `cpms_register_inflight`
-- 改造:`sheng_signer_cache` 类型从 `key_admins::sheng_signer_cache::ShengSignerCache` 改 `sheng_admins::signing_cache::ShengSigningCache`(Phase 2+3 卡已实现)
-- 删除:`key_id` / `key_version` / `key_alg` / `public_key_hex`(KEY_ADMIN 顶级签名 metadata)
 - 保留:`store` / `sharded_store`
 
 ## 主要风险点
@@ -112,12 +108,10 @@ GET  /chain/sheng-admin/list[?province=AH]
 1. 抽 `chain/runtime_align.rs` 中 client 单例 → `chain/client.rs`,加 `submit_immortal_paysno` helper
 2. 新建 `chain/sheng_admin/{handler,query,add_backup,remove_backup}.rs`,推链先 mock
 3. 新建 `chain/sheng_signer/{handler,activation,rotation}.rs`,推链先 mock
-4. `main.rs` 路由表:删 KEY_ADMIN 旧路由(若 Phase 2 没删干净)+ 加 sheng-admin/sheng-signer 新路由
 5. `AppState` 字段精简
 6. `cargo check` + `cargo test` 全绿
 7. **更新文档**:`memory/05-modules/sfid/backend/chain/` 加 sheng_admin/sheng_signer 模块说明
 8. **完善注释**:新模块顶部 1-3 行 + activation/rotation 推链流程详解
-9. **清理残留**:Grep `runtime_align.*Client|chain_keyring` 零结果
 
 ## 验收清单
 
@@ -180,7 +174,6 @@ GET  /api/v1/chain/sheng-admin/list?province=XX    → chain::sheng_admin::handl
 
 ### E. `AppState` 字段精简 — 无新增,与 phase23e 既有结构对齐
 
-- 无 KEY_ADMIN 残留字段(`signing_seed_hex` / `known_key_seeds` / `key_id` / `key_version` / `key_alg` / `public_key_hex` 早随 phase23e 全删)
 - 保留:`store` / `rate_limit_redis` / `cpms_register_inflight` / `sheng_signer_cache` / `sharded_store`
 - AppState struct 未改
 

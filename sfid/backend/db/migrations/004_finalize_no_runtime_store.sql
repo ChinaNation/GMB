@@ -4,7 +4,7 @@ BEGIN;
 ALTER TABLE admins DROP CONSTRAINT IF EXISTS admins_role_check;
 ALTER TABLE admins
   ADD CONSTRAINT admins_role_check
-  CHECK (role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
+  CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
 
 -- 运行态杂项表（不再使用 runtime_store）
 CREATE TABLE IF NOT EXISTS runtime_misc (
@@ -19,8 +19,7 @@ SELECT
   id,
   payload
     - 'admin_users_by_pubkey'
-    - 'super_admin_province_by_pubkey'
-    - 'chain_keyring_state',
+    - 'super_admin_province_by_pubkey',
   now()
 FROM runtime_store
 WHERE id = 1
@@ -28,15 +27,8 @@ ON CONFLICT (id) DO UPDATE SET
   payload = EXCLUDED.payload,
   updated_at = EXCLUDED.updated_at;
 
-DROP VIEW IF EXISTS v_key_admins;
 DROP VIEW IF EXISTS v_super_admins;
 DROP VIEW IF EXISTS v_operator_admins;
-
-CREATE OR REPLACE VIEW v_key_admins AS
-SELECT a.*, k.slot, k.keyring_version, k.updated_at AS slot_updated_at
-FROM admins a
-JOIN key_admin_keyring k ON k.admin_id = a.admin_id
-WHERE a.role = 'KEY_ADMIN';
 
 CREATE OR REPLACE VIEW v_super_admins AS
 SELECT a.*, s.province_name, s.scope_no

@@ -16,7 +16,6 @@ src/views/
 ├── citizens/       注册局 + 业务员绑定/解绑
 ├── operators/      市管理员 ShiAdmin
 ├── sheng-admins/   省管理员 ShengAdmin + system-settings
-├── keyring/        KeyAdmin 密钥轮换
 ├── institutions/   私权/公权/公安局机构
 └── common/         跨 view 共享小组件
 ```

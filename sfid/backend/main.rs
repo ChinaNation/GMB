@@ -21,7 +21,9 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 mod app_core;
+mod audit;
 mod citizens;
+mod cpms;
 mod crypto;
 mod indexer;
 mod institutions;
@@ -32,17 +34,19 @@ mod qr;
 mod scope;
 mod sfid;
 mod sheng_admins;
-mod shi_admins;
 mod store_shards;
-use scope::cpms::in_scope_cpms_site;
 
 pub(crate) use app_core::http_security::*;
 pub(crate) use app_core::runtime_ops::*;
+pub(crate) use citizens::model::*;
+pub(crate) use cpms::model::*;
+pub(crate) use cpms::scope::in_scope_cpms_site;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
     require_admin_write, require_sheng_admin, verify_admin_signature,
 };
 pub(crate) use models::*;
+pub(crate) use sfid::model::*;
 
 #[derive(Clone)]
 struct AppState {
@@ -51,9 +55,8 @@ struct AppState {
     #[allow(dead_code)]
     cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008 Phase 23e)。
-    /// 历史 KEY_ADMIN 签名缓存(每省 1 把 + 全局 SFID MAIN 包装密钥)已删除,
-    /// 新缓存按 (province, admin_pubkey) 二级 key
-    /// 持有 3 把独立 keypair,seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
+    /// 缓存按 (province, admin_pubkey) 二级 key 持有 3 把独立 keypair,
+    /// seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
     pub(crate) sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
     /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
     /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
@@ -148,9 +151,7 @@ impl StoreBackend {
     }
 
     fn parse_admin_role(role: &str) -> AdminRole {
-        // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,只剩 SHENG_ADMIN / SHI_ADMIN。
-        // 历史 KEY_ADMIN 行(若残留)已被 db/migrations/014_drop_key_admins.sql 删除,
-        // 这里收到无法识别的 role 字符串时一律降级到 SHI_ADMIN(最严范围)。
+        // 中文注释:当前只接受 SHENG_ADMIN / SHI_ADMIN;无法识别时降级到最严范围。
         match role {
             "SHENG_ADMIN" => AdminRole::ShengAdmin,
             "SHI_ADMIN" => AdminRole::ShiAdmin,
@@ -666,9 +667,7 @@ fn main() {
             .unwrap_or(false)
         {
             // 已有密钥，直接加载（不需要 tokio runtime）
-            match crate::institutions::anon_cert::rsa_blind::init_from_pem(
-                existing_pem.as_deref().unwrap(),
-            ) {
+            match crate::cpms::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
                 Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
                 Err(e) => warn!("RSA anon cert keypair load failed: {e}"),
             }
@@ -683,9 +682,9 @@ fn main() {
         .expect("build tokio runtime");
     runtime.block_on(async move {
         // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
-        if crate::institutions::anon_cert::rsa_blind::get_public_key_pem().is_err() {
+        if crate::cpms::rsa_blind::get_public_key_pem().is_err() {
             info!("generating RSA anon cert keypair...");
-            match crate::institutions::anon_cert::rsa_blind::generate_keypair_pem() {
+            match crate::cpms::rsa_blind::generate_keypair_pem() {
                 Ok(new_pem) => {
                     if let Ok(mut store) = state.store.write() {
                         store.anon_rsa_private_key_pem = Some(new_pem);
@@ -787,50 +786,43 @@ fn main() {
                 "/api/v1/admin/sheng-admins",
                 get(sheng_admins::list_sheng_admins),
             )
-            .route(
-                "/api/v1/admin/sheng-admins/:province",
-                put(sheng_admins::replace_sheng_admin),
-            )
-            .route("/api/v1/admin/cpms-keys", get(sheng_admins::list_cpms_keys))
+            .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
                 "/api/v1/admin/cpms-keys/by-institution/:sfid_id",
-                get(sheng_admins::get_cpms_site_by_institution),
+                get(cpms::get_cpms_site_by_institution),
             )
             .route(
                 "/api/v1/admin/cpms-keys/sfid/generate",
-                post(sheng_admins::generate_cpms_institution_sfid_qr),
+                post(cpms::generate_cpms_institution_sfid_qr),
             )
-            .route(
-                "/api/v1/admin/cpms/register",
-                post(sheng_admins::register_cpms),
-            )
+            .route("/api/v1/admin/cpms/register", post(cpms::register_cpms))
             .route(
                 "/api/v1/admin/cpms/archive/import",
-                post(sheng_admins::archive_import),
+                post(cpms::archive_import),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid",
-                delete(sheng_admins::delete_cpms_keys),
+                delete(cpms::delete_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke-token",
-                post(sheng_admins::revoke_install_token),
+                post(cpms::revoke_install_token),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/reissue",
-                post(sheng_admins::reissue_install_token),
+                post(cpms::reissue_install_token),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/disable",
-                put(sheng_admins::disable_cpms_keys),
+                put(cpms::disable_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/enable",
-                put(sheng_admins::enable_cpms_keys),
+                put(cpms::enable_cpms_keys),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:site_sfid/revoke",
-                put(sheng_admins::revoke_cpms_keys),
+                put(cpms::revoke_cpms_keys),
             )
             // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。
             // 中文注释:机构/账户两层模型的 API
@@ -899,15 +891,15 @@ fn main() {
             )
             .route(
                 "/api/v1/admin/cpms-status/scan",
-                post(shi_admins::admin_cpms_status_scan),
+                post(citizens::status::admin_cpms_status_scan),
             )
             .route(
                 "/api/v1/admin/audit-logs",
-                get(scope::audit::admin_list_audit_logs),
+                get(audit::admin_list_audit_logs),
             )
             .route(
                 "/api/v1/admin/citizens",
-                get(scope::query::admin_list_citizens),
+                get(citizens::handler::admin_list_citizens),
             )
             // ── 公民身份绑定 ──
             .route(
@@ -936,28 +928,19 @@ fn main() {
                 "/api/v1/admin/sfid/cities",
                 get(sfid::admin::admin_sfid_cities),
             )
-            // ADR-008 Phase 23e:`/api/v1/admin/attestor/keyring` 与 rotate/challenge/verify/commit
-            // 端点已整段下架(KEY_ADMIN 角色废止,链上 ShengAdmins/ShengSigningPubkey 是真相)。
-            // ─── ADR-008:省管理员 3-tier 名册 + 签名密钥链交互入口 ───
+            // 中文注释:旧签名轮换端点已下架,链上 ShengAdmins/ShengSigningPubkey 是真相。
+            // ─── ADR-008:省管理员 3-tier 名册展示 + 本人签名密钥生成/更换 ───
             .route(
                 "/api/v1/admin/sheng-admin/roster",
-                get(sheng_admins::chain_roster_handler::list_roster_admin),
+                get(sheng_admins::roster::list_roster_admin),
             )
             .route(
-                "/api/v1/admin/sheng-admin/roster/add-backup",
-                post(sheng_admins::chain_add_backup::handler),
+                "/api/v1/admin/sheng-signer/prepare",
+                post(sheng_admins::signing_keys::prepare),
             )
             .route(
-                "/api/v1/admin/sheng-admin/roster/remove-backup",
-                post(sheng_admins::chain_remove_backup::handler),
-            )
-            .route(
-                "/api/v1/admin/sheng-signer/activate",
-                post(sheng_admins::chain_activate_signer::handler),
-            )
-            .route(
-                "/api/v1/admin/sheng-signer/rotate",
-                post(sheng_admins::chain_rotate_signer::handler),
+                "/api/v1/admin/sheng-signer/submit",
+                post(sheng_admins::signing_keys::submit),
             )
             .route_layer(middleware::from_fn_with_state(
                 state.clone(),
@@ -973,7 +956,7 @@ fn main() {
             .route("/api/v1/health", get(health))
             .route(
                 "/api/v1/public/identity/search",
-                get(scope::query::public_identity_search),
+                get(citizens::handler::public_identity_search),
             );
 
         // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
@@ -999,11 +982,11 @@ fn main() {
             // ── wuminapp 投票账户注册/查询(wuminapp 自有) ──
             .route(
                 "/api/v1/app/vote-account/register",
-                post(citizens::binding::app_vote_account_register),
+                post(citizens::vote::app_vote_account_register),
             )
             .route(
                 "/api/v1/app/vote-account/status",
-                get(citizens::binding::app_vote_account_status),
+                get(citizens::vote::app_vote_account_status),
             )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 注册信息凭证 / 账户列表 ──
             .route(
@@ -1031,11 +1014,6 @@ fn main() {
             .route(
                 "/api/v1/app/clearing-banks/eligible-search",
                 get(institutions::chain_duoqian_info::app_search_eligible_clearing_banks),
-            )
-            // ── ADR-008 phase45:链反向调用,公开拉取本省 3 槽公钥 ──
-            .route(
-                "/api/v1/chain/sheng-admin/list",
-                get(sheng_admins::chain_roster_handler::list_roster_public),
             );
 
         let app_state = state.clone();
@@ -1059,8 +1037,7 @@ fn main() {
             .unwrap_or_else(|e| panic!("failed to initialize chain genesis hash: {e}"));
         info!("chain genesis hash initialized");
 
-        // ADR-008 Phase 23e:链上 keyring 同步 / KEY_ADMIN 名册 seed / main signer 校验
-        // 全部下架。SFID 不再镜像 chain `KeyAdminKeyring` storage(已不存在);
+        // 中文注释:链上旧签名名册同步与 main signer 校验全部下架。
         // 省管理员 3-tier 真相在链上 `ShengAdmins[Province][Slot]` storage,
         // SFID 内部 cache 由各省 admin 登录时按需 bootstrap。
 

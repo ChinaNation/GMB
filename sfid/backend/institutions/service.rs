@@ -9,7 +9,8 @@ use chrono::Utc;
 
 use crate::institutions::model::{MultisigAccount, MultisigInstitution};
 use crate::institutions::store;
-use crate::models::{InstitutionChainStatus, MultisigChainStatus, Store};
+use crate::institutions::{InstitutionChainStatus, MultisigChainStatus};
+use crate::models::Store;
 use crate::sfid::{
     classify, generate_sfid_code, province::PROVINCES, GenerateSfidInput, InstitutionCategory,
     InstitutionCode, A3, PUBLIC_SECURITY_INSTITUTION_NAME,

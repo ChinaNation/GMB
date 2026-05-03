@@ -1,108 +1,216 @@
-//! 中文注释:省管理员 3-tier 名册(roster)操作 service —— **已被 phase4/7 取代,无活跃调用方**。
+//! 中文注释:注册局-省级管理员页面的一主两备名册展示。
 //!
-//! ADR-008 决议(2026-05-01):add_sheng_admin_backup / remove_sheng_admin_backup
-//! 必须由当前 main 公钥签名授权,链上 ShengAdmins[Province][Slot] storage 持久化。
+//! 本文件只负责读取和渲染省管理员三槽状态,不负责链上写操作。真正的
+//! “更换省管理员/主备交换”后续如果接入区块链,必须放到独立
+//! `chain_replace_admin.rs` 中,避免普通页面查询继续混用 `chain_` 命名。
 //!
-//! Phase 4 起真实推链入口转移到 `crate::sheng_admins::{chain_add_backup, chain_remove_backup}`,
-//! Phase 7 已切真。本文件保留作为 Phase 3 历史路径的占位,等 Phase 7 收尾时统一删除。
+//! 当前 `fetch_roster` 仍是本地基线读取:main 来自内置省管理员清单,
+//! backup_1 / backup_2 暂为空。链上 storage pull 待区块链端主备交换能力
+//! 对齐后单独接入。
 //!
-//! 名册当前真相来源:
-//! - main:`crate::sheng_admins::province_admins::SHENG_ADMIN_MAINS[*].pubkey` 常量
-//! - backup_1 / backup_2:`fetch_backup_admins` 占位返回 [None, None]
+//! ## 与 `institutions/chain_duoqian_info.rs` 的对齐
+//!
+//! 公开 endpoint 风格、错误码、ApiResponse wrapper 与 duoqian_info 一致。
 
 #![allow(dead_code)]
 
-use crate::sheng_admins::province_admins::{
-    fetch_backup_admins, province_admins_for, ProvinceAdmins, Slot,
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
 };
+use serde::Serialize;
+use sp_core::Pair;
+
+use crate::crypto::pubkey::same_admin_pubkey;
+use crate::login::require_sheng_admin;
+use crate::models::ApiResponse;
+use crate::sheng_admins::province_admins::{pubkey_from_hex, sheng_admin_mains};
+use crate::AppState;
 
 #[derive(Debug)]
-pub(crate) enum RosterError {
+pub(crate) enum RosterQueryError {
     UnknownProvince,
-    SlotInvalidForOp,
-    AlreadyOccupied(Slot),
-    NotOccupied(Slot),
-    ChainMockUnavailable,
+    PubkeyDecode,
 }
 
-impl std::fmt::Display for RosterError {
+impl std::fmt::Display for RosterQueryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RosterError::UnknownProvince => write!(f, "unknown province"),
-            RosterError::SlotInvalidForOp => write!(f, "slot invalid for this operation"),
-            RosterError::AlreadyOccupied(s) => {
-                write!(f, "slot {} already occupied", s.as_str())
-            }
-            RosterError::NotOccupied(s) => write!(f, "slot {} not occupied", s.as_str()),
-            RosterError::ChainMockUnavailable => {
-                write!(f, "legacy chain push placeholder unavailable")
-            }
+            RosterQueryError::UnknownProvince => write!(f, "unknown province"),
+            RosterQueryError::PubkeyDecode => write!(f, "decode main pubkey hex failed"),
         }
     }
 }
 
-impl std::error::Error for RosterError {}
+impl std::error::Error for RosterQueryError {}
 
-/// 拉取本省 3-tier 名册(main 来自常量,backup 当前 mock 为 None)。
-pub(crate) fn read_roster(province: &str) -> Result<ProvinceAdmins, RosterError> {
-    province_admins_for(province).ok_or(RosterError::UnknownProvince)
-}
-
-/// 中文注释:Phase 3 历史路径 —— 推链注册 backup 公钥。
-/// 已被 `crate::sheng_admins::chain_add_backup` 取代,无活跃调用方。
-pub(crate) async fn add_backup(
+/// 拉取本省 3 槽公钥(slot 顺序固定:[main, backup_1, backup_2])。
+///
+/// 中文注释:当前只读取 SFID 内置 main 管理员基线,backup 槽位等待后续
+/// “更换省管理员/主备交换”链上能力落地后接入真实状态源。
+pub(crate) async fn fetch_roster(
     province: &str,
-    slot: Slot,
-    new_backup: [u8; 32],
-) -> Result<(), RosterError> {
-    if matches!(slot, Slot::Main) {
-        return Err(RosterError::SlotInvalidForOp);
-    }
-    let current = read_roster(province)?;
-    let occupied = match slot {
-        Slot::Backup1 => current.backup_1.is_some(),
-        Slot::Backup2 => current.backup_2.is_some(),
-        Slot::Main => true,
-    };
-    if occupied {
-        return Err(RosterError::AlreadyOccupied(slot));
-    }
-    push_chain_placeholder(&format!(
-        "add_sheng_admin_backup province={province} slot={} new_backup=0x{}",
-        slot.as_str(),
-        hex::encode(new_backup)
-    ))
-    .await
-}
-
-/// 中文注释:Phase 3 历史路径 —— 推链注销 backup 公钥。
-/// 已被 `crate::sheng_admins::chain_remove_backup` 取代,无活跃调用方。
-pub(crate) async fn remove_backup(province: &str, slot: Slot) -> Result<(), RosterError> {
-    if matches!(slot, Slot::Main) {
-        return Err(RosterError::SlotInvalidForOp);
-    }
-    let current = read_roster(province)?;
-    let occupied = match slot {
-        Slot::Backup1 => current.backup_1.is_some(),
-        Slot::Backup2 => current.backup_2.is_some(),
-        Slot::Main => true,
-    };
-    if !occupied {
-        return Err(RosterError::NotOccupied(slot));
-    }
-    push_chain_placeholder(&format!(
-        "remove_sheng_admin_backup province={province} slot={}",
-        slot.as_str()
-    ))
-    .await
-}
-
-/// Phase 3 历史路径占位。真实推链已由 `crate::sheng_admins::{chain_add_backup, chain_remove_backup}`
-/// 在 Phase 7 切真,无活跃调用方;保留仅为暂不破坏 module 边界,后续清理。
-async fn push_chain_placeholder(name: &str) -> Result<(), RosterError> {
+) -> Result<[Option<[u8; 32]>; 3], RosterQueryError> {
+    let entry = sheng_admin_mains()
+        .iter()
+        .find(|p| p.province == province)
+        .ok_or(RosterQueryError::UnknownProvince)?;
+    let main = pubkey_from_hex(entry.pubkey).ok_or(RosterQueryError::PubkeyDecode)?;
     tracing::warn!(
-        "legacy roster placeholder invoked for {name}; real path is sheng_admins::chain_*"
+        province = %province,
+        "fetch_roster uses local main baseline; backup slots await chain replacement source"
     );
-    let _ = fetch_backup_admins; // suppress dead_code warning of imported helper
-    Ok(())
+    Ok([Some(main), None, None])
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AdminRosterOutput {
+    pub(crate) province: String,
+    pub(crate) current_admin_pubkey: String,
+    pub(crate) current_slot: Option<&'static str>,
+    pub(crate) entries: Vec<AdminRosterEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct AdminRosterEntry {
+    /// 前端业务槽位:"Main" / "Backup1" / "Backup2"。
+    pub(crate) slot: &'static str,
+    /// 0x 小写 hex(32 字节);未设置时为 null。
+    pub(crate) admin_pubkey: Option<String>,
+    pub(crate) admin_name: Option<String>,
+    /// UNSET / NOT_INITIALIZED / GENERATED / GENERATED_NOT_LOADED。
+    pub(crate) signing_status: &'static str,
+    pub(crate) signing_pubkey: Option<String>,
+    pub(crate) signing_created_at: Option<String>,
+    pub(crate) cache_loaded: bool,
+    pub(crate) can_operate_signing: bool,
+    pub(crate) can_manage_roster: bool,
+}
+
+fn admin_slot_label(idx: usize) -> &'static str {
+    match idx {
+        0 => "Main",
+        1 => "Backup1",
+        _ => "Backup2",
+    }
+}
+
+fn render_admin_roster(
+    state: &AppState,
+    province: &str,
+    current_admin_pubkey: &str,
+    slots: [Option<[u8; 32]>; 3],
+) -> Result<AdminRosterOutput, axum::response::Response> {
+    let store = crate::store_read_or_500(state)?;
+    let current_slot = slots.iter().enumerate().find_map(|(idx, slot)| {
+        let pubkey = slot.map(|p| format!("0x{}", hex::encode(p)))?;
+        if same_admin_pubkey(pubkey.as_str(), current_admin_pubkey) {
+            Some(admin_slot_label(idx))
+        } else {
+            None
+        }
+    });
+    let can_manage_roster = current_slot == Some("Main");
+
+    let entries = slots
+        .iter()
+        .enumerate()
+        .map(|(idx, slot)| {
+            let Some(admin_bytes) = slot else {
+                return AdminRosterEntry {
+                    slot: admin_slot_label(idx),
+                    admin_pubkey: None,
+                    admin_name: None,
+                    signing_status: "UNSET",
+                    signing_pubkey: None,
+                    signing_created_at: None,
+                    cache_loaded: false,
+                    can_operate_signing: false,
+                    can_manage_roster,
+                };
+            };
+            let admin_pubkey = format!("0x{}", hex::encode(admin_bytes));
+            let user = store
+                .admin_users_by_pubkey
+                .iter()
+                .find(|(key, _)| same_admin_pubkey(key.as_str(), admin_pubkey.as_str()))
+                .map(|(_, user)| user);
+            let cache_pair = state.sheng_admin_signing_cache.get(province, admin_bytes);
+            let cache_loaded = cache_pair.is_some();
+            let signing_pubkey = user
+                .and_then(|user| user.signing_pubkey.clone())
+                .or_else(|| {
+                    cache_pair
+                        .as_ref()
+                        .map(|pair| format!("0x{}", hex::encode(pair.public().0)))
+                });
+            let signing_created_at = user
+                .and_then(|user| user.signing_created_at)
+                .map(|dt| dt.to_rfc3339());
+            let signing_status = match (signing_pubkey.is_some(), cache_loaded) {
+                (false, _) => "NOT_INITIALIZED",
+                (true, true) => "GENERATED",
+                (true, false) => "GENERATED_NOT_LOADED",
+            };
+            AdminRosterEntry {
+                slot: admin_slot_label(idx),
+                admin_pubkey: Some(admin_pubkey.clone()),
+                admin_name: user.map(|user| {
+                    if user.admin_name.trim().is_empty() {
+                        format!("{province}省级管理员")
+                    } else {
+                        user.admin_name.clone()
+                    }
+                }),
+                signing_status,
+                signing_pubkey,
+                signing_created_at,
+                cache_loaded,
+                can_operate_signing: same_admin_pubkey(admin_pubkey.as_str(), current_admin_pubkey),
+                can_manage_roster,
+            }
+        })
+        .collect();
+
+    Ok(AdminRosterOutput {
+        province: province.to_string(),
+        current_admin_pubkey: current_admin_pubkey.to_string(),
+        current_slot,
+        entries,
+    })
+}
+
+/// `GET /api/v1/admin/sheng-admin/roster`(session 触发型,本省名册)。
+///
+/// 从登录 session 取 admin_province,直接转 `fetch_roster`。
+pub(crate) async fn list_roster_admin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let ctx = match require_sheng_admin(&state, &headers) {
+        Ok(ctx) => ctx,
+        Err(resp) => return resp,
+    };
+    let Some(province) = ctx.admin_province.clone() else {
+        return crate::api_error(StatusCode::FORBIDDEN, 1003, "admin province scope missing");
+    };
+    match fetch_roster(province.as_str()).await {
+        Ok(slots) => {
+            match render_admin_roster(&state, province.as_str(), ctx.admin_pubkey.as_str(), slots) {
+                Ok(data) => Json(ApiResponse {
+                    code: 0,
+                    message: "ok".to_string(),
+                    data,
+                })
+                .into_response(),
+                Err(resp) => resp,
+            }
+        }
+        Err(err) => {
+            tracing::warn!(province = %province, error = %err, "fetch_roster failed");
+            crate::api_error(StatusCode::SERVICE_UNAVAILABLE, 1502, "chain pull failed")
+        }
+    }
 }

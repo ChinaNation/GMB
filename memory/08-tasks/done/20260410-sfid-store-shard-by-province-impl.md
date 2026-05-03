@@ -219,12 +219,7 @@ pub(crate) struct StoreShard {
 ```rust
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct GlobalShard {
-    // KEY_ADMIN 密钥环
-    pub(crate) chain_keyring_state: Option<ChainKeyringState>,
-    pub(crate) keyring_rotate_challenges: HashMap<String, KeyringRotateChallenge>,
 
-    // 全局管理员索引(KeyAdmin + ShengAdmin 本身,不含 ShiAdmin)
-    // KeyAdmin 不归属任何省,ShengAdmin 的本体也在这里(登录路由需要快速查)
     // 注意:ShengAdmin 的详细字段(含 encrypted_signing_privkey)在 GlobalShard 也存一份
     // 省分片 local_admins 只包含 ShiAdmin
     pub(crate) global_admins: HashMap<String, AdminUser>,
@@ -619,7 +614,6 @@ let user = state.store_shards.read_global(|g| {
 })?;
 ```
 
-### 5.4 跨省查询(KEY_ADMIN 场景)
 
 ```rust
 let mut all_institutions = Vec::new();
@@ -727,10 +721,8 @@ pub(crate) async fn migrate_legacy_store_if_needed(
 
     // 2. 构建 GlobalShard
     let mut global = GlobalShard::default();
-    global.chain_keyring_state = legacy_store.chain_keyring_state.clone();
     global.keyring_rotate_challenges = legacy_store.keyring_rotate_challenges.clone();
     for (pubkey, user) in &legacy_store.admin_users_by_pubkey {
-        if matches!(user.role, AdminRole::KeyAdmin | AdminRole::ShengAdmin) {
             global.global_admins.insert(pubkey.clone(), user.clone());
         }
     }
@@ -887,8 +879,6 @@ let state = AppState {
 2. 按 handler 分类:
    - ShiAdmin 业务(注册机构、citizen 绑定等)→ `write_province` / `read_province`
    - ShengAdmin 管理(列省内资源)→ `read_province`
-   - KeyAdmin 全局(登录、轮换、审计)→ `read_global` / `write_global`
-   - KeyAdmin 跨省(全国列表)→ `for_each_province`
 3. 逐个改造,每改 10 处跑一次 `cargo check`
 4. **特别处理**:
    - 登录 handler:`admin_users_by_pubkey` → `GlobalShard.global_admins`(登录路由)+ 本省 local_admins(业务路径)
@@ -938,7 +928,6 @@ let state = AppState {
 | DashMap 懒加载竞争 | 🟡 中 | `entry().or_insert()` 原子化,并发测试覆盖 |
 | 登录路径读 global 频繁 → GlobalShard 写锁争用 | 🟡 中 | GlobalShard 的写操作只在 session 变化时,频率低;读用 RwLock 并发读不阻塞 |
 | Phase 1 的 sheng_signer_cache 数据源依赖 global | 🟡 中 | ShengAdmin 明确放 global,不拆到 province 分片 |
-| 跨省 KEY_ADMIN 操作性能下降 | 🟢 低 | KEY_ADMIN 操作频率低,O(43) 可接受 |
 | 迁移耗时过长导致启动卡 | 🟢 低 | 预估 <5 秒,实际压测后调整 preload 策略(可跳过预加载,全部走懒加载) |
 | 双写失败导致新旧不一致 | 🟡 中 | 失败时日志 ERROR,但不阻塞请求(新路径优先);过渡期结束前发现的不一致手工补齐 |
 
@@ -1038,7 +1027,6 @@ systemctl start sfid-backend
 
 ### 11.1 功能验收
 - [ ] 启动迁移成功,日志显示 `provinces=43, elapsed_ms<5000`
-- [ ] 登录流程(KeyAdmin / ShengAdmin / ShiAdmin)三角色全通
 - [ ] 注册机构、替换 sheng admin、SFID MAIN 轮换、CPMS 激活 — 手工各走一遍
 - [ ] `cargo check` + `cargo test` + `npx tsc --noEmit` + `npm run build` 全绿
 - [ ] PG 里 `store_shards` 表有 44 行(43 省 + 1 global),`legacy runtime_cache_entries` 内容仍同步更新(双写期)

@@ -2,7 +2,7 @@
 //
 // 本文件只定义 StoreShard(每省一份)和 GlobalShard(跨省共享)两个
 // 结构体。它们对应 impl.md 第 3.3 / 3.4 节的字段清单。字段类型统一
-// 引用 `crate::models::*` / `crate::institutions::*` 下已有的类型,
+// 引用各功能模块下已有的类型,
 // 不新建任何数据结构、不改动 Phase 1 代码。
 //
 // 这两个结构体必须:
@@ -19,12 +19,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::citizens::model::{
+    CitizenBindChallenge, CitizenRecord, CitizenStatus, ImportedArchive, PendingBindScan,
+};
+use crate::cpms::model::CpmsSiteKeys;
 use crate::institutions::{MultisigAccount, MultisigInstitution};
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::models::{
-    AdminUser, AuditLogEntry, BindCallbackJob, ChainRequestReceipt, CitizenBindChallenge,
-    CitizenRecord, CitizenStatus, CpmsSiteKeys, ImportedArchive, PendingBindScan,
-    RewardStateRecord, ServiceMetrics, VoteVerifyCacheEntry,
+    AdminUser, AuditLogEntry, BindCallbackJob, ChainRequestReceipt, RewardStateRecord,
+    ServiceMetrics, VoteVerifyCacheEntry,
 };
 
 /// 省级分片:按 province 名切分的业务数据。
@@ -34,7 +37,7 @@ pub(crate) struct StoreShard {
     /// 分片 key(省名)
     pub(crate) province: String,
 
-    // ── 本省管理员(仅 ShiAdmin;ShengAdmin 本体在 GlobalShard。ADR-008 后无 KeyAdmin)──
+    // ── 本省管理员(仅 ShiAdmin;ShengAdmin 本体在 GlobalShard)──
     pub(crate) local_admins: HashMap<String, AdminUser>,
 
     // ── 本省机构(两层模型)──
@@ -76,8 +79,7 @@ pub(crate) struct StoreShard {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct GlobalShard {
-    // 中文注释:chain_keyring_state / keyring_rotate_challenges 已随 ADR-008
-    // (KEY_ADMIN 整角色废止)+ phase23e 子卡(2026-05-01)删除。
+    // 中文注释:旧签名轮换缓存已随 phase23e 子卡(2026-05-01)删除。
     /// 全局管理员索引:ShengAdmin 本体(含 encrypted_signing_privkey)。
     /// ShiAdmin 不进这里,存在对应省的 `StoreShard.local_admins`。
     pub(crate) global_admins: HashMap<String, AdminUser>,

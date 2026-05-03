@@ -17,7 +17,6 @@
   - 新增 extrinsic `set_sheng_signing_pubkey(province, new_pubkey: Option<[u8;32]>)`:
     origin 必须 `ensure_signed` 且 `who == SfidMainAccount`,`None` 表示清除该省
   - 新增 getter `sheng_signing_pubkey(province) -> Option<[u8;32]>`
-  - 新增 Error:`NotKeyAdmin`、`PubkeyAlreadyUsed`(等同实施细则命名)
   - 新增 Event:`ShengSigningPubkeyUpdated { province, new_pubkey }`
 - `duoqian-manage` pallet:
   - `register_sfid_institution` 追加参数 `signing_province: Option<Vec<u8>>`,
@@ -39,19 +38,14 @@
   - `encrypted_signing_privkey TEXT`(base64(nonce_12B || ciphertext || tag_16B))
   - `signing_pubkey TEXT`(hex,便于链上对账)
 - `src/models/mod.rs::AdminUser` + `sheng-admins` Row 扩同名两字段
-- 新建 `src/key-admins/sheng_signer_cache.rs`:进程内 `ShengSignerCache`,
   内部持 `HashMap<Province, sr25519::Pair>` 与 AES-256-GCM wrap key
   (wrap key 由 HKDF-SHA256(SFID MAIN seed, salt, info) 派生,salt =
   `sfid-sheng-signer-v1-salt`、info = `sfid-sheng-signer-v1-info`),
   整个生命周期明文 seed 用 `zeroize`
-- 新建 `src/key-admins/signer_router.rs`:
   - `resolve_business_signer(state, ctx) -> (sr25519::Pair, Province)` 按 ctx.role 路由
-  - KeyAdmin 直接 Forbidden(业务不让密钥管理员推)
   - Sheng/Shi 未在线/本省未 bootstrap → 503 友好提示
-- 新建 `src/key-admins/chain_sheng_signing.rs`:封装
   `submit_set_sheng_signing_pubkey(state, ka_signer, province, Option<[u8;32]>)` 的
   extrinsic 组装 + 上链 + InBestBlock 等待
-- 新建 `key_admins::bootstrap_sheng_signer` async helper:登录时
   如果本省已有 encrypted_signing_privkey → 解密载入 cache;
   否则生成新 sr25519 keypair → 加密入库 → 推链 `set_sheng_signing_pubkey` → 载入 cache
 - 登录 handler 接入 bootstrap:
@@ -83,7 +77,6 @@
 - `src/api/client.ts::ShengAdminRow`:新增 `signing_pubkey?: string | null`
 - `src/views/institutions/CreateInstitutionModal.tsx` +
   `src/views/institutions/CreateAccountModal.tsx`:
-  catch 分支识别 503 中的"本省登录管理员未在线"和"密钥管理员不能直接推送",
   翻译成友好中文提示
 
 ### 0.4 已知残留 / 推迟项
@@ -97,9 +90,7 @@
 ### 0.5 v1 / v2 作废的决定
 
 - ❌ **2.5.1 的独立 `POST /api/v1/admin/system/unlock` 接口**:不存在。实际实现里
-  wrap key 在 `load_key_admin_main_signer` 解锁 SFID MAIN 时顺带派生,不需要单独解锁接口
 - ❌ **3.1 `SystemLockBanner` + 3.2 `UnlockBackendModal`**:不存在。前端不需要
-  "后端未解锁"的独立 UI,因为解锁随 KEY_ADMIN 主密钥登录自动完成
 - ❌ **第 9 节"省 seed 如何从后端传到 sheng login admin 冷钱包"拍板**:作废。
   最终架构里 sheng admin 的签名私钥**完全由后端托管**(加密 Store + 运行时 cache),
   不需要导出到任何冷钱包
@@ -132,10 +123,7 @@
 ### 1.1 三层治理关系
 
 ```
-KEY_ADMIN(主密钥管理员,3 位)
   职责:管理省登录管理员,只签一种链交易 set_sheng_signing_pubkey
-  私钥位置:sfid 后端内存(每次启动由 KEY_ADMIN 扫码解锁)
-  公钥位置:链上 KeyAdminKeyring(已有)
   ↓ 管理
 省登录管理员(43 位,每省 1 位)
   职责:
@@ -160,7 +148,6 @@ KEY_ADMIN(主密钥管理员,3 位)
 
 ```rust
 // 已有
-pub type KeyAdminKeyring<T> = StorageValue<_, KeyAdminKeyringEntry>;
 
 // 新增
 pub type ShengSigningPubkey<T> = StorageMap<
@@ -200,9 +187,6 @@ pub fn set_sheng_signing_pubkey(
         .try_into()
         .map_err(|_| Error::<T>::ProvinceTooLong)?;
 
-    // 权限:唯一的授权者是 KEY_ADMIN 主
-    let ka = KeyAdminKeyring::<T>::get();
-    ensure!(who.encode() == ka.main.encode(), Error::<T>::NotKeyAdmin);
 
     // 清理旧反向索引
     if let Some(old_pub) = ShengSigningPubkey::<T>::get(&bounded) {
@@ -211,12 +195,10 @@ pub fn set_sheng_signing_pubkey(
 
     match new_pubkey {
         Some(pub_key) => {
-            // 冲突校验:新 pubkey 不得与 KEY_ADMIN 任一把重复
             ensure!(
                 pub_key != ka.main
                     && pub_key != ka.backup_a
                     && pub_key != ka.backup_b,
-                Error::<T>::ConflictWithKeyAdmin
             );
             // 冲突校验:新 pubkey 不得已被其他省占用
             ensure!(
@@ -240,7 +222,6 @@ pub fn set_sheng_signing_pubkey(
 
 #### 1.3.2 改造:业务 extrinsic 的 verifier
 
-把现有 `register_sfid_institution` 等业务 extrinsic 的 origin 校验**从"KEY_ADMIN 主"改为"省签名密钥"**:
 
 ```rust
 fn ensure_business_writer<T: Config>(who: &T::AccountId) -> DispatchResult {
@@ -256,9 +237,7 @@ fn ensure_business_writer<T: Config>(who: &T::AccountId) -> DispatchResult {
 }
 ```
 
-**关键决定**:**业务 extrinsic 不再接受 KEY_ADMIN 作为 origin**。日常业务 100% 由省签名密钥签发,KEY_ADMIN 只签 `set_sheng_signing_pubkey`。这是彻底的权限分离。
 
-**迁移注意**:链端升级后,如果某省 signing pubkey 还未上链(sheng login admin 未登录),**该省不能推任何业务 extrinsic**。升级前 KEY_ADMIN 应先让所有省的 sheng login admin 至少登录一次完成首次 signing pubkey 生成,避免升级窗口业务中断。
 
 #### 1.3.3 新增 Error
 
@@ -266,9 +245,7 @@ fn ensure_business_writer<T: Config>(who: &T::AccountId) -> DispatchResult {
 #[pallet::error]
 pub enum Error<T> {
     // ...existing...
-    NotKeyAdmin,
     ProvinceTooLong,
-    ConflictWithKeyAdmin,
     PubkeyAlreadyUsed,
     NotAuthorizedSfidWriter,
     InvalidCallerLength,
@@ -325,7 +302,6 @@ pub(crate) struct AdminUser {
     /// 仅 ShengAdmin 使用。加密存储的本省签名私钥种子。
     /// 格式:base64(nonce_12B || ciphertext || tag_16B)
     /// 明文 = sr25519 seed 32 字节
-    /// Wrap key:HKDF-SHA256(KEY_ADMIN 主种子, salt, info)
     #[serde(default)]
     pub(crate) encrypted_signing_privkey: Option<String>,
 
@@ -339,11 +315,8 @@ pub(crate) struct AdminUser {
 
 ### 2.3 ShengSignerCache 内存缓存
 
-**新文件**:`sfid/backend/src/key_admins/sheng_signer_cache.rs`
 
 ```rust
-//! 中文注释:省级签名密钥的进程内缓存 + KEY_ADMIN wrap key 缓存。
-//! 启动后 locked 状态,KEY_ADMIN 扫码解锁一次后长期驻留内存。
 
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -370,8 +343,6 @@ const NONCE_LEN: usize = 12;
 pub(crate) struct ShengSignerCache {
     /// 省名 → 本省签名 PairSigner
     signers: RwLock<HashMap<String, ProvinceSigner>>,
-    /// KEY_ADMIN 主 PairSigner(用于签 set_sheng_signing_pubkey)
-    key_admin_signer: RwLock<Option<ProvinceSigner>>,
     /// AES-256 wrap key(加密/解密省签名私钥用)
     wrap_key: RwLock<Option<[u8; 32]>>,
     unlocked: AtomicBool,
@@ -381,7 +352,6 @@ impl ShengSignerCache {
     pub(crate) fn new() -> Self {
         Self {
             signers: RwLock::new(HashMap::new()),
-            key_admin_signer: RwLock::new(None),
             wrap_key: RwLock::new(None),
             unlocked: AtomicBool::new(false),
         }
@@ -391,12 +361,10 @@ impl ShengSignerCache {
         self.unlocked.load(Ordering::Acquire)
     }
 
-    /// 解锁:KEY_ADMIN 主密钥种子 → 构造 KEY_ADMIN PairSigner + 派生 wrap key
     pub(crate) fn unlock(
         &self,
         ka_seed: &mut [u8; 32],
     ) -> Result<(), String> {
-        // 1. 构造 KEY_ADMIN signer
         let ka_pair = sr25519::Pair::from_seed(ka_seed);
         let ka_signer = PairSigner::new(ka_pair);
 
@@ -410,7 +378,6 @@ impl ShengSignerCache {
         ka_seed.zeroize();
 
         // 3. 写入内存
-        *self.key_admin_signer.write().map_err(|_| "cache poisoned")? = Some(ka_signer);
         *self.wrap_key.write().map_err(|_| "cache poisoned")? = Some(wrap_key);
         self.unlocked.store(true, Ordering::Release);
         Ok(())
@@ -480,8 +447,6 @@ impl ShengSignerCache {
         self.signers.read().ok()?.get(province).cloned()
     }
 
-    pub(crate) fn get_key_admin_signer(&self) -> Option<ProvinceSigner> {
-        self.key_admin_signer.read().ok()?.clone()
     }
 
     pub(crate) fn active_province_count(&self) -> usize {
@@ -492,12 +457,9 @@ impl ShengSignerCache {
 
 ### 2.4 签名路由
 
-**新文件**:`sfid/backend/src/key_admins/signer_router.rs`
 
 ```rust
-//! 推链签名路由器。日常业务一律走本省签名密钥,KEY_ADMIN 只用于 set_sheng_signing_pubkey。
 
-use crate::key_admins::sheng_signer_cache::ProvinceSigner;
 use crate::models::AdminRole;
 
 pub(crate) struct AdminCtx {
@@ -513,13 +475,10 @@ pub(crate) fn resolve_business_signer(
 ) -> Result<ProvinceSigner, ApiError> {
     if !state.sheng_signer_cache.is_unlocked() {
         return Err(ApiError::service_unavailable(
-            "sfid 后端未解锁,请联系密钥管理员",
         ));
     }
     let province = match ctx.role {
-        AdminRole::KeyAdmin => {
             return Err(ApiError::forbidden(
-                "密钥管理员不能直接推送业务交易",
             ));
         }
         AdminRole::ShengAdmin | AdminRole::ShiAdmin => {
@@ -538,13 +497,10 @@ pub(crate) fn resolve_business_signer(
         })
 }
 
-/// 管理推链(仅 set_sheng_signing_pubkey):必须 unlocked 的 KEY_ADMIN signer
-pub(crate) fn resolve_key_admin_signer(
     state: &AppState,
 ) -> Result<ProvinceSigner, ApiError> {
     state
         .sheng_signer_cache
-        .get_key_admin_signer()
         .ok_or_else(|| ApiError::service_unavailable("sfid 后端未解锁"))
 }
 ```
@@ -555,9 +511,7 @@ pub(crate) fn resolve_key_admin_signer(
 
 ```
 body: { challenge_id, signature, seed_hex }
-auth: 必须先通过 KEY_ADMIN 扫码登录获取 access_token
 action:
-  1. 验证 KEY_ADMIN 签名
   2. 解析 seed_hex → 32 字节种子
   3. 调用 sheng_signer_cache.unlock(&mut seed)
   4. 遍历 Store 所有 ShengAdmin,凡是有 encrypted_signing_privkey 的,
@@ -567,10 +521,8 @@ action:
 ```
 
 **注意**:解锁后**不会自动让所有省立刻可用**。sheng login admin 登录后才把本省 signer 塞进 cache.signers。这一步只是:
-- 构造 KEY_ADMIN signer(用于 set_sheng_signing_pubkey)
 - 派生 wrap key(用于后续加密/解密)
 
-所以后端重启 → KEY_ADMIN 解锁 → 所有 sheng login admin 重新登录后,系统恢复正常。
 
 **修正**:为了减少"后端重启后所有省都要重登"的麻烦,可以在解锁时**预解密所有已有 encrypted_signing_privkey 到 cache**,跳过 sheng login admin 的重新登录步骤。但这违反"登出即驱逐"的业务规则。
 
@@ -641,8 +593,6 @@ if ctx.role == AdminRole::ShengAdmin {
             // 推链
             let ka_signer = state
                 .sheng_signer_cache
-                .get_key_admin_signer()
-                .ok_or_else(|| ApiError::service_unavailable("no KEY_ADMIN signer"))?;
             submit_set_sheng_signing_pubkey(
                 &state,
                 &ka_signer,
@@ -692,8 +642,6 @@ if state.sheng_signer_cache.is_unlocked() {
     // 1. 推链清除
     let ka_signer = state
         .sheng_signer_cache
-        .get_key_admin_signer()
-        .ok_or_else(|| ApiError::service_unavailable("no KEY_ADMIN signer"))?;
     submit_set_sheng_signing_pubkey(&state, &ka_signer, &province, None).await?;
 
     // 2. 清 Store 的 encrypted_signing_privkey(新 admin 的记录)
@@ -711,20 +659,16 @@ if state.sheng_signer_cache.is_unlocked() {
 
 #### 2.5.5 业务 handler 接入
 
-**定位**:所有原本调用 `key_admins::load_key_admin_main_signer` 的业务 extrinsic 提交点(`institutions.rs::submit_register_sfid_institution_extrinsic` 等)。
 
 替换:
 ```rust
 // 原:
-// let signer = key_admins::load_key_admin_main_signer(&state, &ctx.admin_pubkey)?;
 
 // 新:
-let signer = key_admins::signer_router::resolve_business_signer(&state, &ctx)?;
 ```
 
 ### 2.6 链端交易提交 helper
 
-**新文件**:`sfid/backend/src/key_admins/submit_sheng_signing.rs`
 
 ```rust
 pub(crate) async fn submit_set_sheng_signing_pubkey(
@@ -796,7 +740,6 @@ pub(crate) struct AppState {
 
 ```rust
 tracing::info!(
-    "sfid backend started, sheng signer cache locked, awaiting KEY_ADMIN unlock"
 );
 ```
 
@@ -812,7 +755,6 @@ tracing::info!(
 
 ```tsx
 // 顶部 Banner 条,所有角色都能看到
-// - 未解锁:🔒 橙色 Banner,KEY_ADMIN 可见"解锁"按钮
 // - 已解锁:🔓 绿色细条(可选折叠)
 ```
 
@@ -820,8 +762,6 @@ tracing::info!(
 ```tsx
 - 挂载时调 GET /api/v1/admin/system/status
 - 返回 { unlocked: boolean, active_provinces: number }
-- 未解锁 + KEY_ADMIN → 显示"解锁后端"按钮
-- 未解锁 + 非 KEY_ADMIN → 显示"系统未解锁,请联系密钥管理员"
 - 已解锁 → 显示"已解锁,${active_provinces} 省在线"
 ```
 
@@ -830,15 +770,12 @@ tracing::info!(
 **组件**:`sfid/frontend/src/components/UnlockBackendModal.tsx`(新)
 
 流程:
-1. KEY_ADMIN 用 wumin 冷钱包扫码(复用现有 wumin 扫码组件)
 2. 签一个固定 challenge "sfid-system-unlock-v1-{timestamp}"
-3. **同时**把 KEY_ADMIN 主私钥种子 hex 传回前端(wumin 需要支持这个动作)
 4. 前端发 POST `/api/v1/admin/system/unlock` with `{ challenge_id, signature, seed_hex }`
 5. 成功后刷新 Banner 状态
 
 **wumin 改动需求**:在签 challenge 的同时也返回私钥种子(或派生的 wrap key)。需要用户确认 wumin 是否支持。
 
-**如果 wumin 不支持**:退回到 KEY_ADMIN 手动粘贴 seed_hex 到 unlock 表单(安全性较差但可行)。
 
 ### 3.3 ShengAdminsView 改动
 
@@ -850,14 +787,11 @@ tracing::info!(
   - 🟢 已激活(链上有,cache 已加载)
   - 🟡 已激活但 cache 未加载(sheng admin 未登录)
 - 无需任何"激活"按钮,全自动流程
-- 更换按钮保留,KEY_ADMIN 点击后走现有 `replace_sheng_admin` 接口(后端会自动清链 + 清 Store)
 
 ### 3.4 业务推链错误处理
 
 业务 handler 可能返回的新错误:
 - 503 "本省(辽宁省)登录管理员未在线,暂无法推链"
-- 503 "sfid 后端未解锁,请联系密钥管理员"
-- 403 "密钥管理员不能直接推送业务交易"
 
 前端在机构注册等业务 Modal 里捕获这些错误,展示友好提示 + 引导操作(比如"请通知辽宁省管理员登录")。
 
@@ -908,7 +842,6 @@ sfid-load-test \
 
 1. `--concurrency 50 --provinces 1`:单省 50 并发基线
 2. `--concurrency 500 --provinces 10`:跨省基线
-3. 对照实验:业务 extrinsic verifier 改造**前**(所有交易走 KEY_ADMIN)vs 改造**后**(按省分散)
 
 ---
 
@@ -929,9 +862,6 @@ sfid-load-test \
 
 - [ ] 依赖更新(aes-gcm / hkdf / sha2 / base64 / zeroize)
 - [ ] `models/mod.rs` AdminUser 扩展字段
-- [ ] 新建 `key_admins/sheng_signer_cache.rs`
-- [ ] 新建 `key_admins/signer_router.rs`
-- [ ] 新建 `key_admins/submit_sheng_signing.rs`
 - [ ] AppState 扩展 + 初始化
 - [ ] `unlock` handler 接入
 - [ ] 省登录管理员 login handler 追加 signer 生成/解锁逻辑
@@ -951,7 +881,6 @@ sfid-load-test \
 
 - [ ] 新 crate `sfid-load-test` 写完
 - [ ] 本地起链 + 后端 + 前端
-- [ ] 手工端到端:KEY_ADMIN 解锁 → sheng admin 首次登录 → 链上 signing pubkey 出现 → SHI_ADMIN 推链成功
 - [ ] 压测 baseline:50 并发 × 1 省
 - [ ] 压测对比:改造前后 P99 对比报告
 
@@ -963,10 +892,6 @@ sfid-load-test \
 |---|---|---|
 | runtime setCode 失败导致链停摆 | 🔴 高 | 本地 dev → stage → 生产三段演练 |
 | 升级后存量省未登录导致业务全挂 | 🔴 高 | 升级前先让所有 sheng admin 至少登录一次;或升级后先挂公告再 setCode |
-| KEY_ADMIN seed 通过 HTTP body 传输被截获 | 🔴 高 | 强制 TLS + 证书 pinning;wumin 如支持可派生 wrap key 代替传 seed |
-| 后端被攻破导致 KEY_ADMIN + 所有省 signer 同时失守 | 🔴 高 | 部署在金融级可信环境,监控入侵,应急预案:干净机器启动新后端 + KEY_ADMIN 冷钱包手动发 `set_sheng_signing_pubkey(None)` 清除所有省 |
-| 后端重启后 KEY_ADMIN 不在线,无法解锁 | 🟡 中 | KEY_ADMIN 值班 SLA;或接受重启期间推链全失败 |
-| 某省 sheng admin 长时间离线,本省业务全挂 | 🟡 中 | 业务预期:非工作时段不推链。应急:KEY_ADMIN 更换该省 login admin 到一位能立即上线的人 |
 | 加密 wrap key 被内存 dump 泄露 | 🟢 低 | 生产禁用 core dump;定期重启清理内存 |
 | 链上 O(43) 遍历性能 | ✅ 已解决 | 用 ProvinceBySigningPubkey 反向索引 O(1) |
 
@@ -980,7 +905,6 @@ sfid-load-test \
 1. 维护窗口公告,预计中断 10~30 分钟
 2. 链端 setCode 升级
 3. 升级成功后,立即停 sfid 后端,部署新版本
-4. 后端启动后 KEY_ADMIN 解锁
 5. 通知各省 sheng login admin 登录(触发 signing key 生成 + 上链)
 6. 逐省验证 signing pubkey 已上链
 7. 启用前端新版本,解除维护
@@ -999,36 +923,28 @@ sfid-load-test \
 - [ ] `cargo build --release` 绿
 - [ ] 所有单元测试通过
 - [ ] 本地节点 setCode 升级成功
-- [ ] KEY_ADMIN 可成功调用 `set_sheng_signing_pubkey`
-- [ ] 非 KEY_ADMIN 调用被拒绝
 - [ ] 业务 extrinsic 由省签名密钥签发可通过
-- [ ] 业务 extrinsic 由 KEY_ADMIN 签发被拒绝
 - [ ] 反向索引在 set/remove 时正确维护
 
 ### 8.2 后端
 - [ ] `cargo check` + `cargo test` 绿
 - [ ] 启动后 cache locked
-- [ ] KEY_ADMIN 解锁后 cache 进入 unlocked
 - [ ] Sheng admin 首次登录:生成 + 加密 + 上链 + cache 载入(四步全成功)
 - [ ] Sheng admin 再次登录:解密 + cache 载入(两步全成功)
 - [ ] Sheng admin 登出:cache 驱逐,本省业务立即 503
 - [ ] `replace_sheng_admin` 级联清链 + 清 Store + 驱逐 cache
 - [ ] 业务 extrinsic 按省正确路由
-- [ ] KEY_ADMIN 种子在内存中生命周期正确(解锁完立即 zeroize)
 - [ ] wrap key 全生命周期不落盘
 
 ### 8.3 前端
 - [ ] `npx tsc --noEmit` + `npm run build` 绿
 - [ ] SystemLockBanner 正确显示状态
-- [ ] KEY_ADMIN 能通过 UI 触发解锁
 - [ ] ShengAdminsView 显示 signing 密钥状态 Tag
 - [ ] 业务错误(503)有友好提示
 
 ### 8.4 联调
-- [ ] 端到端:KEY_ADMIN 解锁 → 辽宁 sheng admin 登录 → 链上 signing pubkey 出现 → 辽宁 SHI_ADMIN 推 `register_sfid_institution` 成功 → 链上 explorer 检查 signer = 辽宁 signing pubkey
 - [ ] 辽宁 sheng admin 登出 → 辽宁 SHI_ADMIN 推链立即失败
 - [ ] 辽宁 sheng admin 重新登录 → 推链恢复(无需重新生成 keypair)
-- [ ] KEY_ADMIN 更换辽宁 sheng admin → 链上 signing pubkey 被清除 → 新 sheng admin 登录 → 新 signing pubkey 上链 → 推链成功
 - [ ] 压测 baseline 报告产出
 
 ---
@@ -1037,11 +953,9 @@ sfid-load-test \
 
 **已全部拍板**(前面对话)。唯一剩一个实现细节:
 
-**KEY_ADMIN 解锁时,seed 怎么传给后端?**
 
 - [ ] **方式 1**:HTTP body 明文 hex 传 seed(简单,依赖 TLS 信任)—— **推荐**
 - [ ] **方式 2**:wumin 冷钱包支持派生 wrap key,只传 wrap key(需要 wumin 支持额外派生功能)
-- [ ] **方式 3**:KEY_ADMIN 在 sfid 前端命令行输入 seed hex(最土但最安全)
 
 **默认方式 1**,除非你指定换。
 

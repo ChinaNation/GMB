@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`citizenchain/runtime/`(otherpallet/sfid-system + governance/voting-engine + issuance/citizen-issuance + issuance/resolution-issuance + governance/runtime-upgrade + src/configs/mod.rs)
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`(Step 2 章节)
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`(Step 2 章节)
 - 前置依赖:step2a / step2b / step2c(commit 6e1779c)全部完工
 - 阻塞下游:step2d(wumin / wuminapp decoder 必须同步加 (province, signer_admin_pubkey) 字段)
 

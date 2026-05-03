@@ -19,7 +19,6 @@
 
 ## 前端
 - `ShengAdminsView` 表格必须显示"签名密钥状态"列(Tag),`signing_pubkey` 为 None 显示未初始化,有值显示已激活 + Tooltip 完整 pubkey
-- 机构注册 / 账户注册 Modal 的 catch 分支必须识别"本省登录管理员未在线"和"密钥管理员不能直接推送"两种 503,翻译成友好中文
 
 ## 运维
 - 唯一新增的部署要求:**确保 `SFID_SIGNING_SEED_HEX` 环境变量正确**(已有机制),不需要任何新 env

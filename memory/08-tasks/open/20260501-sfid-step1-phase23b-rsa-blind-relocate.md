@@ -1,32 +1,25 @@
-# SFID Step 1 / Phase 23b:`key_admins::rsa_blind` 搬到 `institutions/anon_cert/`
 
 - 状态:open
 - 创建日期:2026-05-01
 - 模块:`sfid/backend/`
-- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-sheng-3tier-transition.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:phase23a(models split)
 - 阻塞下游:phase23e
 
 ## 任务需求
 
-`key-admins/rsa_blind.rs`(148 行)实现 RSA 盲签匿名凭证,被 `sheng_admins/institutions.rs` 6 处直接调用——**这跟 KEY_ADMIN 角色无关**,只是历史上代码放错位置。本卡把 rsa_blind 搬到正确位置,从 KEY_ADMIN 删除路径上摘出。
+2026-05-02 机构模块粗粒度整合后,该能力最终归入 CPMS 模块根目录
 
 ## 搬迁方案
 
-- 新位置:`sfid/backend/institutions/anon_cert/`(新目录)
-  - `mod.rs` re-export
-  - `rsa_blind.rs`(从 `key-admins/` 整文件迁移,内容不动)
-- 调用方更新:`sheng_admins/institutions.rs` 把 `use crate::key_admins::rsa_blind` → `use crate::institutions::anon_cert::rsa_blind`
-- `key-admins/mod.rs` 删除 `pub mod rsa_blind;` 行(暂保留其他)
+- 新位置:`sfid/backend/cpms/rsa_blind.rs`
 
 ## 影响范围
 
-- 新增:`institutions/anon_cert/{mod,rsa_blind}.rs`
-- 修改:`institutions/mod.rs` 加 `pub mod anon_cert;`
-- 修改:`key-admins/mod.rs` 去 `pub mod rsa_blind;`
-- 修改:`sheng_admins/institutions.rs` 6 处 import 路径
-- 删除:`key-admins/rsa_blind.rs`(物理 git mv 到新位置)
+- 新增:`cpms/rsa_blind.rs`
+- 修改:`cpms/mod.rs` 加 `pub(crate) mod rsa_blind;`
+- 修改调用方 import 路径
 
 ## 主要风险点
 
@@ -36,8 +29,7 @@
 ## 验收清单
 
 - `cargo check` + `cargo test` + `cargo clippy` 与 baseline 持平
-- Grep `key_admins::rsa_blind` 零结果
-- Grep `institutions::anon_cert::rsa_blind` ≥ 6(迁移完整)
+- Grep `cpms::rsa_blind` 覆盖所有匿名证书调用方
 
 ## 工作量
 
@@ -45,19 +37,14 @@
 
 ## Progress
 
-### 2026-05-01 — phase23b 执行完毕(SFID Agent)
+### 2026-05-01 — phase23b 初次执行完毕(SFID Agent)
 
 **改动文件:**
 
-- `sfid/backend/institutions/anon_cert/mod.rs`(新建):中文 `//!` 用途说明 + `pub mod rsa_blind;`
-- `sfid/backend/institutions/anon_cert/rsa_blind.rs`(`git mv` 自 `key-admins/rsa_blind.rs`,内容零改动,148 行)
-- `sfid/backend/institutions/mod.rs`:加 `pub mod anon_cert;`
-- `sfid/backend/key-admins/mod.rs`:删 `pub(crate) mod rsa_blind;`
-- `sfid/backend/main.rs`:3 处 import 路径改为 `crate::institutions::anon_cert::rsa_blind::*`
-- `sfid/backend/sheng_admins/institutions.rs`:4 处同上(任务卡原估 6 处,实际是 4 处)
-- `sfid/backend/operate/binding.rs`:1 处同上(任务卡未列出,verify_anon_cert 调用)
-- `memory/05-modules/sfid/backend/key-admins/KEY_ADMINS_TECHNICAL.md`:顶部加注释指出 rsa_blind 已搬出
-- `memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md`:顶部加注释说明新增 anon_cert 子模块
+- 初次迁入 institutions 的记录已被 2026-05-02 粗粒度整合覆盖。
+- `sfid/backend/main.rs`、`sfid/backend/cpms/handler.rs`、`sfid/backend/citizens/binding.rs`
+  已统一改为 `crate::cpms::rsa_blind::*`
+- `memory/05-modules/sfid/backend/cpms/CPMS_TECHNICAL.md`:记录 RSA 盲签名归属
 
 **调用方实际共 8 处(非任务卡说的 6 处):** main.rs 3 + sheng_admins/institutions.rs 4 + operate/binding.rs 1。任务卡描述偏低,实际都已更新。
 
@@ -66,13 +53,9 @@
 **验收:**
 
 - `cargo check`:Finished, 3 baseline dead_code warnings(province.rs),与 baseline 持平。
-- `cargo test`:79 passed / 0 failed,含 `institutions::anon_cert::rsa_blind::tests::{generate_and_init_roundtrip, pem_reload}` 2 个测试已自动归位到新路径。
+- `cargo test`:79 passed / 0 failed(初次迁移时记录)。
 - `cargo clippy --all-targets -- -D warnings`:54+57 errors,与 baseline 59 持平,未引入新错。
-- 残留 grep `key_admins::rsa_blind\|key-admins/rsa_blind` = **0**(达标)
-- 新路径 grep `institutions::anon_cert::rsa_blind\|institutions/anon_cert/rsa_blind` = **8**(覆盖完整,≥6 达标)
-- `key-admins/rsa_blind.rs` 物理已不存在,`git status` 显示 `R` (rename) 保留 history。
-- `key-admins/mod.rs` 内 `rsa_blind` 行已删,其余三个 mod 完整保留。
+- 新路径 grep `cpms::rsa_blind` 覆盖当前匿名证书调用方。
 
-**未做事项(留给后续卡):** 不删 `key-admins/` 整目录(phase23e),不改 `business/`(phase23c)、`operate/`(phase23d),不动 `citizenchain/`、`sfid/frontend/`,不 commit。
 
 **任务卡调整建议:** 上游 phase23 主卡可记录"phase23b 调用方修正为 8 处而非 6 处",其余无需调整。状态 → done(待人工 review 后挪入 closed/)。

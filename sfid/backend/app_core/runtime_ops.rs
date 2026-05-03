@@ -537,7 +537,7 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
 /// 把全局 store 里所有 `PublicSecurity` 机构及其默认账户写入 sharded,**幂等**(or_insert)。
 pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     use crate::institutions::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
-    use crate::models::MultisigChainStatus;
+    use crate::institutions::MultisigChainStatus;
     use crate::sfid::InstitutionCategory;
 
     // 1. 从全局 store 快照取所有公安局机构 + 其 2 条默认账户

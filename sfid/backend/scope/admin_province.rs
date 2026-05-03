@@ -1,10 +1,10 @@
 //! 按 pubkey + role 解析管理员所属省份
 //!
-//! 中文注释:本文件由 Phase 23c 从 `business/scope.rs` 物理搬迁而来。
+//! 中文注释:本文件只保留 pubkey + role 推断所属省的权限辅助。
 //! 这两个函数与 `rules.rs::get_visible_scope`(从 ctx 派生 VisibleScope)互补,
 //! 用于尚未走 ctx.admin_province 的旧路径,从 pubkey 兜底查省。
 
-use crate::scope::pubkey::same_admin_pubkey;
+use crate::crypto::pubkey::same_admin_pubkey;
 use crate::sheng_admins::province_admins::sheng_admin_province;
 use crate::{AdminRole, Store};
 

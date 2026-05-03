@@ -1,68 +1,50 @@
 # MODELS 模块技术文档
 
+- 最后更新:2026-05-02
+- 任务卡:
+  - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
+
 ## 1. 模块定位
 
-- 路径：`backend/models`
-- 职责：统一维护 SFID 后端的数据结构定义（领域模型 + API DTO + 状态枚举）。
-- 目标：把数据协议与业务逻辑解耦，避免 `main.rs` 持续膨胀。
+- 路径:`sfid/backend/models`
+- 职责:只维护 SFID 后端跨业务共享的数据结构。
+- 边界:不得继续承载具体业务模块 DTO。
 
-## 2. 结构分类
+## 2. 当前结构
 
-- 运行态模型（Runtime Store）
-  - `Store`
-  - `PersistedRuntimeMeta`
-  - `AdminUser`
-  - `BindingRecord`
-  - `RewardStateRecord`
-  - `VoteVerifyCacheEntry`
-  - `AuditLogEntry`
+```text
+sfid/backend/models/
+├── mod.rs      # 全局共享模型 facade
+├── error.rs    # ApiResponse / ApiError / HealthData
+├── role.rs     # AdminRole / AdminStatus / AdminUser / 操作员 DTO
+└── store.rs    # Store 聚合体、审计、指标、链请求回执、回调、奖励、投票缓存
+```
 
-- 安全与链路模型
-  - `ChainRequestAuth`
-  - `ChainRequestReceipt`
-  - `BindCallbackJob`
-  - `BindCallbackPayload`
-  - `BindCallbackSignablePayload`
+## 3. 已归还的业务模型
 
-- 业务状态枚举
-  - `AdminRole`
-  - `AdminStatus`
-  - `CitizenStatus`
-  - `CpmsSiteStatus`
-  - `RewardStatus`
-  - `RewardAckStatusInput`
+```text
+sfid/backend/citizens/model.rs
+  # 公民身份、绑定状态机、绑定/解绑 DTO、投票账户 DTO、扫码 QR 载荷
 
-- 接口输入输出 DTO
-  - 认证/绑定/查询/投票/奖励/CPMS/密钥轮换相关请求与响应结构
-  - 统一响应结构：`ApiResponse<T>`、`ApiError`、`HealthData`
+sfid/backend/cpms/model.rs
+  # CPMS 站点、安装 token、QR1/QR2/QR3/QR4、匿名证书 DTO
 
-## 3. 使用方式
+sfid/backend/sfid/model.rs
+  # SFID 管理页元信息 DTO
 
-- `main.rs` 通过 `pub(crate) use models::*;` 统一导出。
-- 业务模块继续通过 `crate::*` 获取类型，不需要逐模块改大量引用路径。
+sfid/backend/institutions/model.rs
+  # 机构链状态 InstitutionChainStatus / MultisigChainStatus
+```
 
-## 4. 边界
+## 4. 使用方式
 
-- `models` 只定义“数据长什么样”，不执行业务流程。
-- 业务处理逻辑分别位于：
-  - `citizens`（公民身份业务）
-  - `chain`（区块链业务）
-  - `business`（查询/审计/作用域）
-  - `login`（认证）
-  - `key-admins` / `sheng-admins` / `shi-admins`（角色业务）
+- `main.rs` 继续 `pub(crate) use models::*` 暴露全局共享类型。
+- 业务模型由对应模块导出,例如 `citizens::model::*`、`cpms::model::*`。
+- `Store` 可以引用业务模块模型,但业务 DTO 不反向塞回 `models`。
 
-## 5. 链路字段同步（2026-03）
+## 5. 铁律
 
-- `BindingRecord` 新增 `runtime_bind_*` 字段族（`binding_id/bind_nonce/signature/key_id/key_version/alg/signer_pubkey`），用于持久化 Runtime 绑定凭证与签发者元信息。
-- `BindingRecord.sfid_signature` 继续保留旧 JSON 绑定证明签名语义；`bind_result.signature` 返回 Runtime 凭证签名，二者不可混用。
-- `VoteVerifyInput.proposal_id` 改为必填 `u64`，已移除废弃 `challenge` 字段。
-- `VoteVerifyOutput` 仅返回投票凭证字段（`genesis_hash/who/binding_id/proposal_id/vote_nonce/signature`），不再返回 `sfid_code` 明文。
-- `ChainVotersCountOutput` 统一输出 `genesis_hash/who/eligible_total/snapshot_nonce/signature`，不再保留兼容快照字段。
-- 涉及新增字段均使用 `#[serde(default)]` 兼容历史持久化数据反序列化。
-
-
-## ADR-008 Phase 23e 更新（2026-05-01）
-
-KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
-本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
-实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。
+- 新增业务 DTO 放到对应功能模块的 `model.rs`。
+- 只有真正跨模块共享且没有明确业务归属的模型才能放入 `models`。
+- 禁止在 `models` 目录恢复公民、CPMS、SFID 元信息、空权限占位、
+  空会话占位或省管理员槽位 facade 文件。

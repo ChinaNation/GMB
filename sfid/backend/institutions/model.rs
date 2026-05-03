@@ -16,9 +16,49 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::models::{InstitutionChainStatus, MultisigChainStatus};
 use crate::scope::HasProvinceCity;
 use crate::sfid::InstitutionCategory;
+
+// ── 机构 / 账户链上状态 ───────────────────────────────────────
+
+/// 机构链上注册状态。
+///
+/// 中文注释:该状态只服务机构模块。SFID 系统只记录链上同步回来的机构状态,
+/// 不在后台手动创建或注销链上机构。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InstitutionChainStatus {
+    NotRegistered,
+    PendingRegister,
+    Registered,
+    RevokedOnChain,
+}
+
+impl Default for InstitutionChainStatus {
+    fn default() -> Self {
+        Self::NotRegistered
+    }
+}
+
+/// 机构账户链上状态。
+///
+/// 中文注释:账户是否激活只以链上事实为准。SFID 创建账户时只是登记
+/// `(sfid_id, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
+/// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MultisigChainStatus {
+    NotOnChain,
+    PendingOnChain,
+    ActiveOnChain,
+    RevokedOnChain,
+}
+
+impl Default for MultisigChainStatus {
+    fn default() -> Self {
+        Self::NotOnChain
+    }
+}
 
 /// 机构(每个 sfid_id 唯一)。
 #[derive(Debug, Clone, Serialize, Deserialize)]

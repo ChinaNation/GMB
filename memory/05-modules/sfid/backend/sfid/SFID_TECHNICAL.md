@@ -39,6 +39,9 @@
   `backend/sheng_admins/province_admins.rs`。
 - `admin.rs`
   - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
+- `model.rs`
+  - 管理端 SFID 元信息 DTO(`AdminSfidMetaOutput` / `AdminSfidCitiesQuery` 等),
+    不再放在全局 `models`。
 - `city_codes/*.rs`
   - 43 个省份城市代码表(数据)
 
@@ -60,7 +63,7 @@
 
 - `main.rs` 路由将 `admin/sfid/*` 接口接入 `sfid::admin`。
 - `app_core/runtime_ops.rs` 的 `seed_demo_record` 也复用同一套生成工具，不再生成旧格式演示 `sfid`。
-- `sheng_admins/institutions.rs`：省级管理员生成机构 `site_sfid`。
+- `cpms/handler.rs`：公安局 CPMS 站点生成 `site_sfid`。
 - `login/mod.rs` 与 `scope/admin_province.rs`：通过
   `sheng_admins::province_admins` 做角色展示和归属推断。
 

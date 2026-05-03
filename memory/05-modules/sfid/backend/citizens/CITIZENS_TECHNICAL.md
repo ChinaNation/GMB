@@ -16,21 +16,25 @@
   - `citizen_bind_challenge` 绑定/解绑 challenge 签发
   - `citizen_bind` / `citizen_unbind` 公民身份绑定/解绑
   - `citizen_push_chain_bind` / `citizen_push_chain_unbind` 推链
-  - `app_vote_account_register` / `app_vote_account_status` wuminapp 投票账户
 - `chain_binding.rs`
   - 公民绑定 / 解绑链上 extrinsic 提交 helper
 - `chain_vote.rs`
   - wuminapp 公民投票凭证签发接口
 - `chain_joint_vote.rs`
   - 联合投票人口快照凭证签发接口
+- `model.rs`
+  - 公民身份记录、绑定状态机、绑定/解绑 DTO、投票账户 DTO、扫码 QR 载荷
+- `handler.rs`
+  - `admin_list_citizens` 后台公民列表
+  - `public_identity_search` 公开身份查询
 - `status.rs`
   - `admin_cpms_status_scan` CPMS 站点扫公民状态
 - `cpms_qr.rs`
   - `canonical_citizen_qr_text`
   - `canonical_status_qr_text`
   - `verify_cpms_qr_signature`(签名链路废弃,保留 canonical 工具供复用)
-- `handler.rs` 占位骨架,后续 Phase 拆 axum handler 时启用
-- `vote.rs`   占位骨架,后续 Phase 把 `app_vote_account_*` 拆出至此模块
+- `vote.rs`
+  - `app_vote_account_register` / `app_vote_account_status` wuminapp 投票账户登记/查询
 - `mod.rs`    子模块注册入口
 
 ## 3. 路由接线
@@ -40,12 +44,13 @@
 - `POST /api/v1/admin/citizen/unbind` -> `citizens::binding::citizen_unbind`
 - `POST /api/v1/admin/citizen/bind/push-chain` -> `citizens::binding::citizen_push_chain_bind`
 - `POST /api/v1/admin/citizen/unbind/push-chain` -> `citizens::binding::citizen_push_chain_unbind`
-- `POST /api/v1/app/vote-account/register` -> `citizens::binding::app_vote_account_register`
-- `GET  /api/v1/app/vote-account/status` -> `citizens::binding::app_vote_account_status`
+- `POST /api/v1/app/vote-account/register` -> `citizens::vote::app_vote_account_register`
+- `GET  /api/v1/app/vote-account/status` -> `citizens::vote::app_vote_account_status`
 - `POST /api/v1/app/vote/credential` -> `citizens::chain_vote::app_vote_credential`
 - `GET  /api/v1/app/voters/count` -> `citizens::chain_joint_vote::app_voters_count`
 - `POST /api/v1/admin/cpms-status/scan` -> `citizens::status::admin_cpms_status_scan`
-  (经由 `shi_admins::mod.rs` 转发)
+- `GET  /api/v1/admin/citizens` -> `citizens::handler::admin_list_citizens`
+- `GET  /api/v1/public/identity/search` -> `citizens::handler::public_identity_search`
 
 ## 4. 依赖与边界
 
@@ -53,9 +58,10 @@
   - `scope`(省域范围判断)
   - 全局公共能力(鉴权、审计、状态存储、签名封装)
   - `citizens::chain_binding`(链上 `bind_sfid` / `unbind_sfid` extrinsic 推送)
-  - `sheng_admins::institutions`(`resolve_site_province_via_shard`)
+  - `cpms`(`resolve_site_province_via_shard` / `verify_sr25519_signature`)
 - 边界:
   - `citizens` 仅负责公民身份业务。
+  - 公民 DTO 放 `citizens/model.rs`,不得再塞入全局 `models`。
   - 链上交互能力在 `backend/citizens/chain_*`。
   - SFID 号生成入口在 `backend/sfid/generator.rs`。
 

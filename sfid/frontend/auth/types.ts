@@ -1,7 +1,7 @@
 // 中文注释:登录与角色相关的前端类型集中放在 auth 模块内。
 // 省管理员槽位类型属于链上名册,放在 sheng_admins/chain_* 文件内。
 
-import type { ShengSlot } from '../sheng_admins/chain_sheng_admins_types';
+import type { ShengSlot } from '../sheng_admins/types';
 
 export type AdminRole = 'SHENG_ADMIN' | 'SHI_ADMIN';
 

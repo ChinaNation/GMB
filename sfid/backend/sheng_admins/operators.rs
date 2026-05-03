@@ -1,3 +1,8 @@
+//! 省管理员维护市管理员的 handler。
+//!
+//! ShengAdmin 在本省范围内新增、更新、停用 ShiAdmin;ShiAdmin 只读取自己被授权
+//! 范围内的操作员视图。链上省管理员更换不在此文件内处理。
+
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -6,8 +11,8 @@ use axum::{
 };
 use chrono::Utc;
 
+use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::scope::admin_province::province_scope_for_role;
-use crate::scope::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::sfid::province::city_code_by_name;
 use crate::*;
 
@@ -102,8 +107,7 @@ pub(crate) async fn create_operator(
         Err(resp) => return resp,
     };
     // ── 解析 created_by ──
-    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,require_sheng_admin 已挡掉非 ShengAdmin。
-    // created_by 必须为空或等于调用者自身。
+    // 中文注释:require_sheng_admin 已挡掉非 ShengAdmin,created_by 必须为空或等于调用者自身。
     let created_by_pubkey = match input.created_by.as_deref().map(str::trim) {
         None | Some("") => ctx.admin_pubkey.clone(),
         Some(raw) => {
@@ -631,7 +635,7 @@ fn can_manage_operator(
     actor_province: Option<&str>,
     operator: &AdminUser,
 ) -> bool {
-    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,本函数只剩本人 + 同省判断。
+    // 中文注释:本函数只做本人 + 同省判断。
     let _ = actor_role;
     if same_admin_pubkey(operator.created_by.as_str(), actor_pubkey) {
         return true;

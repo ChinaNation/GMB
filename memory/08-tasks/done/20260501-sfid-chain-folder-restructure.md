@@ -7,7 +7,6 @@
 
 ## 架构铁律(本任务确立)
 
-> 链 → SFID 是唯一交互方式(链需要时主动 HTTP pull),SFID 自身不依赖链做主动业务决策。但当前 key-admins / operate-binding push-chain 等历史能力**先不动**,只做"位置归整"——把所有 chain ↔ SFID 交互代码统一收敛到 `sfid/backend/src/chain/` 下。
 
 ## 范围
 
@@ -24,7 +23,6 @@ sfid/backend/src/chain/
 ├── citizen_binding/             # 公民身份绑定(含 admin push-chain 暂留)
 ├── citizen_vote/                # 公民投票凭证 pull
 │
-├── key_admins/                  # key-admins 推链(rotate / register / sheng_signing)
 ├── sheng_admin/                 # 省级管理员链上状态查询(给前端 UI)
 └── balance/                     # 链余额查询(给前端 UI)
 ```
@@ -49,7 +47,6 @@ sfid/backend/src/chain/
 
 ## 不做
 
-- 不动 key-admins / operate / sheng-admins 主体业务代码(只搬出 chain RPC 段)
 - 不删 subxt 依赖
 - 不删 chain/url.rs / chain/runtime_align.rs 读链分支
 - 不动 SFID 前端 view(后端能力保留,UI 数据源不变)
@@ -62,7 +59,6 @@ sfid/backend/src/chain/
 - T3. 搬 app_voters_count → joint_vote/
 - T4. 搬 app_vote_credential → citizen_vote/
 - T5. 搬 operate/binding 推链 + credential → citizen_binding/
-- T6. 搬 key-admins 推链段 → key_admins/
 - T7. 搬 sheng-admins/catalog 推链段 → sheng_admin/
 - T8. 搬 balance.rs → balance/
 - T9. 删 6 项 dead routes

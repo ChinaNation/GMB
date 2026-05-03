@@ -35,20 +35,15 @@
 2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
 4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
-5. SFID 验签主备账户管理：`key-admins` 模块（一主两备与轮换）。
 
 ## 4. 管理员模型与登录机制
 ### 4.1 管理员类型
-- 密钥管理员（`KEY_ADMIN`）：
-1. 数量固定 3 个（主密钥管理员 1 + 备用密钥管理员 2）。
 2. 来源为当前一主两备公钥状态，随密钥轮换自动同步。
 3. 权限：密钥管理最高权限（查看密钥状态、发起/提交主密钥轮换）、全局管理权限（可跨省管理市级管理员、可更换省级省级管理员、可执行业务接口查询与状态操作）。
 4. 不具备机构管理权限（不能访问机构管理页、不能生成机构身份识别码、不能扫码录入机构）。
 - 省级管理员（`SHENG_ADMIN`）：
 1. 数量固定 43 个（每省 1 个）。
-2. 初始公钥清单在代码中固化（编译期常量）并在安装时入库；运行中可由密钥管理员按省替换。
 3. 权限：除密钥管理外全权限（市级管理员管理、机构管理、绑定/解绑/查询、状态变更扫码等）。
-4. 省级管理员角色不可降级；公钥替换仅允许密钥管理员执行。
 5. 权限范围：01-43 号省级管理员仅可查看/启用/停用/删除自己创建的市级管理员。
 - 市级管理员（`SHI_ADMIN`）：
 1. 数量不设上限。
@@ -56,9 +51,6 @@
 3. 权限：登录后执行绑定、解绑、查询用户信息，不可管理管理员账号。
 
 ### 4.4 前端统一形态
-- 密钥管理员、省级管理员与市级管理员使用同一套管理员网站前端与同一登录流程。
-- 三类管理员共享基础业务页面（绑定、解绑、查询、状态变更扫码）；省级管理员额外拥有”管理员/机构管理”，密钥管理员额外拥有”密钥管理/省级省级管理员更换”。
-- 密钥管理员登录后额外显示”密钥管理”菜单；省级管理员登录后额外显示”管理员””机构管理”菜单。
 - 菜单显示仅做体验控制，最终权限以后端 RBAC 为准。
 
 ### 4.2 账户模型
@@ -108,11 +100,9 @@
 ## 6. 功能清单
 ### 6.1 管理员人工功能
 - 扫码并解析 CPMS 二维码。
-- 省级管理员、市级管理员扫码”CPMS 状态变更二维码”更新用户状态（密钥管理员同样可执行）。
 - 绑定确认（档案号、公钥唯一性校验）。
 - 解绑处理（线下受理、线上执行）。
 - 绑定查询与审计查询。
-- 省级管理员与密钥管理员维护市级管理员账号（新增、启停用、删除；省级管理员按创建者隔离）。
 - 市级管理员数据模型新增姓名字段 `admin_name`；新增管理员必须提交姓名与公钥。
 - 管理员新增/修改市级管理员时，`admin_pubkey` 必须通过 `sr25519` 公钥格式校验（非法输入拒绝）。
 - 管理员”修改”弹窗支持同时修改姓名和公钥。
@@ -123,11 +113,7 @@
 3. 回到 SFID 机构页扫码录入机构，完成 3 把机构公钥入库并激活。
 
 ### 6.3 权限控制实现要求
-- 绑定/解绑/扫码状态变更等写接口允许：`KEY_ADMIN`、`SHENG_ADMIN`、`SHI_ADMIN`（按具体接口约束）。
 - 机构管理接口（机构身份识别码生成、机构扫码录入、机构更新/禁用/撤销/删除/查询）仅允许：`SHENG_ADMIN`。
-- 绑定信息查询接口允许：`KEY_ADMIN`、`SHENG_ADMIN`、`SHI_ADMIN`。
-- 管理市级管理员接口允许：`KEY_ADMIN`、`SHENG_ADMIN`（`KEY_ADMIN` 可跨创建者全局管理）。
-- 密钥管理接口（`attestor/keyring`、`rotate/challenge`、`rotate/commit`）仅允许：`KEY_ADMIN`。
 - 市级管理员管理接口的对象权限：按 `created_by` 隔离，仅可管理自己创建的市级管理员。
 - 省级数据强隔离：每省 1 个省级管理员；省级管理员与其创建的市级管理员仅可查看和操作本省数据。
 - 隔离范围：机构（CPMS 机构登记）、公民绑定信息、SFID 生成与状态变更。
@@ -166,7 +152,6 @@
 2. `provinces`
 3. `sheng_admin_scope`
 4. `shi_admin_scope`
-5. `key_admin_keyring`
 - 当前后端功能目录（2026-05-02 平铺后）：
 1. `backend/main.rs`：路由装配与启动骨架。
 2. `backend/app_core/`：跨业务底层工具,含 HTTP 安全、运行期工具与 `chain_*` 通用链工具。
@@ -177,7 +162,6 @@
 7. `backend/scope/`：省/市可见范围与写权限判断。
 8. `backend/sfid/`：SFID 生成与元数据模块。
 9. `backend/models/`：统一数据结构模块。
-- 架构冻结口径：SFID 后端不再恢复 `backend/src/`、`backend/chain/`、`backend/key-admins/`、`backend/operate/` 等旧目录。
 
 ### 7.3 签名与密钥
 - 当前版本按业务目录管理签名密钥与验签流程：省管理员三槽签名密钥在 `sheng_admins`，机构登记与机构链交互在 `institutions`，公民绑定/投票凭证在 `citizens`。
@@ -204,13 +188,11 @@
 4. 发起轮换时必须提交一把新公钥替换被提升的备用槽位。
 5. 被用于发起的旧备用提升为新主公钥，旧主公钥退出活动集，结果始终保持“一主两备”。
 - 轮换接口流程（Runtime 对齐口径）：
-1. 密钥管理员（且必须为当前备用公钥）调用 `rotate/challenge` 生成一次性挑战原文。
 2. 指定备用公钥对应私钥对挑战原文签名。
 3. 调用 `rotate/verify` 校验签名确认为备用密钥签名。
 4. 调用 `rotate/commit` 提交 `challenge_id + signature + new_backup_pubkey`，并由后端调用链上标准 extrinsic（如 `rotate_sfid_keys`）执行轮换。
 5. 提交后必须回写 `chain_tx_hash` 与 `block_number`，用于对账与审计。
 - 前端可视化流程（当前实现）：
-1. 密钥管理员在“密钥管理”页面输入 `initiator_pubkey` 生成轮换二维码。
 2. 备用私钥钱包扫码二维码并签名。
 3. 前端摄像头扫码签名结果二维码，先执行 `rotate/verify`。
 4. 验签通过后输入“新备用公钥（可选新备用 seed）”并提交 `rotate/commit`。
@@ -222,16 +204,13 @@
 1. `runtime_cache_entries`：运行态分片缓存（JSONB，按 `entry_key` 存储）。
 2. `runtime_misc`：运行态兼容快照。
 3. `runtime_meta`：运行态元数据（签名种子/公钥，含加密载荷）。
-4. `admins`：管理员主表（`KEY_ADMIN|SHENG_ADMIN|SHI_ADMIN`）。
 5. `provinces`：省份维度表。
 6. `sheng_admin_scope`：省级管理员省域归属（含 `scope_no`）。
 7. `shi_admin_scope`：市级管理员归属省级管理员关系。
-8. `key_admin_keyring`：密钥管理员一主两备槽位映射。
 9. `chain_idempotency_requests`：链路幂等与防重放记录。
 10. `binding_unique_locks`：绑定唯一性锁（公钥/档案号双向唯一）。
 11. `bind_reward_states`：奖励回执状态机。
 - 管理员视图：
-1. `v_key_admins`
 2. `v_sheng_admins`
 3. `v_shi_admins`
 - 历史兼容表（仍在迁移历史中）：
@@ -245,15 +224,12 @@
 - `admins.admin_pubkey` 全局唯一。
 - `sheng_admin_scope.province_name` 唯一（每省仅 1 名省级管理员）。
 - `sheng_admin_scope.scope_no` 唯一（1..43 编号）。
-- `key_admin_keyring.slot` 固定且唯一：`MAIN|BACKUP_A|BACKUP_B`。
 - `chain_idempotency_requests` 双唯一：`(route_key, request_id)` 与 `(route_key, nonce)`。
 - `binding_unique_locks`：`account_pubkey` 与 `archive_index` 均唯一。
 - `bind_reward_states`：`account_pubkey` 与 `callback_id` 均唯一。
 
 ### 8.3 状态机
 - `audit_logs.result`：`SUCCESS | FAILED`
-- `admins.role`：`KEY_ADMIN | SHENG_ADMIN | SHI_ADMIN`
-- 会话角色：`KEY_ADMIN | SHENG_ADMIN | SHI_ADMIN`
 - `admins.status`：`ACTIVE | DISABLED`
 - 登录挑战：运行态 `login_challenges`（一次性消费 + TTL）。
 - 奖励状态：`PENDING | RETRY_WAITING | FAILED | REWARDED`。
@@ -270,18 +246,11 @@
 - `POST /api/v1/admin/auth/qr/challenge`：生成网页登录二维码 challenge。
 - `POST /api/v1/admin/auth/qr/complete`：提交签名结果（`challenge_id/request_id + admin_pubkey + signature`，`session_id` 可选）。
 - `GET /api/v1/admin/auth/qr/result`：网页登录页轮询二维码登录结果。
-- `GET /api/v1/admin/operators`：查询市级管理员列表（`SHENG_ADMIN | KEY_ADMIN`）。
-- `POST /api/v1/admin/operators`：新增市级管理员（`SHENG_ADMIN | KEY_ADMIN`）。
-- `PUT /api/v1/admin/operators/{id}`：修改市级管理员（`SHENG_ADMIN | KEY_ADMIN`）。
-- `DELETE /api/v1/admin/operators/{id}`：删除市级管理员（`SHENG_ADMIN | KEY_ADMIN`）。
-- `PUT /api/v1/admin/operators/{id}/status`：启用/停用市级管理员（`SHENG_ADMIN | KEY_ADMIN`）。
 - 市级管理员接口口径补充：列表返回 `admin_name` 与 `created_by_name`（创建者显示名）；新增接口提交 `admin_name + admin_pubkey`；修改接口支持同时更新姓名与公钥，且后端校验 `admin_pubkey` 格式。
 
 ### 9.6 省级管理员基线与变更策略（当前）
 1. 省级管理员基线采用 `scope_no(1..43) + province_name + admin_pubkey` 固化清单初始化（迁移脚本维护）。
-2. 运行中允许由密钥管理员通过接口按省替换省级管理员公钥：`PUT /api/v1/admin/sheng-admins/:province`。
 3. 替换后必须同步写入审计日志，并保持 `sheng_admin_scope` 的省份唯一与编号唯一约束。
-4. 非密钥管理员不得替换省级管理员公钥。
 
 ### 9.3 管理员业务接口（人工）
 - `POST /api/v1/admin/bind/scan`：上传二维码内容并验签解析（仅允许扫描本省已登记机构的二维码）。
@@ -291,17 +260,11 @@
 - `GET /api/v1/admin/sfid/meta`：获取 SFID 生成工具元数据（A3 选项、机构选项、省列表、当前管理员省域限制）。
 - `GET /api/v1/admin/sfid/cities?province=...`：按省加载可选市列表（省级管理员仅可查询本省）。
 - `POST /api/v1/admin/sfid/generate`：使用后端 Rust 工具生成指定用户 SFID 码（首次生成后锁定该公民所属省）。
-- `GET /api/v1/admin/attestor/keyring`：查询 SFID 区块链签名密钥当前一主两备状态（仅密钥管理员）。
 - `POST /api/v1/admin/attestor/rotate/challenge`：发起主密钥轮换 challenge（仅指定发起备用公钥）。
 - `POST /api/v1/admin/attestor/rotate/verify`：校验 challenge 签名是否来自发起备用公钥。
 - `POST /api/v1/admin/attestor/rotate/commit`：提交 `challenge_id + signature + new_backup_pubkey` 执行轮换。
-- 密钥管理员可在前端“密钥管理”页面完成可视化操作（二维码生成 + 扫码签名 + 验签 + 输入新备用公钥提交）。
-- `GET /api/v1/admin/sheng-admins`：查询 43 省省级管理员列表（仅密钥管理员）。
-- `PUT /api/v1/admin/sheng-admins/:province`：按省替换省级管理员公钥（仅密钥管理员）。
 - `POST /api/v1/admin/cpms-keys/sfid/generate`：生成机构身份识别码与 SFID 签名初始化二维码（仅省级管理员）。
 - `POST /api/v1/admin/cpms-keys/register-scan`：扫描并录入 CPMS 公钥登记二维码（仅省级管理员，且必须绑定对应 `init_qr_payload`）。
-- `POST /api/v1/admin/cpms-status/scan`：省级管理员/市级管理员扫描 CPMS 状态变更二维码并更新用户状态（密钥管理员同样可执行；省级角色仅可操作本省机构与本省公民）。
-- `GET /api/v1/admin/audit-logs`：查询审计日志（密钥管理员/省级管理员，可按 action/actor/keyword 过滤）。
 - `GET /api/v1/admin/cpms-keys`：查询机构列表（仅省级管理员，返回本省机构）。
 
 ### 9.4 区块链接口（自动）
@@ -363,7 +326,6 @@
 
 ### 9.8 CPMS 状态变更扫码接口（人工）
 - `POST /api/v1/admin/cpms-status/scan`：省级管理员/市级管理员扫描 CPMS 状态变更二维码并更新用户状态。
-- 鉴权要求：`SHENG_ADMIN`、`SHI_ADMIN`、`KEY_ADMIN` 可调用（省级角色仍受省域隔离）。
 
 ### 9.5 公开查询接口（Token 鉴权）
 - `GET /api/v1/public/identity/search?archive_no=...`
@@ -644,8 +606,6 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 验收标准：前后端、测试、区块链对接口与字段无歧义。
 
 ### 16.2 里程碑 1：数据层与系统初始化（2-3 天）
-- 完成核心表与索引：`runtime_cache_entries`、`runtime_meta`、`admins`、`key_admin_keyring`、`chain_idempotency_requests`、`binding_unique_locks`、`bind_reward_states`。
-- 完成管理员与密钥分表：`admins`、`provinces`、`sheng_admin_scope`、`shi_admin_scope`、`key_admin_keyring`。
 - 完成运行态拆分：`runtime_misc`、`runtime_meta`，并下线 `runtime_store`。
 - 运行态缓存升级：`runtime_cache_entries`（按键分片存储），`runtime_misc` 仅保留兼容快照。
 - 完成运行态加密落地：`runtime_meta.payload_enc`。

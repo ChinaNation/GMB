@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-01
 - 模块:`sfid/backend/{operate,citizens}/`
-- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-sheng-3tier-transition.md`
 - 前置依赖:phase23a
 - 阻塞下游:phase23e
 
@@ -30,7 +30,6 @@
 
 ## 主要风险点
 
-- **`bootstrap_sheng_signer` 在 binding 路径中调用?**:phase23 progress 显示 `login/mod.rs` 才是 bootstrap 调用方,operate 只用 signing pair。验证 binding/status 不直接依赖 KEY_ADMIN
 - **cpms_qr 归属**:本卡先按 citizens 迁入,边界争议留 phase7
 
 ## 验收清单
@@ -89,4 +88,3 @@
 
 - handler/vote 拆分留给后续 Phase(任务卡里已说明,phase23d 不在范围)
 - cpms_qr 边界讨论(是否拆 `cpms/` 子模块)留 phase7 评估
-- phase23e 可继续拆 `key-admins/`、`chain/key_admins/`、`chain/balance/`

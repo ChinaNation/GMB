@@ -5,7 +5,6 @@ ALTER TABLE IF EXISTS sfid_admins RENAME TO admins;
 ALTER TABLE IF EXISTS sfid_provinces RENAME TO provinces;
 ALTER TABLE IF EXISTS sfid_super_admin_scope RENAME TO super_admin_scope;
 ALTER TABLE IF EXISTS sfid_operator_admin_scope RENAME TO operator_admin_scope;
-ALTER TABLE IF EXISTS sfid_key_admin_keyring RENAME TO key_admin_keyring;
 
 -- 约束/索引命名同步（存在才改）
 ALTER INDEX IF EXISTS idx_sfid_admins_role_status RENAME TO idx_admins_role_status;
@@ -20,20 +19,13 @@ BEGIN
       AND conrelid = 'admins'::regclass
   ) THEN
     ALTER TABLE admins ADD CONSTRAINT admins_role_check
-      CHECK (role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
+      CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN', 'QUERY_ONLY'));
   END IF;
 END
 $$;
 
-DROP VIEW IF EXISTS v_key_admins;
 DROP VIEW IF EXISTS v_super_admins;
 DROP VIEW IF EXISTS v_operator_admins;
-
-CREATE OR REPLACE VIEW v_key_admins AS
-SELECT a.*, k.slot, k.keyring_version, k.updated_at AS slot_updated_at
-FROM admins a
-JOIN key_admin_keyring k ON k.admin_id = a.admin_id
-WHERE a.role = 'KEY_ADMIN';
 
 CREATE OR REPLACE VIEW v_super_admins AS
 SELECT a.*, s.province_name, s.scope_no

@@ -1,9 +1,8 @@
 # institutions/ — SFID 机构与账户名称模型
 
-> 中文注释(phase23b, 2026-05-01):新增 `anon_cert/` 子模块(`rsa_blind.rs` 从
-> `key-admins/` 搬到此处),实现 RSA 盲签匿名凭证(RFC 9474 RSABSSA-SHA384-PSS-Randomized),
-> 由公安局 SFID 生成流程、CPMS QR4 绑定校验调用。
-> 见任务卡 `20260501-sfid-step1-phase23b-rsa-blind-relocate.md`。
+> 中文注释(2026-05-02):`institutions` 只保留机构身份、账户名称、资料库和
+> 机构对区块链/钱包提供查询的能力。匿名证书 RSA 盲签名已经归入
+> `sfid/backend/cpms/rsa_blind.rs`,不再挂在机构模块下。
 
 ## 定位
 
@@ -114,15 +113,13 @@ SFID 不能单方面删除仍在链上的账户名称。
 
 ```text
 backend/institutions/
-├── mod.rs       — pub use 聚合
-├── chain_duoqian_info.rs         — 机构与区块链/钱包交互的模块入口
-├── chain_duoqian_info_dto.rs     — 机构链交互 DTO
-├── chain_duoqian_info_handler.rs — 机构链交互 HTTP handler
-├── model.rs     — 机构、账户、链上同步 DTO
-├── store.rs     — 机构/账户 store 读写层
-├── service.rs   — 校验、分类、默认账户、删除许可规则
-├── derive.rs    — DUOQIAN_V1 本地地址派生
-└── handler.rs   — HTTP handler
+├── mod.rs                  — 模块声明与聚合导出
+├── model.rs                — 机构、账户、资料库、请求/响应 DTO
+├── store.rs                — 机构/账户 store 读写层
+├── service.rs              — 校验、分类、默认账户、删除许可规则
+├── handler.rs              — 机构本地 HTTP handler
+├── derive.rs               — DUOQIAN_V1 本地地址派生
+└── chain_duoqian_info.rs   — 机构提供给区块链/钱包查询的 DTO 与 handler
 ```
 
 ## 技术方案收口项
@@ -137,10 +134,4 @@ backend/institutions/
 - 2026-04-19:私权机构两步式创建。
 - 2026-04-21:DUOQIAN_V1 账户名称派生规则收口。
 - 2026-04-29:SFID 状态真源改为链上同步,后台不再手动激活账户。
-
-
-## ADR-008 Phase 23e 更新（2026-05-01）
-
-KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
-本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
-实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。
+- 2026-05-02:机构本地管理与链端查询收口为当前 7 文件结构,历史角色说明已清理。

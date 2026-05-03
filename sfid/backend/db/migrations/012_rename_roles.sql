@@ -11,4 +11,4 @@ DELETE FROM admins WHERE role = 'QUERY_ONLY';
 
 -- 添加新约束
 ALTER TABLE admins ADD CONSTRAINT admins_role_check
-    CHECK (role IN ('KEY_ADMIN', 'INSTITUTION_ADMIN', 'SYSTEM_ADMIN'));
+    CHECK (role IN ('INSTITUTION_ADMIN', 'SYSTEM_ADMIN'));

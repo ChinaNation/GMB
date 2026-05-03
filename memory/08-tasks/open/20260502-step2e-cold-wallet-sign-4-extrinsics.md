@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`sfid/backend` + `wumin` + `wuminapp`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 上游:phase7(commit 81cde87)+ step2d(commit b4bb76e)
 - 跨模块协议触发:`memory/07-ai/chat-protocol.md` 第 5 条(runtime 凭证签名/验签改动必须双端联动)
 

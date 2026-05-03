@@ -3,9 +3,7 @@
 //! ADR-008 决议(2026-05-01):每省 3 把独立签名密钥(每个 admin slot 各一把,
 //! 互不共享)。登录时根据 (province, admin_pubkey) 载入 Pair,登出/idle 驱逐。
 //!
-//! 与旧 KEY_ADMIN 签名缓存区别:
-//! - 旧:每省 1 把签名密钥,key 是 province
-//! - 新:每省 3 把(main / backup_1 / backup_2),key 是 (province, admin_pubkey)
+//! 缓存粒度:每省 3 把(main / backup_1 / backup_2),key 是 (province, admin_pubkey)
 //!
 //! 业务凭证签发(institutions / citizens / shi_admins)统一从本 cache 取 Pair。
 
@@ -108,7 +106,7 @@ impl Default for ShengSigningCache {
 
 /// 中文注释:业务推链 signer 路由(ADR-008 Phase 23e)。
 ///
-/// 历史 `key_admins::signer_router::resolve_business_signer` 等价替换:
+/// 当前业务推链规则:
 /// - ShengAdmin / ShiAdmin:取登录态对应省的 cache(ShengAdmin 用自己 pubkey,
 ///   ShiAdmin 用其上级 sheng admin pubkey;后者实现走 `any_for_province` 退化)
 /// - 任何角色 cache 缺失:返回 503,提示让本省 admin 先登录

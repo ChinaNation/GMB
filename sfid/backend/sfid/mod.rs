@@ -6,7 +6,7 @@
 //!
 //! 中文注释(铁律):
 //! 任何新增的 SFID 工具逻辑(A3 类型、机构码、省市清单、分类、校验、生成)
-//! 都必须放在本模块下,**不能**散在 `sheng-admins/` / `operate/` / `business/` /
+//! 都必须放在本模块下,**不能**散在 `sheng-admins/` / `operate/` /
 //! `chain/` / `app_core/` 等业务模块里。
 //!
 //! 参见 `feedback_sfid_module_is_single_entry.md`。
@@ -20,6 +20,7 @@
 //! - [`category`]         — 机构分类(公安局/公权/私权),任务卡 2 使用
 //! - [`validator`]        — SFID 号格式校验
 //! - [`generator`]        — SFID 号生成
+//! - [`model`]            — SFID admin 元信息 DTO
 //! - [`admin`]            — SFID admin 相关(legacy)
 
 pub mod a3;
@@ -28,6 +29,7 @@ pub mod category;
 pub mod cities;
 pub mod generator;
 pub mod institution_code;
+pub(crate) mod model;
 pub mod province;
 pub mod validator;
 
@@ -37,6 +39,8 @@ pub use category::{classify, InstitutionCategory, PUBLIC_SECURITY_INSTITUTION_NA
 pub use cities::{cities_of, real_cities_of};
 pub use generator::{generate_sfid_code, GenerateSfidInput};
 pub use institution_code::InstitutionCode;
+#[allow(unused_imports)]
+pub(crate) use model::*;
 pub use province::{
     city_code_by_name, province_code_by_name, province_name_by_code, provinces, CityCode,
     ProvinceCode,

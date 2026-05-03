@@ -3,6 +3,10 @@
 - 最后更新:2026-05-02
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
+  - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
+  - `memory/08-tasks/done/20260502-sfid-institutions粗粒度整合.md`
+  - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
+  - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
 
 ## 当前边界
 
@@ -25,17 +29,18 @@ sfid/backend/
 ├── main.rs                    # Axum 路由、AppState、StoreHandle 等后端入口
 ├── main_tests.rs              # main.rs 的测试模块
 ├── app_core/                  # 跨业务底层工具,含 HTTP 安全、运行期工具、chain_* 通用链工具
-├── citizens/                  # 公民身份、绑定、投票凭证、CPMS 状态扫码
-├── crypto/                    # 加密与 sr25519 辅助
+├── audit.rs                   # 审计日志查询 handler
+├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
+├── cpms/                      # CPMS 模型、安装、注册、匿名证书 rsa_blind、站点状态治理
+├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── indexer/                   # 链事件解析与索引 worker
-├── institutions/              # 机构创建、机构资料、账户名称、机构链交互 chain_duoqian_info*
-├── login/                     # 管理员登录、挑战、签名校验
-├── models/                    # 共享模型、角色、状态、Store 结构
+├── institutions/              # 机构创建、机构资料、账户名称、机构链查询 chain_duoqian_info.rs
+├── login/                     # 管理员登录、扫码登录、鉴权守卫、签名校验
+├── models/                    # 全局共享模型、角色、响应包装、Store 结构
 ├── qr/                        # QR 协议辅助
-├── scope/                     # 省/市可见范围与写权限判断
-├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码
-├── sheng_admins/              # 省管理员后台业务和省管理员链交互 chain_*
-├── shi_admins/                # 市管理员模块
+├── scope/                     # 省/市可见范围与过滤规则,不放 handler
+├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
+├── sheng_admins/              # 省管理员治理、市管理员操作员维护、三槽展示、本地 signing seed 管理
 ├── store_shards/              # 分片 Store 与迁移辅助
 ├── db/                        # 数据库迁移和 seed,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
@@ -49,6 +54,14 @@ sfid/backend/
 - 禁止恢复独立 `sfid/backend/chain/` 业务目录。
 - 后端新增功能模块直接放 `sfid/backend/<功能名>/`。
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
+- CPMS 系统管理归 `sfid/backend/cpms/`,不得再放入 `sheng_admins/institutions.rs`。
+- 后端不再维护 `sfid/backend/shi_admins/` 空壳转发目录;市管理员操作员维护归
+  `sheng_admins/operators.rs`,CPMS 状态扫码归 `citizens/status.rs`。
+- 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,SFID 元信息 DTO 归
+  `sfid/model.rs`,不得塞回 `models/`。
+- `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
+- 省管理员只有“更换省管理员/主备交换”需要链交互时,才允许新增
+  `sheng_admins/chain_replace_admin.rs`。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
 - 非源码目录 `db/`、`scripts/`、`tests/`、`target/` 不参与业务模块平铺。
 

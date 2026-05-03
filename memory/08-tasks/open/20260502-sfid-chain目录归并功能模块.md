@@ -64,7 +64,7 @@
 - `sfid/backend/app_core/`
   - 新增 `chain_runtime.rs`、`chain_client.rs`、`chain_url.rs`。
 - `sfid/backend/institutions/`
-  - 新增 `chain_duoqian_info.rs`、`chain_duoqian_info_dto.rs`、`chain_duoqian_info_handler.rs`。
+  - 新增 `chain_duoqian_info.rs`,承接机构链查询 DTO 与 handler。
 - `sfid/backend/citizens/`
   - 新增 `chain_binding.rs`、`chain_vote.rs`、`chain_joint_vote.rs`。
 - `sfid/backend/sheng_admins/`

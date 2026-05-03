@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`wuminapp`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 上游:step2d(commit b4bb76e),wumin decoder 已支持 17.5 但 wuminapp caller 仍调旧 17.0
 
 ## 任务需求

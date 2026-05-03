@@ -80,16 +80,6 @@ pub(crate) enum Slot {
     Backup2,
 }
 
-impl Slot {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            Slot::Main => "MAIN",
-            Slot::Backup1 => "BACKUP_1",
-            Slot::Backup2 => "BACKUP_2",
-        }
-    }
-}
-
 /// 某省当前生效的三槽管理员公钥。
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]

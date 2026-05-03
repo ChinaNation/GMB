@@ -1,8 +1,8 @@
 //! 中文注释:进程内 `Store` 聚合体 + 敏感种子封装 + 服务指标 / 审计 / 链请求回执 /
-//! 异步绑定回调 / 公民奖励 / 投票验证缓存 / Keyring 轮换会话 / 机构与账户链上状态。
+//! 异步绑定回调 / 公民奖励 / 投票验证缓存。
 //!
-//! 内容统一来自 phase23a 拆分前的 `models/mod.rs`,本文件维护 `Store` 这棵
-//! 进程内状态树的全部字段类型;子领域 DTO(citizen/cpms/role/meta)单独成文件。
+//! 中文注释:本文件维护 `Store` 这棵进程内状态树。业务模型类型只引用对应
+//! 功能模块,不在 `models` 里复制定义。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,10 +12,10 @@ use zeroize::Zeroize;
 
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 
-use super::citizen::{
+use crate::citizens::model::{
     CitizenBindChallenge, CitizenRecord, CitizenStatus, ImportedArchive, PendingBindScan,
 };
-use super::cpms::CpmsSiteKeys;
+use crate::cpms::model::CpmsSiteKeys;
 
 /// 中文注释:历史 `make_signature_envelope` 已下线,本结构仅保留作为
 /// `BindCallbackPayload.proof / callback_attestation` 字段类型(目前由
@@ -132,10 +132,8 @@ pub(crate) struct Store {
     pub(crate) next_document_id: u64,
 }
 
-// 中文注释:KeyringRotateChallenge / KeyringStateOutput / KeyringRotate{Challenge,Verify,Commit}{Input,Output}
-// 已随 ADR-008 KEY_ADMIN 整角色废止 / phase23e 子卡(2026-05-01)一并删除。
-// 省级 3-tier 名册由 chain runtime 上 `ShengAdmins` storage 持有真相,SFID 不再
-// 维护本地 keyring_rotate 流程。
+// 中文注释:旧签名轮换 DTO 已删除。省级 3-tier 名册由 chain runtime 上
+// `ShengAdmins` storage 持有真相,SFID 不再维护本地签名轮换流程。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AuditLogEntry {
@@ -230,17 +228,6 @@ pub(crate) struct VoteVerifyCacheEntry {
     pub(crate) cached_at: DateTime<Utc>,
 }
 
-// 中文注释:ChainRequestAuth 配套于已下架的 chain HMAC 鉴权(prepare_chain_request),
-// 2026-05-01 一并下架。
-
-#[derive(Deserialize)]
-pub(crate) struct AuditLogsQuery {
-    pub(crate) action: Option<String>,
-    pub(crate) actor_pubkey: Option<String>,
-    pub(crate) keyword: Option<String>,
-    pub(crate) limit: Option<usize>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct BindCallbackPayload {
     pub(crate) callback_id: String,
@@ -253,45 +240,4 @@ pub(crate) struct BindCallbackPayload {
     pub(crate) proof: SignatureEnvelope,
     pub(crate) client_request_id: Option<String>,
     pub(crate) callback_attestation: SignatureEnvelope,
-}
-
-// ── 多签管理:机构 / 账户链上状态 ─────────────────────
-
-/// 机构链上注册状态。
-///
-/// 中文注释:SFID 系统只记录链上同步回来的机构状态,不主动创建或注销链上机构。
-/// 创建 SFID 时默认为 `NotRegistered`;链上注册/注销成功后由受信任同步接口更新。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum InstitutionChainStatus {
-    NotRegistered,
-    PendingRegister,
-    Registered,
-    RevokedOnChain,
-}
-
-impl Default for InstitutionChainStatus {
-    fn default() -> Self {
-        Self::NotRegistered
-    }
-}
-
-/// 机构账户链上状态。
-///
-/// 中文注释:账户是否激活只以链上事实为准。SFID 创建账户时只是登记
-/// `(sfid_id, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
-/// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum MultisigChainStatus {
-    NotOnChain,
-    PendingOnChain,
-    ActiveOnChain,
-    RevokedOnChain,
-}
-
-impl Default for MultisigChainStatus {
-    fn default() -> Self {
-        Self::NotOnChain
-    }
 }

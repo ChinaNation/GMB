@@ -1,19 +1,33 @@
 # SFID Login 模块技术文档
 
+- 最后更新:2026-05-02
+- 任务卡:
+  - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
+
 ## 1. 模块目标
-`src/login` 负责 SFID 管理员认证链路，统一处理“登录挑战生成、签名验签、会话签发、会话校验”。
 
-该模块只负责认证（Authentication），不负责业务权限动作本身（业务接口由 `key-admins`、`sheng-admins`、`shi-admins` 接手）。
+`sfid/backend/login` 负责 SFID 管理员认证链路,统一处理登录挑战生成、
+签名验签、会话签发、二维码登录和会话校验。
 
-## 2. 目录与职责
+本模块只负责 Authentication 和登录态守卫。业务权限、数据范围、链交互动作
+必须留在各业务模块内继续校验,不得把业务 handler 塞回登录目录。
+
+## 2. 当前目录
+
 ```text
-src/login/
-├── mod.rs                # 登录接口、会话中间件、验签与鉴权函数
-└── LOGIN_TECHNICAL.md    # 本文档
+sfid/backend/login/
+├── mod.rs        # 模块聚合与对外 API re-export
+├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
+├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
+├── qr_login.rs   # WUMIN_QR_V1 扫码登录 challenge/complete/result
+├── guards.rs     # require_admin_* 鉴权守卫、session 校验、签名 key bootstrap
+└── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
 ```
 
-## 3. 对外接口（管理员登录）
+## 3. 对外接口
+
 - `GET /api/v1/admin/auth/check`
+- `POST /api/v1/admin/auth/logout`
 - `POST /api/v1/admin/auth/identify`
 - `POST /api/v1/admin/auth/challenge`
 - `POST /api/v1/admin/auth/verify`
@@ -22,64 +36,46 @@ src/login/
 - `GET /api/v1/admin/auth/qr/result`
 
 ## 4. 认证模型
-- 账户标识：`admin_pubkey`
-- 会话载体：`Bearer <access_token>`
-- 会话缓存：`admin_sessions`
-- 挑战缓存：`login_challenges`
-- 二维码登录结果缓存：`qr_login_results`
+
+- 管理员标识:`admin_pubkey`
+- 角色模型:当前只保留 `ShengAdmin` / `ShiAdmin`
+- 会话载体:`Bearer <access_token>`
+- 会话缓存:`admin_sessions`,登录后同步写入 GlobalShard
+- 挑战缓存:`login_challenges`
+- 二维码登录结果缓存:`qr_login_results`
 
 ## 5. 核心流程
-### 5.1 二维码登录
-1. 前端调用 `qr/challenge` 生成挑战。
-2. 手机扫码签名后回传签名回执（`qr/complete`）。
-3. 后端验签成功后签发 `access_token`。
-4. 前端轮询 `qr/result` 获取登录成功状态与会话。
 
-二维码登录统一遵循 `WUMIN_QR_V1` 协议规范：
+### 5.1 普通 Challenge 登录
 
-- 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
-- 系统签名原文：`WUMIN_QR_V1|system|challenge|issued_at|expires_at|sys_pubkey`
-- 手机签名原文：`WUMIN_QR_V1|system|challenge|expires_at`
-- 回执兼容字段：`challenge|challenge_id|request_id`、`pubkey|admin_pubkey|public_key`
+1. `identify` 根据管理员身份二维码解析 `admin_pubkey` 并检查管理员状态。
+2. `challenge` 生成带 `origin/domain/session_id/nonce` 的 challenge。
+3. `verify` 校验 sr25519 签名,一次性消费 challenge 并签发 8 小时会话。
+4. ShengAdmin 登录成功后会触发本省本人 signing keypair 本地 bootstrap。
 
-### 5.2 普通 challenge 登录
-1. 先 `identify` 校验管理员身份。
-2. `challenge` 生成带上下文的挑战串。
-3. `verify` 验签通过后签发会话。
+### 5.2 二维码登录
 
-## 6. 安全策略
-- 挑战短时效：默认 `90` 秒。
-- 挑战一次性消费：`consumed=true` 后不可复用。
-- 会话过期与空闲超时双重校验。
-- 登录签名算法：`sr25519`。
-- 兼容部分钱包的 `<Bytes>...</Bytes>` 包裹签名。
-- 角色限制函数集中在本模块：
-  - `require_admin_any`
-  - `require_admin_write`
-  - `require_super_admin`
-  - `require_super_or_key_admin`
-  - `require_key_admin`
-  - `require_super_or_operator_or_key_admin`
-- 省域防御（`SUPER_ADMIN`）：
-  - `require_super_admin` 要求 `admin_province` 非空。
-  - `require_super_or_key_admin` 在 `ctx.role == SUPER_ADMIN` 时同样要求 `admin_province` 非空。
+1. `qr/challenge` 生成 WUMIN_QR_V1 登录挑战和 SFID 系统签名。
+2. 手机扫码后按 `login_receipt` 原文签名并提交 `qr/complete`。
+3. 后端验签成功后写入 `qr_login_results` 并签发会话。
+4. 网页轮询 `qr/result` 获取 `PENDING / SUCCESS / EXPIRED`。
 
-## 7. 与业务模块边界
-- `src/login`：只做认证和会话校验。
-- `src/key-admins` / `src/sheng-admins` / `src/shi-admins` / `src/business`：
-  - 通过 `require_*` 函数拿到认证上下文。
-  - 按角色继续执行业务权限与数据范围校验。
+二维码登录统一遵循 `WUMIN_QR_V1`:
 
-## 8. 关键实现约束
-- 登录相关函数统一位于 `src/login/mod.rs`。
-- `main.rs` 仅保留路由装配与模块接线，不再持有登录业务实现。
-- 新增登录需求必须先更新本文件再改代码，避免认证口径分叉。
-- 登录协议禁止再引入 `aud` 作为移动端扫码验签字段；网页上下文如需保留，只能作为服务端会话上下文单独保存。
-- SFID 二维码由 SFID 自身系统私钥签发；手机端使用二维码内的 `sys_pubkey` 验证 `sys_sig` 后，再进入管理员钱包签名步骤。
+- 系统签名由 `SFID_SIGNING_SEED_HEX` 派生的 SFID main signer 产出。
+- 手机端验签原文由 `qr::build_signature_message` 生成。
+- 登录协议禁止重新引入 `aud` 作为移动端扫码验签字段。
 
+## 6. 守卫函数
 
-## ADR-008 Phase 23e 更新（2026-05-01）
+- `require_admin_any`:读取登录态,返回 `AdminAuthContext`。
+- `require_admin_write`:当前与 `require_admin_any` 等价,保留写接口语义入口。
+- `require_sheng_admin`:只放行 `ShengAdmin`,并要求存在省域 scope。
+- `require_admin_session_middleware`:Axum 路由层会话校验中间件。
 
-KEY_ADMIN 整角色废止；省管理员 3-tier 自治（main / backup_1 / backup_2）。
-本文档涉及 KEY_ADMIN / key-admins / chain_keyring / signing_seed_hex / known_key_seeds / public_key_hex / require_key_admin / require_institution_or_key_admin / KeyringRotate* 的章节均已失效，
-实际行为以 `memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md` 与代码为准。
+## 7. 边界规则
+
+- `login` 不承载机构、公民、CPMS、省管理员治理等业务 handler。
+- 业务模块不得直接读取 session cache,只能通过 `require_admin_*` 获取认证上下文。
+- 角色范围过滤放在 `scope`,不放回 `login`。
+- 省管理员一主两备治理放在 `sheng_admins`,登录目录只负责本人登录后的本地签名密钥加载。

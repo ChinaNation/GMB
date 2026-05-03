@@ -1,6 +1,6 @@
 //! 中文注释:管理员角色 / 状态 / 实体 + Operator 列表与维护接口 DTO。
 //!
-//! ADR-008(2026-05-01):KEY_ADMIN 整角色废止,只剩 ShengAdmin / ShiAdmin。
+//! 中文注释:当前只保留 ShengAdmin / ShiAdmin 两个管理员角色。
 //! 省管理员 3-tier 自治(main / backup_1 / backup_2),不再有"全国超级管理员"。
 
 use chrono::{DateTime, Utc};
@@ -111,14 +111,6 @@ pub(crate) struct CreateOperatorInput {
     /// 不指定则默认为调用者自身。
     #[serde(default)]
     pub(crate) created_by: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct ReplaceShengAdminInput {
-    pub(crate) admin_pubkey: String,
-    /// 新省级管理员姓名，可选；未提供时保留原值
-    #[serde(default)]
-    pub(crate) admin_name: Option<String>,
 }
 
 #[derive(Deserialize)]

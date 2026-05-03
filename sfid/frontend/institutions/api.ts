@@ -88,7 +88,7 @@ export interface InstitutionListRow {
   created_at: string;
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users);未命中 null */
   created_by_name?: string | null;
-  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN(ADR-008 起 KEY_ADMIN 已删);未命中 null */
+  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN;未命中 null */
   created_by_role?: string | null;
 }
 
@@ -97,7 +97,7 @@ export interface InstitutionDetail {
   accounts: MultisigAccount[];
   /** 创建该机构的登录管理员姓名(按 created_by pubkey 反查 admin_users) */
   created_by_name?: string | null;
-  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN(ADR-008 起 KEY_ADMIN 已删) */
+  /** 创建者角色:SHENG_ADMIN / SHI_ADMIN */
   created_by_role?: string | null;
 }
 
@@ -120,43 +120,6 @@ export const DOC_TYPE_OPTIONS = [
   '法人授权书',
   '其他',
 ] as const;
-
-// ─── CPMS 站点 API 类型 ──────────────────────────────────────────
-// 中文注释:CPMS 站点挂在公安局机构信息页下,所以归入 institutions 模块。
-
-export type GenerateCpmsInstitutionSfidResult = {
-  site_sfid: string;
-  qr1_payload: string;
-};
-
-export type CpmsSiteRow = {
-  site_sfid: string;
-  install_token_status: 'PENDING' | 'USED' | 'REVOKED';
-  status?: 'PENDING' | 'ACTIVE' | 'DISABLED' | 'REVOKED';
-  version?: number;
-  province_code?: string;
-  admin_province?: string;
-  city_name?: string;
-  institution_code?: string;
-  institution_name?: string;
-  qr1_payload?: string;
-  qr3_payload?: string | null;
-  created_by: string;
-  created_by_name?: string;
-  created_at: string;
-  updated_by?: string | null;
-  updated_at?: string | null;
-};
-
-export type CpmsRegisterResult = {
-  qr3_payload: string;
-};
-
-export type CpmsArchiveImportResult = {
-  archive_no: string;
-  province_code: string;
-  status: string;
-};
 
 // ─── 请求 DTO ─────────────────────────────────────────────────
 
@@ -355,7 +318,7 @@ export async function listAccounts(
 
 /**
  * 任务卡 6:按 sfid 工具权威市清单对账公安局机构(增/删/改名)。
- * province 由 SHENG_ADMIN/SHI_ADMIN 各自 scope 限制(ADR-008 起 KEY_ADMIN 已删,无全国全量对账分支)。
+ * province 由 SHENG_ADMIN/SHI_ADMIN 各自 scope 限制,无全国全量对账分支。
  * 进入公安局省详情页前调用,确保数据跟市清单同步。
  */
 export async function reconcilePublicSecurity(
@@ -368,130 +331,6 @@ export async function reconcilePublicSecurity(
     auth,
     { method: 'POST' }
   );
-}
-
-/**
- * 任务卡 `20260408-sfid-public-security-cpms-embed`:
- * 按机构 sfid_id 反查其 CPMS 站点。
- * 后端通过 `(province, city, institution_code)` 三元组匹配,无则返回 null。
- */
-export async function getCpmsSiteByInstitution(
-  auth: AdminAuth,
-  sfidId: string
-): Promise<CpmsSiteRow | null> {
-  return adminRequest<CpmsSiteRow | null>(
-    `/api/v1/admin/cpms-keys/by-institution/${encodeURIComponent(sfidId)}`,
-    auth
-  );
-}
-
-/** 生成公安局 CPMS 站点 SFID 和安装 QR1。 */
-export async function generateCpmsInstitutionSfid(
-  auth: AdminAuth,
-  payload: { province?: string; city: string; institution: string; institution_name: string },
-): Promise<GenerateCpmsInstitutionSfidResult> {
-  return adminRequest<GenerateCpmsInstitutionSfidResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
-/** 扫 CPMS 设备返回的 QR2,完成站点匿名证书注册并返回 QR3。 */
-export async function registerCpms(
-  auth: AdminAuth,
-  payload: { qr_payload: string },
-): Promise<CpmsRegisterResult> {
-  return adminRequest<CpmsRegisterResult>('/api/v1/admin/cpms/register', auth, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
-/** 导入 CPMS 档案二维码。当前入口保留给机构域,避免散落到全局 API。 */
-export async function importArchive(
-  auth: AdminAuth,
-  payload: { qr_payload: string },
-): Promise<CpmsArchiveImportResult> {
-  return adminRequest<CpmsArchiveImportResult>('/api/v1/admin/cpms/archive/import', auth, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
-/** 注销未使用安装令牌。 */
-export async function revokeInstallToken(auth: AdminAuth, siteSfid: string): Promise<string> {
-  return adminRequest<string>(
-    `/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/revoke-token`,
-    auth,
-    { method: 'POST' },
-  );
-}
-
-/** 重发安装令牌,用于 PENDING/REVOKED 后重新生成 QR1。 */
-export async function reissueInstallToken(
-  auth: AdminAuth,
-  siteSfid: string,
-): Promise<GenerateCpmsInstitutionSfidResult> {
-  return adminRequest<GenerateCpmsInstitutionSfidResult>(
-    `/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/reissue`,
-    auth,
-    { method: 'POST' },
-  );
-}
-
-/** 列出 CPMS 站点。 */
-export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
-  const result = await adminRequest<{ total: number; limit: number; offset: number; rows: CpmsSiteRow[] }>(
-    '/api/v1/admin/cpms-keys',
-    auth,
-    { method: 'GET' },
-  );
-  return result.rows ?? [];
-}
-
-/** 禁用 CPMS 站点密钥。 */
-export async function disableCpmsKeys(
-  auth: AdminAuth,
-  siteSfid: string,
-  reason?: string,
-): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/disable`, auth, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  });
-}
-
-/** 启用已禁用的 CPMS 站点密钥。 */
-export async function enableCpmsKeys(auth: AdminAuth, siteSfid: string): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/enable`, auth, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({}),
-  });
-}
-
-/** 吊销 CPMS 站点密钥。 */
-export async function revokeCpmsKeys(
-  auth: AdminAuth,
-  siteSfid: string,
-  reason?: string,
-): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/revoke`, auth, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  });
-}
-
-/** 删除 CPMS 站点密钥记录。 */
-export async function deleteCpmsKeys(auth: AdminAuth, siteSfid: string): Promise<string> {
-  return adminRequest<string>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}`, auth, {
-    method: 'DELETE',
-  });
 }
 
 /**

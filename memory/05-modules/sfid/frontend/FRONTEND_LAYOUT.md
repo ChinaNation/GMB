@@ -5,6 +5,7 @@
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
   - `memory/08-tasks/open/20260502-sfid-chain目录归并功能模块.md`
+  - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
   - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
 
@@ -22,11 +23,12 @@ sfid/frontend/
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
 ├── common/                    # 跨业务复用组件
+├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── institutions/              # 机构本地管理页面、institutions/api.ts、chain_duoqian_info.ts
 ├── qr/
 ├── sfid/                      # SFID 元数据 API,如省市/A3/机构类型选项
-├── sheng_admins/              # 省管理员业务页面、sheng_admins/api.ts、chain_* 链交互页面/API
+├── sheng_admins/              # 省管理员/市管理员页面、roster_api.ts、signing_keys_api.ts
 ├── shi_admins/                # 市管理员页面、shi_admins/api.ts
 ├── theme/
 └── utils/                     # 通用工具,http.ts 只放请求封装,不放业务 API
@@ -38,24 +40,24 @@ sfid/frontend/
 - `utils/http.ts` 只放 `request`、`adminRequest`、`adminHeaders` 和 401 拦截,不得放业务接口。
 - 登录/会话接口放 `auth/api.ts`;登录态和角色类型放 `auth/types.ts`。
 - SFID 元数据接口放 `sfid/api.ts`,用于省份、市、A3、机构类型等跨页面选择项。
-- 机构与 CPMS 站点管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。
+- 机构本地管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。
+- CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民绑定、解绑、推链绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
-- 省管理员本地后台接口放 `sheng_admins/api.ts`;省管理员链交互接口/页面保持 `chain_` 前缀。
+- 省管理员本地后台接口放 `sheng_admins/api.ts`;一主两备展示接口放
+  `sheng_admins/roster_api.ts`;本人 signing seed 生成/更换接口放
+  `sheng_admins/signing_keys_api.ts`。
 - 市管理员操作员接口放 `shi_admins/api.ts`。
 
 ## 省管理员目录规则
 
 - `sheng_admins/`:放普通后台业务页面,例如省管理员列表、注册局视图、市管理员维护。
-- 省管理员功能与链交互的页面、API 和类型也放在 `sheng_admins/`,文件名必须以 `chain_` 开头:
-  - `chain_RosterPage.tsx`
-  - `chain_ActivationPage.tsx`
-  - `chain_RotatePage.tsx`
-  - `chain_sheng_admins.ts`
-  - `chain_sheng_admins_types.ts`
-- `省管理员名册`、`激活签名`、`rotate 签名` 不再作为 `App.tsx` 顶层 Tab 暴露。
-  这些链交互页面/API 暂保留在 `sheng_admins/chain_*`,后续统一并入注册局页面承接。
-- 省管理员槽位 `ShengSlot` 属于链上 `ShengAdmins[Province][Slot]` 名册语义,
-  因此放在 `sheng_admins/chain_sheng_admins_types.ts`,不再放全局 `types/`。
+- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,直接展示一主两备 3 个板块。
+- `roster_api.ts` 只做页面展示查询,不是链交互。
+- `signing_keys_api.ts` 只做本人本地 signing seed 生成/更换,不是链交互。
+- 省管理员只有“更换省管理员/主备交换”后续接入区块链时,才允许新增
+  `chain_replace_admin.ts`。
+- `省管理员名册`、`激活签名`、`rotate 签名` 不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
+- 省管理员槽位 `ShengSlot` 放在 `sheng_admins/types.ts`,不再放全局 `types/`。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 
 ## 链交互目录规则
@@ -65,8 +67,10 @@ sfid/frontend/
 
 | 前端文件 | 后端文件 | 职责 |
 |---|---|---|
-| `institutions/chain_duoqian_info.ts` | `institutions/chain_duoqian_info*.rs` | 机构查询、注册信息凭证、清算行信息 |
-| `sheng_admins/chain_*.tsx` / `chain_sheng_admins*.ts` | `sheng_admins/chain_*.rs` | 省管理员三槽名册、签名公钥激活/轮换 |
+| `institutions/chain_duoqian_info.ts` | `institutions/chain_duoqian_info.rs` | 机构查询、注册信息凭证、清算行信息 |
+
+省管理员一主两备展示和本人 signing seed 生成/更换不列入链交互表。
+CPMS 系统管理也不列入链交互表,归 `cpms/`。
 
 ### `institutions/chain_duoqian_info.ts` 边界
 
@@ -90,6 +94,7 @@ sfid/frontend/
   "auth",
   "citizens",
   "common",
+  "cpms",
   "hooks",
   "institutions",
   "qr",

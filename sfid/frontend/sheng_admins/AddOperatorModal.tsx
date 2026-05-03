@@ -24,7 +24,6 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
     onCreateOperator,
     accountScanTarget,
     setAccountScanTarget,
-    replaceSuperForm,
   } = state;
 
   // selectedCity 有值时预填城市字段
@@ -142,8 +141,6 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
         onResolved={(addr) => {
           if (accountScanTarget === 'operator') {
             addOperatorForm.setFieldsValue({ operator_pubkey: addr });
-          } else if (accountScanTarget === 'super-admin') {
-            replaceSuperForm.setFieldsValue({ admin_pubkey: addr });
           }
           setAccountScanTarget(null);
         }}
