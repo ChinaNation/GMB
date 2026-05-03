@@ -12,6 +12,14 @@
 /// - `joint_vote` / `citizen_vote` / `finalize_proposal` 在投票引擎内部
 ///   重新排 call_index：0=internal_vote / 1=joint_vote / 2=citizen_vote /
 ///   3=finalize_proposal。
+///
+/// Phase 4 · 业务 wrapper 物理删除（2026-05-02）：
+/// - 业务 pallet 的 `execute_xxx` / `cancel_failed_xxx` wrapper extrinsic
+///   全部物理删除，统一到 `VotingEngine::retry_passed_proposal`(9.4) 与
+///   `VotingEngine::cancel_passed_proposal`(9.5)。冷钱包 decoder 删除 7 个
+///   旧分支：`execute_admin_replacement` / `execute_replace_grandpa_key` /
+///   `cancel_failed_replace_grandpa_key` / `execute_destroy` /
+///   `execute_transfer` / `execute_safety_fund_transfer` / `execute_sweep_to_main`。
 class PalletRegistry {
   const PalletRegistry._();
 
@@ -54,21 +62,30 @@ class PalletRegistry {
   /// `finalize_proposal(proposal_id)` — 任意人触发终态执行（无需签投票）。
   static const int finalizeProposalCall = 3;
 
+  /// `retry_passed_proposal(proposal_id)` — 已通过提案的手动执行入口
+  /// （Phase 4 整改后,所有业务 pallet 的 execute_xxx wrapper 统一收口至此）。
+  static const int retryPassedProposalCall = 4;
+
+  /// `cancel_passed_proposal(proposal_id, reason)` — 已通过但确认不可执行
+  /// 的提案取消入口（Phase 4 整改后,所有 cancel_failed_xxx 统一收口至此）。
+  static const int cancelPassedProposalCall = 5;
+
   // ---- 业务 pallet:仅保留提案创建与幂等兜底入口 ----
   //
   // Phase 2/3 已在链端物理删除所有业务 pallet 内部的聚合签名与投票入口
   // (共八条),全部通过 `VotingEngine(9).internal_vote(0)` 统一收敛。
-  // 业务 pallet 仅保留 propose 提案创建、execute 执行兜底、cleanup 被拒清理、
-  // cancel 失败取消 等幂等入口。冷钱包 decoder 与此对齐。
+  // Phase 4(2026-05-02) 进一步删除了所有业务 pallet 的 execute_xxx /
+  // cancel_failed_xxx wrapper extrinsic,手动重试/取消统一走
+  // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
+  // 业务 pallet 仅保留 propose 提案创建与 cleanup 被拒清理 等幂等入口。
 
   // ---- DuoqianTransfer (19) ----
+  // call_index 3/4/5 (execute_transfer / execute_safety_fund_transfer /
+  // execute_sweep_to_main) 已于 Phase 4 物理删除,call_index 留洞不复用。
   static const int duoqianTransferPallet = 19;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
   static const int proposeSweepCall = 2;
-  static const int executeTransferCall = 3;
-  static const int executeSafetyFundCall = 4;
-  static const int executeSweepCall = 5;
 
   // ---- RuntimeUpgrade (13) ----
   static const int runtimeUpgradePallet = 13;
@@ -91,20 +108,20 @@ class PalletRegistry {
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- ResolutionDestro (14) ----
+  // call_index 1 (execute_destroy) 已于 Phase 4 物理删除,留洞不复用。
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
-  static const int executeDestroyCall = 1;
 
   // ---- AdminsChange (12) ----
+  // call_index 1 (execute_admin_replacement) 已于 Phase 4 物理删除,留洞不复用。
   static const int adminsChangePallet = 12;
   static const int proposeAdminReplacementCall = 0;
-  static const int executeAdminReplacementCall = 1;
 
   // ---- GrandpaKeyChange (16) ----
+  // call_index 1, 2 (execute_replace_grandpa_key /
+  // cancel_failed_replace_grandpa_key) 已于 Phase 4 物理删除,留洞不复用。
   static const int grandpaKeyChangePallet = 16;
   static const int proposeReplaceGrandpaKeyCall = 0;
-  static const int executeReplaceGrandpaKeyCall = 1;
-  static const int cancelFailedReplaceGrandpaKeyCall = 2;
 
   // ---- ResolutionIssuance (8) ----
   static const int resolutionIssuancePallet = 8;

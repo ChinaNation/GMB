@@ -535,8 +535,10 @@ pub fn build_propose_safety_fund_sign_request(
 /// 构建 propose_sweep_to_main 签名请求（手续费划转提案：pallet=19, call=2）。
 ///
 /// Phase 2 将本 pallet 的 call_index 连续重排:
-/// 0=propose_transfer / 1=propose_safety_fund_transfer / 2=propose_sweep_to_main /
-/// 3=execute_transfer / 4=execute_safety_fund_transfer / 5=execute_sweep_to_main。
+/// 0=propose_transfer / 1=propose_safety_fund_transfer / 2=propose_sweep_to_main。
+/// Phase 4(2026-05-02) 已物理删除 call_index 3/4/5 (execute_xxx),
+/// 手动重试统一收口至 `VotingEngine::retry_passed_proposal`(9.4),
+/// 留洞 call_index 不复用。
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
     shenfen_id: &str,

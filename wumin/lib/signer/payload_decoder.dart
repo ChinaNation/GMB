@@ -119,6 +119,8 @@ class PayloadDecoder {
 
       // ── VotingEngine(9) · 统一投票入口 ──
       // Phase 3：业务 pallet 的 vote_X 全部下线，冷钱包只在这里解码投票 payload。
+      // Phase 4：业务 pallet 的 execute_xxx / cancel_failed_xxx 全部物理删除,
+      // 手动重试/取消统一收口至 retry_passed_proposal(9.4) / cancel_passed_proposal(9.5)。
       if (palletIndex == PalletRegistry.votingEnginePallet) {
         if (callIndex == PalletRegistry.internalVoteCall) {
           return _decodeInternalVote(bytes);
@@ -132,11 +134,22 @@ class PayloadDecoder {
         if (callIndex == PalletRegistry.finalizeProposalCall) {
           return _decodeFinalizeProposal(bytes);
         }
+        if (callIndex == PalletRegistry.retryPassedProposalCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'retry_passed_proposal',
+            summaryTemplate: '手动触发已通过提案 #{id} 执行',
+          );
+        }
+        if (callIndex == PalletRegistry.cancelPassedProposalCall) {
+          return _decodeCancelPassedProposal(bytes);
+        }
       }
 
       // ── DuoqianTransfer(19) ──
-      // Phase 3：投票入口统一到 VotingEngine::internal_vote,
-      // 本 pallet 保留 3 条 propose_X + 3 条 execute_X 兜底执行。
+      // Phase 3/4：投票入口统一到 VotingEngine::internal_vote,
+      // 手动重试入口统一到 VotingEngine::retry_passed_proposal,
+      // 本 pallet 仅保留 3 条 propose_X。
       if (palletIndex == PalletRegistry.duoqianTransferPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
           return _decodeProposeTransfer(bytes);
@@ -146,27 +159,6 @@ class PayloadDecoder {
         }
         if (callIndex == PalletRegistry.proposeSweepCall) {
           return _decodeProposeSweep(bytes);
-        }
-        if (callIndex == PalletRegistry.executeTransferCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_transfer',
-            summaryTemplate: '手动触发转账提案 #{id} 执行',
-          );
-        }
-        if (callIndex == PalletRegistry.executeSafetyFundCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_safety_fund_transfer',
-            summaryTemplate: '手动触发安全基金提案 #{id} 执行',
-          );
-        }
-        if (callIndex == PalletRegistry.executeSweepCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_sweep_to_main',
-            summaryTemplate: '手动触发手续费划转提案 #{id} 执行',
-          );
         }
       }
 
@@ -218,51 +210,27 @@ class PayloadDecoder {
       }
 
       // ── ResolutionDestro(14) ──
+      // Phase 4: execute_destroy 已统一到 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.resolutionDestroPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) {
           return _decodeProposeDestroy(bytes);
         }
-        if (callIndex == PalletRegistry.executeDestroyCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_destroy',
-            summaryTemplate: '手动触发决议销毁提案 #{id} 执行',
-          );
-        }
       }
 
       // ── AdminsChange(12) ──
+      // Phase 4: execute_admin_replacement 已统一到 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.adminsChangePallet) {
         if (callIndex == PalletRegistry.proposeAdminReplacementCall) {
           return _decodeProposeAdminReplacement(bytes);
         }
-        if (callIndex == PalletRegistry.executeAdminReplacementCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_admin_replacement',
-            summaryTemplate: '手动触发管理员替换提案 #{id} 执行',
-          );
-        }
       }
 
       // ── GrandpaKeyChange(16) ──
+      // Phase 4: execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
+      // 已分别统一到 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
       if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
         if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) {
           return _decodeProposeKeyChange(bytes);
-        }
-        if (callIndex == PalletRegistry.executeReplaceGrandpaKeyCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'execute_replace_grandpa_key',
-            summaryTemplate: '手动触发 GRANDPA 密钥替换提案 #{id} 执行',
-          );
-        }
-        if (callIndex == PalletRegistry.cancelFailedReplaceGrandpaKeyCall) {
-          return _decodeProposalIdOnly(
-            bytes,
-            action: 'cancel_failed_replace_grandpa_key',
-            summaryTemplate: '取消失败的 GRANDPA 密钥替换提案 #{id}',
-          );
         }
       }
 
@@ -442,6 +410,45 @@ class PayloadDecoder {
       summary: '触发提案 #$proposalId 终态执行',
       fields: {
         'proposal_id': proposalId.toString(),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // VotingEngine(9) / cancel_passed_proposal(5)
+  //
+  // 链端签名（Phase 4 整改 2026-05-02 后的统一取消入口）：
+  //   pub fn cancel_passed_proposal(
+  //     origin,
+  //     proposal_id: u64,
+  //     _reason: BoundedVec<u8, MaxProposalDataLen>,
+  //   )
+  //
+  // SCALE: [0x09][0x05][proposal_id:u64_le][Compact<u32> reason_len + reason_bytes]
+  // ---------------------------------------------------------------------------
+  static DecodedPayload? _decodeCancelPassedProposal(Uint8List bytes) {
+    if (bytes.length < 10) return null;
+    final proposalId = _readU64Le(bytes, 2);
+    var offset = 10;
+
+    var reason = '';
+    if (offset < bytes.length) {
+      final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
+      offset += reasonLenSize;
+      if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
+        reason = utf8.decode(
+          bytes.sublist(offset, offset + reasonLen),
+          allowMalformed: true,
+        );
+      }
+    }
+
+    return DecodedPayload(
+      action: 'cancel_passed_proposal',
+      summary: '取消已通过但不可执行的提案 #$proposalId',
+      fields: {
+        'proposal_id': proposalId.toString(),
+        'reason': reason,
       },
     );
   }

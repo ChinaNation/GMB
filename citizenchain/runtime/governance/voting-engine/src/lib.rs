@@ -2249,16 +2249,6 @@ pub mod pallet {
             })
         }
 
-        /// 兼容层：旧业务 execute_xxx extrinsic 必须委托到统一重试状态机。
-        pub fn retry_passed_proposal_for(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            Self::retry_passed_proposal_inner(who, proposal_id)
-        }
-
-        /// 兼容层：旧业务 cancel_xxx extrinsic 必须委托到统一取消状态机。
-        pub fn cancel_passed_proposal_for(who: &T::AccountId, proposal_id: u64) -> DispatchResult {
-            Self::cancel_passed_proposal_inner(who, proposal_id)
-        }
-
         /// 查询当前是否处于某个提案的业务回调/终态清理作用域。
         ///
         /// 中文注释：业务 pallet 用它保护敏感生命周期写入，避免普通 runtime 调用绕过投票引擎。

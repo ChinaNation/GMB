@@ -53,19 +53,25 @@ void main() {
       expect(true, isTrue);
     });
 
-    test('业务 pallet 的 propose_X / execute_X call_index 连续排列', () {
+    test('业务 pallet 的 propose_X call_index 连续排列', () {
+      // Phase 4(2026-05-02): execute_xxx wrapper 已物理删除,
+      // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
       expect(PalletRegistry.proposeTransferCall, 0);
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
-      expect(PalletRegistry.executeTransferCall, 3);
-      expect(PalletRegistry.executeSafetyFundCall, 4);
-      expect(PalletRegistry.executeSweepCall, 5);
 
       expect(PalletRegistry.proposeCreateCall, 0);
       expect(PalletRegistry.proposeCloseCall, 1);
       expect(PalletRegistry.registerSfidInstitutionCall, 2);
       expect(PalletRegistry.proposeCreatePersonalCall, 3);
       expect(PalletRegistry.cleanupRejectedProposalCall, 4);
+    });
+
+    test('VotingEngine 统一手动重试/取消入口', () {
+      // Phase 4(2026-05-02): 业务 pallet 的 execute_xxx / cancel_failed_xxx 全删,
+      // 统一收口至 VotingEngine 的 4/5 两个 call_index。
+      expect(PalletRegistry.retryPassedProposalCall, 4);
+      expect(PalletRegistry.cancelPassedProposalCall, 5);
     });
 
     test('supportedSpecVersions 非空 + 当前为 spec=0', () {

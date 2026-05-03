@@ -335,31 +335,10 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 任意人触发"已通过提案"的密钥替换执行。
-        ///
-        /// Phase 2 整改后投票一律走 `VotingEngine::internal_vote` 公开 call;
-        /// 通过后由本模块的 `InternalVoteExecutor` 自动执行替换。本 call 保留给
-        /// "自动执行失败(如 GRANDPA 仍有 pending change)后的手动重试"。
-        #[pallet::call_index(1)]
-        #[pallet::weight(<T as Config>::WeightInfo::execute_replace_grandpa_key())]
-        pub fn execute_replace_grandpa_key(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::retry_passed_proposal_for(&who, proposal_id)
-        }
-
-        /// 清理"已通过但确定无法执行"的提案(如 GRANDPA 密钥格式错乱等)。
-        #[pallet::call_index(2)]
-        #[pallet::weight(<T as Config>::WeightInfo::cancel_failed_replace_grandpa_key())]
-        pub fn cancel_failed_replace_grandpa_key(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            voting_engine::Pallet::<T>::cancel_passed_proposal_for(&who, proposal_id)
-        }
+        // call_index = 1, 2 已废弃: execute_replace_grandpa_key /
+        // cancel_failed_replace_grandpa_key 已统一到 VotingEngine 的
+        // retry_passed_proposal / cancel_passed_proposal —— 前端必须直接调用
+        // 投票引擎入口,业务 pallet 不再保留 wrapper extrinsic。
     }
 
     impl<T: Config> Pallet<T> {
@@ -948,7 +927,7 @@ mod tests {
             finalize_grandpa_at(1 + GrandpaChangeDelay::get());
             assert!(Grandpa::pending_change().is_none());
 
-            assert_ok!(GrandpaKeyChange::execute_replace_grandpa_key(
+            assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(prc_admin(0)),
                 pid,
             ));
@@ -1006,9 +985,10 @@ mod tests {
                 ]
             );
 
-            assert_ok!(GrandpaKeyChange::cancel_failed_replace_grandpa_key(
+            assert_ok!(VotingEngine::cancel_passed_proposal(
                 RuntimeOrigin::signed(prc_admin(0)),
                 pid,
+                Default::default(),
             ));
             assert_eq!(
                 voting_engine::Pallet::<Test>::proposals(pid)
@@ -1052,9 +1032,10 @@ mod tests {
             pass_prc_proposal(1, pid);
 
             assert_noop!(
-                GrandpaKeyChange::cancel_failed_replace_grandpa_key(
+                VotingEngine::cancel_passed_proposal(
                     RuntimeOrigin::signed(prc_admin(0)),
                     pid,
+                    Default::default(),
                 ),
                 Error::<Test>::GrandpaChangePending
             );
@@ -1279,7 +1260,7 @@ mod tests {
             let pid = last_proposal_id();
             // 不投票，直接尝试执行
             assert_noop!(
-                GrandpaKeyChange::execute_replace_grandpa_key(
+                VotingEngine::retry_passed_proposal(
                     RuntimeOrigin::signed(prc_admin(0)),
                     pid,
                 ),
@@ -1321,9 +1302,10 @@ mod tests {
 
             // 提案仍可执行，不允许取消
             assert_noop!(
-                GrandpaKeyChange::cancel_failed_replace_grandpa_key(
+                VotingEngine::cancel_passed_proposal(
                     RuntimeOrigin::signed(prc_admin(0)),
                     pid,
+                    Default::default(),
                 ),
                 Error::<Test>::ProposalStillExecutable
             );
