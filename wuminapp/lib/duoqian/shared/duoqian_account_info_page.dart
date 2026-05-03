@@ -11,7 +11,9 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import '../institution/institution_duoqian_close_page.dart';
+import '../personal/personal_admin_list_page.dart';
 import '../personal/personal_duoqian_close_page.dart';
+import '../personal/personal_proposal_list_section.dart';
 import 'duoqian_manage_models.dart';
 import 'duoqian_manage_service.dart';
 import 'duoqian_qr_sheet.dart';
@@ -389,75 +391,38 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
           const SizedBox(height: 16),
 
-          // 管理员列表
-          Card(
-            elevation: 0,
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: AppTheme.border),
+          // 管理员列表(折叠成单行,点击进入子页)
+          _buildAdminEntryCard(info),
+
+          // 个人多签提案列表(req 5):活跃 + 历史(本机 Isar 永久保留终态记录)
+          if (widget.isPersonal) ...[
+            const SizedBox(height: 16),
+            FutureBuilder<List<WalletProfile>>(
+              future: _getAdminWallets(),
+              builder: (context, snapshot) {
+                final wallets = snapshot.data ?? const <WalletProfile>[];
+                return PersonalProposalListSection(
+                  institution: widget.institution,
+                  adminWallets: wallets,
+                );
+              },
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(
-                      '管理员列表（${_adminPubkeys.length} 人）',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.primaryDark,
-                      ),
-                    ),
-                  ),
-                  const Divider(),
-                  if (_adminPubkeys.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        '暂无管理员信息',
-                        style: TextStyle(color: AppTheme.textTertiary),
-                      ),
-                    )
-                  else
-                    ...List.generate(_adminPubkeys.length, (index) {
-                      final pubkey = _adminPubkeys[index];
-                      final ss58 = _pubkeyToSS58(pubkey);
-                      return ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          radius: 16,
-                          backgroundColor:
-                              AppTheme.primaryDark.withValues(alpha: 0.08),
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryDark,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          ss58,
-                          style: const TextStyle(
-                              fontSize: 11, fontFamily: 'monospace'),
-                        ),
-                      );
-                    }),
-                ],
-              ),
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildTransferEntryCard() {
+  /// 管理员列表入口卡片(req 1):点击进入完整管理员列表页(个人多签
+  /// 页内含"激活"按钮的三态交互;机构多签复用同 [DuoqianAccountInfoPage]
+  /// 路径,本入口仅个人多签开启)。
+  Widget _buildAdminEntryCard(DuoqianAccountInfo? info) {
+    final adminCount = _adminPubkeys.length;
+    final threshold = info?.threshold;
+    final subtitle = threshold == null
+        ? '$adminCount 人'
+        : '$adminCount 人 · 阈值 $threshold/$adminCount';
+
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -465,56 +430,147 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: AppTheme.border),
       ),
-      child: InkWell(
-        onTap: _openTransferProposal,
+      child: ListTile(
+        leading: const Icon(Icons.group_outlined,
+            size: 22, color: AppTheme.primaryDark),
+        title: const Text(
+          '管理员列表',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+        ),
+        trailing: const Icon(Icons.chevron_right,
+            size: 20, color: AppTheme.textTertiary),
+        onTap: () => _openAdminListPage(info),
+      ),
+    );
+  }
+
+  Future<void> _openAdminListPage(DuoqianAccountInfo? info) async {
+    if (!widget.isPersonal) {
+      // 机构多签暂沿用旧的平铺渲染,此处仅 personal 入口开放新子页;
+      // 后续机构页改造会单独引入。
+      return;
+    }
+    final wallets = await _getAdminWallets();
+    if (!mounted) return;
+    final creator = await _resolvePersonalCreatorPubkeyHex();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalAdminListPage(
+          institution: widget.institution,
+          duoqianStatus: info?.status ?? DuoqianStatus.pending,
+          adminPubkeys: _adminPubkeys,
+          adminWallets: wallets,
+          creatorPubkeyHex: creator,
+        ),
+      ),
+    );
+    // 子页可能完成投票 → 刷新本页状态(可能多签已激活)
+    if (mounted) await _load();
+  }
+
+  /// 从本机 Isar 读取个人多签创建者公钥 hex。
+  /// req 3 未实现时,只有创建者本机有此记录;非创建者打开子页 creatorPubkeyHex 为 null
+  /// (届时所有 admin 都按"非创建者"渲染,语义略损但不阻塞主流程)。
+  Future<String?> _resolvePersonalCreatorPubkeyHex() async {
+    try {
+      final isar = await WalletIsar.instance.db();
+      final entity = await isar.personalDuoqianEntitys
+          .filter()
+          .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+          .findFirst();
+      if (entity == null) return null;
+      // creatorAddress 是 SS58,转 pubkey hex(小写,无 0x)。
+      final pair =
+          Keyring().decodeAddress(entity.creatorAddress);
+      return pair
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join()
+          .toLowerCase();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildTransferEntryCard() {
+    // 待激活的多签账户(链上提案尚未通过 → DuoqianStatus.pending)不允许发起转账提案,
+    // 整张卡片置灰显示但不响应点击,文案提示用户先完成激活。
+    final canTransfer = _accountInfo?.status == DuoqianStatus.active;
+    final accentColor =
+        canTransfer ? AppTheme.primaryDark : AppTheme.textTertiary;
+    final subtitle = canTransfer
+        ? '从当前多签账户发起链上转账'
+        : '账户尚未激活,无法发起转账';
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryDark.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: accentColor.withValues(alpha: 0.15)),
+      ),
+      child: InkWell(
+        onTap: canTransfer ? _openTransferProposal : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Opacity(
+          opacity: canTransfer ? 1.0 : 0.5,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.send_outlined,
+                    size: 19,
+                    color: accentColor,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.send_outlined,
-                  size: 19,
-                  color: AppTheme.primaryDark,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '发起转账提案',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '发起转账提案',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '从当前多签账户发起链上转账',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textTertiary,
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: AppTheme.textTertiary,
-              ),
-            ],
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppTheme.textTertiary,
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -8223,6 +8223,2112 @@ extension PersonalDuoqianEntityQueryProperty on QueryBuilder<
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
+extension GetPersonalDuoqianProposalEntityCollection on Isar {
+  IsarCollection<PersonalDuoqianProposalEntity>
+      get personalDuoqianProposalEntitys => this.collection();
+}
+
+const PersonalDuoqianProposalEntitySchema = CollectionSchema(
+  name: r'PersonalDuoqianProposalEntity',
+  id: 5957107678398576470,
+  properties: {
+    r'action': PropertySchema(
+      id: 0,
+      name: r'action',
+      type: IsarType.string,
+    ),
+    r'createdAtMillis': PropertySchema(
+      id: 1,
+      name: r'createdAtMillis',
+      type: IsarType.long,
+    ),
+    r'finalStatusAtMillis': PropertySchema(
+      id: 2,
+      name: r'finalStatusAtMillis',
+      type: IsarType.long,
+    ),
+    r'noVotes': PropertySchema(
+      id: 3,
+      name: r'noVotes',
+      type: IsarType.long,
+    ),
+    r'personalAddress': PropertySchema(
+      id: 4,
+      name: r'personalAddress',
+      type: IsarType.string,
+    ),
+    r'proposalId': PropertySchema(
+      id: 5,
+      name: r'proposalId',
+      type: IsarType.long,
+    ),
+    r'snapshotJson': PropertySchema(
+      id: 6,
+      name: r'snapshotJson',
+      type: IsarType.string,
+    ),
+    r'status': PropertySchema(
+      id: 7,
+      name: r'status',
+      type: IsarType.string,
+    ),
+    r'yesVotes': PropertySchema(
+      id: 8,
+      name: r'yesVotes',
+      type: IsarType.long,
+    )
+  },
+  estimateSize: _personalDuoqianProposalEntityEstimateSize,
+  serialize: _personalDuoqianProposalEntitySerialize,
+  deserialize: _personalDuoqianProposalEntityDeserialize,
+  deserializeProp: _personalDuoqianProposalEntityDeserializeProp,
+  idName: r'id',
+  indexes: {
+    r'personalAddress_proposalId': IndexSchema(
+      id: 4269598985981127288,
+      name: r'personalAddress_proposalId',
+      unique: true,
+      replace: true,
+      properties: [
+        IndexPropertySchema(
+          name: r'personalAddress',
+          type: IndexType.hash,
+          caseSensitive: true,
+        ),
+        IndexPropertySchema(
+          name: r'proposalId',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'action': IndexSchema(
+      id: -2948318935682215514,
+      name: r'action',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'action',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'status': IndexSchema(
+      id: -107785170620420283,
+      name: r'status',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'status',
+          type: IndexType.hash,
+          caseSensitive: true,
+        )
+      ],
+    ),
+    r'createdAtMillis': IndexSchema(
+      id: -2739706252225730577,
+      name: r'createdAtMillis',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'createdAtMillis',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    )
+  },
+  links: {},
+  embeddedSchemas: {},
+  getId: _personalDuoqianProposalEntityGetId,
+  getLinks: _personalDuoqianProposalEntityGetLinks,
+  attach: _personalDuoqianProposalEntityAttach,
+  version: '3.1.0+1',
+);
+
+int _personalDuoqianProposalEntityEstimateSize(
+  PersonalDuoqianProposalEntity object,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  var bytesCount = offsets.last;
+  bytesCount += 3 + object.action.length * 3;
+  bytesCount += 3 + object.personalAddress.length * 3;
+  {
+    final value = object.snapshotJson;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  bytesCount += 3 + object.status.length * 3;
+  return bytesCount;
+}
+
+void _personalDuoqianProposalEntitySerialize(
+  PersonalDuoqianProposalEntity object,
+  IsarWriter writer,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  writer.writeString(offsets[0], object.action);
+  writer.writeLong(offsets[1], object.createdAtMillis);
+  writer.writeLong(offsets[2], object.finalStatusAtMillis);
+  writer.writeLong(offsets[3], object.noVotes);
+  writer.writeString(offsets[4], object.personalAddress);
+  writer.writeLong(offsets[5], object.proposalId);
+  writer.writeString(offsets[6], object.snapshotJson);
+  writer.writeString(offsets[7], object.status);
+  writer.writeLong(offsets[8], object.yesVotes);
+}
+
+PersonalDuoqianProposalEntity _personalDuoqianProposalEntityDeserialize(
+  Id id,
+  IsarReader reader,
+  List<int> offsets,
+  Map<Type, List<int>> allOffsets,
+) {
+  final object = PersonalDuoqianProposalEntity();
+  object.action = reader.readString(offsets[0]);
+  object.createdAtMillis = reader.readLong(offsets[1]);
+  object.finalStatusAtMillis = reader.readLongOrNull(offsets[2]);
+  object.id = id;
+  object.noVotes = reader.readLong(offsets[3]);
+  object.personalAddress = reader.readString(offsets[4]);
+  object.proposalId = reader.readLong(offsets[5]);
+  object.snapshotJson = reader.readStringOrNull(offsets[6]);
+  object.status = reader.readString(offsets[7]);
+  object.yesVotes = reader.readLong(offsets[8]);
+  return object;
+}
+
+P _personalDuoqianProposalEntityDeserializeProp<P>(
+  IsarReader reader,
+  int propertyId,
+  int offset,
+  Map<Type, List<int>> allOffsets,
+) {
+  switch (propertyId) {
+    case 0:
+      return (reader.readString(offset)) as P;
+    case 1:
+      return (reader.readLong(offset)) as P;
+    case 2:
+      return (reader.readLongOrNull(offset)) as P;
+    case 3:
+      return (reader.readLong(offset)) as P;
+    case 4:
+      return (reader.readString(offset)) as P;
+    case 5:
+      return (reader.readLong(offset)) as P;
+    case 6:
+      return (reader.readStringOrNull(offset)) as P;
+    case 7:
+      return (reader.readString(offset)) as P;
+    case 8:
+      return (reader.readLong(offset)) as P;
+    default:
+      throw IsarError('Unknown property with id $propertyId');
+  }
+}
+
+Id _personalDuoqianProposalEntityGetId(PersonalDuoqianProposalEntity object) {
+  return object.id;
+}
+
+List<IsarLinkBase<dynamic>> _personalDuoqianProposalEntityGetLinks(
+    PersonalDuoqianProposalEntity object) {
+  return [];
+}
+
+void _personalDuoqianProposalEntityAttach(
+    IsarCollection<dynamic> col, Id id, PersonalDuoqianProposalEntity object) {
+  object.id = id;
+}
+
+extension PersonalDuoqianProposalEntityByIndex
+    on IsarCollection<PersonalDuoqianProposalEntity> {
+  Future<PersonalDuoqianProposalEntity?> getByPersonalAddressProposalId(
+      String personalAddress, int proposalId) {
+    return getByIndex(
+        r'personalAddress_proposalId', [personalAddress, proposalId]);
+  }
+
+  PersonalDuoqianProposalEntity? getByPersonalAddressProposalIdSync(
+      String personalAddress, int proposalId) {
+    return getByIndexSync(
+        r'personalAddress_proposalId', [personalAddress, proposalId]);
+  }
+
+  Future<bool> deleteByPersonalAddressProposalId(
+      String personalAddress, int proposalId) {
+    return deleteByIndex(
+        r'personalAddress_proposalId', [personalAddress, proposalId]);
+  }
+
+  bool deleteByPersonalAddressProposalIdSync(
+      String personalAddress, int proposalId) {
+    return deleteByIndexSync(
+        r'personalAddress_proposalId', [personalAddress, proposalId]);
+  }
+
+  Future<List<PersonalDuoqianProposalEntity?>>
+      getAllByPersonalAddressProposalId(
+          List<String> personalAddressValues, List<int> proposalIdValues) {
+    final len = personalAddressValues.length;
+    assert(proposalIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([personalAddressValues[i], proposalIdValues[i]]);
+    }
+
+    return getAllByIndex(r'personalAddress_proposalId', values);
+  }
+
+  List<PersonalDuoqianProposalEntity?> getAllByPersonalAddressProposalIdSync(
+      List<String> personalAddressValues, List<int> proposalIdValues) {
+    final len = personalAddressValues.length;
+    assert(proposalIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([personalAddressValues[i], proposalIdValues[i]]);
+    }
+
+    return getAllByIndexSync(r'personalAddress_proposalId', values);
+  }
+
+  Future<int> deleteAllByPersonalAddressProposalId(
+      List<String> personalAddressValues, List<int> proposalIdValues) {
+    final len = personalAddressValues.length;
+    assert(proposalIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([personalAddressValues[i], proposalIdValues[i]]);
+    }
+
+    return deleteAllByIndex(r'personalAddress_proposalId', values);
+  }
+
+  int deleteAllByPersonalAddressProposalIdSync(
+      List<String> personalAddressValues, List<int> proposalIdValues) {
+    final len = personalAddressValues.length;
+    assert(proposalIdValues.length == len,
+        'All index values must have the same length');
+    final values = <List<dynamic>>[];
+    for (var i = 0; i < len; i++) {
+      values.add([personalAddressValues[i], proposalIdValues[i]]);
+    }
+
+    return deleteAllByIndexSync(r'personalAddress_proposalId', values);
+  }
+
+  Future<Id> putByPersonalAddressProposalId(
+      PersonalDuoqianProposalEntity object) {
+    return putByIndex(r'personalAddress_proposalId', object);
+  }
+
+  Id putByPersonalAddressProposalIdSync(PersonalDuoqianProposalEntity object,
+      {bool saveLinks = true}) {
+    return putByIndexSync(r'personalAddress_proposalId', object,
+        saveLinks: saveLinks);
+  }
+
+  Future<List<Id>> putAllByPersonalAddressProposalId(
+      List<PersonalDuoqianProposalEntity> objects) {
+    return putAllByIndex(r'personalAddress_proposalId', objects);
+  }
+
+  List<Id> putAllByPersonalAddressProposalIdSync(
+      List<PersonalDuoqianProposalEntity> objects,
+      {bool saveLinks = true}) {
+    return putAllByIndexSync(r'personalAddress_proposalId', objects,
+        saveLinks: saveLinks);
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryWhereSort on QueryBuilder<
+    PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity, QWhere> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhere> anyId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhere> anyCreatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'createdAtMillis'),
+      );
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryWhere on QueryBuilder<
+    PersonalDuoqianProposalEntity,
+    PersonalDuoqianProposalEntity,
+    QWhereClause> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> idEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: id,
+        upper: id,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> idNotEqualTo(Id id) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            )
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            );
+      } else {
+        return query
+            .addWhereClause(
+              IdWhereClause.greaterThan(lower: id, includeLower: false),
+            )
+            .addWhereClause(
+              IdWhereClause.lessThan(upper: id, includeUpper: false),
+            );
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> idGreaterThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.greaterThan(lower: id, includeLower: include),
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> idLessThan(Id id, {bool include = false}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        IdWhereClause.lessThan(upper: id, includeUpper: include),
+      );
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> idBetween(
+    Id lowerId,
+    Id upperId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IdWhereClause.between(
+        lower: lowerId,
+        includeLower: includeLower,
+        upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterWhereClause>
+      personalAddressEqualToAnyProposalId(String personalAddress) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'personalAddress_proposalId',
+        value: [personalAddress],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterWhereClause>
+      personalAddressNotEqualToAnyProposalId(String personalAddress) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [],
+              upper: [personalAddress],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [],
+              upper: [personalAddress],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterWhereClause>
+      personalAddressProposalIdEqualTo(String personalAddress, int proposalId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'personalAddress_proposalId',
+        value: [personalAddress, proposalId],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterWhereClause>
+      personalAddressEqualToProposalIdNotEqualTo(
+          String personalAddress, int proposalId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress],
+              upper: [personalAddress, proposalId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress, proposalId],
+              includeLower: false,
+              upper: [personalAddress],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress, proposalId],
+              includeLower: false,
+              upper: [personalAddress],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'personalAddress_proposalId',
+              lower: [personalAddress],
+              upper: [personalAddress, proposalId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> personalAddressEqualToProposalIdGreaterThan(
+    String personalAddress,
+    int proposalId, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'personalAddress_proposalId',
+        lower: [personalAddress, proposalId],
+        includeLower: include,
+        upper: [personalAddress],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> personalAddressEqualToProposalIdLessThan(
+    String personalAddress,
+    int proposalId, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'personalAddress_proposalId',
+        lower: [personalAddress],
+        upper: [personalAddress, proposalId],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> personalAddressEqualToProposalIdBetween(
+    String personalAddress,
+    int lowerProposalId,
+    int upperProposalId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'personalAddress_proposalId',
+        lower: [personalAddress, lowerProposalId],
+        includeLower: includeLower,
+        upper: [personalAddress, upperProposalId],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> actionEqualTo(String action) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'action',
+        value: [action],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> actionNotEqualTo(String action) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'action',
+              lower: [],
+              upper: [action],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'action',
+              lower: [action],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'action',
+              lower: [action],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'action',
+              lower: [],
+              upper: [action],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> statusEqualTo(String status) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'status',
+        value: [status],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> statusNotEqualTo(String status) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'status',
+              lower: [],
+              upper: [status],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'status',
+              lower: [status],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'status',
+              lower: [status],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'status',
+              lower: [],
+              upper: [status],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> createdAtMillisEqualTo(int createdAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'createdAtMillis',
+        value: [createdAtMillis],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> createdAtMillisNotEqualTo(int createdAtMillis) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'createdAtMillis',
+              lower: [],
+              upper: [createdAtMillis],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'createdAtMillis',
+              lower: [createdAtMillis],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'createdAtMillis',
+              lower: [createdAtMillis],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'createdAtMillis',
+              lower: [],
+              upper: [createdAtMillis],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> createdAtMillisGreaterThan(
+    int createdAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'createdAtMillis',
+        lower: [createdAtMillis],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> createdAtMillisLessThan(
+    int createdAtMillis, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'createdAtMillis',
+        lower: [],
+        upper: [createdAtMillis],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterWhereClause> createdAtMillisBetween(
+    int lowerCreatedAtMillis,
+    int upperCreatedAtMillis, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'createdAtMillis',
+        lower: [lowerCreatedAtMillis],
+        includeLower: includeLower,
+        upper: [upperCreatedAtMillis],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryFilter on QueryBuilder<
+    PersonalDuoqianProposalEntity,
+    PersonalDuoqianProposalEntity,
+    QFilterCondition> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'action',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      actionContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'action',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      actionMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'action',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'action',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> actionIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'action',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> createdAtMillisEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'createdAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> createdAtMillisGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'createdAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> createdAtMillisLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'createdAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> createdAtMillisBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'createdAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'finalStatusAtMillis',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'finalStatusAtMillis',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'finalStatusAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisGreaterThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'finalStatusAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'finalStatusAtMillis',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> finalStatusAtMillisBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'finalStatusAtMillis',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> idEqualTo(Id value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> idGreaterThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> idLessThan(
+    Id value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'id',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> idBetween(
+    Id lower,
+    Id upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'id',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> noVotesEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'noVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> noVotesGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'noVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> noVotesLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'noVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> noVotesBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'noVotes',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'personalAddress',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      personalAddressContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'personalAddress',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      personalAddressMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'personalAddress',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'personalAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> personalAddressIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'personalAddress',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> proposalIdEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'proposalId',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> proposalIdGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'proposalId',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> proposalIdLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'proposalId',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> proposalIdBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'proposalId',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'snapshotJson',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'snapshotJson',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'snapshotJson',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      snapshotJsonContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'snapshotJson',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      snapshotJsonMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'snapshotJson',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'snapshotJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> snapshotJsonIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'snapshotJson',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'status',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      statusContains(String value, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'status',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+          QAfterFilterCondition>
+      statusMatches(String pattern, {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'status',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'status',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> statusIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'status',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> yesVotesEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'yesVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> yesVotesGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'yesVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> yesVotesLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'yesVotes',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterFilterCondition> yesVotesBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'yesVotes',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryObject on QueryBuilder<
+    PersonalDuoqianProposalEntity,
+    PersonalDuoqianProposalEntity,
+    QFilterCondition> {}
+
+extension PersonalDuoqianProposalEntityQueryLinks on QueryBuilder<
+    PersonalDuoqianProposalEntity,
+    PersonalDuoqianProposalEntity,
+    QFilterCondition> {}
+
+extension PersonalDuoqianProposalEntityQuerySortBy on QueryBuilder<
+    PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity, QSortBy> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByAction() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'action', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByActionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'action', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByCreatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByCreatedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByFinalStatusAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'finalStatusAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByFinalStatusAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'finalStatusAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByNoVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'noVotes', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByNoVotesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'noVotes', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByPersonalAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'personalAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByPersonalAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'personalAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByProposalId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'proposalId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByProposalIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'proposalId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortBySnapshotJson() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'snapshotJson', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortBySnapshotJsonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'snapshotJson', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByYesVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'yesVotes', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> sortByYesVotesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'yesVotes', Sort.desc);
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQuerySortThenBy on QueryBuilder<
+    PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity, QSortThenBy> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByAction() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'action', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByActionDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'action', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByCreatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByCreatedAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'createdAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByFinalStatusAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'finalStatusAtMillis', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByFinalStatusAtMillisDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'finalStatusAtMillis', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenById() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByNoVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'noVotes', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByNoVotesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'noVotes', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByPersonalAddress() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'personalAddress', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByPersonalAddressDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'personalAddress', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByProposalId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'proposalId', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByProposalIdDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'proposalId', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenBySnapshotJson() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'snapshotJson', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenBySnapshotJsonDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'snapshotJson', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByStatus() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByStatusDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'status', Sort.desc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByYesVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'yesVotes', Sort.asc);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QAfterSortBy> thenByYesVotesDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'yesVotes', Sort.desc);
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryWhereDistinct on QueryBuilder<
+    PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity, QDistinct> {
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByAction({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'action', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByCreatedAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'createdAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByFinalStatusAtMillis() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'finalStatusAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByNoVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'noVotes');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByPersonalAddress({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'personalAddress',
+          caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByProposalId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'proposalId');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctBySnapshotJson({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'snapshotJson', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByStatus({bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'status', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, PersonalDuoqianProposalEntity,
+      QDistinct> distinctByYesVotes() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'yesVotes');
+    });
+  }
+}
+
+extension PersonalDuoqianProposalEntityQueryProperty on QueryBuilder<
+    PersonalDuoqianProposalEntity,
+    PersonalDuoqianProposalEntity,
+    QQueryProperty> {
+  QueryBuilder<PersonalDuoqianProposalEntity, int, QQueryOperations>
+      idProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'id');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, String, QQueryOperations>
+      actionProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'action');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, int, QQueryOperations>
+      createdAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'createdAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, int?, QQueryOperations>
+      finalStatusAtMillisProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'finalStatusAtMillis');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, int, QQueryOperations>
+      noVotesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'noVotes');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, String, QQueryOperations>
+      personalAddressProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'personalAddress');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, int, QQueryOperations>
+      proposalIdProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'proposalId');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, String?, QQueryOperations>
+      snapshotJsonProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'snapshotJson');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, String, QQueryOperations>
+      statusProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'status');
+    });
+  }
+
+  QueryBuilder<PersonalDuoqianProposalEntity, int, QQueryOperations>
+      yesVotesProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'yesVotes');
+    });
+  }
+}
+
+// coverage:ignore-file
+// ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
+
 extension GetDuoqianInstitutionEntityCollection on Isar {
   IsarCollection<DuoqianInstitutionEntity> get duoqianInstitutionEntitys =>
       this.collection();

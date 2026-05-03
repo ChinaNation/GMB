@@ -8,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:isar/isar.dart';
+import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/duoqian/personal/personal_proposal_history_service.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
 import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
@@ -251,6 +254,10 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = TransferProposalService();
+      // 提前查链上 NextProposalId,作为本次转账提案的预测 ID;
+      // 若该多签是个人多签,后续写入 Isar 历史(req 5)。
+      final predictedProposalId = await service.fetchNextProposalId();
+
       await service.submitProposeTransfer(
         institution: widget.institution,
         beneficiaryAddress: _beneficiaryController.text.trim(),
@@ -259,6 +266,15 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
         sign: signCallback,
+      );
+
+      // 若是个人多签,写入提案历史 entity(转账提案在多签详情页提案列表展示)。
+      // 本页 institution.orgType 个人/机构都是 OrgType.duoqian,通过 Isar 查
+      // PersonalDuoqianEntity 命中即视作个人多签。
+      await _maybeRecordPersonalProposal(
+        proposalId: predictedProposalId,
+        beneficiary: _beneficiaryController.text.trim(),
+        amountYuan: AmountFormat.tryParse(_amountController.text) ?? 0,
       );
 
       if (!mounted) return;
@@ -280,6 +296,39 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       if (mounted) {
         setState(() => _submitting = false);
       }
+    }
+  }
+
+  /// 仅当 [widget.institution] 是个人多签时,把转账提案写入 Isar 历史
+  /// (`PersonalDuoqianProposalEntity`),让详情页"提案列表"区域立即看到。
+  /// 机构多签的提案历史由其他模块负责,这里 silent skip。
+  Future<void> _maybeRecordPersonalProposal({
+    required int proposalId,
+    required String beneficiary,
+    required double amountYuan,
+  }) async {
+    try {
+      final isar = await WalletIsar.instance.db();
+      final personal = await isar.personalDuoqianEntitys
+          .filter()
+          .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+          .findFirst();
+      if (personal == null) return; // 非个人多签,跳过
+
+      await PersonalProposalHistoryService().recordOrUpdate(
+        personalAddressHex: widget.institution.duoqianAddress,
+        proposalId: proposalId,
+        action: PersonalProposalAction.transfer,
+        status: PersonalProposalStatus.voting,
+        yesVotes: 0,
+        noVotes: 0,
+        snapshot: {
+          'beneficiary': beneficiary,
+          'amount_yuan': amountYuan,
+        },
+      );
+    } catch (_) {
+      // 写入失败不阻断主流程(链端已成功)
     }
   }
 
