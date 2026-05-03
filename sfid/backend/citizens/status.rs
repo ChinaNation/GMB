@@ -1,7 +1,7 @@
 //! 公民状态扫码 handler:CPMS 站点扫公民状态 QR,审计 + 缓存失效。
 //!
-//! 入口由 `shi_admins::admin_cpms_status_scan` 路由转发,链上交互能力位于
-//! `citizens::chain_binding`,canonical 文本拼装位于 `citizens::cpms_qr`。
+//! 管理端入口直接挂到 `citizens::status::admin_cpms_status_scan`,
+//! 链上交互能力位于 `citizens::chain_binding`,canonical 文本拼装位于 `citizens::cpms_qr`。
 
 use axum::{
     extract::State,
@@ -48,7 +48,7 @@ pub(crate) async fn admin_cpms_status_scan(
     // 先从分片读 cpms site（async），再拿 legacy store 短锁做其余操作
     let site_sfid_key = payload.site_sfid.trim().to_string();
     let site_keys: CpmsSiteKeys = {
-        let province = match crate::sheng_admins::institutions::resolve_site_province_via_shard(
+        let province = match crate::cpms::resolve_site_province_via_shard(
             &state,
             &site_sfid_key,
             admin_ctx.admin_province.as_deref(),

@@ -34,7 +34,6 @@ views/
   operators/
     OperatorsView.tsx      # 操作员(SHI_ADMIN)增删改查
   key-management/
-    KeyringView.tsx        # KeyAdmin/ShengAdmin 密钥轮换
   institutions/            # 已存在,保持不动
   common/                  # 已存在,保持不动
 ```

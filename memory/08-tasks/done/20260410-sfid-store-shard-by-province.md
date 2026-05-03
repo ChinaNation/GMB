@@ -67,8 +67,6 @@
 │   └── ...(43 省,懒加载)                                │
 │                                                          │
 │ global_shard: Arc<RwLock<GlobalShard>>                   │
-│   └── 跨省共享状态:KEY_ADMIN keyring / SFID MAIN seed / │
-│       chain_keyring_state / audit_log_index / 等         │
 │                                                          │
 │ sheng_signer_cache: Arc<ShengSignerCache>(Phase 1 已有)  │
 └──────────────────────────────────────────────────────────┘
@@ -126,12 +124,7 @@ pub(crate) struct StoreShard {
 ```rust
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct GlobalShard {
-    // KEY_ADMIN 密钥环状态
-    pub(crate) chain_keyring_state: Option<ChainKeyringState>,
-    pub(crate) keyring_rotate_challenges: HashMap<String, KeyringRotateChallenge>,
 
-    // KEY_ADMIN 列表(不是省级)
-    pub(crate) key_admins: Vec<KeyAdminRow>,
 
     // 登录 challenge(全局会话)
     pub(crate) login_challenges: HashMap<String, LoginChallenge>,
@@ -348,12 +341,10 @@ let institution = state.store_shards.read_province(&province, |shard| {
 
 **province 从哪里来**:
 - SHI_ADMIN / ShengAdmin 的请求 → `ctx.admin_province`(已有)
-- KEY_ADMIN 跨省请求 → 参数里带 province 或遍历所有分片
 - 公开路径(citizen 绑定等)→ 从 sfid_id 里解析省份代码(见 `sfid/province.rs`)
 
 ### 4.2 跨省查询
 
-少数场景需要跨省(KEY_ADMIN 全局列表):
 
 ```rust
 // 遍历所有分片收集
@@ -372,12 +363,10 @@ pub(crate) async fn list_all_institutions(
 }
 ```
 
-**注意**:跨省查询是 O(省数) 而不是 O(1),但 KEY_ADMIN 场景罕见,可接受。
 
 ### 4.3 全局 state 路径
 
 涉及 `GlobalShard` 字段的 handler 改走 `read_global` / `write_global`:
-- KEY_ADMIN 管理
 - 登录 challenge / session
 - 审计日志
 - 链请求幂等
@@ -481,7 +470,6 @@ Phase 1 的改动需要迁移到新分片结构:
 - [ ] 压测:单省 100 并发,P99 较 Phase 1 降低 >50%
 - [ ] 压测:10 省 500 并发(每省 50 并发),P99 保持在 <200ms
 - [ ] 数据完整性:迁移后做 diff,新老路径读取机构/citizen/操作员各 10 条抽样对比
-- [ ] 功能回归:登录、注册机构、citizen 绑定、KEY_ADMIN 操作、CPMS 流程手工走一遍
 
 ---
 
@@ -489,7 +477,6 @@ Phase 1 的改动需要迁移到新分片结构:
 
 ### 拍板 1:分片维度
 
-- [ ] **按 province(推荐)**:自然业务边界,KEY_ADMIN 跨省操作走 GlobalShard 或遍历
 - [ ] 按 province_code 数字:索引更紧凑但 UTF-8 省名更可读
 - [ ] 按 (province, category):更细粒度但跨 category 查询复杂
 

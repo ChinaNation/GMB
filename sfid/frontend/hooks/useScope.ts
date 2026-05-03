@@ -1,4 +1,4 @@
-// 中文注释:前端对齐后端 scope::rules::VisibleScope,两角色范围派生(ADR-008 删 KEY_ADMIN)。
+// 中文注释:前端对齐后端 scope::rules::VisibleScope,按两角色范围派生。
 // 铁律:feedback_scope_auto_filter.md(SHENG=本省 / SHI=本市)
 //
 // sheng_admin / shi_admin 两个视图的 Dashboard 走"全局视图(43 省可看)+ 跨省按钮置灰":

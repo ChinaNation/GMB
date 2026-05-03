@@ -4,7 +4,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS admins (
   admin_id BIGSERIAL PRIMARY KEY,
   admin_pubkey TEXT NOT NULL UNIQUE,
-  role TEXT NOT NULL CHECK (role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN')),
+  role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
   status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED')),
   built_in BOOLEAN NOT NULL DEFAULT FALSE,
   created_by TEXT NOT NULL DEFAULT 'SYSTEM',
@@ -36,15 +36,6 @@ CREATE TABLE IF NOT EXISTS operator_admin_scope (
 CREATE INDEX IF NOT EXISTS idx_operator_admin_scope_super
   ON operator_admin_scope(super_admin_id);
 
--- 密钥管理员一主两备槽位
-CREATE TABLE IF NOT EXISTS key_admin_keyring (
-  slot TEXT PRIMARY KEY CHECK (slot IN ('MAIN', 'BACKUP_A', 'BACKUP_B')),
-  admin_id BIGINT NOT NULL UNIQUE REFERENCES admins(admin_id) ON DELETE RESTRICT,
-  admin_pubkey TEXT NOT NULL UNIQUE,
-  keyring_version BIGINT NOT NULL DEFAULT 1,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 -- 从 runtime_store(id=1) 回填管理员
 WITH raw AS (
   SELECT payload
@@ -65,7 +56,7 @@ INSERT INTO admins(admin_pubkey, role, status, built_in, created_by, created_at)
 SELECT
   admin_pubkey,
   CASE
-    WHEN role IN ('KEY_ADMIN', 'SUPER_ADMIN', 'OPERATOR_ADMIN') THEN role
+    WHEN role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN') THEN role
     ELSE 'OPERATOR_ADMIN'
   END,
   CASE
@@ -148,49 +139,7 @@ ON CONFLICT (admin_id) DO UPDATE SET
   super_admin_id = EXCLUDED.super_admin_id,
   province_name = EXCLUDED.province_name;
 
--- 回填密钥管理员一主两备
-WITH raw AS (
-  SELECT payload
-  FROM runtime_store
-  WHERE id = 1
-),
-kr AS (
-  SELECT
-    COALESCE((payload->'chain_keyring_state'->>'version')::bigint, 1) AS version,
-    payload->'chain_keyring_state'->>'main_pubkey' AS main_pubkey,
-    payload->'chain_keyring_state'->>'backup_a_pubkey' AS backup_a_pubkey,
-    payload->'chain_keyring_state'->>'backup_b_pubkey' AS backup_b_pubkey
-  FROM raw
-),
-slots AS (
-  SELECT 'MAIN'::text AS slot, version, main_pubkey AS admin_pubkey FROM kr
-  UNION ALL
-  SELECT 'BACKUP_A'::text AS slot, version, backup_a_pubkey AS admin_pubkey FROM kr
-  UNION ALL
-  SELECT 'BACKUP_B'::text AS slot, version, backup_b_pubkey AS admin_pubkey FROM kr
-),
-rows_to_upsert AS (
-  SELECT s.slot, a.admin_id, s.admin_pubkey, s.version
-  FROM slots s
-  JOIN admins a ON a.admin_pubkey = s.admin_pubkey
-  WHERE s.admin_pubkey IS NOT NULL AND s.admin_pubkey <> ''
-)
-INSERT INTO key_admin_keyring(slot, admin_id, admin_pubkey, keyring_version, updated_at)
-SELECT slot, admin_id, admin_pubkey, version, now()
-FROM rows_to_upsert
-ON CONFLICT (slot) DO UPDATE SET
-  admin_id = EXCLUDED.admin_id,
-  admin_pubkey = EXCLUDED.admin_pubkey,
-  keyring_version = EXCLUDED.keyring_version,
-  updated_at = EXCLUDED.updated_at;
-
 -- 便于按“类”直接查看
-CREATE OR REPLACE VIEW v_key_admins AS
-SELECT a.*, k.slot, k.keyring_version, k.updated_at AS slot_updated_at
-FROM admins a
-JOIN key_admin_keyring k ON k.admin_id = a.admin_id
-WHERE a.role = 'KEY_ADMIN';
-
 CREATE OR REPLACE VIEW v_super_admins AS
 SELECT a.*, s.province_name, s.scope_no
 FROM admins a

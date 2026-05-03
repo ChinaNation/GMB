@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`citizenchain/runtime/transaction/duoqian-manage/`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`(Step 2 章节)
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`(Step 2 章节)
 - 前置依赖:step2a(sfid-system pallet 重写完成,helper `sheng_signing_pubkey_for_admin` 可用)
 - 阻塞下游:step2d(wumin / wuminapp decoder 必须按本卡新字段同步)
 

@@ -1,5 +1,5 @@
 // 中文注释:sfid 前端登录态 + 能力标志的全局 Context。
-// ADR-008(2026-05-01)起 KEY_ADMIN 已彻底删除,角色仅剩 SHENG_ADMIN / SHI_ADMIN。
+// 中文注释:角色仅剩 SHENG_ADMIN / SHI_ADMIN。
 // 省管理员三槽自治(Main/Backup1/Backup2)由 sheng_admin 视图自身处理,本 context 只看 role + 三 槽位字段。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';

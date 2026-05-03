@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`sfid/backend`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 上游:step2d(commit b4bb76e)wuminapp `PopulationSnapshotResponse` 已强校验 `province + signerAdminPubkey`
 
 ## 任务需求

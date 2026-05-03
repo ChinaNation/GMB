@@ -3,8 +3,8 @@
 - 状态:open
 - 创建日期:2026-05-01
 - 模块:`sfid/backend/models/`
-- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-delete-key-admin-and-sheng-3tier.md`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`
+- 上游:`memory/08-tasks/open/20260501-sfid-step1-phase23-sheng-3tier-transition.md`
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`
 - 前置依赖:Phase 1(完成)+ Phase 3 增量基础设施(完成,见 phase23 progress)
 - 阻塞下游:phase23b/c/d/e
 
@@ -17,7 +17,6 @@
 | 子文件 | 内容 |
 |---|---|
 | `models/mod.rs` | 仅 `pub mod role; pub use role::*;` 等 re-export + 公共顶层注释 |
-| `models/role.rs` | `AdminRole`(暂保 KeyAdmin,phase23e 删)+ `AdminStatus` + Display/parse |
 | `models/slot.rs` | `Slot { Main, Backup1, Backup2 }`(若 phase23 progress 已加在 `sfid/province.rs`,搬过来或 re-export) |
 | `models/session.rs` | `SessionContext` / 登录态 DTO / `LoginPayload` 等 |
 | `models/permission.rs` | 权限决策类型(若 mod.rs 中无,可空文件 + 注释占位) |
@@ -59,12 +58,10 @@
 | 文件 | 行数 | 内容 |
 |---|---|---|
 | `models/mod.rs` | 41 | 顶部 `//!` facade 注释 + 9 个 `pub(crate) mod` + 7 条 `pub(crate) use ...::*;` re-export(`permission` / `session` 是占位,无类型导出) |
-| `models/role.rs` | 145 | `AdminRole`(暂保 `KeyAdmin`,phase23e 删)+ `AdminStatus` + `AdminUser` + `OperatorRow` / `OperatorListOutput` / `ShengAdminRow` / `CreateOperatorInput` / `ReplaceShengAdminInput` / `ListQuery` / `UpdateOperatorInput` / `UpdateOperatorStatusInput` |
 | `models/slot.rs` | 6 | `pub(crate) use crate::sfid::province::Slot;` re-export(实际定义已在 phase23 progress 落入 `sfid/province.rs`) |
 | `models/session.rs` | 5 | 占位:`AdminSession` / `LoginChallenge` / `QrLoginResultRecord` 仍在 `crate::login`,本文件仅做语义占位,后续 login DTO 抽离时再下沉 |
 | `models/permission.rs` | 6 | 占位:权限决策由 `crate::scope` 实现,直接消费 `AdminRole` / `AdminStatus`,无独立 DTO |
 | `models/error.rs` | 24 | `ApiResponse` / `ApiError` / `HealthData` |
-| `models/store.rs` | 376 | `Store` 聚合体 + `SensitiveSeed` / `SignatureEnvelope` + `ServiceMetrics` / `ChainRequestReceipt` / `AuditLogEntry` / `AuditLogsQuery` / `BindCallbackJob` / `BindCallbackPayload` / `RewardStatus` / `RewardStateRecord` / `VoteVerifyCacheEntry` / `KeyringRotateChallenge` / `KeyringStateOutput` / `KeyringRotate{Challenge,Commit,Verify}{Input,Output}` / `InstitutionChainStatus` / `MultisigChainStatus` |
 | `models/citizen.rs` | 274 | `CitizenStatus` / `ImportedArchive` / `ArchiveImportStatus` / `PendingBindScan` / `CitizenRecord` + `status()` impl / `CitizenBindStatus` / `CitizenBindChallenge` / 绑定 / 解绑 / 查询 DTO + wuminapp 投票账户 + 现场扫码 QR 载荷 |
 | `models/cpms.rs` | 199 | `CpmsSiteStatus` / `InstallTokenStatus` + defaults / `CpmsSiteKeys` / 注册 / 安装 / 档案输入输出 / `CpmsRegisterReqPayload` / `CpmsArchiveQrPayload` / `AnonCert` / `CpmsStatusScan{Input,Output}` |
 | `models/meta.rs` | 34 | `SfidOptionItem` / `SfidProvinceItem` / `SfidCityItem` / `AdminSfidMetaOutput` / `AdminSfidCitiesQuery`(管理员控制台元信息接口 DTO) |
@@ -80,13 +77,10 @@
 - [x] `cargo clippy --all-targets -- -D warnings` 59 errors(与 baseline 完全一致,本卡未引入新错)
 - [x] `models/mod.rs` ≤ 80 行(实测 41 行,只剩 facade)
 - [x] 每个 sub-file 顶部 1-3 行中文 `//!` 模块注释(citizen.rs / cpms.rs / error.rs / meta.rs / permission.rs / role.rs / session.rs / slot.rs / store.rs 已检视均符合)
-- [x] `pub(crate) use models::*;`(`main.rs:51`)行为零变化:11 处 caller(`institutions/{handler,model,service,store}.rs`、`store_shards/{shard_types,migration}.rs`、`scope/rules.rs`、`chain/institution_info/{handler,dto}.rs`、`app_core/runtime_ops.rs`、`key-admins/signer_router.rs`)的 import 路径(`crate::models::AdminRole` / `Store` / `ApiResponse` / `InstitutionChainStatus` / `MultisigChainStatus` 等)无需任何变更,glob re-export 透出全部公开类型
 
 ### 残留与下游
 
-- `AdminRole::KeyAdmin` 枚举值按任务卡要求**保留**,留待 phase23e 删除(role.rs 顶部已加注释标记 ADR-008 决议)
 - `Slot` re-export 路径 `crate::models::Slot` 已可用,phase4+ 业务收到链上 backup 公钥后可直接走该路径
-- 本卡已为 phase23b(rsa-blind-relocate)/ phase23c(business-to-scope)/ phase23d(operate-to-citizens)/ phase23e(key-admin final removal)解锁 `models/` 内部的拆分基线,后续子卡只需在已分组的子文件里增减类型即可,无需再触动 facade
 
 ### 并发产物 / 待主入口决策
 
@@ -95,7 +89,6 @@
 - `admin.rs`(124 行,把 `AdminUser` / `OperatorRow` / `OperatorListOutput` / `ShengAdminRow` / `Create/Replace/Update/UpdateStatus/List` 等从 role 抽出)
 - `audit.rs`(37 行,把 `AuditLogEntry` / `AuditLogsQuery` / `ChainRequestReceipt` 从 store 抽出)
 - `institution.rs`(单独存放 `InstitutionChainStatus` / `MultisigChainStatus` + Default)
-- `keyring.rs`(单独存放 `KeyringRotate*` + `KeyringStateOutput`)
 - `metrics.rs`(单独存放 `ServiceMetrics`)
 - `sfid_options.rs`(替代 `meta.rs`,内容同)
 - `vote.rs`(单独存放 wuminapp 投票账户 + 奖励 + 绑定回调相关 DTO)
@@ -121,10 +114,8 @@
 ### 验收命令重跑(本轮终态,与上轮一致)
 
 - `cd sfid/backend && cargo check` ⇒ 全绿,3 warnings(`sfid/province.rs` 既有 `name/code/villages/towns` dead_code,与本卡无关)
-- `cargo test` ⇒ **79 passed / 0 failed**(含 `keyring_rotate_*`、`sync_key_admin_users_keeps_monotonic_ids`、`store_shards::*`、`sheng_signer::*` 等全部 main_tests + 子模块测试)
 - `cargo clippy --all-targets -- -D warnings` ⇒ **59 errors,与 baseline 完全一致**;其中 `models/` 命中 4 条全部为搬迁过来的旧错(`role.rs:16` AdminRole 同后缀 / `store.rs:352` InstitutionChainStatus 可 derive Default / `store.rs:365` MultisigChainStatus 同后缀 / `store.rs:372` MultisigChainStatus 可 derive Default),与原 `mod.rs` 在搬迁前完全一致,本卡未引入新错
 - `wc -l models/mod.rs` = **41 行**(≤ 80 验收线 ✓)
-- `grep -rn "crate::models::" sfid/backend/ | wc -l` = **20 条**(institutions/* / store_shards/* / scope/rules.rs / key-admins/signer_router.rs / chain/institution_info/* / app_core/runtime_ops.rs),路径名零变化,facade wildcard re-export 透出全部公开类型 ⇒ caller 零感知
 
 ### 状态
 
@@ -141,7 +132,6 @@
 ### 三件套重跑(本轮终态)
 
 - `cd /Users/rhett/GMB/sfid/backend && cargo check` ⇒ 全绿,3 warnings(均为 `sfid/province.rs` ProvinceCode/CityCode/TownCode 既有 dead_code 字段,baseline)
-- `cargo test --no-fail-fast` ⇒ **79 passed / 0 failed / 0 ignored / 0 measured / 0 filtered out**(含 `main_tests::keyring_rotate_*`、`key_admins::rsa_blind::*`、`store_shards/sheng_signer::*` 等全部子集)
 - `cargo clippy --all-targets -- -D warnings` ⇒ **54 bin errors + 57 bin+test errors = 59 unique** ⇆ phase23 progress 与第 2 轮记录的基线**逐字相同**,本轮未引入新错
 - `wc -l models/mod.rs` = **41 行**(验收线 ≤ 80 ✓)
 - `grep -rn "crate::models::" sfid/backend/ | wc -l` = **20 条**,路径名零变化(facade re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等全部公开类型)
@@ -164,7 +154,6 @@
 - `cargo test --quiet` ⇒ **79 passed / 0 failed / 0 ignored / 0 measured / 0 filtered out**(0.56s)
 - `cargo clippy --all-targets --quiet -- -D warnings` ⇒ **59 errors**,逐字命中 phase23 baseline + 第 1/2/3 轮记录,本轮未引入新错
 - `wc -l models/mod.rs` ⇒ **41 行**(≤ 80 验收线 ✓)
-- `grep -rn "crate::models::" sfid/backend/` ⇒ **20 条 callsite**(`institutions/{handler,model,service,store}.rs` × 4+3 / `store_shards/{shard_types,migration}.rs` × 2 / `scope/rules.rs` / `key-admins/signer_router.rs` / `chain/institution_info/{handler,dto}.rs` × 2 / `app_core/runtime_ops.rs` / `models/{slot,mod}.rs` 自身注释 × 2),全部解析正常,facade glob re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等
 
 ### 结论
 
@@ -213,7 +202,6 @@
 - `cargo clippy --all-targets -- -D warnings` ⇒ **bin 54 errors + bin+test 57 errors**,与 phase23 baseline 完全一致;`models/` 命中 4 条全部为搬迁过来的旧错(`role.rs:16` AdminRole 同后缀、`store.rs:352/372` Default 可 derive、`store.rs:365` MultisigChainStatus 同后缀),本轮零新增
 - `wc -l models/mod.rs` = **41 行**(验收线 ≤ 80 ✓)
 - `wc -l models/*.rs` 9 子文件累计 1069 行 + mod.rs 41 行 = 1110 行,vs 拆分前 1021 行,净 +89 行(子文件顶部 `//!` 注释 + 跨文件 `super::` import + facade re-export 块)
-- `grep -rn "crate::models::" src/ | wc -l` = **20 条 callsite**,路径名零变化(`institutions/{handler,model,service,store}` × 7 / `store_shards/{shard_types,migration}` × 2 / `scope/rules` / `key-admins/signer_router` / `chain/institution_info/{handler,dto}` × 2 / `app_core/runtime_ops` / `models/{slot,mod}` 自身注释 × 2 = 16 callsite + 4 inline `crate::models::AdminRole::*` 在 `institutions/handler` 6 行 = 20),facade glob re-export 透出 `AdminRole / Store / ApiResponse / InstitutionChainStatus / MultisigChainStatus / Slot` 等全部公开类型
 
 ### 结论
 

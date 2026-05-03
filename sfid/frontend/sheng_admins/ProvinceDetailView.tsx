@@ -47,7 +47,6 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
     setSelectedCity,
     adminDetailTab,
     setAdminDetailTab,
-    replaceSuperLoading,
     operators,
     operatorsLoading,
     operatorListPage,
@@ -55,12 +54,9 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
     operatorCities,
     operatorCitiesLoading,
     setAddOperatorOpen,
-    replaceSuperForm,
-    onReplaceShengAdmin,
     onToggleOperatorStatus,
     onUpdateOperator,
     onDeleteOperator,
-    setAccountScanTarget,
   } = state;
 
   // scope 自动锁定省和市
@@ -87,10 +83,6 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
     : false;
   // ADR-008:省管理员只能编辑自己省内的 operators(SHI_ADMIN);跨省一律置灰
   const canEditOperators = scope.canWrite && auth?.role === 'SHENG_ADMIN' && isSelf;
-  // ADR-008:省管理员替换走 sheng_admin/RosterPage(三槽 add/remove backup),
-  // 这里不再展示"替换 main"操作(main 公钥硬编码 const 不可链上替换)
-  const canReplaceThisAdmin = false;
-
   // sub-tab(仅在省详情内显示)
   const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
     { key: 'operators', label: effectiveCity ? '市管理员列表' : '市列表' },
@@ -158,11 +150,6 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
         ) : selectedShengAdmin ? (
           <SuperAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
-            canReplaceThisAdmin={canReplaceThisAdmin}
-            replaceSuperLoading={replaceSuperLoading}
-            replaceSuperForm={replaceSuperForm}
-            onReplaceShengAdmin={onReplaceShengAdmin}
-            setAccountScanTarget={setAccountScanTarget}
           />
         ) : null}
       </>
@@ -196,11 +183,6 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
         ) : selectedShengAdmin ? (
           <SuperAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
-            canReplaceThisAdmin={canReplaceThisAdmin}
-            replaceSuperLoading={replaceSuperLoading}
-            replaceSuperForm={replaceSuperForm}
-            onReplaceShengAdmin={onReplaceShengAdmin}
-            setAccountScanTarget={setAccountScanTarget}
           />
         ) : null}
       </>

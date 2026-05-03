@@ -40,7 +40,7 @@ function resolveHeaderAdminName(auth: AdminAuth | null): string {
   if (!auth) return '';
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
   if (name) return name;
-  // ADR-008(2026-05-01)起 KEY_ADMIN 角色已彻底删除,只剩 SHENG_ADMIN / SHI_ADMIN。
+  // 中文注释:当前只剩 SHENG_ADMIN / SHI_ADMIN 两个管理员角色。
   if (auth.role === 'SHENG_ADMIN') return '省级管理员';
   if (auth.role === 'SHI_ADMIN') return '市级管理员';
   return '';

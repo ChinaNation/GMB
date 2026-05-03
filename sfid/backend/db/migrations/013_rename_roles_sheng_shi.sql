@@ -14,7 +14,7 @@ UPDATE admins SET role = 'SHENG_ADMIN' WHERE role = 'INSTITUTION_ADMIN';
 UPDATE admins SET role = 'SHI_ADMIN' WHERE role = 'SYSTEM_ADMIN';
 
 ALTER TABLE admins ADD CONSTRAINT admins_role_check
-    CHECK (role IN ('KEY_ADMIN', 'SHENG_ADMIN', 'SHI_ADMIN'));
+    CHECK (role IN ('SHENG_ADMIN', 'SHI_ADMIN'));
 
 -- 中文注释:super_admin_scope 表改名为 sheng_admin_scope
 -- 索引/约束会自动跟着表名改(PostgreSQL RENAME TABLE 语义)

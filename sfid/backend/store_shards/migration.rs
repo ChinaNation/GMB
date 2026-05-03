@@ -10,7 +10,7 @@
 //     档案导入、绑定流程、ShiAdmin、SFID 生成历史、奖励状态、回调任务
 //   - 全局(GlobalShard):ShengAdmin 本体、登录 challenge/session、
 //     幂等池、审计日志、链请求幂等、RSA 密钥、服务指标
-//     (ADR-008 后 KEY_ADMIN 角色废止;keyring/keyring_rotate_challenges 删)
+//     (旧签名轮换缓存已删)
 //
 // **归属不明确的字段一律保守下沉到 GlobalShard**,写锁开销可接受,
 // 等 Day 3 handler 改造时再下沉到省分片。
@@ -278,8 +278,7 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
     // ── GlobalShard ──
     let mut global = GlobalShard::default();
     global.version = 1;
-    // ADR-008 后 chain_keyring_state / keyring_rotate_challenges 已不再存在。
-    // ShengAdmin 进 global_admins(KEY_ADMIN 角色已删)
+    // 中文注释:旧签名轮换缓存已不再存在,ShengAdmin 写入 global_admins。
     for (pubkey, admin) in &store.admin_users_by_pubkey {
         if matches!(admin.role, AdminRole::ShengAdmin) {
             global.global_admins.insert(pubkey.clone(), admin.clone());

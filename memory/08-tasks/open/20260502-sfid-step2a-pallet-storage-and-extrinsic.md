@@ -3,7 +3,7 @@
 - 状态:open
 - 创建日期:2026-05-02
 - 模块:`citizenchain/runtime/otherpallet/sfid-system/`
-- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier-and-key-admin-removal.md`(Step 2 章节)
+- 关联 ADR:`memory/04-decisions/ADR-008-sheng-admin-3tier.md`(Step 2 章节)
 - 上游:Step 1 SFID 后端已落地(commit 461b78c,phase45 chain/client.rs mock 推链 4 个 endpoint 在 SFID 端就绪)
 - 阻塞下游:step2b(duoqian-manage 凭证)+ SFID phase7(mock 切真)
 
@@ -11,7 +11,6 @@
 
 把 `citizenchain/runtime/otherpallet/sfid-system/src/lib.rs` 1206 行重写,落地 ADR-008 决议:
 - storage 改 DoubleMap(Province × Slot / AdminPubkey)
-- 4 个 Pays::No extrinsic 替换 KEY_ADMIN 老 extrinsic
 - 删 `SfidMainAccount/Backup1/Backup2`、`current_sfid_verify_pubkey()`、单值 `ShengSigningPubkey`、`ProvinceBySigningPubkey`、genesis_config
 
 **spec_version 不升**(本期裸升级,留待 chain 上线后再走 setCode)。
@@ -127,7 +126,6 @@ domain 常量(`feedback_scale_domain_must_be_array.md`):必须 `[u8; N]` 数组,
 ## 验收清单
 
 - `cargo check -p sfid-system`、`cargo check` 全 runtime 全绿
-- `cargo test -p sfid-system` 新 + 老测试全绿(老测试与 KEY_ADMIN 相关的删除,新增 ≥ 12 测试覆盖 4 extrinsic + ValidateUnsigned + helper)
 - `cargo clippy -p sfid-system -- -D warnings` 无新错
 - 新测试覆盖:
   - `activate_first_come_first_serve_on_empty_main`

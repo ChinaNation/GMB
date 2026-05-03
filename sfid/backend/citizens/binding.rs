@@ -1,8 +1,8 @@
 //! 公民身份绑定/解绑 handler 集合。
 //!
 //! 含 challenge 签发、`citizen_bind` / `citizen_unbind`、链上推送
-//! (`citizen_push_chain_bind/unbind`) 以及 wuminapp 投票账户登记/查询。
-//! 链交互能力位于 `citizens::chain_binding`。
+//! (`citizen_push_chain_bind/unbind`)。链交互能力位于
+//! `citizens::chain_binding`,wuminapp 投票账户登记/查询归属 `citizens::vote`。
 
 use axum::{
     extract::State,
@@ -204,7 +204,7 @@ pub(crate) async fn citizen_bind(
                 .mr
                 .as_deref()
                 .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
-            let cert_valid = match crate::institutions::anon_cert::rsa_blind::verify_anon_cert(
+            let cert_valid = match crate::cpms::rsa_blind::verify_anon_cert(
                 &qr4.cert.prov,
                 &qr4.cert.pk,
                 &sfid_sig_bytes,
@@ -246,11 +246,8 @@ pub(crate) async fn citizen_bind(
                     )
                 }
             };
-            if !crate::sheng_admins::institutions::verify_sr25519_signature(
-                &anon_pk,
-                &archive_sign_source,
-                &archive_sig,
-            ) {
+            if !crate::cpms::verify_sr25519_signature(&anon_pk, &archive_sign_source, &archive_sig)
+            {
                 return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
             }
 
@@ -573,7 +570,11 @@ pub(crate) async fn citizen_unbind(
 }
 
 /// 验证公民绑定签名（sr25519，substrate context）。
-fn verify_citizen_bind_signature(pubkey_bytes: &[u8; 32], message: &str, signature: &[u8]) -> bool {
+pub(crate) fn verify_citizen_bind_signature(
+    pubkey_bytes: &[u8; 32],
+    message: &str,
+    signature: &[u8],
+) -> bool {
     use schnorrkel::{
         signing_context, PublicKey as Sr25519PublicKey, Signature as Sr25519Signature,
     };
@@ -590,7 +591,7 @@ fn verify_citizen_bind_signature(pubkey_bytes: &[u8; 32], message: &str, signatu
 }
 
 /// 从 SS58 地址解出 hex 格式公钥。
-fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
+pub(crate) fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
     let decoded = bs58::decode(address.trim()).into_vec().ok()?;
     // SS58 prefix < 64 → 1 字节前缀；prefix >= 64 → 2 字节前缀
     let prefix_len = if decoded.first().copied().unwrap_or(0) < 64 {
@@ -606,7 +607,7 @@ fn ss58_to_pubkey_hex(address: &str) -> Option<String> {
 }
 
 /// 0x hex 公钥 → SS58 地址（prefix=2027）。
-fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
+pub(crate) fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
     let pubkey_bytes = hex::decode(pubkey_hex.trim_start_matches("0x")).ok()?;
     if pubkey_bytes.len() != 32 {
         return None;
@@ -629,175 +630,6 @@ fn pubkey_hex_to_ss58(pubkey_hex: &str) -> Option<String> {
     hasher.finalize_variable(&mut hash).ok()?;
     payload.extend_from_slice(&hash[..2]);
     Some(bs58::encode(payload).into_string())
-}
-
-// ── wuminapp 投票账户接口 ──────────────────────────────────────
-
-/// wuminapp 推送投票账户（公共接口，无 admin 认证）。
-///
-/// 用户在 wuminapp 选择钱包后，签名证明私钥所有权，推送 pubkey 到 SFID。
-pub(crate) async fn app_vote_account_register(
-    State(state): State<AppState>,
-    Json(input): Json<VoteAccountRegisterInput>,
-) -> impl IntoResponse {
-    if input.address.trim().is_empty()
-        || input.pubkey.trim().is_empty()
-        || input.signature.trim().is_empty()
-        || input.sign_message.trim().is_empty()
-    {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "address, pubkey, signature, sign_message are required",
-        );
-    }
-
-    // 验证 SS58 地址与 pubkey 一致
-    let derived_pubkey = match ss58_to_pubkey_hex(input.address.trim()) {
-        Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 address"),
-    };
-    let input_pubkey = input.pubkey.trim().to_lowercase();
-    if derived_pubkey.to_lowercase() != input_pubkey {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "address and pubkey mismatch");
-    }
-
-    // 验证 sign_message 格式：CITIZEN_VOTE_REGISTER|{address}|{timestamp}
-    let parts: Vec<&str> = input.sign_message.trim().split('|').collect();
-    if parts.len() != 3 || parts[0] != "CITIZEN_VOTE_REGISTER" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "invalid sign_message format");
-    }
-    if parts[1] != input.address.trim() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "sign_message address mismatch",
-        );
-    }
-    let timestamp: i64 = match parts[2].parse() {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "invalid timestamp in sign_message",
-            )
-        }
-    };
-    let now = Utc::now().timestamp();
-    if (now - timestamp).abs() > 300 {
-        return api_error(
-            StatusCode::UNAUTHORIZED,
-            1007,
-            "sign_message expired (>5 min)",
-        );
-    }
-
-    // sr25519 验签
-    let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&input_pubkey) {
-        Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid pubkey format"),
-    };
-    let sig_bytes = match hex::decode(input.signature.trim().trim_start_matches("0x")) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
-    };
-    if !verify_citizen_bind_signature(&pubkey_bytes, input.sign_message.trim(), &sig_bytes) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
-    }
-
-    // 检查是否已存在
-    let mut store = match store_write_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    if store.citizen_id_by_pubkey.contains_key(&input_pubkey) {
-        // 幂等：已存在直接返回成功
-        drop(store);
-        return Json(ApiResponse {
-            code: 0,
-            message: "ok".to_string(),
-            data: serde_json::json!({}),
-        })
-        .into_response();
-    }
-
-    // 创建新记录（只有 pubkey，状态 Pending）
-    let cid = store.next_citizen_id;
-    store.next_citizen_id += 1;
-    let account_address = pubkey_hex_to_ss58(&input_pubkey);
-    let record = CitizenRecord {
-        id: cid,
-        account_pubkey: Some(input_pubkey.clone()),
-        account_address,
-        archive_no: None,
-        sfid_code: None,
-        sfid_signature: None,
-        province_code: None,
-        chain_confirmed: false,
-        bound_at: None,
-        bound_by: None,
-        created_at: Utc::now(),
-    };
-    store.citizen_records.insert(cid, record);
-    store.citizen_id_by_pubkey.insert(input_pubkey, cid);
-    drop(store);
-
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: serde_json::json!({}),
-    })
-    .into_response()
-}
-
-/// wuminapp 查询投票账户绑定状态（公共接口）。
-pub(crate) async fn app_vote_account_status(
-    State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<VoteAccountStatusQuery>,
-) -> impl IntoResponse {
-    if params.address.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "address is required");
-    }
-    let pubkey_hex = match ss58_to_pubkey_hex(params.address.trim()) {
-        Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 address"),
-    };
-
-    let store = match store_read_or_500(&state) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    let result = match store
-        .citizen_id_by_pubkey
-        .get(&pubkey_hex)
-        .and_then(|cid| store.citizen_records.get(cid))
-    {
-        Some(record) => {
-            let status_str = match record.status() {
-                CitizenBindStatus::Bound => "bound",
-                CitizenBindStatus::Pending | CitizenBindStatus::Bindable => "pending",
-                CitizenBindStatus::Unlinked => "unset",
-            };
-            VoteAccountStatusOutput {
-                status: status_str.to_string(),
-                address: record.account_address.clone(),
-                sfid_code: record.sfid_code.clone(),
-            }
-        }
-        None => VoteAccountStatusOutput {
-            status: "unset".to_string(),
-            address: None,
-            sfid_code: None,
-        },
-    };
-    drop(store);
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: result,
-    })
-    .into_response()
 }
 
 // ── 管理员推链接口 ──────────────────────────────────────

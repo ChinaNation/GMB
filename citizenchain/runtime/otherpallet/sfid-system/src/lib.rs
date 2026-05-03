@@ -7,7 +7,7 @@
 //! - 维护按省 + admin 二维独立的省级签名公钥(`ShengSigningPubkey[Province][AdminPubkey]`)。
 //!
 //! 架构边界(ADR-008):
-//! - **没有 KEY_ADMIN**:链上 0 prior knowledge of SFID,初始 storage 全空。
+//! - 链上 0 prior knowledge of SFID,初始 storage 全空。
 //! - **首激活 first-come-first-serve**:任意省 admin 公钥首次调 `activate_sheng_signing_pubkey`
 //!   被记录到 `ShengAdmins[Province][Main]`,后续 backup 由 Main 签名授权。
 //! - **每省 3 把独立签名密钥**:Main / Backup1 / Backup2 各自一把,业务凭证签发互不共享。

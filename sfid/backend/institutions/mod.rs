@@ -8,17 +8,17 @@
 //!
 //! ## 子模块
 //!
-//! - [`model`]    — 结构体、DTO
-//! - [`store`]    — cache entry 读写层
-//! - [`service`]  — 业务校验、唯一性、分类
-//! - [`handler`]  — HTTP handler
+//! - [`model`]              — 机构、账户、资料库结构体与 DTO
+//! - [`store`]              — cache entry 读写层
+//! - [`service`]            — 机构本地业务校验、唯一性、分类
+//! - [`handler`]            — 机构本地 HTTP handler
+//! - [`chain_duoqian_info`] — 机构信息提供给区块链/钱包查询的入口
 //!
 //! 铁律见 `feedback_institutions_two_layer.md`。
 
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-pub mod anon_cert;
 /// 中文注释:机构模块与区块链/钱包交互的唯一入口,文件名按 `chain_` 规则固定。
 pub mod chain_duoqian_info;
 pub mod derive;
@@ -30,7 +30,8 @@ pub mod store;
 pub use model::{
     account_key_from_string, account_key_to_string, AccountKey, ChainSyncAccountInput,
     ChainSyncInput, ChainSyncOutput, CreateAccountInput, CreateAccountOutput,
-    CreateInstitutionInput, CreateInstitutionOutput, InstitutionDetailOutput, InstitutionDocument,
-    InstitutionListRow, MultisigAccount, MultisigInstitution, ParentInstitutionRow,
-    UpdateInstitutionInput, VALID_DOC_TYPES,
+    CreateInstitutionInput, CreateInstitutionOutput, InstitutionChainStatus,
+    InstitutionDetailOutput, InstitutionDocument, InstitutionListRow, MultisigAccount,
+    MultisigChainStatus, MultisigInstitution, ParentInstitutionRow, UpdateInstitutionInput,
+    VALID_DOC_TYPES,
 };

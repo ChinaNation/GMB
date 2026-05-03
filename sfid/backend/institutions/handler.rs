@@ -40,6 +40,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use crate::app_core::runtime_ops::append_audit_log;
+use crate::crypto::pubkey::normalize_admin_pubkey;
 use crate::institutions::model::{
     account_key_to_string, CreateAccountInput, CreateAccountOutput, CreateInstitutionInput,
     CreateInstitutionOutput, InstitutionDetailOutput, InstitutionDocument, InstitutionListRow,
@@ -53,8 +54,9 @@ use crate::institutions::service::{
     validate_institution_name, validate_sub_type_with_p1, ReconcileReport, ServiceError,
 };
 use crate::institutions::store;
+use crate::institutions::{InstitutionChainStatus, MultisigChainStatus};
 use crate::login::require_admin_any;
-use crate::models::{ApiResponse, InstitutionChainStatus, MultisigChainStatus};
+use crate::models::ApiResponse;
 use crate::scope::{filter_by_scope, get_visible_scope};
 use crate::sfid::province::{province_name_by_code, PROVINCES};
 use crate::sfid::{generate_sfid_code, validate_sfid_id_format, GenerateSfidInput};
@@ -113,7 +115,7 @@ fn resolve_province_from_sfid_id(sfid_id: &str) -> Option<String> {
 /// 反查 `created_by` pubkey → (管理员姓名, 角色枚举字符串)。
 /// 未命中两者均为 `None`(前端显示"未知")。
 fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Option<String>) {
-    let norm = match crate::scope::pubkey::normalize_admin_pubkey(created_by) {
+    let norm = match normalize_admin_pubkey(created_by) {
         Some(v) => v,
         None => return (None, None),
     };
@@ -125,12 +127,11 @@ fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Op
         }
     };
     for user in store.admin_users_by_pubkey.values() {
-        let Some(user_norm) = crate::scope::pubkey::normalize_admin_pubkey(&user.admin_pubkey)
-        else {
+        let Some(user_norm) = normalize_admin_pubkey(&user.admin_pubkey) else {
             continue;
         };
         if user_norm == norm {
-            // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,只剩两角色。
+            // 中文注释:当前只剩 ShengAdmin / ShiAdmin 两角色。
             let role_str = match user.role {
                 crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
                 crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
@@ -954,7 +955,7 @@ pub(crate) async fn list_institutions(
     let scope = get_visible_scope(&ctx);
 
     // Phase 2 Day 3 Round 2:从 sharded_store 遍历分片收集机构列表
-    // scope 确定需要扫描哪些省:ShengAdmin/ShiAdmin 只看锁定省(ADR-008 后无 KeyAdmin)
+    // scope 确定需要扫描哪些省:ShengAdmin/ShiAdmin 只看锁定省。
     let target_provinces: Vec<String> = if let Some(ref locked) = scope.locked_province {
         vec![locked.clone()]
     } else {
@@ -964,14 +965,14 @@ pub(crate) async fn list_institutions(
     // 预先从全局 store 构建 admin pubkey → (name, role_str) 反查表
     // 用于 InstitutionListRow.created_by_name / created_by_role 填充
     // 归一化 key:去 0x 前缀 + 转小写,匹配 created_by 的格式
-    // ADR-008 Phase 23e:KEY_ADMIN 整角色废止,只剩两角色。
+    // 中文注释:当前只剩 ShengAdmin / ShiAdmin 两角色。
     let admin_lookup: std::collections::HashMap<String, (Option<String>, &'static str)> =
         match state.store.read() {
             Ok(store) => store
                 .admin_users_by_pubkey
                 .values()
                 .filter_map(|u| {
-                    let key = crate::scope::pubkey::normalize_admin_pubkey(&u.admin_pubkey)?;
+                    let key = normalize_admin_pubkey(&u.admin_pubkey)?;
                     let role_str: &'static str = match u.role {
                         crate::models::AdminRole::ShengAdmin => "SHENG_ADMIN",
                         crate::models::AdminRole::ShiAdmin => "SHI_ADMIN",
@@ -1103,7 +1104,7 @@ pub(crate) async fn list_institutions(
     for row in rows.iter_mut() {
         let raw_created_by = row.created_by_role.take();
         let Some(raw) = raw_created_by else { continue };
-        let Some(norm) = crate::scope::pubkey::normalize_admin_pubkey(&raw) else {
+        let Some(norm) = normalize_admin_pubkey(&raw) else {
             continue;
         };
         if let Some((name_opt, role)) = admin_lookup.get(&norm) {
@@ -1342,9 +1343,9 @@ pub(crate) async fn list_accounts(
     .into_response()
 }
 
-// ─── 5b/扫码支付/清算行候选搜索 已搬 institutions/chain_duoqian_info* ─────────
+// ─── 5b/扫码支付/清算行候选搜索 已搬 institutions/chain_duoqian_info.rs ────────
 //
-// 5 个 endpoint 全部移到 institutions/chain_duoqian_info_handler.rs:
+// 5 个 endpoint 全部整合到 institutions/chain_duoqian_info.rs:
 //   - app_search_institutions / app_get_institution / app_list_accounts
 //   - app_search_clearing_banks / app_search_eligible_clearing_banks
 //
@@ -1493,8 +1494,8 @@ pub(crate) struct ReconcilePublicSecurityQuery {
 ///
 /// 中文注释:按 sfid 工具的权威市清单对账该省的公安局机构(增/删/改名)。
 /// 进入公安局省详情页前调用,确保数据跟市清单同步。
-/// ADR-008 Phase 23e:KEY_ADMIN 整角色废止,scope 校验改为
-/// "ShengAdmin/ShiAdmin 只能对自己省对账";43 省全量对账无管理员可触发。
+/// scope 校验规则:"ShengAdmin/ShiAdmin 只能对自己省对账";
+/// 43 省全量对账无管理员可触发。
 pub(crate) async fn reconcile_public_security(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1535,7 +1536,7 @@ pub(crate) async fn reconcile_public_security(
             reports.push(report);
         }
         None => {
-            // ADR-008 后无 KEY_ADMIN,scope.provinces 必非空(否则无管理员有此权限);
+            // 中文注释:scope.provinces 必非空(否则无管理员有此权限);
             // 兼容路径保留全国 fallback,但实际触发 ShengAdmin → 1 省、ShiAdmin → 1 省。
             let target_provinces: Vec<String> = if scope.provinces.is_empty() {
                 crate::sfid::province::PROVINCES
