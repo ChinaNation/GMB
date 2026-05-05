@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
@@ -129,6 +130,8 @@ class PendingVoteStore {
     OnchainRpc onchainRpc,
   ) async {
     final pending = await getPending(proposalType, proposalId);
+    debugPrint(
+        '[PendingVote.confirmAll] proposalId=$proposalId pending.len=${pending.length}');
     final stillPending = <PendingVoteRecord>[];
 
     for (final record in pending) {
@@ -139,14 +142,18 @@ class PendingVoteStore {
           txHash: record.txHash,
           createdAt: record.createdAt,
         );
+        debugPrint(
+            '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} → $result');
         if (result == TxConfirmResult.pending) {
           stillPending.add(record);
         } else {
           // confirmed 或 lost，清除记录
           await remove(proposalType, proposalId, record.walletPubkey);
         }
-      } catch (_) {
+      } catch (e) {
         // 节点不可达时保留，下次重试
+        debugPrint(
+            '[PendingVote.confirmAll] checkTxStatus 异常,保留记录 ${record.txHash}: $e');
         stillPending.add(record);
       }
     }

@@ -14,7 +14,10 @@
 // 沿用现有 [DuoqianManageDetailPage] 的 QrSigner 签名 + InternalVoteService 投票流程,
 // 不引入新的签名逻辑。
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
 import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
@@ -71,6 +74,8 @@ class PersonalAdminListPage extends StatefulWidget {
 }
 
 class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
+  static final _keyring = Keyring();
+
   final TransferProposalService _proposalService = TransferProposalService();
   final PersonalPendingCreateLookup _lookup = PersonalPendingCreateLookup();
 
@@ -360,15 +365,25 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
     }
   }
 
+  /// 把 32 字节 pubkey hex 编码为 GMB SS58 地址(prefix=2027),并做两端截断
+  /// 以适配 monospace 11 字号的 ListTile title 行宽。
+  ///
+  /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原始 hex,避免崩溃。
   String _pubkeyToSS58(String pubkeyHex) {
-    // 与 duoqian_account_info_page 一致的转换;此处简单化:仅展示前后 6 位 + 中间省略号。
-    // 复用项目内 polkadart_keyring 转换需要 alg + ss58 prefix,详情页已展示完整 SS58,
-    // 这里精简:展示 hex 前 8/后 8(monospace 11 字号)。
-    final lower = pubkeyHex.startsWith('0x')
-        ? pubkeyHex.substring(2).toLowerCase()
-        : pubkeyHex.toLowerCase();
-    if (lower.length <= 16) return lower;
-    return '${lower.substring(0, 8)}…${lower.substring(lower.length - 8)}';
+    try {
+      final hex = pubkeyHex.startsWith('0x')
+          ? pubkeyHex.substring(2)
+          : pubkeyHex;
+      final bytes = Uint8List(hex.length ~/ 2);
+      for (var i = 0; i < bytes.length; i++) {
+        bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+      }
+      final ss58 = _keyring.encodeAddress(bytes, 2027);
+      if (ss58.length <= 24) return ss58;
+      return '${ss58.substring(0, 12)}…${ss58.substring(ss58.length - 8)}';
+    } catch (_) {
+      return pubkeyHex;
+    }
   }
 }
 

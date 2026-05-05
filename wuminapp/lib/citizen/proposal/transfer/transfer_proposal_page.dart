@@ -196,8 +196,22 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     setState(() => _submitting = true);
 
     try {
+      // 多签管理员的转账提案签名(2026-05-03 整改):
+      // 多签管理员(个人 + 机构)支持冷热钱包双路径,与 personal_duoqian_create_page 对齐;
+      // 治理机构(NRC/PRC/PRB)和区块链软件端管理员才只支持冷钱包(QR)。
+      // 这里多签提案 → 热钱包优先 → 冷钱包 fallback 走 QR。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
-        // 管理员操作统一通过 QR 码签名（wumin 冷钱包）
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(
+              wallet.walletIndex, payload);
+        }
+        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
         // 千分位格式化，与 PayloadDecoder._fenToYuan 对齐
@@ -215,17 +229,13 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'propose_transfer',
-            summary:
-                '${OrgType.label(widget.institution.orgType)} 提案转账 $amountFormatted GMB 给 $beneficiary',
+            summary: '提案转账 $amountFormatted GMB 给 $beneficiary',
             fields: [
-              // propose_transfer 链端 fields 按 Registry = (org, beneficiary,
-              // amount_yuan, remark)。OrgType.label 输出与 wumin decoder
-              // _orgName 字面一致;amount_yuan 与 _fenToYuan 同为千分位
-              // "X.XX GMB"。
-              SignDisplayField(
-                  key: 'org',
-                  label: '付款机构',
-                  value: OrgType.label(widget.institution.orgType)),
+              // propose_transfer 链端 fields 按 Registry = (beneficiary,
+              // amount_yuan, remark)。原 `org` 字段已删除(2026-05-03):
+              // 个人多签和机构多签 orgType 都是 OrgType.duoqian,
+              // OrgType.label 输出"注册多签机构"对个人多签是误导,直接删字段。
+              // wumin 冷钱包 decoder 也同步移除 org 字段读取。
               SignDisplayField(
                   key: 'beneficiary', label: '收款账户', value: beneficiary),
               SignDisplayField(
@@ -683,21 +693,10 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
             ),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: widget.badgeColor.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            OrgType.label(widget.institution.orgType),
-            style: TextStyle(
-              fontSize: 11,
-              color: widget.badgeColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+        // 原"注册多签机构"badge 已删除(2026-05-03):
+        // 个人多签和机构多签 orgType 都是 OrgType.duoqian → label 输出"注册多签机构",
+        // 但用户进入页面是个人多签时显示这个标签具有误导性。
+        // 直接不显示标签,只显示多签账户名(已足够标识)。
       ],
     );
   }
