@@ -5,6 +5,10 @@
 //   并同步到 Isar,保证其他设备发起的提案也被记录。
 // - 历史提案(REJECTED / EXECUTED / EXECUTION_FAILED):链上 90 天后清理,
 //   wuminapp 通过 Isar 永久保留。两者合并以 Isar 为准。
+//
+// **样式**(2026-05-03 bug 3 整改):每条提案是**独立方块 Card**(对齐治理机构详情页
+// `_buildProposalCard:520`),带 statusColor 边框 + 36×36 状态图标 + 标题/子标题 +
+// 右侧状态徽章。Card 之间 8px 间距。
 
 import 'package:flutter/material.dart';
 
@@ -85,63 +89,75 @@ class _PersonalProposalListSectionState
     final activeItems = _items.where((v) => v.isActive).toList();
     final historyItems = _items.where((v) => v.isFinal).toList();
 
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppTheme.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(
-                '该多签提案',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.primaryDark,
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else if (activeItems.isEmpty && historyItems.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  '暂无提案',
-                  style: TextStyle(color: AppTheme.textTertiary),
-                ),
-              )
-            else ...[
-              if (activeItems.isNotEmpty) ...[
-                _buildSubheader('进行中'),
-                ...activeItems.map(_buildProposalTile),
-              ],
-              if (historyItems.isNotEmpty) ...[
-                if (activeItems.isNotEmpty) const Divider(height: 1),
-                _buildSubheader('历史'),
-                ...historyItems.map(_buildProposalTile),
-              ],
-            ],
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '提案列表',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.primaryDark,
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        if (_loading)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceMuted,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          )
+        else if (activeItems.isEmpty && historyItems.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceMuted,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(color: AppTheme.border),
+            ),
+            child: const Column(
+              children: [
+                Icon(Icons.ballot_outlined,
+                    size: 40, color: AppTheme.textTertiary),
+                SizedBox(height: 8),
+                Text(
+                  '暂无提案',
+                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (activeItems.isNotEmpty) ...[
+            _buildSubheader('进行中'),
+            ...activeItems.map((v) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildProposalCard(v),
+                )),
+          ],
+          if (historyItems.isNotEmpty) ...[
+            _buildSubheader('历史'),
+            ...historyItems.map((v) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildProposalCard(v),
+                )),
+          ],
+        ],
+      ],
     );
   }
 
   Widget _buildSubheader(String label) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         label,
         style: const TextStyle(
@@ -153,34 +169,77 @@ class _PersonalProposalListSectionState
     );
   }
 
-  Widget _buildProposalTile(PersonalDuoqianProposalView view) {
-    final actionLabel = _actionLabel(view.action);
-    final statusLabel = _statusLabel(view.status);
+  /// 提案方块卡片(对齐治理机构详情页 `institution_detail_page._buildProposalCard:520`):
+  /// Card with statusColor border(alpha 0.2) + 36×36 statusColor icon container +
+  /// 标题/子标题 + 右侧状态徽章。
+  Widget _buildProposalCard(PersonalDuoqianProposalView view) {
     final statusColor = _statusColor(view.status);
-
-    return ListTile(
-      dense: true,
-      leading: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: statusColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
+      ),
+      child: InkWell(
+        onTap: () => _openProposal(view),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(_actionIcon(view.action),
+                    size: 18, color: statusColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_actionLabel(view.action)} · #${view.proposalId}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '赞成 ${view.yesVotes} · 反对 ${view.noVotes}',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppTheme.textTertiary),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _statusLabel(view.status),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Icon(_actionIcon(view.action), size: 16, color: statusColor),
       ),
-      title: Text(
-        '$actionLabel · #${view.proposalId}',
-        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
-        '$statusLabel · 赞成 ${view.yesVotes} / 反对 ${view.noVotes}',
-        style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
-      ),
-      trailing: const Icon(Icons.chevron_right,
-          size: 18, color: AppTheme.textTertiary),
-      onTap: () => _openProposal(view),
     );
   }
 

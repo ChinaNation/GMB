@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -81,6 +82,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   }
 
   Future<void> _load() async {
+    debugPrint('[VoteDetail._load] 开始 proposalId=${widget.proposalId}');
     setState(() {
       _loading = true;
       _error = null;
@@ -89,7 +91,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     try {
       final rpc = ChainRpc();
 
-      // 并行加载管理员列表、提案状态、投票计数
+      // step1:并行加载管理员列表、提案状态、投票计数
+      debugPrint(
+          '[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally...');
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.shenfenId),
         _proposalService.fetchProposalStatus(widget.proposalId),
@@ -99,10 +103,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       final admins = results[0] as List<String>;
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
+      debugPrint(
+          '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no}');
 
-      // 加载提案业务数据（从 ProposalData 解码）
+      // step2:加载提案业务数据（从 ProposalData 解码）
+      debugPrint('[VoteDetail._load] step2: fetchProposalData');
       final key = _buildProposalDataStorageKey(widget.proposalId);
       final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
+      debugPrint(
+          '[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
       CreateDuoqianProposalInfo? createInfo;
       CloseDuoqianProposalInfo? closeInfo;
       if (raw != null && raw.isNotEmpty) {
@@ -115,7 +124,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         }
       }
 
-      // 逐个查询每位管理员的投票记录
+      // step3:逐个查询每位管理员的投票记录
+      debugPrint(
+          '[VoteDetail._load] step3: 逐 admin 查投票 (${admins.length} 个)');
       final votes = <String, bool?>{};
       final voteFutures = admins.map((pubkey) async {
         final vote =
@@ -126,14 +137,18 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       for (final entry in voteResults) {
         votes[entry.key] = entry.value;
       }
+      debugPrint('[VoteDetail._load] step3 完成');
 
-      // 检查待确认投票
+      // step4:检查待确认投票
+      debugPrint('[VoteDetail._load] step4: PendingVoteStore.confirmAll');
       final pendingRecords = await PendingVoteStore.instance.confirmAll(
         'duoqian_manage',
         widget.proposalId,
         OnchainRpc(),
       );
       final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
+      debugPrint(
+          '[VoteDetail._load] step4 完成 stillPending.len=${pendingRecords.length}');
 
       // 筛选可投票钱包
       final votable = <WalletProfile>[];
@@ -147,7 +162,11 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         }
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        debugPrint('[VoteDetail._load] !mounted 提前返回');
+        return;
+      }
+      debugPrint('[VoteDetail._load] step5: setState');
       setState(() {
         _admins = admins;
         _status = status;
@@ -161,7 +180,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         _closeInfo = closeInfo;
         _loading = false;
       });
-    } catch (e) {
+      debugPrint('[VoteDetail._load] 结束');
+    } catch (e, st) {
+      debugPrint('[VoteDetail._load] catch 异常: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
@@ -216,8 +237,15 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   }
 
   Future<void> _submitVote(bool approve) async {
+    debugPrint(
+        '[VoteDetail] _submitVote 开始 approve=$approve proposalId=${widget.proposalId}');
     final wallet = _selectedVoteWallet;
-    if (wallet == null) return;
+    if (wallet == null) {
+      debugPrint('[VoteDetail] _submitVote 无可投钱包,直接 return');
+      return;
+    }
+    debugPrint(
+        '[VoteDetail] 选中钱包 ${wallet.address} pubkey=${wallet.pubkeyHex} isHot=${wallet.isHotWallet}');
 
     setState(() => _submitting = true);
 
@@ -227,8 +255,10 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
       WalletManager? hotWalletManager;
       if (wallet.isHotWallet) {
+        debugPrint('[VoteDetail] 热钱包 authenticate 开始');
         hotWalletManager = WalletManager();
         await hotWalletManager.authenticateForSigning();
+        debugPrint('[VoteDetail] 热钱包 authenticate 完成');
       }
 
       Future<Uint8List> signCallback(Uint8List payload) async {
@@ -280,6 +310,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
       // Phase 3: 创建/关闭多签的投票都走 VotingEngine::internal_vote(9.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
+      debugPrint('[VoteDetail] 调 InternalVoteService.submit');
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
         approve: approve,
@@ -287,10 +318,13 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
       );
+      debugPrint(
+          '[VoteDetail] submit 返回 txHash=${result.txHash} nonce=${result.usedNonce}');
 
       // 持久化待确认投票记录
       var pubkey = wallet.pubkeyHex.toLowerCase();
       if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+      debugPrint('[VoteDetail] 写 PendingVoteStore...');
       await PendingVoteStore.instance.save(PendingVoteRecord(
         proposalType: 'duoqian_manage',
         proposalId: widget.proposalId,
@@ -300,6 +334,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         usedNonce: result.usedNonce,
         createdAt: DateTime.now(),
       ));
+      debugPrint('[VoteDetail] PendingVoteStore.save 完成');
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -310,8 +345,14 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       );
 
       _adminService.clearCache(widget.institution.shenfenId);
-      await _load();
-    } catch (e) {
+      // 中文注释:不再 await _load(),让 finally 立即把 _submitting 改回 false,
+      // UI 的"投票中"转圈立即停;详情页数据后台异步刷新。即使 _load 内某个
+      // smoldot RPC 卡住,也不会让按钮一直转 — 这是排查 GMB 链 6 分钟出块期
+      // 偶发慢/卡的兜底。
+      debugPrint('[VoteDetail] fire-and-forget 调 _load 后台刷新');
+      unawaited(_load());
+    } catch (e, st) {
+      debugPrint('[VoteDetail] _submitVote catch 异常: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -320,6 +361,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         ),
       );
     } finally {
+      debugPrint('[VoteDetail] finally setState(_submitting=false)');
       if (mounted) setState(() => _submitting = false);
     }
   }

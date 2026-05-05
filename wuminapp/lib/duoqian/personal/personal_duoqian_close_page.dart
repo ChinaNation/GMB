@@ -1,13 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
 import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
-    show QrScanMode, QrScanPage;
+    show QrScanMode, QrScanPage, QrScanTransferResult;
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -131,7 +132,21 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
       final wallet = _selectedWallet;
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
+      // 热钱包:先认证(生物/密码),后续 signCallback 用本地 seed 签名;
+      // 冷钱包:走 QR 签名(扫码 → wumin 设备签 → 扫回签名)。
+      // 对齐 [duoqian_manage_detail_page._submitVote] 同款分流。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(
+              wallet.walletIndex, payload);
+        }
+        // 冷钱包路径
         final qrSigner = QrSigner();
         final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
@@ -345,18 +360,30 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                icon: const Icon(Icons.qr_code_scanner,
-                    color: AppTheme.primaryDark),
+                tooltip: '扫码填入受益人地址',
+                icon: SvgPicture.asset(
+                  'assets/icons/scan-line.svg',
+                  width: 22,
+                  height: 22,
+                ),
                 onPressed: () async {
-                  final result = await Navigator.push<String>(
+                  // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
+                  // 而非 String;之前用 Navigator.push<String> 类型不匹配,Flutter
+                  // 框架 cast 失败 → push 的 future 拿到 null → 受益人栏不会被填。
+                  // 改抄 transfer_proposal_page._scanToAddress 同款写法。
+                  final result = await Navigator.push<QrScanTransferResult>(
                     context,
                     MaterialPageRoute(
-                        builder: (_) =>
-                            const QrScanPage(mode: QrScanMode.transfer)),
+                      builder: (_) => const QrScanPage(
+                        mode: QrScanMode.transfer,
+                        customTitle: '扫描收款码',
+                      ),
+                    ),
                   );
-                  if (result != null && mounted) {
-                    _beneficiaryController.text = result.trim();
-                  }
+                  if (result == null || !mounted) return;
+                  setState(() {
+                    _beneficiaryController.text = result.toAddress;
+                  });
                 },
               ),
             ],

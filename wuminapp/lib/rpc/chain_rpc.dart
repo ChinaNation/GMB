@@ -125,22 +125,144 @@ class ChainRpc {
   RuntimeMetadata? _cachedMetadata;
   String? _cachedCurrentSfidMainPubkeyHex;
 
-  /// 提交已签名的 extrinsic，返回交易哈希（32 字节）。
+  /// 提交已签名的 extrinsic,返回交易哈希(32 字节)。
   ///
-  /// 瞬断重试已由 `SmoldotClientManager._withRetry` 统一处理。
+  /// **设计**(2026-05-03 改为 submit-only + 后台监听):
+  /// - 主流程仅调原生 `submitExtrinsicHex`(底层走 `author_submitExtrinsic`),
+  ///   拿到 txHash 立即返回,UI 永不卡住。
+  /// - 后台 fire-and-forget 启一条 `author_submitAndWatchExtrinsic` 订阅,
+  ///   8 秒内观察到 invalid/dropped/usurped/future 仅打印日志,不再回灌 UI。
+  ///
+  /// 历史:曾尝试在主流程内 watch + 1 秒 timeout(参见 git 2026-05-03 早些时候的提交),
+  /// 但 smoldot 通过 native binding 转发 broadcast stream 的首条 event 存在调度延迟,
+  /// 在 GMB 链 6 分钟出块的节奏下经常 1 秒内拿不到 txHash 导致 `completeError` 抛出,
+  /// UI 反而误判失败并继续转圈。最终回到 submit-only,放弃在客户端拦截 mempool reject,
+  /// reject 排查改走 polkadot.js apps + 终端日志。
   Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
     final hex = '0x${_hexEncode(encoded)}';
+    // 完整 extrinsic hex 用 debugPrint 输出,便于直接复制到 polkadot.js apps
+    // "Tools → Decode" 验证编码(call/signer/nonce/era 等);旧版仅前 80 字符,
+    // 排查"提交看似成功但链上没出块"时不够用。
     debugPrint(
-        '[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes), hex 前 80 字符: ${hex.substring(0, hex.length.clamp(0, 82))}...');
-    // 诊断：提交前检查 peer 数量
-    final peerCount = await SmoldotClientManager.instance.getPeerCount();
-    debugPrint('[ChainRpc.submitExtrinsic] 当前 peer 数量: $peerCount');
-    final result = await SmoldotClientManager.instance.submitExtrinsicHex(hex);
-    debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回: $result');
-    if (result == null || result.isEmpty) {
-      throw StateError('smoldot 轻节点未返回交易哈希');
+        '[ChainRpc.submitExtrinsic] 提交 extrinsic (${encoded.length} bytes)');
+    debugPrint('[ChainRpc.submitExtrinsic] full hex: $hex');
+
+    final txHashHex =
+        await SmoldotClientManager.instance.submitExtrinsicHex(hex);
+    if (txHashHex == null || txHashHex.isEmpty) {
+      throw StateError('smoldot 未返回交易哈希');
     }
-    return _hexDecode(_stripHexPrefix(result));
+    debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
+
+    unawaited(_watchTxRejectInBackground(hex, txHashHex));
+    return _hexDecode(_stripHexPrefix(txHashHex));
+  }
+
+  /// 后台观察一条交易的 mempool 状态,**所有状态都打日志**,被拒时立即结束。
+  ///
+  /// 60 秒内未收到任何状态视为 timeout(smoldot 转发失败 / 全节点完全不响应),
+  /// 也打日志退出 — 这是排查"提交成功但链上没出块"的核心诊断输入。
+  Future<void> _watchTxRejectInBackground(String hex, String txHashHex) async {
+    StreamSubscription? sub;
+    Timer? bailTimer;
+    try {
+      final stream = SmoldotClientManager.instance
+          .subscribe('author_submitAndWatchExtrinsic', [hex]);
+      final done = Completer<void>();
+      bailTimer = Timer(const Duration(seconds: 60), () {
+        if (!done.isCompleted) {
+          debugPrint(
+              '[ChainRpc.bgWatch] $txHashHex 60s timeout 仍未收到终态,可能 smoldot 转发失败或全节点静默 drop');
+          done.complete();
+        }
+      });
+      sub = stream.listen(
+        (event) {
+          try {
+            final dynamic raw = (event as dynamic).result;
+            final cls = _classifyTxStatus(raw);
+            debugPrint(
+                '[ChainRpc.bgWatch] $txHashHex status=$raw classify=$cls');
+            if (cls == _TxResult.failure) {
+              debugPrint(
+                  '[ChainRpc.bgWatch] $txHashHex 被拒绝: ${_describeTxStatus(raw)}');
+              if (!done.isCompleted) done.complete();
+            }
+          } catch (e) {
+            debugPrint('[ChainRpc.bgWatch] event 解析异常: $e');
+          }
+        },
+        onError: (Object e) {
+          debugPrint('[ChainRpc.bgWatch] $txHashHex stream error: $e');
+          if (!done.isCompleted) done.complete();
+        },
+      );
+      await done.future;
+    } catch (e) {
+      debugPrint('[ChainRpc.bgWatch] 整体异常: $e');
+    } finally {
+      bailTimer?.cancel();
+      // sub.cancel() 不能 await(smoldot native binding 在持续推送 events 期间
+      // 可能阻塞调用线程),fire-and-forget 让本协程立即结束。
+      if (sub != null) unawaited(sub.cancel());
+    }
+  }
+
+  /// 把 TransactionStatus(JSON 形式)归三类:成功 / 失败 / 仍在等待。
+  ///
+  /// 仅 [_watchTxRejectInBackground] 使用:主流程已不再依赖归类,只关心 failure 一种。
+  _TxResult _classifyTxStatus(dynamic status) {
+    if (status is String) {
+      switch (status) {
+        case 'ready':
+        case 'broadcast':
+          return _TxResult.success;
+        case 'future':
+        case 'invalid':
+        case 'dropped':
+        case 'finalityTimeout':
+          return _TxResult.failure;
+        default:
+          return _TxResult.pending;
+      }
+    }
+    if (status is Map) {
+      if (status.containsKey('inBlock') ||
+          status.containsKey('finalized') ||
+          status.containsKey('broadcast')) {
+        return _TxResult.success;
+      }
+      if (status.containsKey('usurped') || status.containsKey('retracted')) {
+        return _TxResult.failure;
+      }
+    }
+    return _TxResult.pending;
+  }
+
+  /// 把 TransactionStatus 转成可读 reject 原因(仅后台日志使用)。
+  String _describeTxStatus(dynamic status) {
+    if (status is String) {
+      switch (status) {
+        case 'invalid':
+          return '交易无效(可能 nonce 重复 / 余额不足 / 签名无效 / SignedExtension 校验失败)';
+        case 'dropped':
+          return '被交易池剔除(mempool 已满或优先级过低)';
+        case 'future':
+          return 'nonce 大于链上已确认值,交易暂留(等待前序交易确认)';
+        case 'finalityTimeout':
+          return '最终化超时';
+      }
+      return status;
+    }
+    if (status is Map) {
+      if (status.containsKey('usurped')) {
+        return '被同 nonce 的另一笔交易顶替(usurped)';
+      }
+      if (status.containsKey('retracted')) {
+        return '所在区块被 retracted';
+      }
+    }
+    return '$status';
   }
 
   // ──── 链上状态查询 ────
@@ -351,3 +473,6 @@ class ChainRpc {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
+
+/// `submitExtrinsic` 内部状态归类:成功 / 失败 / 仍在等待。
+enum _TxResult { success, failure, pending }

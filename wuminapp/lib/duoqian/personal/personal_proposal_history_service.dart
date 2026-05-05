@@ -92,17 +92,63 @@ class PersonalProposalHistoryService {
   /// 拉取该多签的全部提案(活跃 + 历史),按 createdAt desc 排序。
   ///
   /// 容错:链上失败仅回退 Isar;Isar 失败仅回退链上;两者都失败返回空列表。
+  ///
+  /// 状态新鲜度策略(2026-05-03 修):
+  /// 1. 链上 ActiveProposalsByInstitution 同步活跃提案到 Isar(防其他设备漏记)
+  /// 2. **额外**:遍历 Isar 中本机已知 status='voting' 的 entity,挨个查链上
+  ///    Proposals[id] 拿最新 status + tally。这步必须独立于 active 列表,
+  ///    因为提案一旦终态(passed/executed/rejected)就从 active 列表移除,
+  ///    本机 Isar 永远停在 voting 状态,UI 卡片显示"投票中"是假数据。
   Future<List<PersonalDuoqianProposalView>> fetchAll(
     String personalAddressHex,
   ) async {
     final activeIds = await _safeFetchActiveProposalIds(personalAddressHex);
 
-    // 链上活跃提案逐个同步到 Isar(防止其他设备发起的提案在本机无记录)。
+    // Step 1: 链上活跃提案逐个同步到 Isar(防止其他设备发起的提案在本机无记录)。
     for (final pid in activeIds) {
       await _syncActiveProposalToIsar(personalAddressHex, pid);
     }
 
+    // Step 2: 重查本机 Isar 中 status='voting' 的 entity,即使它们已不在 active 列表
+    // (提案终态后就从 active 列表移除,但本机 entity 还停在 voting)。
+    await _refreshLocalVotingEntities(personalAddressHex);
+
     return _readAllFromIsar(personalAddressHex);
+  }
+
+  /// 遍历本机 Isar 中所有 status='voting' 的 entity,查链上 `Proposals[id]` 拿最新状态。
+  /// 链上若已终态(passed/executed/rejected/execution_failed),upsert 为终态;
+  /// 链上仍 voting 则只刷新 yesVotes/noVotes;链上 storage 不存在(已被 90 天清理)
+  /// 也只刷新 vote tally(取现有值)— 不强制覆盖为终态,等本机其他渠道写入历史。
+  Future<void> _refreshLocalVotingEntities(String personalAddressHex) async {
+    try {
+      final isar = await WalletIsar.instance.db();
+      final votingEntities = await isar.personalDuoqianProposalEntitys
+          .filter()
+          .personalAddressEqualTo(personalAddressHex)
+          .statusEqualTo(PersonalProposalStatus.voting)
+          .findAll();
+
+      for (final e in votingEntities) {
+        try {
+          final chainStatus = await _proposalService.fetchProposalStatus(e.proposalId);
+          if (chainStatus == null) continue; // 链上不存在,跳过
+          final tally = await _proposalService.fetchVoteTally(e.proposalId);
+          await recordOrUpdate(
+            personalAddressHex: personalAddressHex,
+            proposalId: e.proposalId,
+            action: e.action,
+            status: mapChainStatus(chainStatus),
+            yesVotes: tally.yes,
+            noVotes: tally.no,
+          );
+        } catch (_) {
+          // 单条刷新失败不阻断其他 entity
+        }
+      }
+    } catch (_) {
+      // 整个刷新失败也不阻断主流程
+    }
   }
 
   /// 写入或更新 Isar 提案 entity。

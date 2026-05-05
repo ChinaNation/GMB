@@ -125,7 +125,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                 color: AppTheme.accent,
               ),
               title: const Text('创建个人多签'),
-              subtitle: const Text('无需 SFID,直接设置管理员'),
+              subtitle: const Text('无需SFID号'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openCreatePersonal();
@@ -138,7 +138,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                 color: AppTheme.info,
               ),
               title: const Text('创建机构多签'),
-              subtitle: const Text('需要 SFID 机构标识'),
+              subtitle: const Text('需要SFID号'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openCreateInstitution();
@@ -219,7 +219,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '多签交易',
+          '账户列表',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
