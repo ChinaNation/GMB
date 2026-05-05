@@ -77,7 +77,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
-    // admins-change / voting-engine / duoqian-manage / duoqian-transfer /
+    // admins-change / votingengine / duoqian-manage / duoqian-transfer /
     // offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 0,
     impl_version: 0,
@@ -300,7 +300,7 @@ mod runtime {
 
     // 投票引擎模块：提供联合投票/内部投票/公民投票
     #[runtime::pallet_index(9)]
-    pub type VotingEngine = voting_engine;
+    pub type VotingEngine = votingengine;
 
     // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]

@@ -48,27 +48,29 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
 
   useEffect(() => {
     setLoading(true);
+    // 双层 ID v1:不再需要 getNextProposalId 找起点 — 反向索引内部按 startId 过滤,
+    // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
     Promise.all([
       api.getInstitutionDetail(shenfenId),
-      api.getNextProposalId().catch(() => 0),
       api.getActivatedAdmins(shenfenId).catch(() => [] as ActivatedAdmin[]),
     ])
-      .then(async ([d, nextId, aa]) => {
+      .then(async ([d, aa]) => {
         setDetail(d);
         setActivatedAdmins(aa);
-        // 加载第一页提案
-        if (nextId > 0) {
-          try {
-            const page = await api.getInstitutionProposalPage(shenfenId, nextId - 1, PROPOSAL_PAGE_SIZE);
-            setProposals(page.items);
-            setProposalHasMore(page.hasMore);
-            if (page.items.length > 0) {
-              const lastId = page.items[page.items.length - 1].proposalId;
-              setProposalNextStartId(lastId > 0 ? lastId - 1 : null);
-            }
-          } catch (_) {
-            setProposals([]);
+        try {
+          const page = await api.getInstitutionProposalPage(
+            shenfenId,
+            Number.MAX_SAFE_INTEGER,
+            PROPOSAL_PAGE_SIZE,
+          );
+          setProposals(page.items);
+          setProposalHasMore(page.hasMore);
+          if (page.items.length > 0) {
+            const lastId = page.items[page.items.length - 1].proposalId;
+            setProposalNextStartId(lastId > 0 ? lastId - 1 : null);
           }
+        } catch (_) {
+          setProposals([]);
         }
         setError(null);
       })

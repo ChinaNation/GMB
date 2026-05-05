@@ -86,6 +86,10 @@ parameter_types! {
 /// All migrations of the runtime, aside from the ones declared in the pallets.
 ///
 /// This can be a tuple of types, each implementing `OnRuntimeUpgrade`.
+///
+/// 中文注释:`votingengine::migrations::v1::MigrateToV1` 已实现但**未注册**,
+/// spec_version 维持 0 不升级。一旦决定 0 → 1 升级,在此 tuple 加入 MigrateToV1
+/// 即可激活回填。代码已就绪,只是这一行未挂上去。
 #[allow(unused_parens)]
 type SingleBlockMigrations = ();
 
@@ -395,7 +399,7 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             // retry_passed_proposal / cancel_passed_proposal 全部按 VOTE_FLAT_FEE 收费;
             // finalize_proposal 任意人可调用、推动清理,免费。
             RuntimeCall::VotingEngine(ref ve_call) => match ve_call {
-                voting_engine::pallet::Call::finalize_proposal { .. } => {
+                votingengine::pallet::Call::finalize_proposal { .. } => {
                     onchain_transaction::AmountExtractResult::NoAmount
                 }
                 _ => onchain_transaction::AmountExtractResult::Amount(
@@ -411,7 +415,7 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                 primitives::fee_policy::VOTE_FLAT_FEE,
             ),
             // 业务治理 pallet 的 execute_xxx / cancel_failed_xxx wrapper 已于 2026-05-02
-            // (Phase 4) 物理删除,手动重试/取消统一收口至 voting_engine::retry_passed_proposal /
+            // (Phase 4) 物理删除,手动重试/取消统一收口至 votingengine::retry_passed_proposal /
             // cancel_passed_proposal(已在 RuntimeCall::VotingEngine 分支按 VOTE_FLAT_FEE 处理)。
             // 业务 pallet 剩下的 propose_X / cleanup_X 全部按 VOTE_FLAT_FEE 收费(1 元/次)。
             RuntimeCall::AdminsChange(_) => onchain_transaction::AmountExtractResult::Amount(
@@ -762,7 +766,7 @@ impl
 impl duoqian_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type InternalVoteEngine = voting_engine::Pallet<Runtime>;
+    type InternalVoteEngine = votingengine::Pallet<Runtime>;
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
@@ -945,17 +949,17 @@ impl sfid_system::Config for Runtime {
 pub struct RuntimePopulationSnapshotVerifier;
 
 impl
-    voting_engine::PopulationSnapshotVerifier<
+    votingengine::PopulationSnapshotVerifier<
         AccountId,
-        voting_engine::pallet::VoteNonceOf<Runtime>,
-        voting_engine::pallet::VoteSignatureOf<Runtime>,
+        votingengine::pallet::VoteNonceOf<Runtime>,
+        votingengine::pallet::VoteSignatureOf<Runtime>,
     > for RuntimePopulationSnapshotVerifier
 {
     fn verify_population_snapshot(
         who: &AccountId,
         eligible_total: u64,
-        nonce: &voting_engine::pallet::VoteNonceOf<Runtime>,
-        signature: &voting_engine::pallet::VoteSignatureOf<Runtime>,
+        nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
+        signature: &votingengine::pallet::VoteSignatureOf<Runtime>,
         province: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
@@ -1137,7 +1141,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             return false;
         };
         admins_change::Pallet::<Runtime>::is_active_subject_admin(
-            voting_engine::internal_vote::ORG_DUOQIAN,
+            votingengine::vote::internal::ORG_DUOQIAN,
             subject_id,
             who,
         )
@@ -1218,7 +1222,7 @@ fn is_nrc_admin(who: &AccountId) -> bool {
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
     admins_change::Pallet::<Runtime>::is_active_subject_admin(
-        voting_engine::internal_vote::ORG_NRC,
+        votingengine::vote::internal::ORG_NRC,
         nrc_institution,
         who,
     )
@@ -1255,9 +1259,9 @@ fn is_joint_proposer(who: &AccountId) -> bool {
     for entry in CHINA_CB.iter() {
         if let Some(institution) = shenfen_id_to_fixed48(entry.shenfen_id) {
             let org = if Some(institution) == nrc_institution {
-                voting_engine::internal_vote::ORG_NRC
+                votingengine::vote::internal::ORG_NRC
             } else {
-                voting_engine::internal_vote::ORG_PRC
+                votingengine::vote::internal::ORG_PRC
             };
             if admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who) {
                 return true;
@@ -1327,28 +1331,28 @@ impl runtime_upgrade::RuntimeCodeExecutor for RuntimeSetCodeExecutor {
 
 pub struct RuntimeJointVoteResultCallback;
 
-impl voting_engine::JointVoteResultCallback for RuntimeJointVoteResultCallback {
+impl votingengine::JointVoteResultCallback for RuntimeJointVoteResultCallback {
     fn on_joint_vote_finalized(
         vote_proposal_id: u64,
         approved: bool,
-    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
+    ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (vote_proposal_id, approved);
-            Ok(voting_engine::ProposalExecutionOutcome::Ignored)
+            Ok(votingengine::ProposalExecutionOutcome::Ignored)
         }
 
         #[cfg(not(feature = "runtime-benchmarks"))]
         {
             if resolution_issuance::Pallet::<Runtime>::owns_proposal(vote_proposal_id) {
-                return <ResolutionIssuance as voting_engine::JointVoteResultCallback>::on_joint_vote_finalized(
+                return <ResolutionIssuance as votingengine::JointVoteResultCallback>::on_joint_vote_finalized(
                 vote_proposal_id,
                 approved,
             );
             }
 
             if runtime_upgrade::Pallet::<Runtime>::owns_proposal(vote_proposal_id) {
-                return <RuntimeUpgrade as voting_engine::JointVoteResultCallback>::on_joint_vote_finalized(
+                return <RuntimeUpgrade as votingengine::JointVoteResultCallback>::on_joint_vote_finalized(
                     vote_proposal_id,
                     approved,
                 );
@@ -1361,7 +1365,7 @@ impl voting_engine::JointVoteResultCallback for RuntimeJointVoteResultCallback {
     }
 }
 
-impl voting_engine::Config for Runtime {
+impl votingengine::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
@@ -1400,7 +1404,7 @@ impl voting_engine::Config for Runtime {
     type InternalThresholdProvider = RuntimeInternalThresholdProvider;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
-    type WeightInfo = voting_engine::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = votingengine::weights::SubstrateWeight<Runtime>;
 }
 
 impl pow_difficulty::Config for Runtime {
@@ -1429,7 +1433,7 @@ mod tests {
     use sfid_system::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
     use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
-    use voting_engine::{
+    use votingengine::{
         InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier, SfidEligibility,
     };
 
@@ -1482,23 +1486,23 @@ mod tests {
             encoded.extend_from_slice(&data.encode());
             let bounded_data: frame_support::BoundedVec<
                 u8,
-                <Runtime as voting_engine::Config>::MaxProposalDataLen,
+                <Runtime as votingengine::Config>::MaxProposalDataLen,
             > = encoded.try_into().expect("proposal data bound");
             let owner: frame_support::BoundedVec<
                 u8,
-                <Runtime as voting_engine::Config>::MaxModuleTagLen,
+                <Runtime as votingengine::Config>::MaxModuleTagLen,
             > = resolution_issuance::MODULE_TAG
                 .to_vec()
                 .try_into()
                 .expect("module tag bound");
-            voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
-            voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
-            voting_engine::Proposals::<Runtime>::insert(
+            votingengine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
+            votingengine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
+            votingengine::Proposals::<Runtime>::insert(
                 proposal_id,
-                voting_engine::Proposal {
-                    kind: voting_engine::PROPOSAL_KIND_JOINT,
-                    stage: voting_engine::STAGE_JOINT,
-                    status: voting_engine::STATUS_PASSED,
+                votingengine::Proposal {
+                    kind: votingengine::PROPOSAL_KIND_JOINT,
+                    stage: votingengine::STAGE_JOINT,
+                    status: votingengine::STATUS_PASSED,
                     internal_org: None,
                     internal_institution: None,
                     start: 0u32,
@@ -1516,12 +1520,12 @@ mod tests {
                 true,
             );
 
-            voting_engine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
+            votingengine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
             assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
                 proposal_id,
                 true
             ));
-            voting_engine::CallbackExecutionScopes::<Runtime>::remove(proposal_id);
+            votingengine::CallbackExecutionScopes::<Runtime>::remove(proposal_id);
 
             // 验证 VotingProposalCount 已递减
             assert_eq!(
@@ -1529,7 +1533,7 @@ mod tests {
                 0u32
             );
 
-            // 中文注释：自动延迟清理由 voting-engine 自身单测覆盖，
+            // 中文注释：自动延迟清理由 votingengine 自身单测覆盖，
             // 这里仅验证 runtime 包装层能正确透传到 SFID 投票凭证清理接口。
             RuntimeSfidEligibility::cleanup_vote_credentials(proposal_id);
 
@@ -1564,7 +1568,7 @@ mod tests {
 
             assert_ok!(ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[0])),
-                voting_engine::internal_vote::ORG_NRC,
+                votingengine::vote::internal::ORG_NRC,
                 nrc_institution,
                 destroy_amount,
             ));
@@ -1579,7 +1583,7 @@ mod tests {
                 ));
             }
 
-            // 提案数据由 voting-engine 延迟清理，执行后仍保留
+            // 提案数据由 votingengine 延迟清理，执行后仍保留
             assert!(VotingEngine::get_proposal_data(pid).is_some());
 
             assert_eq!(
@@ -1625,7 +1629,7 @@ mod tests {
             }
 
             let internal_vote_call =
-                RuntimeCall::VotingEngine(voting_engine::pallet::Call::internal_vote {
+                RuntimeCall::VotingEngine(votingengine::pallet::Call::internal_vote {
                     proposal_id: 1,
                     approve: true,
                 });
@@ -1791,7 +1795,7 @@ mod tests {
                 RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
             );
 
-            // 测试中直接写入 voting-engine 存储；生产路径必须走 create_*_with_data 原子入口。
+            // 测试中直接写入 votingengine 存储；生产路径必须走 create_*_with_data 原子入口。
             let proposal_id = 7u64;
             let proposer = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
             let reason: runtime_upgrade::pallet::ReasonOf<Runtime> =
@@ -1810,40 +1814,40 @@ mod tests {
             encoded.extend_from_slice(&codec::Encode::encode(&proposal));
             let bounded_data: frame_support::BoundedVec<
                 u8,
-                <Runtime as voting_engine::Config>::MaxProposalDataLen,
+                <Runtime as votingengine::Config>::MaxProposalDataLen,
             > = encoded.try_into().expect("proposal data bound");
             let owner: frame_support::BoundedVec<
                 u8,
-                <Runtime as voting_engine::Config>::MaxModuleTagLen,
+                <Runtime as votingengine::Config>::MaxModuleTagLen,
             > = runtime_upgrade::MODULE_TAG
                 .to_vec()
                 .try_into()
                 .expect("module tag bound");
-            voting_engine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
-            voting_engine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
+            votingengine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
+            votingengine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
             let code_vec = code.into_inner();
             let object_len = u32::try_from(code_vec.len()).expect("runtime code length fits u32");
             let object_hash = <Runtime as frame_system::Config>::Hashing::hash(&code_vec);
             let bounded_object: frame_support::BoundedVec<
                 u8,
-                <Runtime as voting_engine::Config>::MaxProposalObjectLen,
+                <Runtime as votingengine::Config>::MaxProposalObjectLen,
             > = code_vec.try_into().expect("runtime code object bound");
-            voting_engine::ProposalObject::<Runtime>::insert(proposal_id, bounded_object);
-            voting_engine::ProposalObjectMeta::<Runtime>::insert(
+            votingengine::ProposalObject::<Runtime>::insert(proposal_id, bounded_object);
+            votingengine::ProposalObjectMeta::<Runtime>::insert(
                 proposal_id,
-                voting_engine::ProposalObjectMetadata {
+                votingengine::ProposalObjectMetadata {
                     kind: runtime_upgrade::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
                     object_len,
                     object_hash,
                 },
             );
 
-            // 回调拒绝后，业务摘要保持创建时快照，终态由 voting-engine 统一维护。
+            // 回调拒绝后，业务摘要保持创建时快照，终态由 votingengine 统一维护。
             let outcome =
                 RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
                     .expect("runtime-upgrade callback should succeed");
-            assert_eq!(outcome, voting_engine::ProposalExecutionOutcome::Executed);
-            let raw = voting_engine::Pallet::<Runtime>::get_proposal_data(proposal_id)
+            assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
+            let raw = votingengine::Pallet::<Runtime>::get_proposal_data(proposal_id)
                 .expect("proposal data should exist");
             let tag = runtime_upgrade::MODULE_TAG;
             assert!(
@@ -1980,8 +1984,8 @@ mod tests {
         province: &[u8],
         who: &AccountId,
         eligible_total: u64,
-        pop_nonce: &voting_engine::pallet::VoteNonceOf<Runtime>,
-    ) -> voting_engine::pallet::VoteSignatureOf<Runtime> {
+        pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
+    ) -> votingengine::pallet::VoteSignatureOf<Runtime> {
         let payload = (
             primitives::core_const::DUOQIAN_DOMAIN,
             primitives::core_const::OP_SIGN_POP,
@@ -2041,7 +2045,7 @@ mod tests {
                 &main_admin_pubkey,
             ));
 
-            let pop_nonce: voting_engine::pallet::VoteNonceOf<Runtime> =
+            let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
                 b"pop-nonce".to_vec().try_into().expect("nonce should fit");
             let pop_signature = build_pop_signature(
                 &main_signing_pair,
@@ -2197,7 +2201,7 @@ mod tests {
         new_test_ext().execute_with(|| {
             let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
             let who = AccountId::new([26u8; 32]);
-            let pop_nonce: voting_engine::pallet::VoteNonceOf<Runtime> =
+            let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
                 b"pop-pass-nonce".to_vec().try_into().expect("nonce");
             let signature = build_pop_signature(
                 &main_signing_pair,
@@ -2289,7 +2293,7 @@ mod tests {
             assert!(!is_nrc_admin(&nrc_admin));
             assert!(!is_nrc_admin(&outsider));
             assert!(!RuntimeInternalAdminProvider::is_internal_admin(
-                voting_engine::internal_vote::ORG_NRC,
+                votingengine::vote::internal::ORG_NRC,
                 nrc_id,
                 &nrc_admin
             ));
@@ -2487,10 +2491,10 @@ mod tests {
 
 pub struct RuntimeInternalAdminProvider;
 
-impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
+impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
     fn is_internal_admin(
         org: u8,
-        institution: voting_engine::InstitutionPalletId,
+        institution: votingengine::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
         admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who)
@@ -2498,14 +2502,14 @@ impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminPro
 
     fn get_admin_list(
         org: u8,
-        institution: voting_engine::InstitutionPalletId,
+        institution: votingengine::InstitutionPalletId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
         admins_change::Pallet::<Runtime>::active_subject_admins(org, institution)
     }
 
     fn is_pending_internal_admin(
         org: u8,
-        institution: voting_engine::InstitutionPalletId,
+        institution: votingengine::InstitutionPalletId,
         who: &AccountId,
     ) -> bool {
         admins_change::Pallet::<Runtime>::is_pending_subject_admin_for_snapshot(
@@ -2517,7 +2521,7 @@ impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminPro
 
     fn get_pending_admin_list(
         org: u8,
-        institution: voting_engine::InstitutionPalletId,
+        institution: votingengine::InstitutionPalletId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
         admins_change::Pallet::<Runtime>::pending_subject_admins_for_snapshot(org, institution)
     }
@@ -2525,29 +2529,29 @@ impl voting_engine::InternalAdminProvider<AccountId> for RuntimeInternalAdminPro
 
 pub struct RuntimeInternalThresholdProvider;
 
-impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: voting_engine::InstitutionPalletId) -> bool {
-        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
+    fn is_known_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
+        if org != votingengine::vote::internal::ORG_DUOQIAN {
             return false;
         }
         admins_change::Pallet::<Runtime>::active_subject_exists(org, institution)
     }
 
-    fn is_known_pending_subject(org: u8, institution: voting_engine::InstitutionPalletId) -> bool {
-        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+    fn is_known_pending_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
+        if org != votingengine::vote::internal::ORG_DUOQIAN {
             return false;
         }
         admins_change::Pallet::<Runtime>::pending_subject_exists_for_snapshot(org, institution)
     }
 
-    fn pass_threshold(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
+    fn pass_threshold(org: u8, institution: votingengine::InstitutionPalletId) -> Option<u32> {
         match org {
-            voting_engine::internal_vote::ORG_NRC
-            | voting_engine::internal_vote::ORG_PRC
-            | voting_engine::internal_vote::ORG_PRB => {
-                voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+            votingengine::vote::internal::ORG_NRC
+            | votingengine::vote::internal::ORG_PRC
+            | votingengine::vote::internal::ORG_PRB => {
+                votingengine::vote::internal::fixed_governance_pass_threshold(org)
             }
-            voting_engine::internal_vote::ORG_DUOQIAN => {
+            votingengine::vote::internal::ORG_DUOQIAN => {
                 admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
             }
             _ => None,
@@ -2556,9 +2560,9 @@ impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvid
 
     fn pending_pass_threshold(
         org: u8,
-        institution: voting_engine::InstitutionPalletId,
+        institution: votingengine::InstitutionPalletId,
     ) -> Option<u32> {
-        if org != voting_engine::internal_vote::ORG_DUOQIAN {
+        if org != votingengine::vote::internal::ORG_DUOQIAN {
             return None;
         }
         admins_change::Pallet::<Runtime>::pending_subject_threshold_for_snapshot(org, institution)
@@ -2567,15 +2571,15 @@ impl voting_engine::InternalThresholdProvider for RuntimeInternalThresholdProvid
 
 pub struct RuntimeInternalAdminCountProvider;
 
-impl voting_engine::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: voting_engine::InstitutionPalletId) -> Option<u32> {
+impl votingengine::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
+    fn admin_count(org: u8, institution: votingengine::InstitutionPalletId) -> Option<u32> {
         admins_change::Pallet::<Runtime>::active_subject_admin_count(org, institution)
     }
 }
 
 pub struct RuntimeSfidEligibility;
 
-impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
+impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
     fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool {
         #[cfg(feature = "runtime-benchmarks")]
         {
@@ -2655,10 +2659,10 @@ impl voting_engine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility 
     fn cleanup_vote_credentials_chunk(
         proposal_id: u64,
         limit: u32,
-    ) -> voting_engine::VoteCredentialCleanup {
+    ) -> votingengine::VoteCredentialCleanup {
         let result =
             sfid_system::pallet::UsedVoteNonce::<Runtime>::clear_prefix(proposal_id, limit, None);
-        voting_engine::VoteCredentialCleanup {
+        votingengine::VoteCredentialCleanup {
             removed: result.unique,
             loops: result.loops,
             has_remaining: result.maybe_cursor.is_some(),

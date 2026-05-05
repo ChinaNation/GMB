@@ -15,13 +15,14 @@ use primitives::count_const::{
 
 use crate::{
     pallet::{
-        AdminSnapshot, Config, Error, Event, InternalTallies, InternalThresholdSnapshot,
+        self, AdminSnapshot, Config, Error, Event, InternalTallies, InternalThresholdSnapshot,
         InternalVotesByAccount, Pallet, Proposals,
     },
-    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind, InternalVoteEngine,
     InternalThresholdProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
     STATUS_REJECTED,
 };
+use sp_runtime::DispatchError;
 
 pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
@@ -202,7 +203,7 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
             if let Err(err) =
-                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+                crate::limit::try_add_active_proposal::<T>(institution, id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -290,7 +291,7 @@ impl<T: Config> Pallet<T> {
             };
 
             if let Err(err) =
-                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+                crate::limit::try_add_active_proposal::<T>(institution, id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -381,7 +382,7 @@ impl<T: Config> Pallet<T> {
 
             // 全局活跃提案数限制
             if let Err(err) =
-                crate::active_proposal_limit::try_add_active_proposal::<T>(institution, id)
+                crate::limit::try_add_active_proposal::<T>(institution, id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -508,5 +509,165 @@ impl<T: Config> Pallet<T> {
             Error::<T>::VoteNotExpired
         );
         Self::set_status_and_emit(proposal_id, crate::STATUS_REJECTED)
+    }
+}
+
+impl<T: pallet::Config> InternalVoteEngine<T::AccountId> for pallet::Pallet<T> {
+    fn create_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution)
+    }
+
+    fn create_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_internal_proposal(who, org, institution) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_internal_proposal_with_threshold_and_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        threshold: u32,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_internal_proposal_with_explicit_threshold(
+                    who,
+                    org,
+                    institution,
+                    threshold,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_pending_subject_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_pending_subject_internal_proposal(who, org, institution)
+    }
+
+    fn create_pending_subject_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_pending_subject_internal_proposal(
+                who,
+                org,
+                institution,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_pending_subject_internal_proposal_with_snapshot_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        admins: sp_std::vec::Vec<T::AccountId>,
+        threshold: u32,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_pending_subject_internal_proposal_with_snapshot(
+                    who,
+                    org,
+                    institution,
+                    admins,
+                    threshold,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_admin_set_mutation_internal_proposal(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+    ) -> Result<u64, DispatchError> {
+        pallet::Pallet::<T>::do_create_admin_set_mutation_internal_proposal(who, org, institution)
+    }
+
+    fn create_admin_set_mutation_internal_proposal_with_data(
+        who: T::AccountId,
+        org: u8,
+        institution: InstitutionPalletId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        frame_support::storage::with_transaction(|| {
+            let proposal_id =
+                match pallet::Pallet::<T>::do_create_admin_set_mutation_internal_proposal(
+                    who,
+                    org,
+                    institution,
+                ) {
+                    Ok(proposal_id) => proposal_id,
+                    Err(err) => {
+                        return frame_support::storage::TransactionOutcome::Rollback(Err(err))
+                    }
+                };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
     }
 }

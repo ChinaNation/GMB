@@ -2,7 +2,7 @@
 
 ## 2026-04-30 · 统一投票引擎状态机改造
 
-本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `voting-engine` 生命周期：
+本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `votingengine` 生命周期：
 
 - 提案创建使用 `create_internal_proposal_with_data`，在同一事务中绑定 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
 - 管理员投票统一走 `VotingEngine::internal_vote(proposal_id, approve)`，本模块不再提供独立 vote/finalize call。
@@ -43,7 +43,7 @@
   - 创世预置的治理机构（NRC / PRC / PRB）
   - `duoqian-manage` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
-- 本模块不负责投票引擎实现，投票逻辑委托给 `voting-engine` 的 `InternalVoteEngine`。
+- 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
 补充说明：
 - 只要某类内置机构被本模块的 `institution_org()` / `institution_pallet_address()` 正式识别，
@@ -117,7 +117,7 @@ pub fn propose_transfer(
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
 9. 机构主账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
-10. 活跃提案数由 `voting-engine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
+10. 活跃提案数由 `votingengine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
 
 **执行逻辑：**
 
@@ -137,7 +137,7 @@ VotingEngine::internal_vote(origin, proposal_id, approve)
 
 ### 2.3 已废弃: execute_transfer / execute_safety_fund_transfer / execute_sweep_to_main
 
-2026-05-02 unified voting entry 整改后，本 pallet 的所有 `execute_xxx` wrapper extrinsic 物理删除。前端必须直接调用 voting-engine 公开 extrinsic：
+2026-05-02 unified voting entry 整改后，本 pallet 的所有 `execute_xxx` wrapper extrinsic 物理删除。前端必须直接调用 votingengine 公开 extrinsic：
 
 - 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`
 - 取消失败提案: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`
@@ -146,14 +146,14 @@ VotingEngine::internal_vote(origin, proposal_id, approve)
 
 ## 3. 存储项
 
-本模块**自身不定义存储项**。所有提案数据统一存储在 `voting-engine` 中：
+本模块**自身不定义存储项**。所有提案数据统一存储在 `votingengine` 中：
 
 | 存储位置 | Key | Value | 说明 |
 | --- | --- | --- | --- |
-| `voting_engine::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
-| `voting_engine::ProposalOwner` | `u64` | `MODULE_TAG` | 业务 owner，禁止跨模块覆写 |
-| `voting_engine::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
-| `voting_engine::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
+| `votingengine::ProposalData` | `u64` | `Vec<u8>`（编码的 `TransferAction`） | 提案业务数据 |
+| `votingengine::ProposalOwner` | `u64` | `MODULE_TAG` | 业务 owner，禁止跨模块覆写 |
+| `votingengine::ProposalMeta` | `u64` | `ProposalMetadata` | 提案元数据（创建块号等） |
+| `votingengine::Proposals` | `u64` | `Proposal` | 提案核心状态（status、timing） |
 | `SafetyFundProposalActions` | `u64` | `SafetyFundAction` | 安全基金动作独立存储，owner 仍为 `MODULE_TAG` |
 | `SweepProposalActions` | `u64` | `SweepAction` | 费用划转动作独立存储，owner 仍为 `MODULE_TAG` |
 
@@ -225,7 +225,7 @@ pub enum Event<T: Config> {
 }
 ```
 
-投票事件统一由 `voting-engine::InternalVoteCast`、`ProposalFinalized`、`ProposalExecutionRetryScheduled`、`ProposalExecutionRetried` 等事件表达。
+投票事件统一由 `votingengine::InternalVoteCast`、`ProposalFinalized`、`ProposalExecutionRetryScheduled`、`ProposalExecutionRetried` 等事件表达。
 
 ## 5. 错误码
 
@@ -287,8 +287,8 @@ pub enum Error<T> {
 `VotingEngine::internal_vote` 达到阈值后，投票引擎进入 `STATUS_PASSED` 并在同一事务内回调本模块自动执行：
 
 ```
-1. 最后一票触发 voting-engine 的 STATUS_PASSED 判定
-2. voting-engine 调用 InternalVoteExecutor::on_internal_vote_finalized(proposal_id, approved=true)
+1. 最后一票触发 votingengine 的 STATUS_PASSED 判定
+2. votingengine 调用 InternalVoteExecutor::on_internal_vote_finalized(proposal_id, approved=true)
 3. 本模块按 ProposalOwner / ProposalData / 独立 action storage 认领 transfer、safety_fund 或 sweep
 4. 执行业务转账:
    a. 解析资金源和目标账户
@@ -347,7 +347,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
 
 ### 8.2 关键差异
 
-- 投票完全复用 `voting-engine::internal_vote`，不再有业务 pallet 自己的 vote/finalize 状态机。
+- 投票完全复用 `votingengine::internal_vote`，不再有业务 pallet 自己的 vote/finalize 状态机。
 - 幂等保护由投票引擎的 `InternalVotesByAccount` / `AlreadyVoted` 统一提供。
 - 手动重试、取消、3 次失败终态和 deadline 终态由投票引擎统一处理。
 
@@ -381,7 +381,7 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 ```rust
 #[pallet::config]
 pub trait Config:
-    frame_system::Config + voting_engine::Config + duoqian_manage::Config
+    frame_system::Config + votingengine::Config + duoqian_manage::Config
 {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -399,7 +399,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `duoqian_manage::Config` 和 `voting_engine::Config` 提供，本模块不再单独声明。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `duoqian_manage::Config` 和 `votingengine::Config` 提供，本模块不再单独声明。
 
 ## 11. Weight 估算
 
@@ -409,7 +409,7 @@ pub trait Config:
 | `propose_safety_fund_transfer` | 待 benchmark | - | - |
 | `propose_sweep_to_main` | 待 benchmark | - | - |
 
-说明：投票权重由 `voting-engine::internal_vote` 承担；手动重试走 `VotingEngine::retry_passed_proposal`，权重由投票引擎统一计入。本模块 2026-05-02 起不再保留 `execute_xxx` wrapper。正式数值需重新跑 benchmark 生成。
+说明：投票权重由 `votingengine::internal_vote` 承担；手动重试走 `VotingEngine::retry_passed_proposal`，权重由投票引擎统一计入。本模块 2026-05-02 起不再保留 `execute_xxx` wrapper。正式数值需重新跑 benchmark 生成。
 
 ## 12. 文件清单
 

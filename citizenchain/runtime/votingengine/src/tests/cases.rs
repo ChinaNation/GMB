@@ -1,0 +1,2301 @@
+use super::*;
+
+    #[test]
+    fn unix_seconds_to_year_uses_utc_gregorian_boundaries() {
+        new_test_ext().execute_with(|| {
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_798_761_600).expect("valid 2027 timestamp"),
+                2027
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_830_297_600).expect("valid 2028 timestamp"),
+                2028
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_861_919_999).expect("valid 2028 timestamp"),
+                2028
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_861_920_000).expect("valid 2029 timestamp"),
+                2029
+            );
+            assert_eq!(
+                VotingEngine::unix_seconds_to_year(1_956_528_000).expect("valid 2032 timestamp"),
+                2032
+            );
+        });
+    }
+
+    #[test]
+    fn leap_year_rules_match_gregorian_calendar() {
+        new_test_ext().execute_with(|| {
+            assert!(VotingEngine::is_leap_year(2000));
+            assert!(!VotingEngine::is_leap_year(2100));
+            assert!(VotingEngine::is_leap_year(2400));
+            assert_eq!(VotingEngine::days_in_year(2028), 366);
+            assert_eq!(VotingEngine::days_in_year(2029), 365);
+        });
+    }
+
+    #[test]
+    fn proposal_id_counter_resets_at_real_utc_year_boundary() {
+        // 双层 ID v1:
+        // - 主键 NextProposalId 全局单调累加,跨年不重置
+        // - 展示号 ProposalDisplayMeta.seq_in_year 跨年自动重置回 0
+        // - CurrentProposalYear 跟着系统时间切换
+        new_test_ext().execute_with(|| {
+            set_test_now_secs(1_830_297_599);
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            // 主键纯单调:首个提案 = 0
+            assert_eq!(proposal_id, 0);
+            // 展示号:2027 年首个,seq_in_year = 0
+            let display = pallet::ProposalDisplayId::<Test>::get(proposal_id)
+                .expect("display id present");
+            assert_eq!(display.year, 2027);
+            assert_eq!(display.seq_in_year, 0);
+            assert_eq!(CurrentProposalYear::<Test>::get(), 2027);
+            assert_eq!(YearProposalCounter::<Test>::get(), 1);
+
+            set_test_now_secs(1_830_297_600);
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            // 主键单调累加:第二个提案 = 1(跨年也只 +1)
+            assert_eq!(proposal_id, 1);
+            // 展示号:2028 年首个,seq_in_year 跨年重置为 0
+            let display = pallet::ProposalDisplayId::<Test>::get(proposal_id)
+                .expect("display id present");
+            assert_eq!(display.year, 2028);
+            assert_eq!(display.seq_in_year, 0);
+            assert_eq!(CurrentProposalYear::<Test>::get(), 2028);
+            assert_eq!(YearProposalCounter::<Test>::get(), 1);
+            assert_eq!(NextProposalId::<Test>::get(), 2);
+        });
+    }
+
+    #[test]
+    fn internal_proposal_must_be_created_by_same_institution_admin() {
+        new_test_ext().execute_with(|| {
+            // Phase 1 整改:`create_internal_proposal` 公开 extrinsic 已删除,
+            // 只保留 `InternalVoteEngine` trait 入口供业务模块内部调用;
+            // 这里直接验证 trait 路径的权限校验。
+            let outsider = AccountId32::new([7u8; 32]);
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    outsider,
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    prc_admin(0),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            // 双层 ID v1:主键纯单调,首个提案 = 0;展示号通过 ProposalDisplayId 反查。
+            assert_eq!(proposal_id, 0);
+            let display = pallet::ProposalDisplayId::<Test>::get(proposal_id)
+                .expect("display id present");
+            assert_eq!(display.year, 2026);
+            assert_eq!(display.seq_in_year, 0);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .stage,
+                STAGE_INTERNAL
+            );
+        });
+    }
+
+    #[test]
+    fn active_internal_proposal_rejects_pending_subject() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    pending_subject_admin(0),
+                    vote::internal::ORG_DUOQIAN,
+                    pending_subject_institution(),
+                ),
+                pallet::Error::<Test>::InvalidInstitution
+            );
+        });
+    }
+
+    #[test]
+    fn governance_internal_proposal_snapshots_fixed_threshold_not_provider() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 中文注释：测试 Provider 对治理机构故意返回 1，这里必须仍写入固定治理阈值。
+            assert_eq!(
+                InternalThresholdSnapshot::<Test>::get(proposal_id),
+                Some(primitives::count_const::NRC_INTERNAL_THRESHOLD)
+            );
+        });
+    }
+
+    #[test]
+    fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_pending_subject_proposal_via_engine(
+                pending_subject_admin(0),
+                vote::internal::ORG_DUOQIAN,
+                pending_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
+            assert!(VotingEngine::is_admin_in_snapshot(
+                proposal_id,
+                pending_subject_institution(),
+                &pending_subject_admin(0)
+            ));
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                pending_subject_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                pending_subject_admin(1),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
+        new_test_ext().execute_with(|| {
+            set_registered_duoqian_threshold(3);
+            let proposal_id = create_internal_proposal_via_engine(
+                registered_subject_admin(0),
+                vote::internal::ORG_DUOQIAN,
+                registered_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
+            set_registered_duoqian_threshold(2);
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(1),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                registered_subject_admin(2),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_admin_set_mutation_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    nrc_admin(1),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+        });
+    }
+
+    #[test]
+    fn regular_mutex_blocks_same_subject_admin_set_mutation() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.regular_active_count, 1);
+            assert_eq!(state.admin_set_mutation_proposal, None);
+
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::RegularInternalProposalActive
+            );
+
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+        });
+    }
+
+    #[test]
+    fn regular_internal_proposals_can_coexist_under_same_subject() {
+        new_test_ext().execute_with(|| {
+            let first = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            let second = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ne!(first, second);
+            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+                .expect("mutex should exist");
+            assert_eq!(state.regular_active_count, 2);
+            assert_eq!(state.admin_set_mutation_proposal, None);
+        });
+    }
+
+    #[test]
+    fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_admin_set_mutation_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_PASSED
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_some()
+            );
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                    nrc_admin(1),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::AdminSetMutationProposalActive
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_EXECUTION_FAILED
+            ));
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_none()
+            );
+        });
+    }
+
+    #[test]
+    fn proposal_status_transition_state_machine_is_strict() {
+        new_test_ext().execute_with(|| {
+            let voting_to_passed = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_EXECUTION_FAILED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_VOTING),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                voting_to_passed,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_REJECTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_VOTING),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                voting_to_passed,
+                STATUS_EXECUTED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(voting_to_passed, STATUS_PASSED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+
+            let passed_to_failed = create_internal_proposal_via_engine(
+                nrc_admin(1),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                passed_to_failed,
+                STATUS_PASSED
+            ));
+            assert_ok!(VotingEngine::set_status_and_emit(
+                passed_to_failed,
+                STATUS_EXECUTION_FAILED
+            ));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(passed_to_failed, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+
+            let rejected = create_internal_proposal_via_engine(
+                nrc_admin(2),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(rejected, STATUS_REJECTED));
+            assert_noop!(
+                VotingEngine::set_status_and_emit(rejected, STATUS_PASSED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+        });
+    }
+
+    #[test]
+    fn callback_execution_result_requires_callback_scope() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::set_callback_execution_result(proposal_id, STATUS_EXECUTED),
+                pallet::Error::<Test>::InvalidProposalStatus
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_must_be_by_same_institution_admin() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                prb_admin(0),
+                vote::internal::ORG_PRB,
+                prb_pid(),
+            );
+
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, true),
+                pallet::Error::<Test>::NoPermission
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                prb_admin(1),
+                proposal_id,
+                true
+            ));
+        });
+    }
+
+    #[test]
+    fn nrc_internal_vote_passes_at_13_yes_votes() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            for i in 0..12 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(12),
+                proposal_id,
+                true
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_is_rejected_after_timeout() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                prc_admin(0),
+                vote::internal::ORG_PRC,
+                prc_pid(),
+            );
+
+            let proposal = VotingEngine::proposals(proposal_id).expect("proposal exists");
+            System::set_block_number(proposal.end + 1);
+
+            assert_ok!(VotingEngine::finalize_proposal(
+                RuntimeOrigin::signed(prc_admin(0)),
+                proposal_id,
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_timeout_is_auto_rejected_on_initialize() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = create_internal_proposal_via_engine(
+                prc_admin(0),
+                vote::internal::ORG_PRC,
+                prc_pid(),
+            );
+
+            let proposal = VotingEngine::proposals(proposal_id).expect("proposal exists");
+            System::set_block_number(proposal.end);
+            <VotingEngine as Hooks<u64>>::on_initialize(proposal.end);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+
+            let next = proposal.end + 1;
+            System::set_block_number(next);
+            <VotingEngine as Hooks<u64>>::on_initialize(next);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
+        new_test_ext().execute_with(|| {
+            // Phase 1 整改:`create_joint_proposal` 公开 extrinsic 已删除,
+            // 只保留 `JointVoteEngine` trait 入口供业务模块内部调用;
+            // 这里直接验证 trait 路径的权限校验。
+
+            // 外部人员不能创建联合提案
+            let outsider = AccountId32::new([9u8; 32]);
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert!(
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    outsider,
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
+                )
+                .is_err()
+            );
+
+            // 省储会管理员可以创建联合提案
+            let nonce_prc: pallet::VoteNonceOf<Test> =
+                b"snap-nonce-prc".to_vec().try_into().expect("nonce fits");
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    prc_admin(0),
+                    10,
+                    nonce_prc.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
+                )
+            );
+
+            // 国储会管理员可以创建联合提案
+            let nonce_nrc: pallet::VoteNonceOf<Test> =
+                b"snap-nonce-nrc".to_vec().try_into().expect("nonce fits");
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce_nrc.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_requires_current_institution_admin() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+
+            assert_ok!(submit_joint_vote(
+                prc_admin(0),
+                proposal_id,
+                prc_pid(),
+                true
+            ));
+
+            assert_noop!(
+                submit_joint_vote(prc_admin(0), proposal_id, nrc_pid(), true),
+                pallet::Error::<Test>::NoPermission
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_rejects_duplicate_admin_vote() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+
+            assert_noop!(
+                submit_joint_vote(nrc_admin(0), proposal_id, nrc_pid(), true),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_uses_fixed_governance_threshold_not_provider() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            // 中文注释：测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+            assert_eq!(
+                JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+                None
+            );
+
+            for i in 1..primitives::count_const::NRC_INTERNAL_THRESHOLD as usize {
+                assert_ok!(submit_joint_vote(
+                    nrc_admin(i),
+                    proposal_id,
+                    nrc_pid(),
+                    true
+                ));
+            }
+            assert_eq!(
+                JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+                Some(true)
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
+
+            assert_eq!(
+                JointVotesByInstitution::<Test>::get(proposal_id, nrc_pid()),
+                Some(false)
+            );
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(
+                JointTallies::<Test>::get(proposal_id).no,
+                primitives::count_const::NRC_JOINT_VOTE_WEIGHT
+            );
+        });
+    }
+
+    #[test]
+    fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_some()
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_PRC, prc_pid()).is_some()
+            );
+            assert_noop!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                ),
+                pallet::Error::<Test>::RegularInternalProposalActive
+            );
+
+            cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .stage,
+                STAGE_CITIZEN
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_none()
+            );
+            assert!(
+                VotingEngine::internal_proposal_mutex(vote::internal::ORG_PRC, prc_pid()).is_none()
+            );
+
+            assert_ok!(
+                <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                    nrc_admin(1),
+                    vote::internal::ORG_NRC,
+                    nrc_pid(),
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn population_snapshot_nonce_cannot_be_reused_across_proposals() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert_ok!(
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
+                )
+            );
+
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            assert!(
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    11,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok()
+                )
+                .is_err()
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    binding_id_ok(),
+                    vote_nonce("n-1"),
+                    vote_sig_bad(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::InvalidSfidVoteCredential
+            );
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("n-2"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+            assert_eq!(CitizenTallies::<Test>::get(0).yes, 1);
+        });
+    }
+
+    #[test]
+    fn citizen_vote_same_sfid_can_only_vote_once_per_proposal() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("n-1"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    binding_id_ok(),
+                    vote_nonce("n-2"),
+                    vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    false
+                ),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_credential_nonce_is_replay_protected_per_proposal_and_sfid() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            insert_citizen_proposal(1, 10, 100);
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("same"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                1,
+                binding_id_ok(),
+                vote_nonce("same"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 0, 100);
+
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    binding_id_ok(),
+                    vote_nonce("x-1"),
+                    vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::CitizenEligibleTotalNotSet
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_timeout_with_half_or_less_is_rejected() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+            System::set_block_number(6);
+
+            assert_ok!(VotingEngine::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0
+            ));
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_timeout_is_auto_rejected_on_initialize() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            assert_ok!(VotingEngine::schedule_proposal_expiry(0, 5));
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            System::set_block_number(6);
+            <VotingEngine as Hooks<u64>>::on_initialize(6);
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_timeout_auto_registers_cleanup_and_clears_vote_nonces() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 5);
+            assert_ok!(VotingEngine::schedule_proposal_expiry(0, 5));
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("timeout-cleanup"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+            assert!(has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
+
+            System::set_block_number(6);
+            <VotingEngine as Hooks<u64>>::on_initialize(6);
+
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_REJECTED
+            );
+            assert!(has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
+
+            // set_status_and_emit(STATUS_REJECTED) 在 on_initialize(6) 中被调用时
+            // 已自动注册 90 天后清理，无需业务模块手动清理。
+            // cleanup_at = 6 + retention
+            let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
+            let cleanup_block = 6 + retention;
+            for i in 0..20u64 {
+                System::set_block_number(cleanup_block + i);
+                <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
+            }
+            assert!(!has_used_vote_nonce(0, binding_id_ok(), "timeout-cleanup"));
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    0,
+                    <Test as frame_system::Config>::Hashing::hash(b"sfid-other"),
+                    vote_nonce("n-ineligible-hash"),
+                    vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::SfidNotEligible
+            );
+
+            let outsider = AccountId32::new([7u8; 32]);
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(outsider),
+                    0,
+                    binding_id_ok(),
+                    vote_nonce("n-ineligible"),
+                    vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::SfidNotEligible
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_rejects_when_not_in_citizen_stage() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_noop!(
+                VotingEngine::citizen_vote(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    proposal_id,
+                    binding_id_ok(),
+                    vote_nonce("joint-stage"),
+                    vote_sig_ok(),
+                    province_ok(),
+                    signer_admin_pubkey_ok(),
+                    true
+                ),
+                pallet::Error::<Test>::InvalidProposalStage
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("immediate-pass"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTED);
+        });
+    }
+
+    #[test]
+    fn delayed_cleanup_cleans_used_vote_nonce_after_retention() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+
+            assert_ok!(VotingEngine::citizen_vote(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                0,
+                binding_id_ok(),
+                vote_nonce("immediate-cleanup"),
+                vote_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(0).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTED);
+            assert!(has_used_vote_nonce(0, binding_id_ok(), "immediate-cleanup"));
+
+            // 中文注释：执行成功终态会注册 90 天延迟清理，清理前凭证仍保留。
+            let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
+            let cleanup_block = retention;
+            for i in 0..20u64 {
+                System::set_block_number(cleanup_block + i);
+                <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
+            }
+            assert!(!has_used_vote_nonce(
+                0,
+                binding_id_ok(),
+                "immediate-cleanup"
+            ));
+        });
+    }
+
+    #[test]
+    fn citizen_finalize_before_timeout_is_rejected() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            System::set_block_number(100);
+
+            assert_noop!(
+                VotingEngine::finalize_proposal(RuntimeOrigin::signed(nrc_admin(0)), 0),
+                pallet::Error::<Test>::VoteNotExpired
+            );
+        });
+    }
+
+    #[test]
+    fn citizen_pass_threshold_function_boundaries_are_correct() {
+        assert!(!vote::citizen::is_citizen_vote_passed(0, 0));
+        assert!(!vote::citizen::is_citizen_vote_passed(5, 10));
+        assert!(vote::citizen::is_citizen_vote_passed(6, 10));
+    }
+
+    #[test]
+    fn citizen_reject_threshold_function_boundaries_are_correct() {
+        // eligible_total=0 → 不否决（无意义）
+        assert!(!vote::citizen::is_citizen_vote_rejected(0, 0));
+        // 反对 4/10 = 40% < 50% → 不否决（赞成仍有可能 > 50%）
+        assert!(!vote::citizen::is_citizen_vote_rejected(4, 10));
+        // 反对 5/10 = 50% → 否决（赞成最多 50%，无法严格 > 50%）
+        assert!(vote::citizen::is_citizen_vote_rejected(5, 10));
+        // 反对 6/10 = 60% → 否决
+        assert!(vote::citizen::is_citizen_vote_rejected(6, 10));
+    }
+
+    #[test]
+    fn joint_vote_all_yes_passes_immediately() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    100,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
+
+            for (institution, _) in all_prc_institutions() {
+                cast_joint_votes_until_finalized(proposal_id, institution, true);
+            }
+            for (institution, _) in all_prb_institutions() {
+                cast_joint_votes_until_finalized(proposal_id, institution, true);
+            }
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTED);
+            assert_eq!(proposal.stage, STAGE_JOINT);
+            assert_eq!(
+                JointTallies::<Test>::get(proposal_id).yes,
+                primitives::count_const::JOINT_VOTE_TOTAL
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_rejects() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    77,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+            cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
+            let first_prc = all_prc_institutions()
+                .first()
+                .cloned()
+                .expect("there should be at least one prc institution");
+            cast_joint_votes_until_finalized(proposal_id, first_prc.0, false);
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(proposal.start, System::block_number());
+            assert_eq!(
+                proposal.end,
+                proposal.start + primitives::count_const::VOTING_DURATION_BLOCKS as u64
+            );
+            assert_eq!(proposal.citizen_eligible_total, 77);
+            assert_eq!(JointTallies::<Test>::get(proposal_id).no, 1);
+        });
+    }
+
+    #[test]
+    fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    88,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            System::set_block_number(proposal.end + 1);
+            assert_ok!(VotingEngine::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                proposal_id
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(
+                proposal.end,
+                (proposal.start + primitives::count_const::VOTING_DURATION_BLOCKS as u64)
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    88,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(submit_joint_vote(
+                nrc_admin(0),
+                proposal_id,
+                nrc_pid(),
+                true
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            let expired_at = proposal.end + 1;
+            System::set_block_number(expired_at);
+            <VotingEngine as Hooks<u64>>::on_initialize(expired_at);
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.stage, STAGE_CITIZEN);
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(proposal.start, expired_at);
+            assert_eq!(
+                proposal.end,
+                expired_at + primitives::count_const::VOTING_DURATION_BLOCKS as u64
+            );
+        });
+    }
+
+    #[test]
+    fn joint_vote_timeout_with_unanimous_tally_passes() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    66,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+            JointTallies::<Test>::insert(
+                proposal_id,
+                VoteCountU32 {
+                    yes: primitives::count_const::JOINT_VOTE_TOTAL,
+                    no: 0,
+                },
+            );
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            System::set_block_number(proposal.end + 1);
+            assert_ok!(VotingEngine::finalize_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                proposal_id
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTED);
+            assert_eq!(proposal.stage, STAGE_JOINT);
+        });
+    }
+
+    #[test]
+    fn joint_vote_callback_failure_rolls_back_final_status() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    100,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            set_joint_callback_should_fail(true);
+            assert!(VotingEngine::set_status_and_emit(proposal_id, STATUS_PASSED).is_err());
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_VOTING);
+            assert_eq!(proposal.stage, STAGE_JOINT);
+        });
+    }
+
+    #[test]
+    fn joint_vote_callback_failure_does_not_cleanup_vote_credentials() {
+        new_test_ext().execute_with(|| {
+            insert_citizen_proposal(0, 10, 100);
+            mark_vote_nonce_used(0, binding_id_ok(), "keep-on-fail");
+            set_joint_callback_should_fail(true);
+
+            assert!(VotingEngine::set_status_and_emit(0, STATUS_PASSED).is_err());
+            assert_eq!(
+                Proposals::<Test>::get(0)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+            assert!(has_used_vote_nonce(0, binding_id_ok(), "keep-on-fail"));
+        });
+    }
+
+    #[test]
+    fn proposal_finalized_event_uses_status_after_joint_callback_override() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    100,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            set_joint_callback_override_status(Some(STATUS_EXECUTION_FAILED));
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
+
+            let finalized = System::events()
+                .into_iter()
+                .rev()
+                .find_map(|record| match record.event {
+                    RuntimeEvent::VotingEngine(Event::ProposalFinalized {
+                        proposal_id: event_id,
+                        status,
+                    }) if event_id == proposal_id => Some(status),
+                    _ => None,
+                })
+                .expect("proposal finalized event should exist");
+            assert_eq!(finalized, STATUS_EXECUTION_FAILED);
+            let finalized_count = System::events()
+                .into_iter()
+                .filter(|record| {
+                    matches!(
+                        &record.event,
+                        RuntimeEvent::VotingEngine(Event::ProposalFinalized {
+                            proposal_id: event_id,
+                            ..
+                        }) if *event_id == proposal_id
+                    )
+                })
+                .count();
+            assert_eq!(finalized_count, 1);
+        });
+    }
+
+    #[test]
+    fn auto_finalize_requeues_failed_joint_callback() {
+        new_test_ext().execute_with(|| {
+            let nonce = snapshot_nonce_ok();
+            let sig = snapshot_sig_ok();
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    66,
+                    nonce.as_slice(),
+                    sig.as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            JointTallies::<Test>::insert(
+                proposal_id,
+                VoteCountU32 {
+                    yes: primitives::count_const::JOINT_VOTE_TOTAL,
+                    no: 0,
+                },
+            );
+
+            let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
+            let expired_at = proposal.end + 1;
+
+            set_joint_callback_should_fail(true);
+            System::set_block_number(expired_at);
+            <VotingEngine as Hooks<u64>>::on_initialize(expired_at);
+
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_VOTING
+            );
+            assert_eq!(PendingExpiryBucket::<Test>::get(), Some(expired_at));
+            assert_eq!(
+                ProposalsByExpiry::<Test>::get(expired_at),
+                vec![proposal_id]
+            );
+
+            set_joint_callback_should_fail(false);
+            let next_block = expired_at + 1;
+            System::set_block_number(next_block);
+            <VotingEngine as Hooks<u64>>::on_initialize(next_block);
+
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTED
+            );
+            assert!(PendingExpiryBucket::<Test>::get().is_none());
+            assert!(ProposalsByExpiry::<Test>::get(expired_at).is_empty());
+        });
+    }
+
+    #[test]
+    fn auto_finalize_uses_pending_cursor_when_expiry_bucket_exceeds_per_block_limit() {
+        new_test_ext().execute_with(|| {
+            let end = 5u64;
+            let expiry = end + 1;
+            let total = 70u64;
+            for proposal_id in 0..total {
+                insert_citizen_proposal(proposal_id, 10, end);
+                assert_ok!(VotingEngine::schedule_proposal_expiry(proposal_id, end));
+            }
+
+            System::set_block_number(6);
+            <VotingEngine as Hooks<u64>>::on_initialize(6);
+            assert_eq!(ProposalsByExpiry::<Test>::get(expiry).len(), 6);
+            assert_eq!(PendingExpiryBucket::<Test>::get(), Some(expiry));
+
+            System::set_block_number(7);
+            <VotingEngine as Hooks<u64>>::on_initialize(7);
+            assert!(ProposalsByExpiry::<Test>::get(expiry).is_empty());
+            assert!(PendingExpiryBucket::<Test>::get().is_none());
+            for proposal_id in 0..total {
+                assert_eq!(
+                    Proposals::<Test>::get(proposal_id)
+                        .expect("proposal should exist")
+                        .status,
+                    STATUS_REJECTED
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn schedule_proposal_expiry_rejects_bucket_overflow() {
+        new_test_ext().execute_with(|| {
+            let end = 5u64;
+            for proposal_id in 0..128u64 {
+                assert_ok!(VotingEngine::schedule_proposal_expiry(proposal_id, end));
+            }
+
+            assert_noop!(
+                VotingEngine::schedule_proposal_expiry(999, end),
+                pallet::Error::<Test>::TooManyProposalsAtExpiry
+            );
+        });
+    }
+
+    #[test]
+    fn cleanup_queue_processes_full_due_bucket_without_orphaning_remaining_items() {
+        new_test_ext().execute_with(|| {
+            let cleanup_block = 77u64;
+            let ids: BoundedVec<u64, ConstU32<50>> = (0..50u64)
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("cleanup queue should fit");
+            for proposal_id in ids.iter().copied() {
+                insert_citizen_proposal(proposal_id, 10, 100);
+            }
+            CleanupQueue::<Test>::insert(cleanup_block, ids);
+
+            System::set_block_number(cleanup_block);
+            <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block);
+
+            assert!(CleanupQueue::<Test>::get(cleanup_block).is_empty());
+            for proposal_id in 0..50u64 {
+                assert_eq!(
+                    PendingProposalCleanups::<Test>::get(proposal_id),
+                    Some(PendingCleanupStage::AdminSnapshots)
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn schedule_cleanup_returns_error_when_all_candidate_buckets_are_full() {
+        new_test_ext().execute_with(|| {
+            let now = System::block_number();
+            fill_cleanup_schedule_window(now);
+
+            assert_noop!(
+                cleanup::schedule_cleanup::<Test>(9_999, now),
+                Error::<Test>::CleanupQueueFull
+            );
+        });
+    }
+
+    #[test]
+    fn terminal_status_rolls_back_when_cleanup_cannot_be_scheduled() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = 9_999u64;
+            let now = System::block_number();
+            insert_citizen_proposal(proposal_id, 10, now + 100);
+            fill_cleanup_schedule_window(now);
+
+            assert_noop!(
+                VotingEngine::set_status_and_emit(proposal_id, STATUS_REJECTED),
+                Error::<Test>::CleanupQueueFull
+            );
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_VOTING
+            );
+            assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
+        });
+    }
+
+    #[test]
+    fn retry_deadline_keeps_retry_state_when_cleanup_scheduling_fails() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+            fill_cleanup_schedule_window(deadline);
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert_eq!(
+                Proposals::<Test>::get(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_PASSED
+            );
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_some());
+            assert!(
+                ExecutionRetryDeadlines::<Test>::get(deadline + 1).contains(&proposal_id),
+                "cleanup scheduling failure must requeue retry deadline instead of losing it"
+            );
+        });
+    }
+
+    #[test]
+    fn retry_deadline_enters_pending_queue_when_reschedule_window_is_full() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+            fill_cleanup_schedule_window(deadline);
+            fill_retry_deadline_window(deadline + 1);
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_some());
+            assert_eq!(
+                PendingExecutionRetryExpirations::<Test>::get(proposal_id),
+                Some(deadline)
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should remain")
+                    .status,
+                STATUS_PASSED
+            );
+
+            clear_cleanup_schedule_window(deadline + 1);
+            clear_retry_deadline_window(deadline + 1);
+            System::set_block_number(deadline + 1);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline + 1);
+
+            assert!(PendingExecutionRetryExpirations::<Test>::get(proposal_id).is_none());
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal should exist")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+        });
+    }
+
+    #[test]
+    fn delayed_cleanup_chunks_cleanup_across_blocks() {
+        new_test_ext().execute_with(|| {
+            let proposal_id = 42u64;
+            let citizen_hashes = [
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+            ];
+
+            insert_citizen_proposal(proposal_id, 10, 100);
+            JointVotesByInstitution::<Test>::insert(proposal_id, nrc_pid(), true);
+            JointVotesByInstitution::<Test>::insert(proposal_id, prc_pid(), true);
+            JointVotesByInstitution::<Test>::insert(proposal_id, prb_pid(), true);
+            for (index, binding_id) in citizen_hashes.iter().enumerate() {
+                CitizenVotesByBindingId::<Test>::insert(proposal_id, *binding_id, true);
+                let nonce = match index {
+                    0 => "cleanup-nonce-1",
+                    1 => "cleanup-nonce-2",
+                    _ => "cleanup-nonce-3",
+                };
+                mark_vote_nonce_used(proposal_id, *binding_id, nonce);
+            }
+
+            // 中文注释：投票通过后由 callback 返回 Executed，终态会注册 90 天后清理。
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            // 此时 PendingProposalCleanups 尚未设置（要等 90 天后 process_cleanup_queue 触发）
+            assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
+
+            // set_status_and_emit 在 block 0 调用，cleanup_at = 0 + retention
+            let retention = 90u64 * primitives::pow_const::BLOCKS_PER_DAY;
+            let cleanup_block = retention;
+            // 运行多轮 on_initialize 直到清理完成
+            for i in 0..20u64 {
+                System::set_block_number(cleanup_block + i);
+                <VotingEngine as Hooks<u64>>::on_initialize(cleanup_block + i);
+                if PendingProposalCleanups::<Test>::get(proposal_id).is_none()
+                    && Proposals::<Test>::get(proposal_id).is_none()
+                {
+                    break;
+                }
+            }
+
+            assert!(PendingProposalCleanups::<Test>::get(proposal_id).is_none());
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-1"),
+                "cleanup-nonce-1"
+            ));
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-2"),
+                "cleanup-nonce-2"
+            ));
+            assert!(!has_used_vote_nonce(
+                proposal_id,
+                <Test as frame_system::Config>::Hashing::hash(b"cleanup-sfid-3"),
+                "cleanup-nonce-3"
+            ));
+        });
+    }
+
+    #[test]
+    fn store_and_get_proposal_data_works() {
+        new_test_ext().execute_with(|| {
+            assert!(VotingEngine::get_proposal_data(0).is_none());
+
+            let data = b"test proposal data".to_vec();
+            assert_ok!(VotingEngine::store_proposal_data(0, data.clone()));
+
+            let stored = VotingEngine::get_proposal_data(0).expect("data should exist");
+            assert_eq!(&stored[..], &data[..]);
+
+            // 覆盖
+            let data2 = b"updated data".to_vec();
+            assert_ok!(VotingEngine::store_proposal_data(0, data2.clone()));
+            let stored2 = VotingEngine::get_proposal_data(0).expect("data should exist");
+            assert_eq!(&stored2[..], &data2[..]);
+        });
+    }
+
+    #[test]
+    fn store_and_get_proposal_object_works() {
+        new_test_ext().execute_with(|| {
+            assert!(VotingEngine::get_proposal_object(7).is_none());
+            assert!(VotingEngine::get_proposal_object_meta(7).is_none());
+
+            let object = vec![1u8, 2, 3, 4, 5, 6];
+            assert_ok!(VotingEngine::store_proposal_object(7, 1, object.clone()));
+
+            let stored = VotingEngine::get_proposal_object(7).expect("object should exist");
+            assert_eq!(stored, object);
+
+            let meta = VotingEngine::get_proposal_object_meta(7).expect("meta should exist");
+            assert_eq!(meta.kind, 1);
+            assert_eq!(meta.object_len, 6);
+            assert_eq!(
+                meta.object_hash,
+                <Test as frame_system::Config>::Hashing::hash(&object)
+            );
+
+            VotingEngine::remove_proposal_object(7);
+            assert!(VotingEngine::get_proposal_object(7).is_none());
+            assert!(VotingEngine::get_proposal_object_meta(7).is_none());
+        });
+    }
+
+    #[test]
+    fn store_proposal_meta_works() {
+        new_test_ext().execute_with(|| {
+            VotingEngine::store_proposal_meta(42, 100);
+            let meta = ProposalMeta::<Test>::get(42).expect("meta should exist");
+            assert_eq!(meta.created_at, 100);
+            assert!(meta.passed_at.is_none());
+
+            VotingEngine::set_proposal_passed(42, 200);
+            let meta2 = ProposalMeta::<Test>::get(42).expect("meta should exist");
+            assert_eq!(meta2.passed_at, Some(200));
+        });
+    }
+
+    // ──── Phase 1 新增:公开 internal_vote extrinsic + InternalVoteResultCallback ────
+
+    /// 重置 Phase 1 新增的 thread_local 测试桩状态,避免用例间污染。
+    fn reset_internal_callback_state() {
+        INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
+        INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
+        INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
+        INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
+    }
+
+    #[test]
+    fn internal_vote_public_call_casts_vote() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(0),
+                proposal_id,
+                true
+            ));
+
+            assert!(InternalVotesByAccount::<Test>::contains_key(
+                proposal_id,
+                &nrc_admin(0)
+            ));
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).no, 0);
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_non_admin() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 非 NRC 管理员(比如 PRB 的管理员)不能投 NRC 的内部提案。
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(prb_admin(0), proposal_id, true),
+                pallet::Error::<Test>::NoPermission
+            );
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 0);
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_double_vote() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+            assert_ok!(cast_internal_vote_via_extrinsic(
+                nrc_admin(0),
+                proposal_id,
+                true
+            ));
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, false),
+                pallet::Error::<Test>::AlreadyVoted
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_passes_triggers_callback_approved_true() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // NRC 阈值 13 票;投 13 票赞成使提案进入 STATUS_PASSED。
+            for i in 0..13 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            // 回调被触发且 approved = true。
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert_eq!(log, vec![(proposal_id, true)]);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_early_rejection_triggers_callback_approved_false() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // NRC 总管理员 19 人,阈值 13 票。7 票反对 → 剩余 12 人全同意也到不了 13,
+            // 触发提前否决。
+            for i in 0..7 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    false
+                ));
+            }
+
+            // 回调被触发且 approved = false。
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert_eq!(log, vec![(proposal_id, false)]);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_REJECTED
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_callback_not_called_before_threshold() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 投 12 票赞成(阈值 13),未达阈值不应触发回调。
+            for i in 0..12 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            let log = INTERNAL_CALLBACK_LOG.with(|log| log.borrow().clone());
+            assert!(log.is_empty(), "未达阈值回调不应被调用: {:?}", log);
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+        });
+    }
+
+    #[test]
+    fn internal_vote_callback_err_rolls_back_status() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            // 前 12 票赞成(未达阈值,不触发回调,不受 SHOULD_FAIL 影响)。
+            for i in 0..12 {
+                assert_ok!(cast_internal_vote_via_extrinsic(
+                    nrc_admin(i),
+                    proposal_id,
+                    true
+                ));
+            }
+
+            // 第 13 票达阈值,回调会被触发;置 SHOULD_FAIL 让回调返回 Err。
+            INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = true);
+            assert!(cast_internal_vote_via_extrinsic(nrc_admin(12), proposal_id, true).is_err());
+
+            // 提案状态、票数必须整体回滚到投票中 + 12 票。
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_VOTING
+            );
+            assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 12);
+            assert!(!InternalVotesByAccount::<Test>::contains_key(
+                proposal_id,
+                &nrc_admin(12)
+            ));
+        });
+    }
+
+    #[test]
+    fn manual_retry_third_failure_marks_execution_failed() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should exist")
+                    .manual_attempts,
+                0
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                proposal_id
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should remain")
+                    .manual_attempts,
+                1
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(1)),
+                proposal_id
+            ));
+            assert_eq!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                    .expect("retry state should remain")
+                    .manual_attempts,
+                2
+            );
+
+            assert_ok!(VotingEngine::retry_passed_proposal(
+                RuntimeOrigin::signed(nrc_admin(2)),
+                proposal_id
+            ));
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+
+            let third_retry_outcome = System::events()
+                .into_iter()
+                .rev()
+                .find_map(|record| match record.event {
+                    RuntimeEvent::VotingEngine(Event::ProposalExecutionRetried {
+                        proposal_id: event_id,
+                        manual_attempts: 3,
+                        outcome,
+                    }) if event_id == proposal_id => Some(outcome),
+                    _ => None,
+                })
+                .expect("third retry event should exist");
+            assert_eq!(third_retry_outcome, STATUS_EXECUTION_FAILED);
+        });
+    }
+
+    #[test]
+    fn default_cancel_callback_rejects_passed_retry_proposal() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_noop!(
+                VotingEngine::cancel_passed_proposal(
+                    RuntimeOrigin::signed(nrc_admin(0)),
+                    proposal_id,
+                    b"not allowed"
+                        .to_vec()
+                        .try_into()
+                        .expect("reason should fit")
+                ),
+                Error::<Test>::ProposalCancellationNotAllowed
+            );
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_PASSED
+            );
+        });
+    }
+
+    #[test]
+    fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            let cleanup_log = INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow().clone());
+            assert_eq!(cleanup_log, vec![proposal_id]);
+        });
+    }
+
+    #[test]
+    fn joint_retryable_outcome_is_forced_to_execution_failed() {
+        new_test_ext().execute_with(|| {
+            set_joint_callback_override_status(Some(STATUS_PASSED));
+            let proposal_id =
+                <VotingEngine as JointVoteEngine<AccountId32>>::create_joint_proposal(
+                    nrc_admin(0),
+                    10,
+                    snapshot_nonce_ok().as_slice(),
+                    snapshot_sig_ok().as_slice(),
+                    province_ok().as_slice(),
+                    &signer_admin_pubkey_ok(),
+                )
+                .expect("joint proposal should be created");
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert!(
+                ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none(),
+                "joint proposal must not enter internal retry state"
+            );
+        });
+    }
+
+    #[test]
+    fn execution_retry_deadline_expires_to_execution_failed() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            let proposal_id = create_internal_proposal_via_engine(
+                nrc_admin(0),
+                vote::internal::ORG_NRC,
+                nrc_pid(),
+            );
+
+            assert_ok!(VotingEngine::set_status_and_emit(
+                proposal_id,
+                STATUS_PASSED
+            ));
+            let deadline = ProposalExecutionRetryStates::<Test>::get(proposal_id)
+                .expect("retry state should exist")
+                .retry_deadline;
+
+            System::set_block_number(deadline);
+            <VotingEngine as Hooks<u64>>::on_initialize(deadline);
+
+            assert!(ProposalExecutionRetryStates::<Test>::get(proposal_id).is_none());
+            assert_eq!(
+                VotingEngine::proposals(proposal_id)
+                    .expect("proposal exists")
+                    .status,
+                STATUS_EXECUTION_FAILED
+            );
+            assert!(System::events().into_iter().any(|record| matches!(
+                record.event,
+                RuntimeEvent::VotingEngine(Event::ProposalExecutionRetryExpired {
+                    proposal_id: event_id
+                }) if event_id == proposal_id
+            )));
+        });
+    }
+
+    #[test]
+    fn internal_vote_rejects_wrong_stage_joint_proposal() {
+        new_test_ext().execute_with(|| {
+            reset_internal_callback_state();
+            // 手工写一个 kind=JOINT 的提案,用 internal_vote 去投 → 应拒绝。
+            let proposal_id = 999u64;
+            let now = <frame_system::Pallet<Test>>::block_number();
+            Proposals::<Test>::insert(
+                proposal_id,
+                Proposal {
+                    kind: PROPOSAL_KIND_JOINT,
+                    stage: STAGE_JOINT,
+                    status: STATUS_VOTING,
+                    internal_org: None,
+                    internal_institution: None,
+                    start: now,
+                    end: now + 100,
+                    citizen_eligible_total: 0,
+                },
+            );
+
+            assert_noop!(
+                cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, true),
+                pallet::Error::<Test>::InvalidProposalKind
+            );
+        });
+    }

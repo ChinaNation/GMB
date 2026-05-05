@@ -1,6 +1,6 @@
 //! 决议销毁模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `voting-engine::internal_vote`,本模块不再有
+//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
 //! `vote_destroy` extrinsic。benchmark 只覆盖"发起提案"和"任意人重试执行"两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
@@ -28,7 +28,7 @@ fn prc_admin<T: Config>(index: usize) -> T::AccountId {
 }
 
 fn last_proposal_id<T: Config>() -> u64 {
-    voting_engine::Pallet::<T>::next_proposal_id().saturating_sub(1)
+    votingengine::Pallet::<T>::next_proposal_id().saturating_sub(1)
 }
 
 #[benchmarks]
@@ -50,9 +50,9 @@ mod benchmarks {
         );
 
         let proposal_id = last_proposal_id::<T>();
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
+        assert!(votingengine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
 
     // execute_destroy benchmark 已废弃: 该 wrapper extrinsic 已统一到
-    // VotingEngine::retry_passed_proposal,benchmark 由 voting-engine 自身覆盖。
+    // VotingEngine::retry_passed_proposal,benchmark 由 votingengine 自身覆盖。
 }

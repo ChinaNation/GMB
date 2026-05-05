@@ -2,7 +2,7 @@
 
 ## 用途
 
-MODULE_TAG 是各业务模块在 `voting-engine` 的 `ProposalData` / `ProposalOwner` 中写入的字节标识。投票引擎本身不解析提案数据内容，但会用 `ProposalOwner` 做 owner 校验，禁止跨模块覆写。各模块在读取时仍需校验前缀或独立存储键，防止误解码。
+MODULE_TAG 是各业务模块在 `votingengine` 的 `ProposalData` / `ProposalOwner` 中写入的字节标识。投票引擎本身不解析提案数据内容，但会用 `ProposalOwner` 做 owner 校验，禁止跨模块覆写。各模块在读取时仍需校验前缀或独立存储键，防止误解码。
 
 ## 适用场景
 

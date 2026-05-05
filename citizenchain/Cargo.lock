@@ -49,7 +49,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -1598,7 +1598,7 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -3051,7 +3051,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -3072,7 +3072,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -4526,7 +4526,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -7750,7 +7750,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -10135,7 +10135,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -10152,7 +10152,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -10301,7 +10301,7 @@ dependencies = [
  "scale-info",
  "sp-io",
  "sp-runtime",
- "voting-engine",
+ "votingengine",
 ]
 
 [[package]]
@@ -15400,7 +15400,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
-name = "voting-engine"
+name = "votingengine"
 version = "1.0.0"
 dependencies = [
  "frame-benchmarking",

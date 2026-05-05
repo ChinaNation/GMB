@@ -38,7 +38,7 @@ lib/citizen/
 
 ### 2.1 关键约束（必须遵守）
 
-- `voting-engine` 的 `create_internal_proposal`、`create_joint_proposal` 和 `internal_vote` 外部调用被禁用，直接调用会返回 `NoPermission`。
+- `votingengine` 的 `create_internal_proposal`、`create_joint_proposal` 和 `internal_vote` 外部调用被禁用，直接调用会返回 `NoPermission`。
 - 联合提案必须由业务治理 pallet 通过 `JointVoteEngine` trait 发起。
 - 内部投票必须由业务治理 pallet 通过 `InternalVoteEngine` trait 转发。
 
@@ -55,7 +55,7 @@ lib/citizen/
 | --- | --- | --- |
 | `account` | `AccountId32` | SS58 地址字符串（当前链 `ss58 = 2027`） |
 | `institution` | `[u8; 48]` | `0x` + 96 hex（机构 pallet id） |
-| `proposal_id` | `u64` | 年份编码：`年份 × 1,000,000 + 年内计数器`，如 `2026000001`，App 显示为 `2026#1` |
+| `proposal_id` | `u64` | 全局单调主键(双层 ID v1)。展示号 `(year, seq_in_year)` 通过 `votingengine::ProposalDisplayId[id]` 反查表持有,App 渲染为 `2026000123` 风格(年份 + 6 位补零序号),与主键解耦 |
 | `approve` | `bool` | `true/false` |
 | `nonce` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
 | `signature` | `BoundedVec<u8, 64>` | `0x` hex，解码后字节长度 `1..64` |
@@ -322,9 +322,9 @@ message = blake2_256(SCALE.encode(payload))
 - `resolution-issuance` 和 `runtime-upgrade` 的独立 ID 体系（`NextProposalId`、`GovToJointVote`、`JointVoteToGov`）已删除，直接使用投票引擎 proposal_id
 
 关键文件：
-- `voting-engine/src/proposal_cleanup.rs`（清理逻辑）
-- `voting-engine/src/active_proposal_limit.rs`（活跃提案限制）
-- `voting-engine/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
+- `votingengine/src/cleanup.rs`（清理逻辑）
+- `votingengine/src/limit.rs`（活跃提案限制）
+- `votingengine/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
 
 ### 6.4.1 Runtime 升级提案的摘要 / 对象分层
 
@@ -409,13 +409,13 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.3.1 活跃提案数量限制
 
-每个机构（`InstitutionPalletId`）同时最多允许 runtime 配置数量的活跃提案（当前生产值为 **10**），不区分提案类型（转账、销毁、换管理员等），由投票引擎（`voting-engine::active_proposal_limit`）统一管控。
+每个机构（`InstitutionPalletId`）同时最多允许 runtime 配置数量的活跃提案（当前生产值为 **10**），不区分提案类型（转账、销毁、换管理员等），由投票引擎（`votingengine::limit`，原 `active_proposal_limit`）统一管控。
 
 - 创建提案时：`try_add_active_proposal()` 检查并添加
 - 提案完成时：`remove_active_proposal()` 在 `set_status_and_emit` 中立即释放（提案通过/拒绝/过期时）
 - App 端发起提案前异步查询活跃数，达上限弹窗提示"提案数量已达上限"
 
-关键文件：`voting-engine/src/active_proposal_limit.rs`
+关键文件：`votingengine/src/limit.rs`
 
 ### 7.4 提案类型页面
 
@@ -641,8 +641,8 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 | `lib/duoqian/personal/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
 | `duoqian-manage/src/lib.rs` | 注册、创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
-| `voting-engine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
-| `voting-engine/src/lib.rs` | InternalThresholdProvider trait |
+| `votingengine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
+| `votingengine/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
 
 ## 9. 源码对齐基线
@@ -670,12 +670,12 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
 - `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`
-- `citizenchain/runtime/governance/voting-engine/src/lib.rs`
-- `citizenchain/runtime/governance/voting-engine/src/internal_vote.rs`
-- `citizenchain/runtime/governance/voting-engine/src/joint_vote.rs`
-- `citizenchain/runtime/governance/voting-engine/src/citizen_vote.rs`
-- `citizenchain/runtime/governance/voting-engine/src/proposal_cleanup.rs`
-- `citizenchain/runtime/governance/voting-engine/src/active_proposal_limit.rs`
+- `citizenchain/runtime/votingengine/src/lib.rs`
+- `citizenchain/runtime/votingengine/src/internal_vote.rs`
+- `citizenchain/runtime/votingengine/src/joint_vote.rs`
+- `citizenchain/runtime/votingengine/src/citizen_vote.rs`
+- `citizenchain/runtime/votingengine/src/cleanup.rs`
+- `citizenchain/runtime/votingengine/src/limit.rs`
 - `citizenchain/runtime/issuance/resolution-issuance/src/lib.rs`
 - `citizenchain/runtime/governance/runtime-upgrade/src/lib.rs`
 - `citizenchain/runtime/governance/admins-change/src/lib.rs`

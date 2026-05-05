@@ -40,7 +40,7 @@ const pallets = [
   },
   {
     name: '治理投票引擎',
-    module: 'voting-engine',
+    module: 'votingengine',
     desc: '三级投票引擎：内部投票、联合投票、公民投票，链上透明计票',
   },
   {

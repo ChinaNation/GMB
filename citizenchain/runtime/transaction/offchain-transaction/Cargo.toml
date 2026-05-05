@@ -20,7 +20,7 @@ sp-std = { workspace = true }
 log = { version = "0.4", default-features = false }
 
 primitives = { path = "../../primitives", default-features = false }
-voting-engine = { path = "../../governance/voting-engine", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
 institution-asset = { path = "../institution-asset", default-features = false }
 
 [features]
@@ -44,6 +44,6 @@ std = [
     "sp-std/std",
     "log/std",
     "primitives/std",
-    "voting-engine/std",
+    "votingengine/std",
     "institution-asset/std",
 ]

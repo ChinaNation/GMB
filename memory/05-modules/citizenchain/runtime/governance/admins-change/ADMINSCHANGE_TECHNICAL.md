@@ -1,6 +1,6 @@
 # ADMINS_ORIGIN_GOV Technical Notes
 
-最新更新：2026-05-02，生命周期写状态入口收口到 `SubjectLifecycle` trait，原始存储 mutator 仅保留 `pub(crate)`，并由 voting-engine 提案上下文约束调用。
+最新更新：2026-05-02，生命周期写状态入口收口到 `SubjectLifecycle` trait，原始存储 mutator 仅保留 `pub(crate)`，并由 votingengine 提案上下文约束调用。
 
 ## 1. 模块定位
 
@@ -63,7 +63,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 
 - 所有调用都必须传入 `proposal_id + module_tag + institution`，并校验该提案属于调用模块。
 - `create_pending_subject_for_proposal` 要求提案为 `PROPOSAL_KIND_INTERNAL / STAGE_INTERNAL / STATUS_VOTING`。
-- `activate_subject_for_proposal` 与 `close_subject_for_proposal` 要求提案为 `STATUS_PASSED`，且当前处于 voting-engine callback 执行作用域。
+- `activate_subject_for_proposal` 与 `close_subject_for_proposal` 要求提案为 `STATUS_PASSED`，且当前处于 votingengine callback 执行作用域。
 - `remove_pending_subject_for_proposal` 仅接受 `STATUS_REJECTED / STATUS_EXECUTION_FAILED`，用于拒绝或执行失败终态清理。
 
 关闭规则：
@@ -114,7 +114,7 @@ Pending 快照专用 API：
 3. 校验主体为 `Active` 且 `subject.org == org`。
 4. 校验发起人是当前管理员。
 5. 校验 `old_admin` 存在、`new_admin` 不存在。
-6. 在同一个 `with_transaction` 中调 `voting-engine` 的管理员集合变更内部提案入口创建投票（只接受 Active 主体，并申请同主体独占锁）。
+6. 在同一个 `with_transaction` 中调 `votingengine` 的管理员集合变更内部提案入口创建投票（只接受 Active 主体，并申请同主体独占锁）。
 7. 在同一事务中将 `AdminReplacementAction` 写入投票引擎 `ProposalData`，写入 `ProposalMeta`，并发出 `AdminReplacementProposed`。
 
 提案数据格式：
@@ -200,7 +200,7 @@ cargo test -p admins-change --lib
 - 替换后新管理员可继续发起提案。
 - 无效机构、旧管理员缺失、新管理员已存在等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
-- 生命周期 trait 拒绝脱离 voting-engine 提案上下文的激活/关闭调用。
+- 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - NRC/PRC/PRB 等 `BuiltinInstitution` 调用 `close_subject` 会被拒绝，状态保持 `Active`。
 - `PersonalDuoqian / SfidInstitution` 等动态主体激活后仍可通过 `close_subject` 正常关闭。
 - 执行路径拒绝 kind / stage / org / institution 与 `AdminReplacementAction` 不一致的提案。

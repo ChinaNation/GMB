@@ -388,7 +388,7 @@ fn decode_account_name_from_key(full_key_hex: &str, sfid_prefix_hex: &str) -> Op
 
 /// 机构提案列表分页。
 ///
-/// 当前阶段返回空列表占位。提案存储在 `voting-engine::Proposals[id]`,
+/// 当前阶段返回空列表占位。提案存储在 `votingengine::Proposals[id]`,
 /// 按 sfid_id 过滤需要扫描全表 + 反查 ProposalMeta.institution_hex,
 /// 实现略显重,放 follow-up 任务卡(本任务卡 §8 风险表)。
 ///

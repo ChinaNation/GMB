@@ -6,7 +6,7 @@
 use codec::Encode;
 use frame_support::{ensure, traits::Currency};
 use sp_runtime::{traits::CheckedAdd, DispatchResult, SaturatedConversion};
-use voting_engine::InstitutionPalletId;
+use votingengine::InstitutionPalletId;
 
 use crate::pallet::{Config, Error};
 use crate::BalanceOf;

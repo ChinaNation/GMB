@@ -31,7 +31,7 @@ use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
 };
 use crate::BalanceOf;
-use voting_engine::InternalVoteEngine;
+use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_close<T: Config>(
     who: T::AccountId,
@@ -78,7 +78,7 @@ pub(crate) fn do_propose_close<T: Config>(
         .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
         admins_change::Pallet::<T>::is_active_subject_admin(
-            voting_engine::internal_vote::ORG_DUOQIAN,
+            votingengine::vote::internal::ORG_DUOQIAN,
             subject_id,
             &who,
         ),
@@ -111,8 +111,8 @@ pub(crate) fn do_propose_close<T: Config>(
         Error::<T>::ReservedBalanceRemaining
     );
 
-    let org = voting_engine::internal_vote::ORG_DUOQIAN;
-    // 中文注释:用 subject_id 作为 voting-engine 治理索引(已由 resolve_admin_subject_for_account
+    let org = votingengine::vote::internal::ORG_DUOQIAN;
+    // 中文注释:用 subject_id 作为 votingengine 治理索引(已由 resolve_admin_subject_for_account
     // 解出),保证个人/机构走同一管理员主体。
     let institution = subject_id;
     // 中文注释:关闭提案需全员管理员通过(2026-05-03 整改)。从 active 主体读 admins.len()。

@@ -4,7 +4,7 @@
 ### 0.1 模块职责
 `runtime-upgrade` 负责把"Runtime wasm 升级"包装成一个受治理约束的链上流程，核心要求是：
 - 仅允许国储会（NRC）和 43 个省储会（PRC）管理员发起升级提案。
-- 升级提案必须先经过 `voting-engine` 的联合投票。
+- 升级提案必须先经过 `votingengine` 的联合投票。
 - 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
 - 联合投票通过后才允许执行 `set_code`。
 - 投票结果、执行结果必须在链上可追踪。
@@ -12,7 +12,7 @@
 ### 0.2 提案创建需求
 - 提案必须携带非空升级理由 `reason`。
 - 提案必须携带非空 wasm `code`。
-- 创建提案时同步在 `voting-engine` 创建联合投票，使用投票引擎统一分配的 `proposal_id`（本模块不维护独立 ID）。
+- 创建提案时同步在 `votingengine` 创建联合投票，使用投票引擎统一分配的 `proposal_id`（本模块不维护独立 ID）。
 
 ### 0.3 联合投票回调需求
 - 联合投票拒绝时，提案必须进入 `Rejected`。
@@ -22,7 +22,7 @@
 
 ### 0.4 执行失败处理
 - 若联合投票已通过但 `set_code` 执行失败，提案进入 `ExecutionFailed`。
-- runtime wasm 不再内嵌在摘要结构里，而是统一存入 `voting-engine::ProposalObject`。
+- runtime wasm 不再内嵌在摘要结构里，而是统一存入 `votingengine::ProposalObject`。
 - 执行成功、拒绝、执行失败后，wasm 对象继续保留到投票引擎 90 天延迟清理统一删除，不由业务模块手工删除。
 
 ### 0.5 可审计与运维需求
@@ -36,10 +36,10 @@
 ## 1. 模块定位
 `runtime-upgrade` 是"Runtime 升级治理编排模块"，负责：
 - 接收国储会或省储会管理员提交的 wasm 升级提案；
-- 调用 `voting-engine` 创建联合投票；
+- 调用 `votingengine` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
-- 摘要数据存储在 `voting-engine` 的 `ProposalData`；
-- 原始 wasm 对象存储在 `voting-engine` 的 `ProposalObject`；
+- 摘要数据存储在 `votingengine` 的 `ProposalData`；
+- 原始 wasm 对象存储在 `votingengine` 的 `ProposalObject`；
 - 本模块零本地存储。
 
 代码位置：
@@ -72,18 +72,18 @@ Runtime 配置位置：
 
 ## 3. 核心数据结构
 ### 3.1 ProposalStatus
-- `Voting`：创建时摘要快照；生产终态以 voting-engine 的 `Proposal.status` 为准。
+- `Voting`：创建时摘要快照；生产终态以 votingengine 的 `Proposal.status` 为准。
 - `Passed`：历史兼容枚举，生产回调路径不再写入。
 - `Rejected`：历史兼容枚举，生产回调路径不再写入。
 - `ExecutionFailed`：历史兼容枚举，生产回调路径不再写入。
 
-### 3.2 Proposal（摘要，序列化存入 voting-engine ProposalData）
+### 3.2 Proposal（摘要，序列化存入 votingengine ProposalData）
 - `proposer: AccountId`：提案发起人（国储会或省储会管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
-- `status: ProposalStatus`：创建时摘要字段；真实投票/执行状态读取 voting-engine。
+- `status: ProposalStatus`：创建时摘要字段；真实投票/执行状态读取 votingengine。
 
-### 3.3 对象层数据（统一存入 voting-engine ProposalObject）
+### 3.3 对象层数据（统一存入 votingengine ProposalObject）
 - `kind = 1`：表示 runtime wasm 对象
 - `object_len`：wasm 字节长度
 - `object_hash`：对象哈希
@@ -93,7 +93,7 @@ Runtime 配置位置：
 - `MODULE_TAG = b"rt-upg"`：存入 ProposalData 的前缀，用于区分不同业务模块，防止跨模块误解码。
 
 ## 4. 存储模型
-本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `voting-engine`：
+本模块无本地存储。所有提案数据、投票数据、元数据均存储在 `votingengine`：
 - `ProposalData`：存放 `MODULE_TAG + Proposal<T>` 摘要的 SCALE 编码
 - `ProposalObjectMeta`：存放 runtime wasm 的对象元数据（kind / len / hash）
 - `ProposalObject`：存放 runtime wasm 原始字节
@@ -144,7 +144,7 @@ Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_
 
 ### 5.4 投票引擎状态协同
 
-当前实现与 `voting-engine` 的协作关系如下：
+当前实现与 `votingengine` 的协作关系如下：
 
 - 联合投票通过时，投票引擎先按通用路径把提案写成 `STATUS_PASSED`，再在同一事务中执行本模块回调
 - 联合投票拒绝时，投票引擎保持 `STATUS_REJECTED`
@@ -205,16 +205,16 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 联合投票通过且执行成功时写入 `STATUS_EXECUTED`
 - 联合投票拒绝时保持 `STATUS_REJECTED`
 - 联合投票通过但执行失败时写入 `STATUS_EXECUTION_FAILED`
-- 查询层文档已明确：展示真实升级结果时以 voting-engine 的 `Proposal.status` 为准，业务摘要只用于展示 proposer/reason/code_hash
+- 查询层文档已明确：展示真实升级结果时以 votingengine 的 `Proposal.status` 为准，业务摘要只用于展示 proposer/reason/code_hash
 
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
 - `propose_runtime_upgrade` benchmark 已同步 ADR-008 step3 的 `province` 与 `signer_admin_pubkey` 参数，避免 runtime-benchmarks 聚合编译时继续走旧签名
-- `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `voting-engine` 的联合投票终态回调路径覆盖。
+- `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `votingengine` 的联合投票终态回调路径覆盖。
 
 ### 7.5 已收口入口
-1. `finalize_joint_vote` 手工 Root 入口已删除，只保留 voting-engine callback。
+1. `finalize_joint_vote` 手工 Root 入口已删除，只保留 votingengine callback。
 
 ## 8. 中文注释覆盖重点
 本模块当前已在以下关键位置补充中文注释：
@@ -227,7 +227,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 ## 9. 测试覆盖
 已覆盖（当前单测与框架完整性检查共 16 个测试）：
 - 国储会和省储会管理员均可发起提案，非联合提案发起人拒绝
-- 提案摘要与对象数据正确分别存入 voting-engine
+- 提案摘要与对象数据正确分别存入 votingengine
 - 联合投票拒绝进入 `Rejected`（含 wasm 对象保留到统一清理）
 - 联合投票通过并成功执行进入 `Passed`
 - 联合投票通过但执行失败进入 `ExecutionFailed`

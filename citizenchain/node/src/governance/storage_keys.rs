@@ -22,6 +22,13 @@ pub fn twox_128(data: &[u8]) -> [u8; 16] {
     out
 }
 
+/// 计算 twox_64 哈希(Substrate `Twox64Concat` 第一层 key 用)。
+pub fn twox_64(data: &[u8]) -> [u8; 8] {
+    let mut h = XxHash64::with_seed(0);
+    h.write(data);
+    h.finish().to_le_bytes()
+}
+
 /// 计算 blake2b_128 哈希（Substrate StorageMap key 哈希）。
 pub fn blake2b_128(data: &[u8]) -> [u8; 16] {
     let hash = Blake2bParams::new().hash_length(16).hash(data);
@@ -126,6 +133,26 @@ pub fn double_map_key(pallet: &str, storage: &str, key1: &[u8], key2: &[u8]) -> 
     key.extend_from_slice(key1);
     key.extend_from_slice(&blake2_hash2);
     key.extend_from_slice(key2);
+
+    format!("0x{}", hex::encode(&key))
+}
+
+/// 构造 `StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, K2, _>` 的
+/// **前缀**(只到第一层 K1,不含第二层 K2),用于 `state_getKeysPaged` 列举:
+///   twox_128(pallet) + twox_128(storage) + twox_64(K1) + K1
+///
+/// 对应 votingengine v1 的 `ProposalsByOrg / ByInstitution / ByOwner / ByYear`
+/// 4 张反向索引的列举前缀。
+pub fn twox64_concat_prefix(pallet: &str, storage: &str, key1: &[u8]) -> String {
+    let pallet_hash = twox_128(pallet.as_bytes());
+    let storage_hash = twox_128(storage.as_bytes());
+    let twox64_k1 = twox_64(key1);
+
+    let mut key = Vec::with_capacity(16 + 16 + 8 + key1.len());
+    key.extend_from_slice(&pallet_hash);
+    key.extend_from_slice(&storage_hash);
+    key.extend_from_slice(&twox64_k1);
+    key.extend_from_slice(key1);
 
     format!("0x{}", hex::encode(&key))
 }

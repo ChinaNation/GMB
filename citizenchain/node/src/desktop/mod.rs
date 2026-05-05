@@ -50,6 +50,11 @@ pub fn run_desktop() {
             governance::get_next_proposal_id,
             governance::get_institution_proposals,
             governance::get_institution_proposal_page,
+            // 双层 ID + 反向索引(spec_version v1)
+            governance::get_proposal_display,
+            governance::list_proposals_by_org,
+            governance::list_proposals_by_institution,
+            governance::list_proposals_by_owner,
             governance::activation::build_activate_admin_request,
             governance::activation::verify_activate_admin,
             governance::activation::get_activated_admins,

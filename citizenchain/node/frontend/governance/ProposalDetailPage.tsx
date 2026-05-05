@@ -37,6 +37,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const [resolvedShenfenId, setResolvedShenfenId] = useState<string | undefined>(externalShenfenId);
   // 投票中（已提交但未确认上链）的钱包 pubkey → 提交时间
   const [pendingVotes, setPendingVotes] = useState<Map<string, number>>(new Map());
+  // 双层 ID v1:展示号反查值,链上 ProposalDisplayId[id] 拉取
+  const [displayMeta, setDisplayMeta] = useState<import('./types').ProposalDisplayMeta | null>(
+    null,
+  );
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 超过 5 分钟未确认的投票视为丢失
   const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
@@ -87,8 +91,12 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   useEffect(() => {
     setLoading(true);
     const fetchAll = async () => {
-      const d = await api.getProposalDetail(proposalId);
+      const [d, dm] = await Promise.all([
+        api.getProposalDetail(proposalId),
+        api.getProposalDisplay(proposalId).catch(() => null),
+      ]);
       setInfo(d);
+      setDisplayMeta(dm ?? null);
       let sid = externalShenfenId;
       if (!sid && d.meta.institutionHex) {
         sid = institutionHexToShenfenId(d.meta.institutionHex);
@@ -149,7 +157,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   if (!info) return null;
 
   const { meta } = info;
-  const displayId = formatProposalId(meta.proposalId);
+  const displayId = formatProposalId(meta.proposalId, displayMeta);
   const displayStatus = proposalDisplayStatus(meta.status, info.runtimeUpgradeDetail?.status);
 
   return (
@@ -369,10 +377,16 @@ function VoteTallyBar({ title, yes, no, threshold }: {
   );
 }
 
-function formatProposalId(id: number): string {
-  const year = Math.floor(id / 1_000_000);
-  const counter = id % 1_000_000;
-  return `${year}#${counter}`;
+/// 提案展示号格式化(双层 ID v1):`2026000123` 风格(年份 + 6 位补零序号)。
+/// 主键 `proposalId` 与展示号解耦,展示号由 `getProposalDisplay` 反查得到。
+/// `meta=null` 时(链上未写入)fallback 到 `#<id>` 形式。
+export function formatProposalId(
+  id: number,
+  meta?: import('./types').ProposalDisplayMeta | null,
+): string {
+  if (meta == null) return `#${id}`;
+  const seq = String(meta.seqInYear).padStart(6, '0');
+  return `${meta.year}${seq}`;
 }
 function kindLabel(kind: number): string {
   return kind === 0 ? '内部投票' : kind === 1 ? '联合投票' : '未知';

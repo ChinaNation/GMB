@@ -4,6 +4,7 @@ import type {
   ActivatedAdmin,
   GovernanceOverview,
   InstitutionDetail,
+  ProposalDisplayMeta,
   ProposalFullInfo,
   ProposalListItem,
   ProposalPageResult,
@@ -31,6 +32,15 @@ export const governanceApi = {
     invoke<ProposalListItem[]>('get_institution_proposals', { shenfenId }),
   getInstitutionProposalPage: (shenfenId: string, startId: number, count: number) =>
     invoke<ProposalPageResult>('get_institution_proposal_page', { shenfenId, startId, count }),
+  // 双层 ID + 反向索引(spec_version v1)
+  getProposalDisplay: (proposalId: number) =>
+    invoke<ProposalDisplayMeta | null>('get_proposal_display', { proposalId }),
+  listProposalsByOrg: (org: number) =>
+    invoke<number[]>('list_proposals_by_org', { org }),
+  listProposalsByInstitution: (shenfenId: string) =>
+    invoke<number[]>('list_proposals_by_institution', { shenfenId }),
+  listProposalsByOwner: (moduleTagScaleHex: string) =>
+    invoke<number[]>('list_proposals_by_owner', { moduleTagScaleHex }),
   buildActivateAdminRequest: (pubkeyHex: string, shenfenId: string) =>
     invoke<ActivateRequestResult>('build_activate_admin_request', { pubkeyHex, shenfenId }),
   verifyActivateAdmin: (

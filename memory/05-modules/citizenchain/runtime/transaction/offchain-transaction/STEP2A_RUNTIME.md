@@ -181,7 +181,7 @@ $ cargo check -p offchain-transaction
 - 运行完整单元/集成测试
 
 **Step 2b `set_max_l2_fee_rate` 联合投票**:
-把本步的 `ensure_root(origin)` 入口改为接 `voting-engine` 联合投票 pallet 的 `JointVoteEngine::execute_if_passed`,让提案通过后再由投票引擎回调本 pallet 的内部执行函数。
+把本步的 `ensure_root(origin)` 入口改为接 `votingengine` 联合投票 pallet 的 `JointVoteEngine::execute_if_passed`,让提案通过后再由投票引擎回调本 pallet 的内部执行函数。
 
 ## 7. 风险与验证后续
 

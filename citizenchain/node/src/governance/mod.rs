@@ -364,6 +364,72 @@ pub async fn get_institution_proposal_page(
     .map_err(|e| format!("institution proposal page task failed: {e}"))?
 }
 
+// ──── 双层 ID 与反向索引(spec_version v1 — PR-Z) ────
+
+/// 查询提案展示号 `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }`。
+#[tauri::command]
+pub async fn get_proposal_display(
+    app: AppHandle,
+    proposal_id: u64,
+) -> Result<Option<proposal::ProposalDisplayMeta>, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行,无法查询展示号".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || proposal::fetch_proposal_display_id(proposal_id))
+        .await
+        .map_err(|e| format!("proposal display task failed: {e}"))?
+}
+
+/// 反向索引:列出 `ProposalsByOrg[org]` 下所有 proposal_id。
+#[tauri::command]
+pub async fn list_proposals_by_org(app: AppHandle, org: u8) -> Result<Vec<u64>, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行,无法查询反向索引".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || proposal::fetch_proposals_by_org(org))
+        .await
+        .map_err(|e| format!("proposals by org task failed: {e}"))?
+}
+
+/// 反向索引:列出 `ProposalsByInstitution[institution]` 下所有 proposal_id。
+#[tauri::command]
+pub async fn list_proposals_by_institution(
+    app: AppHandle,
+    shenfen_id: String,
+) -> Result<Vec<u64>, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行,无法查询反向索引".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        proposal::fetch_proposals_by_institution(&shenfen_id)
+    })
+    .await
+    .map_err(|e| format!("proposals by institution task failed: {e}"))?
+}
+
+/// 反向索引:列出 `ProposalsByOwner[module_tag]` 下所有 proposal_id。
+/// `module_tag` 是 BoundedVec<u8> 的 SCALE 编码字节(Compact<len> + bytes)。
+#[tauri::command]
+pub async fn list_proposals_by_owner(
+    app: AppHandle,
+    module_tag_scale_hex: String,
+) -> Result<Vec<u64>, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行,无法查询反向索引".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = hex::decode(module_tag_scale_hex.trim_start_matches("0x"))
+            .map_err(|e| format!("module_tag hex 解析失败: {e}"))?;
+        proposal::fetch_proposals_by_owner(&bytes)
+    })
+    .await
+    .map_err(|e| format!("proposals by owner task failed: {e}"))?
+}
+
 /// 构建投票签名请求 QR JSON（需要节点运行）。
 #[tauri::command]
 pub async fn build_vote_request(

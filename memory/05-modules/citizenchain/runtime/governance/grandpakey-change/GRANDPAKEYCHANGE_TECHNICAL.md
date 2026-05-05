@@ -5,7 +5,7 @@
 `grandpakey-change` 负责把“机构 GRANDPA 公钥替换”包装成受治理约束的链上流程，要求：
 - 仅支持国储会（NRC）与省储会（PRC）发起 GRANDPA 密钥替换。
 - 仅允许目标机构内部管理员发起、投票、执行和清理提案。
-- 治理投票由 `voting-engine` 的内部投票统一承载。
+- 治理投票由 `votingengine` 的内部投票统一承载。
 - 投票通过后由模块自动调度 `pallet-grandpa::schedule_change`。
 
 ### 0.2 提案创建需求
@@ -13,7 +13,7 @@
 - 发起人必须是该机构当前内部管理员。
 - `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
 - `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
-- 并发控制由 `voting-engine` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
+- 并发控制由 `votingengine` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
 - 同一把 `new_key` 若被多个活跃提案占用，第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败，可通过 `VotingEngine::cancel_passed_proposal` 清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
 
 ### 0.3 执行与失败恢复需求
@@ -23,7 +23,7 @@
 - 若提案已通过但已确定不可执行，应允许机构管理员手动取消失败提案，解除机构阻塞。
 
 ### 0.4 生命周期与清理需求
-- 被拒绝的提案由 `voting-engine` 的过期/清理机制处理。
+- 被拒绝的提案由 `votingengine` 的过期/清理机制处理。
 - 已通过但确定不可执行的提案，通过 `VotingEngine::cancel_passed_proposal` 手动清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
 - 注意：旧版的 `cancel_stale_replace_grandpa_key`（call_index=3）已移除，stale 清理由投票引擎统一承载。
 
@@ -31,7 +31,7 @@
 `grandpakey-change` 是“GRANDPA 密钥治理模块”，职责是：
 - 仅允许国储会（NRC）与省储会（PRC）发起 GRANDPA 密钥替换提案。
 - 仅允许目标机构内部管理员参与提案/投票/执行/清理。
-- 借助 `voting-engine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
+- 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
 
 代码位置：
 - `/Users/rhett/GMB/citizenchain/runtime/governance/grandpakey-change/src/lib.rs`
@@ -49,7 +49,7 @@ Runtime 配置位置：
 - 注意：旧版的 `StaleProposalLifetime` 配置项已移除。
 
 ## 3. 存储模型
-本模块仅维护 2 个存储项，提案数据由 `voting-engine` 统一管理。
+本模块仅维护 2 个存储项，提案数据由 `votingengine` 统一管理。
 
 1. `CurrentGrandpaKeys: Map<InstitutionPalletId, [u8; 32]>`
 - 机构当前治理认可的 GRANDPA 公钥
@@ -57,7 +57,7 @@ Runtime 配置位置：
 2. `GrandpaKeyOwnerByKey: Map<[u8; 32], InstitutionPalletId>`
 - 公钥到机构的反向索引，O(1) 判断 new_key 是否已被占用
 
-提案数据存储在 `voting-engine` 中：
+提案数据存储在 `votingengine` 中：
 - 提案动作（`GrandpaKeyReplacementAction`）通过 `create_internal_proposal_with_data` 在创建提案时原子写入，并同步绑定 `ProposalOwner`
 - 机构活跃提案列表由 `ActiveProposalsByInstitution`（上限 10 个）管控
 
@@ -83,7 +83,7 @@ Runtime 配置位置：
 - `new_key` 必须是有效且非 weak/small-order 的 ed25519 公钥（`CompressedEdwardsY` + `is_small_order`）
 - `new_key != old_key`
 - `new_key` 不能被其他机构当前占用（反向索引 O(1)）
-- 机构活跃提案数由 `voting-engine` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
+- 机构活跃提案数由 `votingengine` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
 
 ### 5.2 投票入口（由 VotingEngine 承载）
 `vote_replace_grandpa_key` extrinsic 已删除。
@@ -176,7 +176,7 @@ Runtime 配置位置：
 - `pre_upgrade` 记录 `CurrentGrandpaKeys` 数量，并检查当前 key 无重复。
 - `post_upgrade` 校验 storage version、正反向索引数量一致、每条 `CurrentGrandpaKeys[institution] = key` 都有 `GrandpaKeyOwnerByKey[key] = institution`。
 
-Cargo `try-runtime` feature 会向 `frame-support`、`frame-system`、`pallet-grandpa`、`sp-runtime`、`voting-engine` 传播。
+Cargo `try-runtime` feature 会向 `frame-support`、`frame-system`、`pallet-grandpa`、`sp-runtime`、`votingengine` 传播。
 
 ## 13. 测试覆盖
 `cargo test -p grandpakey-change` 覆盖（17 个用例，含 runtime integrity/genesis 基础用例）：

@@ -1,5 +1,5 @@
 [package]
-name = "voting-engine"  # 治理投票引擎
+name = "votingengine"  # 投票引擎
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者
@@ -15,7 +15,7 @@ frame-benchmarking = { workspace = true, optional = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 
-primitives = { path = "../../primitives", default-features = false }
+primitives = { path = "../primitives", default-features = false }
 
 [features]
 default = ["std"]

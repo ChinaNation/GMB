@@ -14,7 +14,7 @@ use frame_support::{
 use sp_runtime::traits::Zero;
 use sp_runtime::DispatchError;
 use sp_std::vec::Vec;
-use voting_engine::{
+use votingengine::{
     JointVoteEngine, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED, STATUS_REJECTED,
 };
 
@@ -35,7 +35,7 @@ pub struct RecipientAmount<AccountId, Balance> {
     pub amount: Balance,
 }
 
-/// 存入 voting-engine ProposalData 的业务数据结构。
+/// 存入 votingengine ProposalData 的业务数据结构。
 #[derive(Encode, Decode, Clone, RuntimeDebug, PartialEq, Eq)]
 pub struct IssuanceProposalData<AccountId, Balance> {
     pub proposer: AccountId,
@@ -106,13 +106,13 @@ impl<T: Config> Pallet<T> {
     pub fn load_proposal_data(
         proposal_id: u64,
     ) -> Option<IssuanceProposalData<T::AccountId, BalanceOf<T>>> {
-        let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)?;
+        let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)?;
         Self::decode_tagged_data(&raw)
     }
 
     /// 判断指定提案是否属于本模块。
     pub fn owns_proposal(proposal_id: u64) -> bool {
-        voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+        votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
     }
 
     fn decode_tagged_data(raw: &[u8]) -> Option<IssuanceProposalData<T::AccountId, BalanceOf<T>>> {
@@ -128,7 +128,7 @@ impl<T: Config> Pallet<T> {
         approved: bool,
     ) -> Result<FinalizeOutcome, DispatchError> {
         // 中文注释：联合投票终结、发行执行和计数递减必须在同一事务里提交；
-        // voting-engine 负责在外层终态转换后统一登记提案清理。
+        // votingengine 负责在外层终态转换后统一登记提案清理。
         with_transaction(|| {
             if let Err(err) = Self::ensure_vote_engine_callback_context(proposal_id, approved) {
                 return TransactionOutcome::Rollback(Err(err));
@@ -207,13 +207,13 @@ impl<T: Config> Pallet<T> {
     }
 
     fn ensure_vote_engine_callback_context(proposal_id: u64, approved: bool) -> DispatchResult {
-        // 中文注释：决议发行只接受 voting-engine 在终态转换事务内发起的回调，
+        // 中文注释：决议发行只接受 votingengine 在终态转换事务内发起的回调，
         // 不再提供任何 Root 或外部来源可直接触发的手工 finalize 路径。
         ensure!(
-            voting_engine::pallet::CallbackExecutionScopes::<T>::contains_key(proposal_id),
+            votingengine::pallet::CallbackExecutionScopes::<T>::contains_key(proposal_id),
             Error::<T>::ProposalNotFinalizable
         );
-        let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+        let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(Error::<T>::ProposalNotFound)?;
         ensure!(
             proposal.kind == PROPOSAL_KIND_JOINT && proposal.stage == STAGE_JOINT,

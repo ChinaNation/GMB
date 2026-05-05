@@ -10,7 +10,7 @@
 //   - 本钱包已投反对:灰色"已拒绝"(禁用)
 //   - 多签 Active:无按钮(创建已完成)
 //
-// "激活"行为本质是 voting-engine `internal_vote(proposal_id, approve=true)`,
+// "激活"行为本质是 votingengine `internal_vote(proposal_id, approve=true)`,
 // 沿用现有 [DuoqianManageDetailPage] 的 QrSigner 签名 + InternalVoteService 投票流程,
 // 不引入新的签名逻辑。
 

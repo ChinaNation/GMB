@@ -106,9 +106,9 @@ mod benchmarks {
             signer_admin_pubkey,
         );
 
-        let proposal_id = voting_engine::Pallet::<T>::next_proposal_id().saturating_sub(1);
+        let proposal_id = votingengine::Pallet::<T>::next_proposal_id().saturating_sub(1);
         assert!(
-            voting_engine::Pallet::<T>::get_proposal_data(proposal_id).is_some(),
+            votingengine::Pallet::<T>::get_proposal_data(proposal_id).is_some(),
             "runtime upgrade benchmark should store proposal data in voting engine"
         );
     }

@@ -34,7 +34,7 @@ use crate::pallet::{
 use crate::personal::types::{DuoqianAccount, DuoqianStatus};
 use crate::traits::{ProtectedSourceChecker, SfidInstitutionVerifier};
 use crate::RegisteredInstitution;
-use voting_engine::InternalVoteEngine;
+use votingengine::InternalVoteEngine;
 
 /// 机构整体创建提案 (call_index=5,ADR-008 step2b)。
 #[allow(clippy::too_many_arguments)]
@@ -94,7 +94,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     // 与 NRC/PRC/PRB 的 shenfen_id_to_fixed48 算法一致,不再绕道 main_address。
     let institution = sfid_id_to_institution_id(sfid_id.as_slice())
         .ok_or(Error::<T>::EmptySfidId)?;
-    let org = voting_engine::internal_vote::ORG_DUOQIAN;
+    let org = votingengine::vote::internal::ORG_DUOQIAN;
     let action = CreateInstitutionAction {
         sfid_id: sfid_id.clone(),
         institution_name: institution_name.clone(),
@@ -198,7 +198,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         TransactionOutcome::Commit(Ok(proposal_id))
     })?;
 
-    let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
+    let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
         .map(|p| p.end)
         .ok_or(Error::<T>::VoteEngineError)?;
 
