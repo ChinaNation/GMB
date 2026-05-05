@@ -137,7 +137,7 @@ pub struct InstitutionDetail {
 
 /// 机构提案列表分页结果。
 ///
-/// 当前阶段仅返回空列表占位(全量扫描 voting-engine `Proposals` 并按机构过滤
+/// 当前阶段仅返回空列表占位(全量扫描 votingengine `Proposals` 并按机构过滤
 /// 留 follow-up 任务卡)。前端 UI 依然会显示"暂无提案"行,未来填充时无需改 UI。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

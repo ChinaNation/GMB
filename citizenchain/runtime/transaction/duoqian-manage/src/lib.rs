@@ -33,7 +33,7 @@ use frame_system::pallet_prelude::*;
 use sp_core::sr25519::Public as Sr25519Public;
 use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
-use voting_engine::{
+use votingengine::{
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
 };
 
@@ -56,14 +56,14 @@ pub mod pallet {
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine::Config + admins_change::Config {
+    pub trait Config: frame_system::Config + votingengine::Config + admins_change::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Currency: Currency<Self::AccountId> + ReservableCurrency<Self::AccountId>;
 
         /// 内部投票引擎
-        type InternalVoteEngine: voting_engine::InternalVoteEngine<Self::AccountId>;
+        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         type AddressValidator: DuoqianAddressValidator<Self::AccountId>;
         type ReservedAddressChecker: DuoqianReservedAddressChecker<Self::AccountId>;
@@ -697,7 +697,7 @@ pub mod pallet {
             let _ = ensure_signed(origin)?;
 
             // 读取提案数据，校验 MODULE_TAG 后判断操作类型
-            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             let tag = crate::MODULE_TAG;
             ensure!(
@@ -707,7 +707,7 @@ pub mod pallet {
             let action_tag = raw[tag.len()];
 
             // 校验投票引擎状态必须为 REJECTED
-            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
                 proposal.status == STATUS_REJECTED,
@@ -889,7 +889,7 @@ pub mod pallet {
 
         pub(crate) fn create_pending_admin_subject_for_proposal(
             proposal_id: u64,
-            institution_id: voting_engine::InstitutionPalletId,
+            institution_id: votingengine::InstitutionPalletId,
             kind: admins_change::AdminSubjectKind,
             admins: &DuoqianAdminsOf<T>,
             threshold: u32,
@@ -899,7 +899,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                voting_engine::internal_vote::ORG_DUOQIAN,
+                votingengine::vote::internal::ORG_DUOQIAN,
                 kind,
                 admins.iter().cloned().collect(),
                 threshold,
@@ -909,7 +909,7 @@ pub mod pallet {
 
         pub(crate) fn activate_admin_subject(
             proposal_id: u64,
-            institution_id: voting_engine::InstitutionPalletId,
+            institution_id: votingengine::InstitutionPalletId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::activate_subject_for_proposal(
                 proposal_id,
@@ -920,7 +920,7 @@ pub mod pallet {
 
         pub(crate) fn remove_pending_admin_subject(
             proposal_id: u64,
-            institution_id: voting_engine::InstitutionPalletId,
+            institution_id: votingengine::InstitutionPalletId,
         ) {
             let _ = admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
                 proposal_id,
@@ -931,7 +931,7 @@ pub mod pallet {
 
         pub(crate) fn close_admin_subject(
             proposal_id: u64,
-            institution_id: voting_engine::InstitutionPalletId,
+            institution_id: votingengine::InstitutionPalletId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::close_subject_for_proposal(
                 proposal_id,
@@ -985,7 +985,7 @@ pub mod pallet {
 // ──── 投票终态回调:把已通过的多签创建/关闭提案落地到链上 ────
 //
 // Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
+// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor:
 // - 按 `MODULE_TAG + ACTION_CREATE_PERSONAL / ACTION_CLOSE` 前缀认领本模块提案;
 // - `approved = true` → 分派到 `execute_create` / `execute_close`;执行失败
@@ -1001,7 +1001,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         use frame_support::storage::{with_transaction, TransactionOutcome};
-        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+        let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
@@ -1130,7 +1130,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
-        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+        let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(()),
         };
@@ -1181,7 +1181,7 @@ mod tests {
     use frame_system as system;
     use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine::internal_vote::ORG_DUOQIAN;
+    use votingengine::vote::internal::ORG_DUOQIAN;
 
     type Block = frame_system::mocking::MockBlock<Test>;
     type Balance = u128;
@@ -1210,7 +1210,7 @@ mod tests {
         pub type Balances = pallet_balances;
 
         #[runtime::pallet_index(2)]
-        pub type VotingEngine = voting_engine;
+        pub type VotingEngine = votingengine;
 
         #[runtime::pallet_index(3)]
         pub type Duoqian = pallet;
@@ -1347,7 +1347,7 @@ mod tests {
     }
 
     pub struct TestSfidEligibility;
-    impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
     {
         fn is_eligible(
@@ -1371,17 +1371,17 @@ mod tests {
 
     pub struct TestPopulationSnapshotVerifier;
     impl
-        voting_engine::PopulationSnapshotVerifier<
+        votingengine::PopulationSnapshotVerifier<
             AccountId32,
-            voting_engine::pallet::VoteNonceOf<Test>,
-            voting_engine::pallet::VoteSignatureOf<Test>,
+            votingengine::pallet::VoteNonceOf<Test>,
+            votingengine::pallet::VoteSignatureOf<Test>,
         > for TestPopulationSnapshotVerifier
     {
         fn verify_population_snapshot(
             _who: &AccountId32,
             _eligible_total: u64,
-            _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
-            _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _nonce: &votingengine::pallet::VoteNonceOf<Test>,
+            _signature: &votingengine::pallet::VoteSignatureOf<Test>,
             _province: &[u8],
             _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
@@ -1391,7 +1391,7 @@ mod tests {
 
     /// 测试用 InternalAdminProvider：从 admins-change 统一主体表读取管理员。
     pub struct TestInternalAdminProvider;
-    impl voting_engine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
             if org != ORG_DUOQIAN {
                 return false;
@@ -1433,7 +1433,7 @@ mod tests {
     }
 
     pub struct TestInternalAdminCountProvider;
-    impl voting_engine::InternalAdminCountProvider for TestInternalAdminCountProvider {
+    impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
         fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_DUOQIAN {
                 return None;
@@ -1444,7 +1444,7 @@ mod tests {
 
     /// 测试用 InternalThresholdProvider：从 admins-change 统一主体表读取阈值。
     pub struct TestInternalThresholdProvider;
-    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+    impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
             if org != ORG_DUOQIAN {
                 return false;
@@ -1461,7 +1461,7 @@ mod tests {
 
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_DUOQIAN {
-                return voting_engine::internal_vote::fixed_governance_pass_threshold(org);
+                return votingengine::vote::internal::fixed_governance_pass_threshold(org);
             }
             admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
         }
@@ -1481,7 +1481,7 @@ mod tests {
         }
     }
 
-    impl voting_engine::Config for Test {
+    impl votingengine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
@@ -1516,7 +1516,7 @@ mod tests {
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type InternalVoteEngine = voting_engine::Pallet<Test>;
+        type InternalVoteEngine = votingengine::Pallet<Test>;
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
@@ -1538,7 +1538,7 @@ mod tests {
     impl admins_change::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<64>;
-        type InternalVoteEngine = voting_engine::Pallet<Test>;
+        type InternalVoteEngine = votingengine::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1699,7 +1699,7 @@ mod tests {
     }
 
     fn last_proposal_id() -> u64 {
-        voting_engine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+        votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
     fn make_admins(seeds: &[u8]) -> DuoqianAdminsOf<Test> {
@@ -2843,9 +2843,9 @@ mod tests {
             assert!(PendingPersonalCreate::<Test>::contains_key(pid));
 
             // 模拟投票引擎将提案置为 REJECTED
-            voting_engine::Proposals::<Test>::mutate(pid, |maybe| {
+            votingengine::Proposals::<Test>::mutate(pid, |maybe| {
                 if let Some(proposal) = maybe {
-                    proposal.status = voting_engine::STATUS_REJECTED;
+                    proposal.status = votingengine::STATUS_REJECTED;
                 }
             });
 

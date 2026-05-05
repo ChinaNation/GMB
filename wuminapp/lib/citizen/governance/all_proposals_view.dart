@@ -20,13 +20,14 @@ import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
 import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_detail_page.dart';
 import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
 
-/// 全局提案列表：展示全链所有提案，按 ID 倒序，标注投票状态和红点。
+/// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///
-/// 采用四层优化架构：
-/// 1. 本地内存缓存（ProposalCache）
-/// 2. 批量查询（fetchStorageBatch）
-/// 3. 分页加载（ScrollController 滚动触发）
-/// 4. 轻节点新区块订阅（新区块自动检测新提案）
+/// **数据源(v1 双层 ID + 反向索引)**:
+/// - `ProposalsByOrg[NRC] ∪ ByOrg[PRC] ∪ ByOrg[PRB]` 取所有治理类提案 ID
+/// - **不再扫主键 + 客户端过滤**;ORG_DUOQIAN 多签提案天然不进列表
+///
+/// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
+/// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。
 class AllProposalsView extends StatefulWidget {
   const AllProposalsView({
     super.key,
@@ -43,6 +44,11 @@ class AllProposalsView extends StatefulWidget {
 class _AllProposalsViewState extends State<AllProposalsView> {
   static const int _pageSize = 10;
 
+  // 治理类 org 编码(与 votingengine::internal_vote::ORG_* 对齐)
+  static const int _orgNrc = 0;
+  static const int _orgPrc = 1;
+  static const int _orgPrb = 2;
+
   final TransferProposalService _proposalService = TransferProposalService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ProposalContextResolver _contextResolver = ProposalContextResolver();
@@ -56,18 +62,18 @@ class _AllProposalsViewState extends State<AllProposalsView> {
   // 分页状态
   bool _loading = true;
   bool _loadingMore = false;
-  bool _hasMore = true;
   String? _error;
   List<_ProposalDisplayItem> _items = [];
 
-  /// 已知的 nextProposalId（用于检测新提案）。
-  int _knownNextId = 0;
-
-  /// 已加载到的最小提案 ID（不含）。
-  int _loadedUpTo = -1;
+  /// 通过反向索引取到的全部治理提案 ID(降序排列)。
+  /// 列表页基于此切分翻页 — cursor `_items.length` 标记已加载到第几条,
+  /// `_hasMore = _items.length < _allIds.length`。
+  List<int> _allIds = const [];
 
   /// 待投票计数。
   int _pendingVoteCount = 0;
+
+  bool get _hasMore => _items.length < _allIds.length;
 
   @override
   void initState() {
@@ -99,20 +105,22 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   Future<void> _checkForNewProposals() async {
     try {
-      final newNextId = await _proposalService.fetchNextProposalId();
-      if (newNextId > _knownNextId && _knownNextId > 0) {
-        // 有新提案，在顶部插入
-        final newItems = await _loadProposalRange(newNextId - 1, _knownNextId);
-        if (newItems.isNotEmpty && mounted) {
-          setState(() {
-            _items = [...newItems, ..._items];
-            _knownNextId = newNextId;
-          });
-          _updatePendingVoteCount();
-        }
+      final fresh = await _fetchAllGovernanceIds();
+      final knownSet = _allIds.toSet();
+      final newIds = fresh.where((id) => !knownSet.contains(id)).toList();
+      if (newIds.isEmpty) return;
+
+      // 新增提案插到列表顶部
+      final newItems = await _loadItemsForIds(newIds);
+      if (mounted) {
+        setState(() {
+          _items = [...newItems, ..._items];
+          _allIds = fresh;
+        });
+        _updatePendingVoteCount();
       }
     } catch (_) {
-      // 静默忽略，不阻塞 UI
+      // 静默忽略,不阻塞 UI
     }
   }
 
@@ -125,44 +133,49 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     }
   }
 
+  /// 拉三 org 反向索引并集,降序返回(主键单调,降序即按时间倒序)。
+  Future<List<int>> _fetchAllGovernanceIds() async {
+    final results = await Future.wait([
+      _proposalService.fetchProposalIdsByOrg(_orgNrc),
+      _proposalService.fetchProposalIdsByOrg(_orgPrc),
+      _proposalService.fetchProposalIdsByOrg(_orgPrb),
+    ]);
+    final all = <int>{...results[0], ...results[1], ...results[2]}.toList();
+    all.sort((a, b) => b.compareTo(a));
+    return all;
+  }
+
   Future<void> _loadFirstPage() async {
     setState(() {
       _loading = true;
       _error = null;
       _items = [];
-      _hasMore = true;
+      _allIds = const [];
       _loadingMore = false;
     });
 
     try {
-      final nextId = await _proposalService.fetchNextProposalId();
-      _knownNextId = nextId;
+      final ids = await _fetchAllGovernanceIds();
 
-      if (nextId == 0) {
+      if (ids.isEmpty) {
         if (!mounted) return;
         setState(() {
+          _allIds = const [];
           _loading = false;
-          _hasMore = false;
         });
         widget.onPendingVoteCountChanged?.call(0);
         return;
       }
 
-      // 计算当前年份的起始 ID
-      final year = nextId ~/ 1000000;
-      final yearStartId = year * 1000000;
-
-      final startId = nextId - 1; // 最新提案 ID
-      final items = await _loadProposalRange(
-          startId, (startId - _pageSize + 1).clamp(yearStartId, startId + 1));
+      // 切前 _pageSize 条
+      final firstPageIds =
+          ids.sublist(0, ids.length < _pageSize ? ids.length : _pageSize);
+      final items = await _loadItemsForIds(firstPageIds);
 
       if (!mounted) return;
       setState(() {
+        _allIds = ids;
         _items = items;
-        _loadedUpTo = items.isNotEmpty
-            ? items.last.proposal.meta.proposalId
-            : yearStartId;
-        _hasMore = _loadedUpTo > yearStartId;
         _loading = false;
       });
 
@@ -183,30 +196,16 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     setState(() => _loadingMore = true);
 
     try {
-      final year = _knownNextId ~/ 1000000;
-      final yearStartId = year * 1000000;
-      final startId = _loadedUpTo - 1;
-
-      if (startId < yearStartId) {
-        if (mounted) {
-          setState(() {
-            _hasMore = false;
-            _loadingMore = false;
-          });
-        }
-        return;
-      }
-
-      final endId = (startId - _pageSize + 1).clamp(yearStartId, startId + 1);
-      final newItems = await _loadProposalRange(startId, endId);
+      final from = _items.length;
+      final to = (from + _pageSize) > _allIds.length
+          ? _allIds.length
+          : (from + _pageSize);
+      final pageIds = _allIds.sublist(from, to);
+      final newItems = await _loadItemsForIds(pageIds);
 
       if (!mounted) return;
       setState(() {
         _items = [..._items, ...newItems];
-        _loadedUpTo = newItems.isNotEmpty
-            ? newItems.last.proposal.meta.proposalId
-            : yearStartId;
-        _hasMore = _loadedUpTo > yearStartId;
         _loadingMore = false;
       });
 
@@ -218,13 +217,13 @@ class _AllProposalsViewState extends State<AllProposalsView> {
     }
   }
 
-  /// 加载 [startId] 到 [endId]（含 startId，不含 endId）的提案并生成 display items。
-  Future<List<_ProposalDisplayItem>> _loadProposalRange(
-      int startId, int endId) async {
-    final count = startId - endId + 1;
-    if (count <= 0) return const [];
+  /// 给定一组 proposal_id,batch fetch 详情 + 上下文 + 待投票判定,
+  /// 返回 `_ProposalDisplayItem` 列表(顺序与入参一致)。
+  Future<List<_ProposalDisplayItem>> _loadItemsForIds(List<int> ids) async {
+    if (ids.isEmpty) return const [];
 
-    final proposals = await _proposalService.fetchProposalPage(startId, count);
+    // 批量取提案详情(meta + 业务详情)
+    final proposals = await _proposalService.fetchProposalsByIds(ids);
 
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
@@ -237,7 +236,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       final p = proposals[i];
       final ctx = contexts[i];
 
-      // 检查是否有未投票的钱包（统一使用 VoteChecker）
+      // 检查是否有未投票的钱包(统一使用 VoteChecker)
       bool needsVote = false;
       if (ctx.hasAdminWallets && p.meta.status == 0) {
         needsVote = await _voteChecker.hasUnvotedWallet(
@@ -399,7 +398,7 @@ class _AllProposalsViewState extends State<AllProposalsView> {
                       Row(
                         children: [
                           Text(
-                            formatProposalId(meta.proposalId),
+                            formatProposalId(meta.displayMeta),
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,

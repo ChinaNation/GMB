@@ -35,7 +35,7 @@ mod runtime {
     pub type Balances = pallet_balances;
 
     #[runtime::pallet_index(2)]
-    pub type VotingEngine = voting_engine;
+    pub type VotingEngine = votingengine;
 
     #[runtime::pallet_index(8)]
     pub type ResolutionIssuance = super;
@@ -90,7 +90,7 @@ thread_local! {
 }
 
 pub struct TestJointVoteEngine;
-impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
+impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
     fn create_joint_proposal(
         _who: AccountId32,
         eligible_total: u64,
@@ -134,23 +134,23 @@ impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
         )?;
         let bounded_data: frame_support::BoundedVec<
             u8,
-            <Test as voting_engine::Config>::MaxProposalDataLen,
+            <Test as votingengine::Config>::MaxProposalDataLen,
         > = data
             .try_into()
             .map_err(|_| DispatchError::Other("proposal data too large"))?;
-        let owner: frame_support::BoundedVec<u8, <Test as voting_engine::Config>::MaxModuleTagLen> =
+        let owner: frame_support::BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> =
             module_tag
                 .to_vec()
                 .try_into()
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
-        voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
-        voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+        votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
         Ok(proposal_id)
     }
 }
 
 pub struct TestSfidEligibility;
-impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
     fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
@@ -172,17 +172,17 @@ impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>:
 
 pub struct TestPopulationSnapshotVerifier;
 impl
-    voting_engine::PopulationSnapshotVerifier<
+    votingengine::PopulationSnapshotVerifier<
         AccountId32,
-        voting_engine::pallet::VoteNonceOf<Test>,
-        voting_engine::pallet::VoteSignatureOf<Test>,
+        votingengine::pallet::VoteNonceOf<Test>,
+        votingengine::pallet::VoteSignatureOf<Test>,
     > for TestPopulationSnapshotVerifier
 {
     fn verify_population_snapshot(
         _who: &AccountId32,
         _eligible_total: u64,
-        _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
-        _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+        _nonce: &votingengine::pallet::VoteNonceOf<Test>,
+        _signature: &votingengine::pallet::VoteSignatureOf<Test>,
         _province: &[u8],
         _signer_admin_pubkey: &[u8; 32],
     ) -> bool {
@@ -198,13 +198,13 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
 }
 
 pub struct TestInternalThresholdProvider;
-impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: voting_engine::InstitutionPalletId) -> Option<u32> {
-        voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
+    fn pass_threshold(org: u8, _institution: votingengine::InstitutionPalletId) -> Option<u32> {
+        votingengine::vote::internal::fixed_governance_pass_threshold(org)
     }
 }
 
-impl voting_engine::Config for Test {
+impl votingengine::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
     type MaxVoteSignatureLength = ConstU32<64>;
@@ -268,15 +268,15 @@ fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn insert_engine_proposal(proposal_id: u64) {
-    insert_engine_proposal_with_status(proposal_id, voting_engine::STATUS_PASSED);
+    insert_engine_proposal_with_status(proposal_id, votingengine::STATUS_PASSED);
 }
 
 fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
-    voting_engine::pallet::Proposals::<Test>::insert(
+    votingengine::pallet::Proposals::<Test>::insert(
         proposal_id,
-        voting_engine::Proposal {
-            kind: voting_engine::PROPOSAL_KIND_JOINT,
-            stage: voting_engine::STAGE_JOINT,
+        votingengine::Proposal {
+            kind: votingengine::PROPOSAL_KIND_JOINT,
+            stage: votingengine::STAGE_JOINT,
             status,
             internal_org: None,
             internal_institution: None,
@@ -293,34 +293,34 @@ fn overwrite_proposal_data(
 ) {
     let mut encoded = Vec::from(crate::MODULE_TAG);
     encoded.extend_from_slice(&codec::Encode::encode(&data));
-    let bounded_data: BoundedVec<u8, <Test as voting_engine::Config>::MaxProposalDataLen> =
+    let bounded_data: BoundedVec<u8, <Test as votingengine::Config>::MaxProposalDataLen> =
         encoded.try_into().expect("proposal data should fit");
-    let owner: BoundedVec<u8, <Test as voting_engine::Config>::MaxModuleTagLen> = crate::MODULE_TAG
+    let owner: BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> = crate::MODULE_TAG
         .to_vec()
         .try_into()
         .expect("module tag should fit");
-    voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
-    voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
+    votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+    votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
 }
 
 fn call_joint_callback(
     proposal_id: u64,
     approved: bool,
-) -> Result<voting_engine::ProposalExecutionOutcome, DispatchError> {
-    voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+) -> Result<votingengine::ProposalExecutionOutcome, DispatchError> {
+    votingengine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
     let result = ResolutionIssuance::on_joint_vote_finalized(proposal_id, approved);
-    voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+    votingengine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
     match result {
         Ok(outcome) => {
             if approved {
-                voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                votingengine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
                     if let Some(proposal) = maybe {
                         proposal.status = match outcome {
-                            voting_engine::ProposalExecutionOutcome::Executed => {
-                                voting_engine::STATUS_EXECUTED
+                            votingengine::ProposalExecutionOutcome::Executed => {
+                                votingengine::STATUS_EXECUTED
                             }
-                            voting_engine::ProposalExecutionOutcome::FatalFailed => {
-                                voting_engine::STATUS_EXECUTION_FAILED
+                            votingengine::ProposalExecutionOutcome::FatalFailed => {
+                                votingengine::STATUS_EXECUTION_FAILED
                             }
                             _ => proposal.status,
                         };
@@ -447,10 +447,10 @@ fn approved_callback_executes_issuance() {
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));
         assert_eq!(
-            voting_engine::pallet::Proposals::<Test>::get(100)
+            votingengine::pallet::Proposals::<Test>::get(100)
                 .expect("engine proposal should exist")
                 .status,
-            voting_engine::STATUS_EXECUTED
+            votingengine::STATUS_EXECUTED
         );
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(pallet::Executed::<Test>::get(100).is_some());
@@ -474,7 +474,7 @@ fn callback_rejects_non_finalizable_engine_status() {
             signer_admin_pubkey_ok()
         ));
 
-        insert_engine_proposal_with_status(100, voting_engine::STATUS_VOTING);
+        insert_engine_proposal_with_status(100, votingengine::STATUS_VOTING);
         assert_noop!(
             call_joint_callback(100, true),
             pallet::Error::<Test>::ProposalNotFinalizable
@@ -486,7 +486,7 @@ fn callback_rejects_non_finalizable_engine_status() {
 }
 
 #[test]
-fn callback_requires_voting_engine_scope() {
+fn callback_requires_votingengine_scope() {
     new_test_ext().execute_with(|| {
         assert_ok!(ResolutionIssuance::propose_resolution_issuance(
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
@@ -532,10 +532,10 @@ fn second_callback_after_executed_is_rejected() {
             pallet::Error::<Test>::ProposalNotFinalizable
         );
         assert_eq!(
-            voting_engine::pallet::Proposals::<Test>::get(100)
+            votingengine::pallet::Proposals::<Test>::get(100)
                 .expect("engine proposal should exist")
                 .status,
-            voting_engine::STATUS_EXECUTED
+            votingengine::STATUS_EXECUTED
         );
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert_eq!(pallet::TotalIssued::<Test>::get(), 4300);
@@ -557,7 +557,7 @@ fn rejected_callback_does_not_issue() {
             signer_admin_pubkey_ok()
         ));
 
-        insert_engine_proposal_with_status(100, voting_engine::STATUS_REJECTED);
+        insert_engine_proposal_with_status(100, votingengine::STATUS_REJECTED);
         assert_ok!(call_joint_callback(100, false));
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(!pallet::Executed::<Test>::contains_key(100));
@@ -653,10 +653,10 @@ fn pause_blocks_approved_execution() {
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));
         assert_eq!(
-            voting_engine::pallet::Proposals::<Test>::get(100)
+            votingengine::pallet::Proposals::<Test>::get(100)
                 .expect("engine proposal should exist")
                 .status,
-            voting_engine::STATUS_EXECUTION_FAILED
+            votingengine::STATUS_EXECUTION_FAILED
         );
         assert_eq!(pallet::VotingProposalCount::<Test>::get(), 0);
         assert!(!pallet::Executed::<Test>::contains_key(100));

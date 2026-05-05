@@ -127,7 +127,7 @@ class PersonalDuoqianEntity {
 
 /// 个人多签提案历史快照（本地持久化）。
 ///
-/// 链上 voting-engine 90 天后清理终态提案 (REJECTED/EXECUTED/EXECUTION_FAILED)，
+/// 链上 votingengine 90 天后清理终态提案 (REJECTED/EXECUTED/EXECUTION_FAILED)，
 /// wuminapp 端必须在本地永久保留历史，详情页提案列表才能在历史段始终可见。
 ///
 /// 写入时机:

@@ -37,7 +37,7 @@ const Map<String, String> actionLabels = {
   // 业务提案幂等入口
   // Phase 4(2026-05-02): execute_xxx / cancel_failed_xxx 的 7 个旧 label
   // 已删除,所有手动重试/取消统一显示为 retry_passed_proposal /
-  // cancel_passed_proposal(在 voting-engine 段已声明)。
+  // cancel_passed_proposal(在 votingengine 段已声明)。
   'cleanup_rejected_proposal': '清理被否决提案',
   'register_sfid_institution': '登记 SFID 机构信息',
 

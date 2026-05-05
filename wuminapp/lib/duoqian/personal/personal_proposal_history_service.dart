@@ -1,7 +1,7 @@
 // 个人多签提案历史聚合服务(req 5)。
 //
 // 双轨制数据源:
-// 1. 链上 `voting_engine.ActiveProposalsByInstitution[personal_address || zeros(16)]`
+// 1. 链上 `votingengine.ActiveProposalsByInstitution[personal_address || zeros(16)]`
 //    返回当前活跃(STATUS_VOTING)的提案 ID 列表。
 // 2. 本机 Isar `PersonalDuoqianProposalEntity` 永久保留所有历史快照,覆盖
 //    链上 90 天后已清理的终态提案。
@@ -26,7 +26,7 @@ class PersonalProposalAction {
   static const String close = 'close';
 }
 
-/// 提案状态字符串(对齐 voting-engine 链上枚举,但用人类可读字符串持久化)。
+/// 提案状态字符串(对齐 votingengine 链上枚举,但用人类可读字符串持久化)。
 class PersonalProposalStatus {
   static const String voting = 'voting';
   static const String passed = 'passed';
@@ -35,7 +35,7 @@ class PersonalProposalStatus {
   static const String executionFailed = 'execution_failed';
 }
 
-/// 链上 voting-engine status u8 → Isar 字符串。
+/// 链上 votingengine status u8 → Isar 字符串。
 String mapChainStatus(int? chainStatus) {
   switch (chainStatus) {
     case 0:

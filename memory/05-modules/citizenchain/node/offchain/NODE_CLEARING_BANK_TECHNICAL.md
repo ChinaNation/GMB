@@ -141,7 +141,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 
 | # | 项 | 触发条件 |
 |---|---|---|
-| F1 | 机构提案列表 full scan(`fetch_institution_proposals`)| voting-engine 提案存储扫描 + institution_hex 过滤 |
+| F1 | 机构提案列表 full scan(`fetch_institution_proposals`)| votingengine 提案存储扫描 + institution_hex 过滤 |
 | F2 | 节点桌面"扫码添加管理员"接 wumin user_contact / user_duoqian QR | 当前 create-multisig 用粘贴兜底 |
 | F3 | 创建机构 extrinsic 提交后冷钱包两段握手实际接入(`VoteSigningFlow` 复用) | 当前 alert 占位 |
 | F4 | wumin decoder 加新版 `propose_create_institution` action 分支 | 必须按 10 字段新布局解码,否则冷钱包扫到 sign_request 会红色拒签 |

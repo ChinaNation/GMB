@@ -2,7 +2,7 @@
 
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
-`voting-engine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
+`votingengine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
 - `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建显式 Pending 快照内部提案、创建管理员集合变更内部提案；业务模块必须优先使用 `*_with_data` 变体在同一事务中绑定 owner/data/meta
 - `JointVoteEngine`：创建联合提案；业务模块必须优先使用 `create_joint_proposal_with_data` 在同一事务中绑定 owner/data/meta
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后把执行结果以 `ProposalExecutionOutcome` 回传给投票引擎
@@ -47,7 +47,7 @@
 - 所有清理入口必须能释放对应提案的计票状态与对象层存储，避免存储长期累积。
 
 ## 1. 模块定位
-`voting-engine` 是治理投票引擎基础模块，统一承载三类治理投票流程：
+`votingengine` 是治理投票引擎基础模块，统一承载三类治理投票流程：
 - 内部投票（`INTERNAL`）
 - 联合机构投票（`JOINT`）
 - 公民投票（`CITIZEN`）
@@ -98,8 +98,10 @@ any → unknown
 
 ### 2.2 关键存储
 - `CurrentProposalYear`：当前提案年份（`u16`），用于年度计数器重置；年份按真实 UTC 公历年边界计算，不使用平均年秒数
-- `YearProposalCounter`：当前年份内的提案计数器（`u32`），每年从 0 开始
-- `NextProposalId`：兼容别名（`u64`），值为 `年份 × 1,000,000 + 计数器 + 1`，仅供外部查询
+- `YearProposalCounter`：当前年份内的提案计数器（`u32`），每年从 0 开始;**无上限**(实质 u32 容量 42.9 亿/年)
+- `NextProposalId`：主键计数器（`u64`）,下次 `allocate_proposal_id` 返回的值。**全局单调累加**,跨业务/跨年/跨机构唯一不重号
+- `ProposalDisplayId`：双层 ID 反查表(`u64 → ProposalDisplayMeta { year, seq_in_year }`)。展示号与主键解耦,客户端拼成 "2026000123" 风格
+- `ProposalsByOrg / ProposalsByInstitution / ProposalsByOwner / ProposalsByYear`：4 张反向索引(`StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, u64, ()>`),客户端按分类直接迭代,O(分类内规模)
 - `Proposals`：提案主表
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
@@ -182,7 +184,7 @@ any → unknown
 5. 若自动结算时下游回调失败，提案会重新写回过期桶，等待后续区块继续重试。
 
 ## 4. 状态终结、回调与重试
-投票结果统一通过 `set_status_and_emit` 完成投票判定；该函数已收口为 `pub(crate)`，只允许 `voting-engine` 内部计票、超时和阶段流转逻辑调用。业务模块不得直接推进 `Proposal.status`，只能通过 callback 返回统一执行结果。
+投票结果统一通过 `set_status_and_emit` 完成投票判定；该函数已收口为 `pub(crate)`，只允许 `votingengine` 内部计票、超时和阶段流转逻辑调用。业务模块不得直接推进 `Proposal.status`，只能通过 callback 返回统一执行结果。
 
 `ProposalExecutionOutcome` 语义：
 
@@ -327,19 +329,29 @@ any → unknown
 - `InternalThresholdProvider for ()` 不提供任何默认阈值，runtime 与 mock runtime 必须显式注入 provider，避免漏配置时仍误走固定阈值。
 - 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 
-### 5.10 Proposal ID 年份边界
-`allocate_proposal_id` 的年份段按 UTC 公历年计算：
+### 5.10 双层 ID 与年份边界
 
-```text
-proposal_id = UTC 公历年份 × 1,000,000 + 年内计数器
-```
+**主键 / 展示号双层设计**:
 
-实现要求：
+- **主键 `proposal_id: u64`** 全局单调累加,从 `NextProposalId` 取下一个值。跨业务、跨年、跨机构**唯一不重号**,实质无上限(u64 = 1.84 × 10¹⁹)。
+- **展示号 `ProposalDisplayId[id] = ProposalDisplayMeta { year: u16, seq_in_year: u32 }`** 单独存反查表,渲染层基于其拼接 `2026000123` 风格(年份 + 6 位补零序号),seq 突破 6 位时自动扩展。`year_in_seq` u32 上限 42.9 亿/年,实质无上限。
 
-- 使用 Unix 秒数先换算 UTC 天数，再按公历闰年规则确定年份。
-- 闰年规则为：能被 4 整除且不能被 100 整除，或能被 400 整除。
-- 禁止使用 `365.2425 天` 这类平均年长直接整除计算年份，因为平均年边界会在真实元旦前后漂移，导致提案 ID 被分配到错误年份段。
-- 单测必须覆盖真实元旦边界，尤其是曾经会错分的 `2028-01-01 00:00:00 UTC`。
+`allocate_proposal_id` 同事务内三件事:
+
+1. `NextProposalId += 1` 取主键
+2. 按 UTC 公历年算年份;跨年自动重置 `YearProposalCounter`
+3. 写 `ProposalDisplayId[id] = (year, seq_in_year)`
+
+年份计算实现要求:
+
+- 使用 Unix 秒数先换算 UTC 天数,再按公历闰年规则确定年份。
+- 闰年规则:能被 4 整除且不能被 100 整除,或能被 400 整除。
+- 禁止用 `365.2425 天` 平均年长整除计算,会在元旦前后漂移到错误年份。
+- 单测覆盖真实元旦边界,尤其是 `2028-01-01 00:00:00 UTC`。
+
+**4 张反向索引同事务在 `register_proposal_data` 末尾写入**(`ProposalsByOrg / ByInstitution / ByOwner / ByYear`),清理路径 `cleanup_proposal_indexes` 同步释放。
+
+历史 v0 格式 `年份 × 1_000_000 + counter`(counter ≤ 999_999)已下线;`migrations::v1::MigrateToV1` 已实现待激活,spec_version 维持 0 等待用户拍板升级。
 
 ### 5.11 管理员集合变更互斥
 已新增内部提案互斥机制：
@@ -363,7 +375,7 @@ unified voting entry 整改最后一步把所有业务 pallet 的 `execute_xxx` 
 - 手动重试：`VotingEngine::retry_passed_proposal(proposal_id)`
 - 取消失败：`VotingEngine::cancel_passed_proposal(proposal_id, reason)`
 
-权限校验、最多 3 次手动失败、retry deadline、`STATUS_PASSED → STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 状态推进全部由 voting-engine 统一承担。业务 pallet 仅保留 propose 和 callback（`InternalVoteExecutor::try_execute_*_from_callback`），不再暴露任何兼容层。
+权限校验、最多 3 次手动失败、retry deadline、`STATUS_PASSED → STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 状态推进全部由 votingengine 统一承担。业务 pallet 仅保留 propose 和 callback（`InternalVoteExecutor::try_execute_*_from_callback`），不再暴露任何兼容层。
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
@@ -413,7 +425,7 @@ runtime 金额提取策略把 `VotingEngine::internal_vote(proposal_id, approve)
 - 内部投票：`src/internal_vote.rs`
 - 联合投票：`src/joint_vote.rs`
 - 公民投票：`src/citizen_vote.rs`
-- 提案清理调度：`src/proposal_cleanup.rs`
-- 活跃提案限额：`src/active_proposal_limit.rs`
+- 提案清理调度：`src/cleanup.rs`(原 `proposal_cleanup.rs`)
+- 活跃提案限额：`src/limit.rs`(原 `active_proposal_limit.rs`)
 - Benchmark：`src/benchmarks.rs`
 - Weight：`src/weights.rs`

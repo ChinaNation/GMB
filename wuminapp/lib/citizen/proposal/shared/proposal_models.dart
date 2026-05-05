@@ -39,6 +39,21 @@ class TransferProposalInfo {
   }
 }
 
+/// 提案展示号(双层 ID 设计,spec_version v1)。
+///
+/// 链上 `ProposalDisplayId[u64] = ProposalDisplayMeta { year: u16, seq_in_year: u32 }`
+/// 反查表的客户端镜像。主键 `proposal_id` 全局单调与展示号解耦,渲染层基于
+/// 本结构拼接 "2026000123" 类格式。
+class ProposalDisplayMeta {
+  const ProposalDisplayMeta({required this.year, required this.seqInYear});
+
+  /// 创建年份(UTC 公历)。
+  final int year;
+
+  /// 年内序号(每年从 0 重置)。u32 上限,实质无上限。
+  final int seqInYear;
+}
+
 /// 提案链上元数据（从 VotingEngine::Proposals Storage 解码）。
 class ProposalMeta {
   const ProposalMeta({
@@ -48,6 +63,7 @@ class ProposalMeta {
     required this.status,
     this.internalOrg,
     this.institutionBytes,
+    this.displayMeta,
   });
 
   final int proposalId;
@@ -56,6 +72,10 @@ class ProposalMeta {
   final int status; // 0=voting, 1=passed, 2=rejected
   final int? internalOrg;
   final Uint8List? institutionBytes;
+
+  /// 展示号(双层 ID:主键 `proposalId` 单调,展示号年份+序号通过 `ProposalDisplayId` 反查)。
+  /// 列表页 batch fetch 后填充;详情页解码 ProposalMeta 时同步查询。
+  final ProposalDisplayMeta? displayMeta;
 }
 
 /// Runtime upgrade 提案链上数据。

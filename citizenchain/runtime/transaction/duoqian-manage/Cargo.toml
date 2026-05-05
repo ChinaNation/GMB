@@ -18,7 +18,7 @@ sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sfid-system = { path = "../../otherpallet/sfid-system", default-features = false }
 admins-change = { path = "../../governance/admins-change", default-features = false }
-voting-engine = { path = "../../governance/voting-engine", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
 institution-asset = { path = "../institution-asset", default-features = false }
 onchain-transaction = { path = "../onchain-transaction", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
@@ -44,7 +44,7 @@ std = [
     "sp-std/std",
     "sfid-system/std",
     "admins-change/std",
-    "voting-engine/std",
+    "votingengine/std",
     "institution-asset/std",
     "onchain-transaction/std",
     "primitives/std",

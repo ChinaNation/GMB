@@ -17,14 +17,15 @@ use primitives::count_const::{
 };
 
 use crate::{
-    internal_vote::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
+    vote::internal::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
     pallet::{
-        Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
+        self, Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
         JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,
     },
-    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind, JointVoteEngine,
     PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
+use sp_runtime::DispatchError;
 
 use crate::nrc_pallet_id_bytes;
 
@@ -193,7 +194,7 @@ impl<T: Config> Pallet<T> {
 
             // 中文注释：联合提案活跃名额计入发起人所属机构（国储会或省储会），每机构最多10个。
             if let Err(err) =
-                crate::active_proposal_limit::try_add_active_proposal::<T>(proposer_institution, id)
+                crate::limit::try_add_active_proposal::<T>(proposer_institution, id)
             {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -453,6 +454,118 @@ impl<T: Config> Pallet<T> {
                 eligible_total,
             });
             TransactionOutcome::Commit(Ok(()))
+        })
+    }
+}
+
+impl<T: pallet::Config> JointVoteEngine<T::AccountId> for pallet::Pallet<T> {
+    fn create_joint_proposal(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let signature: pallet::VoteSignatureOf<T> = signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        pallet::Pallet::<T>::do_create_joint_proposal(
+            who,
+            eligible_total,
+            snapshot_nonce,
+            signature,
+            province,
+            signer_admin_pubkey,
+        )
+    }
+
+    fn create_joint_proposal_with_data(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let signature: pallet::VoteSignatureOf<T> = signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_joint_proposal(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+                province,
+                signer_admin_pubkey,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            match pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
+        })
+    }
+
+    fn create_joint_proposal_with_data_and_object(
+        who: T::AccountId,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+        object_kind: u8,
+        object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let snapshot_nonce: pallet::VoteNonceOf<T> = snapshot_nonce
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        let signature: pallet::VoteSignatureOf<T> = signature
+            .to_vec()
+            .try_into()
+            .map_err(|_| pallet::Error::<T>::InvalidPopulationSnapshot)?;
+        frame_support::storage::with_transaction(|| {
+            let proposal_id = match pallet::Pallet::<T>::do_create_joint_proposal(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+                province,
+                signer_admin_pubkey,
+            ) {
+                Ok(proposal_id) => proposal_id,
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            };
+            let now = frame_system::Pallet::<T>::block_number();
+            if let Err(err) =
+                pallet::Pallet::<T>::register_proposal_data(proposal_id, module_tag, data, now)
+            {
+                return frame_support::storage::TransactionOutcome::Rollback(Err(err));
+            }
+            match pallet::Pallet::<T>::store_proposal_object(proposal_id, object_kind, object_data)
+            {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(proposal_id)),
+                Err(err) => frame_support::storage::TransactionOutcome::Rollback(Err(err)),
+            }
         })
     }
 }

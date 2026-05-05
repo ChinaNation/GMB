@@ -32,7 +32,7 @@ use crate::personal::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus,
 use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
 };
-use voting_engine::InternalVoteEngine;
+use votingengine::InternalVoteEngine;
 
 pub(crate) fn do_propose_create_personal<T: Config>(
     who: T::AccountId,
@@ -78,7 +78,7 @@ pub(crate) fn do_propose_create_personal<T: Config>(
 
     let now = <frame_system::Pallet<T>>::block_number();
     let institution = account_to_institution_id(&duoqian_address);
-    let org = voting_engine::internal_vote::ORG_DUOQIAN;
+    let org = votingengine::vote::internal::ORG_DUOQIAN;
     let action = CreateDuoqianAction {
         duoqian_address: duoqian_address.clone(),
         proposer: who.clone(),
@@ -145,7 +145,7 @@ pub(crate) fn do_propose_create_personal<T: Config>(
         TransactionOutcome::Commit(Ok(proposal_id))
     })?;
 
-    let expires_at = voting_engine::Pallet::<T>::proposals(proposal_id)
+    let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
         .map(|p| p.end)
         .ok_or(Error::<T>::VoteEngineError)?;
 

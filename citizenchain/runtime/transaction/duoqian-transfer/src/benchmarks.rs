@@ -4,7 +4,7 @@
 //! 本 pallet 的 `vote_X` / `finalize_X` 已物理删除,所有管理员投票一律通过
 //! `VotingEngine::internal_vote`(9.0)。本文件只保留 `propose_transfer`
 //! 和 `execute_transfer` 两个业务动作的 benchmark;投票 weight 全部归入
-//! voting-engine pallet 自身的 benchmark,业务端无需重复覆盖。
+//! votingengine pallet 自身的 benchmark,业务端无需重复覆盖。
 
 #![cfg(feature = "runtime-benchmarks")]
 
@@ -42,7 +42,7 @@ fn beneficiary_account<T: Config>() -> T::AccountId {
 }
 
 fn last_proposal_id<T: Config>() -> u64 {
-    voting_engine::Pallet::<T>::next_proposal_id().saturating_sub(1)
+    votingengine::Pallet::<T>::next_proposal_id().saturating_sub(1)
 }
 
 #[benchmarks]
@@ -71,10 +71,10 @@ mod benchmarks {
         );
 
         let pid = last_proposal_id::<T>();
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(pid).is_some());
+        assert!(votingengine::Pallet::<T>::get_proposal_data(pid).is_some());
     }
 
     // execute_transfer / execute_safety_fund_transfer / execute_sweep_to_main
     // benchmark 已废弃: 三个 wrapper extrinsic 已统一到
-    // VotingEngine::retry_passed_proposal,benchmark 由 voting-engine 自身覆盖。
+    // VotingEngine::retry_passed_proposal,benchmark 由 votingengine 自身覆盖。
 }

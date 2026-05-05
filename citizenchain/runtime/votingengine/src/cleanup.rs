@@ -96,7 +96,7 @@ fn trigger_cleanup<T: Config>(proposal_id: u64) -> Weight {
     // 1. 释放活跃提案名额（兜底）
     if let Some(proposal) = pallet::Proposals::<T>::get(proposal_id) {
         if let Some(institution) = proposal.internal_institution {
-            crate::active_proposal_limit::remove_active_proposal::<T>(institution, proposal_id);
+            crate::limit::remove_active_proposal::<T>(institution, proposal_id);
             weight = weight.saturating_add(db_weight.reads_writes(1, 1));
         }
     }

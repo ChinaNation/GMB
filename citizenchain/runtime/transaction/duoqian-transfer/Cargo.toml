@@ -18,7 +18,7 @@ sp-runtime = { workspace = true }
 sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
-voting-engine = { path = "../../governance/voting-engine", default-features = false }
+votingengine = { path = "../../votingengine", default-features = false }
 admins-change = { path = "../../governance/admins-change", default-features = false }
 duoqian-manage = { path = "../duoqian-manage", default-features = false }
 onchain-transaction = { path = "../onchain-transaction", default-features = false }
@@ -37,7 +37,7 @@ std = [
     "sp-runtime/std",
     "sp-io/std",
     "primitives/std",
-    "voting-engine/std",
+    "votingengine/std",
     "admins-change/std",
     "duoqian-manage/std",
     "onchain-transaction/std",

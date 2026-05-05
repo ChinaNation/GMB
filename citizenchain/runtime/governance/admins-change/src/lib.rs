@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 //! 管理员权限治理模块（admins-change）
 //! - 本模块只负责“更换管理员”这一类业务事项
-//! - 投票流程本身由 voting-engine 提供（内部投票）
+//! - 投票流程本身由 votingengine 提供（内部投票）
 //! - 约束：仅替换，不增删；且仅能在本机构范围内更换
 
 extern crate alloc;
@@ -28,8 +28,8 @@ use primitives::count_const::{
     NRC_ADMIN_COUNT, NRC_INTERNAL_THRESHOLD, PRB_ADMIN_COUNT, PRB_INTERNAL_THRESHOLD,
     PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
 };
-use voting_engine::{
-    internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
+use votingengine::{
+    vote::internal::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
     STATUS_REJECTED, STATUS_VOTING,
@@ -127,7 +127,7 @@ pub struct AdminInstitution<AdminList, AccountId, BlockNumber> {
 /// 管理员主体生命周期写入口。
 ///
 /// 中文注释：这里是跨 pallet 唯一允许写 Pending/Active/Closed 生命周期的 API。
-/// 裸存储 mutator 保持 crate 内私有；调用方必须提供 voting-engine 提案上下文，
+/// 裸存储 mutator 保持 crate 内私有；调用方必须提供 votingengine 提案上下文，
 /// 由 admins-change 再校验 owner、机构、状态和回调作用域。
 pub trait SubjectLifecycle<AccountId> {
     fn create_pending_subject_for_proposal(
@@ -191,10 +191,10 @@ fn default_threshold(org: u8) -> Option<u32> {
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use voting_engine::InternalVoteEngine;
+    use votingengine::InternalVoteEngine;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine::Config {
+    pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -203,7 +203,7 @@ pub mod pallet {
         type MaxAdminsPerInstitution: Get<u32>;
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
-        type InternalVoteEngine: voting_engine::InternalVoteEngine<Self::AccountId>;
+        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         /// 该 pallet 的可配置权重实现。
         type WeightInfo: crate::weights::WeightInfo;
@@ -411,7 +411,7 @@ pub mod pallet {
         InvalidThreshold,
         /// 管理员重复
         DuplicateAdmin,
-        /// 管理员主体生命周期写入缺少有效 voting-engine 提案作用域
+        /// 管理员主体生命周期写入缺少有效 votingengine 提案作用域
         InvalidSubjectLifecycleScope,
     }
 
@@ -563,10 +563,10 @@ pub mod pallet {
             require_callback_scope: bool,
         ) -> DispatchResult {
             ensure!(
-                voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, module_tag),
+                votingengine::Pallet::<T>::is_proposal_owner(proposal_id, module_tag),
                 Error::<T>::InvalidSubjectLifecycleScope
             );
-            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::InvalidSubjectLifecycleScope)?;
             ensure!(
                 proposal.kind == PROPOSAL_KIND_INTERNAL,
@@ -590,7 +590,7 @@ pub mod pallet {
             );
             if require_callback_scope {
                 ensure!(
-                    voting_engine::Pallet::<T>::is_callback_execution_scope(proposal_id),
+                    votingengine::Pallet::<T>::is_callback_execution_scope(proposal_id),
                     Error::<T>::InvalidSubjectLifecycleScope
                 );
             }
@@ -807,7 +807,7 @@ pub mod pallet {
             action: AdminReplacementAction<T::AccountId>,
         ) -> DispatchResult {
             // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
-            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
                 proposal.kind == PROPOSAL_KIND_INTERNAL,
@@ -836,7 +836,7 @@ pub mod pallet {
                 proposal.internal_org == Some(subject.org),
                 Error::<T>::ProposalOrgMismatch
             );
-            voting_engine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
+            votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
                 subject.org,
                 action.institution,
                 proposal_id,
@@ -925,7 +925,7 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
     ) -> DispatchResult {
         let subject = pallet::Institutions::<T>::get(institution)
             .ok_or(pallet::Error::<T>::InvalidInstitution)?;
-        let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+        let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
             .ok_or(pallet::Error::<T>::InvalidSubjectLifecycleScope)?;
         ensure!(
             matches!(proposal.status, STATUS_REJECTED | STATUS_EXECUTION_FAILED),
@@ -964,7 +964,7 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
 // ──── 投票终态回调:把已通过的管理员替换提案落地到链上 ────
 //
 // Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
+// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `ProposalOwner` 认领本模块提案，`ProposalData` 只保存裸业务 action。
 //
 // 设计要点:
@@ -981,10 +981,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
         // Step 1:认领 — 检查 ProposalOwner，避免再依赖 ProposalData 的 MODULE_TAG 前缀。
-        if !voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG) {
+        if !votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG) {
             return Ok(ProposalExecutionOutcome::Ignored);
         }
-        let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
+        let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
             .ok_or(pallet::Error::<T>::ProposalActionNotFound)?;
 
         if !approved {
@@ -1021,8 +1021,8 @@ mod tests {
         shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine::{
-        internal_vote::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
+    use votingengine::{
+        vote::internal::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
         InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
         STATUS_REJECTED,
     };
@@ -1050,7 +1050,7 @@ mod tests {
         pub type System = frame_system;
 
         #[runtime::pallet_index(1)]
-        pub type VotingEngine = voting_engine;
+        pub type VotingEngine = votingengine;
 
         #[runtime::pallet_index(2)]
         pub type AdminsChange = super;
@@ -1064,7 +1064,7 @@ mod tests {
     }
 
     pub struct TestSfidEligibility;
-    impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
     {
         fn is_eligible(
@@ -1089,17 +1089,17 @@ mod tests {
 
     pub struct TestPopulationSnapshotVerifier;
     impl
-        voting_engine::PopulationSnapshotVerifier<
+        votingengine::PopulationSnapshotVerifier<
             AccountId32,
-            voting_engine::pallet::VoteNonceOf<Test>,
-            voting_engine::pallet::VoteSignatureOf<Test>,
+            votingengine::pallet::VoteNonceOf<Test>,
+            votingengine::pallet::VoteSignatureOf<Test>,
         > for TestPopulationSnapshotVerifier
     {
         fn verify_population_snapshot(
             _who: &AccountId32,
             _eligible_total: u64,
-            _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
-            _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _nonce: &votingengine::pallet::VoteNonceOf<Test>,
+            _signature: &votingengine::pallet::VoteSignatureOf<Test>,
             _province: &[u8],
             _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
@@ -1108,7 +1108,7 @@ mod tests {
     }
 
     pub struct TestInternalAdminProvider;
-    impl voting_engine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
             if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
                 return false;
@@ -1125,9 +1125,9 @@ mod tests {
     }
 
     pub struct TestInternalThresholdProvider;
-    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+    impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+            votingengine::vote::internal::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -1138,7 +1138,7 @@ mod tests {
         }
     }
 
-    impl voting_engine::Config for Test {
+    impl votingengine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
@@ -1174,7 +1174,7 @@ mod tests {
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<32>;
-        type InternalVoteEngine = voting_engine::Pallet<Test>;
+        type InternalVoteEngine = votingengine::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1223,7 +1223,7 @@ mod tests {
 
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
     fn last_proposal_id() -> u64 {
-        voting_engine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+        votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
     fn current_admins(institution: InstitutionPalletId) -> Vec<AccountId32> {
@@ -1234,14 +1234,14 @@ mod tests {
     }
 
     fn mark_proposal_passed_without_callback(proposal_id: u64) {
-        voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+        votingengine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
             let proposal = maybe.as_mut().expect("proposal should exist");
             proposal.status = STATUS_PASSED;
         });
         let now = System::block_number();
-        voting_engine::ProposalExecutionRetryStates::<Test>::insert(
+        votingengine::ProposalExecutionRetryStates::<Test>::insert(
             proposal_id,
-            voting_engine::ExecutionRetryState {
+            votingengine::ExecutionRetryState {
                 manual_attempts: 0,
                 first_auto_failed_at: now,
                 retry_deadline: now,
@@ -1256,7 +1256,7 @@ mod tests {
     /// 所有管理员通过投票引擎的公开 call 直接投票,通过后由 `InternalVoteExecutor` 回调
     /// 执行业务。
     fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-        voting_engine::Pallet::<Test>::internal_vote(
+        votingengine::Pallet::<Test>::internal_vote(
             RuntimeOrigin::signed(who),
             proposal_id,
             approve,
@@ -1269,7 +1269,7 @@ mod tests {
             .filter(|record| {
                 matches!(
                     &record.event,
-                    RuntimeEvent::VotingEngine(voting_engine::Event::ProposalFinalized {
+                    RuntimeEvent::VotingEngine(votingengine::Event::ProposalFinalized {
                         proposal_id: event_id,
                         status,
                     }) if *event_id == proposal_id && *status == expected_status
@@ -1324,12 +1324,12 @@ mod tests {
     }
 
     #[test]
-    fn subject_lifecycle_trait_requires_voting_engine_scope_for_activation() {
+    fn subject_lifecycle_trait_requires_votingengine_scope_for_activation() {
         new_test_ext().execute_with(|| {
             let institution = pending_subject_id();
             let admin_a = AccountId32::new([201u8; 32]);
             let admin_b = AccountId32::new([202u8; 32]);
-            let proposal_id = <voting_engine::Pallet<Test> as InternalVoteEngine<
+            let proposal_id = <votingengine::Pallet<Test> as InternalVoteEngine<
                 AccountId32,
             >>::create_pending_subject_internal_proposal_with_snapshot_data(
                 admin_a.clone(),
@@ -1358,7 +1358,7 @@ mod tests {
                 Error::<Test>::InvalidSubjectLifecycleScope
             );
 
-            voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+            votingengine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
                 let proposal = maybe.as_mut().expect("proposal should exist");
                 proposal.status = STATUS_PASSED;
             });
@@ -1367,13 +1367,13 @@ mod tests {
                 Error::<Test>::InvalidSubjectLifecycleScope
             );
 
-            voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+            votingengine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
             assert_ok!(AdminsChange::activate_subject_for_proposal(
                 proposal_id,
                 b"dq-mgmt",
                 institution
             ));
-            voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+            votingengine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
         });
     }
 
@@ -1501,7 +1501,7 @@ mod tests {
             assert!(admins.iter().any(|a| a == &new_admin));
             assert!(!admins.iter().any(|a| a == &old_admin));
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTED
@@ -1542,7 +1542,7 @@ mod tests {
 
             assert_noop!(
                 cast_vote(prc_admin(0), pid, true),
-                voting_engine::pallet::Error::<Test>::NoPermission
+                votingengine::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -1657,7 +1657,7 @@ mod tests {
 
             assert_noop!(
                 cast_vote(prb_admin(0), pid, true),
-                voting_engine::pallet::Error::<Test>::NoPermission
+                votingengine::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -1689,7 +1689,7 @@ mod tests {
 
             assert_noop!(
                 cast_vote(prc_admin(0), pid, true),
-                voting_engine::pallet::Error::<Test>::NoPermission
+                votingengine::pallet::Error::<Test>::NoPermission
             );
         });
     }
@@ -1698,7 +1698,7 @@ mod tests {
     fn regular_internal_proposal_blocks_admin_replacement() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
-            assert_ok!(<voting_engine::Pallet<Test> as InternalVoteEngine<
+            assert_ok!(<votingengine::Pallet<Test> as InternalVoteEngine<
                 AccountId32,
             >>::create_internal_proposal(
                 nrc_admin(0), ORG_NRC, institution,
@@ -1712,7 +1712,7 @@ mod tests {
                     nrc_admin(2),
                     AccountId32::new([89u8; 32])
                 ),
-                voting_engine::pallet::Error::<Test>::RegularInternalProposalActive
+                votingengine::pallet::Error::<Test>::RegularInternalProposalActive
             );
         });
     }
@@ -1748,23 +1748,23 @@ mod tests {
             }
 
             let proposal =
-                voting_engine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
+                votingengine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
             assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
             assert_eq!(finalized_event_count(pid, STATUS_EXECUTION_FAILED), 1);
             assert!(
-                voting_engine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
+                votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
                     .is_none()
             );
-            let data = voting_engine::Pallet::<Test>::get_proposal_data(pid)
+            let data = votingengine::Pallet::<Test>::get_proposal_data(pid)
                 .expect("proposal data should exist");
-            assert!(voting_engine::Pallet::<Test>::is_proposal_owner(
+            assert!(votingengine::Pallet::<Test>::is_proposal_owner(
                 pid, MODULE_TAG
             ));
             let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
                 .expect("should decode");
             assert_noop!(
                 VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
+                votingengine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -1807,7 +1807,7 @@ mod tests {
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_data(pid).is_some(),
                 "proposal data should exist"
             );
         });
@@ -1865,7 +1865,7 @@ mod tests {
 
             assert_noop!(
                 VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
+                votingengine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -1883,16 +1883,16 @@ mod tests {
             ));
             let pid1 = last_proposal_id();
 
-            let end = voting_engine::Pallet::<Test>::proposals(pid1)
+            let end = votingengine::Pallet::<Test>::proposals(pid1)
                 .expect("proposal should exist")
                 .end;
             System::set_block_number(end + 1);
-            assert_ok!(voting_engine::Pallet::<Test>::finalize_proposal(
+            assert_ok!(votingengine::Pallet::<Test>::finalize_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid1
             ));
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid1)
+                votingengine::Pallet::<Test>::proposals(pid1)
                     .expect("proposal should exist")
                     .status,
                 STATUS_REJECTED
@@ -1940,14 +1940,14 @@ mod tests {
             }
 
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTION_FAILED
             );
-            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert!(
-                voting_engine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
+                votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
                     .is_none()
             );
 
@@ -1963,7 +1963,7 @@ mod tests {
 
             assert_noop!(
                 VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
+                votingengine::pallet::Error::<Test>::ProposalNotRetryable
             );
             let admins = current_admins(institution);
             assert!(!admins.iter().any(|a| a == &new_admin));
@@ -1986,26 +1986,26 @@ mod tests {
             let pid = last_proposal_id();
             mark_proposal_passed_without_callback(pid);
 
-            voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
+            votingengine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
                 let proposal = maybe.as_mut().expect("proposal should exist");
-                proposal.kind = voting_engine::PROPOSAL_KIND_JOINT;
+                proposal.kind = votingengine::PROPOSAL_KIND_JOINT;
             });
             assert_noop!(
                 VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                voting_engine::pallet::Error::<Test>::ProposalOwnerMissing
+                votingengine::pallet::Error::<Test>::ProposalOwnerMissing
             );
 
-            voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
+            votingengine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
                 let proposal = maybe.as_mut().expect("proposal should exist");
-                proposal.kind = voting_engine::PROPOSAL_KIND_INTERNAL;
-                proposal.stage = voting_engine::STAGE_JOINT;
+                proposal.kind = votingengine::PROPOSAL_KIND_INTERNAL;
+                proposal.stage = votingengine::STAGE_JOINT;
             });
             assert_ok!(VotingEngine::retry_passed_proposal(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 pid
             ));
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTION_FAILED
@@ -2028,16 +2028,16 @@ mod tests {
             let pid = last_proposal_id();
             mark_proposal_passed_without_callback(pid);
 
-            voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
+            votingengine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
                 let proposal = maybe.as_mut().expect("proposal should exist");
                 proposal.internal_institution = Some(prc_pallet_id());
             });
             assert_noop!(
                 VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
-                voting_engine::pallet::Error::<Test>::NoPermission
+                votingengine::pallet::Error::<Test>::NoPermission
             );
 
-            voting_engine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
+            votingengine::pallet::Proposals::<Test>::mutate(pid, |maybe| {
                 let proposal = maybe.as_mut().expect("proposal should exist");
                 proposal.internal_institution = Some(institution);
                 proposal.internal_org = Some(ORG_PRC);
@@ -2047,7 +2047,7 @@ mod tests {
                 pid
             ));
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("proposal should exist")
                     .status,
                 STATUS_EXECUTION_FAILED
@@ -2077,7 +2077,7 @@ mod tests {
             assert!(admins.iter().any(|a| a == &old_admin));
             assert!(!admins.iter().any(|a| a == &new_admin));
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_data(pid).is_some(),
                 "proposal data should exist"
             );
         });
@@ -2136,7 +2136,7 @@ mod tests {
                 assert!(admins.contains(&new_admin), "round {i}: new admin must be in list");
                 assert!(!admins.contains(&old_admin), "round {i}: old admin must be out");
                 assert!(
-                    voting_engine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
+                    votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
                         .is_none(),
                     "round {i}: mutex must be released after finalize"
                 );
@@ -2167,7 +2167,7 @@ mod tests {
                     nrc_admin(14),
                     AccountId32::new([221u8; 32])
                 ),
-                voting_engine::pallet::Error::<Test>::AdminSetMutationProposalActive
+                votingengine::pallet::Error::<Test>::AdminSetMutationProposalActive
             );
 
             assert_noop!(
@@ -2178,7 +2178,7 @@ mod tests {
                     nrc_admin(13),
                     AccountId32::new([222u8; 32])
                 ),
-                voting_engine::pallet::Error::<Test>::AdminSetMutationProposalActive
+                votingengine::pallet::Error::<Test>::AdminSetMutationProposalActive
             );
         });
     }

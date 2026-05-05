@@ -1,6 +1,6 @@
 //! 多签交易模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `voting-engine::internal_vote`,本模块不再有
+//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
 //! `finalize_create` / `vote_close` extrinsic。对应的 benchmark 已删除。
 
 #![cfg(feature = "runtime-benchmarks")]
@@ -11,7 +11,7 @@ use frame_support::traits::Currency;
 use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 use sp_std::vec;
-use voting_engine::STATUS_PASSED;
+use votingengine::STATUS_PASSED;
 
 use crate::{
     pallet::{
@@ -119,15 +119,15 @@ fn find_safe_beneficiary<T: Config>(
 
 /// Benchmark 辅助:让指定提案通过(绕开投票路径,benchmark 只关心后续业务执行开销)。
 fn pass_proposal<T: Config>(proposal_id: u64) -> Result<(), BenchmarkError> {
-    voting_engine::Proposals::<T>::mutate(proposal_id, |maybe| {
+    votingengine::Proposals::<T>::mutate(proposal_id, |maybe| {
         if let Some(proposal) = maybe {
             proposal.status = STATUS_PASSED;
         }
     });
     let now = frame_system::Pallet::<T>::block_number();
-    voting_engine::ProposalExecutionRetryStates::<T>::insert(
+    votingengine::ProposalExecutionRetryStates::<T>::insert(
         proposal_id,
-        voting_engine::ExecutionRetryState {
+        votingengine::ExecutionRetryState {
             manual_attempts: 0,
             first_auto_failed_at: now,
             retry_deadline: now,
@@ -232,7 +232,7 @@ mod benchmarks {
             beneficiary,
         );
 
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(1).is_some());
+        assert!(votingengine::Pallet::<T>::get_proposal_data(1).is_some());
         let _ = admin2; // avoid unused warning for admin2
         Ok(())
     }
@@ -265,7 +265,7 @@ mod benchmarks {
             amount,
         );
 
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(votingengine::Pallet::<T>::get_proposal_data(0).is_some());
         Ok(())
     }
 }

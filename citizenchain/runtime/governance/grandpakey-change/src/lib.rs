@@ -3,7 +3,7 @@
 //! 本模块将"机构 GRANDPA 公钥替换"包装成受治理约束的链上流程：
 //! - 仅国储会（NRC）与省储会（PRC）可发起密钥替换提案。
 //! - 仅目标机构内部管理员可参与提案/投票/执行/清理。
-//! - 借助 `voting-engine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
+//! - 借助 `votingengine` 内部投票达成通过后，调用 `pallet-grandpa::schedule_change` 变更 authority set。
 //! - 新公钥必须通过 ed25519 有效性校验和 small-order 弱公钥拒绝。
 //!
 //! 投票通过后自动尝试执行；若因 GRANDPA pending change 暂时失败，可手动重试或取消。
@@ -24,8 +24,8 @@ use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
-use voting_engine::{
-    internal_vote::{ORG_NRC, ORG_PRC},
+use votingengine::{
+    vote::internal::{ORG_NRC, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalCancelDecision,
     ProposalExecutionOutcome, STATUS_PASSED,
 };
@@ -81,11 +81,11 @@ pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
     use sp_std::vec::Vec;
-    use voting_engine::{InternalAdminProvider, InternalVoteEngine};
+    use votingengine::{InternalAdminProvider, InternalVoteEngine};
 
     #[pallet::config]
     pub trait Config:
-        frame_system::Config + voting_engine::Config + pallet_grandpa::Config
+        frame_system::Config + votingengine::Config + pallet_grandpa::Config
     {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -94,7 +94,7 @@ pub mod pallet {
         type GrandpaChangeDelay: Get<BlockNumberFor<Self>>;
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免猜测 next_proposal_id）。
-        type InternalVoteEngine: voting_engine::InternalVoteEngine<Self::AccountId>;
+        type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -348,7 +348,7 @@ pub mod pallet {
             institution: InstitutionPalletId,
             who: &T::AccountId,
         ) -> bool {
-            <T as voting_engine::Config>::InternalAdminProvider::is_internal_admin(
+            <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
                 who,
@@ -370,7 +370,7 @@ pub mod pallet {
             proposal_id: u64,
             action: GrandpaKeyReplacementAction,
         ) -> DispatchResult {
-            let proposal = voting_engine::Pallet::<T>::proposals(proposal_id)
+            let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
                 .ok_or(Error::<T>::ProposalActionNotFound)?;
             ensure!(
                 proposal.status == STATUS_PASSED,
@@ -444,7 +444,7 @@ pub mod pallet {
 // ──── 投票终态回调:把已通过的 GRANDPA 密钥替换提案落地到链上 ────
 //
 // Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`voting_engine::InternalVoteResultCallback`] 广播回来。
+// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案。
 //
 // 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
@@ -458,7 +458,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         proposal_id: u64,
         approved: bool,
     ) -> Result<ProposalExecutionOutcome, sp_runtime::DispatchError> {
-        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+        let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
@@ -498,7 +498,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
     fn can_cancel_passed_proposal(
         proposal_id: u64,
     ) -> Result<ProposalCancelDecision, sp_runtime::DispatchError> {
-        let raw = match voting_engine::Pallet::<T>::get_proposal_data(proposal_id) {
+        let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalCancelDecision::Ignored),
         };
@@ -532,7 +532,7 @@ mod tests {
     use primitives::china::china_cb::CHINA_CB;
     use sp_core::{Pair, Void};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use voting_engine::STATUS_EXECUTION_FAILED;
+    use votingengine::STATUS_EXECUTION_FAILED;
 
     type Block = frame_system::mocking::MockBlock<Test>;
 
@@ -560,7 +560,7 @@ mod tests {
         pub type Grandpa = pallet_grandpa;
 
         #[runtime::pallet_index(2)]
-        pub type VotingEngine = voting_engine;
+        pub type VotingEngine = votingengine;
 
         #[runtime::pallet_index(3)]
         pub type GrandpaKeyChange = super;
@@ -594,7 +594,7 @@ mod tests {
     pub struct TestPopulationSnapshotVerifier;
     pub struct TestInternalAdminProvider;
 
-    impl voting_engine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
+    impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
         for TestSfidEligibility
     {
         fn is_eligible(
@@ -620,17 +620,17 @@ mod tests {
     }
 
     impl
-        voting_engine::PopulationSnapshotVerifier<
+        votingengine::PopulationSnapshotVerifier<
             AccountId32,
-            voting_engine::pallet::VoteNonceOf<Test>,
-            voting_engine::pallet::VoteSignatureOf<Test>,
+            votingengine::pallet::VoteNonceOf<Test>,
+            votingengine::pallet::VoteSignatureOf<Test>,
         > for TestPopulationSnapshotVerifier
     {
         fn verify_population_snapshot(
             _who: &AccountId32,
             _eligible_total: u64,
-            _nonce: &voting_engine::pallet::VoteNonceOf<Test>,
-            _signature: &voting_engine::pallet::VoteSignatureOf<Test>,
+            _nonce: &votingengine::pallet::VoteNonceOf<Test>,
+            _signature: &votingengine::pallet::VoteSignatureOf<Test>,
             _province: &[u8],
             _signer_admin_pubkey: &[u8; 32],
         ) -> bool {
@@ -638,7 +638,7 @@ mod tests {
         }
     }
 
-    impl voting_engine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
+    impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
             let mut who_raw = [0u8; 32];
             who_raw.copy_from_slice(who.as_ref());
@@ -673,9 +673,9 @@ mod tests {
 
     pub struct TestTimeProvider;
     pub struct TestInternalThresholdProvider;
-    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+    impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+            votingengine::vote::internal::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -685,7 +685,7 @@ mod tests {
         }
     }
 
-    impl voting_engine::Config for Test {
+    impl votingengine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
@@ -719,7 +719,7 @@ mod tests {
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type GrandpaChangeDelay = GrandpaChangeDelay;
-        type InternalVoteEngine = voting_engine::Pallet<Test>;
+        type InternalVoteEngine = votingengine::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -811,12 +811,12 @@ mod tests {
 
     /// 获取最近一次 create_internal_proposal 分配的 proposal_id。
     fn last_proposal_id() -> u64 {
-        voting_engine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
+        votingengine::Pallet::<Test>::next_proposal_id().saturating_sub(1)
     }
 
     /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
     fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-        voting_engine::Pallet::<Test>::internal_vote(
+        votingengine::Pallet::<Test>::internal_vote(
             RuntimeOrigin::signed(who),
             proposal_id,
             approve,
@@ -908,13 +908,13 @@ mod tests {
             pass_prc_proposal(1, pid);
 
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain for retries")
                     .status,
                 STATUS_PASSED
             );
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert!(System::events().iter().any(|record| {
                 matches!(
                     &record.event,
@@ -969,7 +969,7 @@ mod tests {
             pass_prc_proposal(1, pid);
 
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain for cleanup")
                     .status,
                 STATUS_PASSED
@@ -991,7 +991,7 @@ mod tests {
                 Default::default(),
             ));
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("cancelled proposal should remain until cleanup")
                     .status,
                 STATUS_EXECUTION_FAILED
@@ -1041,9 +1041,9 @@ mod tests {
             );
 
             assert_eq!(CurrentGrandpaKeys::<Test>::get(institution), Some(old_key));
-            assert!(voting_engine::Pallet::<Test>::get_proposal_data(pid).is_some());
+            assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("passed proposal should remain active")
                     .status,
                 STATUS_PASSED
@@ -1083,7 +1083,7 @@ mod tests {
             pass_prc_proposal(1, pid);
 
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(pid)
+                votingengine::Pallet::<Test>::proposals(pid)
                     .expect("fatal failed proposal should remain until cleanup")
                     .status,
                 STATUS_EXECUTION_FAILED
@@ -1140,7 +1140,7 @@ mod tests {
             pass_prc_proposal(2, second_pid);
 
             assert_eq!(
-                voting_engine::Pallet::<Test>::proposals(second_pid)
+                votingengine::Pallet::<Test>::proposals(second_pid)
                     .expect("colliding proposal should remain until cleanup")
                     .status,
                 STATUS_EXECUTION_FAILED
@@ -1264,7 +1264,7 @@ mod tests {
                     RuntimeOrigin::signed(prc_admin(0)),
                     pid,
                 ),
-                voting_engine::pallet::Error::<Test>::ProposalNotRetryable
+                votingengine::pallet::Error::<Test>::ProposalNotRetryable
             );
         });
     }
@@ -1326,7 +1326,7 @@ mod tests {
             let outsider = AccountId32::new([98u8; 32]);
             assert_noop!(
                 cast_vote(outsider, pid, true),
-                voting_engine::pallet::Error::<Test>::NoPermission
+                votingengine::pallet::Error::<Test>::NoPermission
             );
         });
     }

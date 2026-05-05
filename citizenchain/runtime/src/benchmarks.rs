@@ -40,6 +40,6 @@ frame_benchmarking::define_benchmarks!(
     [grandpakey_change, GrandpaKeyChange]
     [duoqian_manage, DuoqianManage]
     [duoqian_transfer, DuoqianTransfer]
-    [voting_engine, VotingEngine]
+    [votingengine, VotingEngine]
     [runtime_upgrade, RuntimeUpgrade]
 );

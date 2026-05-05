@@ -539,7 +539,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
             const SizedBox(height: 12),
             _buildInfoRow(
               '提案 ID',
-              formatProposalId(widget.proposalId),
+              formatProposalId(_meta?.displayMeta),
             ),
             if (widget.institution != null) ...[
               const Divider(height: 20),

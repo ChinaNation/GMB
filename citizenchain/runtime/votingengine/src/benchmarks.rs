@@ -50,7 +50,7 @@ mod benchmarks {
         {
             created_id = Pallet::<T>::do_create_internal_proposal(
                 who,
-                crate::internal_vote::ORG_NRC,
+                crate::vote::internal::ORG_NRC,
                 institution,
             )
             .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
@@ -70,7 +70,7 @@ mod benchmarks {
         let institution = nrc_institution()?;
         let proposal_id = Pallet::<T>::do_create_internal_proposal(
             who.clone(),
-            crate::internal_vote::ORG_NRC,
+            crate::vote::internal::ORG_NRC,
             institution,
         )
         .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
@@ -185,7 +185,7 @@ mod benchmarks {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,
-            internal_org: Some(crate::internal_vote::ORG_NRC),
+            internal_org: Some(crate::vote::internal::ORG_NRC),
             internal_institution: Some(nrc_institution()?),
             start: one,
             end: one,

@@ -10,6 +10,7 @@ import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_service.dart';
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
 import 'package:wuminapp_mobile/citizen/governance/proposal_cache.dart';
 import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart';
@@ -122,6 +123,133 @@ class TransferProposalService {
     return _rpc.fetchBalance(institution.duoqianAddress);
   }
 
+  // ──── 双层 ID 与反向索引(spec_version v1)────
+
+  /// 查询提案展示号:`ProposalDisplayId[proposal_id] = ProposalDisplayMeta { year, seq_in_year }`。
+  ///
+  /// 返回 null 表示链上不存在该展示号(理论上不应该发生 — 创建提案时
+  /// 同事务一定写入)。
+  Future<ProposalDisplayMeta?> fetchProposalDisplayId(int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'ProposalDisplayId',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 6) return null;
+    // SCALE: u16 LE (year) + u32 LE (seq_in_year) = 6 bytes
+    final bd = ByteData.sublistView(data);
+    return ProposalDisplayMeta(
+      year: bd.getUint16(0, Endian.little),
+      seqInYear: bd.getUint32(2, Endian.little),
+    );
+  }
+
+  /// 批量查询展示号(列表页一次性 batch fetch,避免 N 次 RPC)。
+  Future<Map<int, ProposalDisplayMeta>> fetchProposalDisplayIdBatch(
+      List<int> proposalIds) async {
+    if (proposalIds.isEmpty) return const {};
+    final keyHexList = proposalIds
+        .map((id) => '0x${_hexEncode(_buildStorageKey(
+              'VotingEngine',
+              'ProposalDisplayId',
+              _u64ToLeBytes(id),
+            ))}')
+        .toList();
+    final batchResult = await _rpc.fetchStorageBatch(keyHexList);
+    final result = <int, ProposalDisplayMeta>{};
+    for (var i = 0; i < proposalIds.length; i++) {
+      final data = batchResult[keyHexList[i]];
+      if (data == null || data.length < 6) continue;
+      final bd = ByteData.sublistView(data);
+      result[proposalIds[i]] = ProposalDisplayMeta(
+        year: bd.getUint16(0, Endian.little),
+        seqInYear: bd.getUint32(2, Endian.little),
+      );
+    }
+    return result;
+  }
+
+  /// 反向索引:`ProposalsByOrg[org]` 下的所有 proposal_id。
+  ///
+  /// org 取值:0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN(详见
+  /// `votingengine::internal_vote::ORG_*` 常量)。
+  Future<List<int>> fetchProposalIdsByOrg(int org) async {
+    return _fetchProposalIdsByDoubleMap(
+      'ProposalsByOrg',
+      Uint8List.fromList([org]),
+    );
+  }
+
+  /// 反向索引:`ProposalsByInstitution[institution_pallet_id(48 bytes)]` 下的所有 proposal_id。
+  Future<List<int>> fetchProposalIdsByInstitution(String shenfenId) async {
+    return _fetchProposalIdsByDoubleMap(
+      'ProposalsByInstitution',
+      _institutionIdentityToFixed48(shenfenId),
+    );
+  }
+
+  /// 反向索引:`ProposalsByOwner[module_tag]` 下的所有 proposal_id。
+  /// `module_tag` 是业务模块的 BoundedVec<u8, MaxModuleTagLen>,SCALE 编码后传入。
+  Future<List<int>> fetchProposalIdsByOwner(Uint8List moduleTag) async {
+    // BoundedVec<u8> 的 SCALE 编码 = Compact<len> + bytes;作为 storage 的 K1 键时,
+    // 链上对该编码后的字节做 twox64,然后 concat 原编码字节。
+    final encoded = ByteOutput();
+    encoded.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(moduleTag.length)));
+    encoded.write(moduleTag);
+    return _fetchProposalIdsByDoubleMap('ProposalsByOwner', encoded.toBytes());
+  }
+
+  /// 通用反向索引迭代器。
+  ///
+  /// `StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, u64, ()>` 的 key 结构:
+  ///   `twox128(pallet) ++ twox128(storage) ++ twox64(K1)(8B) ++ K1(原值) ++ twox64(u64)(8B) ++ u64(8B LE)`
+  ///
+  /// 取所有 key 的前缀:
+  ///   `twox128(pallet) ++ twox128(storage) ++ twox64(K1) ++ K1`
+  ///
+  /// `state_getKeysPaged(prefix, count, startKey)` 返回前缀下所有完整 key,
+  /// 每个 key 末 8 字节 = u64 LE = proposal_id。
+  Future<List<int>> _fetchProposalIdsByDoubleMap(
+      String storageName, Uint8List firstKeyRaw) async {
+    final palletHash = _twoxx128String('VotingEngine');
+    final storageHash = _twoxx128String(storageName);
+    final firstKeyHashed = Hasher.twoxx64.hash(firstKeyRaw);
+    final prefixLen = palletHash.length +
+        storageHash.length +
+        firstKeyHashed.length +
+        firstKeyRaw.length;
+    final prefix = Uint8List(prefixLen);
+    var off = 0;
+    prefix.setAll(off, palletHash);
+    off += palletHash.length;
+    prefix.setAll(off, storageHash);
+    off += storageHash.length;
+    prefix.setAll(off, firstKeyHashed);
+    off += firstKeyHashed.length;
+    prefix.setAll(off, firstKeyRaw);
+    final prefixHex = '0x${_hexEncode(prefix)}';
+
+    // 一次拉到底(开发期数据量小);生产 1000 万级时再分页
+    final keysHex = await SmoldotClientManager.instance.request(
+      'state_getKeysPaged',
+      [prefixHex, 1000, null],
+    ) as List<dynamic>?;
+    if (keysHex == null || keysHex.isEmpty) return const [];
+
+    // 每条 key 末 8 字节 = proposal_id u64 LE(twox64_concat 的 raw 部分)
+    final ids = <int>[];
+    for (final keyHex in keysHex) {
+      if (keyHex is! String) continue;
+      final keyBytes = _hexDecode(keyHex);
+      if (keyBytes.length < 8) continue;
+      final tail = keyBytes.sublist(keyBytes.length - 8);
+      ids.add(_decodeU64(tail));
+    }
+    return ids;
+  }
+
   /// 每个机构最多同时 10 个活跃提案（全局，不区分提案类型）。
   static const maxActiveProposalsPerInstitution = 10;
 
@@ -214,6 +342,12 @@ class TransferProposalService {
       }
     }
 
+    // 双层 ID v1:同时查 ProposalDisplayId 反查表(失败不阻塞,fallback null)
+    ProposalDisplayMeta? displayMeta;
+    try {
+      displayMeta = await fetchProposalDisplayId(proposalId);
+    } catch (_) {}
+
     return ProposalMeta(
       proposalId: proposalId,
       kind: kind,
@@ -221,136 +355,46 @@ class TransferProposalService {
       status: status,
       internalOrg: internalOrg,
       institutionBytes: institutionBytes,
+      displayMeta: displayMeta,
     );
-  }
-
-  /// 查询全链所有活跃提案（status=0 投票中），按 ID 倒序。
-  Future<List<ProposalWithDetail>> fetchAllActiveProposals() async {
-    final nextId = await fetchNextProposalId();
-    if (nextId == 0) return const [];
-
-    // 计算当前年份的起始 ID
-    final year = nextId ~/ 1000000;
-    final startId = year * 1000000;
-
-    // 并行查询所有提案元数据
-    final metaFutures = <Future<ProposalMeta?>>[];
-    for (var id = startId; id < nextId; id++) {
-      metaFutures.add(fetchProposalMeta(id));
-    }
-    final metas = await Future.wait(metaFutures);
-
-    // 收集所有存在的提案（包括已完成的，供历史查看）
-    final results = <ProposalWithDetail>[];
-    for (final meta in metas) {
-      if (meta == null) continue;
-
-      // 尝试获取业务详情（ProposalData）
-      TransferProposalInfo? transferDetail;
-      RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
-      CreateDuoqianProposalInfo? createDuoqianDetail;
-      CloseDuoqianProposalInfo? closeDuoqianDetail;
-      SafetyFundProposalInfo? safetyFundDetail;
-      SweepProposalInfo? sweepDetail;
-      if (meta.kind == 0) {
-        // 内部投票提案 → 先尝试管理提案,再尝试转账提案,最后尝试安全基金/手续费划转
-        try {
-          final manageService = DuoqianManageService(chainRpc: _rpc);
-          final key = _buildStorageKey(
-            'VotingEngine',
-            'ProposalData',
-            _u64ToLeBytes(meta.proposalId),
-          );
-          final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-          if (raw != null && raw.isNotEmpty) {
-            final manageDetail =
-                manageService.decodeManageProposalData(meta.proposalId, raw);
-            if (manageDetail is CreateDuoqianProposalInfo) {
-              createDuoqianDetail = manageDetail;
-            } else if (manageDetail is CloseDuoqianProposalInfo) {
-              closeDuoqianDetail = manageDetail;
-            } else {
-              transferDetail = await fetchProposalAction(meta.proposalId);
-            }
-          }
-        } catch (_) {}
-        // 如果仍无匹配，尝试安全基金 / 手续费划转提案。
-        // 原"省储行费率提案"(`RateProposalActions`)在 Step 2b-iv-b 随老
-        // 省储行 pallet 一起下线,此处不再枚举。
-        if (transferDetail == null &&
-            createDuoqianDetail == null &&
-            closeDuoqianDetail == null) {
-          try {
-            safetyFundDetail = await fetchSafetyFundAction(meta.proposalId);
-          } catch (_) {}
-          if (safetyFundDetail == null) {
-            try {
-              sweepDetail = await fetchSweepAction(meta.proposalId);
-            } catch (_) {}
-          }
-        }
-      } else if (meta.kind == 1) {
-        // 联合投票提案 → 尝试解码为 runtime 升级提案
-        try {
-          final upgradeService = RuntimeUpgradeService(chainRpc: _rpc);
-          runtimeUpgradeDetail =
-              await upgradeService.fetchRuntimeUpgradeProposal(meta.proposalId);
-        } catch (_) {}
-      }
-
-      // 如果联合提案且不是 runtime 升级，尝试检测决议发行/销毁 TAG
-      String? resIssuanceSummary;
-      String? resDestroySummary;
-      if (meta.kind == 1 && runtimeUpgradeDetail == null) {
-        try {
-          final raw = await fetchProposalDataRaw(meta.proposalId);
-          if (raw != null) {
-            final tag = _detectJointProposalTag(raw);
-            if (tag == 'res-iss') {
-              resIssuanceSummary = '决议发行提案';
-            } else if (tag == 'res-dst') {
-              resDestroySummary = '决议销毁提案';
-            }
-          }
-        } catch (_) {}
-      }
-
-      // 多签管理提案不在治理列表中显示
-      if (createDuoqianDetail != null || closeDuoqianDetail != null) {
-        continue;
-      }
-
-      results.add(ProposalWithDetail(
-        meta: meta,
-        transferDetail: transferDetail?.copyWithStatus(meta.status),
-        runtimeUpgradeDetail: runtimeUpgradeDetail,
-        safetyFundDetail: safetyFundDetail,
-        sweepDetail: sweepDetail,
-        resolutionIssuanceSummary: resIssuanceSummary,
-        resolutionDestroySummary: resDestroySummary,
-      ));
-    }
-
-    // 按 ID 倒序
-    results.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
-    return results;
   }
 
   // ──── 分页 + 缓存 + 批量查询 ────
 
-  /// 分页查询提案：从 [startId] 往前（含 startId）加载 [count] 个。
+  /// 给定一组 proposal_id,batch 查 meta + 业务详情 + 展示号,
+  /// 返回 `ProposalWithDetail` 列表(顺序按 ids 入参,**不再重排**)。
   ///
-  /// 优先读缓存，未命中的用 [fetchStorageBatch] 批量查询。
+  /// 双层 ID v1 模式下,客户端先通过反向索引拿 ID 列表,再调本方法取详情。
+  /// 多签管理提案(ACTION_CREATE_PERSONAL / ACTION_CLOSE)按既有规则过滤掉。
+  Future<List<ProposalWithDetail>> fetchProposalsByIds(List<int> ids) async {
+    if (ids.isEmpty) return const [];
+    return _fetchProposalsForIds(ids);
+  }
+
+  /// 分页查询提案:从 [startId] 往前(含 startId)加载 [count] 个。
+  ///
+  /// 优先读缓存,未命中的用 [fetchStorageBatch] 批量查询。
   /// 返回结果按 ID 倒序。
   Future<List<ProposalWithDetail>> fetchProposalPage(
       int startId, int count) async {
+    // 中文注释:把范围转成显式 ids 列表,然后委派给 _fetchProposalsForIds。
+    final ids = <int>[
+      for (var id = startId; id > startId - count && id >= 0; id--) id,
+    ];
+    return _fetchProposalsForIds(ids);
+  }
+
+  /// 给定 [ids] 一组提案 ID,batch 拉 meta + 业务详情 + 展示号,
+  /// 返回 `ProposalWithDetail` 列表,**顺序与入参一致**。
+  /// 多签管理类提案(ACTION_CREATE_PERSONAL / ACTION_CLOSE)在装配阶段过滤掉。
+  Future<List<ProposalWithDetail>> _fetchProposalsForIds(List<int> ids) async {
     final results = <ProposalWithDetail>[];
     final uncachedMetaKeys = <String>[];
     final uncachedMetaIds = <int>[];
     final cachedMetas = <int, ProposalMeta>{};
     final runtimeUpgradeService = RuntimeUpgradeService(chainRpc: _rpc);
 
-    for (var id = startId; id > startId - count && id >= 0; id--) {
+    for (final id in ids) {
       final cached = ProposalCache.getMeta(id);
       if (cached != null) {
         cachedMetas[id] = cached;
@@ -374,6 +418,25 @@ class TransferProposalService {
             cachedMetas[id] = meta;
             ProposalCache.putMeta(id, meta);
           }
+        }
+      }
+      // 双层 ID v1:为这一批 meta 同步 batch 拉 ProposalDisplayId 并 patch 进 meta
+      final displayMap = await fetchProposalDisplayIdBatch(uncachedMetaIds);
+      for (final id in uncachedMetaIds) {
+        final meta = cachedMetas[id];
+        final dm = displayMap[id];
+        if (meta != null && dm != null) {
+          final patched = ProposalMeta(
+            proposalId: meta.proposalId,
+            kind: meta.kind,
+            stage: meta.stage,
+            status: meta.status,
+            internalOrg: meta.internalOrg,
+            institutionBytes: meta.institutionBytes,
+            displayMeta: dm,
+          );
+          cachedMetas[id] = patched;
+          ProposalCache.putMeta(id, patched);
         }
       }
     }
@@ -462,8 +525,8 @@ class TransferProposalService {
       }
     }
 
-    // 组装结果（跳过多签管理提案，这些在多签账户详情页单独展示）
-    for (var id = startId; id > startId - count && id >= 0; id--) {
+    // 组装结果(跳过多签管理提案,这些在多签账户详情页单独展示)
+    for (final id in ids) {
       final meta = cachedMetas[id];
       if (meta == null) continue;
       // 多签管理提案不在治理列表中显示
@@ -526,53 +589,60 @@ class TransferProposalService {
     return results;
   }
 
-  /// 查询当前年份内，对指定机构用户可见的提案事件。
+  /// 查询对指定机构用户可见的提案事件。
   ///
-  /// 中文注释：机构页除了显示本机构内部提案，也必须显示所有用户都可见的联合投票提案，
-  /// 否则 runtime 升级这类联合投票提案无法在各机构入口被发现。
+  /// **v1 双层 ID 模式**:
+  /// - 走 `ProposalsByInstitution[shenfenId]` 反向索引拿本机构所有提案 ID
+  ///   (含内部投票如转账/费率设置/管理员变更等)
+  /// - 联合投票提案(runtime 升级 / 决议)的 internal_institution = None,
+  ///   不会落 `ProposalsByInstitution`,所以这里**额外**取本年所有 kind=1
+  ///   提案,并入结果(机构页要让所有用户都能看到联合投票)
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
       String shenfenId) async {
-    final nextId = await fetchNextProposalId();
-    if (nextId == 0) return const <ProposalWithDetail>[];
+    // 1) 本机构所有提案(含内部投票)
+    final institutionIds =
+        await fetchProposalIdsByInstitution(shenfenId);
+    final institutionProposals = await _fetchProposalsForIds(institutionIds);
 
-    final yearStartId = _currentYearStartId(nextId);
-    final institutionBytes = _institutionIdentityToFixed48(shenfenId);
-    final visibleProposals = <ProposalWithDetail>[];
+    // 2) 联合投票提案(kind=1)在所有机构页可见 — 取本年所有 ProposalsByYear[当前年]
+    //    再筛 kind=1。开发期数据量小;PR-Z 之后产品如果要"机构页只看本机构"
+    //    可以删掉这段。
+    final currentYear = await _resolveCurrentYear();
+    final yearIds = currentYear == null
+        ? const <int>[]
+        : await _fetchProposalIdsByYearTwox(currentYear);
+    final extraJointIds = yearIds
+        .where((id) => !institutionIds.contains(id))
+        .toList();
+    final extraJointProposals = extraJointIds.isEmpty
+        ? const <ProposalWithDetail>[]
+        : await _fetchProposalsForIds(extraJointIds);
+    final jointOnly = extraJointProposals
+        .where((p) => p.meta.kind == 1)
+        .toList();
 
-    const pageSize = 100;
-    for (var startId = nextId - 1;
-        startId >= yearStartId;
-        startId -= pageSize) {
-      final remaining = startId - yearStartId + 1;
-      final count = remaining < pageSize ? remaining : pageSize;
-      final page = await fetchProposalPage(startId, count);
-      for (final proposal in page) {
-        final transferDetail = proposal.transferDetail;
-        if (transferDetail != null &&
-            _bytesEqual(transferDetail.institutionBytes, institutionBytes)) {
-          visibleProposals.add(proposal);
-          continue;
-        }
-        // 中文注释：多签管理提案已在 fetchProposalPage 中过滤，此处不再匹配。
-        // 内部投票提案（费率设置等）：通过 institutionBytes 匹配
-        if (proposal.meta.kind == 0 &&
-            proposal.meta.institutionBytes != null &&
-            _bytesEqual(proposal.meta.institutionBytes!, institutionBytes)) {
-          visibleProposals.add(proposal);
-          continue;
-        }
-        if (proposal.meta.kind == 1) {
-          visibleProposals.add(proposal);
-        }
-      }
-    }
-
-    return visibleProposals;
+    final all = <ProposalWithDetail>[...institutionProposals, ...jointOnly];
+    all.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
+    return all;
   }
 
-  int _currentYearStartId(int nextId) {
-    final year = nextId ~/ 1000000;
-    return year * 1000000;
+  /// 从 `CurrentProposalYear` 拿当前提案分配年份(用于反向索引按年迭代)。
+  Future<int?> _resolveCurrentYear() async {
+    final palletHash = _twoxx128String('VotingEngine');
+    final storageHash = _twoxx128String('CurrentProposalYear');
+    final key = Uint8List(palletHash.length + storageHash.length);
+    key.setAll(0, palletHash);
+    key.setAll(palletHash.length, storageHash);
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 2) return null;
+    return ByteData.sublistView(data).getUint16(0, Endian.little);
+  }
+
+  /// `ProposalsByYear[year]` 反向索引迭代(year 是 u16,内部不暴露给业务层)。
+  Future<List<int>> _fetchProposalIdsByYearTwox(int year) async {
+    final yearBytes = Uint8List(2);
+    ByteData.sublistView(yearBytes).setUint16(0, year, Endian.little);
+    return _fetchProposalIdsByDoubleMap('ProposalsByYear', yearBytes);
   }
 
   /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。

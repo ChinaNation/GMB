@@ -135,7 +135,7 @@ citizenchain/
 - `grandpakey-change`
 - `resolution-destro`
 - `runtime-upgrade`
-- `voting-engine`
+- `votingengine`
 
 ### 9.2 发行模块（`runtime/issuance/`）
 - 负责公民发行、全节点发行、省储行利息、决议发行完整流程。
@@ -203,7 +203,7 @@ citizenchain/
 - `runtime/governance/grandpakey-change/GRANDPAKEYCHANGE_TECHNICAL.md`
 - `runtime/governance/resolution-destro/RESOLUTIONDESTRO_TECHNICAL.md`
 - `runtime/governance/runtime-upgrade/RUNTIMEUPGRADE_TECHNICAL.md`
-- `runtime/governance/voting-engine/VOTINGENGINE_TECHNICAL.md`
+- `runtime/votingengine/VOTINGENGINE_TECHNICAL.md`
 
 ### 12.2 发行
 - `runtime/issuance/citizen-issuance/CITIZENISS_TECHNICAL.md`

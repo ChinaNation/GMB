@@ -27,6 +27,17 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
+/// 提案展示号(双层 ID v1):`ProposalDisplayId[id]` 反查值。
+///
+/// 主键 `proposal_id` 是全局单调 u64;展示号通过本结构持有
+/// `(year, seq_in_year)`,渲染层把它拼成 "2026000123" 风格。
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalDisplayMeta {
+    pub year: u16,
+    pub seq_in_year: u32,
+}
+
 /// 提案元数据（从 VotingEngine::Proposals 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -263,8 +274,10 @@ fn is_duoqian_manage_proposal(proposal_id: u64) -> bool {
         && raw[offset..offset + tag.len()] == *tag
 }
 
-/// 分页查询提案列表（从 start_id 往前 count 个，按 ID 倒序）。
-/// 自动过滤多签管理提案（创建/关闭多签账户），这些在多签账户详情页单独展示。
+/// 分页查询提案列表(从 start_id 往前 count 个,按 ID 倒序)。
+/// 自动过滤多签管理提案(创建/关闭多签账户),这些在多签账户详情页单独展示。
+///
+/// 双层 ID v1:主键 0 起单调累加,所以下界用 0(不再按年份切)。
 pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResult, String> {
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -275,7 +288,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
     while id > min_id {
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
-                // 中文注释：多签管理提案（创建/关闭多签账户）不在治理列表中显示。
+                // 中文注释:多签管理提案(创建/关闭多签账户)不在治理列表中显示。
                 if is_duoqian_manage_proposal(id) {
                     if id == 0 {
                         break;
@@ -283,21 +296,23 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     id -= 1;
                     continue;
                 }
-                // 中文注释：runtime-upgrade 的业务终态保存在 ProposalData，
-                // 这里只把它折叠成列表展示状态，避免 UI 把”已否决/执行失败”误显示成”已执行”。
+                // 中文注释:runtime-upgrade 的业务终态保存在 ProposalData,
+                // 这里只把它折叠成列表展示状态,避免 UI 把"已否决/执行失败"误显示成"已执行"。
                 let display = match fetch_proposal_display(id, &meta) {
                     Ok(v) => v,
                     Err(_) => ProposalDisplayInfo {
-                        summary: "（详情查询失败）".to_string(),
+                        summary: "(详情查询失败)".to_string(),
                         status: meta.status,
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
                 let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
+                // 双层 ID v1:展示号从 ProposalDisplayId 反查;查不到 fallback `#id`
+                let display_meta = fetch_proposal_display_id(id).ok().flatten();
 
                 items.push(ProposalListItem {
                     proposal_id: id,
-                    display_id: format_proposal_id(id),
+                    display_id: format_proposal_id(id, display_meta.as_ref()),
                     kind: meta.kind,
                     kind_label: kind_label(meta.kind).to_string(),
                     stage: meta.stage,
@@ -308,7 +323,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     summary: display.summary,
                 });
             }
-            Ok(None) => {} // 提案不存在，跳过
+            Ok(None) => {} // 提案不存在,跳过
             Err(e) => {
                 warnings.push(format!("查询提案 {id} 失败: {e}"));
             }
@@ -319,11 +334,8 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
         id -= 1;
     }
 
-    // 判断是否还有更多
-    let has_more = min_id > 0 && {
-        let year_start = (start_id / 1_000_000) * 1_000_000;
-        min_id > year_start
-    };
+    // 双层 ID v1:主键单调,下界 0
+    let has_more = min_id > 0;
 
     Ok(ProposalPageResult {
         items,
@@ -331,7 +343,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
         warning: if warnings.is_empty() {
             None
         } else {
-            Some(warnings.join("；"))
+            Some(warnings.join(";"))
         },
     })
 }
@@ -431,55 +443,67 @@ pub fn fetch_institution_proposal_page(
     start_id: u64,
     count: u32,
 ) -> Result<ProposalPageResult, String> {
-    let institution_hex = hex::encode(storage_keys::shenfen_id_to_fixed48(shenfen_id));
     let mut items = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
-    let mut id = start_id;
-    // 提案 ID 格式为 YYYY000000 起，年份起始下界（含）
-    let year_start = (start_id / 1_000_000) * 1_000_000;
 
-    while items.len() < count as usize && id >= year_start {
+    // 双层 ID v1:走 ProposalsByInstitution 反向索引,O(本机构提案数),
+    // 不再扫主键 + 客户端过滤。
+    let mut ids = fetch_proposals_by_institution(shenfen_id)?;
+    ids.sort_by(|a, b| b.cmp(a)); // 降序(主键单调,降序即按时间倒序)
+
+    // start_id 是上一次翻页返回的最后一个 id - 1。本次取 ids 中 ≤ start_id 的部分。
+    let from_idx = ids
+        .iter()
+        .position(|id| *id <= start_id)
+        .unwrap_or(ids.len());
+    let take_ids: Vec<u64> = ids
+        .iter()
+        .skip(from_idx)
+        .take(count as usize)
+        .copied()
+        .collect();
+    let next_idx = from_idx + take_ids.len();
+
+    for id in take_ids {
+        if is_duoqian_manage_proposal(id) {
+            // 防御性过滤:多签管理提案不该出现在 ProposalsByInstitution(它们的
+            // institution 是 ORG_DUOQIAN 多签账户,不是治理机构)。如果出现就跳过。
+            continue;
+        }
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
-                // 过滤：只保留属于该机构的提案，且排除多签管理提案
-                let matches = meta.institution_hex.as_deref() == Some(&institution_hex);
-                if matches && !is_duoqian_manage_proposal(id) {
-                    let display = match fetch_proposal_display(id, &meta) {
-                        Ok(v) => v,
-                        Err(_) => ProposalDisplayInfo {
-                            summary: "（详情查询失败）".to_string(),
-                            status: meta.status,
-                            status_label: status_label(meta.status).to_string(),
-                        },
-                    };
-                    let institution_name =
-                        resolve_institution_name(meta.institution_hex.as_deref());
-                    items.push(ProposalListItem {
-                        proposal_id: id,
-                        display_id: format_proposal_id(id),
-                        kind: meta.kind,
-                        kind_label: kind_label(meta.kind).to_string(),
-                        stage: meta.stage,
-                        stage_label: stage_label(meta.stage).to_string(),
-                        status: display.status,
-                        status_label: display.status_label,
-                        institution_name,
-                        summary: display.summary,
-                    });
-                }
+                let display = match fetch_proposal_display(id, &meta) {
+                    Ok(v) => v,
+                    Err(_) => ProposalDisplayInfo {
+                        summary: "(详情查询失败)".to_string(),
+                        status: meta.status,
+                        status_label: status_label(meta.status).to_string(),
+                    },
+                };
+                let institution_name =
+                    resolve_institution_name(meta.institution_hex.as_deref());
+                let display_meta = fetch_proposal_display_id(id).ok().flatten();
+                items.push(ProposalListItem {
+                    proposal_id: id,
+                    display_id: format_proposal_id(id, display_meta.as_ref()),
+                    kind: meta.kind,
+                    kind_label: kind_label(meta.kind).to_string(),
+                    stage: meta.stage,
+                    stage_label: stage_label(meta.stage).to_string(),
+                    status: display.status,
+                    status_label: display.status_label,
+                    institution_name,
+                    summary: display.summary,
+                });
             }
-            Ok(None) => {} // 提案不存在，跳过
+            Ok(None) => {} // 提案不存在,跳过
             Err(e) => {
                 warnings.push(format!("查询提案 {id} 失败: {e}"));
             }
         }
-        if id == year_start {
-            break;
-        }
-        id -= 1;
     }
 
-    let has_more = id > year_start;
+    let has_more = next_idx < ids.len();
 
     Ok(ProposalPageResult {
         items,
@@ -965,11 +989,89 @@ fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), String> 
 
 // ──── 工具函数 ────
 
-/// 提案 ID 格式化：2026000001 → "2026#1"。
-fn format_proposal_id(id: u64) -> String {
-    let year = id / 1_000_000;
-    let counter = id % 1_000_000;
-    format!("{year}#{counter}")
+/// 提案展示号格式化(双层 ID v1):
+///   主键 `proposal_id` 是单调 u64,与展示号解耦。展示号通过链上
+///   `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }` 反查。
+///
+/// 渲染格式:`2026000123`(年份 + 6 位补零序号);seq 突破 6 位时自动扩展。
+/// `display_meta=None` 时(理论不该发生)fallback 到 `#<u64>` 形式避免空字符串。
+fn format_proposal_id(id: u64, display_meta: Option<&ProposalDisplayMeta>) -> String {
+    match display_meta {
+        Some(meta) => format!("{}{:06}", meta.year, meta.seq_in_year),
+        None => format!("#{id}"),
+    }
+}
+
+/// 查询 `VotingEngine::ProposalDisplayId[id]` → `ProposalDisplayMeta { year:u16, seq_in_year:u32 }`。
+/// 6 字节 SCALE:u16 LE + u32 LE。
+pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisplayMeta>, String> {
+    let key =
+        storage_keys::map_key("VotingEngine", "ProposalDisplayId", &proposal_id.to_le_bytes());
+    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let hex_value = match result.as_str() {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    let raw = hex::decode(hex_value.trim_start_matches("0x"))
+        .map_err(|e| format!("解析 ProposalDisplayId hex 失败: {e}"))?;
+    if raw.len() < 6 {
+        return Ok(None);
+    }
+    let year = u16::from_le_bytes([raw[0], raw[1]]);
+    let seq_in_year = u32::from_le_bytes([raw[2], raw[3], raw[4], raw[5]]);
+    Ok(Some(ProposalDisplayMeta { year, seq_in_year }))
+}
+
+/// 通用反向索引迭代器:列举 `StorageDoubleMap<_, Twox64Concat, K1, Twox64Concat, u64, ()>`
+/// 在指定 K1 下的所有 proposal_id。每条 key 末 8 字节 = u64 LE = proposal_id。
+fn fetch_proposal_ids_by_index(storage_name: &str, key1: &[u8]) -> Result<Vec<u64>, String> {
+    let prefix = storage_keys::twox64_concat_prefix("VotingEngine", storage_name, key1);
+    // state_getKeysPaged(prefix, count, startKey, hash)
+    let params = Value::Array(vec![
+        Value::String(prefix),
+        Value::Number(1000.into()),
+        Value::Null,
+    ]);
+    let result = rpc_post("state_getKeysPaged", params)?;
+    let arr = match result.as_array() {
+        Some(arr) => arr,
+        None => return Ok(Vec::new()),
+    };
+    let mut ids = Vec::with_capacity(arr.len());
+    for v in arr {
+        let s = match v.as_str() {
+            Some(s) => s,
+            None => continue,
+        };
+        let bytes = match hex::decode(s.trim_start_matches("0x")) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+        if bytes.len() < 8 {
+            continue;
+        }
+        let mut tail = [0u8; 8];
+        tail.copy_from_slice(&bytes[bytes.len() - 8..]);
+        ids.push(u64::from_le_bytes(tail));
+    }
+    Ok(ids)
+}
+
+/// 反向索引:`ProposalsByOrg[org]` → 该 org 下所有 proposal_id。
+pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
+    fetch_proposal_ids_by_index("ProposalsByOrg", &[org])
+}
+
+/// 反向索引:`ProposalsByInstitution[institution]` → 本机构所有 proposal_id。
+pub fn fetch_proposals_by_institution(shenfen_id: &str) -> Result<Vec<u64>, String> {
+    let inst = storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    fetch_proposal_ids_by_index("ProposalsByInstitution", &inst)
+}
+
+/// 反向索引:`ProposalsByOwner[module_tag]` → 该业务模块所有 proposal_id。
+/// `module_tag` 入参为 BoundedVec<u8> 的 SCALE 编码体(Compact<len> + bytes)。
+pub fn fetch_proposals_by_owner(module_tag_scale: &[u8]) -> Result<Vec<u64>, String> {
+    fetch_proposal_ids_by_index("ProposalsByOwner", module_tag_scale)
 }
 
 fn kind_label(kind: u8) -> &'static str {

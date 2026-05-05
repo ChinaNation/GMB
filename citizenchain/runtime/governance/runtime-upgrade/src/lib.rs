@@ -6,7 +6,7 @@ pub mod weights;
 
 use frame_support::pallet_prelude::DispatchResult;
 pub use pallet::*;
-use voting_engine::JointVoteResultCallback;
+use votingengine::JointVoteResultCallback;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
 pub const MODULE_TAG: &[u8] = b"rt-upg";
@@ -23,7 +23,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use genesis_pallet::DeveloperUpgradeCheck;
     use sp_runtime::{traits::Hash, DispatchError};
-    use voting_engine::JointVoteEngine;
+    use votingengine::JointVoteEngine;
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
@@ -31,8 +31,8 @@ pub mod pallet {
     pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
     pub const PROPOSAL_OBJECT_KIND_RUNTIME_WASM: u8 = 1;
 
-    /// 提案摘要数据：序列化后存入 voting-engine 的 ProposalData。
-    /// 大对象 wasm code 单独写入 voting-engine 的 ProposalObject。
+    /// 提案摘要数据：序列化后存入 votingengine 的 ProposalData。
+    /// 大对象 wasm code 单独写入 votingengine 的 ProposalObject。
     #[derive(
         Encode,
         Decode,
@@ -52,7 +52,7 @@ pub mod pallet {
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
-        /// 创建时摘要状态；真实投票/执行终态由 voting-engine 维护。
+        /// 创建时摘要状态；真实投票/执行终态由 votingengine 维护。
         pub status: ProposalStatus,
     }
 
@@ -70,18 +70,18 @@ pub mod pallet {
     pub enum ProposalStatus {
         /// 创建时默认状态；生产回调路径不再回写该字段。
         Voting,
-        /// 历史兼容枚举，真实成功终态读取 voting-engine STATUS_EXECUTED。
+        /// 历史兼容枚举，真实成功终态读取 votingengine STATUS_EXECUTED。
         Passed,
-        /// 历史兼容枚举，真实否决终态读取 voting-engine STATUS_REJECTED。
+        /// 历史兼容枚举，真实否决终态读取 votingengine STATUS_REJECTED。
         Rejected,
-        /// 历史兼容枚举，真实失败终态读取 voting-engine STATUS_EXECUTION_FAILED。
+        /// 历史兼容枚举，真实失败终态读取 votingengine STATUS_EXECUTION_FAILED。
         ExecutionFailed,
     }
 
     use crate::weights::WeightInfo;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine::Config {
+    pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -112,7 +112,7 @@ pub mod pallet {
     #[pallet::pallet]
     pub struct Pallet<T>(_);
 
-    // 提案数据、元数据均已移至 voting-engine 统一管控，本模块不再持有任何 Storage。
+    // 提案数据、元数据均已移至 votingengine 统一管控，本模块不再持有任何 Storage。
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -157,7 +157,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
         /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
-        /// 由 voting-engine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
+        /// 由 votingengine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
@@ -227,20 +227,20 @@ pub mod pallet {
             Ok(())
         }
 
-        // call_index = 1 保持空缺：联合投票终结只能由 voting-engine 回调进入，
+        // call_index = 1 保持空缺：联合投票终结只能由 votingengine 回调进入，
         // 不再暴露 Root 手工回放 extrinsic，避免形成第二条执行入口。
     }
 
     impl<T: Config> Pallet<T> {
         /// 快速判断 proposal_id 是否属于本模块（通过 ProposalOwner 匹配）。
         pub fn owns_proposal(proposal_id: u64) -> bool {
-            voting_engine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
+            votingengine::Pallet::<T>::is_proposal_owner(proposal_id, crate::MODULE_TAG)
         }
 
         /// 从投票引擎 ProposalData 中读取并解码本模块的提案摘要。
         /// 先校验 MODULE_TAG 前缀，防止跨模块误解码。
         pub(crate) fn load_proposal(proposal_id: u64) -> Result<Proposal<T>, DispatchError> {
-            let raw = voting_engine::Pallet::<T>::get_proposal_data(proposal_id)
+            let raw = votingengine::Pallet::<T>::get_proposal_data(proposal_id)
                 .ok_or(Error::<T>::ProposalNotFound)?;
             let tag = crate::MODULE_TAG;
             if raw.len() < tag.len() || &raw[..tag.len()] != tag {
@@ -251,34 +251,34 @@ pub mod pallet {
         }
 
         fn load_runtime_code(proposal_id: u64) -> Result<CodeOf<T>, DispatchError> {
-            let meta = voting_engine::Pallet::<T>::get_proposal_object_meta(proposal_id)
+            let meta = votingengine::Pallet::<T>::get_proposal_object_meta(proposal_id)
                 .ok_or(Error::<T>::RuntimeCodeMissing)?;
             ensure!(
                 meta.kind == PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
                 Error::<T>::RuntimeCodeMissing
             );
-            let raw = voting_engine::Pallet::<T>::get_proposal_object(proposal_id)
+            let raw = votingengine::Pallet::<T>::get_proposal_object(proposal_id)
                 .ok_or(Error::<T>::RuntimeCodeMissing)?;
             raw.try_into()
                 .map_err(|_| Error::<T>::RuntimeCodeMissing.into())
         }
 
-        /// 联合投票结果回调（由 voting-engine 的 set_status_and_emit 在事务内调用）。
+        /// 联合投票结果回调（由 votingengine 的 set_status_and_emit 在事务内调用）。
         ///
-        /// 状态处理模式与 voting-engine 对齐：
+        /// 状态处理模式与 votingengine 对齐：
         /// - approved + 执行成功 → 返回 `Executed`，由投票引擎写 STATUS_EXECUTED。
         /// - approved + 执行失败 → 返回 `FatalFailed`，由投票引擎写 STATUS_EXECUTION_FAILED。
         /// - rejected → 返回 `Executed`，投票引擎保留 STATUS_REJECTED。
         pub(crate) fn apply_joint_vote_result(
             proposal_id: u64,
             approved: bool,
-        ) -> Result<voting_engine::ProposalExecutionOutcome, DispatchError> {
+        ) -> Result<votingengine::ProposalExecutionOutcome, DispatchError> {
             let proposal = Self::load_proposal(proposal_id)?;
-            if let Some(engine_proposal) = voting_engine::Pallet::<T>::proposals(proposal_id) {
+            if let Some(engine_proposal) = votingengine::Pallet::<T>::proposals(proposal_id) {
                 let expected_status = if approved {
-                    voting_engine::STATUS_PASSED
+                    votingengine::STATUS_PASSED
                 } else {
-                    voting_engine::STATUS_REJECTED
+                    votingengine::STATUS_REJECTED
                 };
                 ensure!(
                     engine_proposal.status == expected_status,
@@ -313,16 +313,16 @@ pub mod pallet {
                     });
                 }
                 Ok(if exec_ok {
-                    voting_engine::ProposalExecutionOutcome::Executed
+                    votingengine::ProposalExecutionOutcome::Executed
                 } else {
-                    voting_engine::ProposalExecutionOutcome::FatalFailed
+                    votingengine::ProposalExecutionOutcome::FatalFailed
                 })
             } else {
                 Self::deposit_event(Event::<T>::JointVoteFinalized {
                     proposal_id,
                     approved: false,
                 });
-                Ok(voting_engine::ProposalExecutionOutcome::Executed)
+                Ok(votingengine::ProposalExecutionOutcome::Executed)
             }
         }
     }
@@ -332,7 +332,7 @@ impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(
         vote_proposal_id: u64,
         approved: bool,
-    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
+    ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         // 中文注释：统一使用 voting engine 的 proposal_id，不再需要反查映射。
         pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)
     }
@@ -373,7 +373,7 @@ mod tests {
         pub type System = frame_system;
 
         #[runtime::pallet_index(1)]
-        pub type VotingEngine = voting_engine;
+        pub type VotingEngine = votingengine;
 
         #[runtime::pallet_index(2)]
         pub type RuntimeUpgrade = super;
@@ -413,7 +413,7 @@ mod tests {
     }
 
     pub struct TestJointVoteEngine;
-    impl voting_engine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
+    impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
         fn create_joint_proposal(
             _who: AccountId32,
             eligible_total: u64,
@@ -457,19 +457,19 @@ mod tests {
             )?;
             let bounded_data: frame_support::BoundedVec<
                 u8,
-                <Test as voting_engine::Config>::MaxProposalDataLen,
+                <Test as votingengine::Config>::MaxProposalDataLen,
             > = data
                 .try_into()
                 .map_err(|_| DispatchError::Other("proposal data too large"))?;
             let owner: frame_support::BoundedVec<
                 u8,
-                <Test as voting_engine::Config>::MaxModuleTagLen,
+                <Test as votingengine::Config>::MaxModuleTagLen,
             > = module_tag
                 .to_vec()
                 .try_into()
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
-            voting_engine::ProposalData::<Test>::insert(proposal_id, bounded_data);
-            voting_engine::ProposalOwner::<Test>::insert(proposal_id, owner);
+            votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+            votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
             Ok(proposal_id)
         }
 
@@ -500,14 +500,14 @@ mod tests {
             let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
             let bounded_object: frame_support::BoundedVec<
                 u8,
-                <Test as voting_engine::Config>::MaxProposalObjectLen,
+                <Test as votingengine::Config>::MaxProposalObjectLen,
             > = object_data
                 .try_into()
                 .map_err(|_| DispatchError::Other("proposal object too large"))?;
-            voting_engine::ProposalObject::<Test>::insert(proposal_id, bounded_object);
-            voting_engine::ProposalObjectMeta::<Test>::insert(
+            votingengine::ProposalObject::<Test>::insert(proposal_id, bounded_object);
+            votingengine::ProposalObjectMeta::<Test>::insert(
                 proposal_id,
-                voting_engine::ProposalObjectMetadata {
+                votingengine::ProposalObjectMetadata {
                     kind: object_kind,
                     object_len,
                     object_hash,
@@ -525,16 +525,16 @@ mod tests {
     }
 
     pub struct TestInternalThresholdProvider;
-    impl voting_engine::InternalThresholdProvider for TestInternalThresholdProvider {
+    impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(
             org: u8,
-            _institution: voting_engine::InstitutionPalletId,
+            _institution: votingengine::InstitutionPalletId,
         ) -> Option<u32> {
-            voting_engine::internal_vote::fixed_governance_pass_threshold(org)
+            votingengine::vote::internal::fixed_governance_pass_threshold(org)
         }
     }
 
-    impl voting_engine::Config for Test {
+    impl votingengine::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxVoteNonceLength = ConstU32<64>;
         type MaxVoteSignatureLength = ConstU32<64>;
@@ -673,7 +673,7 @@ mod tests {
 
     /// 从 ProposalData 读取并跳过 MODULE_TAG 后 decode 提案摘要。
     fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
-        let raw = voting_engine::Pallet::<Test>::get_proposal_data(proposal_id)
+        let raw = votingengine::Pallet::<Test>::get_proposal_data(proposal_id)
             .expect("proposal data should exist");
         let tag = crate::MODULE_TAG;
         assert!(
@@ -700,12 +700,12 @@ mod tests {
     /// 测试 mock 的 TestJointVoteEngine 不创建真实 Proposals 条目，
     /// 需手工补一个以模拟真实回调上下文。
     fn insert_engine_proposal(proposal_id: u64) {
-        voting_engine::pallet::Proposals::<Test>::insert(
+        votingengine::pallet::Proposals::<Test>::insert(
             proposal_id,
-            voting_engine::Proposal {
-                kind: voting_engine::PROPOSAL_KIND_JOINT,
-                stage: voting_engine::STAGE_JOINT,
-                status: voting_engine::STATUS_PASSED,
+            votingengine::Proposal {
+                kind: votingengine::PROPOSAL_KIND_JOINT,
+                stage: votingengine::STAGE_JOINT,
+                status: votingengine::STATUS_PASSED,
                 internal_org: None,
                 internal_institution: None,
                 start: 0u64,
@@ -718,21 +718,21 @@ mod tests {
     fn call_joint_callback(
         proposal_id: u64,
         approved: bool,
-    ) -> Result<voting_engine::ProposalExecutionOutcome, DispatchError> {
-        voting_engine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+    ) -> Result<votingengine::ProposalExecutionOutcome, DispatchError> {
+        votingengine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
         let result = RuntimeUpgrade::on_joint_vote_finalized(proposal_id, approved);
-        voting_engine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+        votingengine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
         match result {
             Ok(outcome) => {
                 if approved {
-                    voting_engine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                    votingengine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
                         if let Some(proposal) = maybe {
                             proposal.status = match outcome {
-                                voting_engine::ProposalExecutionOutcome::Executed => {
-                                    voting_engine::STATUS_EXECUTED
+                                votingengine::ProposalExecutionOutcome::Executed => {
+                                    votingengine::STATUS_EXECUTED
                                 }
-                                voting_engine::ProposalExecutionOutcome::FatalFailed => {
-                                    voting_engine::STATUS_EXECUTION_FAILED
+                                votingengine::ProposalExecutionOutcome::FatalFailed => {
+                                    votingengine::STATUS_EXECUTION_FAILED
                                 }
                                 _ => proposal.status,
                             };
@@ -785,29 +785,29 @@ mod tests {
             ));
 
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_data(100).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_data(100).is_some(),
                 "NRC proposer should create proposal data"
             );
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_data(101).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_data(101).is_some(),
                 "PRC proposer should create proposal data"
             );
         });
     }
 
     #[test]
-    fn proposal_data_stored_in_voting_engine() {
+    fn proposal_data_stored_in_votingengine() {
         new_test_ext().execute_with(|| {
             propose_ok();
             // proposal_id comes from NEXT_JOINT_ID which starts at 100
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_data(100).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_data(100).is_some(),
                 "proposal data should be stored in voting engine"
             );
             let proposal = decode_proposal(100);
             assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_object(100).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "runtime wasm should be stored in proposal object layer"
             );
         });
@@ -819,7 +819,7 @@ mod tests {
             propose_ok();
             // proposal_id == joint_vote_id == 100
             let outcome = call_joint_callback(100, false).expect("callback should succeed");
-            assert_eq!(outcome, voting_engine::ProposalExecutionOutcome::Executed);
+            assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Voting));
         });
@@ -835,7 +835,7 @@ mod tests {
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Voting));
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_object(100).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "approved proposal should still keep object data for unified cleanup"
             );
             let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
@@ -860,10 +860,10 @@ mod tests {
                 "runtime code executor should fail in this test"
             );
             // 投票引擎侧应为 STATUS_EXECUTION_FAILED
-            let engine_proposal = voting_engine::pallet::Proposals::<Test>::get(100).unwrap();
+            let engine_proposal = votingengine::pallet::Proposals::<Test>::get(100).unwrap();
             assert_eq!(
                 engine_proposal.status,
-                voting_engine::STATUS_EXECUTION_FAILED
+                votingengine::STATUS_EXECUTION_FAILED
             );
         });
     }
@@ -877,7 +877,7 @@ mod tests {
             let p = decode_proposal(100);
             assert!(matches!(p.status, pallet::ProposalStatus::Voting));
             assert!(
-                voting_engine::Pallet::<Test>::get_proposal_object(100).is_some(),
+                votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
                 "rejected proposal object should stay until unified cleanup"
             );
         });
@@ -900,10 +900,10 @@ mod tests {
             assert_ok!(call_joint_callback(100, true));
 
             // 执行成功时在回调作用域内静默写入 EXECUTED，最终事件由投票引擎外层发出。
-            let engine_proposal = voting_engine::pallet::Proposals::<Test>::get(100).unwrap();
+            let engine_proposal = votingengine::pallet::Proposals::<Test>::get(100).unwrap();
             assert_eq!(
                 engine_proposal.status,
-                voting_engine::STATUS_EXECUTED,
+                votingengine::STATUS_EXECUTED,
                 "success path should mark engine status executed"
             );
         });

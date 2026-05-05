@@ -48,7 +48,7 @@
 
 - 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
-- 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 voting-engine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
+- 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
 - 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_snapshot_data`，由显式管理员列表和阈值先锁定投票快照，再在同一事务中调用 `SubjectLifecycle::create_pending_subject_for_proposal` 写 Pending 主体、绑定 owner/data/meta。
 - 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal_with_data`，只接受 Active 主体。
 
@@ -90,7 +90,7 @@ propose_create_institution(
 - 手续费按 `onchain-transaction::calculate_onchain_fee(initial_total)` 计算。
 - 发起提案时从创建者账户 reserve `initial_total + fee`。
 - 投票通过执行时，先 unreserve，再扣手续费，再把各账户初始余额划入对应机构账户。
-- 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 voting-engine 的终态回调释放 reserve 并清理 pending 索引。
+- 投票拒绝时释放 reserve 并清理 pending 索引；自动执行暂时失败时保留 pending 数据供重试；进入 `STATUS_EXECUTION_FAILED` 终态时由 votingengine 的终态回调释放 reserve 并清理 pending 索引。
 
 ## 6. 投票回调
 
@@ -151,4 +151,4 @@ runtime 适配：
 ## 9. 变更记录
 
 - 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_id`,签名业务字段收口为 `sfid_id / institution_name / account_names[]`。
-- 2026-05-02:创建 Pending 多签主体改为 voting-engine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。
+- 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。

@@ -1,6 +1,6 @@
 //! GRANDPA 密钥治理模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `voting-engine::internal_vote`,本模块不再有
+//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
 //! `vote_replace_grandpa_key` extrinsic。Benchmark 只覆盖"发起提案"、"重试执行"和
 //! "清理不可执行提案"三条路径。
 
@@ -44,10 +44,10 @@ mod benchmarks {
         #[extrinsic_call]
         propose_replace_grandpa_key(RawOrigin::Signed(proposer), institution, new_key);
 
-        assert!(voting_engine::Pallet::<T>::get_proposal_data(0).is_some());
+        assert!(votingengine::Pallet::<T>::get_proposal_data(0).is_some());
     }
 
     // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key benchmark
     // 已废弃: 两个 wrapper extrinsic 已统一到 VotingEngine 的 retry/cancel
-    // 入口,benchmark 由 voting-engine 自身覆盖。
+    // 入口,benchmark 由 votingengine 自身覆盖。
 }

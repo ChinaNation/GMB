@@ -5,12 +5,20 @@
 /// `primitives/china/china_ch.rs`（省储行）。
 library;
 
-/// 机构类型枚举，数值与链上 `org` 编码一致。
-/// 提案 ID 显示格式化：2026000001 → "2026#1"
-String formatProposalId(int proposalId) {
-  final year = proposalId ~/ 1000000;
-  final counter = proposalId % 1000000;
-  return '$year#$counter';
+import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+
+/// 提案展示号格式化(双层 ID v1):`2026000123` 风格。
+///
+/// 主键 `proposal_id` 是全局单调 u64,与展示无关。展示号由链上
+/// `ProposalDisplayId[id] = ProposalDisplayMeta { year, seq_in_year }`
+/// 反查得到,本函数把它拼成纯数字字符串(年份 + 6 位补零序号)。
+///
+/// 当 `seq_in_year` 突破 6 位(>=1_000_000)时自动扩展到 7、8 位等,
+/// 不会截断。
+String formatProposalId(ProposalDisplayMeta? meta) {
+  if (meta == null) return '—';
+  final seq = meta.seqInYear.toString().padLeft(6, '0');
+  return '${meta.year}$seq';
 }
 
 class OrgType {

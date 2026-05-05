@@ -17,7 +17,7 @@ pub mod validation;
 pub mod weights;
 
 pub use pallet::*;
-use voting_engine::JointVoteResultCallback;
+use votingengine::JointVoteResultCallback;
 
 /// 模块标识前缀，用于在投票引擎 ProposalData 中识别决议发行提案。
 ///
@@ -34,7 +34,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use sp_runtime::traits::Zero;
     use sp_std::vec::Vec;
-    use voting_engine::JointVoteEngine;
+    use votingengine::JointVoteEngine;
 
     pub type BalanceOf<T> =
         <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -54,7 +54,7 @@ pub mod pallet {
     }
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + voting_engine::Config {
+    pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -252,7 +252,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// 创建“决议发行”联合投票提案。
         /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
-        /// 由 voting-engine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
+        /// 由 votingengine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]
         pub fn propose_resolution_issuance(
@@ -313,16 +313,16 @@ impl<T: pallet::Config> JointVoteResultCallback for pallet::Pallet<T> {
     fn on_joint_vote_finalized(
         vote_proposal_id: u64,
         approved: bool,
-    ) -> Result<voting_engine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
+    ) -> Result<votingengine::ProposalExecutionOutcome, sp_runtime::DispatchError> {
         let outcome = pallet::Pallet::<T>::apply_joint_vote_result(vote_proposal_id, approved)?;
         Ok(match outcome {
             pallet::FinalizeOutcome::ApprovedExecutionSucceeded => {
-                voting_engine::ProposalExecutionOutcome::Executed
+                votingengine::ProposalExecutionOutcome::Executed
             }
             pallet::FinalizeOutcome::ApprovedExecutionFailed => {
-                voting_engine::ProposalExecutionOutcome::FatalFailed
+                votingengine::ProposalExecutionOutcome::FatalFailed
             }
-            pallet::FinalizeOutcome::Rejected => voting_engine::ProposalExecutionOutcome::Executed,
+            pallet::FinalizeOutcome::Rejected => votingengine::ProposalExecutionOutcome::Executed,
         })
     }
 }

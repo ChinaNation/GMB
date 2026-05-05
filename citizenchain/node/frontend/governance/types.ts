@@ -116,6 +116,12 @@ export type InstitutionBalanceUpdate = {
 
 // ── 提案相关类型 ──
 
+/// 双层 ID v1:展示号反查值。主键 `proposalId` 与展示号解耦。
+export type ProposalDisplayMeta = {
+  year: number;
+  seqInYear: number;
+};
+
 export type ProposalListItem = {
   proposalId: number;
   displayId: string;

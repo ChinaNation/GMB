@@ -457,7 +457,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
   String _proposalTitle(ProposalWithDetail proposal) {
-    final proposalId = formatProposalId(proposal.meta.proposalId);
+    final proposalId = formatProposalId(proposal.meta.displayMeta);
     if (proposal.transferDetail != null) {
       return '转账提案 $proposalId';
     }
