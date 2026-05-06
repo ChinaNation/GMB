@@ -14,6 +14,7 @@ frame-system = { workspace = true }
 frame-benchmarking = { workspace = true, optional = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
+sp-io = { workspace = true }
 
 primitives = { path = "../../primitives", default-features = false }
 votingengine = { path = "..", default-features = false }
@@ -28,6 +29,7 @@ std = [
     "frame-benchmarking?/std",
     "sp-runtime/std",
     "sp-std/std",
+    "sp-io/std",
     "primitives/std",
     "votingengine/std",
 ]

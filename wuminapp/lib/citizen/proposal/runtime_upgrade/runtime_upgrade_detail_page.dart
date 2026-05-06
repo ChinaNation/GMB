@@ -120,7 +120,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         _service.fetchProposalMeta(widget.proposalId),
         _service.fetchRuntimeUpgradeProposal(widget.proposalId),
         _service.fetchJointTally(widget.proposalId),
-        _service.fetchCitizenTally(widget.proposalId),
+        _service.fetchReferendumTally(widget.proposalId),
       ];
 
       final institution = widget.institution;
@@ -910,7 +910,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '公民投票进度',
+              '联合公投进度',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
@@ -944,7 +944,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     );
   }
 
-  /// 公民投票阶段判断
+  /// 联合公投阶段判断
   bool get _citizenVoteOpen =>
       (_meta?.status == 0) && (_meta?.stage == 2) && _resolvedStatusCode() == 0;
 
@@ -954,7 +954,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     if (_isAdmin && _jointVoteOpen) {
       return _buildVoteButtons();
     }
-    // 公民投票阶段：所有用户显示投票按钮（SFID 绑定校验后续完善）
+    // 联合公投阶段：所有用户显示投票按钮（SFID 绑定校验后续完善）
     if (_citizenVoteOpen) {
       return _buildCitizenVoteButtons();
     }
@@ -985,7 +985,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           const Padding(
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
-              '公民投票',
+              '联合公投',
               style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -1057,7 +1057,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('确认公民投票$label'),
+        title: Text('确认联合公投$label'),
         content: Text(
           '将对此升级提案投"$label"票。投票后不可修改。',
         ),
@@ -1079,7 +1079,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Future<void> _submitCitizenVote(bool approve) async {
-    // TODO: 公民投票提交逻辑（需要链上 citizen_vote extrinsic）
+    // TODO: 联合公投提交逻辑（需要链上 cast_referendum extrinsic）
     // 暂时提示功能开发中
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

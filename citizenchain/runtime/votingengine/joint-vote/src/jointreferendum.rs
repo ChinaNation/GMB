@@ -1,6 +1,6 @@
-//! 联合投票 — 全民兜底阶段。
+//! 联合投票 — 联合公投阶段。
 //!
-//! 联合管理员阶段非全票通过或超时进入此阶段,SFID 持有者按 >50% 严格多数投票。
+//! 联合内部投票阶段非全票通过或超时进入此阶段,SFID 持有者按 >50% 严格多数投票。
 //!
 //! 业务函数挂在 `super::Pallet<T>` 上,在 super(lib.rs)的 #[pallet::call]
 //! `cast_referendum` extrinsic 与 `JointProposalFinalizer::finalize_jointreferendum_timeout`
@@ -13,11 +13,11 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 
 use votingengine::{Proposal, SfidEligibility, PROPOSAL_KIND_JOINT, STATUS_PASSED};
 
-use super::pallet::{CitizenTallies, CitizenVotesByBindingId, Config, Error, Event, Pallet};
+use super::pallet::{ReferendumTallies, ReferendumVotesByBindingId, Config, Error, Event, Pallet};
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {
-    /// 公民投票:由外部 SFID 系统判定资格,链上去重计票。
+    /// 联合公投:由外部 SFID 系统判定资格,链上去重计票。
     /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
     pub fn do_jointreferendum_vote(
         who: T::AccountId,
@@ -36,7 +36,7 @@ impl<T: Config> Pallet<T> {
             votingengine::Error::<T>::InvalidProposalKind
         );
         ensure!(
-            proposal.stage == votingengine::STAGE_CITIZEN,
+            proposal.stage == votingengine::STAGE_REFERENDUM,
             votingengine::Error::<T>::InvalidProposalStage
         );
         ensure!(
@@ -49,7 +49,7 @@ impl<T: Config> Pallet<T> {
         );
 
         ensure!(
-            !CitizenVotesByBindingId::<T>::contains_key(proposal_id, binding_id),
+            !ReferendumVotesByBindingId::<T>::contains_key(proposal_id, binding_id),
             votingengine::Error::<T>::AlreadyVoted
         );
         ensure!(
@@ -65,8 +65,8 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidSfidVoteCredential
         );
 
-        CitizenVotesByBindingId::<T>::insert(proposal_id, binding_id, approve);
-        let tally = CitizenTallies::<T>::mutate(proposal_id, |tally| {
+        ReferendumVotesByBindingId::<T>::insert(proposal_id, binding_id, approve);
+        let tally = ReferendumTallies::<T>::mutate(proposal_id, |tally| {
             if approve {
                 tally.yes = tally.yes.saturating_add(1);
             } else {
@@ -75,7 +75,7 @@ impl<T: Config> Pallet<T> {
             *tally
         });
 
-        Self::deposit_event(Event::<T>::CitizenVoteCast {
+        Self::deposit_event(Event::<T>::ReferendumVoteCast {
             proposal_id,
             who,
             binding_id,
@@ -94,13 +94,13 @@ impl<T: Config> Pallet<T> {
         Ok(())
     }
 
-    /// 公民投票超时结算:按 >50% 规则,未达阈值否决。
+    /// 联合公投超时结算:按 >50% 规则,未达阈值否决。
     pub fn do_finalize_jointreferendum_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
         ensure!(
-            proposal.stage == votingengine::STAGE_CITIZEN,
+            proposal.stage == votingengine::STAGE_REFERENDUM,
             votingengine::Error::<T>::InvalidProposalStage
         );
         ensure!(
@@ -111,7 +111,7 @@ impl<T: Config> Pallet<T> {
             <frame_system::Pallet<T>>::block_number() > proposal.end,
             votingengine::Error::<T>::VoteNotExpired
         );
-        let tally = CitizenTallies::<T>::get(proposal_id);
+        let tally = ReferendumTallies::<T>::get(proposal_id);
         let status = if is_jointreferendum_vote_passed(tally.yes, proposal.citizen_eligible_total) {
             STATUS_PASSED
         } else {

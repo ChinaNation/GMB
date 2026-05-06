@@ -311,8 +311,8 @@ class VoteChecker {
   /// 检查某管理员是否已对某提案投票。
   ///
   /// 根据 [kind] 自动选择正确的链上存储：
-  /// - kind=0（内部投票）→ InternalVotesByAccount
-  /// - kind=1（联合投票）→ JointVotesByAdmin（需要 [institutionBytes]）
+  /// - kind=0（内部投票）→ InternalVote::InternalVotesByAccount
+  /// - kind=1（联合投票）→ JointVote::JointVotesByAdmin（需要 [institutionBytes]）
   ///
   /// 返回：null=未投票，true=赞成，false=反对。
   Future<bool?> fetchVote({

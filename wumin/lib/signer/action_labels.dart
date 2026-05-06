@@ -16,7 +16,7 @@ const Map<String, String> actionLabels = {
   // 投票引擎（pallet=9）· 统一投票入口
   'internal_vote': '管理员投票',
   'joint_vote': '联合投票',
-  'citizen_vote': '公民投票',
+  'cast_referendum': '联合公投',
   'finalize_proposal': '触发提案执行',
   'retry_passed_proposal': '手动执行已通过提案',
   'cancel_passed_proposal': '取消已通过但不可执行的提案',

@@ -276,7 +276,7 @@ class TransferProposalService {
   /// 查询投票计数。
   Future<({int yes, int no})> fetchVoteTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngine',
+      'InternalVote',
       'InternalTallies',
       _u64ToLeBytes(proposalId),
     );
@@ -768,7 +768,7 @@ class TransferProposalService {
     final accountBytes = _hexDecode(pubkeyHex);
 
     // 双 key：blake2_128_concat(proposal_id) + blake2_128_concat(account)
-    final palletHash = _twoxx128String('VotingEngine');
+    final palletHash = _twoxx128String('InternalVote');
     final storageHash = _twoxx128String('InternalVotesByAccount');
     final key1 = _blake2128Concat(proposalIdBytes);
     final key2 = _blake2128Concat(accountBytes);

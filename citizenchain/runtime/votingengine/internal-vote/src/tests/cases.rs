@@ -732,7 +732,7 @@ fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
             Some(false)
         );
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-        assert_eq!(proposal.stage, STAGE_CITIZEN);
+        assert_eq!(proposal.stage, STAGE_REFERENDUM);
         assert_eq!(
             joint_vote::JointTallies::<Test>::get(proposal_id).no,
             primitives::count_const::NRC_JOINT_VOTE_WEIGHT
@@ -776,7 +776,7 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
             VotingEngine::proposals(proposal_id)
                 .expect("proposal should exist")
                 .stage,
-            STAGE_CITIZEN
+            STAGE_REFERENDUM
         );
         assert!(
             VotingEngine::internal_proposal_mutex(ORG_NRC, nrc_pid()).is_none()
@@ -854,7 +854,7 @@ fn citizen_vote_rejects_invalid_signature_and_allows_valid_vote() {
             signer_admin_pubkey_ok(),
             true
         ));
-        assert_eq!(joint_vote::CitizenTallies::<Test>::get(0).yes, 1);
+        assert_eq!(joint_vote::ReferendumTallies::<Test>::get(0).yes, 1);
     });
 }
 
@@ -940,7 +940,7 @@ fn citizen_vote_rejects_when_eligible_total_not_set_in_proposal() {
 fn citizen_timeout_with_half_or_less_is_rejected() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 5);
-        joint_vote::CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+        joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
         System::set_block_number(6);
 
         assert_ok!(VotingEngine::finalize_proposal(
@@ -961,7 +961,7 @@ fn citizen_timeout_is_auto_rejected_on_initialize() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 5);
         assert_ok!(VotingEngine::schedule_proposal_expiry(0, 5));
-        joint_vote::CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+        joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
         System::set_block_number(6);
         <VotingEngine as Hooks<u64>>::on_initialize(6);
@@ -1084,7 +1084,7 @@ fn citizen_vote_rejects_when_not_in_citizen_stage() {
 fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 100);
-        joint_vote::CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+        joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0),
             0,
@@ -1105,7 +1105,7 @@ fn citizen_vote_passes_immediately_when_yes_exceeds_half() {
 fn delayed_cleanup_cleans_used_vote_nonce_after_retention() {
     new_test_ext().execute_with(|| {
         insert_citizen_proposal(0, 10, 100);
-        joint_vote::CitizenTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
+        joint_vote::ReferendumTallies::<Test>::insert(0, VoteCountU64 { yes: 5, no: 0 });
 
         assert_ok!(<joint_vote::Pallet<Test>>::do_jointreferendum_vote(nrc_admin(0),
             0,
@@ -1226,7 +1226,7 @@ fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_r
         cast_joint_votes_until_finalized(proposal_id, first_prc.0, false);
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-        assert_eq!(proposal.stage, STAGE_CITIZEN);
+        assert_eq!(proposal.stage, STAGE_REFERENDUM);
         assert_eq!(proposal.status, STATUS_VOTING);
         assert_eq!(proposal.start, System::block_number());
         assert_eq!(
@@ -1269,7 +1269,7 @@ fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
         ));
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-        assert_eq!(proposal.stage, STAGE_CITIZEN);
+        assert_eq!(proposal.stage, STAGE_REFERENDUM);
         assert_eq!(proposal.status, STATUS_VOTING);
         assert_eq!(
             proposal.end,
@@ -1307,7 +1307,7 @@ fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
         <VotingEngine as Hooks<u64>>::on_initialize(expired_at);
 
         let proposal = Proposals::<Test>::get(proposal_id).expect("proposal should exist");
-        assert_eq!(proposal.stage, STAGE_CITIZEN);
+        assert_eq!(proposal.stage, STAGE_REFERENDUM);
         assert_eq!(proposal.status, STATUS_VOTING);
         assert_eq!(proposal.start, expired_at);
         assert_eq!(
@@ -1717,7 +1717,7 @@ fn delayed_cleanup_chunks_cleanup_across_blocks() {
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prc_pid(), true);
         joint_vote::JointVotesByInstitution::<Test>::insert(proposal_id, prb_pid(), true);
         for (index, binding_id) in citizen_hashes.iter().enumerate() {
-            joint_vote::CitizenVotesByBindingId::<Test>::insert(proposal_id, *binding_id, true);
+            joint_vote::ReferendumVotesByBindingId::<Test>::insert(proposal_id, *binding_id, true);
             let nonce = match index {
                 0 => "cleanup-nonce-1",
                 1 => "cleanup-nonce-2",

@@ -118,26 +118,23 @@ class PayloadDecoder {
       }
 
       // ── InternalVote sub-pallet (22) · 内部投票管理员一人一票 ──
-      // 2026-05-05 拆分:原 VotingEngine.internal_vote 迁出。
       if (palletIndex == PalletRegistry.internalVotePallet &&
           callIndex == PalletRegistry.internalVoteCall) {
         return _decodeInternalVote(bytes);
       }
 
-      // ── JointVote sub-pallet (23) · 联合投票(管理员阶段 + 全民兜底)──
-      // 2026-05-05 拆分:原 VotingEngine.joint_vote / citizen_vote 迁出。
+      // ── JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)──
       if (palletIndex == PalletRegistry.jointVotePallet) {
         if (callIndex == PalletRegistry.jointVoteCall) {
           return _decodeJointVote(bytes);
         }
-        if (callIndex == PalletRegistry.citizenVoteCall) {
-          return _decodeCitizenVote(bytes);
+        if (callIndex == PalletRegistry.castReferendumCall) {
+          return _decodeCastReferendum(bytes);
         }
       }
 
       // ── VotingEngine(9) · 引擎核心生命周期 extrinsic ──
-      // 2026-05-05 拆分后仅保留 finalize_proposal / retry_passed_proposal /
-      // cancel_passed_proposal 三个引擎核心 extrinsic。
+      // 仅承载 finalize_proposal / retry_passed_proposal / cancel_passed_proposal。
       if (palletIndex == PalletRegistry.votingEnginePallet) {
         if (callIndex == PalletRegistry.finalizeProposalCall) {
           return _decodeFinalizeProposal(bytes);
@@ -181,15 +178,14 @@ class PayloadDecoder {
       }
 
       // ── DuoqianManage(17) ──
-      // 投票入口统一到 InternalVote::cast(22.0)。本 pallet
-      // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
+      // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
+      // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_sfid_institution(call=2) 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
       // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
-      // ADR-008 step2b/step2d 后凭证带 (province, signer_admin_pubkey) 双层匹配字段。
+      // ADR-008 step2b/step2d 凭证带 (province, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.duoqianManagePallet) {
-        // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 废弃,
-        // 机构多签最少 2 账户,统一走 call_index=5 propose_create_institution。
+        // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           return _decodeProposeClose(bytes);
         }
@@ -217,7 +213,7 @@ class PayloadDecoder {
       }
 
       // ── ResolutionDestro(14) ──
-      // Phase 4: execute_destroy 已统一到 VotingEngine::retry_passed_proposal。
+      // execute_destroy 走 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.resolutionDestroPallet) {
         if (callIndex == PalletRegistry.proposeDestroyCall) {
           return _decodeProposeDestroy(bytes);
@@ -225,7 +221,7 @@ class PayloadDecoder {
       }
 
       // ── AdminsChange(12) ──
-      // Phase 4: execute_admin_replacement 已统一到 VotingEngine::retry_passed_proposal。
+      // execute_admin_replacement 走 VotingEngine::retry_passed_proposal。
       if (palletIndex == PalletRegistry.adminsChangePallet) {
         if (callIndex == PalletRegistry.proposeAdminReplacementCall) {
           return _decodeProposeAdminReplacement(bytes);
@@ -233,8 +229,8 @@ class PayloadDecoder {
       }
 
       // ── GrandpaKeyChange(16) ──
-      // Phase 4: execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
-      // 已分别统一到 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
+      // execute_replace_grandpa_key / cancel_failed_replace_grandpa_key
+      // 分别走 VotingEngine::retry_passed_proposal / cancel_passed_proposal。
       if (palletIndex == PalletRegistry.grandpaKeyChangePallet) {
         if (callIndex == PalletRegistry.proposeReplaceGrandpaKeyCall) {
           return _decodeProposeKeyChange(bytes);
@@ -385,9 +381,8 @@ class PayloadDecoder {
   // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
-  // duoqian_manage/duoqian_transfer 五路)的管理员投票都走这里,冷钱包不再按
-  // 业务 pallet 分路解码投票 payload。2026-05-05 sub-pallet 拆分后从
-  // VotingEngine.internal_vote(9.0) 迁出至 InternalVote.cast(22.0)。
+  // duoqian_manage/duoqian_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
+  // 冷钱包不按业务 pallet 分路解码投票 payload。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
     if (bytes.length < 11) return null;
@@ -408,8 +403,7 @@ class PayloadDecoder {
   // VotingEngine(9) / finalize_proposal(3)
   // 格式：[0x09][0x03][proposal_id:u64_le]
   //
-  // 任意账户触发终态执行,无需签投票语义。引擎核心 extrinsic,2026-05-05
-  // sub-pallet 拆分后留在 VotingEngine 主 pallet。
+  // 任意账户触发终态执行,无需签投票语义。引擎核心 lifecycle extrinsic。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeFinalizeProposal(Uint8List bytes) {
     if (bytes.length < 10) return null;
@@ -465,8 +459,6 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // JointVote(23) / cast_admin(0)
   // 格式：[0x17][0x00][proposal_id:u64_le][institution:48][approve:bool]
-  //
-  // 2026-05-05 sub-pallet 拆分后从 VotingEngine.joint_vote(9.1) 迁出。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     // 2 + 8 + 48 + 1 = 59
@@ -490,8 +482,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // JointVote(23) / cast_referendum(1)
   //
-  // ADR-008 step3 凭证双层匹配。2026-05-05 sub-pallet 拆分后从
-  // VotingEngine.citizen_vote(9.2) 迁出至 JointVote.cast_referendum(23.1)。
+  // ADR-008 step3 凭证双层匹配。
   // 格式：[0x17][0x01][proposal_id:u64_le][binding_id:32]
   //       [Vec nonce][Vec sig][Vec province][[u8;32] signer_admin_pubkey][approve:bool]
   //
@@ -499,7 +490,7 @@ class PayloadDecoder {
   // 走 sheng_signing_pubkey_for_admin(province, admin) 双层匹配查派生公钥,
   // signer_admin_pubkey 不进 SCALE 即被拒签 → decoder 拒绝旧凭证字节流。
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeCitizenVote(Uint8List bytes) {
+  static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
     // 最小：2 + 8 + 32 + 1(nonce compact) + 1(sig compact)
     //      + 1(province compact) + 32(signer_admin_pubkey) + 1(approve) = 78
     if (bytes.length < 78) return null;
@@ -542,7 +533,7 @@ class PayloadDecoder {
     final voteText = approve ? '赞成' : '反对';
 
     return DecodedPayload(
-      action: 'citizen_vote',
+      action: 'cast_referendum',
       summary: '公民投票 提案 #$proposalId：$voteText',
       fields: {
         'proposal_id': proposalId.toString(),
@@ -744,9 +735,6 @@ class PayloadDecoder {
       },
     );
   }
-
-  // _decodeProposeCreate (DuoqianManage / propose_create call=0) 已于
-  // 2026-05-03 废弃: 单账户机构创建入口已删除,机构最少 2 账户走 propose_create_institution。
 
   // ---------------------------------------------------------------------------
   // DuoqianManage(17) / propose_create_institution(5)

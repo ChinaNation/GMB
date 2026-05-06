@@ -163,7 +163,7 @@ pub mod pallet {
         /// 内部投票 mode chunked cleanup 派发,由 internal-vote pallet 实现。
         type InternalCleanup: crate::traits::InternalCleanupHandler;
 
-        /// 联合投票 mode 超时结算回调,覆盖管理员阶段(STAGE_JOINT)与全民兜底阶段(STAGE_CITIZEN),
+        /// 联合投票 mode 超时结算回调,覆盖内部投票阶段(STAGE_JOINT)与联合公投阶段(STAGE_REFERENDUM),
         /// 由 joint-vote pallet 实现。
         type JointFinalizer: crate::traits::JointProposalFinalizer<BlockNumberFor<Self>>;
 
@@ -339,7 +339,7 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// 提案持有的互斥锁列表，用于终态或联合投票进入公民阶段时释放。
+    /// 提案持有的互斥锁列表，用于终态或联合投票进入联合公投阶段时释放。
     #[pallet::storage]
     #[pallet::getter(fn proposal_mutex_bindings)]
     pub type ProposalMutexBindings<T: Config> = StorageMap<
@@ -408,7 +408,7 @@ pub mod pallet {
             stage: u8,
             end: BlockNumberFor<T>,
         },
-        /// 中文注释：联合投票阶段非全票通过或超时，提案推进到公民投票阶段。
+        /// 中文注释：联合投票阶段非全票通过或超时，提案推进到联合公投阶段。
         ProposalAdvancedToCitizen {
             proposal_id: u64,
             citizen_end: BlockNumberFor<T>,
@@ -581,7 +581,7 @@ pub mod pallet {
                         BlockNumberFor<T>,
                     >>::finalize_joint_timeout(&proposal, proposal_id)?;
                 }
-                STAGE_CITIZEN => {
+                STAGE_REFERENDUM => {
                     <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                         BlockNumberFor<T>,
                     >>::finalize_jointreferendum_timeout(&proposal, proposal_id)?;
@@ -698,7 +698,7 @@ pub mod pallet {
                             BlockNumberFor<T>,
                         >>::finalize_joint_timeout(&proposal, proposal_id)
                     }
-                    STAGE_CITIZEN => {
+                    STAGE_REFERENDUM => {
                         <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                             BlockNumberFor<T>,
                         >>::finalize_jointreferendum_timeout(&proposal, proposal_id)
@@ -1438,7 +1438,7 @@ pub mod pallet {
                 }
                 PendingCleanupStage::CitizenVotes => {
                     let (removed, has_remaining) =
-                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_citizen_votes_chunk(
+                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_referendum_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
                     let weight =

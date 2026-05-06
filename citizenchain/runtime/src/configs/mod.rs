@@ -395,9 +395,9 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             // ResolutionDestro 仅 propose_destroy(销毁提案)。两者都是货币政策不入费率公式。
             RuntimeCall::ResolutionIssuance(_) => onchain_transaction::AmountExtractResult::NoAmount,
             RuntimeCall::ResolutionDestro(_) => onchain_transaction::AmountExtractResult::NoAmount,
-            // 投票引擎:Phase 2 后公开 call 仅 5 个 — internal_vote / joint_vote / citizen_vote /
-            // retry_passed_proposal / cancel_passed_proposal 全部按 VOTE_FLAT_FEE 收费;
-            // finalize_proposal 任意人可调用、推动清理,免费。
+            // 投票引擎主 pallet 公开 call 共 3 个:
+            //   finalize_proposal — 任意人推动超时结算,免费;
+            //   retry_passed_proposal / cancel_passed_proposal — 管理员手动重试/取消,VOTE_FLAT_FEE。
             RuntimeCall::VotingEngine(ref ve_call) => match ve_call {
                 votingengine::pallet::Call::finalize_proposal { .. } => {
                     onchain_transaction::AmountExtractResult::NoAmount

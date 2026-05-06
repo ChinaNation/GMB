@@ -40,11 +40,10 @@ frame_benchmarking::define_benchmarks!(
     [grandpakey_change, GrandpaKeyChange]
     [org_manage, DuoqianManage]
     [duoqian_transfer, DuoqianTransfer]
-    // votingengine 引擎核心 + 3 sub-pallet 的 benchmark 待 substrate-benchmark-cli
-    // 配合 weight 模板生成后再注册;权重当前由 weights.rs 中的保守上界承担。
+    [internal_vote, InternalVote]
+    [joint_vote, JointVote]
+    // votingengine 引擎核心 + citizen-vote 暂无 benchmark fn,等业务接入再注册。
     // [votingengine, VotingEngine]
-    // [internal_vote, InternalVote]
-    // [joint_vote, JointVote]
     // [citizen_vote, CitizenVote]
     [runtime_upgrade, RuntimeUpgrade]
 );

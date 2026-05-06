@@ -226,7 +226,7 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
             _ProposalTypeCard(
               icon: Icons.account_balance,
               title: '决议发行',
-              subtitle: '发起公民币发行决议，需联合投票+公民投票',
+              subtitle: '发起公民币发行决议，需联合投票:内部投票阶段+联合公投阶段',
               color: AppTheme.primaryDark,
               enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(context, null, name: '决议发行'),
@@ -235,7 +235,7 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
             _ProposalTypeCard(
               icon: Icons.arrow_upward,
               title: '状态升级',
-              subtitle: 'Runtime 升级，需联合投票+公民投票',
+              subtitle: 'Runtime 升级，需联合投票:内部投票阶段+联合公投阶段',
               color: AppTheme.info,
               enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(

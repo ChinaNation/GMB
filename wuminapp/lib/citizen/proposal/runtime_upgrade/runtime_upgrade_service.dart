@@ -142,7 +142,7 @@ class RuntimeUpgradeService {
   /// Value: VoteCountU32 { yes: u32, no: u32 } = 8 bytes。
   Future<({int yes, int no})> fetchJointTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngine',
+      'JointVote',
       'JointTallies',
       _u64ToLeBytes(proposalId),
     );
@@ -161,7 +161,7 @@ class RuntimeUpgradeService {
   Future<bool?> fetchJointVoteByInstitution(
       int proposalId, Uint8List institutionId48) async {
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngine',
+      'JointVote',
       'JointVotesByInstitution',
       _u64ToLeBytes(proposalId),
       institutionId48,
@@ -175,7 +175,7 @@ class RuntimeUpgradeService {
   Future<({int yes, int no})> fetchJointInstitutionTally(
       int proposalId, Uint8List institutionId48) async {
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngine',
+      'JointVote',
       'JointInstitutionTallies',
       _u64ToLeBytes(proposalId),
       institutionId48,
@@ -197,7 +197,7 @@ class RuntimeUpgradeService {
       ..setAll(0, institutionId48)
       ..setAll(institutionId48.length, accountBytes);
     final fullKey = _buildDoubleStorageKey(
-      'VotingEngine',
+      'JointVote',
       'JointVotesByAdmin',
       _u64ToLeBytes(proposalId),
       compositeKey,
@@ -210,10 +210,10 @@ class RuntimeUpgradeService {
   /// 查询公民投票计数（CitizenTallies）。
   ///
   /// Value: VoteCountU64 { yes: u64, no: u64 } = 16 bytes。
-  Future<({int yes, int no})> fetchCitizenTally(int proposalId) async {
+  Future<({int yes, int no})> fetchReferendumTally(int proposalId) async {
     final key = _buildStorageKey(
-      'VotingEngine',
-      'CitizenTallies',
+      'JointVote',
+      'ReferendumTallies',
       _u64ToLeBytes(proposalId),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');

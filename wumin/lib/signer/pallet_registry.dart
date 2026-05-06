@@ -6,28 +6,20 @@
 /// [supportedSpecVersions] 列出当前注册表适配的 spec_version 集合。
 /// 离线设备收到未知 spec_version 时应拒绝解码，提示用户升级冷钱包。
 ///
-/// 投票引擎统一入口(2026-04-22 整改 + 2026-05-05 sub-pallet 拆分):
-/// - 业务 pallet 的 `vote_X` 全部下线,管理员投票走 `InternalVote::cast`(22.0)
-/// - 联合投票管理员阶段走 `JointVote::cast_admin`(23.0),
-///   全民兜底阶段(原 citizen_vote)走 `JointVote::cast_referendum`(23.1)
-/// - 引擎核心 `VotingEngine` (9) 仅保留 `finalize_proposal`(9.3) /
-///   `retry_passed_proposal`(9.4) / `cancel_passed_proposal`(9.5)
+/// 投票引擎统一入口:
+/// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(22.0)
+/// - 联合投票内部投票阶段走 `JointVote::cast_admin`(23.0),
+///   联合公投阶段走 `JointVote::cast_referendum`(23.1)
+/// - 引擎核心 `VotingEngine` (9) 仅承载 `finalize_proposal`(9.3) /
+///   `retry_passed_proposal`(9.4) / `cancel_passed_proposal`(9.5)。
 ///
-/// 业务 wrapper 物理删除(2026-05-02):
-/// - 业务 pallet 的 `execute_xxx` / `cancel_failed_xxx` wrapper extrinsic
-///   全部物理删除,统一到 `VotingEngine::retry_passed_proposal`(9.4) 与
-///   `VotingEngine::cancel_passed_proposal`(9.5)。冷钱包 decoder 删除 7 个
-///   旧分支:`execute_admin_replacement` / `execute_replace_grandpa_key` /
-///   `cancel_failed_replace_grandpa_key` / `execute_destroy` /
-///   `execute_transfer` / `execute_safety_fund_transfer` / `execute_sweep_to_main`。
+/// 手动执行重试/取消统一走 `VotingEngine::retry_passed_proposal`(9.4) 与
+/// `VotingEngine::cancel_passed_proposal`(9.5),业务 pallet 不承载 wrapper extrinsic。
 class PalletRegistry {
   const PalletRegistry._();
 
   /// 当前注册表适配的链 spec_version 集合。
-  ///
-  /// 2026-04-29 重新创世前 runtime wasm 版本整体归零,冷钱包同步仅接受
-  /// 当前 fresh genesis 版本。
-  /// 遇到旧 spec 的离线请求视为过期，拒绝解码。
+  /// 遇到旧 spec 的离线请求视为过期,拒绝解码。
   static const Set<int> supportedSpecVersions = {0};
 
   /// 检查给定 spec_version 是否与当前注册表兼容。
@@ -44,13 +36,10 @@ class PalletRegistry {
   static const int balancesPallet = 2;
   static const int transferKeepAliveCall = 3;
 
-  // ---- VotingEngine (9) · 引擎核心(生命周期 extrinsic 仅留 finalize/retry/cancel)----
-  // 2026-05-05 拆分:mode-specific 投票 extrinsic(internal_vote/joint_vote/citizen_vote)
-  // 全部迁出至 sub-pallet:
-  //   - InternalVote (22).cast       — 原 VotingEngine.internal_vote
-  //   - JointVote (23).cast_admin    — 原 VotingEngine.joint_vote
-  //   - JointVote (23).cast_referendum — 原 VotingEngine.citizen_vote
-  // 引擎核心仅保留 finalize_proposal / retry_passed_proposal / cancel_passed_proposal。
+  // ---- VotingEngine (9) · 引擎核心 ----
+  // 仅承载 lifecycle extrinsic:finalize_proposal / retry_passed_proposal /
+  // cancel_passed_proposal。mode-specific 投票 extrinsic 在 InternalVote(22) /
+  // JointVote(23) sub-pallet。
   static const int votingEnginePallet = 9;
 
   /// `finalize_proposal(proposal_id)` — 任意人触发终态执行(无需签投票)。
@@ -64,30 +53,24 @@ class PalletRegistry {
 
   // ---- InternalVote sub-pallet (22) · 内部投票管理员一人一票 ----
   static const int internalVotePallet = 22;
-  /// `cast(proposal_id, approve)` — 原 VotingEngine.internal_vote 迁出。
+  /// `cast(proposal_id, approve)`。
   static const int internalVoteCall = 0;
 
-  // ---- JointVote sub-pallet (23) · 联合投票(管理员阶段 + 全民兜底)----
+  // ---- JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)----
   static const int jointVotePallet = 23;
-  /// `cast_admin(proposal_id, institution_id_48, approve)` — 联合投票管理员阶段。
+  /// `cast_admin(proposal_id, institution_id_48, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
   /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —
-  /// 联合公投全民兜底阶段(SFID 持有者投票,原 VotingEngine.citizen_vote 迁出)。
-  static const int citizenVoteCall = 1;
+  /// 联合公投联合公投阶段(SFID 持有者投票)。
+  static const int castReferendumCall = 1;
 
-  // ---- 业务 pallet:仅保留提案创建与幂等兜底入口 ----
+  // ---- 业务 pallet:仅承载提案创建与幂等兜底入口 ----
   //
-  // Phase 2/3 已在链端物理删除所有业务 pallet 内部的聚合签名与投票入口
-  // (共八条),全部通过 `InternalVote(22).cast(0)` 统一收敛
-  // (2026-05-05 sub-pallet 拆分前为 `VotingEngine(9).internal_vote(0)`)。
-  // Phase 4(2026-05-02) 进一步删除了所有业务 pallet 的 execute_xxx /
-  // cancel_failed_xxx wrapper extrinsic,手动重试/取消统一走
+  // 投票统一走 `InternalVote(22).cast(0)`,手动重试/取消统一走
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。
-  // 业务 pallet 仅保留 propose 提案创建与 cleanup 被拒清理 等幂等入口。
 
   // ---- DuoqianTransfer (19) ----
-  // call_index 3/4/5 (execute_transfer / execute_safety_fund_transfer /
-  // execute_sweep_to_main) 已于 Phase 4 物理删除,call_index 留洞不复用。
+  // call_index 3/4/5 留洞不复用(原 execute_xxx wrapper 已物理删除)。
   static const int duoqianTransferPallet = 19;
   static const int proposeTransferCall = 0;
   static const int proposeSafetyFundCall = 1;
@@ -99,8 +82,8 @@ class PalletRegistry {
   static const int developerDirectUpgradeCall = 2;
 
   // ---- DuoqianManage (17) ----
-  // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 物理删除,
-  // 留洞不复用。机构多签最少 2 账户,统一走 call_index=5。
+  // call_index=0 留洞不复用(原 propose_create 单账户机构已物理删除)。
+  // 机构多签最少 2 账户,统一走 call_index=5。
   static const int duoqianManagePallet = 17;
   static const int proposeCloseCall = 1;
   static const int registerSfidInstitutionCall = 2;
@@ -115,18 +98,17 @@ class PalletRegistry {
   static const int proposeCreateInstitutionCall = 5;
 
   // ---- ResolutionDestro (14) ----
-  // call_index 1 (execute_destroy) 已于 Phase 4 物理删除,留洞不复用。
+  // call_index 1 留洞不复用。
   static const int resolutionDestroPallet = 14;
   static const int proposeDestroyCall = 0;
 
   // ---- AdminsChange (12) ----
-  // call_index 1 (execute_admin_replacement) 已于 Phase 4 物理删除,留洞不复用。
+  // call_index 1 留洞不复用。
   static const int adminsChangePallet = 12;
   static const int proposeAdminReplacementCall = 0;
 
   // ---- GrandpaKeyChange (16) ----
-  // call_index 1, 2 (execute_replace_grandpa_key /
-  // cancel_failed_replace_grandpa_key) 已于 Phase 4 物理删除,留洞不复用。
+  // call_index 1, 2 留洞不复用。
   static const int grandpaKeyChangePallet = 16;
   static const int proposeReplaceGrandpaKeyCall = 0;
 
