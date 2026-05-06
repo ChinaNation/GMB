@@ -117,20 +117,28 @@ class PayloadDecoder {
         return _decodeTransferKeepAlive(bytes);
       }
 
-      // ── VotingEngine(9) · 统一投票入口 ──
-      // Phase 3：业务 pallet 的 vote_X 全部下线，冷钱包只在这里解码投票 payload。
-      // Phase 4：业务 pallet 的 execute_xxx / cancel_failed_xxx 全部物理删除,
-      // 手动重试/取消统一收口至 retry_passed_proposal(9.4) / cancel_passed_proposal(9.5)。
-      if (palletIndex == PalletRegistry.votingEnginePallet) {
-        if (callIndex == PalletRegistry.internalVoteCall) {
-          return _decodeInternalVote(bytes);
-        }
+      // ── InternalVote sub-pallet (22) · 内部投票管理员一人一票 ──
+      // 2026-05-05 拆分:原 VotingEngine.internal_vote 迁出。
+      if (palletIndex == PalletRegistry.internalVotePallet &&
+          callIndex == PalletRegistry.internalVoteCall) {
+        return _decodeInternalVote(bytes);
+      }
+
+      // ── JointVote sub-pallet (23) · 联合投票(管理员阶段 + 全民兜底)──
+      // 2026-05-05 拆分:原 VotingEngine.joint_vote / citizen_vote 迁出。
+      if (palletIndex == PalletRegistry.jointVotePallet) {
         if (callIndex == PalletRegistry.jointVoteCall) {
           return _decodeJointVote(bytes);
         }
         if (callIndex == PalletRegistry.citizenVoteCall) {
           return _decodeCitizenVote(bytes);
         }
+      }
+
+      // ── VotingEngine(9) · 引擎核心生命周期 extrinsic ──
+      // 2026-05-05 拆分后仅保留 finalize_proposal / retry_passed_proposal /
+      // cancel_passed_proposal 三个引擎核心 extrinsic。
+      if (palletIndex == PalletRegistry.votingEnginePallet) {
         if (callIndex == PalletRegistry.finalizeProposalCall) {
           return _decodeFinalizeProposal(bytes);
         }
@@ -147,8 +155,8 @@ class PayloadDecoder {
       }
 
       // ── DuoqianTransfer(19) ──
-      // Phase 3/4：投票入口统一到 VotingEngine::internal_vote,
-      // 手动重试入口统一到 VotingEngine::retry_passed_proposal,
+      // 投票入口统一到 InternalVote::cast(22.0),
+      // 手动重试入口统一到 VotingEngine::retry_passed_proposal(9.4),
       // 本 pallet 仅保留 3 条 propose_X。
       if (palletIndex == PalletRegistry.duoqianTransferPallet) {
         if (callIndex == PalletRegistry.proposeTransferCall) {
@@ -173,7 +181,7 @@ class PayloadDecoder {
       }
 
       // ── DuoqianManage(17) ──
-      // Phase 3：投票入口统一到 VotingEngine::internal_vote。本 pallet
+      // 投票入口统一到 InternalVote::cast(22.0)。本 pallet
       // 保留 propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_sfid_institution(call=2) 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
@@ -369,16 +377,17 @@ class PayloadDecoder {
     );
   }
 
-  // Phase 3 · 业务 pallet 的 finalize_X / vote_X 全部下线,
+  // 业务 pallet 的 finalize_X / vote_X 全部下线,
   // 冷钱包统一通过 `_decodeInternalVote` 解码一人一票的管理员投票 payload。
 
   // ---------------------------------------------------------------------------
-  // VotingEngine(9) / internal_vote(0)
-  // 格式：[0x09][0x00][proposal_id:u64_le][approve:bool]
+  // InternalVote(22) / cast(0)
+  // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
-  // Phase 3 统一入口：所有业务 pallet(admins/resolution_destro/grandpa_key/
+  // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
   // duoqian_manage/duoqian_transfer 五路)的管理员投票都走这里,冷钱包不再按
-  // 业务 pallet 分路解码投票 payload。
+  // 业务 pallet 分路解码投票 payload。2026-05-05 sub-pallet 拆分后从
+  // VotingEngine.internal_vote(9.0) 迁出至 InternalVote.cast(22.0)。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
     if (bytes.length < 11) return null;
@@ -399,7 +408,8 @@ class PayloadDecoder {
   // VotingEngine(9) / finalize_proposal(3)
   // 格式：[0x09][0x03][proposal_id:u64_le]
   //
-  // 任意账户触发终态执行，无需签投票语义。
+  // 任意账户触发终态执行,无需签投票语义。引擎核心 extrinsic,2026-05-05
+  // sub-pallet 拆分后留在 VotingEngine 主 pallet。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeFinalizeProposal(Uint8List bytes) {
     if (bytes.length < 10) return null;
@@ -416,7 +426,7 @@ class PayloadDecoder {
   // ---------------------------------------------------------------------------
   // VotingEngine(9) / cancel_passed_proposal(5)
   //
-  // 链端签名（Phase 4 整改 2026-05-02 后的统一取消入口）：
+  // 链端签名(统一取消入口,引擎核心 extrinsic):
   //   pub fn cancel_passed_proposal(
   //     origin,
   //     proposal_id: u64,
@@ -453,8 +463,10 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngine(9) / joint_vote(1)
-  // 格式：[0x09][0x01][proposal_id:u64_le][institution:48][approve:bool]
+  // JointVote(23) / cast_admin(0)
+  // 格式：[0x17][0x00][proposal_id:u64_le][institution:48][approve:bool]
+  //
+  // 2026-05-05 sub-pallet 拆分后从 VotingEngine.joint_vote(9.1) 迁出。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     // 2 + 8 + 48 + 1 = 59
@@ -476,10 +488,11 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // VotingEngine(9) / citizen_vote(2)
+  // JointVote(23) / cast_referendum(1)
   //
-  // ADR-008 step3 凭证双层匹配:
-  // 格式：[0x09][0x02][proposal_id:u64_le][binding_id:32]
+  // ADR-008 step3 凭证双层匹配。2026-05-05 sub-pallet 拆分后从
+  // VotingEngine.citizen_vote(9.2) 迁出至 JointVote.cast_referendum(23.1)。
+  // 格式：[0x17][0x01][proposal_id:u64_le][binding_id:32]
   //       [Vec nonce][Vec sig][Vec province][[u8;32] signer_admin_pubkey][approve:bool]
   //
   // (province, signer_admin_pubkey) 必须进 payload — 链端 RuntimeSfidVoteVerifier

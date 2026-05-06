@@ -35,7 +35,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 将当前管理员列表写入快照存储。
     /// 如果管理员数量超过 MaxAdminsPerInstitution,触发 defensive 告警。
-    pub(crate) fn snapshot_institution_admins(
+    pub fn snapshot_institution_admins(
         proposal_id: u64,
         org: u8,
         institution: InstitutionPalletId,

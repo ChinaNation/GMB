@@ -9,7 +9,7 @@
 把所有"管理员一人一票"动作收敛到客户端单一入口：
 
 ```
-(pallet=9, call=0)  VotingEngine::internal_vote(proposal_id: u64, approve: bool)
+(pallet=9, call=0)  InternalVote::cast(proposal_id: u64, approve: bool)
 ```
 
 `joint_vote` / `citizen_vote` 路径保留，但 call_index 同步 Phase 2 新编号

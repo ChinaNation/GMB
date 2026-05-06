@@ -6,9 +6,7 @@
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
-use crate::{
-    internal, InstitutionPalletId, ProposalCancelDecision, ProposalExecutionOutcome,
-};
+use crate::{InstitutionPalletId, ProposalCancelDecision, ProposalExecutionOutcome};
 
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(
@@ -79,8 +77,8 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 ///
 /// 业务模块通过 `create_internal_proposal` 将普通 Active 主体提案注册到投票引擎,
 /// 仅创建/激活 Pending 主体时使用 `create_pending_subject_internal_proposal`。
-/// 投票动作不再经此 trait 转发——所有管理员直接调公开的
-/// `VotingEngine::internal_vote(proposal_id, approve)` extrinsic 投票,
+/// 投票动作不经此 trait 转发——所有管理员直接调公开的
+/// `InternalVote::cast(proposal_id, approve)` extrinsic 投票,
 /// 由投票引擎的 `InternalVoteResultCallback` 广播回调业务模块执行业务。
 pub trait InternalVoteEngine<AccountId> {
     fn create_internal_proposal(
@@ -633,7 +631,7 @@ pub trait InternalAdminCountProvider {
 impl InternalAdminCountProvider for () {
     fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
         match org {
-            internal::ORG_NRC | internal::ORG_PRC => {
+            crate::types::ORG_NRC | crate::types::ORG_PRC => {
                 use primitives::china::china_cb::{
                     shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
                 };
@@ -642,7 +640,7 @@ impl InternalAdminCountProvider for () {
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
-            internal::ORG_PRB => {
+            crate::types::ORG_PRB => {
                 use primitives::china::china_ch::{
                     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
                 };
@@ -684,3 +682,190 @@ impl InternalThresholdProvider for () {
     }
 }
 
+
+// ──────────────────────────────────────────────────────────────────
+// 投票引擎核心 → mode pallet 的反向调用 trait
+// votingengine 主 crate 的 finalize / cleanup / on_initialize 路径通过这些
+// trait 派发到对应 mode pallet 的实现。
+// ──────────────────────────────────────────────────────────────────
+
+/// 内部投票超时结算入口,由 internal-vote pallet 实现。
+///
+/// votingengine 主 crate 的 `finalize_proposal` extrinsic 与 `on_initialize`
+/// 自动结算逻辑遇到 `STAGE_INTERNAL` 时通过本 trait 派发,业务实现住在 sub-pallet。
+pub trait InternalProposalFinalizer<BlockNumber> {
+    fn finalize_internal_timeout(
+        proposal: &crate::Proposal<BlockNumber>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+}
+
+impl<BlockNumber> InternalProposalFinalizer<BlockNumber> for () {
+    fn finalize_internal_timeout(
+        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other("InternalProposalFinalizerNotConfigured"))
+    }
+}
+
+/// 单步分块清理结果。`(removed_count, has_remaining)`。
+pub type CleanupChunkResult = (u32, bool);
+
+/// internal mode 的 chunked cleanup 入口。
+///
+/// votingengine 主 crate 维护 `PendingProposalCleanups` 状态机,但 internal mode
+/// 自己的 storage(`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`)
+/// 住在 sub-pallet,所以清理动作必须通过本 trait 派发。
+pub trait InternalCleanupHandler {
+    /// 分块清理 InternalVotesByAccount。
+    /// 返回 `(removed_this_chunk, has_remaining)`。
+    fn cleanup_internal_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+
+    /// 终态清理:删 InternalTallies + InternalThresholdSnapshot(单步完成,小 storage)。
+    fn cleanup_internal_terminal(proposal_id: u64);
+}
+
+impl InternalCleanupHandler for () {
+    fn cleanup_internal_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+
+    fn cleanup_internal_terminal(_proposal_id: u64) {}
+}
+
+/// 联合投票超时结算入口。joint-vote sub-pallet 实现。
+///
+/// 联合投票分两阶段:管理员阶段(STAGE_JOINT)+ 全民兜底阶段(STAGE_CITIZEN)。
+/// votingengine 主 crate 的 finalize 路径根据 stage 选择派发到这两个 fn。
+pub trait JointProposalFinalizer<BlockNumber> {
+    fn finalize_joint_timeout(
+        proposal: &crate::Proposal<BlockNumber>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+
+    fn finalize_jointreferendum_timeout(
+        proposal: &crate::Proposal<BlockNumber>,
+        proposal_id: u64,
+    ) -> DispatchResult;
+}
+
+impl<BlockNumber> JointProposalFinalizer<BlockNumber> for () {
+    fn finalize_joint_timeout(
+        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other("JointProposalFinalizerNotConfigured"))
+    }
+
+    fn finalize_jointreferendum_timeout(
+        _proposal: &crate::Proposal<BlockNumber>,
+        _proposal_id: u64,
+    ) -> DispatchResult {
+        Err(DispatchError::Other("JointProposalFinalizerNotConfigured"))
+    }
+}
+
+/// joint mode 的 chunked cleanup 入口。
+///
+/// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution
+/// / JointTallies / CitizenVotesByBindingId / CitizenTallies / UsedPopulationSnapshotNonce)
+/// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
+pub trait JointCleanupHandler {
+    fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_joint_institution_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_joint_institution_tallies_chunk(proposal_id: u64, limit: u32)
+        -> CleanupChunkResult;
+    fn cleanup_citizen_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+
+    /// 终态清理:删 JointTallies + CitizenTallies(单步)。
+    fn cleanup_joint_terminal(proposal_id: u64);
+}
+
+impl JointCleanupHandler for () {
+    fn cleanup_joint_admin_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_joint_institution_votes_chunk(
+        _proposal_id: u64,
+        _limit: u32,
+    ) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_joint_institution_tallies_chunk(
+        _proposal_id: u64,
+        _limit: u32,
+    ) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_citizen_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+        (0, false)
+    }
+    fn cleanup_joint_terminal(_proposal_id: u64) {}
+}
+
+// ──────────────────────────────────────────────────────────────────
+// SFID 资格 / 凭证 trait
+// votingengine::Config 用作 bound,joint-vote pallet 在 jointreferendum 阶段
+// 调用以判定 SFID 持有者投票资格并消耗一次性凭证。
+// ──────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VoteCredentialCleanup {
+    pub removed: u32,
+    pub loops: u32,
+    pub has_remaining: bool,
+}
+
+impl VoteCredentialCleanup {
+    pub const fn done() -> Self {
+        Self {
+            removed: 0,
+            loops: 0,
+            has_remaining: false,
+        }
+    }
+}
+
+/// ADR-008 step3:`verify_and_consume_vote_credential` 加 `(province, signer_admin_pubkey)`
+/// 双层匹配字段,链上不再保留任何"SFID main 兜底"路径。
+pub trait SfidEligibility<AccountId, Hash> {
+    fn is_eligible(binding_id: &Hash, who: &AccountId) -> bool;
+    fn verify_and_consume_vote_credential(
+        binding_id: &Hash,
+        who: &AccountId,
+        proposal_id: u64,
+        nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+    ) -> bool;
+
+    /// 清理某个联合/公民提案对应的投票凭证防重放状态。
+    fn cleanup_vote_credentials(_proposal_id: u64) {}
+
+    /// 分块清理某个提案维度下的投票凭证。
+    fn cleanup_vote_credentials_chunk(proposal_id: u64, _limit: u32) -> VoteCredentialCleanup {
+        Self::cleanup_vote_credentials(proposal_id);
+        let _ = proposal_id;
+        VoteCredentialCleanup::done()
+    }
+}
+
+impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
+    fn is_eligible(_binding_id: &Hash, _who: &AccountId) -> bool {
+        false
+    }
+
+    fn verify_and_consume_vote_credential(
+        _binding_id: &Hash,
+        _who: &AccountId,
+        _proposal_id: u64,
+        _nonce: &[u8],
+        _signature: &[u8],
+        _province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
+    ) -> bool {
+        false
+    }
+}

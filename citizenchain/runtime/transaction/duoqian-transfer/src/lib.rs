@@ -26,7 +26,7 @@ use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use votingengine::{
-    internal::{ORG_REN, ORG_NRC, ORG_PRB, ORG_PRC},
+    types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -1033,6 +1033,9 @@ mod tests {
         #[runtime::pallet_index(2)]
         pub type VotingEngine = votingengine;
 
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
+
         #[runtime::pallet_index(3)]
         pub type DuoqianManage = org_manage;
 
@@ -1285,7 +1288,7 @@ mod tests {
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
-                    votingengine::internal::fixed_governance_pass_threshold(org)
+                    votingengine::types::fixed_governance_pass_threshold(org)
                 }
                 ORG_REN => {
                     let account = AccountId32::decode(&mut &institution[..32]).ok()?;
@@ -1356,12 +1359,21 @@ mod tests {
         type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     impl org_manage::pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
@@ -1383,7 +1395,7 @@ mod tests {
     impl admins_change::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<64>;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1426,7 +1438,7 @@ mod tests {
     }
 
     // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
-    // `VotingEngine::internal_vote`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
+    // `InternalVote::cast`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
     fn nrc_pallet_id() -> InstitutionPalletId {
         reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
@@ -1547,7 +1559,7 @@ mod tests {
         _proposer: AccountId32,
     ) -> frame_support::dispatch::DispatchResult {
         for (admin, _pair) in pairs.iter().take(n) {
-            VotingEngine::internal_vote(RuntimeOrigin::signed(admin.clone()), pid, true)?;
+            <internal_vote::Pallet<Test>>::do_internal_vote(admin.clone(), pid, true)?;
             if VotingEngine::proposals(pid)
                 .map(|proposal| proposal.status != STATUS_VOTING)
                 .unwrap_or(true)

@@ -1,0 +1,5 @@
+# Windows MSVC 静态链接 C++ 运行时,消除对 MSVCP140.dll / VCRUNTIME140.dll 的依赖,
+# 让 citizenchain.exe 在未装 VC++ Redistributable 的 Windows 上也能直接运行。
+# 仅对 x86_64-pc-windows-msvc 目标生效,不影响 macOS / Linux 构建。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

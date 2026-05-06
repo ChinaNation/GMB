@@ -45,7 +45,7 @@ pub struct SweepAction<Balance> {
 
 ### 2. 投票
 
-管理员统一调用 `VotingEngine::internal_vote(proposal_id, approve)`。投票引擎使用创建时的管理员快照和固定阈值判定，达阈值后回调本模块自动执行 sweep。
+管理员统一调用 `InternalVote::cast(proposal_id, approve)`。投票引擎使用创建时的管理员快照和固定阈值判定，达阈值后回调本模块自动执行 sweep。
 
 ### 3. try_execute_sweep（内部方法）
 

@@ -320,8 +320,8 @@ WUMIN_QR_V1|system|challenge|expires_at
   - 冷钱包拒绝
 - `test/signer/payload_decoder_test.dart`
   - transfer_keep_alive 解码
-  - vote_transfer 解码（赞成/反对）
-  - joint_vote 解码
+  - internal_vote 解码(InternalVote::cast 22.0,赞成/反对)
+  - joint_vote 解码(JointVote::cast_admin 23.0)
   - 未知 pallet / 过短 payload / 空值返回 null
 
 ## 12. 冷钱包扫码签名会话

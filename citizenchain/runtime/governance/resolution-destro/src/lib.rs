@@ -14,7 +14,7 @@ use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use votingengine::{
-    internal::{ORG_NRC, ORG_PRB, ORG_PRC},
+    types::{ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -253,8 +253,8 @@ pub mod pallet {
 
 // ──── 投票终态回调:把已通过的销毁提案落地到链上 ────
 //
-// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
+// 投票统一由投票引擎承担,提案通过(或否决)经
+// [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案,非己方返回 Ignored。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
@@ -325,6 +325,9 @@ mod tests {
 
         #[runtime::pallet_index(2)]
         pub type VotingEngine = votingengine;
+
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
 
         #[runtime::pallet_index(3)]
         pub type ResolutionDestro = super;
@@ -457,7 +460,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::internal::fixed_governance_pass_threshold(org)
+            votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -490,19 +493,28 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
-        // Phase 2 整改:挂上本模块 Executor,让提案通过后自动触发销毁执行。
+        // 挂上本模块 Executor,让提案通过后自动触发销毁执行。
         type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
         type InternalThresholdProvider = TestInternalThresholdProvider;
         type InternalAdminCountProvider = ();
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -543,11 +555,8 @@ mod tests {
 
     /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
     fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-        votingengine::Pallet::<Test>::internal_vote(
-            RuntimeOrigin::signed(who),
-            proposal_id,
-            approve,
-        )
+        frame_support::storage::with_transaction(|| -> frame_support::storage::TransactionOutcome<DispatchResult> { match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve,
+        ) { Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())), Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)) } })
     }
 
     fn new_test_ext() -> sp_io::TestExternalities {

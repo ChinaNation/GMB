@@ -1,8 +1,7 @@
 //! 占位 weights,后续由 benchmark 生成替换。
 //!
-//! Phase 2 整改后:聚合签名 `finalize_X` 统一删除,投票改走
-//! `votingengine::internal_vote`;execute_xxx wrapper 已统一到
-//! `votingengine::retry_passed_proposal` 入口,本 pallet 只保留 `propose_X`。
+//! 本 pallet 只保留 `propose_X`;投票走 `votingengine::internal_vote`,
+//! 执行重试走 `votingengine::retry_passed_proposal`。
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(unused_parens)]

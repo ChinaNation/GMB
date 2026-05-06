@@ -41,3 +41,6 @@ runtime-benchmarks = [
     "frame-system/runtime-benchmarks",
 ]
 try-runtime = []
+
+[dev-dependencies]
+internal-vote = { path = "../../votingengine/internal-vote", default-features = false }

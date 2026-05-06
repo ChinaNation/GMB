@@ -34,7 +34,7 @@
 ## 检查结果
 
 - P0 成立：`weights.rs` 仍引用 `ResolutionDestro::ActiveProposalByInstitution`、`ProposalActions`、`ProposalCreatedAt`、`ProposalPassedAt` 等已移除存储项，且 proof 注释/读写次数来自旧路径。
-- P1 成立：`DestroyVoteSubmitted` 事件仅保留定义与文档记录，当前投票统一走 `VotingEngine::internal_vote`，本模块没有任何对应 `deposit_event`。
+- P1 成立：`DestroyVoteSubmitted` 事件仅保留定义与文档记录，当前投票统一走 `InternalVote::cast`，本模块没有任何对应 `deposit_event`。
 - P1 成立：`ProposalActionNotFound` 同时用于“投票引擎提案不存在”和“`DestroyAction` 解码失败”，错误语义混用。
 - P1 成立：`institution_org` 用 `CHINA_CB.first()` 识别 NRC，用 `CHINA_CB.iter().skip(1)` 识别 PRC，依赖隐式顺序。
 - P1 成立：`wuminapp/lib/citizen/proposal/resolution_destroy/` 仅有 `.gitkeep`，实际 `res-dst` 展示逻辑仍在 `transfer_proposal_service.dart`。

@@ -12,14 +12,14 @@ import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 ///
 /// - 所有业务 pallet(admins_change / resolution_destro /
 ///   grandpakey_change / duoqian_manage / duoqian_transfer)的
-///   `vote_X` call 在 Phase 2 已从链端物理删除,管理员一人一票一律走
-///   `VotingEngine::internal_vote(proposal_id, approve)` 一条路径。
+///   业务 pallet 不再提供独立投票入口,管理员一人一票一律走
+///   `InternalVote::cast(proposal_id, approve)` 一条路径。
 /// - 业务 service(TransferProposalService / DuoqianManageService 等)
 ///   只负责发起提案(propose_X)与提案执行重试(execute_X),投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
 ///
-/// Runtime 位置: `pallet_index=9, call_index=0`。
-/// Call 编码: `[0x09][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Runtime 位置: `pallet_index=22, call_index=0`(InternalVote sub-pallet)。
+/// Call 编码: `[0x16][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 class InternalVoteService {
   InternalVoteService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -27,10 +27,10 @@ class InternalVoteService {
 
   // ──── 常量 ────
 
-  /// VotingEngine pallet index（runtime pallet_index=9）。
-  static const int votingEnginePallet = 9;
+  /// InternalVote sub-pallet。runtime pallet_index=22。
+  static const int votingEnginePallet = 22;
 
-  /// internal_vote call_index=0（Phase 2 重排后在投票引擎第 0 位）。
+  /// InternalVote::cast call_index=0。
   static const int internalVoteCallIndex = 0;
 
   /// Mortal era 周期（与其他业务 service 保持一致）。
@@ -38,7 +38,7 @@ class InternalVoteService {
 
   // ──── 公开 API ────
 
-  /// 提交 `VotingEngine::internal_vote(proposal_id, approve)` extrinsic。
+  /// 提交 `InternalVote::cast(proposal_id, approve)` extrinsic(pallet 22.0)。
   ///
   /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。业务模块无需感知
   /// 提案所属 pallet/MODULE_TAG,投票引擎会按 ProposalData 前缀自动
@@ -59,9 +59,9 @@ class InternalVoteService {
     );
   }
 
-  /// 构造 internal_vote call data（对外公开，便于冷钱包/热钱包复用）。
+  /// 构造 InternalVote::cast call data(对外公开,便于冷钱包/热钱包复用)。
   ///
-  /// 格式: `[0x09][0x00][proposal_id:u64_le][approve:bool]`。
+  /// 格式: `[0x16][0x00][proposal_id:u64_le][approve:bool]`(pallet=22, call=0)。
   static Uint8List buildCallData({
     required int proposalId,
     required bool approve,

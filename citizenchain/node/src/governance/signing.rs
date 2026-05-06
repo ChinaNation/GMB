@@ -120,7 +120,7 @@ pub struct VoteSubmitResult {
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」:
 /// 所有业务 pallet(admins_change / resolution_destro /
 /// grandpakey_change / duoqian_manage / duoqian_transfer)的 vote_X
-/// 已物理删除,管理员一人一票统一走 `VotingEngine::internal_vote`
+/// 已物理删除,管理员一人一票统一走 `InternalVote::cast`
 /// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
 /// `InternalVoteExecutor`。
 ///
@@ -530,7 +530,7 @@ pub fn build_propose_safety_fund_sign_request(
 }
 
 // Phase 3(2026-04-22): `build_safety_fund_vote_sign_request` 已删除,
-// 安全基金提案投票统一走 `build_vote_sign_request`(internal_vote, 9.0)。
+// 安全基金提案投票统一走 `build_vote_sign_request`(InternalVote::cast, 22.0)。
 
 /// 构建 propose_sweep_to_main 签名请求（手续费划转提案：pallet=19, call=2）。
 ///
@@ -623,7 +623,7 @@ pub fn build_propose_sweep_sign_request(
 }
 
 // Phase 3(2026-04-22): `build_sweep_vote_sign_request` 已删除,
-// 手续费划转提案投票统一走 `build_vote_sign_request`(internal_vote, 9.0)。
+// 手续费划转提案投票统一走 `build_vote_sign_request`(InternalVote::cast, 22.0)。
 
 /// 构建 developer_direct_upgrade 签名请求（开发期快捷升级：pallet=13, call=2）。
 /// wasm_path 为编译产物的绝对路径，后端直接读文件。

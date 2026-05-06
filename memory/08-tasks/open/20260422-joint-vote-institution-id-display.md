@@ -7,9 +7,12 @@
 
 ## 背景
 
-`VotingEngine::joint_vote(proposal_id, institution_id_48, approve)`
+`JointVote::cast_admin(proposal_id, institution_id_48, approve)`
 的 call payload 包含 48 字节 `institution_id`(shenfen_id),决定"以哪个
 机构身份投票"。
+
+> 2026-05-05 sub-pallet 拆分后入口迁出为 `JointVote::cast_admin(23.0)`,
+> decoder 路径仍是 `_decodeJointVote`,字段问题未变,本卡仍然有效。
 
 当前 wumin `payload_decoder.dart:303-320` 的 `_decodeJointVote` 在解析
 时跳过该字段,`decoded.fields` 只回填 `proposal_id` / `approve`。

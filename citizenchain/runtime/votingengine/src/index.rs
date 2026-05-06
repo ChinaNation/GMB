@@ -25,7 +25,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 由 `register_proposal_data` 在创建阶段同事务调用,保证:
     /// - 任一提案写入 `ProposalData` 后,4 张反向索引立即可查
     /// - 不写 `ProposalData` 的占位提案(仅创建阶段失败回滚的)不会污染索引
-    pub(crate) fn register_proposal_indexes(
+    pub fn register_proposal_indexes(
         proposal_id: u64,
         org: Option<u8>,
         institution: Option<InstitutionPalletId>,
@@ -50,7 +50,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     ///
     /// **必须在 `Proposals[id]` / `ProposalOwner[id]` / `ProposalDisplayId[id]`
     /// 自身被删除之前调用**(否则反查不到分类键无法清索引)。
-    pub(crate) fn cleanup_proposal_indexes(proposal_id: u64) {
+    pub fn cleanup_proposal_indexes(proposal_id: u64) {
         if let Some(proposal) = Proposals::<T>::get(proposal_id) {
             if let Some(org) = proposal.internal_org {
                 ProposalsByOrg::<T>::remove(org, proposal_id);

@@ -899,7 +899,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                votingengine::internal::ORG_REN,
+                votingengine::types::ORG_REN,
                 kind,
                 admins.iter().cloned().collect(),
                 threshold,
@@ -984,8 +984,8 @@ pub mod pallet {
 
 // ──── 投票终态回调:把已通过的多签创建/关闭提案落地到链上 ────
 //
-// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
+// 投票统一由投票引擎承担,提案通过(或否决)经
+// [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor:
 // - 按 `MODULE_TAG + ACTION_CREATE_PERSONAL / ACTION_CLOSE` 前缀认领本模块提案;
 // - `approved = true` → 分派到 `execute_create` / `execute_close`;执行失败
@@ -1181,7 +1181,7 @@ mod tests {
     use frame_system as system;
     use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use votingengine::internal::ORG_REN;
+    use votingengine::types::ORG_REN;
 
     type Block = frame_system::mocking::MockBlock<Test>;
     type Balance = u128;
@@ -1211,6 +1211,9 @@ mod tests {
 
         #[runtime::pallet_index(2)]
         pub type VotingEngine = votingengine;
+
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
 
         #[runtime::pallet_index(3)]
         pub type Duoqian = pallet;
@@ -1461,7 +1464,7 @@ mod tests {
 
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
             if org != ORG_REN {
-                return votingengine::internal::fixed_governance_pass_threshold(org);
+                return votingengine::types::fixed_governance_pass_threshold(org);
             }
             admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
         }
@@ -1511,12 +1514,21 @@ mod tests {
         type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type AddressValidator = TestAddressValidator;
         type ReservedAddressChecker = TestReservedAddressChecker;
         type ProtectedSourceChecker = TestProtectedSourceChecker;
@@ -1538,7 +1550,7 @@ mod tests {
     impl admins_change::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<64>;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1592,7 +1604,7 @@ mod tests {
         take: usize,
     ) -> frame_support::dispatch::DispatchResult {
         for admin in admins.iter().take(take) {
-            VotingEngine::internal_vote(RuntimeOrigin::signed(admin.clone()), proposal_id, true)?;
+            <internal_vote::Pallet<Test>>::do_internal_vote(admin.clone(), proposal_id, true)?;
         }
         Ok(())
     }
@@ -1916,10 +1928,7 @@ mod tests {
             // Phase 2:关闭走投票引擎公开 internal_vote,通过后由 Executor 自动 execute_close。
             // 2026-05-03 整改:关闭提案 threshold = admins.len(),需全员投票。
             for admin in admins.iter() {
-                assert_ok!(VotingEngine::internal_vote(
-                    RuntimeOrigin::signed(admin.clone()),
-                    close_pid,
-                    true
+                assert_ok!(<internal_vote::Pallet<Test>>::do_internal_vote(admin.clone(), close_pid, true
                 ));
             }
 
@@ -2373,10 +2382,7 @@ mod tests {
             assert_eq!(Balances::reserved_balance(&admins[0]), 1_510);
             // 2026-05-03 整改:创建提案 threshold = admins.len()=3,
             // 1 票反对即可让"剩余赞成"无法达到阈值,提前否决。
-            assert_ok!(VotingEngine::internal_vote(
-                RuntimeOrigin::signed(admins[0].clone()),
-                pid,
-                false
+            assert_ok!(<internal_vote::Pallet<Test>>::do_internal_vote(admins[0].clone(), pid, false
             ));
 
             assert_eq!(Balances::reserved_balance(&admins[0]), 0);

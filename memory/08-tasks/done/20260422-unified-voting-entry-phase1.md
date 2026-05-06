@@ -6,7 +6,7 @@
 ## 背景
 
 Phase 0 分析（见 MEMORY 里的 `project_duoqian_finalize_transfer_step2.md`）发现：
-- `VotingEngine::internal_vote` 的公开 call 被历史决策封禁（`Err(NoPermission)`），
+- `InternalVote::cast` 的公开 call 被历史决策封禁（`Err(NoPermission)`），
   导致每个业务 pallet 被迫自己实现 `vote_X` 样板代码。
 - Step 1/2 聚合签名（`finalize_create / finalize_transfer / finalize_safety_fund /
   finalize_sweep`）把问题进一步复杂化：两套投票路径共存、客户端要给每个业务造不同

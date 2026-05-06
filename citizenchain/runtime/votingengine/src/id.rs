@@ -28,7 +28,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     /// 1. 从 `NextProposalId` 取下一个 u64(全局单调,跨业务跨年都唯一)
     /// 2. 从 `YearProposalCounter` 取年内序号(跨年自动重置)
     /// 3. 同事务写 `ProposalDisplayId[id] = (year, seq_in_year)` 供渲染查
-    pub(crate) fn allocate_proposal_id() -> Result<u64, DispatchError> {
+    pub fn allocate_proposal_id() -> Result<u64, DispatchError> {
         let now_ms = T::TimeProvider::now().as_millis();
         // 毫秒 → 秒 → 年份(UTC)
         let secs = u64::try_from(now_ms / 1000).map_err(|_| Error::<T>::ProposalIdOverflow)?;
@@ -68,7 +68,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// Unix 秒数转 UTC 公历年份。
-    pub(crate) fn unix_seconds_to_year(secs: u64) -> Result<u16, DispatchError> {
+    pub fn unix_seconds_to_year(secs: u64) -> Result<u16, DispatchError> {
         const SECS_PER_DAY: u64 = 86_400;
         const DAYS_PER_400_YEARS: u64 = 146_097;
 
@@ -94,7 +94,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         u16::try_from(year).map_err(|_| Error::<T>::ProposalIdOverflow.into())
     }
 
-    pub(crate) fn days_in_year(year: u32) -> u16 {
+    pub fn days_in_year(year: u32) -> u16 {
         if Self::is_leap_year(year) {
             366
         } else {
@@ -102,7 +102,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         }
     }
 
-    pub(crate) fn is_leap_year(year: u32) -> bool {
+    pub fn is_leap_year(year: u32) -> bool {
         year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
     }
 }

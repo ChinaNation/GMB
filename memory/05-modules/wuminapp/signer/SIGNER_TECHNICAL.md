@@ -100,9 +100,9 @@ lib/signer/
 | GMB_ACTIVATE 前缀 (非链上) | `activate_admin` | 管理员激活签名 |
 | Balances(2) / transfer_keep_alive(3) | `transfer` | 转账 |
 | DuoqianTransfer(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
-| DuoqianTransfer(19) / vote_transfer(1) | `vote_transfer` | 投票转账提案 |
-| VotingEngine(9) / joint_vote(3) | `joint_vote` | 联合投票 |
-| VotingEngine(9) / citizen_vote(4) | `citizen_vote` | 公民投票 |
+| InternalVote(22) / cast(0) | `internal_vote` | 内部投票(管理员一人一票,统一入口) |
+| JointVote(23) / cast_admin(0) | `joint_vote` | 联合投票管理员阶段 |
+| JointVote(23) / cast_referendum(1) | `citizen_vote` | 联合公投全民兜底(原 citizen_vote) |
 | RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | Runtime 升级提案 |
 | RuntimeUpgrade(13) / developer(2) | `developer_upgrade` | 开发者直升 |
 | OffchainTransaction(21) / bind(30) | `bind_clearing_bank` | 绑定清算行 |

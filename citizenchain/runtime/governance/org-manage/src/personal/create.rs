@@ -78,7 +78,7 @@ pub(crate) fn do_propose_create_personal<T: Config>(
 
     let now = <frame_system::Pallet<T>>::block_number();
     let institution = account_to_institution_id(&duoqian_address);
-    let org = votingengine::internal::ORG_REN;
+    let org = votingengine::types::ORG_REN;
     let action = CreateDuoqianAction {
         duoqian_address: duoqian_address.clone(),
         proposer: who.clone(),

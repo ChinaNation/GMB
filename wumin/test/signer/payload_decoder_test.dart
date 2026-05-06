@@ -46,12 +46,12 @@ void main() {
 
     // Phase 3(2026-04-22)「投票引擎统一入口整改」:
     // 所有业务 pallet 的 vote_X 已物理删除,所有管理员投票统一走
-    // VotingEngine::internal_vote(9.0)。
+    // InternalVote::cast(22.0)。
 
-    test('decodes internal_vote (pallet=9 call=0) approve=true', () {
-      // [0x09, 0x00, u64_le proposal_id=42, bool approve=true]
+    test('decodes internal_vote (pallet=22 call=0) approve=true', () {
+      // [0x16, 0x00, u64_le proposal_id=42, bool approve=true]
       final payload = Uint8List.fromList([
-        0x09, 0x00,
+        0x16, 0x00,
         42, 0, 0, 0, 0, 0, 0, 0,
         1, // approve = true
       ]);
@@ -66,9 +66,9 @@ void main() {
       expect(decoded.summary, contains('赞成'));
     });
 
-    test('decodes internal_vote (pallet=9 call=0) approve=false', () {
+    test('decodes internal_vote (pallet=22 call=0) approve=false', () {
       final payload = Uint8List.fromList([
-        0x09,
+        0x16,
         0x00,
         7,
         0,
@@ -88,11 +88,11 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes joint_vote (pallet=9 call=1)', () {
-      // Phase 2 重排：joint_vote 由原 call=3 迁到 call=1。
+    test('decodes joint_vote (pallet=23 call=0)', () {
+      // JointVote.cast_admin = pallet 23 / call 0。
       final payload = Uint8List.fromList([
-        0x09,
-        0x01,
+        0x17,
+        0x00,
         7,
         0,
         0,
@@ -115,13 +115,13 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes citizen_vote (pallet=9 call=2) ADR-008 step3 双层凭证', () {
-      // Phase 2 重排：citizen_vote 由原 call=4 迁到 call=2。
+    test('decodes citizen_vote (pallet=23 call=1) ADR-008 step3 双层凭证', () {
+      // JointVote.cast_referendum = pallet 23 / call 1(联合公投全民兜底)。
       // ADR-008 step3：SCALE 末尾在 approve 前加 (province, signer_admin_pubkey)。
       final province = utf8.encode('安徽省');
       final adminPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
       final payload = Uint8List.fromList([
-        0x09, 0x02,
+        0x17, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0, // proposal_id = 99 u64_le
         ...List.filled(32, 0), // binding_id = 0x00 × 32
         0, // Vec nonce len = 0
@@ -150,7 +150,7 @@ void main() {
       // ADR-008 step3 后 SCALE 必须含新字段。旧字节流长度不足 → null。
       // feedback_no_compatibility:不留兼容垫片,老凭证不识别即拒绝。
       final payload = Uint8List.fromList([
-        0x09, 0x02,
+        0x17, 0x01,
         99, 0, 0, 0, 0, 0, 0, 0,
         ...List.filled(32, 0),
         0,

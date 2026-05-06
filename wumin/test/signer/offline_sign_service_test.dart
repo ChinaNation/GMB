@@ -52,11 +52,11 @@ void main() {
     });
 
     test(
-        'signParsedRequest should sign matched internal_vote (Phase 3 统一入口)',
+        'signParsedRequest should sign matched internal_vote (统一入口)',
         () async {
-      // Phase 3(2026-04-22): 所有管理员投票走 VotingEngine(9).internal_vote(0)
-      // payload = [0x09][0x00][u64 LE proposal_id=1][bool approve=1]
-      const payloadHex = '0x09000100000000000000' '01';
+      // 所有管理员投票走 InternalVote(22).cast(0)
+      // payload = [0x16][0x00][u64 LE proposal_id=1][bool approve=1]
+      const payloadHex = '0x16000100000000000000' '01';
       final knownSpec = PalletRegistry.supportedSpecVersions.first;
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
@@ -146,7 +146,7 @@ void main() {
 
     test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
       // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
-      const payloadHex = '0x09000700000000000000' '01';
+      const payloadHex = '0x16000700000000000000' '01';
       final request = _buildTestRequest(
         requestId: 'offline-req-test-action-mismatch',
         address: hotWallet.address,

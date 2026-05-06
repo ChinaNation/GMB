@@ -22,6 +22,42 @@ pub fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
 pub const PROPOSAL_KIND_JOINT: u8 = 1;
 
+// ──────────────────────────────────────────────────────────────────
+// ORG 类型常量(共用,internal-vote / joint-vote / 业务 pallet 都引用)
+// ──────────────────────────────────────────────────────────────────
+
+/// 治理机构:国储会
+pub const ORG_NRC: u8 = 0;
+/// 治理机构:省储会
+pub const ORG_PRC: u8 = 1;
+/// 治理机构:省储行
+pub const ORG_PRB: u8 = 2;
+/// 注册多签:个人(管理员与阈值由 admins-change 统一主体表提供)
+pub const ORG_REN: u8 = 3;
+/// 注册多签:公权(政府/教育/司法/立法/监察)— Phase 2 启用业务路径
+pub const ORG_PUP: u8 = 4;
+/// 注册多签:其他(公司/银行/基金/...)— Phase 2 启用业务路径
+pub const ORG_OTH: u8 = 5;
+
+/// Phase 1:只接受治理 + 个人(REN);PUP/OTH 占位但 Phase 2 才启用业务路径
+pub fn is_valid_org(org: u8) -> bool {
+    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN)
+}
+
+/// 治理机构(NRC/PRC/PRB)的固定制度阈值。
+/// 中文注释:三类治理机构阈值是永久治理常量,不读取注册多签主体配置。
+pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
+    use primitives::count_const::{
+        NRC_INTERNAL_THRESHOLD, PRB_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD,
+    };
+    match org {
+        ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
+        ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
+        ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
+        _ => None,
+    }
+}
+
 pub const STAGE_INTERNAL: u8 = 0;
 pub const STAGE_JOINT: u8 = 1;
 pub const STAGE_CITIZEN: u8 = 2;

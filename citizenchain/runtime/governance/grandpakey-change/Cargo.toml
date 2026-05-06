@@ -25,6 +25,7 @@ votingengine = { path = "../../votingengine", default-features = false }
 [dev-dependencies]
 sp-io = { workspace = true }
 
+internal-vote = { path = "../../votingengine/internal-vote", default-features = false }
 [features]
 default = ["std"]
 try-runtime = [
