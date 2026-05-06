@@ -177,14 +177,14 @@ class PayloadDecoder {
         }
       }
 
-      // ── DuoqianManage(17) ──
+      // ── OrganizationManage(17) ──
       // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
       // propose_X + cleanup_rejected_proposal(被拒提案残留清理)。
       // register_sfid_institution(call=2) 由 sfid 后端 ShengSigningPubkey 直签,
       // 不走冷钱包,decoder 不覆盖。
       // propose_create_institution(call=5) 由 wuminapp 在线端构造、走冷钱包扫码签名;
       // ADR-008 step2b/step2d 凭证带 (province, signer_admin_pubkey) 双层匹配字段。
-      if (palletIndex == PalletRegistry.duoqianManagePallet) {
+      if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           return _decodeProposeClose(bytes);
@@ -381,7 +381,7 @@ class PayloadDecoder {
   // 格式：[0x16][0x00][proposal_id:u64_le][approve:bool]
   //
   // 统一入口:所有业务 pallet(admins/resolution_destro/grandpa_key/
-  // duoqian_manage/duoqian_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
+  // organization_manage/duoqian_transfer 五路)的管理员投票都走 InternalVote::cast(22.0),
   // 冷钱包不按业务 pallet 分路解码投票 payload。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeInternalVote(Uint8List bytes) {
@@ -737,7 +737,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManage(17) / propose_create_institution(5)
+  // OrganizationManage(17) / propose_create_institution(5)
   //
   // 链端签名(ADR-008 step2b 双层凭证):
   //   pub fn propose_create_institution(
@@ -971,7 +971,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManage(17) / propose_create_personal(4)
+  // OrganizationManage(17) / propose_create_personal(4)
   // 格式：[17][4][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
@@ -1027,7 +1027,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianManage(17) / propose_close(1)
+  // OrganizationManage(17) / propose_close(1)
   // 格式：[17][1][duoqian_address:32][beneficiary:32]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeClose(Uint8List bytes) {

@@ -24,7 +24,7 @@ void main() {
       final pallets = {
         PalletRegistry.balancesPallet,
         PalletRegistry.duoqianTransferPallet,
-        PalletRegistry.duoqianManagePallet,
+        PalletRegistry.organizationManagePallet,
         PalletRegistry.votingEnginePallet,
         PalletRegistry.runtimeUpgradePallet,
         PalletRegistry.resolutionDestroPallet,

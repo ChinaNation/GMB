@@ -11,7 +11,10 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
 import 'duoqian_manage_models.dart';
 
-/// 多签账户管理链上交互服务（对应 DuoqianManage pallet 17）。
+// 业务目录 lib/duoqian/ 按多签业务分层（个人 + 机构共用入口），
+// 链端 pallet 名为 OrganizationManage（pallet_index=17）；目录名与 pallet 名解耦不需要同步迁移。
+
+/// 多签账户管理链上交互服务（对应 OrganizationManage pallet 17）。
 ///
 /// 负责 propose_create / propose_close / propose_create_personal 等
 /// 提案创建类 extrinsic 的编码与提交,以及 SFID 注册状态和多签账户的
@@ -28,7 +31,7 @@ class DuoqianManageService {
 
   // ──── 常量 ────
 
-  /// DuoqianManage pallet index（runtime pallet_index=17）。
+  /// OrganizationManage pallet index（runtime pallet_index=17）。
   static const _palletIndex = 17;
 
   /// propose_create call_index=0。
@@ -229,7 +232,7 @@ class DuoqianManageService {
     String personalAddressHex,
   ) async {
     final key = _buildStorageKey(
-      'DuoqianManage',
+      'OrganizationManage',
       'PersonalDuoqianInfo',
       _hexDecode(personalAddressHex),
     );
@@ -248,14 +251,14 @@ class DuoqianManageService {
 
   /// 翻页查询某 SFID 机构下的全部 (account_name, duoqian_address)。
   ///
-  /// 内部:`state_getKeysPaged` prefix = twox128("DuoqianManage")
+  /// 内部:`state_getKeysPaged` prefix = twox128("OrganizationManage")
   ///       || twox128("SfidRegisteredAddress")
   ///       || blake2_128_concat(sfid_id);每个 key 后段:
   ///       blake2_128(account_name)(16B) || account_name 真值(变长 BoundedVec)。
   ///       value = duoqian_address(32B)。
   Future<List<({String accountName, String duoqianAddressHex})>>
       listSfidAccounts(Uint8List sfidId) async {
-    final palletHash = Hasher.twoxx128.hashString('DuoqianManage');
+    final palletHash = Hasher.twoxx128.hashString('OrganizationManage');
     final storageHash = Hasher.twoxx128.hashString('SfidRegisteredAddress');
     final sfidKeyHash = _blake2128Concat(sfidId);
     final prefix = Uint8List(
@@ -313,7 +316,7 @@ class DuoqianManageService {
   Future<String?> fetchSfidRegisteredAddress(
       Uint8List sfidId, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
-      'DuoqianManage',
+      'OrganizationManage',
       'SfidRegisteredAddress',
       sfidId,
       accountName,
@@ -333,7 +336,7 @@ class DuoqianManageService {
   Future<DuoqianAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
     final key = _buildStorageKey(
-      'DuoqianManage',
+      'OrganizationManage',
       'DuoqianAccounts',
       _hexDecode(duoqianAddressHex),
     );
@@ -383,16 +386,17 @@ class DuoqianManageService {
   /// ACTION_CLOSE(2): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CreateDuoqianProposalInfo 或 CloseDuoqianProposalInfo，解码失败返回 null。
-  /// MODULE_TAG 前缀（与链上 duoqian-manage 的 MODULE_TAG 一致）。
+  /// MODULE_TAG 前缀（与链上 organization-manage 的 MODULE_TAG 一致，长度 8 字节）。
   static const _moduleTag = [
-    0x64,
-    0x71,
+    0x6f,
+    0x72,
+    0x67,
     0x2d,
     0x6d,
     0x67,
     0x6d,
     0x74
-  ]; // "dq-mgmt"
+  ]; // "org-mgmt"
 
   Object? decodeManageProposalData(int proposalId, Uint8List raw) {
     try {
@@ -404,7 +408,7 @@ class DuoqianManageService {
       if (offset + vecLen > raw.length) return null;
       final data = raw.sublist(offset, offset + vecLen);
 
-      // 跳过 MODULE_TAG 前缀（"dq-mgmt", 7 bytes）
+      // 跳过 MODULE_TAG 前缀（"org-mgmt", 8 bytes）
       if (data.length < _moduleTag.length + 1) return null;
       for (var i = 0; i < _moduleTag.length; i++) {
         if (data[i] != _moduleTag[i]) return null;
@@ -494,13 +498,13 @@ class DuoqianManageService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    debugPrint('[DuoqianManage] 步骤1: 获取 metadata...');
+    debugPrint('[OrganizationManage] 步骤1: 获取 metadata...');
     final metadata = await _rpc.fetchMetadata();
-    debugPrint('[DuoqianManage] 步骤2: 获取 genesisHash...');
+    debugPrint('[OrganizationManage] 步骤2: 获取 genesisHash...');
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[DuoqianManage] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
+    debugPrint('[OrganizationManage] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
       NonceManager.instance.getNextNonce(
@@ -513,9 +517,9 @@ class DuoqianManageService {
     final nonce = results[1] as int;
     final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
     debugPrint(
-        '[DuoqianManage] nonce=$nonce, block=${latestBlock.blockNumber}');
+        '[OrganizationManage] nonce=$nonce, block=${latestBlock.blockNumber}');
 
-    debugPrint('[DuoqianManage] 步骤4: 构造签名载荷...');
+    debugPrint('[OrganizationManage] 步骤4: 构造签名载荷...');
     final signingPayload = SigningPayload(
       method: callData,
       specVersion: runtimeVersion.specVersion,
@@ -529,11 +533,11 @@ class DuoqianManageService {
     );
     final payloadBytes = signingPayload.encode(registry);
 
-    debugPrint('[DuoqianManage] 步骤5: 签名 (${payloadBytes.length} bytes)...');
+    debugPrint('[OrganizationManage] 步骤5: 签名 (${payloadBytes.length} bytes)...');
     final signature = await sign(payloadBytes);
-    debugPrint('[DuoqianManage] 签名完成 (${signature.length} bytes)');
+    debugPrint('[OrganizationManage] 签名完成 (${signature.length} bytes)');
 
-    debugPrint('[DuoqianManage] 步骤6: 编码 extrinsic...');
+    debugPrint('[OrganizationManage] 步骤6: 编码 extrinsic...');
     final extrinsicPayload = ExtrinsicPayload(
       signer: signerPubkey,
       method: callData,
@@ -544,17 +548,17 @@ class DuoqianManageService {
       tip: 0,
     );
     final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[DuoqianManage] extrinsic 编码完成 (${encoded.length} bytes)');
+    debugPrint('[OrganizationManage] extrinsic 编码完成 (${encoded.length} bytes)');
 
-    debugPrint('[DuoqianManage] 步骤7: 提交到链...');
-    debugPrint('[DuoqianManage] call data hex: ${_hexEncode(callData)}');
+    debugPrint('[OrganizationManage] 步骤7: 提交到链...');
+    debugPrint('[OrganizationManage] call data hex: ${_hexEncode(callData)}');
     try {
       final txHash = await _rpc.submitExtrinsic(encoded);
-      debugPrint('[DuoqianManage] 提交成功: 0x${_hexEncode(txHash)}');
+      debugPrint('[OrganizationManage] 提交成功: 0x${_hexEncode(txHash)}');
       return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
       NonceManager.instance.rollback(fromAddress);
-      debugPrint('[DuoqianManage] 提交失败，原始错误: $e');
+      debugPrint('[OrganizationManage] 提交失败，原始错误: $e');
       rethrow;
     }
   }

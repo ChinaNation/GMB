@@ -54,7 +54,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   RuntimeUpgradeProposalInfo? _proposalInfo;
   ProposalMeta? _meta;
   ({int yes, int no}) _jointTally = (yes: 0, no: 0);
-  ({int yes, int no}) _citizenTally = (yes: 0, no: 0);
+  ({int yes, int no}) _referendumTally = (yes: 0, no: 0);
   bool _reasonExpanded = false;
 
   bool? _institutionVote;
@@ -136,7 +136,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       final meta = results[0] as ProposalMeta?;
       final proposalInfo = results[1] as RuntimeUpgradeProposalInfo?;
       final jointTally = results[2] as ({int yes, int no});
-      final citizenTally = results[3] as ({int yes, int no});
+      final referendumTally = results[3] as ({int yes, int no});
 
       List<String> admins = const [];
       bool? institutionVote;
@@ -202,7 +202,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         _meta = meta;
         _proposalInfo = proposalInfo;
         _jointTally = jointTally;
-        _citizenTally = citizenTally;
+        _referendumTally = referendumTally;
         _admins = admins;
         _institutionVote = institutionVote;
         _institutionAdminTally = institutionAdminTally;
@@ -922,7 +922,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '赞成 ${_citizenTally.yes}',
+                  '赞成 ${_referendumTally.yes}',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -930,7 +930,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   ),
                 ),
                 Text(
-                  '反对 ${_citizenTally.no}',
+                  '反对 ${_referendumTally.no}',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppTheme.danger,
