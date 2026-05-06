@@ -35,17 +35,17 @@ fn proposal_id_is_globally_monotonic_starting_from_zero() {
     new_test_ext().execute_with(|| {
         let id0 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         let id1 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         let id2 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         assert_eq!(id0, 0);
@@ -62,12 +62,12 @@ fn display_meta_seq_in_year_resets_across_year_boundary() {
         // 2026 年内两条
         let id0 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         let id1 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         assert_eq!(id0, 0);
@@ -83,7 +83,7 @@ fn display_meta_seq_in_year_resets_across_year_boundary() {
         set_test_now_secs(1_830_297_599);
         let id2 = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         assert_eq!(id2, 2); // 主键继续 +1
@@ -102,7 +102,7 @@ fn year_proposal_counter_no_longer_capped_at_one_million() {
         // 先创建一条让 CurrentProposalYear 进入 2026 分支(否则 stored_year=0 触发重置)
         let _ = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         // 强制把 YearProposalCounter 设为 v0 旧 cap,看新代码会不会再拒
@@ -110,7 +110,7 @@ fn year_proposal_counter_no_longer_capped_at_one_million() {
         // 仍能成功创建(v0 在此处会 ProposalIdOverflow)
         let id = create_internal_proposal_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
         );
         let display = ProposalDisplayId::<Test>::get(id).unwrap();
@@ -125,14 +125,14 @@ fn reverse_indexes_populated_after_register_proposal_data() {
     new_test_ext().execute_with(|| {
         let id = create_internal_proposal_with_data_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
             b"test-tag",
         );
 
         // ProposalsByOrg
         assert!(ProposalsByOrg::<Test>::contains_key(
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             id
         ));
         // ProposalsByInstitution
@@ -152,7 +152,7 @@ fn final_cleanup_removes_indexes_and_display_id() {
     new_test_ext().execute_with(|| {
         let id = create_internal_proposal_with_data_via_engine(
             nrc_admin(0),
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             nrc_pid(),
             b"cleanup-tag",
         );
@@ -166,7 +166,7 @@ fn final_cleanup_removes_indexes_and_display_id() {
 
         assert!(!ProposalDisplayId::<Test>::contains_key(id));
         assert!(!ProposalsByOrg::<Test>::contains_key(
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             id
         ));
         assert!(!ProposalsByInstitution::<Test>::contains_key(nrc_pid(), id));
@@ -192,7 +192,7 @@ fn migration_v1_backfills_display_id_and_indexes_for_legacy_proposals() {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,
-            internal_org: Some(vote::internal::ORG_NRC),
+            internal_org: Some(internal::ORG_NRC),
             internal_institution: Some(nrc_pid()),
             start: 1,
             end: 100,
@@ -208,7 +208,7 @@ fn migration_v1_backfills_display_id_and_indexes_for_legacy_proposals() {
         // 升级前:ProposalDisplayId / 反向索引均为空
         assert!(!ProposalDisplayId::<Test>::contains_key(legacy_id));
         assert!(!ProposalsByOrg::<Test>::contains_key(
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             legacy_id
         ));
 
@@ -220,7 +220,7 @@ fn migration_v1_backfills_display_id_and_indexes_for_legacy_proposals() {
         assert_eq!(display.year, 2026);
         assert_eq!(display.seq_in_year, 7);
         assert!(ProposalsByOrg::<Test>::contains_key(
-            vote::internal::ORG_NRC,
+            internal::ORG_NRC,
             legacy_id
         ));
         assert!(ProposalsByInstitution::<Test>::contains_key(

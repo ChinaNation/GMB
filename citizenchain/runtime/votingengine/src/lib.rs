@@ -24,26 +24,28 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod citizen;
 pub mod cleanup;
 pub mod data;
 pub mod id;
 pub mod index;
+pub mod internal;
+pub mod joint;
 pub mod limit;
 pub mod migrations;
 pub mod mutex;
 pub mod snapshot;
 pub mod traits;
 pub mod types;
-pub mod vote;
 pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 
+pub use internal::ORG_REN;
+pub use joint::jointreferendum::{SfidEligibility, VoteCredentialCleanup};
 pub use pallet::*;
 pub use traits::*;
 pub use types::*;
-pub use vote::citizen::{SfidEligibility, VoteCredentialCleanup};
-pub use vote::internal::ORG_DUOQIAN;
 
 // 中文注释:`Encode` 给测试文件 (`tests/cases.rs`) 走 `use super::*;` 时使用,
 // 主体代码不直接引用,但移除会让 lib test 编译失败。
@@ -717,7 +719,7 @@ pub mod pallet {
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            Self::do_citizen_vote(
+            Self::do_jointreferendum_vote(
                 who,
                 proposal_id,
                 binding_id,
@@ -752,7 +754,7 @@ pub mod pallet {
                     T::WeightInfo::finalize_proposal_joint()
                 }
                 STAGE_CITIZEN => {
-                    Self::do_finalize_citizen_timeout(&proposal, proposal_id)?;
+                    Self::do_finalize_jointreferendum_timeout(&proposal, proposal_id)?;
                     T::WeightInfo::finalize_proposal_citizen()
                 }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
@@ -827,7 +829,7 @@ pub mod pallet {
                 let finalize_result = match proposal.stage {
                     STAGE_INTERNAL => Self::do_finalize_internal_timeout(&proposal, proposal_id),
                     STAGE_JOINT => Self::do_finalize_joint_timeout(&proposal, proposal_id),
-                    STAGE_CITIZEN => Self::do_finalize_citizen_timeout(&proposal, proposal_id),
+                    STAGE_CITIZEN => Self::do_finalize_jointreferendum_timeout(&proposal, proposal_id),
                     _ => Ok(()),
                 };
                 if finalize_result.is_err() {

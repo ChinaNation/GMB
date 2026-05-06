@@ -11,7 +11,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
 };
 
-/// Weight functions for `duoqian_manage`.
+/// Weight functions for `org_manage`.
 pub trait WeightInfo {
 	fn register_sfid_institution() -> Weight;
 	fn propose_create_institution() -> Weight;

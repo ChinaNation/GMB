@@ -17,7 +17,7 @@ use primitives::count_const::{
 };
 
 use crate::{
-    vote::internal::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
+    internal::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
     pallet::{
         self, Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
         JointVotesByInstitution, Pallet, Proposals, ProposalsByExpiry, UsedPopulationSnapshotNonce,

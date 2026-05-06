@@ -24,14 +24,22 @@ use crate::{
 };
 use sp_runtime::DispatchError;
 
-pub const ORG_NRC: u8 = 0;
-pub const ORG_PRC: u8 = 1;
-pub const ORG_PRB: u8 = 2;
-/// 注册多签/个人多签主体，管理员与阈值由 admins-change 统一主体表提供。
-pub const ORG_DUOQIAN: u8 = 3;
+// 治理机构(创世内置)
+pub const ORG_NRC: u8 = 0;   // 国储会
+pub const ORG_PRC: u8 = 1;   // 省储会
+pub const ORG_PRB: u8 = 2;   // 省储行
+
+// 注册多签机构(通过 org_manage 注册)
+/// 注册多签:个人(原 ORG_REN 改名,数值不变;管理员与阈值由 admins-change 统一主体表提供)
+pub const ORG_REN: u8 = 3;
+/// 注册多签:公权(政府/教育/司法/立法/监察)— Phase 2 启用业务路径
+pub const ORG_PUP: u8 = 4;
+/// 注册多签:其他(公司/银行/基金/...)— Phase 2 启用业务路径
+pub const ORG_OTH: u8 = 5;
 
 pub fn is_valid_org(org: u8) -> bool {
-    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_DUOQIAN)
+    // Phase 1:只接受治理 + 个人(REN);PUP/OTH 占位但 Phase 2 才启用业务路径
+    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN)
 }
 
 /// 治理机构（NRC/PRC/PRB）的固定制度阈值。
@@ -79,10 +87,10 @@ fn is_valid_internal_institution<T: Config>(
                     .any(|pid| pid == institution)
         }
         // 注册多签/个人多签主体：按入口语义分别查询 Active 或 Pending 主体是否存在。
-        ORG_DUOQIAN if pending_subject => {
+        ORG_REN if pending_subject => {
             T::InternalThresholdProvider::is_known_pending_subject(org, institution)
         }
-        ORG_DUOQIAN => T::InternalThresholdProvider::is_known_subject(org, institution),
+        ORG_REN => T::InternalThresholdProvider::is_known_subject(org, institution),
         _ => false,
     }
 }
@@ -111,11 +119,11 @@ fn internal_threshold<T: Config>(
             // 中文注释：三类治理机构阈值是制度常量，内部提案创建时也只快照固定值。
             fixed_governance_pass_threshold(org)
         }
-        ORG_DUOQIAN if pending_subject => {
+        ORG_REN if pending_subject => {
             // 中文注释：注册多签激活投票读取 Pending 主体阈值，并在创建时写入快照。
             T::InternalThresholdProvider::pending_pass_threshold(org, institution)
         }
-        ORG_DUOQIAN => {
+        ORG_REN => {
             // 中文注释：已激活注册多签读取主体配置阈值，并在创建时写入快照。
             T::InternalThresholdProvider::pass_threshold(org, institution)
         }
@@ -164,7 +172,7 @@ impl<T: Config> Pallet<T> {
         admins: sp_std::vec::Vec<T::AccountId>,
         threshold: u32,
     ) -> Result<u64, sp_runtime::DispatchError> {
-        ensure!(org == ORG_DUOQIAN, Error::<T>::InvalidInternalOrg);
+        ensure!(org == ORG_REN, Error::<T>::InvalidInternalOrg);
         ensure!(!admins.is_empty(), Error::<T>::MissingAdminSnapshot);
         ensure!(
             admins.iter().any(|admin| admin == &who),
@@ -252,7 +260,7 @@ impl<T: Config> Pallet<T> {
     /// 用于"主体生命周期"语义的内部提案——业务规则要求全员通过(threshold = admins.len()),
     /// 而不是用户自定义 m-of-n。admins 仍从 active 主体反查并写入 AdminSnapshot。
     ///
-    /// 业务方在 ORG_DUOQIAN 的关闭场景调用,传 `subject.admins.len() as u32`。
+    /// 业务方在 ORG_REN 的关闭场景调用,传 `subject.admins.len() as u32`。
     pub(crate) fn do_create_internal_proposal_with_explicit_threshold(
         who: T::AccountId,
         org: u8,

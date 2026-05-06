@@ -21,7 +21,7 @@ members = [
 
     "runtime/transaction/offchain-transaction", # 交易-链下交易手续费模块 pallet
     "runtime/transaction/onchain-transaction",  # 交易-链上交易手续费模块 pallet
-    "runtime/transaction/duoqian-manage",  # 交易-多签交易模块 pallet
+    "runtime/governance/org-manage",        # 治理-机构管理(原 duoqian-manage,统一承载多签账户/公权/其他机构生命周期)
     "runtime/transaction/duoqian-transfer",     # 交易-机构多签名地址转账模块 pallet
     "runtime/transaction/institution-asset",  # 交易-机构账户资金白名单公共模块
 

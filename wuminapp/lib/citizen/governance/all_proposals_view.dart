@@ -24,7 +24,7 @@ import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_serv
 ///
 /// **数据源(v1 双层 ID + 反向索引)**:
 /// - `ProposalsByOrg[NRC] ∪ ByOrg[PRC] ∪ ByOrg[PRB]` 取所有治理类提案 ID
-/// - **不再扫主键 + 客户端过滤**;ORG_DUOQIAN 多签提案天然不进列表
+/// - **不再扫主键 + 客户端过滤**;ORG_REN 多签提案天然不进列表
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
 /// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。

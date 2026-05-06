@@ -899,7 +899,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                votingengine::vote::internal::ORG_DUOQIAN,
+                votingengine::internal::ORG_REN,
                 kind,
                 admins.iter().cloned().collect(),
                 threshold,
@@ -1181,7 +1181,7 @@ mod tests {
     use frame_system as system;
     use sp_core::{sr25519, Pair as PairT};
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-    use votingengine::vote::internal::ORG_DUOQIAN;
+    use votingengine::internal::ORG_REN;
 
     type Block = frame_system::mocking::MockBlock<Test>;
     type Balance = u128;
@@ -1393,14 +1393,14 @@ mod tests {
     pub struct TestInternalAdminProvider;
     impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return false;
             }
             admins_change::Pallet::<Test>::is_active_subject_admin(org, institution, who)
         }
 
         fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return None;
             }
             admins_change::Pallet::<Test>::active_subject_admins(org, institution)
@@ -1411,7 +1411,7 @@ mod tests {
             institution: InstitutionPalletId,
             who: &AccountId32,
         ) -> bool {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return false;
             }
             admins_change::Pallet::<Test>::is_pending_subject_admin_for_snapshot(
@@ -1425,7 +1425,7 @@ mod tests {
             org: u8,
             institution: InstitutionPalletId,
         ) -> Option<Vec<AccountId32>> {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return None;
             }
             admins_change::Pallet::<Test>::pending_subject_admins_for_snapshot(org, institution)
@@ -1435,7 +1435,7 @@ mod tests {
     pub struct TestInternalAdminCountProvider;
     impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
         fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return None;
             }
             admins_change::Pallet::<Test>::active_subject_admin_count(org, institution)
@@ -1446,28 +1446,28 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return false;
             }
             admins_change::Pallet::<Test>::active_subject_exists(org, institution)
         }
 
         fn is_known_pending_subject(org: u8, institution: InstitutionPalletId) -> bool {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return false;
             }
             admins_change::Pallet::<Test>::pending_subject_exists_for_snapshot(org, institution)
         }
 
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            if org != ORG_DUOQIAN {
-                return votingengine::vote::internal::fixed_governance_pass_threshold(org);
+            if org != ORG_REN {
+                return votingengine::internal::fixed_governance_pass_threshold(org);
             }
             admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
         }
 
         fn pending_pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            if org != ORG_DUOQIAN {
+            if org != ORG_REN {
                 return None;
             }
             admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(org, institution)

@@ -7,7 +7,7 @@ use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
 use crate::{
-    vote, InstitutionPalletId, ProposalCancelDecision, ProposalExecutionOutcome,
+    internal, InstitutionPalletId, ProposalCancelDecision, ProposalExecutionOutcome,
 };
 
 pub trait JointVoteEngine<AccountId> {
@@ -99,7 +99,7 @@ pub trait InternalVoteEngine<AccountId> {
 
     /// 创建普通内部提案,**显式传 threshold**(不走 InternalThresholdProvider 反查)。
     ///
-    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 ORG_DUOQIAN 多签,
+    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 ORG_REN 多签,
     /// 业务规则要求**全员通过**(threshold = admins.len()),不是用户自定义 m-of-n。
     ///
     /// admins 仍从 active 主体反查(InternalAdminProvider::get_admin_list),
@@ -326,7 +326,7 @@ fn merge_cancel_decision(
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
 // 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer /
-// duoqian_manage / admins_change / resolution_destro /
+// org_manage / admins_change / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
     fn on_internal_vote_finalized(
@@ -633,7 +633,7 @@ pub trait InternalAdminCountProvider {
 impl InternalAdminCountProvider for () {
     fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
         match org {
-            vote::internal::ORG_NRC | vote::internal::ORG_PRC => {
+            internal::ORG_NRC | internal::ORG_PRC => {
                 use primitives::china::china_cb::{
                     shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
                 };
@@ -642,7 +642,7 @@ impl InternalAdminCountProvider for () {
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
-            vote::internal::ORG_PRB => {
+            internal::ORG_PRB => {
                 use primitives::china::china_ch::{
                     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
                 };

@@ -47,7 +47,7 @@ use super::*;
             set_test_now_secs(1_830_297_599);
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             // 主键纯单调:首个提案 = 0
@@ -63,7 +63,7 @@ use super::*;
             set_test_now_secs(1_830_297_600);
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(1),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             // 主键单调累加:第二个提案 = 1(跨年也只 +1)
@@ -90,7 +90,7 @@ use super::*;
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
                     outsider,
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::NoPermission
@@ -99,7 +99,7 @@ use super::*;
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
                     prc_admin(0),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::NoPermission
@@ -107,7 +107,7 @@ use super::*;
 
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             // 双层 ID v1:主键纯单调,首个提案 = 0;展示号通过 ProposalDisplayId 反查。
@@ -131,7 +131,7 @@ use super::*;
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
                     pending_subject_admin(0),
-                    vote::internal::ORG_DUOQIAN,
+                    internal::ORG_REN,
                     pending_subject_institution(),
                 ),
                 pallet::Error::<Test>::InvalidInstitution
@@ -144,7 +144,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -161,7 +161,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_pending_subject_proposal_via_engine(
                 pending_subject_admin(0),
-                vote::internal::ORG_DUOQIAN,
+                internal::ORG_REN,
                 pending_subject_institution(),
             );
 
@@ -204,7 +204,7 @@ use super::*;
             set_registered_duoqian_threshold(3);
             let proposal_id = create_internal_proposal_via_engine(
                 registered_subject_admin(0),
-                vote::internal::ORG_DUOQIAN,
+                internal::ORG_REN,
                 registered_subject_institution(),
             );
 
@@ -247,17 +247,17 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_admin_set_mutation_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
-            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+            let state = VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid())
                 .expect("mutex should exist");
             assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
 
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
                     nrc_admin(1),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::AdminSetMutationProposalActive
@@ -270,10 +270,10 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
-            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+            let state = VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid())
                 .expect("mutex should exist");
             assert_eq!(state.regular_active_count, 1);
             assert_eq!(state.admin_set_mutation_proposal, None);
@@ -281,7 +281,7 @@ use super::*;
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
                     nrc_admin(1),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::RegularInternalProposalActive
@@ -301,17 +301,17 @@ use super::*;
         new_test_ext().execute_with(|| {
             let first = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             let second = create_internal_proposal_via_engine(
                 nrc_admin(1),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
             assert_ne!(first, second);
-            let state = VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid())
+            let state = VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid())
                 .expect("mutex should exist");
             assert_eq!(state.regular_active_count, 2);
             assert_eq!(state.admin_set_mutation_proposal, None);
@@ -323,7 +323,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_admin_set_mutation_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -338,12 +338,12 @@ use super::*;
                 STATUS_PASSED
             );
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_some()
+                VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid()).is_some()
             );
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_internal_proposal(
                     nrc_admin(1),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::AdminSetMutationProposalActive
@@ -354,7 +354,7 @@ use super::*;
                 STATUS_EXECUTION_FAILED
             ));
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_none()
+                VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid()).is_none()
             );
         });
     }
@@ -364,7 +364,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let voting_to_passed = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             assert_noop!(
@@ -402,7 +402,7 @@ use super::*;
 
             let passed_to_failed = create_internal_proposal_via_engine(
                 nrc_admin(1),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             assert_ok!(VotingEngine::set_status_and_emit(
@@ -420,7 +420,7 @@ use super::*;
 
             let rejected = create_internal_proposal_via_engine(
                 nrc_admin(2),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             assert_ok!(VotingEngine::set_status_and_emit(rejected, STATUS_REJECTED));
@@ -436,7 +436,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             assert_ok!(VotingEngine::set_status_and_emit(
@@ -455,7 +455,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 prb_admin(0),
-                vote::internal::ORG_PRB,
+                internal::ORG_PRB,
                 prb_pid(),
             );
 
@@ -477,7 +477,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -514,7 +514,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 prc_admin(0),
-                vote::internal::ORG_PRC,
+                internal::ORG_PRC,
                 prc_pid(),
             );
 
@@ -539,7 +539,7 @@ use super::*;
         new_test_ext().execute_with(|| {
             let proposal_id = create_internal_proposal_via_engine(
                 prc_admin(0),
-                vote::internal::ORG_PRC,
+                internal::ORG_PRC,
                 prc_pid(),
             );
 
@@ -778,15 +778,15 @@ use super::*;
                 .expect("joint proposal should be created");
 
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_some()
+                VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid()).is_some()
             );
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_PRC, prc_pid()).is_some()
+                VotingEngine::internal_proposal_mutex(internal::ORG_PRC, prc_pid()).is_some()
             );
             assert_noop!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
                     nrc_admin(1),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 ),
                 pallet::Error::<Test>::RegularInternalProposalActive
@@ -800,16 +800,16 @@ use super::*;
                 STAGE_CITIZEN
             );
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_NRC, nrc_pid()).is_none()
+                VotingEngine::internal_proposal_mutex(internal::ORG_NRC, nrc_pid()).is_none()
             );
             assert!(
-                VotingEngine::internal_proposal_mutex(vote::internal::ORG_PRC, prc_pid()).is_none()
+                VotingEngine::internal_proposal_mutex(internal::ORG_PRC, prc_pid()).is_none()
             );
 
             assert_ok!(
                 <VotingEngine as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
                     nrc_admin(1),
-                    vote::internal::ORG_NRC,
+                    internal::ORG_NRC,
                     nrc_pid(),
                 )
             );
@@ -1185,21 +1185,21 @@ use super::*;
 
     #[test]
     fn citizen_pass_threshold_function_boundaries_are_correct() {
-        assert!(!vote::citizen::is_citizen_vote_passed(0, 0));
-        assert!(!vote::citizen::is_citizen_vote_passed(5, 10));
-        assert!(vote::citizen::is_citizen_vote_passed(6, 10));
+        assert!(!joint::jointreferendum::is_jointreferendum_vote_passed(0, 0));
+        assert!(!joint::jointreferendum::is_jointreferendum_vote_passed(5, 10));
+        assert!(joint::jointreferendum::is_jointreferendum_vote_passed(6, 10));
     }
 
     #[test]
     fn citizen_reject_threshold_function_boundaries_are_correct() {
         // eligible_total=0 → 不否决（无意义）
-        assert!(!vote::citizen::is_citizen_vote_rejected(0, 0));
+        assert!(!joint::jointreferendum::is_jointreferendum_vote_rejected(0, 0));
         // 反对 4/10 = 40% < 50% → 不否决（赞成仍有可能 > 50%）
-        assert!(!vote::citizen::is_citizen_vote_rejected(4, 10));
+        assert!(!joint::jointreferendum::is_jointreferendum_vote_rejected(4, 10));
         // 反对 5/10 = 50% → 否决（赞成最多 50%，无法严格 > 50%）
-        assert!(vote::citizen::is_citizen_vote_rejected(5, 10));
+        assert!(joint::jointreferendum::is_jointreferendum_vote_rejected(5, 10));
         // 反对 6/10 = 60% → 否决
-        assert!(vote::citizen::is_citizen_vote_rejected(6, 10));
+        assert!(joint::jointreferendum::is_jointreferendum_vote_rejected(6, 10));
     }
 
     #[test]
@@ -1655,7 +1655,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -1691,7 +1691,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -1876,7 +1876,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -1901,7 +1901,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -1920,7 +1920,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
             assert_ok!(cast_internal_vote_via_extrinsic(
@@ -1941,7 +1941,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -1972,7 +1972,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2004,7 +2004,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2034,7 +2034,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2072,7 +2072,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2149,7 +2149,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2184,7 +2184,7 @@ use super::*;
             set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 
@@ -2241,7 +2241,7 @@ use super::*;
             reset_internal_callback_state();
             let proposal_id = create_internal_proposal_via_engine(
                 nrc_admin(0),
-                vote::internal::ORG_NRC,
+                internal::ORG_NRC,
                 nrc_pid(),
             );
 

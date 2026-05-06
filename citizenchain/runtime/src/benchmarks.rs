@@ -38,7 +38,7 @@ frame_benchmarking::define_benchmarks!(
     [admins_change, AdminsChange]
     [resolution_destro, ResolutionDestro]
     [grandpakey_change, GrandpaKeyChange]
-    [duoqian_manage, DuoqianManage]
+    [org_manage, DuoqianManage]
     [duoqian_transfer, DuoqianTransfer]
     [votingengine, VotingEngine]
     [runtime_upgrade, RuntimeUpgrade]

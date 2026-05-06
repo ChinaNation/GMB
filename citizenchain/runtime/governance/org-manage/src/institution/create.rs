@@ -94,7 +94,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     // 与 NRC/PRC/PRB 的 shenfen_id_to_fixed48 算法一致,不再绕道 main_address。
     let institution = sfid_id_to_institution_id(sfid_id.as_slice())
         .ok_or(Error::<T>::EmptySfidId)?;
-    let org = votingengine::vote::internal::ORG_DUOQIAN;
+    let org = votingengine::internal::ORG_REN;
     let action = CreateInstitutionAction {
         sfid_id: sfid_id.clone(),
         institution_name: institution_name.clone(),

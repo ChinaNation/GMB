@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// 节点桌面"添加清算行"页用的候选机构记录(序列化给 Tauri 前端)。
 ///
-/// 反序列化 SFID 响应的 DTO 在 `duoqian_manage::sfid::SfidEligibleRow`(snake_case),
+/// 反序列化 SFID 响应的 DTO 在 `org_manage::sfid::SfidEligibleRow`(snake_case),
 /// 本结构只做 Serialize → TS 端 camelCase。两段 DTO 解耦,避免之前
 /// "误用同一 struct 同时跨 SFID 入口/Tauri 出口"导致的契约 mismatch P0。
 #[derive(Debug, Clone, Serialize)]
@@ -27,7 +27,7 @@ pub struct EligibleClearingBankCandidate {
     pub province: String,
     pub city: String,
     /// 主账户当前链上状态:`Inactive` / `Pending` / `Registered` / `Failed`,
-    /// 由 `duoqian_manage::sfid::map_chain_status` 从 SFID 端 SCREAMING_SNAKE_CASE 枚举映射。
+    /// 由 `org_manage::sfid::map_chain_status` 从 SFID 端 SCREAMING_SNAKE_CASE 枚举映射。
     pub main_chain_status: String,
     pub main_account: Option<String>,
     pub fee_account: Option<String>,
