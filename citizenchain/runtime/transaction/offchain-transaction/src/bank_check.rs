@@ -9,7 +9,7 @@
 //! **解耦设计**:bank_check 不直接依赖 `duoqian-manage`,而是通过
 //! `SfidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
 //! 给 `duoqian-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
-//! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `duoqian_manage::Config`。
+//! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `org_manage::Config`。
 
 use frame_support::ensure;
 use sp_std::vec::Vec;

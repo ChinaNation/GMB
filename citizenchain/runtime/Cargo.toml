@@ -66,7 +66,7 @@ citizen-issuance = { path = "issuance/citizen-issuance", default-features = fals
 sfid-system = { path = "otherpallet/sfid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
-duoqian-manage = { path = "transaction/duoqian-manage", default-features = false }
+org-manage = { path = "governance/org-manage", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 votingengine = { path = "votingengine", default-features = false }
 admins-change = { path = "governance/admins-change", default-features = false }
@@ -101,7 +101,7 @@ std = [
 	"sfid-system/std",
 	"pow-difficulty/std",
 	"onchain-transaction/std",
-	"duoqian-manage/std",
+	"org-manage/std",
 	"resolution-issuance/std",
 	"votingengine/std",
 	"admins-change/std",
@@ -149,7 +149,7 @@ runtime-benchmarks = [
 	"sfid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
-	"duoqian-manage/runtime-benchmarks",
+	"org-manage/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
 	"votingengine/runtime-benchmarks",
 	"admins-change/runtime-benchmarks",
@@ -177,7 +177,7 @@ try-runtime = [
 	"sfid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
-	"duoqian-manage/try-runtime",
+	"org-manage/try-runtime",
 	"resolution-issuance/try-runtime",
 	"votingengine/try-runtime",
 	"admins-change/try-runtime",

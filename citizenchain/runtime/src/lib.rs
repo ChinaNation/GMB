@@ -328,7 +328,7 @@ mod runtime {
 
     // 多签交易模块：duoqian_address 创建/注销与半数签名校验（注册型多签，非宪法保留主账户）
     #[runtime::pallet_index(17)]
-    pub type DuoqianManage = duoqian_manage;
+    pub type DuoqianManage = org_manage;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
@@ -402,7 +402,7 @@ mod tests {
             ("resolution_destro", resolution_destro::MODULE_TAG),
             ("resolution_issuance", resolution_issuance::MODULE_TAG),
             ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
-            ("duoqian_manage", duoqian_manage::MODULE_TAG),
+            ("org_manage", org_manage::MODULE_TAG),
             ("duoqian_transfer", duoqian_transfer::MODULE_TAG),
         ];
         let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();

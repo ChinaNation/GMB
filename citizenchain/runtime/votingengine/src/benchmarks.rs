@@ -50,7 +50,7 @@ mod benchmarks {
         {
             created_id = Pallet::<T>::do_create_internal_proposal(
                 who,
-                crate::vote::internal::ORG_NRC,
+                crate::internal::ORG_NRC,
                 institution,
             )
             .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
@@ -70,7 +70,7 @@ mod benchmarks {
         let institution = nrc_institution()?;
         let proposal_id = Pallet::<T>::do_create_internal_proposal(
             who.clone(),
-            crate::vote::internal::ORG_NRC,
+            crate::internal::ORG_NRC,
             institution,
         )
         .map_err(|_| BenchmarkError::Stop("create internal proposal should succeed"))?;
@@ -155,7 +155,7 @@ mod benchmarks {
 
         #[block]
         {
-            Pallet::<T>::do_citizen_vote(
+            Pallet::<T>::do_jointreferendum_vote(
                 who,
                 proposal_id,
                 binding_id,
@@ -185,7 +185,7 @@ mod benchmarks {
             kind: PROPOSAL_KIND_INTERNAL,
             stage: STAGE_INTERNAL,
             status: STATUS_VOTING,
-            internal_org: Some(crate::vote::internal::ORG_NRC),
+            internal_org: Some(crate::internal::ORG_NRC),
             internal_institution: Some(nrc_institution()?),
             start: one,
             end: one,
@@ -249,7 +249,7 @@ mod benchmarks {
 
         #[block]
         {
-            Pallet::<T>::do_finalize_citizen_timeout(&proposal, proposal_id)
+            Pallet::<T>::do_finalize_jointreferendum_timeout(&proposal, proposal_id)
                 .map_err(|_| BenchmarkError::Stop("citizen finalize should succeed"))?;
         }
 

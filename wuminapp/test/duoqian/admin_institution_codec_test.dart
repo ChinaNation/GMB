@@ -26,7 +26,7 @@ void main() {
       final admin2 = List.filled(32, 0xBB);
       // org=3, kind=1, admins=Compact(2)=0x08 + 32+32 字节
       final bytes = Uint8List.fromList([
-        3,                        // org = ORG_DUOQIAN
+        3,                        // org = ORG_REN
         AdminInstitutionCodec.kindSfid,
         0x08,                     // Compact(2): (2<<2) | 0 = 8
         ...admin1,

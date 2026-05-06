@@ -78,7 +78,7 @@ pub(crate) fn do_propose_close<T: Config>(
         .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
         admins_change::Pallet::<T>::is_active_subject_admin(
-            votingengine::vote::internal::ORG_DUOQIAN,
+            votingengine::internal::ORG_REN,
             subject_id,
             &who,
         ),
@@ -111,7 +111,7 @@ pub(crate) fn do_propose_close<T: Config>(
         Error::<T>::ReservedBalanceRemaining
     );
 
-    let org = votingengine::vote::internal::ORG_DUOQIAN;
+    let org = votingengine::internal::ORG_REN;
     // 中文注释:用 subject_id 作为 votingengine 治理索引(已由 resolve_admin_subject_for_account
     // 解出),保证个人/机构走同一管理员主体。
     let institution = subject_id;

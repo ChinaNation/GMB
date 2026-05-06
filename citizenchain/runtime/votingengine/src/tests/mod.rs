@@ -158,17 +158,17 @@
             who_arr.copy_from_slice(&who_bytes);
 
             match org {
-                vote::internal::ORG_NRC | vote::internal::ORG_PRC => CHINA_CB
+                internal::ORG_NRC | internal::ORG_PRC => CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
-                vote::internal::ORG_PRB => CHINA_CH
+                internal::ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
-                vote::internal::ORG_DUOQIAN => {
+                internal::ORG_REN => {
                     institution == registered_subject_institution()
                         && [
                             registered_subject_admin(0),
@@ -187,7 +187,7 @@
             institution: InstitutionPalletId,
         ) -> Option<sp_std::vec::Vec<AccountId32>> {
             match org {
-                vote::internal::ORG_NRC | vote::internal::ORG_PRC => CHINA_CB
+                internal::ORG_NRC | internal::ORG_PRC => CHINA_CB
                     .iter()
                     .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| {
@@ -197,7 +197,7 @@
                             .map(AccountId32::new)
                             .collect()
                     }),
-                vote::internal::ORG_PRB => CHINA_CH
+                internal::ORG_PRB => CHINA_CH
                     .iter()
                     .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
                     .map(|n| {
@@ -207,7 +207,7 @@
                             .map(AccountId32::new)
                             .collect()
                     }),
-                vote::internal::ORG_DUOQIAN if institution == registered_subject_institution() => {
+                internal::ORG_REN if institution == registered_subject_institution() => {
                     Some(sp_std::vec![
                         registered_subject_admin(0),
                         registered_subject_admin(1),
@@ -223,7 +223,7 @@
             institution: InstitutionPalletId,
             who: &AccountId32,
         ) -> bool {
-            org == vote::internal::ORG_DUOQIAN
+            org == internal::ORG_REN
                 && institution == pending_subject_institution()
                 && [pending_subject_admin(0), pending_subject_admin(1)]
                     .iter()
@@ -234,7 +234,7 @@
             org: u8,
             institution: InstitutionPalletId,
         ) -> Option<sp_std::vec::Vec<AccountId32>> {
-            if org != vote::internal::ORG_DUOQIAN || institution != pending_subject_institution() {
+            if org != internal::ORG_REN || institution != pending_subject_institution() {
                 return None;
             }
             Some(sp_std::vec![
@@ -246,22 +246,22 @@
 
     impl InternalThresholdProvider for TestInternalThresholdProvider {
         fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
-            org == vote::internal::ORG_DUOQIAN && institution == registered_subject_institution()
+            org == internal::ORG_REN && institution == registered_subject_institution()
         }
 
         fn is_known_pending_subject(org: u8, institution: InstitutionPalletId) -> bool {
-            org == vote::internal::ORG_DUOQIAN && institution == pending_subject_institution()
+            org == internal::ORG_REN && institution == pending_subject_institution()
         }
 
         fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            if org == vote::internal::ORG_DUOQIAN && institution == registered_subject_institution()
+            if org == internal::ORG_REN && institution == registered_subject_institution()
             {
                 return REGISTERED_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()));
             }
             // 中文注释：治理机构返回“毒化阈值”，用于证明治理投票不再依赖动态 Provider。
             if matches!(
                 org,
-                vote::internal::ORG_NRC | vote::internal::ORG_PRC | vote::internal::ORG_PRB
+                internal::ORG_NRC | internal::ORG_PRC | internal::ORG_PRB
             ) {
                 return Some(1);
             }
@@ -269,7 +269,7 @@
         }
 
         fn pending_pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
-            if org != vote::internal::ORG_DUOQIAN || institution != pending_subject_institution() {
+            if org != internal::ORG_REN || institution != pending_subject_institution() {
                 return None;
             }
             Some(2)

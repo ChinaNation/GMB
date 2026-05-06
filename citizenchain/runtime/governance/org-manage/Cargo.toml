@@ -1,5 +1,5 @@
 [package]
-name = "duoqian-manage"  # 多签名账户注册模块
+name = "org-manage"  # 机构管理(原 duoqian-manage,统一承载个人/公权/其他注册多签机构生命周期入口)
 edition.workspace = true
 version.workspace = true
 authors.workspace = true
@@ -17,10 +17,10 @@ sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
 sfid-system = { path = "../../otherpallet/sfid-system", default-features = false }
-admins-change = { path = "../../governance/admins-change", default-features = false }
+admins-change = { path = "../admins-change", default-features = false }
 votingengine = { path = "../../votingengine", default-features = false }
-institution-asset = { path = "../institution-asset", default-features = false }
-onchain-transaction = { path = "../onchain-transaction", default-features = false }
+institution-asset = { path = "../../transaction/institution-asset", default-features = false }
+onchain-transaction = { path = "../../transaction/onchain-transaction", default-features = false }
 primitives = { path = "../../primitives", default-features = false }
 
 [features]

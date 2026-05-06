@@ -14,7 +14,7 @@ use primitives::china::china_ch::{
     shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
 };
 use votingengine::{
-    vote::internal::{ORG_NRC, ORG_PRB, ORG_PRC},
+    internal::{ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -457,7 +457,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::vote::internal::fixed_governance_pass_threshold(org)
+            votingengine::internal::fixed_governance_pass_threshold(org)
         }
     }
 

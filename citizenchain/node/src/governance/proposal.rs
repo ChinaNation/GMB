@@ -467,7 +467,7 @@ pub fn fetch_institution_proposal_page(
     for id in take_ids {
         if is_duoqian_manage_proposal(id) {
             // 防御性过滤:多签管理提案不该出现在 ProposalsByInstitution(它们的
-            // institution 是 ORG_DUOQIAN 多签账户,不是治理机构)。如果出现就跳过。
+            // institution 是 ORG_REN 多签账户,不是治理机构)。如果出现就跳过。
             continue;
         }
         match fetch_proposal_meta(id) {

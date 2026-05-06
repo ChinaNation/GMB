@@ -65,7 +65,7 @@ impl<AccountId, Hash> SfidEligibility<AccountId, Hash> for () {
     }
 }
 
-pub fn is_citizen_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
+pub fn is_jointreferendum_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
     // 中文注释：公民投票必须严格”大于 50%”才算通过，恰好一半不通过。
     if eligible_total == 0 {
         return false;
@@ -74,7 +74,7 @@ pub fn is_citizen_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
 }
 
 /// 公民投票是否已注定无法通过：反对票 ≥ 50% 时，赞成票不可能严格 > 50%。
-pub fn is_citizen_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
+pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
     if eligible_total == 0 {
         return false;
     }
@@ -84,7 +84,7 @@ pub fn is_citizen_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
 impl<T: Config> Pallet<T> {
     /// 公民投票执行：由外部 SFID 系统判定资格，链上负责去重计票。
     /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
-    pub(crate) fn do_citizen_vote(
+    pub(crate) fn do_jointreferendum_vote(
         who: T::AccountId,
         proposal_id: u64,
         binding_id: T::Hash,
@@ -148,10 +148,10 @@ impl<T: Config> Pallet<T> {
             approve,
         });
 
-        if is_citizen_vote_passed(tally.yes, proposal.citizen_eligible_total) {
+        if is_jointreferendum_vote_passed(tally.yes, proposal.citizen_eligible_total) {
             // 中文注释：赞成票严格 > 50%，提前通过。
             Self::set_status_and_emit(proposal_id, STATUS_PASSED)?;
-        } else if is_citizen_vote_rejected(tally.no, proposal.citizen_eligible_total) {
+        } else if is_jointreferendum_vote_rejected(tally.no, proposal.citizen_eligible_total) {
             // 中文注释：反对票 ≥ 50%，赞成票不可能再严格过半，提前否决。
             // 30 天超时只是兜底，不应让注定失败的提案空等。
             Self::set_status_and_emit(proposal_id, STATUS_REJECTED)?;
@@ -163,7 +163,7 @@ impl<T: Config> Pallet<T> {
     /// 公民投票超时处理：
     /// - 按 >50% 规则计算是否通过；
     /// - 未达到阈值则否决。
-    pub(crate) fn do_finalize_citizen_timeout(
+    pub(crate) fn do_finalize_jointreferendum_timeout(
         proposal: &crate::Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
     ) -> DispatchResult {
@@ -181,7 +181,7 @@ impl<T: Config> Pallet<T> {
             Error::<T>::VoteNotExpired
         );
         let tally = CitizenTallies::<T>::get(proposal_id);
-        let status = if is_citizen_vote_passed(tally.yes, proposal.citizen_eligible_total) {
+        let status = if is_jointreferendum_vote_passed(tally.yes, proposal.citizen_eligible_total) {
             STATUS_PASSED
         } else {
             crate::STATUS_REJECTED

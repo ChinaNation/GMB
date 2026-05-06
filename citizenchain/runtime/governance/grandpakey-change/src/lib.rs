@@ -25,7 +25,7 @@ use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
-    vote::internal::{ORG_NRC, ORG_PRC},
+    internal::{ORG_NRC, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalCancelDecision,
     ProposalExecutionOutcome, STATUS_PASSED,
 };
@@ -675,7 +675,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::vote::internal::fixed_governance_pass_threshold(org)
+            votingengine::internal::fixed_governance_pass_threshold(org)
         }
     }
 

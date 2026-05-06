@@ -1549,7 +1549,6 @@ version = "1.0.0"
 dependencies = [
  "admins-change",
  "citizen-issuance",
- "duoqian-manage",
  "duoqian-transfer",
  "ed25519-dalek",
  "frame-benchmarking",
@@ -1568,6 +1567,7 @@ dependencies = [
  "institution-asset",
  "offchain-transaction",
  "onchain-transaction",
+ "org-manage",
  "pallet-balances",
  "pallet-grandpa",
  "pallet-timestamp",
@@ -3033,38 +3033,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
-name = "duoqian-manage"
-version = "1.0.0"
-dependencies = [
- "admins-change",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "institution-asset",
- "onchain-transaction",
- "pallet-balances",
- "parity-scale-codec",
- "primitives",
- "scale-info",
- "sfid-system",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "sp-std",
- "votingengine",
-]
-
-[[package]]
 name = "duoqian-transfer"
 version = "1.0.0"
 dependencies = [
  "admins-change",
- "duoqian-manage",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
  "institution-asset",
  "onchain-transaction",
+ "org-manage",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -7867,6 +7845,28 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "org-manage"
+version = "1.0.0"
+dependencies = [
+ "admins-change",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "institution-asset",
+ "onchain-transaction",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sfid-system",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
 ]
 
 [[package]]

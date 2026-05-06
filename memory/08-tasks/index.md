@@ -292,3 +292,4 @@
 - `memory/08-tasks/done/20260503-220000-wuminapp-多签5bug合并修复.md`
 - `memory/08-tasks/done/20260504-100000-citizenchain-votingengine-提级与目录拆分.md`
 - `memory/08-tasks/done/20260504-160000-客户端接入双层ID与反向索引.md`
+- `memory/08-tasks/done/20260505-100000-投票引擎与机构管理模块重构.md`

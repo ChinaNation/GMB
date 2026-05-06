@@ -29,7 +29,7 @@ use primitives::count_const::{
     PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
 };
 use votingengine::{
-    vote::internal::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
+    internal::{ORG_REN, ORG_NRC, ORG_PRB, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
     STATUS_REJECTED, STATUS_VOTING,
@@ -429,7 +429,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // 中文注释：本入口只治理制度内置主体(NRC/PRC/PRB)的管理员替换。
-            // ORG_DUOQIAN 的个人/机构多签主体由 duoqian-manage 维护生命周期,
+            // ORG_REN 的个人/机构多签主体由 duoqian-manage 维护生命周期,
             // 不能从通用管理员替换入口绕出第二条治理路径。
             ensure!(
                 matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
@@ -539,7 +539,7 @@ pub mod pallet {
                     );
                 }
                 AdminSubjectKind::SfidInstitution | AdminSubjectKind::PersonalDuoqian => {
-                    ensure!(org == ORG_DUOQIAN, Error::<T>::InvalidSubjectKind);
+                    ensure!(org == ORG_REN, Error::<T>::InvalidSubjectKind);
                 }
             }
             Ok(())
@@ -1022,7 +1022,7 @@ mod tests {
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use votingengine::{
-        vote::internal::{ORG_DUOQIAN, ORG_NRC, ORG_PRB, ORG_PRC},
+        internal::{ORG_REN, ORG_NRC, ORG_PRB, ORG_PRC},
         InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
         STATUS_REJECTED,
     };
@@ -1127,7 +1127,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::vote::internal::fixed_governance_pass_threshold(org)
+            votingengine::internal::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -1287,7 +1287,7 @@ mod tests {
 
             assert_ok!(AdminsChange::do_create_pending_subject(
                 institution,
-                ORG_DUOQIAN,
+                ORG_REN,
                 AdminSubjectKind::PersonalDuoqian,
                 vec![admin_a.clone(), admin_b.clone()],
                 2,
@@ -1295,29 +1295,29 @@ mod tests {
             ));
 
             assert!(!AdminsChange::is_active_subject_admin(
-                ORG_DUOQIAN,
+                ORG_REN,
                 institution,
                 &admin_a
             ));
-            assert!(AdminsChange::active_subject_admins(ORG_DUOQIAN, institution).is_none());
+            assert!(AdminsChange::active_subject_admins(ORG_REN, institution).is_none());
             assert_eq!(
-                AdminsChange::pending_subject_admins_for_snapshot(ORG_DUOQIAN, institution)
+                AdminsChange::pending_subject_admins_for_snapshot(ORG_REN, institution)
                     .expect("pending snapshot admins should exist"),
                 vec![admin_a.clone(), admin_b.clone()]
             );
             assert_eq!(
-                AdminsChange::pending_subject_threshold_for_snapshot(ORG_DUOQIAN, institution),
+                AdminsChange::pending_subject_threshold_for_snapshot(ORG_REN, institution),
                 Some(2)
             );
 
             assert_ok!(AdminsChange::do_activate_subject(institution));
             assert!(AdminsChange::is_active_subject_admin(
-                ORG_DUOQIAN,
+                ORG_REN,
                 institution,
                 &admin_a
             ));
             assert!(
-                AdminsChange::pending_subject_admins_for_snapshot(ORG_DUOQIAN, institution)
+                AdminsChange::pending_subject_admins_for_snapshot(ORG_REN, institution)
                     .is_none()
             );
         });
@@ -1333,7 +1333,7 @@ mod tests {
                 AccountId32,
             >>::create_pending_subject_internal_proposal_with_snapshot_data(
                 admin_a.clone(),
-                ORG_DUOQIAN,
+                ORG_REN,
                 institution,
                 vec![admin_a.clone(), admin_b.clone()],
                 2,
@@ -1346,7 +1346,7 @@ mod tests {
                 proposal_id,
                 b"dq-mgmt",
                 institution,
-                ORG_DUOQIAN,
+                ORG_REN,
                 AdminSubjectKind::PersonalDuoqian,
                 vec![admin_a.clone(), admin_b],
                 2,
@@ -1417,7 +1417,7 @@ mod tests {
 
                 assert_ok!(AdminsChange::do_create_pending_subject(
                     institution,
-                    ORG_DUOQIAN,
+                    ORG_REN,
                     kind,
                     vec![admin_a.clone(), admin_b],
                     2,
@@ -1431,11 +1431,11 @@ mod tests {
                 assert_eq!(subject.kind, kind);
                 assert_eq!(subject.status, AdminSubjectStatus::Closed);
                 assert!(!AdminsChange::is_active_subject_admin(
-                    ORG_DUOQIAN,
+                    ORG_REN,
                     institution,
                     &admin_a
                 ));
-                assert!(AdminsChange::active_subject_admins(ORG_DUOQIAN, institution).is_none());
+                assert!(AdminsChange::active_subject_admins(ORG_REN, institution).is_none());
             }
         });
     }
@@ -1455,7 +1455,7 @@ mod tests {
 
                 assert_ok!(AdminsChange::do_create_pending_subject(
                     institution,
-                    ORG_DUOQIAN,
+                    ORG_REN,
                     kind,
                     vec![admin_a.clone(), admin_b.clone()],
                     2,
@@ -1466,7 +1466,7 @@ mod tests {
                 assert_noop!(
                     AdminsChange::propose_admin_replacement(
                         RuntimeOrigin::signed(admin_a.clone()),
-                        ORG_DUOQIAN,
+                        ORG_REN,
                         institution,
                         admin_b,
                         new_admin
