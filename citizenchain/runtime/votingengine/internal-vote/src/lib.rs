@@ -43,6 +43,7 @@ use votingengine::{
     STATUS_REJECTED,
 };
 
+pub mod migrations;
 pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -59,6 +60,10 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
+    /// pallet 自身 StorageVersion。
+    /// v1:sub-pallet 拆分迁移完成(storage 已从 `VotingEngine` 前缀搬到 `InternalVote`)。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
@@ -67,6 +72,7 @@ pub mod pallet {
     }
 
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 内部投票记录:(proposal_id, 管理员公钥) → 赞成/反对。防止同一管理员重复投票。

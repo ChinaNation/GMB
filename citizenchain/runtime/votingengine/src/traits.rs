@@ -736,7 +736,7 @@ impl InternalCleanupHandler for () {
 
 /// 联合投票超时结算入口。joint-vote sub-pallet 实现。
 ///
-/// 联合投票分两阶段:管理员阶段(STAGE_JOINT)+ 全民兜底阶段(STAGE_CITIZEN)。
+/// 联合投票分两阶段:内部投票阶段(STAGE_JOINT)+ 联合公投阶段(STAGE_REFERENDUM)。
 /// votingengine 主 crate 的 finalize 路径根据 stage 选择派发到这两个 fn。
 pub trait JointProposalFinalizer<BlockNumber> {
     fn finalize_joint_timeout(
@@ -769,16 +769,16 @@ impl<BlockNumber> JointProposalFinalizer<BlockNumber> for () {
 /// joint mode 的 chunked cleanup 入口。
 ///
 /// joint storage(JointVotesByAdmin / JointInstitutionTallies / JointVotesByInstitution
-/// / JointTallies / CitizenVotesByBindingId / CitizenTallies / UsedPopulationSnapshotNonce)
+/// / JointTallies / ReferendumVotesByBindingId / ReferendumTallies / UsedPopulationSnapshotNonce)
 /// 住在 joint-vote pallet,votingengine 主 crate 通过本 trait 派发清理。
 pub trait JointCleanupHandler {
     fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
     fn cleanup_joint_institution_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
     fn cleanup_joint_institution_tallies_chunk(proposal_id: u64, limit: u32)
         -> CleanupChunkResult;
-    fn cleanup_citizen_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
+    fn cleanup_referendum_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
 
-    /// 终态清理:删 JointTallies + CitizenTallies(单步)。
+    /// 终态清理:删 JointTallies + ReferendumTallies(单步)。
     fn cleanup_joint_terminal(proposal_id: u64);
 }
 
@@ -798,7 +798,7 @@ impl JointCleanupHandler for () {
     ) -> CleanupChunkResult {
         (0, false)
     }
-    fn cleanup_citizen_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
+    fn cleanup_referendum_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
         (0, false)
     }
     fn cleanup_joint_terminal(_proposal_id: u64) {}

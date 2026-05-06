@@ -36,19 +36,20 @@ sed -i '' "s/votingEnginePallet = [0-9]*/votingEnginePallet = $VOTING_IDX/" "$RE
 
 # 从各 pallet crate 提取 call_index
 TRANSFER_PALLET="$REPO_ROOT/citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs"
-VOTING_PALLET="$REPO_ROOT/citizenchain/runtime/governance/voting-engine/src/lib.rs"
+JOINT_VOTE_PALLET="$REPO_ROOT/citizenchain/runtime/votingengine/joint-vote/src/lib.rs"
 
-# Step 2 · 离线聚合改造后 vote_transfer 已删除(→ finalize_transfer),冷钱包不盲签 finalize_X
 PROPOSE_CALL=$(grep -B2 'fn propose_transfer' "$TRANSFER_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-JOINT_CALL=$(grep -B2 'fn joint_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
-CITIZEN_CALL=$(grep -B2 'fn citizen_vote' "$VOTING_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+# 联合投票内部投票阶段:JointVote::cast_admin
+JOINT_CALL=$(grep -B2 'fn cast_admin' "$JOINT_VOTE_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
+# 联合公投阶段:JointVote::cast_referendum
+REFERENDUM_CALL=$(grep -B2 'fn cast_referendum' "$JOINT_VOTE_PALLET" | grep -o 'call_index([0-9]*)' | grep -o '[0-9]*')
 
 sed -i '' "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" "$REGISTRY"
 sed -i '' "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
-sed -i '' "s/citizenVoteCall = [0-9]*/citizenVoteCall = $CITIZEN_CALL/" "$REGISTRY"
+sed -i '' "s/castReferendumCall = [0-9]*/castReferendumCall = $REFERENDUM_CALL/" "$REGISTRY"
 
 echo "    spec_version={$SPEC} (链上) Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
-echo "    propose=$PROPOSE_CALL joint=$JOINT_CALL citizen=$CITIZEN_CALL"
+echo "    propose=$PROPOSE_CALL joint=$JOINT_CALL referendum=$REFERENDUM_CALL"
 
 echo "==> 清空构建缓存..."
 flutter clean

@@ -1,9 +1,9 @@
 //! # 联合投票 pallet (joint-vote)
 //!
-//! 国储会 / 省储会 / 省储行的加权多签投票模式 + 全民兜底两阶段:
-//! - [`jointinternal`]:管理员阶段 — 业务函数 `do_create_joint_proposal` /
+//! 国储会 / 省储会 / 省储行的加权多签投票模式 + 联合公投两阶段:
+//! - [`jointinternal`]:内部投票阶段 — 业务函数 `do_create_joint_proposal` /
 //!   `do_joint_vote` / `do_finalize_joint_timeout` 等。
-//! - [`jointreferendum`]:全民兜底阶段 — 业务函数 `do_jointreferendum_vote` /
+//! - [`jointreferendum`]:联合公投阶段 — 业务函数 `do_jointreferendum_vote` /
 //!   `do_finalize_jointreferendum_timeout`。
 //!
 //! 共用基础设施仍归 [`votingengine`] 引擎核心,本 pallet 通过
@@ -29,10 +29,14 @@ use votingengine::{
 
 pub mod jointinternal;
 pub mod jointreferendum;
+pub mod migrations;
 pub mod weights;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
+
+#[cfg(test)]
+mod tests;
 
 pub use pallet::*;
 
@@ -70,7 +74,7 @@ pub fn is_joint_unanimous(yes_weight: u32) -> bool {
     yes_weight >= JOINT_VOTE_PASS_THRESHOLD
 }
 
-/// 公民投票(全民兜底)通过判定:严格 > 50%。
+/// 联合公投通过判定:严格 > 50%。
 pub fn is_jointreferendum_vote_passed(yes_votes: u64, eligible_total: u64) -> bool {
     if eligible_total == 0 {
         return false;
@@ -78,7 +82,7 @@ pub fn is_jointreferendum_vote_passed(yes_votes: u64, eligible_total: u64) -> bo
     yes_votes.saturating_mul(100) > eligible_total.saturating_mul(50)
 }
 
-/// 公民投票否决判定:反对票 ≥ 50% 即否决。
+/// 联合公投否决判定:反对票 ≥ 50% 即否决。
 pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> bool {
     if eligible_total == 0 {
         return false;
@@ -96,6 +100,10 @@ pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
 
+    /// pallet 自身 StorageVersion。
+    /// v1:sub-pallet 拆分迁移完成(storage 已从 `VotingEngine` 前缀搬到 `JointVote`)。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
         #[allow(deprecated)]
@@ -104,9 +112,10 @@ pub mod pallet {
     }
 
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
-    /// 联合投票管理员级记录:(proposal_id, (机构, 管理员公钥)) → 赞成/反对。
+    /// 联合投票内部投票阶段管理员级记录:(proposal_id, (机构, 管理员公钥)) → 赞成/反对。
     #[pallet::storage]
     pub type JointVotesByAdmin<T: Config> = StorageDoubleMap<
         _,
@@ -147,14 +156,14 @@ pub mod pallet {
     pub type JointTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU32, ValueQuery>;
 
-    /// 公民投票记录:(proposal_id, SFID 绑定哈希) → 赞成/反对。
+    /// 联合公投记录:(proposal_id, SFID 绑定哈希) → 赞成/反对。
     #[pallet::storage]
-    pub type CitizenVotesByBindingId<T: Config> =
+    pub type ReferendumVotesByBindingId<T: Config> =
         StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
 
     #[pallet::storage]
-    #[pallet::getter(fn citizen_tally)]
-    pub type CitizenTallies<T: Config> =
+    #[pallet::getter(fn referendum_tally)]
+    pub type ReferendumTallies<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, votingengine::VoteCountU64, ValueQuery>;
 
     /// 总人口快照 nonce 防重放(全局维度)。
@@ -179,8 +188,8 @@ pub mod pallet {
             institution: InstitutionPalletId,
             approved: bool,
         },
-        /// 公民投票已投出一票(binding_id 为 SFID 哈希)。
-        CitizenVoteCast {
+        /// 联合公投已投出一票(binding_id 为 SFID 哈希)。
+        ReferendumVoteCast {
             proposal_id: u64,
             who: T::AccountId,
             binding_id: T::Hash,
@@ -190,7 +199,7 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        /// 公民投票总分母未设置(eligible_total == 0)。
+        /// 联合公投总分母未设置(eligible_total == 0)。
         CitizenEligibleTotalNotSet,
         /// 人口快照参数无效(nonce 为空/已使用/签名验证失败)。
         InvalidPopulationSnapshot,
@@ -204,7 +213,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 联合投票管理员阶段:NRC/PRC/PRB 管理员按机构投票。
+        /// 联合投票内部投票阶段:NRC/PRC/PRB 管理员按机构投票。
         /// 业务实现挂在 [`super::jointinternal`]。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_admin())]
@@ -218,7 +227,7 @@ pub mod pallet {
             Self::do_joint_vote(who, proposal_id, institution, approve)
         }
 
-        /// 联合公投全民兜底:SFID 持有者按 >50% 严格多数投票。
+        /// 联合公投阶段:SFID 持有者按 >50% 严格多数投票。
         /// 业务实现挂在 [`super::jointreferendum`]。
         #[pallet::call_index(1)]
         #[pallet::weight(<T as Config>::WeightInfo::cast_referendum())]
@@ -419,16 +428,16 @@ impl<T: Config> votingengine::traits::JointCleanupHandler for Pallet<T> {
         let result = JointInstitutionTallies::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
-    fn cleanup_citizen_votes_chunk(
+    fn cleanup_referendum_votes_chunk(
         proposal_id: u64,
         limit: u32,
     ) -> votingengine::traits::CleanupChunkResult {
-        let result = CitizenVotesByBindingId::<T>::clear_prefix(proposal_id, limit, None);
+        let result = ReferendumVotesByBindingId::<T>::clear_prefix(proposal_id, limit, None);
         (result.unique, result.maybe_cursor.is_some())
     }
 
     fn cleanup_joint_terminal(proposal_id: u64) {
         JointTallies::<T>::remove(proposal_id);
-        CitizenTallies::<T>::remove(proposal_id);
+        ReferendumTallies::<T>::remove(proposal_id);
     }
 }

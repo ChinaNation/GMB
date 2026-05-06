@@ -45,7 +45,7 @@ pub struct ProposalMeta {
     pub proposal_id: u64,
     /// 0=内部投票, 1=联合投票。
     pub kind: u8,
-    /// 0=内部阶段, 1=联合阶段, 2=公民阶段。
+    /// 0=内部投票, 1=联合投票内部投票阶段, 2=联合公投阶段。
     pub stage: u8,
     /// 0=投票中, 1=通过, 2=否决, 3=已执行, 4=执行失败。
     pub status: u8,
@@ -98,10 +98,10 @@ pub struct JointVoteTally {
     pub no: u32,
 }
 
-/// 公民投票计数。
+/// 联合公投计数。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CitizenVoteTally {
+pub struct ReferendumVoteTally {
     pub yes: u64,
     pub no: u64,
 }
@@ -120,7 +120,7 @@ pub struct ProposalFullInfo {
     pub resolution_destroy_detail: Option<ResolutionDestroyDetail>,
     pub internal_tally: Option<VoteTally>,
     pub joint_tally: Option<JointVoteTally>,
-    pub citizen_tally: Option<CitizenVoteTally>,
+    pub referendum_tally: Option<ReferendumVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
     pub institution_name: Option<String>,
 }
@@ -381,8 +381,8 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         None
     };
 
-    let citizen_tally = if meta.kind == 1 && meta.stage >= 2 {
-        fetch_citizen_tally(proposal_id).ok()
+    let referendum_tally = if meta.kind == 1 && meta.stage >= 2 {
+        fetch_referendum_tally(proposal_id).ok()
     } else {
         None
     };
@@ -400,7 +400,7 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
         resolution_destroy_detail,
         internal_tally,
         joint_tally,
-        citizen_tally,
+        referendum_tally,
         institution_name,
     })
 }
@@ -624,7 +624,7 @@ fn resolve_proposal_action(
 
 fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
     let key = storage_keys::map_key(
-        "VotingEngine",
+        "InternalVote",
         "InternalTallies",
         &proposal_id.to_le_bytes(),
     );
@@ -653,7 +653,7 @@ fn fetch_internal_tally(proposal_id: u64) -> Result<VoteTally, String> {
 }
 
 fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
-    let key = storage_keys::map_key("VotingEngine", "JointTallies", &proposal_id.to_le_bytes());
+    let key = storage_keys::map_key("JointVote", "JointTallies", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
         Value::Null => Ok(JointVoteTally { yes: 0, no: 0 }),
@@ -678,15 +678,15 @@ fn fetch_joint_tally(proposal_id: u64) -> Result<JointVoteTally, String> {
     }
 }
 
-fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
-    let key = storage_keys::map_key("VotingEngine", "CitizenTallies", &proposal_id.to_le_bytes());
+fn fetch_referendum_tally(proposal_id: u64) -> Result<ReferendumVoteTally, String> {
+    let key = storage_keys::map_key("JointVote", "ReferendumTallies", &proposal_id.to_le_bytes());
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     match result {
-        Value::Null => Ok(CitizenVoteTally { yes: 0, no: 0 }),
+        Value::Null => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
         Value::String(hex_data) => {
             let data = decode_hex_storage(&hex_data)?;
             if data.len() < 16 {
-                return Ok(CitizenVoteTally { yes: 0, no: 0 });
+                return Ok(ReferendumVoteTally { yes: 0, no: 0 });
             }
             let yes = u64::from_le_bytes(
                 data[0..8]
@@ -698,9 +698,9 @@ fn fetch_citizen_tally(proposal_id: u64) -> Result<CitizenVoteTally, String> {
                     .try_into()
                     .map_err(|_| "SCALE 数据长度不足".to_string())?,
             );
-            Ok(CitizenVoteTally { yes, no })
+            Ok(ReferendumVoteTally { yes, no })
         }
-        _ => Ok(CitizenVoteTally { yes: 0, no: 0 }),
+        _ => Ok(ReferendumVoteTally { yes: 0, no: 0 }),
     }
 }
 
@@ -1086,7 +1086,7 @@ fn stage_label(stage: u8) -> &'static str {
     match stage {
         0 => "内部阶段",
         1 => "联合阶段",
-        2 => "公民阶段",
+        2 => "联合公投阶段",
         _ => "未知",
     }
 }
@@ -1298,7 +1298,7 @@ pub fn fetch_user_vote_status(
     // 查询内部投票状态（InternalVotesByAccount: DoubleMap<u64, AccountId32> → bool）
     let internal_vote = {
         let key = storage_keys::double_map_key(
-            "VotingEngine",
+            "InternalVote",
             "InternalVotesByAccount",
             &proposal_id.to_le_bytes(),
             &pubkey_bytes,
@@ -1315,7 +1315,7 @@ pub fn fetch_user_vote_status(
         composite_key.extend_from_slice(&institution_id);
         composite_key.extend_from_slice(&pubkey_bytes);
         let key = storage_keys::double_map_key(
-            "VotingEngine",
+            "JointVote",
             "JointVotesByAdmin",
             &proposal_id.to_le_bytes(),
             &composite_key,

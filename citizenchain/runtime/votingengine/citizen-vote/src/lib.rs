@@ -3,7 +3,7 @@
 //! 公民投票多模式入口(选举 / 公投 / 审批投票 / RCV / ...,Phase 3 实现)。
 //!
 //! 与 [`joint-vote::jointreferendum`] 不同 — jointreferendum 是联合投票被否决后的
-//! 全民兜底(yes/no),citizen-vote 是公民个人为公共事务发起的多候选 / 多模式选举。
+//! 联合公投(yes/no),citizen-vote 是公民个人为公共事务发起的多候选 / 多模式选举。
 //!
 //! 本 pallet Phase 1 仅占位骨架,具体投票模式在 Phase 3 任务卡接入。
 

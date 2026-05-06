@@ -240,6 +240,15 @@ pub type UncheckedExtrinsic =
 /// The payload being signed in transactions.
 pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 
+/// Runtime upgrade migrations 集合。
+///
+/// 跑顺序按 tuple 元素从左到右,Executive 在 set_code 后第一时间调度。
+/// 每个 migration 用自己 pallet 的 StorageVersion 做幂等门控,二次跑安全。
+pub type Migrations = (
+    internal_vote::migrations::v1::MigrateV0ToV1<Runtime>,
+    joint_vote::migrations::v1::MigrateV0ToV1<Runtime>,
+);
+
 /// Executive: handles dispatch to the various modules.
 pub type Executive = frame_executive::Executive<
     Runtime,
@@ -247,6 +256,7 @@ pub type Executive = frame_executive::Executive<
     frame_system::ChainContext<Runtime>,
     Runtime,
     AllPalletsWithSystem,
+    Migrations,
 >;
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -307,7 +317,7 @@ mod runtime {
     #[runtime::pallet_index(22)]
     pub type InternalVote = internal_vote;
 
-    // 联合投票 sub-pallet:管理员多签 + 全民兜底两阶段
+    // 联合投票 sub-pallet:管理员多签 + 联合公投两阶段
     #[runtime::pallet_index(23)]
     pub type JointVote = joint_vote;
 

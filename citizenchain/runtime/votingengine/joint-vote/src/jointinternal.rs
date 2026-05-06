@@ -1,7 +1,7 @@
-//! 联合投票 — 管理员阶段。
+//! 联合投票 — 内部投票阶段。
 //!
 //! 国储会 / 省储会 / 省储行管理员按机构投票,任一机构反对或超时进入
-//! 全民兜底阶段(jointreferendum)。
+//! 联合公投阶段(jointreferendum)。
 //!
 //! 业务函数挂在 `super::Pallet<T>` 上,在 super(lib.rs)的 #[pallet::call]
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`
@@ -138,7 +138,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + PRBs)管理员快照,
-    /// 并在创建时锁定公民投票总人口分母(eligible_total),后续阶段切换不再改写。
+    /// 并在创建时锁定联合公投阶段总人口分母(eligible_total),后续阶段切换不再改写。
     /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
     pub fn do_create_joint_proposal(
         who: T::AccountId,
@@ -275,7 +275,7 @@ impl<T: Config> Pallet<T> {
     }
 
     /// 联合投票:管理员按机构投票。机构内达阈值后写入 `JointVotesByInstitution`,
-    /// 全部机构票权累加判断是否全票通过(105 票)或推进至公民投票兜底。
+    /// 全部机构票权累加判断是否全票通过(105 票)或推进至联合公投阶段。
     pub fn do_joint_vote(
         who: T::AccountId,
         proposal_id: u64,
@@ -383,7 +383,7 @@ impl<T: Config> Pallet<T> {
         Self::advance_joint_to_citizen(proposal_id)
     }
 
-    /// 联合管理员阶段超时结算:全票通过 → PASSED,否则进入公民投票阶段。
+    /// 联合内部投票阶段超时结算:全票通过 → PASSED,否则进入联合公投阶段。
     pub fn do_finalize_joint_timeout(
         proposal: &Proposal<frame_system::pallet_prelude::BlockNumberFor<T>>,
         proposal_id: u64,
@@ -423,7 +423,7 @@ impl<T: Config> Pallet<T> {
                         .ok_or(votingengine::Error::<T>::ProposalNotFound)?;
                     let eligible_total = proposal.citizen_eligible_total;
                     let old_end = proposal.end;
-                    proposal.stage = votingengine::STAGE_CITIZEN;
+                    proposal.stage = votingengine::STAGE_REFERENDUM;
                     proposal.start = now;
                     proposal.end = citizen_end;
                     Ok((eligible_total, old_end))

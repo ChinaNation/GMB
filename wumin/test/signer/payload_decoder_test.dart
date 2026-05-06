@@ -115,8 +115,8 @@ void main() {
       expect(decoded.summary, contains('反对'));
     });
 
-    test('decodes citizen_vote (pallet=23 call=1) ADR-008 step3 双层凭证', () {
-      // JointVote.cast_referendum = pallet 23 / call 1(联合公投全民兜底)。
+    test('decodes cast_referendum (pallet=23 call=1) ADR-008 step3 双层凭证', () {
+      // JointVote.cast_referendum = pallet 23 / call 1(联合公投联合公投)。
       // ADR-008 step3：SCALE 末尾在 approve 前加 (province, signer_admin_pubkey)。
       final province = utf8.encode('安徽省');
       final adminPubkey = List<int>.generate(32, (i) => 0xA0 + (i & 0x0F));
@@ -136,7 +136,7 @@ void main() {
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
 
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'citizen_vote');
+      expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
       expect(decoded.fields['province'], '安徽省');
@@ -146,7 +146,7 @@ void main() {
       );
     });
 
-    test('citizen_vote 旧 SCALE 字节流(无 province/admin)拒绝解码', () {
+    test('cast_referendum 旧 SCALE 字节流(无 province/admin)拒绝解码', () {
       // ADR-008 step3 后 SCALE 必须含新字段。旧字节流长度不足 → null。
       // feedback_no_compatibility:不留兼容垫片,老凭证不识别即拒绝。
       final payload = Uint8List.fromList([
@@ -664,15 +664,15 @@ void main() {
       return jsonDecode(raw) as Map<String, dynamic>;
     }
 
-    test('fixture step2d citizen_vote: decoder 解出 province + signer_admin_pubkey',
+    test('fixture step2d cast_referendum: decoder 解出 province + signer_admin_pubkey',
         () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
-          .firstWhere((e) => e['name'] == 'citizen_vote');
+          .firstWhere((e) => e['name'] == 'cast_referendum');
       final hex = caseEntry['expected_call_data_hex'] as String;
       final decoded = PayloadDecoder.decode(hex, specVersion: spec);
       expect(decoded, isNotNull);
-      expect(decoded!.action, 'citizen_vote');
+      expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
       expect(decoded.fields['approve'], 'true');
       expect(decoded.fields['province'],

@@ -27,7 +27,7 @@ use votingengine::traits::{
 use votingengine::SfidEligibility;
 use votingengine::{
     InstitutionPalletId, PendingCleanupStage, Proposal, ProposalExecutionOutcome, VoteCountU32, VoteCountU64, VoteCredentialCleanup,
-    PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_CITIZEN, STAGE_INTERNAL, STAGE_JOINT,
+    PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_REFERENDUM, STAGE_INTERNAL, STAGE_JOINT,
     STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 use primitives::china::china_cb::{
@@ -483,7 +483,7 @@ impl InternalVoteResultCallback for TestInternalVoteResultCallback {
     }
 }
 
-fn new_test_ext() -> sp_io::TestExternalities {
+pub fn new_test_ext() -> sp_io::TestExternalities {
     let storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("frame system genesis storage should build");
@@ -784,7 +784,7 @@ fn insert_citizen_proposal(proposal_id: u64, eligible_total: u64, end: u64) {
         proposal_id,
         Proposal {
             kind: PROPOSAL_KIND_JOINT,
-            stage: STAGE_CITIZEN,
+            stage: STAGE_REFERENDUM,
             status: STATUS_VOTING,
             internal_org: None,
             internal_institution: None,

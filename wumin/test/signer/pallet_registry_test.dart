@@ -36,14 +36,14 @@ void main() {
       expect(pallets.length, 10);
     });
 
-    test('投票引擎 sub-pallet 拆分后 call_index(2026-05-05)', () {
-      // 拆分后:InternalVote(22).cast=0 / JointVote(23).cast_admin=0 /
+    test('投票引擎 sub-pallet call_index', () {
+      // InternalVote(22).cast=0 / JointVote(23).cast_admin=0 /
       // JointVote(23).cast_referendum=1 / VotingEngine(9).finalize_proposal=3
       expect(PalletRegistry.internalVotePallet, 22);
       expect(PalletRegistry.internalVoteCall, 0);
       expect(PalletRegistry.jointVotePallet, 23);
       expect(PalletRegistry.jointVoteCall, 0);
-      expect(PalletRegistry.citizenVoteCall, 1);
+      expect(PalletRegistry.castReferendumCall, 1);
       expect(PalletRegistry.finalizeProposalCall, 3);
     });
 
@@ -57,13 +57,13 @@ void main() {
     });
 
     test('业务 pallet 的 propose_X call_index 连续排列', () {
-      // Phase 4(2026-05-02): execute_xxx wrapper 已物理删除,
-      // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
+      // 手动重试统一走 VotingEngine::retry_passed_proposal(9.4),
+      // 业务 pallet 不承载 execute_xxx wrapper。
       expect(PalletRegistry.proposeTransferCall, 0);
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      // call_index=0 (proposeCreate 单账户机构) 已于 2026-05-03 废弃,留洞。
+      // call_index=0 留洞不复用(单账户机构 proposeCreate 已废弃)。
       expect(PalletRegistry.proposeCloseCall, 1);
       expect(PalletRegistry.registerSfidInstitutionCall, 2);
       expect(PalletRegistry.proposeCreatePersonalCall, 3);
@@ -71,7 +71,7 @@ void main() {
     });
 
     test('VotingEngine 统一手动重试/取消入口', () {
-      // Phase 4(2026-05-02): 业务 pallet 的 execute_xxx / cancel_failed_xxx 全删,
+      // 业务 pallet 不承载 execute_xxx / cancel_failed_xxx,
       // 统一收口至 VotingEngine 的 4/5 两个 call_index。
       expect(PalletRegistry.retryPassedProposalCall, 4);
       expect(PalletRegistry.cancelPassedProposalCall, 5);

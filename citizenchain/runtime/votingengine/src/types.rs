@@ -58,9 +58,16 @@ pub fn fixed_governance_pass_threshold(org: u8) -> Option<u32> {
     }
 }
 
+/// 内部投票 pallet 的 stage(单阶段提案)。
 pub const STAGE_INTERNAL: u8 = 0;
+/// 联合投票 pallet 的内部投票阶段(jointinternal):国储会/省储会/省储行管理员加权投票。
 pub const STAGE_JOINT: u8 = 1;
-pub const STAGE_CITIZEN: u8 = 2;
+/// 联合投票 pallet 的联合公投阶段(jointreferendum):内部投票阶段未全票通过或超时进入,
+/// 由 SFID 持有者按 >50% 严格多数投票。
+///
+/// 注意:这是联合投票的第二阶段,与独立的 citizen-vote pallet(pallet_index=24)
+/// 是两个不同概念。citizen-vote pallet 用于公民选举/公投等多模式投票(Phase 3 接业务)。
+pub const STAGE_REFERENDUM: u8 = 2;
 
 pub const STATUS_VOTING: u8 = 0;
 pub const STATUS_PASSED: u8 = 1;
@@ -162,7 +169,7 @@ pub struct Proposal<BlockNumber> {
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）
     pub end: BlockNumber,
-    /// 公民投票阶段的可投票总人数（由外部资格系统给出）
+    /// 联合公投阶段的可投票总人数（由外部资格系统给出）
     pub citizen_eligible_total: u64,
 }
 
