@@ -61,12 +61,12 @@ pub trait InstitutionAsset<AccountId> {
 ### 4.1 duoqian-manage
 
 - `propose_close`
-- `execute_close`
+- `execute_close_with_finalizer`(internal helper,投票通过后的 callback 执行路径)
 
 ### 4.2 duoqian-transfer
 
 - `propose_transfer`
-- `try_execute_transfer`
+- `try_execute_transfer_from_callback`(internal helper,投票通过后的 callback 执行路径)
 
 ### 4.3 offchain-transaction
 

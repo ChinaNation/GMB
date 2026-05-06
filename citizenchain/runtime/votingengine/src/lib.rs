@@ -13,9 +13,9 @@
 //! - **联合提案发起权**：国储会和省储会管理员均可发起联合投票提案。
 //!
 //! 通过 trait 为上层治理模块提供标准化能力：
-//! - `InternalVoteEngine` / `JointVoteEngine`：仅负责提案创建(不再负责投票,
-//!   Phase 1 整改后投票一律走本 pallet 的公开 `internal_vote / joint_vote /
-//!   citizen_vote` extrinsic)。
+//! - `InternalVoteEngine` / `JointVoteEngine`：业务模块发起提案的内部入口;
+//!   投票走对应 sub-pallet(`internal-vote::cast` / `joint-vote::cast_admin` /
+//!   `joint-vote::cast_referendum`)的公开 extrinsic。
 //! - `InternalVoteResultCallback` / `JointVoteResultCallback`:内部/联合提案
 //!   完成投票判定时,投票引擎按统一状态机调用业务 executor。
 //!   业务模块只返回统一执行结果，不再直接推进投票引擎状态；PASSED 表示执行授权/可重试态。
@@ -24,13 +24,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub mod citizen;
 pub mod cleanup;
 pub mod data;
 pub mod id;
 pub mod index;
-pub mod internal;
-pub mod joint;
 pub mod limit;
 pub mod migrations;
 pub mod mutex;
@@ -41,16 +38,12 @@ pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 
-pub use internal::ORG_REN;
-pub use joint::jointreferendum::{SfidEligibility, VoteCredentialCleanup};
+pub use types::ORG_REN;
+pub use traits::{SfidEligibility, VoteCredentialCleanup};
 pub use pallet::*;
 pub use traits::*;
 pub use types::*;
 
-// 中文注释:`Encode` 给测试文件 (`tests/cases.rs`) 走 `use super::*;` 时使用,
-// 主体代码不直接引用,但移除会让 lib test 编译失败。
-#[cfg(test)]
-use codec::Encode;
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
@@ -163,6 +156,19 @@ pub mod pallet {
         type TimeProvider: frame_support::traits::UnixTime;
 
         type WeightInfo: crate::weights::WeightInfo;
+
+        /// 内部投票 mode 超时结算回调,由 internal-vote pallet 实现。
+        type InternalFinalizer: crate::traits::InternalProposalFinalizer<BlockNumberFor<Self>>;
+
+        /// 内部投票 mode chunked cleanup 派发,由 internal-vote pallet 实现。
+        type InternalCleanup: crate::traits::InternalCleanupHandler;
+
+        /// 联合投票 mode 超时结算回调,覆盖管理员阶段(STAGE_JOINT)与全民兜底阶段(STAGE_CITIZEN),
+        /// 由 joint-vote pallet 实现。
+        type JointFinalizer: crate::traits::JointProposalFinalizer<BlockNumberFor<Self>>;
+
+        /// 联合投票 mode chunked cleanup 派发,由 joint-vote pallet 实现。
+        type JointCleanup: crate::traits::JointCleanupHandler;
     }
 
     use crate::weights::WeightInfo;
@@ -227,74 +233,6 @@ pub mod pallet {
     pub type PendingProposalCleanups<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, PendingCleanupStage, OptionQuery>;
 
-    /// 内部投票记录：(proposal_id, 管理员公钥) → 赞成/反对。防止同一管理员重复投票。
-    #[pallet::storage]
-    pub type InternalVotesByAccount<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        T::AccountId,
-        bool,
-        OptionQuery,
-    >;
-
-    #[pallet::storage]
-    #[pallet::getter(fn internal_tally)]
-    pub type InternalTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
-
-    /// 联合投票——管理员级记录：(proposal_id, (机构, 管理员公钥)) → 赞成/反对。
-    /// 防止同一管理员在同一机构内重复投票。
-    #[pallet::storage]
-    pub type JointVotesByAdmin<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        (InstitutionPalletId, T::AccountId),
-        bool,
-        OptionQuery,
-    >;
-
-    #[pallet::storage]
-    #[pallet::getter(fn joint_institution_tally)]
-    pub type JointInstitutionTallies<T> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        VoteCountU32,
-        ValueQuery,
-    >;
-
-    /// 联合投票——机构级汇总：(proposal_id, 机构) → 该机构内部投票的最终结果（赞成/反对）。
-    /// 机构内部达到阈值后写入，用于联合阶段权重汇总。
-    #[pallet::storage]
-    pub type JointVotesByInstitution<T> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        InstitutionPalletId,
-        bool,
-        OptionQuery,
-    >;
-
-    #[pallet::storage]
-    #[pallet::getter(fn joint_tally)]
-    pub type JointTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU32, ValueQuery>;
-
-    /// 公民投票记录：(proposal_id, 公民身份绑定哈希) → 赞成/反对。
-    /// 每个公民身份只能投一次，由绑定哈希防重。
-    #[pallet::storage]
-    pub type CitizenVotesByBindingId<T: Config> =
-        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, T::Hash, bool, OptionQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn citizen_tally)]
-    pub type CitizenTallies<T> = StorageMap<_, Blake2_128Concat, u64, VoteCountU64, ValueQuery>;
-
     /// 提案管理员快照：提案创建时锁定各机构管理员名单，投票期间不随链上名单变化。
     /// 内部提案只存一条（提案所属机构），联合提案存所有参与机构（约105条）。
     /// 投票时查快照判定资格，保证管理员更换不影响已有提案的投票过程。
@@ -308,17 +246,6 @@ pub mod pallet {
         BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
         OptionQuery,
     >;
-
-    /// 内部投票阈值快照：提案创建时锁定阈值，投票期间不受主体状态变化影响。
-    #[pallet::storage]
-    pub type InternalThresholdSnapshot<T: Config> =
-        StorageMap<_, Blake2_128Concat, u64, u32, OptionQuery>;
-
-    /// 中文注释：总人口快照 nonce 防重放（全局维度，防止跨提案重放）。
-    #[pallet::storage]
-    #[pallet::getter(fn used_population_snapshot_nonce)]
-    pub type UsedPopulationSnapshotNonce<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
     /// 提案业务数据（由各业务模块序列化后写入，投票引擎统一存储和清理）。
     #[pallet::storage]
@@ -509,32 +436,6 @@ pub mod pallet {
         },
         /// 中文注释：管理员取消 PASSED 可重试提案，转入执行失败终态。
         ProposalExecutionCancelled { proposal_id: u64 },
-        /// 中文注释：内部投票已投出一票。
-        InternalVoteCast {
-            proposal_id: u64,
-            who: T::AccountId,
-            approve: bool,
-        },
-        /// 中文注释：联合投票中某机构管理员已投出一票。
-        JointAdminVoteCast {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            who: T::AccountId,
-            approve: bool,
-        },
-        /// 中文注释：联合投票中某机构已形成最终结果（赞成/反对）。
-        JointInstitutionVoteFinalized {
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            approved: bool,
-        },
-        /// 中文注释：公民投票已投出一票（binding_id 为 SFID 哈希）。
-        CitizenVoteCast {
-            proposal_id: u64,
-            who: T::AccountId,
-            binding_id: T::Hash,
-            approve: bool,
-        },
     }
 
     #[pallet::error]
@@ -547,10 +448,6 @@ pub mod pallet {
         InvalidProposalStage,
         /// 中文注释：提案状态不允许当前操作（例如已终结的提案不可投票）。
         InvalidProposalStatus,
-        /// 中文注释：内部投票的机构类型不合法。
-        InvalidInternalOrg,
-        /// 中文注释：内部投票阈值快照缺失。
-        MissingThresholdSnapshot,
         /// 中文注释：内部投票管理员快照缺失。
         MissingAdminSnapshot,
         /// 中文注释：机构标识不属于任何已知类型（NRC/PRC/PRB/多签）。
@@ -563,14 +460,6 @@ pub mod pallet {
         VoteNotExpired,
         /// 中文注释：同一身份已对该提案投过票。
         AlreadyVoted,
-        /// 中文注释：SFID 资格校验未通过（binding_id 未绑定或不匹配）。
-        SfidNotEligible,
-        /// 中文注释：SFID 投票凭证验签失败或已被消费。
-        InvalidSfidVoteCredential,
-        /// 中文注释：公民投票总分母未设置（eligible_total == 0）。
-        CitizenEligibleTotalNotSet,
-        /// 中文注释：人口快照参数无效（nonce 为空/已使用/签名验证失败）。
-        InvalidPopulationSnapshot,
         /// 中文注释：提案已终结，不可重复结算。
         ProposalAlreadyFinalized,
         /// 中文注释:提案主键 u64 单调累加溢出(实质永不发生,1.84×10¹⁹ 上限)。
@@ -665,78 +554,15 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 内部投票(公开入口)。
-        ///
-        /// 所有机构管理员对内部提案的投票统一走此 call。
-        /// 由 `do_internal_vote` 做完整的阶段/权限/防双投/记票/阈值校验。
-        /// 达到投票判定(PASSED/REJECTED)时会通过 `set_status_and_emit` 触发
-        /// `InternalVoteResultCallback` 广播给业务模块执行后续动作。
-        ///
-        /// 签名客户端构造 call_data 格式:
-        ///   `[pallet=9][call=0][proposal_id: u64 LE][approve: bool]`
-        #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::internal_vote())]
-        pub fn internal_vote(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_internal_vote(who, proposal_id, approve)
-        }
-
-        /// 联合投票(公开入口)。
-        ///
-        /// 国储会 / 省储会 / 省储行管理员按机构投票;每个机构独立计票。
-        #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::joint_vote())]
-        pub fn joint_vote(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            institution: InstitutionPalletId,
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_joint_vote(who, proposal_id, institution, approve)
-        }
-
-        /// 公民投票(公开入口)。
-        ///
-        /// SFID 绑定用户按 >50% 多数投票;外层可由任意签名账户代投,
-        /// 内层 `signature` 必须是 `binding_id` 绑定的用户本人 sr25519 签名。
-        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
-        /// 链上 verifier 按 `ShengSigningPubkey` 派生公钥验签。
-        #[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::citizen_vote())]
-        pub fn citizen_vote(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            binding_id: T::Hash,
-            nonce: VoteNonceOf<T>,
-            signature: VoteSignatureOf<T>,
-            province: BoundedVec<u8, ConstU32<64>>,
-            signer_admin_pubkey: [u8; 32],
-            approve: bool,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            Self::do_jointreferendum_vote(
-                who,
-                proposal_id,
-                binding_id,
-                nonce,
-                signature,
-                province,
-                signer_admin_pubkey,
-                approve,
-            )
-        }
+        // 引擎核心仅承载生命周期 extrinsic(超时结算 / 重试 / 取消)。
+        // mode-specific 投票 extrinsic 由各 sub-pallet 提供:
+        //   - InternalVote::cast(22.0)
+        //   - JointVote::cast_admin(23.0)
+        //   - JointVote::cast_referendum(23.1)
+        // call_index 从 3 起,0/1/2 留空。
 
         #[pallet::call_index(3)]
-        #[pallet::weight(
-            T::WeightInfo::finalize_proposal_internal()
-                .max(T::WeightInfo::finalize_proposal_joint())
-                .max(T::WeightInfo::finalize_proposal_citizen())
-        )]
+        #[pallet::weight(T::WeightInfo::finalize_proposal())]
         pub fn finalize_proposal(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -744,23 +570,27 @@ pub mod pallet {
             let _who = ensure_signed(origin)?;
             let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
 
-            let actual_weight = match proposal.stage {
+            match proposal.stage {
                 STAGE_INTERNAL => {
-                    Self::do_finalize_internal_timeout(&proposal, proposal_id)?;
-                    T::WeightInfo::finalize_proposal_internal()
+                    <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
+                        BlockNumberFor<T>,
+                    >>::finalize_internal_timeout(&proposal, proposal_id)?;
                 }
                 STAGE_JOINT => {
-                    Self::do_finalize_joint_timeout(&proposal, proposal_id)?;
-                    T::WeightInfo::finalize_proposal_joint()
+                    <T::JointFinalizer as crate::traits::JointProposalFinalizer<
+                        BlockNumberFor<T>,
+                    >>::finalize_joint_timeout(&proposal, proposal_id)?;
                 }
                 STAGE_CITIZEN => {
-                    Self::do_finalize_jointreferendum_timeout(&proposal, proposal_id)?;
-                    T::WeightInfo::finalize_proposal_citizen()
+                    <T::JointFinalizer as crate::traits::JointProposalFinalizer<
+                        BlockNumberFor<T>,
+                    >>::finalize_jointreferendum_timeout(&proposal, proposal_id)?;
                 }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
-            };
+            }
 
-            Ok(Some(actual_weight).into())
+            // weight 已在 #[pallet::weight] 中静态指定为 max(三模式),无需返回 actual_weight。
+            Ok(().into())
         }
 
         /// 统一手动执行已通过但自动执行失败的提案。
@@ -768,7 +598,7 @@ pub mod pallet {
         /// 中文注释：业务模块不得再各自暴露 execute_xxx 重试入口；所有手动执行
         /// 都必须经过投票引擎校验 PASSED 状态、管理员权限、重试次数和宽限期。
         #[pallet::call_index(4)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(8, 8))]
+        #[pallet::weight(T::WeightInfo::retry_passed_proposal())]
         pub fn retry_passed_proposal(origin: OriginFor<T>, proposal_id: u64) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::retry_passed_proposal_inner(&who, proposal_id)
@@ -779,7 +609,7 @@ pub mod pallet {
         /// 中文注释：取消只允许 `PASSED -> EXECUTION_FAILED`，进入执行失败终态后
         /// 不再允许重试或再次取消。
         #[pallet::call_index(5)]
-        #[pallet::weight(T::DbWeight::get().reads_writes(7, 7))]
+        #[pallet::weight(T::WeightInfo::cancel_passed_proposal())]
         pub fn cancel_passed_proposal(
             origin: OriginFor<T>,
             proposal_id: u64,
@@ -791,7 +621,38 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        pub(crate) fn schedule_proposal_expiry(
+        // ──────────────────────────────────────────────────────────
+        // sub-pallet 调用的事件 emit helper(do_X 搬到 sub-pallet 后,
+        // 仍需要发 votingengine 自己的 lifecycle event)
+        // ──────────────────────────────────────────────────────────
+
+        pub fn emit_proposal_created(
+            proposal_id: u64,
+            kind: u8,
+            stage: u8,
+            end: BlockNumberFor<T>,
+        ) {
+            Self::deposit_event(Event::<T>::ProposalCreated {
+                proposal_id,
+                kind,
+                stage,
+                end,
+            });
+        }
+
+        pub fn emit_proposal_advanced_to_citizen(
+            proposal_id: u64,
+            citizen_end: BlockNumberFor<T>,
+            eligible_total: u64,
+        ) {
+            Self::deposit_event(Event::<T>::ProposalAdvancedToCitizen {
+                proposal_id,
+                citizen_end,
+                eligible_total,
+            });
+        }
+
+        pub fn schedule_proposal_expiry(
             proposal_id: u64,
             end: BlockNumberFor<T>,
         ) -> DispatchResult {
@@ -827,9 +688,21 @@ pub mod pallet {
                 }
 
                 let finalize_result = match proposal.stage {
-                    STAGE_INTERNAL => Self::do_finalize_internal_timeout(&proposal, proposal_id),
-                    STAGE_JOINT => Self::do_finalize_joint_timeout(&proposal, proposal_id),
-                    STAGE_CITIZEN => Self::do_finalize_jointreferendum_timeout(&proposal, proposal_id),
+                    STAGE_INTERNAL => {
+                        <T::InternalFinalizer as crate::traits::InternalProposalFinalizer<
+                            BlockNumberFor<T>,
+                        >>::finalize_internal_timeout(&proposal, proposal_id)
+                    }
+                    STAGE_JOINT => {
+                        <T::JointFinalizer as crate::traits::JointProposalFinalizer<
+                            BlockNumberFor<T>,
+                        >>::finalize_joint_timeout(&proposal, proposal_id)
+                    }
+                    STAGE_CITIZEN => {
+                        <T::JointFinalizer as crate::traits::JointProposalFinalizer<
+                            BlockNumberFor<T>,
+                        >>::finalize_jointreferendum_timeout(&proposal, proposal_id)
+                    }
                     _ => Ok(()),
                 };
                 if finalize_result.is_err() {
@@ -852,17 +725,17 @@ pub mod pallet {
                 weight = weight.saturating_add(db_weight.writes(1));
             }
 
-            let per_finalize_weight = T::WeightInfo::finalize_proposal_internal()
-                .max(T::WeightInfo::finalize_proposal_joint())
-                .max(T::WeightInfo::finalize_proposal_citizen());
-            let finalize_weight = per_finalize_weight.saturating_mul(process_count as u64);
+            // mode-specific 权重住在各 sub-pallet,引擎核心用统一 finalize_proposal
+            // 静态权重作保守上界。
+            let finalize_weight =
+                T::WeightInfo::finalize_proposal().saturating_mul(process_count as u64);
             weight = weight.saturating_add(finalize_weight);
 
             (process_count, has_remaining, weight)
         }
 
 
-        pub(crate) fn ensure_open_proposal(
+        pub fn ensure_open_proposal(
             proposal_id: u64,
         ) -> Result<Proposal<BlockNumberFor<T>>, DispatchError> {
             let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
@@ -910,7 +783,7 @@ pub mod pallet {
             )
         }
 
-        pub(crate) fn mark_proposal_passed_at(proposal_id: u64, block: BlockNumberFor<T>) {
+        pub fn mark_proposal_passed_at(proposal_id: u64, block: BlockNumberFor<T>) {
             ProposalMeta::<T>::mutate(proposal_id, |meta| {
                 if let Some(m) = meta {
                     if m.passed_at.is_none() {
@@ -1342,7 +1215,7 @@ pub mod pallet {
         }
 
         /// 更新提案状态，并按统一 executor 结果推进业务执行状态。
-        pub(crate) fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
+        pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
                 let (kind, stage, institution, should_run_callback) = match Proposals::<
                     T,
@@ -1428,7 +1301,7 @@ pub mod pallet {
         /// 中文注释：仅供单测验证旧回调作用域保护；生产业务回调应直接返回
         /// `ProposalExecutionOutcome`，由外层 `set_status_and_emit` 统一收口状态、事件和清理。
         #[cfg(test)]
-        pub(crate) fn set_callback_execution_result(
+        pub fn set_callback_execution_result(
             proposal_id: u64,
             final_status: u8,
         ) -> DispatchResult {
@@ -1508,23 +1381,27 @@ pub mod pallet {
                     (next, weight)
                 }
                 PendingCleanupStage::InternalVotes => {
-                    let result =
-                        InternalVotesByAccount::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                    let (removed, has_remaining) =
+                        <T::InternalCleanup as crate::traits::InternalCleanupHandler>::cleanup_internal_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
                     let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
+                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
                         Some(PendingCleanupStage::InternalVotes)
                     } else {
-                        Some(PendingCleanupStage::JointAdminVotes) // 继续下一阶段
+                        Some(PendingCleanupStage::JointAdminVotes)
                     };
                     (next, weight)
                 }
                 PendingCleanupStage::JointAdminVotes => {
-                    let result =
-                        JointVotesByAdmin::<T>::clear_prefix(proposal_id, cleanup_limit, None);
+                    let (removed, has_remaining) =
+                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_admin_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
                     let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
+                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
                         Some(PendingCleanupStage::JointAdminVotes)
                     } else {
                         Some(PendingCleanupStage::JointInstitutionVotes)
@@ -1532,14 +1409,13 @@ pub mod pallet {
                     (next, weight)
                 }
                 PendingCleanupStage::JointInstitutionVotes => {
-                    let result = JointVotesByInstitution::<T>::clear_prefix(
-                        proposal_id,
-                        cleanup_limit,
-                        None,
-                    );
+                    let (removed, has_remaining) =
+                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
                     let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
+                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
                         Some(PendingCleanupStage::JointInstitutionVotes)
                     } else {
                         Some(PendingCleanupStage::JointInstitutionTallies)
@@ -1547,14 +1423,13 @@ pub mod pallet {
                     (next, weight)
                 }
                 PendingCleanupStage::JointInstitutionTallies => {
-                    let result = JointInstitutionTallies::<T>::clear_prefix(
-                        proposal_id,
-                        cleanup_limit,
-                        None,
-                    );
+                    let (removed, has_remaining) =
+                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_tallies_chunk(
+                            proposal_id, cleanup_limit,
+                        );
                     let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
+                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
                         Some(PendingCleanupStage::JointInstitutionTallies)
                     } else {
                         Some(PendingCleanupStage::CitizenVotes)
@@ -1562,14 +1437,13 @@ pub mod pallet {
                     (next, weight)
                 }
                 PendingCleanupStage::CitizenVotes => {
-                    let result = CitizenVotesByBindingId::<T>::clear_prefix(
-                        proposal_id,
-                        cleanup_limit,
-                        None,
-                    );
+                    let (removed, has_remaining) =
+                        <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_citizen_votes_chunk(
+                            proposal_id, cleanup_limit,
+                        );
                     let weight =
-                        db_weight.reads_writes(u64::from(result.loops), u64::from(result.unique));
-                    let next = if result.maybe_cursor.is_some() {
+                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let next = if has_remaining {
                         Some(PendingCleanupStage::CitizenVotes)
                     } else {
                         Some(PendingCleanupStage::VoteCredentials)
@@ -1604,10 +1478,13 @@ pub mod pallet {
                     Self::release_internal_proposal_mutexes(proposal_id);
                     Self::cleanup_proposal_indexes(proposal_id);
                     Proposals::<T>::remove(proposal_id);
-                    InternalTallies::<T>::remove(proposal_id);
-                    InternalThresholdSnapshot::<T>::remove(proposal_id);
-                    JointTallies::<T>::remove(proposal_id);
-                    CitizenTallies::<T>::remove(proposal_id);
+                    // internal / joint mode storage 由 sub-pallet 删
+                    <T::InternalCleanup as crate::traits::InternalCleanupHandler>::cleanup_internal_terminal(
+                        proposal_id,
+                    );
+                    <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_terminal(
+                        proposal_id,
+                    );
                     ProposalData::<T>::remove(proposal_id);
                     ProposalOwner::<T>::remove(proposal_id);
                     ProposalMeta::<T>::remove(proposal_id);
@@ -1621,7 +1498,3 @@ pub mod pallet {
     }
 }
 
-
-
-#[cfg(test)]
-mod tests;

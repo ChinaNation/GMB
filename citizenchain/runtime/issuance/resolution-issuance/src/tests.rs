@@ -37,6 +37,9 @@ mod runtime {
     #[runtime::pallet_index(2)]
     pub type VotingEngine = votingengine;
 
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
+
     #[runtime::pallet_index(8)]
     pub type ResolutionIssuance = super;
 }
@@ -200,7 +203,7 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
 pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
     fn pass_threshold(org: u8, _institution: votingengine::InstitutionPalletId) -> Option<u32> {
-        votingengine::internal::fixed_governance_pass_threshold(org)
+        votingengine::types::fixed_governance_pass_threshold(org)
     }
 }
 
@@ -233,7 +236,16 @@ impl votingengine::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-}
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
+    }
 
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;

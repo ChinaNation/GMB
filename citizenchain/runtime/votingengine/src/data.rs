@@ -41,7 +41,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     ///
     /// 中文注释:业务模块只能通过 `create_*_with_data` 系列入口在创建阶段写入一次。
     /// 后续生产路径不得再让 caller 自报 `module_tag` 更新 ProposalData。
-    pub(crate) fn register_proposal_data(
+    pub fn register_proposal_data(
         proposal_id: u64,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
@@ -89,7 +89,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 存储提案业务数据(仅保留给 votingengine crate 内部测试/迁移使用)。
     #[cfg(test)]
-    pub(crate) fn store_proposal_data(
+    pub fn store_proposal_data(
         proposal_id: u64,
         data: sp_std::vec::Vec<u8>,
     ) -> DispatchResult {
@@ -141,7 +141,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 存储提案大对象(例如 runtime wasm)。
-    pub(crate) fn store_proposal_object(
+    pub fn store_proposal_object(
         proposal_id: u64,
         kind: u8,
         data: sp_std::vec::Vec<u8>,
@@ -178,14 +178,14 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 删除提案对象层数据与元数据。
     #[cfg(test)]
-    pub(crate) fn remove_proposal_object(proposal_id: u64) {
+    pub fn remove_proposal_object(proposal_id: u64) {
         ProposalObject::<T>::remove(proposal_id);
         ProposalObjectMeta::<T>::remove(proposal_id);
     }
 
     /// 存储提案辅助元数据(创建时间)。
     #[cfg(test)]
-    pub(crate) fn store_proposal_meta(proposal_id: u64, created_at: BlockNumberFor<T>) {
+    pub fn store_proposal_meta(proposal_id: u64, created_at: BlockNumberFor<T>) {
         ProposalMeta::<T>::insert(
             proposal_id,
             ProposalMetadata {
@@ -197,7 +197,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 标记提案通过时间。
     #[cfg(test)]
-    pub(crate) fn set_proposal_passed(proposal_id: u64, block: BlockNumberFor<T>) {
+    pub fn set_proposal_passed(proposal_id: u64, block: BlockNumberFor<T>) {
         Self::mark_proposal_passed_at(proposal_id, block);
     }
 

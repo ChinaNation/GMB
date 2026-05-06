@@ -812,7 +812,7 @@ pub async fn submit_propose_safety_fund(
 
 /// 构建安全基金投票签名请求 QR JSON（需要节点运行）。
 // Phase 3(2026-04-22): `build_safety_fund_vote_request` 已删除,
-// 所有管理员投票统一走 `build_vote_request`(internal_vote, 9.0)。
+// 所有管理员投票统一走 `build_vote_request`(InternalVote::cast, 22.0)。
 
 /// 构建手续费划转提案签名请求。
 #[tauri::command]
@@ -873,4 +873,4 @@ pub async fn submit_propose_sweep(
 }
 
 // Phase 3(2026-04-22): `build_sweep_vote_request` 已删除,
-// 所有管理员投票统一走 `build_vote_request`(internal_vote, 9.0)。
+// 所有管理员投票统一走 `build_vote_request`(InternalVote::cast, 22.0)。

@@ -375,6 +375,9 @@ mod tests {
         #[runtime::pallet_index(1)]
         pub type VotingEngine = votingengine;
 
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
+
         #[runtime::pallet_index(2)]
         pub type RuntimeUpgrade = super;
     }
@@ -530,7 +533,7 @@ mod tests {
             org: u8,
             _institution: votingengine::InstitutionPalletId,
         ) -> Option<u32> {
-            votingengine::internal::fixed_governance_pass_threshold(org)
+            votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -562,6 +565,15 @@ mod tests {
         type InternalAdminCountProvider = ();
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
+        type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
         type WeightInfo = ();
     }
 

@@ -25,7 +25,7 @@ use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
-    internal::{ORG_NRC, ORG_PRC},
+    types::{ORG_NRC, ORG_PRC},
     InstitutionPalletId, InternalVoteResultCallback, ProposalCancelDecision,
     ProposalExecutionOutcome, STATUS_PASSED,
 };
@@ -443,8 +443,8 @@ pub mod pallet {
 
 // ──── 投票终态回调:把已通过的 GRANDPA 密钥替换提案落地到链上 ────
 //
-// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
+// 投票统一由投票引擎承担,提案通过(或否决)经
+// [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `MODULE_TAG` 前缀认领本模块的提案。
 //
 // 失败语义:自动执行失败(如 GRANDPA pending change 未清理)时发
@@ -562,6 +562,9 @@ mod tests {
         #[runtime::pallet_index(2)]
         pub type VotingEngine = votingengine;
 
+        #[runtime::pallet_index(99)]
+        pub type InternalVote = internal_vote;
+
         #[runtime::pallet_index(3)]
         pub type GrandpaKeyChange = super;
     }
@@ -675,7 +678,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::internal::fixed_governance_pass_threshold(org)
+            votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -714,12 +717,21 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type GrandpaChangeDelay = GrandpaChangeDelay;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -816,11 +828,8 @@ mod tests {
 
     /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
     fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-        votingengine::Pallet::<Test>::internal_vote(
-            RuntimeOrigin::signed(who),
-            proposal_id,
-            approve,
-        )
+        frame_support::storage::with_transaction(|| -> frame_support::storage::TransactionOutcome<DispatchResult> { match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve,
+        ) { Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())), Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)) } })
     }
 
     #[test]

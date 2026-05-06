@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![recursion_limit = "256"]
 
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
@@ -298,9 +299,21 @@ mod runtime {
     #[runtime::pallet_index(8)]
     pub type ResolutionIssuance = resolution_issuance;
 
-    // 投票引擎模块：提供联合投票/内部投票/公民投票
+    // 投票引擎核心:Proposals/反向索引/状态机/快照/锁/清理共用基础设施
     #[runtime::pallet_index(9)]
     pub type VotingEngine = votingengine;
+
+    // 内部投票 sub-pallet:管理员一人一票
+    #[runtime::pallet_index(22)]
+    pub type InternalVote = internal_vote;
+
+    // 联合投票 sub-pallet:管理员多签 + 全民兜底两阶段
+    #[runtime::pallet_index(23)]
+    pub type JointVote = joint_vote;
+
+    // 公民投票 sub-pallet:多模式选举/公投(Phase 3 业务实现)
+    #[runtime::pallet_index(24)]
+    pub type CitizenVote = citizen_vote;
 
     // SFID 绑定与资格校验：统一处理绑定、验签、资格查询
     #[runtime::pallet_index(10)]

@@ -6,18 +6,18 @@
 /// [supportedSpecVersions] 列出当前注册表适配的 spec_version 集合。
 /// 离线设备收到未知 spec_version 时应拒绝解码，提示用户升级冷钱包。
 ///
-/// Phase 3 · 投票引擎统一入口整改（2026-04-22）：
-/// - 业务 pallet 的 `vote_X` 全部下线，所有管理员投票走
-///   `VotingEngine::internal_vote`（9.0）。
-/// - `joint_vote` / `citizen_vote` / `finalize_proposal` 在投票引擎内部
-///   重新排 call_index：0=internal_vote / 1=joint_vote / 2=citizen_vote /
-///   3=finalize_proposal。
+/// 投票引擎统一入口(2026-04-22 整改 + 2026-05-05 sub-pallet 拆分):
+/// - 业务 pallet 的 `vote_X` 全部下线,管理员投票走 `InternalVote::cast`(22.0)
+/// - 联合投票管理员阶段走 `JointVote::cast_admin`(23.0),
+///   全民兜底阶段(原 citizen_vote)走 `JointVote::cast_referendum`(23.1)
+/// - 引擎核心 `VotingEngine` (9) 仅保留 `finalize_proposal`(9.3) /
+///   `retry_passed_proposal`(9.4) / `cancel_passed_proposal`(9.5)
 ///
-/// Phase 4 · 业务 wrapper 物理删除（2026-05-02）：
+/// 业务 wrapper 物理删除(2026-05-02):
 /// - 业务 pallet 的 `execute_xxx` / `cancel_failed_xxx` wrapper extrinsic
-///   全部物理删除，统一到 `VotingEngine::retry_passed_proposal`(9.4) 与
+///   全部物理删除,统一到 `VotingEngine::retry_passed_proposal`(9.4) 与
 ///   `VotingEngine::cancel_passed_proposal`(9.5)。冷钱包 decoder 删除 7 个
-///   旧分支：`execute_admin_replacement` / `execute_replace_grandpa_key` /
+///   旧分支:`execute_admin_replacement` / `execute_replace_grandpa_key` /
 ///   `cancel_failed_replace_grandpa_key` / `execute_destroy` /
 ///   `execute_transfer` / `execute_safety_fund_transfer` / `execute_sweep_to_main`。
 class PalletRegistry {
@@ -44,36 +44,42 @@ class PalletRegistry {
   static const int balancesPallet = 2;
   static const int transferKeepAliveCall = 3;
 
-  // ---- VotingEngine (9) · 所有治理投票唯一入口 ----
+  // ---- VotingEngine (9) · 引擎核心(生命周期 extrinsic 仅留 finalize/retry/cancel)----
+  // 2026-05-05 拆分:mode-specific 投票 extrinsic(internal_vote/joint_vote/citizen_vote)
+  // 全部迁出至 sub-pallet:
+  //   - InternalVote (22).cast       — 原 VotingEngine.internal_vote
+  //   - JointVote (23).cast_admin    — 原 VotingEngine.joint_vote
+  //   - JointVote (23).cast_referendum — 原 VotingEngine.citizen_vote
+  // 引擎核心仅保留 finalize_proposal / retry_passed_proposal / cancel_passed_proposal。
   static const int votingEnginePallet = 9;
 
-  /// `internal_vote(proposal_id, approve)` — 管理员一人一票，
-  /// 覆盖所有业务 pallet 的内部投票（admins/resolution_destro/grandpa_key/
-  /// duoqian_manage/duoqian_transfer 五路）。
-  static const int internalVoteCall = 0;
-
-  /// `joint_vote(proposal_id, institution_id_48, approve)` — 联合投票。
-  static const int jointVoteCall = 1;
-
-  /// `citizen_vote(proposal_id, binding_id, nonce, signature, approve)`
-  /// — 公民投票（由 SFID 发凭证）。
-  static const int citizenVoteCall = 2;
-
-  /// `finalize_proposal(proposal_id)` — 任意人触发终态执行（无需签投票）。
+  /// `finalize_proposal(proposal_id)` — 任意人触发终态执行(无需签投票)。
   static const int finalizeProposalCall = 3;
 
-  /// `retry_passed_proposal(proposal_id)` — 已通过提案的手动执行入口
-  /// （Phase 4 整改后,所有业务 pallet 的 execute_xxx wrapper 统一收口至此）。
+  /// `retry_passed_proposal(proposal_id)` — 已通过提案的手动执行入口。
   static const int retryPassedProposalCall = 4;
 
-  /// `cancel_passed_proposal(proposal_id, reason)` — 已通过但确认不可执行
-  /// 的提案取消入口（Phase 4 整改后,所有 cancel_failed_xxx 统一收口至此）。
+  /// `cancel_passed_proposal(proposal_id, reason)` — 已通过但确认不可执行的提案取消入口。
   static const int cancelPassedProposalCall = 5;
+
+  // ---- InternalVote sub-pallet (22) · 内部投票管理员一人一票 ----
+  static const int internalVotePallet = 22;
+  /// `cast(proposal_id, approve)` — 原 VotingEngine.internal_vote 迁出。
+  static const int internalVoteCall = 0;
+
+  // ---- JointVote sub-pallet (23) · 联合投票(管理员阶段 + 全民兜底)----
+  static const int jointVotePallet = 23;
+  /// `cast_admin(proposal_id, institution_id_48, approve)` — 联合投票管理员阶段。
+  static const int jointVoteCall = 0;
+  /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —
+  /// 联合公投全民兜底阶段(SFID 持有者投票,原 VotingEngine.citizen_vote 迁出)。
+  static const int citizenVoteCall = 1;
 
   // ---- 业务 pallet:仅保留提案创建与幂等兜底入口 ----
   //
   // Phase 2/3 已在链端物理删除所有业务 pallet 内部的聚合签名与投票入口
-  // (共八条),全部通过 `VotingEngine(9).internal_vote(0)` 统一收敛。
+  // (共八条),全部通过 `InternalVote(22).cast(0)` 统一收敛
+  // (2026-05-05 sub-pallet 拆分前为 `VotingEngine(9).internal_vote(0)`)。
   // Phase 4(2026-05-02) 进一步删除了所有业务 pallet 的 execute_xxx /
   // cancel_failed_xxx wrapper extrinsic,手动重试/取消统一走
   // `VotingEngine(9).retry_passed_proposal(4)` / `cancel_passed_proposal(5)`。

@@ -1,7 +1,7 @@
 //! 决议销毁模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
-//! `vote_destroy` extrinsic。benchmark 只覆盖"发起提案"和"任意人重试执行"两条路径。
+//! 投票统一走 `votingengine::internal_vote`,本模块只覆盖"发起提案"和
+//! "任意人重试执行"两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
 

@@ -1,8 +1,7 @@
 //! GRANDPA 密钥治理模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
-//! `vote_replace_grandpa_key` extrinsic。Benchmark 只覆盖"发起提案"、"重试执行"和
-//! "清理不可执行提案"三条路径。
+//! 投票统一走 `votingengine::internal_vote`,本模块只覆盖"发起提案"、
+//! "重试执行"和"清理不可执行提案"三条路径。
 
 #![cfg(feature = "runtime-benchmarks")]
 

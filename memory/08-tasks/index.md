@@ -81,6 +81,7 @@
 - `memory/08-tasks/open/20260502-step2e-cold-wallet-sign-4-extrinsics.md`
 - `memory/08-tasks/open/20260502-wuminapp-propose-create-institution-caller-fix.md`
 - `memory/08-tasks/open/20260504-130000-citizenchain-votingengine-双层ID与反向索引.md`
+- `memory/08-tasks/open/20260505-220000-windows-macos-linux-installer-zero-dep.md`
 
 ## done
 

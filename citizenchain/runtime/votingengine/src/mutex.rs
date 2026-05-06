@@ -23,7 +23,7 @@ use crate::{
 };
 
 impl<T: pallet::Config> pallet::Pallet<T> {
-    pub(crate) fn acquire_internal_proposal_mutex(
+    pub fn acquire_internal_proposal_mutex(
         proposal_id: u64,
         org: u8,
         institution: InstitutionPalletId,
@@ -73,7 +73,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         })
     }
 
-    pub(crate) fn release_internal_proposal_mutexes(proposal_id: u64) {
+    pub fn release_internal_proposal_mutexes(proposal_id: u64) {
         let bindings = ProposalMutexBindings::<T>::take(proposal_id);
         for binding in bindings {
             InternalProposalMutexes::<T>::mutate_exists(

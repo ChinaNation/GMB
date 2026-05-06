@@ -151,7 +151,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 
 测试辅助函数迁移:
 - `finalize_with` / `finalize_transfer_n`(duoqian-manage / duoqian-transfer)
-  参数签名保留,内部改为循环调 `VotingEngine::internal_vote(...)`。
+  参数签名保留,内部改为循环调 `InternalVote::cast(...)`。
 - 删除 `CreateVoteIntent::signing_hash` / `sign_create_intent` / `make_transfer_sigs`
   等聚合签名构造 helper。
 

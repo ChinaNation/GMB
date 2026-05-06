@@ -36,11 +36,14 @@ void main() {
       expect(pallets.length, 10);
     });
 
-    test('投票引擎 call_index 按 Phase 2 重排', () {
-      // 0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal
+    test('投票引擎 sub-pallet 拆分后 call_index(2026-05-05)', () {
+      // 拆分后:InternalVote(22).cast=0 / JointVote(23).cast_admin=0 /
+      // JointVote(23).cast_referendum=1 / VotingEngine(9).finalize_proposal=3
+      expect(PalletRegistry.internalVotePallet, 22);
       expect(PalletRegistry.internalVoteCall, 0);
-      expect(PalletRegistry.jointVoteCall, 1);
-      expect(PalletRegistry.citizenVoteCall, 2);
+      expect(PalletRegistry.jointVotePallet, 23);
+      expect(PalletRegistry.jointVoteCall, 0);
+      expect(PalletRegistry.citizenVoteCall, 1);
       expect(PalletRegistry.finalizeProposalCall, 3);
     });
 

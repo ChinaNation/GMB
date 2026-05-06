@@ -362,20 +362,17 @@ any → unknown
 - 联合投票进入公民投票阶段后释放管理员互斥锁，避免长期公民投票阻塞管理员更换。
 - `STATUS_PASSED` 的管理员集合变更提案不会释放独占锁，必须进入 `STATUS_EXECUTED / STATUS_REJECTED / STATUS_EXECUTION_FAILED` 后释放。
 
-### 5.12 业务 wrapper 物理删除（2026-05-02）
-unified voting entry 整改最后一步把所有业务 pallet 的 `execute_xxx` / `cancel_xxx` wrapper extrinsic 物理删除。涉及范围：
+### 5.12 手动重试 / 取消统一入口
 
-- `duoqian-transfer`：`execute_transfer` / `execute_safety_fund_transfer` / `execute_sweep_to_main`
-- `resolution-destro`：`execute_destroy`
-- `grandpakey-change`：`execute_replace_grandpa_key` / `cancel_failed_replace_grandpa_key`
-- `admins-change` / `runtime-upgrade`：保持 propose/vote 单一入口，不再保留任何手动 retry/cancel wrapper
+业务 pallet 不暴露任何 `execute_xxx` / `cancel_xxx` wrapper extrinsic。前端
+(citizenchain/node Tauri UI、wuminapp 热钱包、wumin 冷钱包)统一调用投票引擎:
 
-整改后，前端（citizenchain/node Tauri UI、wuminapp 热钱包、wumin 冷钱包等）必须统一调用投票引擎公开 extrinsic：
+- 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
+- 取消失败: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`(pallet 9.5)
 
-- 手动重试：`VotingEngine::retry_passed_proposal(proposal_id)`
-- 取消失败：`VotingEngine::cancel_passed_proposal(proposal_id, reason)`
-
-权限校验、最多 3 次手动失败、retry deadline、`STATUS_PASSED → STATUS_EXECUTED / STATUS_EXECUTION_FAILED` 状态推进全部由 votingengine 统一承担。业务 pallet 仅保留 propose 和 callback（`InternalVoteExecutor::try_execute_*_from_callback`），不再暴露任何兼容层。
+权限校验、最多 3 次手动失败、retry deadline、`STATUS_PASSED → STATUS_EXECUTED /
+STATUS_EXECUTION_FAILED` 状态推进全部由 votingengine 统一承担。业务 pallet 仅保留
+propose 和 callback(`InternalVoteExecutor::try_execute_*_from_callback`)。
 
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
@@ -396,7 +393,7 @@ unified voting entry 整改最后一步把所有业务 pallet 的 `execute_xxx` 
 历史提案清理由同一个 hook 分块续跑，额度受 `MaxCleanupStepsPerBlock` / `CleanupKeysPerStep` 限制。
 
 ### 6.3 internal_vote 计费
-runtime 金额提取策略把 `VotingEngine::internal_vote(proposal_id, approve)` 归类为固定 1 元/次的治理用户操作。收费对象是管理员提交的这笔投票 extrinsic；若这一票让提案达阈值，随后自动触发的业务 executor 回调不会再形成另一笔用户提交交易，也不会单独再扣一次固定费用。
+runtime 金额提取策略把 `InternalVote::cast(proposal_id, approve)` 归类为固定 1 元/次的治理用户操作。收费对象是管理员提交的这笔投票 extrinsic；若这一票让提案达阈值，随后自动触发的业务 executor 回调不会再形成另一笔用户提交交易，也不会单独再扣一次固定费用。
 
 保留免费的入口只有 `finalize_proposal`，用于任意人推动超时提案清理。
 

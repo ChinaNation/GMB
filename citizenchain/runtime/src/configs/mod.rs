@@ -57,10 +57,10 @@ use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::RuntimeUpgrade;
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance, GenesisPallet,
-    Hash, Nonce, PalletInfo, ResolutionIssuance, Runtime, RuntimeCall, RuntimeEvent,
-    RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System, VotingEngine,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance,
+    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
+    System, VotingEngine, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -472,6 +472,15 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                     ),
                 }
             }
+            // 3 个 mode-specific 投票 extrinsic 全部按投票统一价 1 元/次:
+            //   InternalVote::cast / JointVote::cast_admin / JointVote::cast_referendum
+            RuntimeCall::InternalVote(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            RuntimeCall::JointVote(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // CitizenVote 当前是空骨架(无 extrinsic / 无 RuntimeCall 变体),Phase 3 业务接入后再补。
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
             //
             // 不再写 `_ => Unknown` 兜底:补 RuntimeCall::Grandpa 之后所有 pallet 变体已穷尽,
@@ -766,7 +775,7 @@ impl
 impl org_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type InternalVoteEngine = votingengine::Pallet<Runtime>;
+    type InternalVoteEngine = InternalVote;
     type AddressValidator = RuntimeDuoqianAddressValidator;
     type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
@@ -778,9 +787,7 @@ impl org_manage::Config for Runtime {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
-    // sr25519 签名固定 64 字节。
-    // Phase 2 整改后旧聚合创建入口已删除,此类型仍保留为 `AdminSignatureOf`
-    // 的容量配置,供未来业务扩展(如链下审计签名附件)使用。
+    // sr25519 签名固定 64 字节;`AdminSignatureOf` 的容量配置,供链下审计签名附件等场景。
     type MaxAdminSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
@@ -1036,21 +1043,21 @@ parameter_types! {
 impl admins_change::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
-    type InternalVoteEngine = VotingEngine;
+    type InternalVoteEngine = InternalVote;
     type WeightInfo = admins_change::weights::SubstrateWeight<Runtime>;
 }
 
 impl resolution_destro::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
-    type InternalVoteEngine = VotingEngine;
+    type InternalVoteEngine = InternalVote;
     type WeightInfo = resolution_destro::weights::SubstrateWeight<Runtime>;
 }
 
 impl grandpakey_change::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type GrandpaChangeDelay = GrandpaAuthoritySetChangeDelay;
-    type InternalVoteEngine = VotingEngine;
+    type InternalVoteEngine = InternalVote;
     type WeightInfo = grandpakey_change::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1141,7 +1148,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             return false;
         };
         admins_change::Pallet::<Runtime>::is_active_subject_admin(
-            votingengine::internal::ORG_REN,
+            votingengine::types::ORG_REN,
             subject_id,
             who,
         )
@@ -1222,7 +1229,7 @@ fn is_nrc_admin(who: &AccountId) -> bool {
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
     admins_change::Pallet::<Runtime>::is_active_subject_admin(
-        votingengine::internal::ORG_NRC,
+        votingengine::types::ORG_NRC,
         nrc_institution,
         who,
     )
@@ -1259,9 +1266,9 @@ fn is_joint_proposer(who: &AccountId) -> bool {
     for entry in CHINA_CB.iter() {
         if let Some(institution) = shenfen_id_to_fixed48(entry.shenfen_id) {
             let org = if Some(institution) == nrc_institution {
-                votingengine::internal::ORG_NRC
+                votingengine::types::ORG_NRC
             } else {
-                votingengine::internal::ORG_PRC
+                votingengine::types::ORG_PRC
             };
             if admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who) {
                 return true;
@@ -1279,7 +1286,7 @@ impl resolution_issuance::Config for Runtime {
     // 中文注释：维护入口只允许 root 操作暂停与短期执行记录清理。
     type MaintenanceOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = resolution_issuance::weights::SubstrateWeight<Runtime>;
-    type JointVoteEngine = VotingEngine;
+    type JointVoteEngine = JointVote;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
     type MaxSnapshotNonceLength = ConstU32<64>;
@@ -1291,7 +1298,7 @@ impl resolution_issuance::Config for Runtime {
 impl runtime_upgrade::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProposeOrigin = EnsureJointProposer;
-    type JointVoteEngine = VotingEngine;
+    type JointVoteEngine = JointVote;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
     type DeveloperUpgradeCheck = GenesisPallet;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
@@ -1405,6 +1412,27 @@ impl votingengine::Config for Runtime {
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
     type TimeProvider = pallet_timestamp::Pallet<Runtime>;
     type WeightInfo = votingengine::weights::SubstrateWeight<Runtime>;
+    // mode-specific finalize / cleanup 通过 trait 派发到对应 sub-pallet。
+    type InternalFinalizer = InternalVote;
+    type InternalCleanup = InternalVote;
+    type JointFinalizer = JointVote;
+    type JointCleanup = JointVote;
+}
+
+// Sub-pallet Config 注入。共用基础设施 votingengine::Config 已 impl 完;
+// sub-pallet 各自 Config 需 RuntimeEvent + 自家 WeightInfo。
+impl internal_vote::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = internal_vote::weights::SubstrateWeight<Runtime>;
+}
+
+impl joint_vote::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = joint_vote::weights::SubstrateWeight<Runtime>;
+}
+
+impl citizen_vote::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
 }
 
 impl pow_difficulty::Config for Runtime {
@@ -1568,7 +1596,7 @@ mod tests {
 
             assert_ok!(ResolutionDestro::propose_destroy(
                 RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[0])),
-                votingengine::internal::ORG_NRC,
+                votingengine::types::ORG_NRC,
                 nrc_institution,
                 destroy_amount,
             ));
@@ -1576,7 +1604,7 @@ mod tests {
             let pid = VotingEngine::next_proposal_id().saturating_sub(1);
 
             for i in 0..13 {
-                assert_ok!(VotingEngine::internal_vote(
+                assert_ok!(InternalVote::cast(
                     RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[i])),
                     pid,
                     true,
@@ -1629,7 +1657,7 @@ mod tests {
             }
 
             let internal_vote_call =
-                RuntimeCall::VotingEngine(votingengine::pallet::Call::internal_vote {
+                RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
                     proposal_id: 1,
                     approve: true,
                 });
@@ -2293,7 +2321,7 @@ mod tests {
             assert!(!is_nrc_admin(&nrc_admin));
             assert!(!is_nrc_admin(&outsider));
             assert!(!RuntimeInternalAdminProvider::is_internal_admin(
-                votingengine::internal::ORG_NRC,
+                votingengine::types::ORG_NRC,
                 nrc_id,
                 &nrc_admin
             ));
@@ -2531,14 +2559,14 @@ pub struct RuntimeInternalThresholdProvider;
 
 impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
-        if org != votingengine::internal::ORG_REN {
+        if org != votingengine::types::ORG_REN {
             return false;
         }
         admins_change::Pallet::<Runtime>::active_subject_exists(org, institution)
     }
 
     fn is_known_pending_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
-        if org != votingengine::internal::ORG_REN {
+        if org != votingengine::types::ORG_REN {
             return false;
         }
         admins_change::Pallet::<Runtime>::pending_subject_exists_for_snapshot(org, institution)
@@ -2546,12 +2574,12 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
 
     fn pass_threshold(org: u8, institution: votingengine::InstitutionPalletId) -> Option<u32> {
         match org {
-            votingengine::internal::ORG_NRC
-            | votingengine::internal::ORG_PRC
-            | votingengine::internal::ORG_PRB => {
-                votingengine::internal::fixed_governance_pass_threshold(org)
+            votingengine::types::ORG_NRC
+            | votingengine::types::ORG_PRC
+            | votingengine::types::ORG_PRB => {
+                votingengine::types::fixed_governance_pass_threshold(org)
             }
-            votingengine::internal::ORG_REN => {
+            votingengine::types::ORG_REN => {
                 admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
             }
             _ => None,
@@ -2562,7 +2590,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
         org: u8,
         institution: votingengine::InstitutionPalletId,
     ) -> Option<u32> {
-        if org != votingengine::internal::ORG_REN {
+        if org != votingengine::types::ORG_REN {
             return None;
         }
         admins_change::Pallet::<Runtime>::pending_subject_threshold_for_snapshot(org, institution)

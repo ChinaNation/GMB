@@ -43,6 +43,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "internal-vote",
  "parity-scale-codec",
  "primitives",
  "scale-info",
@@ -1544,11 +1545,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "citizen-vote"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
+]
+
+[[package]]
 name = "citizenchain"
 version = "1.0.0"
 dependencies = [
  "admins-change",
  "citizen-issuance",
+ "citizen-vote",
  "duoqian-transfer",
  "ed25519-dalek",
  "frame-benchmarking",
@@ -1565,6 +1582,8 @@ dependencies = [
  "hex",
  "hex-literal",
  "institution-asset",
+ "internal-vote",
+ "joint-vote",
  "offchain-transaction",
  "onchain-transaction",
  "org-manage",
@@ -3041,6 +3060,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "institution-asset",
+ "internal-vote",
  "onchain-transaction",
  "org-manage",
  "pallet-balances",
@@ -4495,6 +4515,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "internal-vote",
  "pallet-grandpa",
  "parity-scale-codec",
  "primitives",
@@ -5383,6 +5404,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "internal-vote"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "joint-vote",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
+]
+
+[[package]]
 name = "ip_network"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5608,6 +5646,22 @@ checksum = "9afb3de4395d6b3e67a780b6de64b51c978ecf11cb9a462c66be7d4ca9039d33"
 dependencies = [
  "getrandom 0.3.4",
  "libc",
+]
+
+[[package]]
+name = "joint-vote"
+version = "1.0.0"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
 ]
 
 [[package]]
@@ -7856,6 +7910,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "institution-asset",
+ "internal-vote",
  "onchain-transaction",
  "pallet-balances",
  "parity-scale-codec",
@@ -10128,6 +10183,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "internal-vote",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -10145,6 +10201,7 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "internal-vote",
  "pallet-balances",
  "parity-scale-codec",
  "primitives",
@@ -10296,6 +10353,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "genesis-pallet",
+ "internal-vote",
  "parity-scale-codec",
  "primitives",
  "scale-info",

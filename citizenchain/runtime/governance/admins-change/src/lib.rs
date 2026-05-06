@@ -29,7 +29,7 @@ use primitives::count_const::{
     PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
 };
 use votingengine::{
-    internal::{ORG_REN, ORG_NRC, ORG_PRB, ORG_PRC},
+    types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
     InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome,
     PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
     STATUS_REJECTED, STATUS_VOTING,
@@ -963,8 +963,8 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
 
 // ──── 投票终态回调:把已通过的管理员替换提案落地到链上 ────
 //
-// Phase 2 整改后业务模块不再自行处理投票,提案通过(或否决)由投票引擎
-// 通过 [`votingengine::InternalVoteResultCallback`] 广播回来。
+// 投票统一由投票引擎承担,提案通过(或否决)经
+// [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `ProposalOwner` 认领本模块提案，`ProposalData` 只保存裸业务 action。
 //
 // 设计要点:
@@ -1022,7 +1022,7 @@ mod tests {
     };
     use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
     use votingengine::{
-        internal::{ORG_REN, ORG_NRC, ORG_PRB, ORG_PRC},
+        types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
         InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
         STATUS_REJECTED,
     };
@@ -1054,6 +1054,9 @@ mod tests {
 
         #[runtime::pallet_index(2)]
         pub type AdminsChange = super;
+
+        #[runtime::pallet_index(3)]
+        pub type InternalVote = internal_vote;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -1127,7 +1130,7 @@ mod tests {
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
-            votingengine::internal::fixed_governance_pass_threshold(org)
+            votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
 
@@ -1160,7 +1163,7 @@ mod tests {
         type SfidEligibility = TestSfidEligibility;
         type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
         type JointVoteResultCallback = ();
-        // Phase 2 整改:mock runtime 必须把本模块的 Executor 挂上,
+        // mock runtime 必须把本模块的 Executor 挂上,
         // 否则内部提案通过后业务执行回调不会触发,端到端测试失败。
         type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
         type InternalAdminProvider = TestInternalAdminProvider;
@@ -1169,12 +1172,21 @@ mod tests {
         type MaxAdminsPerInstitution = ConstU32<32>;
         type TimeProvider = TestTimeProvider;
         type WeightInfo = ();
+        type InternalFinalizer = InternalVote;
+        type InternalCleanup = InternalVote;
+        type JointFinalizer = ();
+        type JointCleanup = ();
+    }
+
+    impl internal_vote::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type WeightInfo = ();
     }
 
     impl Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxAdminsPerInstitution = ConstU32<32>;
-        type InternalVoteEngine = votingengine::Pallet<Test>;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
         type WeightInfo = ();
     }
 
@@ -1256,11 +1268,8 @@ mod tests {
     /// 所有管理员通过投票引擎的公开 call 直接投票,通过后由 `InternalVoteExecutor` 回调
     /// 执行业务。
     fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-        votingengine::Pallet::<Test>::internal_vote(
-            RuntimeOrigin::signed(who),
-            proposal_id,
-            approve,
-        )
+        frame_support::storage::with_transaction(|| -> frame_support::storage::TransactionOutcome<DispatchResult> { match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve,
+        ) { Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())), Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)) } })
     }
 
     fn finalized_event_count(proposal_id: u64, expected_status: u8) -> usize {
@@ -1329,7 +1338,7 @@ mod tests {
             let institution = pending_subject_id();
             let admin_a = AccountId32::new([201u8; 32]);
             let admin_b = AccountId32::new([202u8; 32]);
-            let proposal_id = <votingengine::Pallet<Test> as InternalVoteEngine<
+            let proposal_id = <internal_vote::Pallet<Test> as InternalVoteEngine<
                 AccountId32,
             >>::create_pending_subject_internal_proposal_with_snapshot_data(
                 admin_a.clone(),
@@ -1698,7 +1707,7 @@ mod tests {
     fn regular_internal_proposal_blocks_admin_replacement() {
         new_test_ext().execute_with(|| {
             let institution = nrc_pallet_id();
-            assert_ok!(<votingengine::Pallet<Test> as InternalVoteEngine<
+            assert_ok!(<internal_vote::Pallet<Test> as InternalVoteEngine<
                 AccountId32,
             >>::create_internal_proposal(
                 nrc_admin(0), ORG_NRC, institution,

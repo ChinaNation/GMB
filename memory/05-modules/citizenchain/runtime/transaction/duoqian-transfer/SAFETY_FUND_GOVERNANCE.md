@@ -49,7 +49,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 
 ### 2. 投票
 
-- 管理员统一调用 `VotingEngine::internal_vote(proposal_id, approve)`。
+- 管理员统一调用 `InternalVote::cast(proposal_id, approve)`。
 - 投票引擎使用提案创建时锁定的管理员快照和固定 NRC 阈值判定。
 - 达阈值后回调本模块自动执行安全基金转账。
 
@@ -84,13 +84,12 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen> {
 - `with_transaction` 回滚所有状态变更
 - 触发 SafetyFundExecutionFailed 事件
 - 提案保持 `STATUS_PASSED` 并进入 votingengine retry state
-- 快照管理员通过 `VotingEngine::retry_passed_proposal` 手动重试（`execute_safety_fund_transfer` 已于 2026-05-02 废弃）
-- 3 次手动失败或超过 `ExecutionRetryGraceBlocks` 后，投票引擎统一转 `STATUS_EXECUTION_FAILED`
+- 快照管理员通过 `VotingEngine::retry_passed_proposal`(pallet 9.4)手动重试
+- 3 次手动失败或超过 `ExecutionRetryGraceBlocks` 后,投票引擎统一转 `STATUS_EXECUTION_FAILED`
 
 ## 源码位置
 
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
   - `propose_safety_fund_transfer`(call_index=1)
-  - (call_index=4 已废弃 2026-05-02): 原 `execute_safety_fund_transfer` 已统一到 `VotingEngine::retry_passed_proposal`
-  - `try_execute_safety_fund_from_callback`(内部方法)
+  - `try_execute_safety_fund_from_callback`(内部方法,投票通过后由 InternalVoteExecutor 回调触发)
 - `citizenchain/runtime/primitives/china/china_cb.rs` - NRC_ANQUAN_ADDRESS 定义

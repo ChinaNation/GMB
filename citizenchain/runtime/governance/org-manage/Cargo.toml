@@ -54,3 +54,4 @@ std = [
 pallet-balances = { workspace = true, default-features = true }
 sp-core = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
+internal-vote = { path = "../../votingengine/internal-vote", default-features = false }

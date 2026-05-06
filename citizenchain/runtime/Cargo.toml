@@ -69,6 +69,9 @@ onchain-transaction = { path = "transaction/onchain-transaction", default-featur
 org-manage = { path = "governance/org-manage", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 votingengine = { path = "votingengine", default-features = false }
+internal-vote = { path = "votingengine/internal-vote", default-features = false }
+joint-vote = { path = "votingengine/joint-vote", default-features = false }
+citizen-vote = { path = "votingengine/citizen-vote", default-features = false }
 admins-change = { path = "governance/admins-change", default-features = false }
 grandpakey-change = { path = "governance/grandpakey-change", default-features = false }
 runtime-upgrade = { path = "governance/runtime-upgrade", default-features = false }
@@ -104,6 +107,9 @@ std = [
 	"org-manage/std",
 	"resolution-issuance/std",
 	"votingengine/std",
+	"internal-vote/std",
+	"joint-vote/std",
+	"citizen-vote/std",
 	"admins-change/std",
 	"grandpakey-change/std",
 	"runtime-upgrade/std",
@@ -152,6 +158,9 @@ runtime-benchmarks = [
 	"org-manage/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
 	"votingengine/runtime-benchmarks",
+	"internal-vote/runtime-benchmarks",
+	"joint-vote/runtime-benchmarks",
+	"citizen-vote/runtime-benchmarks",
 	"admins-change/runtime-benchmarks",
 	"grandpakey-change/runtime-benchmarks",
 	"runtime-upgrade/runtime-benchmarks",
@@ -180,6 +189,9 @@ try-runtime = [
 	"org-manage/try-runtime",
 	"resolution-issuance/try-runtime",
 	"votingengine/try-runtime",
+	"internal-vote/try-runtime",
+	"joint-vote/try-runtime",
+	"citizen-vote/try-runtime",
 	"admins-change/try-runtime",
 	"grandpakey-change/try-runtime",
 	"runtime-upgrade/try-runtime",

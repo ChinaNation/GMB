@@ -37,9 +37,20 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "targets": ["dmg", "nsis", "deb"],
+    "targets": ["dmg", "nsis", "deb", "appimage"],
     "macOS": {
-      "infoPlist": "Info.plist"
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
+      "nsis": {
+        "installMode": "perMachine",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
     }
   }
 }

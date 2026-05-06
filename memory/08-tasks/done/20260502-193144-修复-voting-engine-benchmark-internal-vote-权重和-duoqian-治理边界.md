@@ -44,7 +44,7 @@
 - 任务卡已创建
 - 已修复 `voting-engine/src/benchmarks.rs`：`citizen_vote` benchmark 补齐 `province` 与 `signer_admin_pubkey`；`joint_vote` benchmark setup 改走真实 `do_create_joint_proposal` 路径。
 - 已修复全 runtime benchmark 聚合编译阻塞：`resolution-issuance` 与 `runtime-upgrade` 的 propose benchmark 同步补齐 ADR-008 step3 参数。
-- 已将 runtime 金额提取策略中的 `VotingEngine::internal_vote` 从 `NoAmount` 改为 `Amount(100_000)`，即管理员提交内部投票 extrinsic 固定 1 元/次；自动 executor 回调不单独产生另一笔用户交易。
+- 已将 runtime 金额提取策略中的 `InternalVote::cast` 从 `NoAmount` 改为 `Amount(100_000)`，即管理员提交内部投票 extrinsic 固定 1 元/次；自动 executor 回调不单独产生另一笔用户交易。
 - 已将 `voting-engine/src/weights.rs` 中 `internal_vote` 的旧占位权重替换为偏高保守 callback fallback，并去掉“与 joint_vote 同量级”的旧说明。
 - 已在 `admins-change::propose_admin_replacement` 加入 org 白名单，仅允许 `ORG_NRC / ORG_PRC / ORG_PRB`，阻断 `ORG_DUOQIAN` 从通用管理员替换入口绕出第二条治理路径。
 - 已补充 `duoqian_subjects_cannot_use_admin_replacement_entry` 测试，并补齐 admins-change 测试 mock 的 ADR-008 trait 签名。

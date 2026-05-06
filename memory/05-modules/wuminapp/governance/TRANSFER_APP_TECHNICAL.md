@@ -2,7 +2,7 @@
 
 ## 1. 功能概述
 
-管理员在机构详情页点击"转账"提案类型后，进入转账表单页面，填写收款地址、金额、备注，提交后构造 `propose_transfer` extrinsic 签名上链。其他管理员可查看提案详情并投票（`vote_transfer`）。
+管理员在机构详情页点击"转账"提案类型后,进入转账表单页面,填写收款地址、金额、备注,提交后构造 `propose_transfer` extrinsic 签名上链。其他管理员可查看提案详情并投票(`InternalVote::cast`)。
 
 ## 2. 页面流程
 
@@ -92,19 +92,23 @@
 [Compact<u32> + bytes]              // remark: SCALE Vec<u8> (Compact 长度 + 原始字节)
 ```
 
-### 4.2 vote_transfer
+### 4.2 内部投票(InternalVote::cast)
 
-**pallet_index**: 19
-**call_index**: 1
+**pallet_index**: 22
+**call_index**: 0
 
-**SCALE 编码格式**：
+**SCALE 编码格式**:
 
 ```
-[0x13]                              // pallet_index = 19
-[0x01]                              // call_index = 1
+[0x16]                              // pallet_index = 22 (InternalVote sub-pallet)
+[0x00]                              // call_index = 0 (cast)
 [8 bytes little-endian]             // proposal_id: u64
 [0x01 或 0x00]                      // approve: true(0x01) / false(0x00)
 ```
+
+转账提案的管理员投票走统一入口 `InternalVote::cast`,投票引擎的
+`InternalVoteResultCallback` 在达阈值时回调 `duoqian-transfer` 执行转账,
+本模块不再提供独立 vote/finalize call。
 
 ## 5. 核心服务：TransferProposalService
 
@@ -138,14 +142,8 @@ class TransferProposalService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   });
 
-  /// 构造并提交 vote_transfer extrinsic
-  Future<String> submitVoteTransfer({
-    required int proposalId,
-    required bool approve,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  });
+  // 投票走统一入口 InternalVote::cast,在 InternalVoteService 实现,
+  // TransferProposalService 不再单独承担投票职责。
 }
 ```
 

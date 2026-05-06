@@ -128,7 +128,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 [节点桌面] ⑩ wait-vote 视图轮询 fetchInstitutionDetail(sfid_id).status
 [其他管理员] ⑪ wumin 冷钱包扫 vote 提案 → 投赞成
           │
-          ▼ ⑫ 票数达 threshold → vote_create 自动执行 → status = Active
+          ▼ ⑫ 票数达 threshold → InternalVoteExecutor 自动执行 → status = Active
           │
 [节点桌面] ⑬ 轮询发现 Active → 自动跳 declare-node
           │

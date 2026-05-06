@@ -14,7 +14,7 @@
 - `new_key` 不能为零值，必须是有效且非 weak/small-order 的 ed25519 公钥。
 - `new_key` 不能等于该机构当前 GRANDPA 公钥，也不能被其他机构当前占用。
 - 并发控制由 `votingengine` 的 `ActiveProposalsByInstitution` 统一管控（每机构上限 10 个活跃提案），本模块不另设单机构单提案限制。
-- 同一把 `new_key` 若被多个活跃提案占用，第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败，可通过 `VotingEngine::cancel_passed_proposal` 清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
+- 同一把 `new_key` 若被多个活跃提案占用,第一个执行成功后后续执行会因 `NewKeyAlreadyUsed` 失败,可通过 `VotingEngine::cancel_passed_proposal`(pallet 9.5)清理。
 
 ### 0.3 执行与失败恢复需求
 - 提案达到通过阈值后，应自动尝试执行 GRANDPA 密钥替换。
@@ -24,8 +24,8 @@
 
 ### 0.4 生命周期与清理需求
 - 被拒绝的提案由 `votingengine` 的过期/清理机制处理。
-- 已通过但确定不可执行的提案，通过 `VotingEngine::cancel_passed_proposal` 手动清理（`cancel_failed_replace_grandpa_key` 已于 2026-05-02 废弃）。
-- 注意：旧版的 `cancel_stale_replace_grandpa_key`（call_index=3）已移除，stale 清理由投票引擎统一承载。
+- 已通过但确定不可执行的提案,通过 `VotingEngine::cancel_passed_proposal`(pallet 9.5)手动清理。
+- stale 清理由投票引擎统一承载。
 
 ## 1. 模块定位
 `grandpakey-change` 是“GRANDPA 密钥治理模块”，职责是：
@@ -85,28 +85,24 @@ Runtime 配置位置：
 - `new_key` 不能被其他机构当前占用（反向索引 O(1)）
 - 机构活跃提案数由 `votingengine` 的 `ActiveProposalsByInstitution`（上限 10 个）管控
 
-### 5.2 投票入口（由 VotingEngine 承载）
-`vote_replace_grandpa_key` extrinsic 已删除。
-
-当前投票统一走 `VotingEngine::internal_vote(proposal_id, approve)`：
+### 5.2 投票入口(由 InternalVote sub-pallet 承载)
+本模块不提供独立投票 call。投票统一走 `InternalVote::cast(proposal_id, approve)`(pallet 22.0):
 - 投票人必须是提案快照中的目标机构内部管理员。
 - 达到固定治理阈值后，投票引擎将提案推进到 `STATUS_PASSED` 并回调本模块自动执行。
 - 自动执行遇到 `GrandpaChangePending` 时发出 `GrandpaKeyExecutionFailed`，返回 `RetryableFailed`，提案保留在 `STATUS_PASSED` 供后续重试。
 - 自动执行遇到 `OldAuthorityNotFound`、`NewKeyAlreadyUsed` 等确定不可执行错误时发出 `GrandpaKeyExecutionFailed`，返回 `FatalFailed`，由投票引擎推进到 `STATUS_EXECUTION_FAILED`。
 
-### 5.3 已废弃: `execute_replace_grandpa_key`（原 index = 1）
-2026-05-02 unified voting entry 整改后，本模块的 `execute_replace_grandpa_key` wrapper extrinsic 物理删除。手动重试统一走：
+### 5.3 手动重试入口
+本模块不提供独立 wrapper extrinsic。手动重试统一走:
 
-- `VotingEngine::retry_passed_proposal(proposal_id)`
+- `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
 
-仅提案快照管理员可触发；重试次数、deadline 与状态推进由投票引擎统一校验。用于“已通过但自动执行暂时失败”的重试。
+仅提案快照管理员可触发;重试次数、deadline 与状态推进由投票引擎统一校验。用于"已通过但自动执行暂时失败"的重试。
 
-### 5.4 已废弃: `cancel_failed_replace_grandpa_key`（原 index = 2）
-注意：旧版 `cancel_stale_replace_grandpa_key`（index = 3）已移除，stale 清理由投票引擎统一承载。
+### 5.4 失败提案取消入口
+本模块不提供独立 wrapper extrinsic。失败提案清理统一走:
 
-2026-05-02 unified voting entry 整改后，`cancel_failed_replace_grandpa_key` wrapper extrinsic 物理删除。失败提案清理统一走：
-
-- `VotingEngine::cancel_passed_proposal(proposal_id, reason)`
+- `VotingEngine::cancel_passed_proposal(proposal_id, reason)`(pallet 9.5)
 
 仅提案快照管理员可清理；仅可清理“已通过但当前确定不可执行”的提案；清理时由投票引擎将状态从 `STATUS_PASSED` 推进到 `STATUS_EXECUTION_FAILED`。
 

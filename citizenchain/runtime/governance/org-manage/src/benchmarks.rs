@@ -1,7 +1,6 @@
 //! 多签交易模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一走 `votingengine::internal_vote`,本模块不再有
-//! `finalize_create` / `vote_close` extrinsic。对应的 benchmark 已删除。
+//! 投票统一走 `votingengine::internal_vote`,本模块不承担投票/聚合 extrinsic。
 
 #![cfg(feature = "runtime-benchmarks")]
 

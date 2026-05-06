@@ -30,7 +30,7 @@ class TransferProposalService {
   ///
   /// Phase 3(2026-04-22): 本 pallet 的所有 vote_X / finalize_X 已删除,
   /// 只保留 propose_X(0/1/2) 与 execute_X(3/4/5) 两组路径;
-  /// 管理员投票一律走 VotingEngine(9).internal_vote(0)。
+  /// 管理员投票一律走 InternalVote(22).cast(0)。
   static const _palletIndex = 19;
 
   /// propose_transfer call_index=0。

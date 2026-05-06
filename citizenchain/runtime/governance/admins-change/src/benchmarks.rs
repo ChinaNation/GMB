@@ -1,7 +1,6 @@
 //! 管理员治理模块 Benchmark 定义。
 //!
-//! Phase 2 整改后投票统一由 `votingengine::internal_vote` 公开 call 承担,
-//! 本模块不再保留独立投票 extrinsic。Benchmark 只覆盖提案创建和
+//! 投票统一走 `votingengine::internal_vote`,本模块只覆盖提案创建和
 //! 执行重试两条路径。
 
 #![cfg(feature = "runtime-benchmarks")]

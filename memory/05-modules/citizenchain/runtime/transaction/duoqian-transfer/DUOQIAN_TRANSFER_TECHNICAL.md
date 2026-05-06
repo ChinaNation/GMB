@@ -5,7 +5,7 @@
 本模块所有 3 组业务（transfer / safety_fund / sweep）已统一接入 `votingengine` 生命周期：
 
 - 提案创建使用 `create_internal_proposal_with_data`，在同一事务中绑定 `ProposalOwner`、`ProposalData` 和 `ProposalMeta`。
-- 管理员投票统一走 `VotingEngine::internal_vote(proposal_id, approve)`，本模块不再提供独立 vote/finalize call。
+- 管理员投票统一走 `InternalVote::cast(proposal_id, approve)`，本模块不再提供独立 vote/finalize call。
 - 投票通过后由 `InternalVoteExecutor` 自动执行。
 - 自动执行成功返回 `ProposalExecutionOutcome::Executed`，投票引擎转 `STATUS_EXECUTED`。
 - 自动执行失败返回 `ProposalExecutionOutcome::RetryableFailed`，提案保持 `STATUS_PASSED` 并进入统一 retry state。
@@ -18,9 +18,9 @@
 | 0 | `propose_transfer` | 发起普通机构转账提案 |
 | 1 | `propose_safety_fund_transfer` | 发起安全基金转账提案 |
 | 2 | `propose_sweep_to_main` | 发起费用账户划转主账户提案 |
-| 3 | (已废弃 2026-05-02) | 原 `execute_transfer` 已统一到 `VotingEngine::retry_passed_proposal` |
-| 4 | (已废弃 2026-05-02) | 原 `execute_safety_fund_transfer` 已统一到 `VotingEngine::retry_passed_proposal` |
-| 5 | (已废弃 2026-05-02) | 原 `execute_sweep_to_main` 已统一到 `VotingEngine::retry_passed_proposal` |
+
+投票走统一入口 `InternalVote::cast`(pallet 22.0),手动重试/取消走
+`VotingEngine::retry_passed_proposal`(9.4)/`cancel_passed_proposal`(9.5)。
 
 ## 0. 功能需求
 
@@ -85,7 +85,7 @@
 
 ### 1.3 institution-asset 边界
 
-- 本模块在 `propose_transfer` 和 `try_execute_transfer` 两个阶段都会调用 `institution-asset`。
+- 本模块在 `propose_transfer` 和 `try_execute_transfer_from_callback` 两个阶段都会调用 `institution-asset`。
 - 当前 runtime 规则下，制度保留 `main_address` 只允许本模块这类治理执行动作内部扣款。
 - 这样可以防止其他交易模块绕开治理流程直接动用机构主账户余额。
 
@@ -127,22 +127,23 @@ pub fn propose_transfer(
 
 ### 2.2 投票入口
 
-本模块不再提供独立 `vote_transfer` / `finalize_transfer`。管理员投票统一走：
+本模块不提供独立的投票/超时结算 extrinsic。管理员投票统一走:
 
 ```rust
-VotingEngine::internal_vote(origin, proposal_id, approve)
+InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
 ```
 
 投票引擎根据提案创建时的管理员快照和阈值快照做权限、防双投和阈值判定。达到通过阈值后，投票引擎回调本模块的 `InternalVoteExecutor` 自动执行转账。
 
-### 2.3 已废弃: execute_transfer / execute_safety_fund_transfer / execute_sweep_to_main
+### 2.3 手动重试 / 取消入口
 
-2026-05-02 unified voting entry 整改后，本 pallet 的所有 `execute_xxx` wrapper extrinsic 物理删除。前端必须直接调用 votingengine 公开 extrinsic：
+本 pallet 不暴露任何业务 wrapper extrinsic。前端直接调用投票引擎公开 extrinsic:
 
-- 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`
-- 取消失败提案: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`
+- 手动重试: `VotingEngine::retry_passed_proposal(proposal_id)`(pallet 9.4)
+- 取消失败提案: `VotingEngine::cancel_passed_proposal(proposal_id, reason)`(pallet 9.5)
 
-投票引擎在 `InternalVoteExecutor` 回调阶段会自动调用本 pallet 的 `try_execute_transfer_from_callback` 完成业务执行；手动重试也走相同回调。
+投票引擎在 `InternalVoteExecutor` 回调阶段会自动调用本 pallet 的
+`try_execute_transfer_from_callback` 完成业务执行;手动重试也走相同回调。
 
 ## 3. 存储项
 
@@ -263,7 +264,7 @@ pub enum Error<T> {
 
 ### 6.2 手续费处理方式
 
-提案提交和投票交易本身**免费**（`CallAmount` 返回 `NoAmount`）。手续费在投票通过后由 pallet 的 `try_execute_transfer` 内部处理：
+提案提交和投票交易本身**免费**(`CallAmount` 返回 `NoAmount`)。手续费在投票通过后由 pallet 的 `try_execute_transfer_from_callback` 内部处理:
 
 1. 通过 `calculate_onchain_fee(amount)` 计算手续费。
 2. 校验余额 >= `amount + fee + ED`。
@@ -284,7 +285,7 @@ pub enum Error<T> {
 
 ### 7.1 自动执行流程
 
-`VotingEngine::internal_vote` 达到阈值后，投票引擎进入 `STATUS_PASSED` 并在同一事务内回调本模块自动执行：
+`InternalVote::cast` 达到阈值后，投票引擎进入 `STATUS_PASSED` 并在同一事务内回调本模块自动执行：
 
 ```
 1. 最后一票触发 votingengine 的 STATUS_PASSED 判定
@@ -339,7 +340,7 @@ VOTING → PASSED（待执行） → EXECUTED（已执行，终态）
            → 创建提案 proposal_id=X
            → emit TransferProposed { from, beneficiary, amount, remark, expires_at, ... }
 
-区块 N+k: 快照管理员逐个提交 VotingEngine::internal_vote(X, approve=true)
+区块 N+k: 快照管理员逐个提交 InternalVote::cast(X, approve=true)
            → STATUS_PASSED 达阈值
            → 同一交易内 callback 自动执行
            → emit TransferExecuted 或 TransferExecutionFailed
