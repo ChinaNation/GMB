@@ -81,10 +81,10 @@ class PalletRegistry {
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
 
-  // ---- DuoqianManage (17) ----
+  // ---- OrganizationManage (17) ----
   // call_index=0 留洞不复用(原 propose_create 单账户机构已物理删除)。
   // 机构多签最少 2 账户,统一走 call_index=5。
-  static const int duoqianManagePallet = 17;
+  static const int organizationManagePallet = 17;
   static const int proposeCloseCall = 1;
   static const int registerSfidInstitutionCall = 2;
   static const int proposeCreatePersonalCall = 3;

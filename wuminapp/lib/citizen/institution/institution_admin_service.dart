@@ -139,10 +139,10 @@ class InstitutionAdminService {
     return key;
   }
 
-  /// 构造 `DuoqianManage::DuoqianAccounts(duoqian_address)` 的 storage key。
+  /// 构造 `OrganizationManage::DuoqianAccounts(duoqian_address)` 的 storage key。
   Uint8List _buildDuoqianAccountsKey(String duoqianAddress) {
     final address = Uint8List.fromList(_hexDecode(duoqianAddress));
-    final palletHash = Hasher.twoxx128.hashString('DuoqianManage');
+    final palletHash = Hasher.twoxx128.hashString('OrganizationManage');
     final storageHash = Hasher.twoxx128.hashString('DuoqianAccounts');
     final blake2Hash = Hasher.blake2b128.hash(address);
 

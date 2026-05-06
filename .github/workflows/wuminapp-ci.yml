@@ -48,7 +48,10 @@ jobs:
 
       - name: 运行测试
         working-directory: wuminapp
-        run: flutter test
+        # WalletIsar 测试模式磁盘 dir 在 systemTemp.path,实例名固定 'wuminapp_wallet'。
+        # 默认 concurrency=CPU 核数,多个 isolate 并行打开同一磁盘 db 会
+        # 互踩 unique index 触发 IsarError,顺序跑稳。
+        run: flutter test --concurrency=1
 
   # ── Android APK 打包 ──
   android:
