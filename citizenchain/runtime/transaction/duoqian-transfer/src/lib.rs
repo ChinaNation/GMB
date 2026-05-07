@@ -140,7 +140,7 @@ fn subject_pallet_address(institution: SubjectId) -> Option<[u8; 32]> {
         .map(|n| n.main_address)
 }
 
-/// 中文注释:检查注册多签机构的 institution_id 是 PersonalDuoqian 协议(SubjectKind=0x03)。
+/// 中文注释:检查注册多签机构的 SubjectId 是 PersonalDuoqian 协议(SubjectKind=0x03)。
 ///
 /// D 阶段(SubjectKind 协议统一,2026-05-06)起:
 ///   byte[0]   = 0x03 (PersonalDuoqian)

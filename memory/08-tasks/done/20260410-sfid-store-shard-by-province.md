@@ -6,7 +6,7 @@
 - **工作量**: 3~4 天
 - **优先级**: 高(解除 50K 并发路径上第二个瓶颈)
 - **前置**: Phase 1 `sfid-sheng-admin-per-province-keyring` 已完成
-- **架构上下文**: `memory/05-architecture/20260409-sfid-50k-concurrent-framework.md`
+- **架构上下文**: `memory/01-architecture/sfid/SFID_50K_CONCURRENT_FRAMEWORK.md`
 - **状态**: 待开工
 
 ---
@@ -506,7 +506,7 @@ Phase 1 的改动需要迁移到新分片结构:
 ## 十一、相关参考
 
 - Phase 1 任务卡:`memory/08-tasks/done/20260409-sfid-sheng-admin-per-province-keyring-impl.md`
-- 架构框架:`memory/05-architecture/20260409-sfid-50k-concurrent-framework.md`
+- 架构框架:`memory/01-architecture/sfid/SFID_50K_CONCURRENT_FRAMEWORK.md`
 - 铁律:
   - `feedback_sfid_sheng_signing_keyring.md`(Phase 1 产出)
   - `feedback_scope_auto_filter.md`(省级 scope 过滤)

@@ -5,7 +5,7 @@
 // 等价于"链上失败 → 仅返回 Isar"路径。
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/duoqian/personal/personal_proposal_history_service.dart';
 
 void main() {

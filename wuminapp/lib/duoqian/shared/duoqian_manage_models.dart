@@ -35,7 +35,11 @@ class CreateDuoqianProposalInfo {
 
   double get amountYuan => amountFen.toDouble() / 100;
 
-  /// 48 字节 InstitutionPalletId（duoqian_address 右补零到 48 字节）。
+  /// 48 字节 SubjectId。
+  ///
+  /// 历史上该字节数组曾使用过旧称；当前统一命名为 SubjectId。
+  /// 本 getter 保留原编码逻辑，只作为旧 ProposalData 的
+  /// 兼容解码辅助，不参与新 SubjectKind 协议构造。
   Uint8List get institutionBytes {
     final bytes = Uint8List(48);
     final addrBytes = _hexDecode(duoqianAddress);
@@ -84,7 +88,11 @@ class CloseDuoqianProposalInfo {
   /// 0=voting, 1=passed, 2=rejected, null=unknown。
   final int? status;
 
-  /// 48 字节 InstitutionPalletId。
+  /// 48 字节 SubjectId。
+  ///
+  /// 历史上该字节数组曾使用过旧称；当前统一命名为 SubjectId。
+  /// 本 getter 保留原编码逻辑，只作为旧 ProposalData 的
+  /// 兼容解码辅助，不参与新 SubjectKind 协议构造。
   Uint8List get institutionBytes {
     final bytes = Uint8List(48);
     final addrBytes = _hexDecode(duoqianAddress);

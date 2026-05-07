@@ -2,9 +2,9 @@
 
 - 状态:Accepted
 - 决议日期:2026-05-06
-- 关联任务卡:`memory/08-tasks/open/20260506-unified-subject-id-protocol.md`
+- 关联任务卡:`memory/08-tasks/done/20260506-unified-subject-id-protocol.md`
 - 关联前置:ADR-008(SFID step2b 双层验签)、ADR-009(personal-manage 拆分)
-- 关联后续:任务卡 C(命名修正 institution_id → subject_id)
+- 关联后续:`memory/08-tasks/done/20260506-rename-institution-id-to-subject-id.md`
 
 ## 背景
 

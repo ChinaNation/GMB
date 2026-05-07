@@ -47,7 +47,7 @@ class PalletRegistry {
   // ---- JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)----
   static const int jointVotePallet = 23;
 
-  /// `cast_admin(proposal_id, institution_id_48, approve)` — 联合投票内部投票阶段。
+  /// `cast_admin(proposal_id, subject_id_48, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
 
   /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —

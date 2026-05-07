@@ -39,7 +39,7 @@
 | `wumin/lib/chain/clearing_banks.dart` | 删除 | 按"不搞兼容/保留/过渡"铁律 |
 | `wumin/lib/signer/payload_decoder.dart` | 改 4 处 | `import` 换文件；`clearingBankName` → `institutionName`（行 7、468、500、750） |
 | `wumin/test/signer/payload_decoder_test.dart` | 加 2 测试 | 国储会 / 省储会 `propose_sweep_to_main` 应分别还原为 `国家储备委员会` / `中枢省储备委员会` |
-| `memory/08-tasks/open/20260405-offchain-deposit-model-redesign.md` | 改 1 行 | 旧文件名 `clearing_banks.dart` 改为 `institutions.dart` |
+| `memory/08-tasks/done/20260405-offchain-deposit-model-redesign.md` | 改 1 行 | 旧文件名 `clearing_banks.dart` 改为 `institutions.dart` |
 
 ### HA000 省份名统一
 

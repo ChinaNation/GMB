@@ -477,14 +477,14 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // JointVote(23) / cast_admin(0)
-  // 格式：[0x17][0x00][proposal_id:u64_le][institution:48][approve:bool]
+  // 格式：[0x17][0x00][proposal_id:u64_le][subject_id:48][approve:bool]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeJointVote(Uint8List bytes) {
     // 2 + 8 + 48 + 1 = 59
     if (bytes.length < 59) return null;
 
     final proposalId = _readU64Le(bytes, 2);
-    // institution_id 48 bytes 跳过（不在 display 中展示细节）
+    // subject_id 48 bytes 跳过（不在 display 中展示细节）
     final approve = bytes[58] != 0;
     final voteText = approve ? '赞成' : '反对';
 

@@ -448,7 +448,7 @@ fn derive_admin_pair(
     let mut seed_bytes = [0u8; 32];
     seed_bytes[0] = org;
     seed_bytes[1] = index;
-    // 后 30 字节由 institution_pallet_id 前 30 字节填充,保证不同机构的 seed 不同
+    // 后 30 字节由 subject_id 前 30 字节填充,保证不同机构的 seed 不同
     seed_bytes[2..32].copy_from_slice(&institution[..30]);
     let pair = sr25519::Pair::from_seed(&seed_bytes);
     let account = AccountId32::new(pair.public().0);
