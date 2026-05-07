@@ -24,7 +24,7 @@
 use core::marker::PhantomData;
 
 use frame_support::pallet_prelude::Weight;
-use frame_support::traits::{Get, OnRuntimeUpgrade};
+use frame_support::traits::{Get, GetStorageVersion, OnRuntimeUpgrade, StorageVersion};
 
 use crate::pallet::{
     Config, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByOrg,
@@ -36,7 +36,13 @@ pub struct MigrateToV1<T>(PhantomData<T>);
 
 impl<T: Config> OnRuntimeUpgrade for MigrateToV1<T> {
     fn on_runtime_upgrade() -> Weight {
-        let mut weight = Weight::zero();
+        // 幂等门控:on-chain storage_version >= 1 直接 noop,避免重复扫表写反向索引。
+        let on_chain = crate::Pallet::<T>::on_chain_storage_version();
+        if on_chain >= 1 {
+            return T::DbWeight::get().reads(1);
+        }
+
+        let mut weight = T::DbWeight::get().reads(1);
 
         // 中文注释:在开发期数据量极小,单块迁移完全够用;真正百万级量级
         // 升级时再分块迁移(走 Substrate 的 LimitedMigration 模式)。
@@ -68,6 +74,9 @@ impl<T: Config> OnRuntimeUpgrade for MigrateToV1<T> {
             ProposalsByYear::<T>::insert(year, proposal_id, ());
             weight = weight.saturating_add(T::DbWeight::get().reads_writes(1, 1));
         }
+
+        StorageVersion::new(1).put::<crate::Pallet<T>>();
+        weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
         weight
     }

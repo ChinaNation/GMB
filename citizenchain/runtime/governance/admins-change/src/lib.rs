@@ -161,7 +161,16 @@ pub trait SubjectLifecycle<AccountId> {
     ) -> DispatchResult;
 }
 
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+/// admins-change pallet on-chain storage 版本。
+///
+/// - v0:历史值,本仓库未保留 v0 代码痕迹。
+/// - v1:命名为 `Institutions` 的 StorageMap。
+/// - v2:storage 改名 `Institutions` → `Subjects`(2026-05-06 C 阶段命名修正)。
+///
+/// 升级路径:`migrations::v1::MigrateV1ToV2` 物理 move_prefix,门控走 on_chain_storage_version。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+
+pub mod migrations;
 
 fn nrc_subject_id() -> Option<SubjectId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。

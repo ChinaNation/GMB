@@ -5,6 +5,10 @@
 //! - 无显示器（服务器）：直接运行区块链节点
 //! - 有子命令（build-spec 等）：运行工具命令后退出
 
+// release 构建走 windows subsystem,Windows 双击 exe 不会附带弹控制台,
+// 也不会因为关闭控制台触发 CTRL_CLOSE_EVENT 把进程杀掉;
+// dev 构建保留 console subsystem,便于看 eprintln!/log 输出。
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![warn(missing_docs)]
 
 mod core;

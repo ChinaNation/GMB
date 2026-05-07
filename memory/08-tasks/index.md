@@ -82,6 +82,7 @@
 - `memory/08-tasks/open/20260502-wuminapp-propose-create-institution-caller-fix.md`
 - `memory/08-tasks/open/20260504-130000-citizenchain-votingengine-双层ID与反向索引.md`
 - `memory/08-tasks/open/20260505-220000-windows-macos-linux-installer-zero-dep.md`
+- `memory/08-tasks/open/20260506-001500-windows-console-fix-and-chainspec-freeze.md`
 
 ## done
 

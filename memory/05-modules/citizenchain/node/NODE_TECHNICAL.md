@@ -65,12 +65,23 @@
 - TxExtension 与 benchmarking.rs 保持一致
 - 矿工热钱包转账 RPC 额外要求一次性令牌；令牌由桌面 Tauri 命令在设备密码校验通过后生成并由 RPC 消费
 
-## 4. Chain Spec
+## 4. Chain Spec（冻结铁律）
 
-- 链名：`CHAIN_NAME`，链 ID：`CHAIN_ID`，SS58 前缀：`SS58_FORMAT`
-- 44 个权威节点 bootnode（DNS 多地址）
-- 创世配置：`genesis_config_presets::genesis_config()`
-- 链类型：`ChainType::Live`
+主网创世后,chainspec 永久冻结(memory/feedback_chainspec_frozen.md)。
+
+- 冻结资产：[citizenchain/node/chainspecs/citizenchain.raw.json](../../../../citizenchain/node/chainspecs/citizenchain.raw.json),raw 格式 1.3 MB,含 44 个权威节点 bootnode、token 属性、协议 ID、扁平化 genesis state(含 `:code` 下的 runtime WASM 字节)
+- 加载方式：[chain_spec.rs](../../../../citizenchain/node/src/core/chain_spec.rs) 用 `include_bytes!` 把 JSON 字节烤进二进制,启动时 `ChainSpec::from_json_bytes` 反序列化。**不再 `with_genesis_config_patch` 现编创世**
+- 全网一致性保证：任何平台、任何 commit 编出来的 binary,内嵌的都是同一份 JSON 字节 → genesis_hash 全网恒等 → 所有节点 P2P handshake 必通过
+
+冻结流程(只做一次,**永不重做**):
+
+1. 主网在线权威节点上跑 `citizenchain export-chain-spec --chain citizenchain --raw > /tmp/citizenchain.raw.json`
+2. scp 回 `citizenchain/node/chainspecs/citizenchain.raw.json`
+3. git commit 入库
+
+后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新 `export-chain-spec` 覆盖这份 JSON。
+
+历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
 
 ## 5. CLI 参数
 
@@ -106,14 +117,14 @@
 | `src/core/rpc.rs` | 419 | 节点核心 RPC、钱包绑定签名、哈希率查询、轻节点同步 |
 | `src/mining/gpu_miner.rs` | 392 | OpenCL 初始化、GPU kernel 调度、哈希率统计 |
 | `src/core/command.rs` | 237 | CLI 子命令路由 |
-| `src/core/chain_spec.rs` | 97 | Chain spec、44 个 bootnode、token 属性 |
+| `src/core/chain_spec.rs` | 25 | 冻结 chainspec 加载入口(`include_bytes!` + `from_json_bytes`),bootnode/token 属性/genesis state 全在 `chainspecs/citizenchain.raw.json` |
 | `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
 | `src/desktop/mod.rs` | 120 | 桌面端 Tauri 入口与命令注册 |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
 | `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |
-| `src/main.rs` | 67 | CLI / 桌面入口分发 |
+| `src/main.rs` | 70 | CLI / 桌面入口分发,release 走 windows subsystem 不弹控制台 |
 | `vendor/` | ~13,854 | sc-consensus-grandpa v0.40.0（GPL-3.0） |
 | `libp2p-websocket/` | 6 files | 本地覆盖 crates.io `libp2p-websocket`，用于 WSS TLS 客户端配置扩展 |
 

@@ -176,7 +176,15 @@ pub mod pallet {
     pub type VoteNonceOf<T> = BoundedVec<u8, <T as Config>::MaxVoteNonceLength>;
     pub type VoteSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxVoteSignatureLength>;
 
+    /// VotingEngine 主 pallet on-chain storage 版本。
+    ///
+    /// - v0:历史值,无反向索引,无 ProposalDisplayId,提案主键 `id = year * 1_000_000 + seq`
+    /// - v1:`migrations::v1::MigrateToV1` 给老提案 backfill ProposalDisplayId +
+    ///   ProposalsByOrg/Institution/Owner/Year 4 张反向索引
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+
     #[pallet::pallet]
+    #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 当前提案年份（用于年度计数器重置）。
