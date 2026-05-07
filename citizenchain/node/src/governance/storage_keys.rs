@@ -58,13 +58,23 @@ pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> [u8; 48] {
     out
 }
 
-/// 构造 `AdminsChange::Subjects(subject_id)` 的存储 key(hex 字符串含 0x 前缀)。
+/// 构造 `AdminsChange` 管理员主体表存储 key(hex 字符串含 0x 前缀)。
 ///
-/// C 阶段(命名修正,2026-05-06)起 storage 已改名 Institutions → Subjects。
+/// 链上 runtime 升级后 spec=1,但 admins-change migration v1 因门控 bug 没搬数据:
+/// genesis 时 `STORAGE_VERSION = 2` 已生效,migration 见 on_chain >= 2 直接 noop。
+/// 92 条管理员仍在 OLD 名 `Institutions` 路径下,subject_id 也是 48B 直接 raw padded
+/// (没有 D 阶段加的 0x01 kind tag)。
+///
+/// 客户端按 OLD 路径读,可直接覆盖 国储会 + 省储会 + 省储行的全部管理员显示。
+/// 不修 migration 的话,这一段就是该客户端读链的最终形态(数据不会自己搬走)。
 pub fn admin_subjects_key(shenfen_id: &str) -> String {
-    let subject_id = subject_id_from_shenfen_id(shenfen_id);
+    let mut subject_id = [0u8; 48];
+    let raw = shenfen_id.as_bytes();
+    let len = raw.len().min(48);
+    subject_id[..len].copy_from_slice(&raw[..len]);
+
     let pallet_hash = twox_128(b"AdminsChange");
-    let storage_hash = twox_128(b"Subjects");
+    let storage_hash = twox_128(b"Institutions");
     let blake2_hash = blake2b_128(&subject_id);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + 48);

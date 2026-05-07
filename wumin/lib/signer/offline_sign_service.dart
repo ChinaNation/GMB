@@ -58,6 +58,32 @@ class OfflineSignService {
 
   OfflineSignVerification verifyPayload(SignRequestEnvelope request) {
     final body = request.body;
+
+    // 哈希直签例外:WASM 升级 call_data(含 600KB+ WASM)物理上塞不进 QR,
+    // server 在 QR 里只放 blake2_256(payload) = 32 字节哈希,decoder 不可能解。
+    // 改靠 display.fields.wasm_hash + 用户肉眼核对放行。仅限 wasm 升级两个
+    // action,其它仍走严格 SCALE decode 验证(strict 两色铁律不放宽)。
+    final action = body.display.action;
+    final isWasmUpgrade = action == 'developer_direct_upgrade' ||
+        action == 'propose_runtime_upgrade';
+    if (isWasmUpgrade) {
+      final payloadBytes = _hexToBytes(body.payloadHex);
+      final hasWasmHash =
+          body.display.fields.any((f) => f.key == 'wasm_hash');
+      if (payloadBytes.length == 32 && hasWasmHash) {
+        return const OfflineSignVerification(
+          decoded: null,
+          displayMatch: DisplayMatchStatus.matched,
+        );
+      }
+      // 例外条件不全(payload 不是 32B / 缺 wasm_hash 字段),仍按 decodeFailed
+      // 处理,绝不允许"声称是 wasm 升级"就盲签。
+      return const OfflineSignVerification(
+        decoded: null,
+        displayMatch: DisplayMatchStatus.decodeFailed,
+      );
+    }
+
     final decoded = PayloadDecoder.decode(
       body.payloadHex,
       specVersion: body.specVersion,
