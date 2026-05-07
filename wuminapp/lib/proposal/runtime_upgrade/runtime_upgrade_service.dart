@@ -8,7 +8,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// Runtime upgrade 提案链上交互服务。
 ///

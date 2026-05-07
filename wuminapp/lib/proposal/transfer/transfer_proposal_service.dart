@@ -11,10 +11,10 @@ import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/governance/proposal_cache.dart';
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// 机构转账提案链上交互服务。
 ///

@@ -11,14 +11,15 @@ import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_admin_service.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/governance/proposal_cache.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_detail_page.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_detail_page.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/vote/constitution_quote.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///
@@ -28,8 +29,8 @@ import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_serv
 ///
 /// **分页**:cursor 模式按 `_allIds` 切分,翻页天然不会卡空页。
 /// **新区块订阅**:周期性重 fetch 三 org id 列表,补差异。
-class AllProposalsView extends StatefulWidget {
-  const AllProposalsView({
+class VoteView extends StatefulWidget {
+  const VoteView({
     super.key,
     this.onPendingVoteCountChanged,
   });
@@ -38,10 +39,10 @@ class AllProposalsView extends StatefulWidget {
   final ValueChanged<int>? onPendingVoteCountChanged;
 
   @override
-  State<AllProposalsView> createState() => _AllProposalsViewState();
+  State<VoteView> createState() => _VoteViewState();
 }
 
-class _AllProposalsViewState extends State<AllProposalsView> {
+class _VoteViewState extends State<VoteView> {
   static const int _pageSize = 10;
 
   // 治理类 org 编码(与 votingengine::internal_vote::ORG_* 对齐)
@@ -266,6 +267,24 @@ class _AllProposalsViewState extends State<AllProposalsView> {
 
   @override
   Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // 公民宪法引言水印,始终若隐若现做底层背景。
+        const Positioned.fill(
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: 0.06,
+              child: ConstitutionQuote(),
+            ),
+          ),
+        ),
+        // 前景:加载/错误/列表/空态(空态时水印自然透出)。
+        Positioned.fill(child: _buildForeground()),
+      ],
+    );
+  }
+
+  Widget _buildForeground() {
     if (_loading) {
       return ListSkeleton(
         itemCount: 5,
@@ -300,18 +319,17 @@ class _AllProposalsViewState extends State<AllProposalsView> {
       );
     }
     if (_items.isEmpty && !_hasMore) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.ballot_outlined, size: 48, color: AppTheme.textTertiary),
-            SizedBox(height: 12),
-            Text('暂无提案',
-                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
-            SizedBox(height: 4),
-            Text('全链提案将在此显示',
-                style: TextStyle(fontSize: 13, color: AppTheme.textTertiary)),
-          ],
+      // 空态:留给水印,前景透明占位以承接下拉刷新。
+      return RefreshIndicator(
+        onRefresh: () async {
+          _adminService.clearCache();
+          _contextResolver.clearWalletCache();
+          ProposalCache.clear();
+          await _loadFirstPage();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [SizedBox(height: 400)],
         ),
       );
     }

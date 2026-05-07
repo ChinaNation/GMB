@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_admin_service.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/pending_vote_store.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/internal_vote_service.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
@@ -16,7 +16,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_vote_widgets.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_vote_widgets.dart';
 
 /// 详情页展示/投票的三种提案类型。
 ///

@@ -1,5 +1,5 @@
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// 提案内存缓存。
 ///

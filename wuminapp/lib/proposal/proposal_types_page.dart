@@ -4,10 +4,10 @@ import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_page.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_page.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_page.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_page.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 

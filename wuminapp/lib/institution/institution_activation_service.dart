@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
 
 /// 管理员激活记录。
 class ActivatedAdmin {

@@ -17,7 +17,7 @@ import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../../Isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
 import '../../ui/app_theme.dart';
 import '../../wallet/core/wallet_manager.dart';
 import '../institution/institution_duoqian_create_page.dart';

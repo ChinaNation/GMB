@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_detail_page.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/institution/institution_detail_page.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/page_transitions.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';
 
-/// 公民 Tab 下的机构二级页。
+/// 治理 tab 二级页：展示治理类机构（国储会/省储会/省储行）分类、排序与详情入口。
 ///
-/// 只负责机构分类、机构排序和进入机构详情；提案发起与投票事件仍由机构详情页承接。
-class InstitutionListPage extends StatefulWidget {
-  const InstitutionListPage({
+/// 提案发起与投票事件仍由机构详情页承接。
+class GovernanceListPage extends StatefulWidget {
+  const GovernanceListPage({
     super.key,
     required this.nationalCouncil,
     required this.provincialCouncils,
@@ -23,10 +23,10 @@ class InstitutionListPage extends StatefulWidget {
   final List<InstitutionInfo> provincialBanks;
 
   @override
-  State<InstitutionListPage> createState() => _InstitutionListPageState();
+  State<GovernanceListPage> createState() => _GovernanceListPageState();
 }
 
-class _InstitutionListPageState extends State<InstitutionListPage> {
+class _GovernanceListPageState extends State<GovernanceListPage> {
   /// 对列表按“管理员机构优先”排序。
   List<InstitutionInfo> _sorted(List<InstitutionInfo> list) {
     final sorted = List<InstitutionInfo>.from(list);
@@ -46,37 +46,29 @@ class _InstitutionListPageState extends State<InstitutionListPage> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         const Text(
-          '机构分类',
+          '治理机构',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w700,
             color: AppTheme.textPrimary,
           ),
         ),
-        const SizedBox(height: 4),
-        const Text(
-          '查看各级机构信息与治理提案',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-          ),
-        ),
         const SizedBox(height: 20),
-        _InstitutionSection(
+        _GovernanceSection(
           title: '国储会',
           icon: Icons.account_balance,
           badgeColor: AppTheme.primaryDark,
           institutions: widget.nationalCouncil,
           onReturnFromDetail: () => setState(() {}),
         ),
-        _InstitutionSection(
+        _GovernanceSection(
           title: '省储会',
           icon: Icons.groups_2_outlined,
           badgeColor: AppTheme.primary,
           institutions: _sorted(widget.provincialCouncils),
           onReturnFromDetail: () => setState(() {}),
         ),
-        _InstitutionSection(
+        _GovernanceSection(
           title: '省储行',
           icon: Icons.account_balance_wallet_outlined,
           badgeColor: AppTheme.accent,
@@ -88,8 +80,8 @@ class _InstitutionListPageState extends State<InstitutionListPage> {
   }
 }
 
-class _InstitutionSection extends StatelessWidget {
-  const _InstitutionSection({
+class _GovernanceSection extends StatelessWidget {
+  const _GovernanceSection({
     required this.title,
     required this.icon,
     required this.badgeColor,
@@ -154,7 +146,7 @@ class _InstitutionSection extends StatelessWidget {
                 final isAdmin = ProposalContextResolver.isAdminInstitution(
                   inst.shenfenId,
                 );
-                return _InstitutionCard(
+                return _GovernanceCard(
                   institution: inst,
                   icon: icon,
                   badgeColor: badgeColor,
@@ -171,8 +163,8 @@ class _InstitutionSection extends StatelessWidget {
   }
 }
 
-class _InstitutionCard extends StatelessWidget {
-  const _InstitutionCard({
+class _GovernanceCard extends StatelessWidget {
+  const _GovernanceCard({
     required this.institution,
     required this.icon,
     required this.badgeColor,

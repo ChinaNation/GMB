@@ -5,7 +5,7 @@
 /// `primitives/china/china_ch.rs`（省储行）。
 library;
 
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// 提案展示号格式化(双层 ID v1):`2026000123` 风格。
 ///
