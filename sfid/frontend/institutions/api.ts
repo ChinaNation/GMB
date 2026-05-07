@@ -1,6 +1,6 @@
 // 中文注释：任务卡 2 新机构/账户两层模型的前端 API 封装。
 // 后端对应:backend/institutions/handler.rs
-// 铁律:feedback_institutions_two_layer.md(一个 sfid_id 下可挂多个 account_name)
+// 铁律:feedback_institutions_two_layer.md(一个 sfid_number 下可挂多个 account_name)
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, adminRequest } from '../utils/http';
@@ -27,7 +27,7 @@ export type MultisigChainStatus =
   | 'REVOKED_ON_CHAIN';
 
 export interface MultisigInstitution {
-  sfid_id: string;
+  sfid_number: string;
   /** 机构名称。两步式创建(2026-04-19):第一步生成时为 null,详情页补填后非空。 */
   institution_name: string | null;
   category: InstitutionCategory;
@@ -41,8 +41,8 @@ export interface MultisigInstitution {
   institution_code: string;
   /** 私法人子类型(仅 A3=SFR 且 P1 填完后才有值) */
   sub_type?: string | null;
-  /** 所属法人 sfid_id(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
-  parent_sfid_id?: string | null;
+  /** 所属法人 sfid_number(仅 A3=FFR 非法人必填;指向 SFR/GFR) */
+  parent_sfid_number?: string | null;
   chain_status: InstitutionChainStatus;
   chain_tx_hash?: string | null;
   chain_block_number?: number | null;
@@ -60,7 +60,7 @@ export interface ReconcileReport {
 }
 
 export interface MultisigAccount {
-  sfid_id: string;
+  sfid_number: string;
   account_name: string;
   duoqian_address: string | null;
   chain_status: MultisigChainStatus;
@@ -72,7 +72,7 @@ export interface MultisigAccount {
 }
 
 export interface InstitutionListRow {
-  sfid_id: string;
+  sfid_number: string;
   /** 两步式创建:第一步仅有 SFID 时为 null,详情页补填后非空 */
   institution_name: string | null;
   category: InstitutionCategory;
@@ -82,7 +82,7 @@ export interface InstitutionListRow {
   city: string;
   institution_code: string;
   sub_type?: string | null;
-  parent_sfid_id?: string | null;
+  parent_sfid_number?: string | null;
   chain_status: InstitutionChainStatus;
   account_count: number;
   created_at: string;
@@ -104,7 +104,7 @@ export interface InstitutionDetail {
 /** 机构资料库文档 */
 export interface InstitutionDocument {
   id: number;
-  sfid_id: string;
+  sfid_number: string;
   file_name: string;
   doc_type: string;
   file_size: number;
@@ -138,7 +138,7 @@ export interface CreateInstitutionInput {
 }
 
 export interface CreateInstitutionOutput {
-  sfid_id: string;
+  sfid_number: string;
   /** 首次创建:私权为 null,公权为已填入的名称 */
   institution_name: string | null;
   category: InstitutionCategory;
@@ -148,13 +148,13 @@ export interface CreateInstitutionOutput {
 export interface UpdateInstitutionInput {
   institution_name?: string;
   sub_type?: string | null;
-  /** 所属法人 sfid_id(仅 FFR;传空串后端会拒) */
-  parent_sfid_id?: string;
+  /** 所属法人 sfid_number(仅 FFR;传空串后端会拒) */
+  parent_sfid_number?: string;
 }
 
 /** 法人机构搜索结果项(FFR 详情页"所属法人"选择器用) */
 export interface ParentInstitutionRow {
-  sfid_id: string;
+  sfid_number: string;
   institution_name: string;
   a3: string;
   /** 私法人子类型(仅 a3=SFR);FFR 判断父 SFR 是否 JOINT_STOCK 以显示清算行设置 */
@@ -165,7 +165,7 @@ export interface ParentInstitutionRow {
 }
 
 export interface CreateAccountOutput {
-  sfid_id: string;
+  sfid_number: string;
   account_name: string;
   chain_status: MultisigChainStatus;
   chain_synced_at: string | null;
@@ -202,7 +202,7 @@ export async function checkInstitutionName(
 }
 
 /**
- * 生成机构(**不上链**)。成功后拿到 sfid_id,再调 `createAccount` 实际上链。
+ * 生成机构(**不上链**)。成功后拿到 sfid_number,再调 `createAccount` 实际上链。
  */
 export async function createInstitution(
   auth: AdminAuth,
@@ -218,15 +218,15 @@ export async function createInstitution(
 /**
  * 在机构下创建账户(**只登记 SFID 账户名称,不触链**)。
  * 链上激活状态只能由区块链软件完成注册后同步回来。
- * 同一 sfid_id 下 account_name 必须唯一(后端硬校验)。
+ * 同一 sfid_number 下 account_name 必须唯一(后端硬校验)。
  */
 export async function createAccount(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   accountName: string
 ): Promise<CreateAccountOutput> {
   return adminRequest<CreateAccountOutput>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/account/create`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/create`,
     auth,
     {
       method: 'POST',
@@ -256,7 +256,7 @@ export async function listInstitutions(
 
 /**
  * 搜索可选的法人机构(供 FFR 详情页"所属法人"选择器使用)。
- * q 可匹配 sfid_id 子串或 institution_name 子串,全国范围,最多 20 条。
+ * q 可匹配 sfid_number 子串或 institution_name 子串,全国范围,最多 20 条。
  */
 export async function searchParentInstitutions(
   auth: AdminAuth,
@@ -271,16 +271,16 @@ export async function searchParentInstitutions(
 
 /**
  * 更新机构详情(两步式第二步)。支持修改机构名称和企业类型。
- * 机构名称后端全国唯一校验(排除自身 sfid_id)。
+ * 机构名称后端全国唯一校验(排除自身 sfid_number)。
  * 企业类型与 P1 联动:P1=0 必须 NON_PROFIT;P1=1 不得为 NON_PROFIT。
  */
 export async function updateInstitution(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   input: UpdateInstitutionInput,
 ): Promise<MultisigInstitution> {
   return adminRequest<MultisigInstitution>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
     auth,
     {
       method: 'PATCH',
@@ -295,10 +295,10 @@ export async function updateInstitution(
  */
 export async function getInstitution(
   auth: AdminAuth,
-  sfidId: string
+  sfidNumber: string
 ): Promise<InstitutionDetail> {
   return adminRequest<InstitutionDetail>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
     auth
   );
 }
@@ -308,10 +308,10 @@ export async function getInstitution(
  */
 export async function listAccounts(
   auth: AdminAuth,
-  sfidId: string
+  sfidNumber: string
 ): Promise<MultisigAccount[]> {
   return adminRequest<MultisigAccount[]>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/accounts`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/accounts`,
     auth
   );
 }
@@ -338,11 +338,11 @@ export async function reconcilePublicSecurity(
  */
 export async function deleteAccount(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   accountName: string
 ): Promise<{ deleted: boolean }> {
   return adminRequest<{ deleted: boolean }>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/account/${encodeURIComponent(accountName)}`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
     { method: 'DELETE' }
   );
@@ -353,10 +353,10 @@ export async function deleteAccount(
 /** 列出机构的所有文档 */
 export async function listDocuments(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
 ): Promise<InstitutionDocument[]> {
   return adminRequest<InstitutionDocument[]>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents`,
     auth,
   );
 }
@@ -364,7 +364,7 @@ export async function listDocuments(
 /** 上传文档(multipart) */
 export async function uploadDocument(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   file: File,
   docType: string,
 ): Promise<InstitutionDocument> {
@@ -372,7 +372,7 @@ export async function uploadDocument(
   formData.append('file', file);
   formData.append('doc_type', docType);
   return adminRequest<InstitutionDocument>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents`,
     auth,
     {
       method: 'POST',
@@ -385,12 +385,12 @@ export async function uploadDocument(
 /** 下载文档(返回 Blob) */
 export async function downloadDocument(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   docId: number,
   fileName: string,
 ): Promise<void> {
   const resp = await fetch(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents/${docId}/download`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents/${docId}/download`,
     { headers: adminHeaders(auth) },
   );
   if (!resp.ok) throw new Error(`下载失败 (${resp.status})`);
@@ -406,11 +406,11 @@ export async function downloadDocument(
 /** 删除文档 */
 export async function deleteDocument(
   auth: AdminAuth,
-  sfidId: string,
+  sfidNumber: string,
   docId: number,
 ): Promise<void> {
   await adminRequest<string>(
-    `/api/v1/institution/${encodeURIComponent(sfidId)}/documents/${docId}`,
+    `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents/${docId}`,
     auth,
     { method: 'DELETE' },
   );

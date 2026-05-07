@@ -21,10 +21,10 @@ use crate::sheng_admins::signing_seed_store::{load_seed, save_seed};
 use crate::AppState;
 
 const PAYLOAD_PREFIX: &[u8; 12] = b"GMB_ACTIVATE";
-const SHENFEN_ID_LEN: usize = 48;
+const SFID_NUMBER_LEN: usize = 48;
 const TIMESTAMP_LEN: usize = 8;
 const NONCE_LEN: usize = 16;
-const PAYLOAD_LEN: usize = PAYLOAD_PREFIX.len() + SHENFEN_ID_LEN + TIMESTAMP_LEN + NONCE_LEN;
+const PAYLOAD_LEN: usize = PAYLOAD_PREFIX.len() + SFID_NUMBER_LEN + TIMESTAMP_LEN + NONCE_LEN;
 const TTL_SECONDS: i64 = 300;
 
 /// 签名密钥 bootstrap / replace 失败原因。
@@ -240,7 +240,7 @@ pub(crate) async fn prepare(
 
     let marker = input.operation.marker(province.as_str());
     let marker_bytes = marker.as_bytes();
-    if marker_bytes.len() > SHENFEN_ID_LEN {
+    if marker_bytes.len() > SFID_NUMBER_LEN {
         return crate::api_error(StatusCode::BAD_REQUEST, 1001, "signing marker too long");
     }
 
@@ -253,7 +253,7 @@ pub(crate) async fn prepare(
 
     let mut payload = Vec::with_capacity(PAYLOAD_LEN);
     payload.extend_from_slice(PAYLOAD_PREFIX);
-    let mut marker_padded = [0u8; SHENFEN_ID_LEN];
+    let mut marker_padded = [0u8; SFID_NUMBER_LEN];
     marker_padded[..marker_bytes.len()].copy_from_slice(marker_bytes);
     payload.extend_from_slice(&marker_padded);
     payload.extend_from_slice(&(now as u64).to_le_bytes());
@@ -270,7 +270,7 @@ pub(crate) async fn prepare(
             display_action: "activate_admin",
             display_summary: input.operation.display_summary(province.as_str()),
             display_fields: vec![DisplayField {
-                key: "shenfen_id",
+                key: "sfid_number",
                 label: "省管理员操作",
                 value: marker,
             }],
@@ -408,7 +408,7 @@ fn validate_payload(payload: &[u8], expected_marker: &str) -> Result<(), String>
     if payload.len() != PAYLOAD_LEN || &payload[..PAYLOAD_PREFIX.len()] != PAYLOAD_PREFIX {
         return Err("payload prefix invalid".to_string());
     }
-    let marker_bytes = &payload[PAYLOAD_PREFIX.len()..PAYLOAD_PREFIX.len() + SHENFEN_ID_LEN];
+    let marker_bytes = &payload[PAYLOAD_PREFIX.len()..PAYLOAD_PREFIX.len() + SFID_NUMBER_LEN];
     let marker_end = marker_bytes
         .iter()
         .position(|b| *b == 0)
@@ -418,7 +418,7 @@ fn validate_payload(payload: &[u8], expected_marker: &str) -> Result<(), String>
     if marker != expected_marker {
         return Err("payload marker mismatch".to_string());
     }
-    let ts_start = PAYLOAD_PREFIX.len() + SHENFEN_ID_LEN;
+    let ts_start = PAYLOAD_PREFIX.len() + SFID_NUMBER_LEN;
     let timestamp = u64::from_le_bytes(
         payload[ts_start..ts_start + TIMESTAMP_LEN]
             .try_into()

@@ -1,10 +1,10 @@
 //! 机构/账户两层数据模型 + CRUD + 链交互
 //!
-//! 中文注释:任务卡 2 的核心模块。链端 `SfidRegisteredAddress::<T>(sfid_id, name)`
+//! 中文注释:任务卡 2 的核心模块。链端 `SfidRegisteredAddress::<T>(sfid_number, name)`
 //! 是 DoubleMap,sfid 系统这里拆两层对齐:
 //!
-//! - `MultisigInstitution`:每个 sfid_id 唯一,存机构展示信息,不进链
-//! - `MultisigAccount`:(sfid_id, account_name) 复合 key,account_name 就是链上 name,进链
+//! - `MultisigInstitution`:每个 sfid_number 唯一,存机构展示信息,不进链
+//! - `MultisigAccount`:(sfid_number, account_name) 复合 key,account_name 就是链上 name,进链
 //!
 //! ## 子模块
 //!

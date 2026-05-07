@@ -41,7 +41,7 @@ pub struct InstitutionDetail {
     /// 机构名称。
     pub name: String,
     /// 链上身份标识。
-    pub shenfen_id: String,
+    pub sfid_number: String,
     /// 机构类型：0=NRC, 1=PRC, 2=PRB。
     pub org_type: u8,
     /// 机构类型显示标签。
@@ -85,7 +85,7 @@ pub struct InstitutionDetail {
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionBalanceUpdate {
     /// 链上身份标识，用于前端过滤当前页面事件。
-    pub shenfen_id: String,
+    pub sfid_number: String,
     /// 主账户链上余额（分）。
     pub balance_fen: Option<String>,
     /// 永久质押账户链上余额（分，仅 PRB）。
@@ -107,7 +107,7 @@ pub struct InstitutionBalanceUpdate {
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionListItem {
     pub name: String,
-    pub shenfen_id: String,
+    pub sfid_number: String,
     pub org_type: u8,
     pub org_type_label: String,
     /// 主账户地址 hex，由前端转成 SS58 显示。

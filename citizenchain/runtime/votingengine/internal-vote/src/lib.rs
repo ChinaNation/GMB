@@ -22,7 +22,7 @@ use frame_support::{
     pallet_prelude::{BoundedVec, DispatchResult},
     storage::{with_transaction, TransactionOutcome},
 };
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_sfid_number;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
@@ -156,14 +156,14 @@ fn is_valid_internal_institution<T: Config>(
                 && CHINA_CB
                     .iter()
                     .skip(1)
-                    .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+                    .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
                     .any(|pid| pid == institution)
         }
         ORG_PRB => {
             !pending_subject
                 && CHINA_CH
                     .iter()
-                    .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+                    .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
                     .any(|pid| pid == institution)
         }
         ORG_REN if pending_subject => {

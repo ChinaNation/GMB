@@ -24,7 +24,7 @@ use crate::address::InstitutionAccountRole;
 use crate::institution::types::CreateInstitutionAccount;
 use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionAccountsOf, Error,
-    InstitutionInitialAccountsOf, Pallet, SfidIdOf, SfidRegisteredAddress,
+    InstitutionInitialAccountsOf, Pallet, SfidNumberOf, SfidRegisteredAddress,
 };
 use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
@@ -54,7 +54,7 @@ pub(crate) fn account_names_payload_from_initial_accounts<T: Config>(
 /// - 费用账户地址
 /// - 初始余额合计
 pub(crate) fn validate_initial_accounts<T: Config>(
-    sfid_id: &SfidIdOf<T>,
+    sfid_number: &SfidNumberOf<T>,
     accounts: &InstitutionInitialAccountsOf<T>,
 ) -> Result<
     (
@@ -92,10 +92,10 @@ pub(crate) fn validate_initial_accounts<T: Config>(
             role,
             InstitutionAccountRole::Main | InstitutionAccountRole::Fee
         );
-        let address = Pallet::<T>::derive_institution_address(sfid_id.as_slice(), role)?;
+        let address = Pallet::<T>::derive_institution_address(sfid_number.as_slice(), role)?;
 
         ensure!(
-            !SfidRegisteredAddress::<T>::contains_key(sfid_id, &item.account_name),
+            !SfidRegisteredAddress::<T>::contains_key(sfid_number, &item.account_name),
             Error::<T>::SfidAlreadyRegistered
         );
         ensure!(

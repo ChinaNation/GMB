@@ -11,10 +11,10 @@
     address  = blake2b_256(preimage)
 
 op_tag 分配：
-    0x00 = OP_MAIN      → input: shenfen_id [+ name]（机构主账户）
-    0x01 = OP_FEE       → input: shenfen_id          （费用账户）
+    0x00 = OP_MAIN      → input: sfid_number [+ name]（机构主账户）
+    0x01 = OP_FEE       → input: sfid_number          （费用账户）
     0x02 = OP_STAKE     → input: citizens_number_u64_le（省储行质押）
-    0x03 = OP_AN        → input: NRC_shenfen_id      （国储会安全基金）
+    0x03 = OP_AN        → input: NRC_sfid_number      （国储会安全基金）
     0x04 = OP_PERSONAL  → input: creator(32B) + name_utf8（个人多签，链上派生）
 
 本工具一次性重算：
@@ -58,7 +58,7 @@ OP_AN = 0x03
 # OP_PERSONAL = 0x04 由链上 derive_personal 使用，不参与 primitives 派生
 
 # 按 china_cb.rs 硬编码，第一条是 NRC
-NRC_SHENFEN_ID = "GFR-LN001-CB0C-617776487-20260222"
+NRC_SFID_NUMBER = "GFR-LN001-CB0X-944805165-2026"
 
 # 需要处理的机构文件（含 main_address 字段）
 FILES_WITH_MAIN = [
@@ -93,12 +93,12 @@ def derive(op_tag: int, payload: bytes) -> bytes:
     return blake2b_256(preimage)
 
 
-def derive_main(sfid_id: str) -> bytes:
-    return derive(OP_MAIN, sfid_id.encode("utf-8"))
+def derive_main(sfid_number: str) -> bytes:
+    return derive(OP_MAIN, sfid_number.encode("utf-8"))
 
 
-def derive_fee(shenfen_id: str) -> bytes:
-    return derive(OP_FEE, shenfen_id.encode("utf-8"))
+def derive_fee(sfid_number: str) -> bytes:
+    return derive(OP_FEE, sfid_number.encode("utf-8"))
 
 
 def derive_stake(citizens_number: int) -> bytes:
@@ -106,13 +106,13 @@ def derive_stake(citizens_number: int) -> bytes:
 
 
 def derive_anquan() -> bytes:
-    return derive(OP_AN, NRC_SHENFEN_ID.encode("utf-8"))
+    return derive(OP_AN, NRC_SFID_NUMBER.encode("utf-8"))
 
 
 # ── Rust 文件扫描 ───────────────────────────────────
 @dataclass
 class MainEntry:
-    sfid_id: str
+    sfid_number: str
     old_hex: str
     new_hex: str
     file_name: str
@@ -121,7 +121,7 @@ class MainEntry:
 
 @dataclass
 class FeeEntry:
-    shenfen_id: str
+    sfid_number: str
     old_hex: str
     new_hex: str
     file_name: str
@@ -142,12 +142,12 @@ def hexstr(b: bytes) -> str:
 
 
 def extract_main(file_path: Path) -> list[MainEntry]:
-    """按 shenfen_id → 下一个 main_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 main_address hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[MainEntry] = []
 
-    sfid_re = re.compile(r'shenfen_id:\s*"([^"]+)"')
+    sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
     addr_re = re.compile(r'main_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
     current_sfid: Optional[str] = None
@@ -161,7 +161,7 @@ def extract_main(file_path: Path) -> list[MainEntry]:
             new = hexstr(derive_main(current_sfid))
             out.append(
                 MainEntry(
-                    sfid_id=current_sfid,
+                    sfid_number=current_sfid,
                     old_hex=old,
                     new_hex=new,
                     file_name=file_path.name,
@@ -173,12 +173,12 @@ def extract_main(file_path: Path) -> list[MainEntry]:
 
 
 def extract_fee(file_path: Path) -> list[FeeEntry]:
-    """按 shenfen_id → 下一个 fee_address hex!(...) 配对。"""
+    """按 sfid_number → 下一个 fee_address hex!(...) 配对。"""
     text = file_path.read_text(encoding="utf-8")
     lines = text.split("\n")
     out: list[FeeEntry] = []
 
-    sfid_re = re.compile(r'shenfen_id:\s*"([^"]+)"')
+    sfid_re = re.compile(r'sfid_number:\s*"([^"]+)"')
     addr_re = re.compile(r'fee_address:\s*hex!\("([0-9a-fA-F]{64})"\)')
 
     current_sfid: Optional[str] = None
@@ -192,7 +192,7 @@ def extract_fee(file_path: Path) -> list[FeeEntry]:
             new = hexstr(derive_fee(current_sfid))
             out.append(
                 FeeEntry(
-                    shenfen_id=current_sfid,
+                    sfid_number=current_sfid,
                     old_hex=old,
                     new_hex=new,
                     file_name=file_path.name,
@@ -352,7 +352,7 @@ def main() -> int:
         for e in entries:
             all_reserved.append(e.new_hex)
             if e.old_hex != e.new_hex:
-                print(f"   🔄 {e.sfid_id}")
+                print(f"   🔄 {e.sfid_number}")
                 print(f"      旧: {e.old_hex}")
                 print(f"      新: {e.new_hex}")
         if not dry_run and changed:
@@ -372,7 +372,7 @@ def main() -> int:
         for e in entries:
             all_reserved.append(e.new_hex)
             if e.old_hex != e.new_hex:
-                print(f"   🔄 {e.shenfen_id}")
+                print(f"   🔄 {e.sfid_number}")
                 print(f"      旧: {e.old_hex}")
                 print(f"      新: {e.new_hex}")
         if not dry_run and changed:

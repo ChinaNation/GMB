@@ -5,12 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 当前钱包绑定清算行的本地快照。
 ///
 /// 中文注释:
-/// - 链上权威仍然是 `UserBank[user]` 与 `ClearingBankNodes[sfid_id]`。
+/// - 链上权威仍然是 `UserBank[user]` 与 `ClearingBankNodes[sfid_number]`。
 /// - 本地只缓存 UI 和扫码付款所需的索引字段,每次关键操作前都要重新查链上
 ///   或清算行节点确认,不能把本快照当作信任根。
 class ClearingBankBindingSnapshot {
   const ClearingBankBindingSnapshot({
-    required this.sfidId,
+    required this.sfidNumber,
     required this.institutionName,
     required this.mainAccount,
     required this.feeAccount,
@@ -21,7 +21,7 @@ class ClearingBankBindingSnapshot {
     required this.lastVerifiedAtMs,
   });
 
-  final String sfidId;
+  final String sfidNumber;
   final String institutionName;
   final String mainAccount;
   final String? feeAccount;
@@ -38,7 +38,7 @@ class ClearingBankBindingSnapshot {
   }
 
   Map<String, dynamic> toJson() => {
-        'sfid_id': sfidId,
+        'sfid_number': sfidNumber,
         'institution_name': institutionName,
         'main_account': mainAccount,
         'fee_account': feeAccount,
@@ -51,7 +51,7 @@ class ClearingBankBindingSnapshot {
 
   factory ClearingBankBindingSnapshot.fromJson(Map<String, dynamic> json) {
     return ClearingBankBindingSnapshot(
-      sfidId: (json['sfid_id'] as String?) ?? '',
+      sfidNumber: (json['sfid_number'] as String?) ?? '',
       institutionName: (json['institution_name'] as String?) ?? '',
       mainAccount: (json['main_account'] as String?) ?? '',
       feeAccount: json['fee_account'] as String?,
@@ -68,7 +68,7 @@ class ClearingBankBindingSnapshot {
 ///
 /// 中文注释:
 /// - 链上 `OffchainTransaction::UserBank[user]` 存的是**主账户** `AccountId32`
-///   (32 字节),**不是** SFID `shenfen_id` 字符串。wuminapp 同时需要 sfid_id、
+///   (32 字节),**不是** SFID `sfid_number` 字符串。wuminapp 同时需要 sfid_number、
 ///   主账户和链上 `ClearingBankNodes` 端点,所以本地缓存升级为 JSON 快照。
 /// - 快照仅是用户体验缓存;绑定、支付、充值、提现前仍要查链上或清算行节点。
 /// - 缓存按 `walletIndex` 隔离,同 App 多钱包互不干扰。
@@ -99,7 +99,7 @@ class ClearingBankPrefs {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final snapshot = ClearingBankBindingSnapshot.fromJson(json);
-      if (snapshot.sfidId.isEmpty ||
+      if (snapshot.sfidNumber.isEmpty ||
           snapshot.mainAccount.isEmpty ||
           snapshot.rpcDomain.isEmpty ||
           snapshot.rpcPort <= 0) {
@@ -111,12 +111,12 @@ class ClearingBankPrefs {
     }
   }
 
-  /// 只写入 `shenfen_id` 的旧便捷入口不再作为业务真源使用。
+  /// 只写入 `sfid_number` 的旧便捷入口不再作为业务真源使用。
   ///
   /// 这里保留给少量测试和过渡调用,会写入一个不可用于支付的最小快照;真实绑定
   /// 页面必须调用 [saveSnapshot]。
-  static Future<void> save(int walletIndex, String shenfenId) async {
-    final trimmed = shenfenId.trim();
+  static Future<void> save(int walletIndex, String sfidNumber) async {
+    final trimmed = sfidNumber.trim();
     if (trimmed.isEmpty) {
       await clear(walletIndex);
     } else {
@@ -124,7 +124,7 @@ class ClearingBankPrefs {
       await saveSnapshot(
         walletIndex,
         ClearingBankBindingSnapshot(
-          sfidId: trimmed,
+          sfidNumber: trimmed,
           institutionName: '',
           mainAccount: '',
           feeAccount: null,
@@ -138,15 +138,15 @@ class ClearingBankPrefs {
     }
   }
 
-  /// 读取 `sfid_id`,未绑定/未写入返回 `null`。
+  /// 读取 `sfid_number`,未绑定/未写入返回 `null`。
   static Future<String?> load(int walletIndex) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('$_keyPrefix$walletIndex');
     if (raw == null || raw.trim().isEmpty) return null;
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      final sfidId = (json['sfid_id'] as String?)?.trim();
-      return (sfidId == null || sfidId.isEmpty) ? null : sfidId;
+      final sfidNumber = (json['sfid_number'] as String?)?.trim();
+      return (sfidNumber == null || sfidNumber.isEmpty) ? null : sfidNumber;
     } catch (_) {
       return null;
     }

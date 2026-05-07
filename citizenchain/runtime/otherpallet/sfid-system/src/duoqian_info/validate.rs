@@ -4,7 +4,7 @@ use super::types::InstitutionFilingPayload;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FilingValidationError {
-    EmptySfidId,
+    EmptySfidNumber,
     EmptyInstitutionName,
     EmptyAccountName,
 }
@@ -13,8 +13,8 @@ pub enum FilingValidationError {
 /// 这里先做与 storage 无关的最小非空校验;省级签名、防重放和重复备案校验
 /// 后续在 extrinsic 接入时继续放在本目录内扩展。
 pub fn validate_payload(payload: &InstitutionFilingPayload) -> Result<(), FilingValidationError> {
-    if payload.sfid_id.is_empty() {
-        return Err(FilingValidationError::EmptySfidId);
+    if payload.sfid_number.is_empty() {
+        return Err(FilingValidationError::EmptySfidNumber);
     }
     if payload.institution_name.is_empty() {
         return Err(FilingValidationError::EmptyInstitutionName);

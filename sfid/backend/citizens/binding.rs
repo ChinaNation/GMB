@@ -253,25 +253,54 @@ pub(crate) async fn citizen_bind(
             let province_code = qr4.cert.prov.clone();
             let archive_no = qr4.ano.clone();
 
-            // 生成 SFID 码
-            let sfid_result =
-                match crate::sfid::generate_sfid_code(crate::sfid::GenerateSfidInput {
-                    account_pubkey: account_pubkey_hex.as_str(),
-                    a3: "GMR",
-                    p1: "1",
-                    province: &crate::sfid::province::province_name_by_code(&province_code)
-                        .unwrap_or(""),
-                    city: "省辖市",
-                    institution: "ZG",
-                }) {
-                    Ok(v) => v,
-                    Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
-                };
-
-            // 写入
+            // 写入(写锁内做 SFID 生成 + 1000 次碰撞重试,避免 lock-free 阶段读到陈旧的 sfid_code map)
             let mut store = match store_write_or_500(&state) {
                 Ok(v) => v,
                 Err(resp) => return resp,
+            };
+
+            // 生成 SFID 码(碰撞重试,1000 次保护栏)
+            //
+            // 公民绑定桶 = (a3=GMR, 一省, city=省辖市, 机构=ZG, year),
+            // 单省最大人口 1.5 亿,占 10⁹ 桶 15%,1000 次都撞概率 ≈ 0.15^1000 ≈ 10⁻⁸²⁴。
+            // 1000 次保护栏的实际作用是防极端饱和与代码 bug 死循环。
+            let province_name = crate::sfid::province::province_name_by_code(&province_code)
+                .unwrap_or("")
+                .to_string();
+            let mut sfid_attempt: Option<String> = None;
+            for retry in 0..1000u32 {
+                let attempt_pubkey = if retry == 0 {
+                    account_pubkey_hex.as_str().to_string()
+                } else {
+                    format!("{}#{retry}", account_pubkey_hex)
+                };
+                let candidate = match crate::sfid::generate_sfid_code(
+                    crate::sfid::GenerateSfidInput {
+                        account_pubkey: attempt_pubkey.as_str(),
+                        a3: "GMR",
+                        p1: "1",
+                        province: province_name.as_str(),
+                        city: "省辖市",
+                        institution: "ZG",
+                    },
+                ) {
+                    Ok(v) => v,
+                    Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
+                };
+                if !store.citizen_id_by_sfid_code.contains_key(&candidate) {
+                    sfid_attempt = Some(candidate);
+                    break;
+                }
+            }
+            let sfid_result = match sfid_attempt {
+                Some(v) => v,
+                None => {
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        1099,
+                        "SFID 桶饱和(N/10⁹>99.9%),协议需扩容",
+                    )
+                }
             };
             // 检查唯一性
             let existing_cid = store

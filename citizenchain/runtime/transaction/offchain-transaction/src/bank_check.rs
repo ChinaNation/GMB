@@ -2,7 +2,7 @@
 //!
 //! 中文注释:
 //! - 清算行(L2)= SFR 私法人 或 FFR 非法人(两者都是"私权机构")。
-//! - 清算行在 SFID 系统注册时生成 sfid_id,并在链上 `duoqian-manage` 注册
+//! - 清算行在 SFID 系统注册时生成 sfid_number,并在链上 `duoqian-manage` 注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
@@ -37,10 +37,10 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 /// 运行时由 `duoqian-manage` 的 `AddressRegisteredSfid` / `SfidRegisteredAddress` /
 /// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
 pub trait SfidAccountQuery<AccountId> {
-    /// 地址 → (sfid_id 字节, account_name 字节)。未登记返回 None。
+    /// 地址 → (sfid_number 字节, account_name 字节)。未登记返回 None。
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)>;
-    /// (sfid_id, account_name) → 地址。未登记返回 None。
-    fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId>;
+    /// (sfid_number, account_name) → 地址。未登记返回 None。
+    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址对应的多签账户是否处于 Active 状态。
     fn is_active(addr: &AccountId) -> bool;
     /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
@@ -55,8 +55,8 @@ pub trait SfidAccountQuery<AccountId> {
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool;
     /// Step 2(2026-04-27, ADR-007)新增:节点是否已声明为清算行节点。
     ///
-    /// 链上 `ClearingBankNodes` storage 由 sfid_id 索引;此方法接受主账户
-    /// 地址参数,内部由实现层反查 sfid_id 后判定。
+    /// 链上 `ClearingBankNodes` storage 由 sfid_number 索引;此方法接受主账户
+    /// 地址参数,内部由实现层反查 sfid_number 后判定。
     fn is_registered_clearing_node(bank: &AccountId) -> bool;
 }
 
@@ -65,7 +65,7 @@ impl<AccountId> SfidAccountQuery<AccountId> for () {
     fn account_info(_addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         None
     }
-    fn find_address(_sfid_id: &[u8], _account_name: &[u8]) -> Option<AccountId> {
+    fn find_address(_sfid_number: &[u8], _account_name: &[u8]) -> Option<AccountId> {
         None
     }
     fn is_active(_addr: &AccountId) -> bool {
@@ -110,7 +110,7 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// 4. 对应 `InstitutionAccounts.status == Active`(B 阶段已删 DuoqianAccounts mirror)
 /// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
 ///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
-/// 6. **节点已声明**:`sfid_id ∈ ClearingBankNodes`,确保该机构已加入清算网络
+/// 6. **节点已声明**:`sfid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络
 ///    (用户不能绑定到"机构合法但未声明清算行节点"的机构)
 pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T>> {
     let (sfid_bytes, account_name_bytes) =
@@ -149,8 +149,8 @@ pub fn ensure_can_be_bound<T: Config>(addr: &T::AccountId) -> Result<(), Error<T
 /// 反查"清算行费用账户"地址(Step 2 起由 `settlement.rs` 使用)。
 ///
 /// 流程:
-/// 1. 由主账户地址反查得到 `sfid_id`
-/// 2. 用 `(sfid_id, "费用账户")` 查询费用账户地址
+/// 1. 由主账户地址反查得到 `sfid_number`
+/// 2. 用 `(sfid_number, "费用账户")` 查询费用账户地址
 ///
 /// 若清算行注册时未同步创建费用账户,返回 `FeeAccountNotFound`。
 pub fn fee_account_of<T: Config>(main_addr: &T::AccountId) -> Result<T::AccountId, Error<T>> {

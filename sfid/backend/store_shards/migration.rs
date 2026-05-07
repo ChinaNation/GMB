@@ -17,7 +17,7 @@
 //
 // 省份识别规则:
 //   - MultisigInstitution:直接读 `.province` 字段
-//   - MultisigAccount:通过 key `sfid_id|account_name` 反查 institution.province
+//   - MultisigAccount:通过 key `sfid_number|account_name` 反查 institution.province
 //   - CpmsSiteKeys:直接读 `.admin_province` 字段
 //   - AdminUser(ShiAdmin):通过 `created_by → sheng_admin_province_by_pubkey` 反查
 //   - CitizenRecord:通过 province_code(2 字符)→ province_name 反查,
@@ -127,7 +127,7 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
     }
 
     // ── 机构:按 institution.province 分散 ──
-    for (sfid_id, inst) in &store.multisig_institutions {
+    for (sfid_number, inst) in &store.multisig_institutions {
         let province = if inst.province.is_empty() {
             "__unknown__".to_string()
         } else {
@@ -136,15 +136,15 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
         let shard = ensure(&mut shards, &province);
         shard
             .multisig_institutions
-            .insert(sfid_id.clone(), inst.clone());
+            .insert(sfid_number.clone(), inst.clone());
     }
 
-    // ── 机构账户:通过 "sfid_id|account_name" key 的 sfid_id 前缀反查 ──
+    // ── 机构账户:通过 "sfid_number|account_name" key 的 sfid_number 前缀反查 ──
     for (key, account) in &store.multisig_accounts {
         // 先找 parent institution 的 province
         let parent_province = store
             .multisig_institutions
-            .get(&account.sfid_id)
+            .get(&account.sfid_number)
             .map(|i| i.province.clone())
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| "__unknown__".to_string());

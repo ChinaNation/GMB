@@ -6,21 +6,9 @@ WUMIN_DIR="$SCRIPT_DIR/.."
 REPO_ROOT="$SCRIPT_DIR/../.."
 cd "$WUMIN_DIR"
 
-echo "==> 同步 runtime spec_version 和 pallet 索引..."
+echo "==> 同步 runtime pallet/call 索引..."
 RUNTIME_LIB="$REPO_ROOT/citizenchain/runtime/src/lib.rs"
 REGISTRY="lib/signer/pallet_registry.dart"
-
-# 从链上读取当前 spec_version（必须能连上节点）
-CHAIN_RPC="${CHAIN_RPC_URL:-http://localhost:9944}"
-SPEC=$(curl -sS --max-time 5 -H 'Content-Type: application/json' \
-  -d '{"id":1,"jsonrpc":"2.0","method":"state_getRuntimeVersion","params":[]}' \
-  "$CHAIN_RPC" 2>/dev/null \
-  | python3 -c "import json,sys; print(json.load(sys.stdin)['result']['specVersion'])" 2>/dev/null) || true
-if [[ -z "$SPEC" ]]; then
-  echo "错误：无法从 $CHAIN_RPC 读取链上 spec_version。请确保区块链节点正在运行。"
-  exit 1
-fi
-sed -i '' "s/supportedSpecVersions = {[^}]*}/supportedSpecVersions = {$SPEC}/" "$REGISTRY"
 
 # 从 runtime pallet_index 宏提取 pallet 索引
 extract_pallet_index() {
@@ -48,7 +36,7 @@ sed -i '' "s/proposeTransferCall = [0-9]*/proposeTransferCall = $PROPOSE_CALL/" 
 sed -i '' "s/jointVoteCall = [0-9]*/jointVoteCall = $JOINT_CALL/" "$REGISTRY"
 sed -i '' "s/castReferendumCall = [0-9]*/castReferendumCall = $REFERENDUM_CALL/" "$REGISTRY"
 
-echo "    spec_version={$SPEC} (链上) Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
+echo "    Balances=$BALANCES_IDX DuoqianTransfer=$DUOQIAN_IDX VotingEngine=$VOTING_IDX"
 echo "    propose=$PROPOSE_CALL joint=$JOINT_CALL referendum=$REFERENDUM_CALL"
 
 echo "==> 清空构建缓存..."

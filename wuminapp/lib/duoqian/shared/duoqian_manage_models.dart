@@ -112,7 +112,10 @@ enum DuoqianStatus {
   active,
 }
 
-/// 多签账户链上信息（从 DuoqianAccounts 存储解码）。
+/// 多签账户链上信息。
+///
+/// 注册机构来自 `OrganizationManage::Institutions / InstitutionAccounts`，
+/// 个人多签来自 `PersonalManage::PersonalDuoqians`。
 class DuoqianAccountInfo {
   const DuoqianAccountInfo({
     required this.adminCount,

@@ -83,8 +83,8 @@ interface Props {
 interface InfoFormValues {
   institution_name: string;
   sub_type?: string;
-  /** 非法人(FFR)所属法人 sfid_id */
-  parent_sfid_id?: string;
+  /** 非法人(FFR)所属法人 sfid_number */
+  parent_sfid_number?: string;
 }
 
 export const PrivateInstitutionLayout: React.FC<Props> = ({
@@ -117,30 +117,30 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     () => (isSFR ? subTypeChoicesForP1(inst.p1) : []),
     [isSFR, inst.p1],
   );
-  // 完善判断:名称必填;SFR 需要 sub_type;FFR 需要 parent_sfid_id
+  // 完善判断:名称必填;SFR 需要 sub_type;FFR 需要 parent_sfid_number
   const needsCompletion =
     !inst.institution_name ||
     (isSFR && !inst.sub_type) ||
-    (isFFR && !inst.parent_sfid_id);
+    (isFFR && !inst.parent_sfid_number);
 
   // ── FFR 所属法人搜索 ──
   const [parentSearchOpts, setParentSearchOpts] = useState<ParentInstitutionRow[]>([]);
   const [parentSearching, setParentSearching] = useState(false);
-  // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_sfid_id 有值,也要一次性拿到显示名)
+  // 当前选中的法人(用于展示已选项名称;首次进入若 inst.parent_sfid_number 有值,也要一次性拿到显示名)
   const [selectedParent, setSelectedParent] = useState<ParentInstitutionRow | null>(null);
 
-  // detail 变更 → 若有 parent_sfid_id 则拉一次展示名称
+  // detail 变更 → 若有 parent_sfid_number 则拉一次展示名称
   useEffect(() => {
-    if (!isFFR || !inst.parent_sfid_id) {
+    if (!isFFR || !inst.parent_sfid_number) {
       setSelectedParent(null);
       return;
     }
-    // 用 sfid_id 自身作为查询词反查名称
+    // 用 sfid_number 自身作为查询词反查名称
     let cancelled = false;
-    searchParentInstitutions(auth, inst.parent_sfid_id)
+    searchParentInstitutions(auth, inst.parent_sfid_number)
       .then((rows) => {
         if (cancelled) return;
-        const hit = rows.find((r) => r.sfid_id === inst.parent_sfid_id);
+        const hit = rows.find((r) => r.sfid_number === inst.parent_sfid_number);
         setSelectedParent(hit ?? null);
       })
       .catch(() => {
@@ -149,7 +149,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [isFFR, inst.parent_sfid_id, auth.access_token]);
+  }, [isFFR, inst.parent_sfid_number, auth.access_token]);
 
   // 搜索(仅在用户点击搜索图标时触发,不自动 onSearch)
   const onParentSearch = async (value: string) => {
@@ -176,7 +176,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
 
   const triggerParentSearch = () => {
     if (parentSearching) return;
-    const q = (form.getFieldValue('parent_sfid_id') ?? '') as string;
+    const q = (form.getFieldValue('parent_sfid_number') ?? '') as string;
     onParentSearch(q);
   };
 
@@ -188,9 +188,9 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
-      parent_sfid_id: inst.parent_sfid_id ?? undefined,
+      parent_sfid_number: inst.parent_sfid_number ?? undefined,
     });
-  }, [inst.sfid_id, inst.institution_name, inst.sub_type]);
+  }, [inst.sfid_number, inst.institution_name, inst.sub_type]);
 
   const onClickEdit = () => {
     setEditing(true);
@@ -198,7 +198,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
-      parent_sfid_id: inst.parent_sfid_id ?? undefined,
+      parent_sfid_number: inst.parent_sfid_number ?? undefined,
     });
     setCurrentName(inst.institution_name ?? '');
   };
@@ -209,7 +209,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     form.setFieldsValue({
       institution_name: inst.institution_name ?? '',
       sub_type: inst.sub_type ?? undefined,
-      parent_sfid_id: inst.parent_sfid_id ?? undefined,
+      parent_sfid_number: inst.parent_sfid_number ?? undefined,
     });
     setCurrentName(inst.institution_name ?? '');
   };
@@ -266,7 +266,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       message.error('请选择企业类型');
       return;
     }
-    if (isFFR && !values.parent_sfid_id) {
+    if (isFFR && !values.parent_sfid_number) {
       message.error('请选择所属法人机构');
       return;
     }
@@ -277,10 +277,10 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
     }
     setSavingInfo(true);
     try {
-      await updateInstitution(auth, inst.sfid_id, {
+      await updateInstitution(auth, inst.sfid_number, {
         institution_name: name,
         sub_type: isSFR ? values.sub_type ?? null : null,
-        parent_sfid_id: isFFR ? values.parent_sfid_id : undefined,
+        parent_sfid_number: isFFR ? values.parent_sfid_number : undefined,
       });
       message.success('机构信息已保存');
       setEditing(false);
@@ -361,7 +361,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
             <Descriptions column={1} size="small">
               <Descriptions.Item label="机构 SFID">
                 <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                  {inst.sfid_id}
+                  {inst.sfid_number}
                 </Typography.Text>
               </Descriptions.Item>
               <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
@@ -404,7 +404,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                   initialValues={{
                     institution_name: inst.institution_name ?? '',
                     sub_type: inst.sub_type ?? undefined,
-                    parent_sfid_id: inst.parent_sfid_id ?? undefined,
+                    parent_sfid_number: inst.parent_sfid_number ?? undefined,
                   }}
                 >
                   <Form.Item
@@ -445,7 +445,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                   {isFFR && (
                     <Form.Item
                       label="所属法人"
-                      name="parent_sfid_id"
+                      name="parent_sfid_number"
                       rules={[{ required: true, message: '请选择所属法人机构' }]}
                       extra="输入 SFID 或机构名称后点击右侧搜索图标,从下拉结果中选择;必须是私法人(SFR)或公法人(GFR)"
                     >
@@ -454,19 +454,19 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                         filterOption={false}
                         notFoundContent={null}
                         options={parentSearchOpts.map((r) => ({
-                          value: r.sfid_id,
+                          value: r.sfid_number,
                           label: (
                             <div>
                               <div style={{ fontWeight: 500 }}>{r.institution_name}</div>
                               <div style={{ fontSize: 11, color: '#888' }}>
-                                {r.sfid_id} · {r.a3} · {r.province}/{r.city}
+                                {r.sfid_number} · {r.a3} · {r.province}/{r.city}
                               </div>
                             </div>
                           ),
                         }))}
                         onSelect={(val) => {
                           // 选中后,把选中机构缓存到 selectedParent 便于只读态展示
-                          const hit = parentSearchOpts.find((o) => o.sfid_id === val);
+                          const hit = parentSearchOpts.find((o) => o.sfid_number === val);
                           if (hit) setSelectedParent(hit);
                         }}
                       >
@@ -515,7 +515,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                   </Descriptions.Item>
                   {isFFR && (
                     <Descriptions.Item label="所属法人">
-                      {inst.parent_sfid_id ? (
+                      {inst.parent_sfid_number ? (
                         selectedParent ? (
                           <span>
                             {selectedParent.institution_name}
@@ -523,12 +523,12 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                               type="secondary"
                               style={{ marginLeft: 6, fontSize: 12 }}
                             >
-                              ({selectedParent.sfid_id})
+                              ({selectedParent.sfid_number})
                             </Typography.Text>
                           </span>
                         ) : (
                           <Typography.Text code style={{ fontSize: 12 }}>
-                            {inst.parent_sfid_id}
+                            {inst.parent_sfid_number}
                           </Typography.Text>
                         )
                       ) : (
@@ -557,7 +557,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
                   )}
                   {/* FFR 资格 badge(2026-04-24, ADR-007):
                       需要 parent 信息(parent.SFR + parent.JOINT_STOCK)。
-                      selectedParent 已在 useEffect 里按 parent_sfid_id 反查并缓存。 */}
+                      selectedParent 已在 useEffect 里按 parent_sfid_number 反查并缓存。 */}
                   {isFFR && selectedParent && isClearingBankEligible(inst, selectedParent) && (
                     <Descriptions.Item label="清算行资格">
                       <Tag color="blue">{CLEARING_BANK_ELIGIBLE_LABEL}</Tag>
@@ -596,11 +596,11 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       </Card>
 
       {/* 下:资料库(自治模块) */}
-      <DocumentLibrary auth={auth} sfidId={inst.sfid_id} canWrite={canWrite} />
+      <DocumentLibrary auth={auth} sfidNumber={inst.sfid_number} canWrite={canWrite} />
 
       <CreateAccountModal
         auth={auth}
-        sfidId={inst.sfid_id}
+        sfidNumber={inst.sfid_number}
         institutionName={inst.institution_name ?? ''}
         existingAccounts={accounts}
         open={createAccountOpen}

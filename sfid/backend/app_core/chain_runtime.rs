@@ -253,13 +253,13 @@ pub(crate) fn build_population_snapshot_credential(
 /// 用**省级签名密钥**签发机构注册信息凭证。
 ///
 /// 中文注释:本函数只签“链端注册真正需要的机构信息”:
-/// `sfid_id / institution_name / account_names`。`province`、`signer_admin_pubkey`、
+/// `sfid_number / institution_name / account_names`。`province`、`signer_admin_pubkey`、
 /// `genesis_hash`、`register_nonce` 是验签与防重放安全字段,不是业务注册字段。
 ///
 /// payload 字节布局必须与链端 `sfid-system` verifier 保持一致:
 /// `blake2_256(scale_encode((
 ///   DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash,
-///   sfid_id, institution_name, account_names,
+///   sfid_number, institution_name, account_names,
 ///   register_nonce, province, signer_admin_pubkey
 /// )))`
 ///
@@ -267,7 +267,7 @@ pub(crate) fn build_population_snapshot_credential(
 /// 否则 sr25519 verify 必败。
 pub(crate) fn build_institution_registration_info_credential(
     state: &AppState,
-    sfid_id: &str,
+    sfid_number: &str,
     institution_name: &str,
     account_names: &[String],
     register_nonce: String,
@@ -275,8 +275,8 @@ pub(crate) fn build_institution_registration_info_credential(
     signer_admin_pubkey: [u8; 32],
     province_pair: &sp_core::sr25519::Pair,
 ) -> Result<RuntimeInstitutionRegistrationInfoCredential, String> {
-    if sfid_id.trim().is_empty() {
-        return Err("sfid_id is required".to_string());
+    if sfid_number.trim().is_empty() {
+        return Err("sfid_number is required".to_string());
     }
     if institution_name.trim().is_empty() {
         return Err("institution_name is required".to_string());
@@ -299,7 +299,7 @@ pub(crate) fn build_institution_registration_info_credential(
         DUOQIAN_DOMAIN,
         OP_SIGN_INST,
         genesis_hash,
-        sfid_id.as_bytes(),
+        sfid_number.as_bytes(),
         institution_name.as_bytes(),
         account_name_bytes,
         register_nonce.as_bytes(),

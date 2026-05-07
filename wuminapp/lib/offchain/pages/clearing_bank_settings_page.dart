@@ -87,7 +87,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   Future<void> _openBind(ClearingBankCandidate item) async {
     if (!item.canBind) return;
     final current = _current;
-    final isSwitch = current != null && current.sfidId != item.info.sfidId;
+    final isSwitch = current != null && current.sfidNumber != item.info.sfidNumber;
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -162,9 +162,9 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
     return ListTile(
       leading: const Icon(Icons.account_balance),
       title: Text(current.institutionName.isEmpty
-          ? current.sfidId
+          ? current.sfidNumber
           : current.institutionName),
-      subtitle: Text('${current.sfidId}\n${current.wssUrl}'),
+      subtitle: Text('${current.sfidNumber}\n${current.wssUrl}'),
       isThreeLine: true,
       trailing: TextButton(
         onPressed: () async {
@@ -210,7 +210,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
     final name =
         info.institutionName.isEmpty ? '(未命名机构)' : info.institutionName;
     final current = _current;
-    final isCurrent = current?.sfidId == info.sfidId;
+    final isCurrent = current?.sfidNumber == info.sfidNumber;
     final buttonText = isCurrent ? '已绑定' : (current == null ? '绑定' : '切换');
 
     return ListTile(
@@ -220,7 +220,7 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
       ),
       title: Text(name),
       subtitle: Text(
-        '${info.sfidId}\n'
+        '${info.sfidNumber}\n'
         '${endpoint == null ? '未查询到链上节点声明' : endpoint.wssUrl}',
       ),
       isThreeLine: true,

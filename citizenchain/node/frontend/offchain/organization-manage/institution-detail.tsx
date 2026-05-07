@@ -1,4 +1,4 @@
-// 清算行机构详情页(链上 organization-manage::Institutions[sfid_id] 已存在时展示)。
+// 清算行机构详情页(链上 organization-manage::Institutions[sfid_number] 已存在时展示)。
 //
 // 风格参考 governance/InstitutionDetailPage 的卡片栅格 + 折叠子页入口,
 // 但数据源全部走 chain/organization-manage,通过 offchainApi.fetchInstitutionDetail 获取。
@@ -17,17 +17,17 @@ import type {
 } from '../types';
 
 type Props = {
-  sfidId: string;
+  sfidNumber: string;
   onBack: () => void;
   onOpenOtherAccounts: (detail: InstitutionDetail) => void;
   onOpenAdminList: (detail: InstitutionDetail) => void;
-  onDeclareNode: (sfidId: string, institutionName: string) => void;
+  onDeclareNode: (sfidNumber: string, institutionName: string) => void;
 };
 
 const PROPOSAL_PAGE_SIZE = 10;
 
 export function ClearingBankInstitutionDetailPage({
-  sfidId,
+  sfidNumber,
   onBack,
   onOpenOtherAccounts,
   onOpenAdminList,
@@ -45,10 +45,10 @@ export function ClearingBankInstitutionDetailPage({
     setLoading(true);
     setError(null);
     Promise.all([
-      offchainApi.fetchInstitutionDetail(sfidId),
-      offchainApi.queryClearingBankNodeInfo(sfidId).catch(() => null),
+      offchainApi.fetchInstitutionDetail(sfidNumber),
+      offchainApi.queryClearingBankNodeInfo(sfidNumber).catch(() => null),
       offchainApi
-        .fetchInstitutionProposals(sfidId, 0, PROPOSAL_PAGE_SIZE)
+        .fetchInstitutionProposals(sfidNumber, 0, PROPOSAL_PAGE_SIZE)
         .catch(() => ({ items: [], hasMore: false })),
     ])
       .then(([d, n, page]) => {
@@ -67,7 +67,7 @@ export function ClearingBankInstitutionDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [sfidId]);
+  }, [sfidNumber]);
 
   if (loading) {
     return (
@@ -111,7 +111,7 @@ export function ClearingBankInstitutionDetailPage({
           <button
             className="primary-button"
             style={{ marginLeft: 'auto' }}
-            onClick={() => onDeclareNode(sfidId, detail.institutionName)}
+            onClick={() => onDeclareNode(sfidNumber, detail.institutionName)}
           >
             声明本机为清算行节点 →
           </button>
@@ -139,9 +139,9 @@ export function ClearingBankInstitutionDetailPage({
       <div className="institution-detail-grid">
         <div className="metric-card">
           <div className="metric-label">
-            机构身份ID <code className="metric-label-id">{detail.sfidId}</code>
+            机构身份ID <code className="metric-label-id">{detail.sfidNumber}</code>
           </div>
-          <div className="metric-value">{detail.sfidId}</div>
+          <div className="metric-value">{detail.sfidNumber}</div>
         </div>
 
         <div className="metric-card">

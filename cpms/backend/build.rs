@@ -20,7 +20,7 @@ fn main() {
     let sfid_dir = env::var("CPMS_SFID_DIR")
         .or_else(|_| env::var("CPMS_SFID_TOOL_DIR"))
         .map(PathBuf::from)
-        .unwrap_or_else(|_| manifest_dir.join("../../sfid/backend/src/sfid"));
+        .unwrap_or_else(|_| manifest_dir.join("../../sfid/backend/sfid"));
 
     let province_file = sfid_dir.join("province.rs");
     let city_dir = sfid_dir.join("city_codes");
@@ -28,7 +28,7 @@ fn main() {
     if !province_file.is_file() || !city_dir.is_dir() {
         panic!(
             "sfid source not found. expected province file at '{}' and city dir at '{}'. \
-set CPMS_SFID_DIR to '/path/to/sfid/backend/src/sfid'",
+set CPMS_SFID_DIR to '/path/to/sfid/backend/sfid'",
             province_file.display(),
             city_dir.display()
         );

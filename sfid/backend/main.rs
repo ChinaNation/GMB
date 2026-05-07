@@ -787,7 +787,7 @@ fn main() {
             )
             .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
-                "/api/v1/admin/cpms-keys/by-institution/:sfid_id",
+                "/api/v1/admin/cpms-keys/by-institution/:sfid_number",
                 get(cpms::get_cpms_site_by_institution),
             )
             .route(
@@ -827,11 +827,11 @@ fn main() {
             // 中文注释:机构/账户两层模型的 API
             // - GET  /api/v1/institution/check-name                      — 机构名称全国查重
             // - POST /api/v1/institution/create                          — 生成机构(不上链)
-            // - POST /api/v1/institution/:sfid_id/account/create         — 只登记账户名称,不上链
+            // - POST /api/v1/institution/:sfid_number/account/create         — 只登记账户名称,不上链
             // - GET  /api/v1/institution/list                            — 按 scope 过滤的机构列表
-            // - GET  /api/v1/institution/:sfid_id                        — 机构详情
-            // - GET  /api/v1/institution/:sfid_id/accounts               — 账户列表
-            // - DELETE /api/v1/institution/:sfid_id/account/:account_name — 删除未上链/已注销新增账户
+            // - GET  /api/v1/institution/:sfid_number                        — 机构详情
+            // - GET  /api/v1/institution/:sfid_number/accounts               — 账户列表
+            // - DELETE /api/v1/institution/:sfid_number/account/:account_name — 删除未上链/已注销新增账户
             .route(
                 "/api/v1/institution/check-name",
                 get(institutions::handler::check_institution_name),
@@ -846,7 +846,7 @@ fn main() {
                 post(institutions::handler::create_institution),
             )
             .route(
-                "/api/v1/institution/:sfid_id/account/create",
+                "/api/v1/institution/:sfid_number/account/create",
                 post(institutions::handler::create_account),
             )
             .route(
@@ -854,31 +854,31 @@ fn main() {
                 get(institutions::handler::list_institutions),
             )
             .route(
-                "/api/v1/institution/:sfid_id",
+                "/api/v1/institution/:sfid_number",
                 get(institutions::handler::get_institution)
                     // 两步式第二步:详情页更新机构名称/企业类型
                     .patch(institutions::handler::update_institution),
             )
             .route(
-                "/api/v1/institution/:sfid_id/accounts",
+                "/api/v1/institution/:sfid_number/accounts",
                 get(institutions::handler::list_accounts),
             )
             .route(
-                "/api/v1/institution/:sfid_id/account/:account_name",
+                "/api/v1/institution/:sfid_number/account/:account_name",
                 delete(institutions::handler::delete_account),
             )
             // 机构资料库文档 CRUD
             .route(
-                "/api/v1/institution/:sfid_id/documents",
+                "/api/v1/institution/:sfid_number/documents",
                 get(institutions::handler::list_documents)
                     .post(institutions::handler::upload_document),
             )
             .route(
-                "/api/v1/institution/:sfid_id/documents/:doc_id/download",
+                "/api/v1/institution/:sfid_number/documents/:doc_id/download",
                 get(institutions::handler::download_document),
             )
             .route(
-                "/api/v1/institution/:sfid_id/documents/:doc_id",
+                "/api/v1/institution/:sfid_number/documents/:doc_id",
                 delete(institutions::handler::delete_document),
             )
             // ADR-008 Phase 23e:`/api/v1/admin/debug/bootstrap-signer` 已下架,
@@ -997,15 +997,15 @@ fn main() {
                 get(institutions::chain_duoqian_info::app_search_institutions),
             )
             .route(
-                "/api/v1/app/institutions/:sfid_id/registration-info",
+                "/api/v1/app/institutions/:sfid_number/registration-info",
                 get(institutions::chain_duoqian_info::app_get_institution_registration_info),
             )
             .route(
-                "/api/v1/app/institutions/:sfid_id",
+                "/api/v1/app/institutions/:sfid_number",
                 get(institutions::chain_duoqian_info::app_get_institution),
             )
             .route(
-                "/api/v1/app/institutions/:sfid_id/accounts",
+                "/api/v1/app/institutions/:sfid_number/accounts",
                 get(institutions::chain_duoqian_info::app_list_accounts),
             )
             // ── 清算行搜索(已激活,wuminapp 绑定清算行用):资格白名单 + 主账户 ACTIVE_ON_CHAIN ──

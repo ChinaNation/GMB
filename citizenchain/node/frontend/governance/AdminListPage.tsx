@@ -14,13 +14,13 @@ import type {
 } from './types';
 
 type Props = {
-  shenfenId: string;
+  sfidNumber: string;
   onBack: () => void;
 };
 
 type ActivateStep = 'idle' | 'qr' | 'scan' | 'verifying' | 'done' | 'error';
 
-export function AdminListPage({ shenfenId, onBack }: Props) {
+export function AdminListPage({ sfidNumber, onBack }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [activatedAdmins, setActivatedAdmins] = useState<ActivatedAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +36,8 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      api.getInstitutionDetail(shenfenId),
-      api.getActivatedAdmins(shenfenId).catch(() => [] as ActivatedAdmin[]),
+      api.getInstitutionDetail(sfidNumber),
+      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
     ])
       .then(([d, aa]) => {
         setDetail(d);
@@ -46,7 +46,7 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [shenfenId]);
+  }, [sfidNumber]);
 
   // 激活倒计时
   useEffect(() => {
@@ -64,7 +64,7 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
     setActivatePubkey(pubkeyHex);
     setActivateError(null);
     try {
-      const result = await api.buildActivateAdminRequest(pubkeyHex, shenfenId);
+      const result = await api.buildActivateAdminRequest(pubkeyHex, sfidNumber);
       setActivateRequest(result);
       setActivateCountdown(90);
       setActivateStep('qr');
@@ -72,7 +72,7 @@ export function AdminListPage({ shenfenId, onBack }: Props) {
       setActivateError(sanitizeError(e));
       setActivateStep('error');
     }
-  }, [shenfenId]);
+  }, [sfidNumber]);
 
   const handleActivateScan = useCallback(async (responseJson: string) => {
     if (!activateRequest) return;

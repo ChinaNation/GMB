@@ -23,7 +23,7 @@
 - Event 字段 `institution: InstitutionPalletId` → `subject: SubjectId`
 
 **不改的(机构业务层)**:
-- `organization-manage::pallet::Institutions: StorageMap<SfidId, InstitutionInfo>` storage
+- `organization-manage::pallet::Institutions: StorageMap<SfidNumber, InstitutionInfo>` storage
 - `InstitutionInfo` / `InstitutionAccountInfo` / `InstitutionLifecycleStatus` / `RegisteredInstitution` / `InstitutionMultisigQuery` / `InstitutionPendingClose`
 - `institution-asset` crate
 - `verify_institution_registration` / `do_propose_institution_close` / `propose_create_institution` / `register_sfid_institution`
@@ -52,7 +52,7 @@
 - `admins-change/src/lib.rs`:`AdminInstitution` → `AdminSubject`;`AdminInstitutionOf` → `AdminSubjectOf`;`Institutions` storage → `Subjects`;函数参数约 80 处
 
 **业务 pallet**:
-- `organization-manage`:函数参数(治理路径) + Error 字段;**保留** `Institutions(SfidId-keyed)`
+- `organization-manage`:函数参数(治理路径) + Error 字段;**保留** `Institutions(SfidNumber-keyed)`
 - `personal-manage`:函数参数
 - `duoqian-transfer`:helper 改名 + 函数参数 + Error 字段 + benchmarks
 - `resolution-destro / grandpakey-change / shengbank-interest`:函数参数
@@ -87,7 +87,7 @@
 - payload 长度上限 47B 不变
 - 业务流程零变更(propose / vote / execute / close 路径所有 case 继续工作)
 - 链未上线,fresh genesis 即生效;无 storage migration
-- `organization-manage::Institutions(SfidId-keyed)` 等机构业务命名一字不动
+- `organization-manage::Institutions(SfidNumber-keyed)` 等机构业务命名一字不动
 - 跨模块联动:runtime + 6 个业务 pallet + node + wumin + wuminapp 必须同步推进
 
 ## 4. 执行计划(13 步,单 commit)
@@ -130,7 +130,7 @@ grep -rn "\bInstitutionPalletId\b" citizenchain/ wumin/ wuminapp/ sfid/ memory/ 
   | grep -v target/ | grep -v ".dart_tool/" | grep -v "08-tasks/done/"
 
 # 旧函数名零残留
-grep -rn "build_institution_id\|parse_institution_id\|institution_id_from_account\|institution_id_from_sfid_id\|institution_id_from_shenfen_id\|nrc_pallet_id_bytes" \
+grep -rn "build_institution_id\|parse_institution_id\|institution_id_from_account\|institution_id_from_sfid_number\|institution_id_from_sfid_number\|nrc_pallet_id_bytes" \
   citizenchain/ wumin/ wuminapp/ memory/ --include="*.rs" --include="*.dart" 2>/dev/null \
   | grep -v target/ | grep -v ".dart_tool/" | grep -v "08-tasks/done/"
 
@@ -150,14 +150,14 @@ grep -rn "\binstitution_org\b\|\binstitution_pallet_address\b\|\binstitution_id_
 - ✓ storage layout 字节级数据等价(只改 Rust 类型/storage prefix 名,fresh genesis 即生效)
 - ✓ 业务流程零变更
 - ✓ 客户端 dispatch 规则不变
-- ✓ 机构业务层(InstitutionInfo / Institutions(SfidId) 等)完全保留
+- ✓ 机构业务层(InstitutionInfo / Institutions(SfidNumber) 等)完全保留
 
 ## 6. 风险与缓解
 
 | ID | 风险 | 缓解 |
 |---|---|---|
 | R1 | 460+ 处改动,易漏 | grep 残留扫描 4 项守门;Step 化执行 |
-| R2 | 机构业务层 vs 治理主体层边界判错 | 改前按"key 类型"区分(SfidId-keyed 不动,SubjectId-keyed 改) |
+| R2 | 机构业务层 vs 治理主体层边界判错 | 改前按"key 类型"区分(SfidNumber-keyed 不动,SubjectId-keyed 改) |
 | R3 | storage prefix 名改了 → hash 全变,链未上线 fresh genesis 才能生效 | feedback_chain_in_dev.md 守住 |
 | R4 | 客户端 dart storage 名字符串字面漏改 | grep `'Institutions'` 字面 + flutter test 守门 |
 | R5 | 文件名 vs 函数名错位(`institution_admin_service.dart` 内部 buildAdminSubjectKey) | 接受历史命名错位;后续业务命名整理任务可清理 |
@@ -174,7 +174,7 @@ grep -rn "\binstitution_org\b\|\binstitution_pallet_address\b\|\binstitution_id_
 
 13 步全部完成(2026-05-06):
 
-1. **`primitives::derive` 改名** — `build_institution_id` → `build_subject_id`;`parse_institution_id` → `parse_subject_id`;`institution_id_from_{account,sfid_id,shenfen_id}` → `subject_id_from_{account,sfid_id,shenfen_id}`;7 个测试断言变量名同步
+1. **`primitives::derive` 改名** — `build_institution_id` → `build_subject_id`;`parse_institution_id` → `parse_subject_id`;`institution_id_from_{account,shenfen_id,sfid_id}` → `subject_id_from_{account,shenfen_id,sfid_id}`(注:此卡为 D 阶段历史记录,当时函数名仍是 shenfen_id/sfid_id;后于 2026-05-07 全部统一为 sfid_number,见 `20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`);7 个测试断言变量名同步
 2. **`votingengine::types`** — `InstitutionPalletId` → `SubjectId`;`nrc_pallet_id_bytes` → `nrc_subject_id`
 3. **`admins-change`** — `AdminInstitution` → `AdminSubject`;`AdminInstitutionOf` → `AdminSubjectOf`;`Institutions` storage → `Subjects`;函数参数 `institution: InstitutionPalletId` → `subject: SubjectId`;`#[pallet::getter(fn institution_of)]` → `subject_of`
 4-9. **业务 pallet 跟随类型改名传递**(workspace 编译通过):organization-manage / personal-manage / duoqian-transfer / internal-vote / joint-vote / citizen-vote / resolution-destro / grandpakey-change / shengbank-interest / runtime configs/lib + benchmarks
@@ -199,7 +199,7 @@ grep -rn "\binstitution_org\b\|\binstitution_pallet_address\b\|\binstitution_id_
 
 ### 残留扫描(全零)
 1. `InstitutionPalletId` / `AdminInstitutionOf` / `build_institution_id` / `parse_institution_id` / `institution_id_from_*` / `nrc_pallet_id_bytes` / `admin_institutions_key`:零残留
-2. `admins_change::Institutions` / `AdminsChange::Institutions` 字面:零残留(机构业务的 `organization_manage::Institutions(SfidId-keyed)` 保留)
+2. `admins_change::Institutions` / `AdminsChange::Institutions` 字面:零残留(机构业务的 `organization_manage::Institutions(SfidNumber-keyed)` 保留)
 3. `AdminInstitution` 类型(治理层):零残留
 4. helper `institution_org` / `institution_pallet_address` / `institution_id_has_zero_suffix`:零残留(已改 subject_*)
 
@@ -209,6 +209,6 @@ grep -rn "\binstitution_org\b\|\binstitution_pallet_address\b\|\binstitution_id_
 - ✓ storage layout 字节级数据等价(只改 Rust 类型名 + storage prefix 名,fresh genesis 即生效)
 - ✓ 业务流程零变更(propose / vote / execute / close 路径所有 case 继续工作)
 - ✓ 客户端 dispatch 规则不变(PersonalDuoqianInfo.has / AddressRegisteredSfid.has 互斥)
-- ✓ 机构业务层完全保留:`organization-manage::Institutions(SfidId-keyed)` / `InstitutionInfo` / `InstitutionAccountInfo` / `InstitutionLifecycleStatus` / `InstitutionMultisigQuery` / `InstitutionPendingClose` / `verify_institution_registration` / `register_sfid_institution` / `propose_create_institution` 一字未动
+- ✓ 机构业务层完全保留:`organization-manage::Institutions(SfidNumber-keyed)` / `InstitutionInfo` / `InstitutionAccountInfo` / `InstitutionLifecycleStatus` / `InstitutionMultisigQuery` / `InstitutionPendingClose` / `verify_institution_registration` / `register_sfid_institution` / `propose_create_institution` 一字未动
 - ✓ wuminapp `lib/citizen/institution/` 目录 + `institution_admin_service.dart` 文件名保留(业务命名)
 - ✓ `institution-asset` crate 保留

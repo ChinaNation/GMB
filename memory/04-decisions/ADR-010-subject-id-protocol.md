@@ -12,7 +12,7 @@
 
 A 阶段(2026-05-04 引入 SubjectKind)**之前**的派生协议是"裸右填零":三类主体派生函数各写一份,字节布局都是 `payload + zeros`,**没有主体类型字节区分**。结果:
 
-1. 内置主体(`shenfen_id` ASCII)与 SFID 机构(`sfid_id` ASCII)字节空间高度重叠,理论上存在撞 key 风险(运营约定靠 GFR-/SFR-/SCR- 前缀人为隔离,无协议级保护)
+1. 内置主体(`sfid_number` ASCII)与 SFID 机构(`sfid_number` ASCII)字节空间高度重叠,理论上存在撞 key 风险(运营约定靠 GFR-/SFR-/SCR- 前缀人为隔离,无协议级保护)
 2. 个人多签(32B blake2 hash)与 ASCII 主体的撞 key 概率 ≈ 2^-32(哈希熵巧合,工程上可忽略但不是结构性互斥)
 
 ## 决议
@@ -32,8 +32,8 @@ SubjectId = [u8; 48]
     0x04..0xFE 保留(未来主体类型扩展)
     0xFF       Reserved 哨兵      (协议升级时启用)
   byte[1..48]: payload (47 字节,kind 决定语义)
-    Builtin:           shenfen_id ASCII 字节(≤47B)右填零
-    SfidInstitution:   sfid_id 字节(≤47B)右填零
+    Builtin:           sfid_number ASCII 字节(≤47B)右填零
+    SfidInstitution:   sfid_number 字节(≤47B)右填零
     PersonalDuoqian:   32B AccountId + 15B 零填充
 ```
 
@@ -56,29 +56,29 @@ pub fn parse_institution_id(id: &[u8; 48]) -> Option<(SubjectKind, &[u8])>;
 
 // 语义 helper(全工程统一入口)
 pub fn subject_id_from_account<A: Encode>(account: &A) -> SubjectId;  // PersonalDuoqian
-pub fn subject_id_from_sfid_id(sfid_id: &[u8]) -> Option<SubjectId>;   // SfidInstitution
-pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> Option<SubjectId>; // Builtin
+pub fn subject_id_from_sfid_number(sfid_number: &[u8]) -> Option<SubjectId>;   // SfidInstitution
+pub fn subject_id_from_sfid_number(sfid_number: &str) -> Option<SubjectId>; // Builtin
 ```
 
 ### 长度约束
 
-- `MaxSfidIdLength` 从 `ConstU32<96>` 收紧到 `ConstU32<47>`(BoundedVec 入链强制守门)
+- `MaxSfidNumberLength` 从 `ConstU32<96>` 收紧到 `ConstU32<47>`(BoundedVec 入链强制守门)
 - `MaxAccountNameLength` 不变(账户名不入 institution_id 协议)
-- 内置主体 shenfen_id 实测 33B,远小于 47B 上限,兼容
+- 内置主体 sfid_number 实测 33B,远小于 47B 上限,兼容
 
 ## 不变量
 
 1. **永久 ABI**:`SubjectKind::Builtin=0x01 / SfidInstitution=0x02 / PersonalDuoqian=0x03 / Reserved=0xFF` 一旦上线不可改
-2. **payload 上限 47B**:任何超过 47B 的 sfid_id 注册请求在 BoundedVec 阶段拒绝
+2. **payload 上限 47B**:任何超过 47B 的 sfid_number 注册请求在 BoundedVec 阶段拒绝
 3. **kind tag 不为 0x01/0x02/0x03 的 institution_id**:`parse_institution_id` 返回 None,`admins-change` 等下游应视为非法
 4. **0x00 留洞**:防与零填充冲突,任何全零的 48B `[u8; 48]` 都不是合法 institution_id
 
 ## 客户端契约
 
-- **wuminapp `admin_institution_codec.dart`**:`personalAddressFromInstitutionId` 检查 byte[0]==0x03 + byte[33..48] 全零;`sfidIdFromInstitutionId` 检查 byte[0]==0x02 + 提取 byte[1..] 去尾零
-- **wuminapp `institution_admin_service.dart::_shenfenIdToFixed48`**:`out[0] = 0x01` + `out.setAll(1, raw)`
+- **wuminapp `admin_institution_codec.dart`**:`personalAddressFromInstitutionId` 检查 byte[0]==0x03 + byte[33..48] 全零;`sfidNumberFromInstitutionId` 检查 byte[0]==0x02 + 提取 byte[1..] 去尾零
+- **wuminapp `institution_admin_service.dart::_sfidNumberToFixed48`**:`out[0] = 0x01` + `out.setAll(1, raw)`
 - **wumin `payload_decoder.dart`**:institution_id 字段透传,不解码内部字节(无影响)
-- **node `storage_keys.rs::subject_id_from_shenfen_id`** + `admin_subjects_key`:offline storage key 计算同步加 0x01 kind tag
+- **node `storage_keys.rs::subject_id_from_sfid_number`** + `admin_subjects_key`:offline storage key 计算同步加 0x01 kind tag
 - **sfid backend**:不解析 institution_id 字节(无影响)
 
 ## 协议升级路径
@@ -89,7 +89,7 @@ pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> Option<SubjectId>; // Bui
 2. `parse_institution_id` 接受新 variant 解码
 3. 业务字段 `org` 视需要分配新值(NRC/PRC/PRB/REN/PUP/OTH 之外)
 
-若需要 payload > 47B 的扩展(例如未来 sfid_id 增长到 64B):
+若需要 payload > 47B 的扩展(例如未来 sfid_number 增长到 64B):
 
 1. 启用 `0xFF Reserved` 哨兵作为新协议版本标记(`SubjectKind::ExtendedV2`)
 2. 在新 storage_version 的 storage migration 中迁移旧数据
@@ -100,7 +100,7 @@ pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> Option<SubjectId>; // Bui
 - 链端 cargo test 全过(primitives 19 / citizenchain --lib 37 / duoqian-transfer 20 / admins-change 31)
 - wumin flutter test 105/105 passed
 - wuminapp duoqian flutter test 30/30 passed
-- 残留扫描 3 项全零(旧函数名 / MaxSfidIdLength=96 / 别名)
+- 残留扫描 3 项全零(旧函数名 / MaxSfidNumberLength=96 / 别名)
 - 链未上线,fresh genesis 即生效;无 storage migration
 
 ## 与 ADR-008 / ADR-009 的边界

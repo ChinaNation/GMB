@@ -1,12 +1,12 @@
 //! 机构/账户两层数据模型
 //!
-//! 中文注释:链端 `SfidRegisteredAddress::<T>(sfid_id, name) → duoqian_address`
-//! 是 DoubleMap,一个 sfid_id 下可挂多个 name,每个 name 派生独立多签地址。
+//! 中文注释:链端 `SfidRegisteredAddress::<T>(sfid_number, name) → duoqian_address`
+//! 是 DoubleMap,一个 sfid_number 下可挂多个 name,每个 name 派生独立多签地址。
 //! sfid 系统这里对应拆两层:
 //!
-//! - `MultisigInstitution`:每个 sfid_id 唯一,存机构展示信息(institution_name 等),
+//! - `MultisigInstitution`:每个 sfid_number 唯一,存机构展示信息(institution_name 等),
 //!   **不**进链。
-//! - `MultisigAccount`:以 `(sfid_id, account_name)` 为复合 key,account_name 是
+//! - `MultisigAccount`:以 `(sfid_number, account_name)` 为复合 key,account_name 是
 //!   **进链的 name**,一个机构下可挂多个。
 //!
 //! 详见 `feedback_institutions_two_layer.md`。
@@ -43,7 +43,7 @@ impl Default for InstitutionChainStatus {
 /// 机构账户链上状态。
 ///
 /// 中文注释:账户是否激活只以链上事实为准。SFID 创建账户时只是登记
-/// `(sfid_id, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
+/// `(sfid_number, account_name)`,默认 `NotOnChain`;链上机构注册或新增账户成功后,
 /// 由同步接口写成 `ActiveOnChain`;链上注销后写成 `RevokedOnChain`。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -60,11 +60,11 @@ impl Default for MultisigChainStatus {
     }
 }
 
-/// 机构(每个 sfid_id 唯一)。
+/// 机构(每个 sfid_number 唯一)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultisigInstitution {
     /// SFID 号,参与链上派生。
-    pub sfid_id: String,
+    pub sfid_number: String,
     /// 机构展示名称(如"广州市公安局"),**不进链**,只在 sfid 系统内部显示。
     ///
     /// 两步式创建(2026-04-19):
@@ -96,10 +96,10 @@ pub struct MultisigInstitution {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
     /// 所属法人机构 SFID(**仅 A3=FFR 非法人必填**)。
-    /// 指向一个私法人(SFR)或公法人(GFR)机构的 sfid_id。
+    /// 指向一个私法人(SFR)或公法人(GFR)机构的 sfid_number。
     /// 非法人机构必须挂在某个法人机构下,全国范围可选。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub parent_sfid_id: Option<String>,
+    pub parent_sfid_number: Option<String>,
     /// 机构链上注册状态。SFID 只记录链上同步结果,不在后台手动注册机构。
     #[serde(default)]
     pub chain_status: InstitutionChainStatus,
@@ -126,12 +126,12 @@ impl HasProvinceCity for MultisigInstitution {
     }
 }
 
-/// 机构下的多签账户(复合 key = (sfid_id, account_name))。
+/// 机构下的多签账户(复合 key = (sfid_number, account_name))。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultisigAccount {
-    /// 所属机构的 sfid_id。
-    pub sfid_id: String,
-    /// 账户名称,**进链的 name 字段**。同 sfid_id 下必须唯一。
+    /// 所属机构的 sfid_number。
+    pub sfid_number: String,
+    /// 账户名称,**进链的 name 字段**。同 sfid_number 下必须唯一。
     pub account_name: String,
     /// 链上派生的多签地址(hex, 不含 0x 前缀)。上链成功后填入。
     pub duoqian_address: Option<String>,
@@ -147,20 +147,20 @@ pub struct MultisigAccount {
     pub created_at: DateTime<Utc>,
 }
 
-/// 复合 key:`(sfid_id, account_name)`。
+/// 复合 key:`(sfid_number, account_name)`。
 pub type AccountKey = (String, String);
 
-/// 把复合 key 序列化为 "sfid_id|account_name" 字符串(用作 HashMap 的 String key)。
-pub fn account_key_to_string(sfid_id: &str, account_name: &str) -> String {
-    format!("{sfid_id}|{account_name}")
+/// 把复合 key 序列化为 "sfid_number|account_name" 字符串(用作 HashMap 的 String key)。
+pub fn account_key_to_string(sfid_number: &str, account_name: &str) -> String {
+    format!("{sfid_number}|{account_name}")
 }
 
-/// 从 "sfid_id|account_name" 字符串解析回元组。
+/// 从 "sfid_number|account_name" 字符串解析回元组。
 pub fn account_key_from_string(s: &str) -> Option<AccountKey> {
     let mut parts = s.splitn(2, '|');
-    let sfid_id = parts.next()?.to_string();
+    let sfid_number = parts.next()?.to_string();
     let account_name = parts.next()?.to_string();
-    Some((sfid_id, account_name))
+    Some((sfid_number, account_name))
 }
 
 /// 机构资料库文档(注册文件/许可证/章程等)。
@@ -168,8 +168,8 @@ pub fn account_key_from_string(s: &str) -> Option<AccountKey> {
 pub struct InstitutionDocument {
     /// 自增文档 ID。
     pub id: u64,
-    /// 所属机构 sfid_id。
-    pub sfid_id: String,
+    /// 所属机构 sfid_number。
+    pub sfid_number: String,
     /// 原始文件名。
     pub file_name: String,
     /// 文档类型(公司章程/营业许可证/股东会决议/法人授权书/其他)。
@@ -207,7 +207,7 @@ pub struct CreateInstitutionInput {
 
 #[derive(Debug, Serialize)]
 pub struct CreateInstitutionOutput {
-    pub sfid_id: String,
+    pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
     pub category: InstitutionCategory,
@@ -218,9 +218,9 @@ pub struct CreateInstitutionOutput {
 pub struct UpdateInstitutionInput {
     pub institution_name: Option<String>,
     pub sub_type: Option<String>,
-    /// 所属法人 sfid_id(仅 FFR 可设置;SFR/GFR 传值会被拒)
+    /// 所属法人 sfid_number(仅 FFR 可设置;SFR/GFR 传值会被拒)
     #[serde(default)]
-    pub parent_sfid_id: Option<String>,
+    pub parent_sfid_number: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -230,7 +230,7 @@ pub struct CreateAccountInput {
 
 #[derive(Debug, Serialize)]
 pub struct CreateAccountOutput {
-    pub sfid_id: String,
+    pub sfid_number: String,
     pub account_name: String,
     pub chain_status: MultisigChainStatus,
     pub chain_synced_at: Option<DateTime<Utc>>,
@@ -241,7 +241,7 @@ pub struct CreateAccountOutput {
 
 #[derive(Debug, Serialize)]
 pub struct InstitutionListRow {
-    pub sfid_id: String,
+    pub sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub institution_name: Option<String>,
     pub category: InstitutionCategory,
@@ -253,7 +253,7 @@ pub struct InstitutionListRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_sfid_id: Option<String>,
+    pub parent_sfid_number: Option<String>,
     pub chain_status: InstitutionChainStatus,
     pub account_count: usize,
     pub created_at: DateTime<Utc>,
@@ -269,7 +269,7 @@ pub struct InstitutionListRow {
 /// 法人机构搜索结果项(用于 FFR 详情页"所属法人"选择器)
 #[derive(Debug, Serialize)]
 pub struct ParentInstitutionRow {
-    pub sfid_id: String,
+    pub sfid_number: String,
     pub institution_name: String,
     pub a3: String,
     /// 私法人子类型(仅 a3=SFR 有值);FFR 前端用此判断父 SFR 是否 JOINT_STOCK 以开放清算行设置
@@ -317,7 +317,7 @@ pub struct ChainSyncInput {
 
 #[derive(Debug, Serialize)]
 pub struct ChainSyncOutput {
-    pub sfid_id: String,
+    pub sfid_number: String,
     pub institution_status: InstitutionChainStatus,
     pub synced_accounts: usize,
     pub chain_synced_at: DateTime<Utc>,

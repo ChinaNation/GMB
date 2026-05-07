@@ -123,10 +123,10 @@ pub(crate) struct Store {
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
-    /// 机构层(每 sfid_id 唯一),任务卡 2 引入。
+    /// 机构层(每 sfid_number 唯一),任务卡 2 引入。
     #[serde(default)]
     pub(crate) multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
-    /// 账户层(key = "sfid_id|account_name"),任务卡 2 引入。account_name 就是链上 name。
+    /// 账户层(key = "sfid_number|account_name"),任务卡 2 引入。account_name 就是链上 name。
     #[serde(default)]
     pub(crate) multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
     /// 机构资料库文档,key = document id(字符串化)。

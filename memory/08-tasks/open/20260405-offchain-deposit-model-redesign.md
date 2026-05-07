@@ -61,7 +61,7 @@
 银行使用现有的 `duoqian-manage` 多签注册机制：
 
 ```
-1. 银行发起人获取 SFID 机构身份码
+1. 银行发起人获取 SFID 机构身份号码
 2. 调用 register_sfid_institution() 注册链上身份
 3. 调用 propose_create() 创建多签账户（管理员 2-64 人）
 4. 投票通过后，银行获得 duoqian_address（多签账户）

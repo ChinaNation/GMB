@@ -18,7 +18,7 @@
 //! preimage = b"DUOQIAN_V1"                  // 10 字节 domain
 //!         || op_tag                         // 1 字节 (0x00 / 0x01 / 0x05)
 //!         || ss58_prefix.to_le_bytes()      // 2 字节 (2027 LE = [0xEB, 0x07])
-//!         || sfid_id.as_bytes()             // 变长
+//!         || sfid_number.as_bytes()             // 变长
 //!         || account_name.as_bytes()        // 仅 0x05 追加;0x00 / 0x01 不追加
 //! duoqian_address = blake2b_256(preimage)   // 32 字节
 //! ```
@@ -60,7 +60,7 @@ pub const RESERVED_NAME_FEE: &str = "费用账户";
 /// - `"主账户"` → `OP_MAIN`(preimage 不含 account_name)
 /// - `"费用账户"` → `OP_FEE`(preimage 不含 account_name)
 /// - 其他非空 → `OP_INSTITUTION`(preimage 追加 account_name 字节)
-pub fn derive_duoqian_address(sfid_id: &str, account_name: &str) -> Option<String> {
+pub fn derive_duoqian_address(sfid_number: &str, account_name: &str) -> Option<String> {
     let name = account_name.trim();
     if name.is_empty() {
         return None;
@@ -73,7 +73,7 @@ pub fn derive_duoqian_address(sfid_id: &str, account_name: &str) -> Option<Strin
         (OP_INSTITUTION, name.as_bytes())
     };
     let ss58_le = SS58_PREFIX.to_le_bytes();
-    let sfid_bytes = sfid_id.as_bytes();
+    let sfid_bytes = sfid_number.as_bytes();
     let mut buf = Vec::with_capacity(
         DUOQIAN_DOMAIN.len() + 1 + ss58_le.len() + sfid_bytes.len() + name_suffix.len(),
     );
@@ -93,8 +93,8 @@ mod tests {
     #[test]
     fn main_account_preimage_excludes_name() {
         // 两个不同 sfid 的"主账户"地址必定不同(sfid 参与派生)
-        let a = derive_duoqian_address("SFR-AH001-ZG0X-123456789-20260101", "主账户").unwrap();
-        let b = derive_duoqian_address("SFR-BJ001-ZG0X-987654321-20260101", "主账户").unwrap();
+        let a = derive_duoqian_address("SFR-AH001-ZG0X-123456789-2026", "主账户").unwrap();
+        let b = derive_duoqian_address("SFR-BJ001-ZG0X-987654321-2026", "主账户").unwrap();
         assert_eq!(a.len(), 64);
         assert_ne!(a, b);
     }
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn main_and_fee_differ_for_same_sfid() {
         // 同一 sfid 的主账户 / 费用账户地址不同(op_tag 不同)
-        let sfid = "SFR-AH001-ZG0X-123456789-20260101";
+        let sfid = "SFR-AH001-ZG0X-123456789-2026";
         let main = derive_duoqian_address(sfid, "主账户").unwrap();
         let fee = derive_duoqian_address(sfid, "费用账户").unwrap();
         assert_ne!(main, fee);
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn named_uses_account_name_in_preimage() {
         // 自定义账户名不同 → 地址不同;空 / 保留名按路由规则处理
-        let sfid = "SFR-AH001-ZG0X-123456789-20260101";
+        let sfid = "SFR-AH001-ZG0X-123456789-2026";
         let wage = derive_duoqian_address(sfid, "工资账户").unwrap();
         let case = derive_duoqian_address(sfid, "办案账户").unwrap();
         assert_ne!(wage, case);
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn deterministic() {
         // 同输入必定同输出(幂等)
-        let sfid = "SFR-AH001-ZG0X-123456789-20260101";
+        let sfid = "SFR-AH001-ZG0X-123456789-2026";
         let a = derive_duoqian_address(sfid, "主账户").unwrap();
         let b = derive_duoqian_address(sfid, "主账户").unwrap();
         assert_eq!(a, b);

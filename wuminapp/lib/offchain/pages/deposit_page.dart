@@ -56,7 +56,7 @@ class _DepositPageState extends State<DepositPage> {
             Text(
               _binding == null
                   ? '请先绑定清算行后再充值。'
-                  : '转入 ${_binding!.institutionName.isEmpty ? _binding!.sfidId : _binding!.institutionName}',
+                  : '转入 ${_binding!.institutionName.isEmpty ? _binding!.sfidNumber : _binding!.institutionName}',
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 16),

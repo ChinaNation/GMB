@@ -15,23 +15,23 @@ use votingengine::STATUS_PASSED;
 use crate::{
     pallet::{
         AccountNameOf, AddressRegisteredSfid, DuoqianAdminsOf, InstitutionAccountNamesOf,
-        RegisterNonceOf, RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+        RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAddress,
     },
     BalanceOf, Call, Config, DuoqianAddressValidator, DuoqianReservedAddressChecker, Pallet,
     ProtectedSourceChecker,
 };
 
-fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkError> {
+fn find_safe_sfid<T: Config>() -> Result<(SfidNumberOf<T>, T::AccountId), BenchmarkError> {
     for candidate in 0..2_048u32 {
         let mut raw = b"duoqian-benchmark-sfid-".to_vec();
         raw.extend_from_slice(&candidate.to_le_bytes());
-        let sfid_id: SfidIdOf<T> = raw
+        let sfid_number: SfidNumberOf<T> = raw
             .try_into()
             .map_err(|_| BenchmarkError::Stop("benchmark sfid id should fit"))?;
 
         // benchmark 场景用 Role::Main 派生，哈希公式等价于历史空 account_name 路径。
         let Ok(duoqian_address) = Pallet::<T>::derive_institution_address(
-            sfid_id.as_slice(),
+            sfid_number.as_slice(),
             crate::InstitutionAccountRole::Main,
         ) else {
             continue;
@@ -47,7 +47,7 @@ fn find_safe_sfid<T: Config>() -> Result<(SfidIdOf<T>, T::AccountId), BenchmarkE
             continue;
         }
 
-        return Ok((sfid_id, duoqian_address));
+        return Ok((sfid_number, duoqian_address));
     }
 
     Err(BenchmarkError::Stop(
@@ -64,7 +64,7 @@ fn bench_account_name<T: Config>() -> Result<AccountNameOf<T>, BenchmarkError> {
 
 fn register_institution<T: Config>(
     relayer: &T::AccountId,
-    sfid_id: &SfidIdOf<T>,
+    sfid_number: &SfidNumberOf<T>,
 ) -> Result<T::AccountId, BenchmarkError> {
     let account_name = bench_account_name::<T>()?;
     let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
@@ -79,7 +79,7 @@ fn register_institution<T: Config>(
         .map_err(|_| BenchmarkError::Stop("benchmark account_names should fit"))?;
     Pallet::<T>::register_sfid_institution(
         RawOrigin::Signed(relayer.clone()).into(),
-        sfid_id.clone(),
+        sfid_number.clone(),
         account_name.clone(),
         account_names,
         register_nonce,
@@ -87,7 +87,7 @@ fn register_institution<T: Config>(
         b"LN".to_vec(),
         [1u8; 32],
     )?;
-    SfidRegisteredAddress::<T>::get(sfid_id, &account_name)
+    SfidRegisteredAddress::<T>::get(sfid_number, &account_name)
         .ok_or(BenchmarkError::Stop("benchmark sfid should be registered"))
 }
 
@@ -148,7 +148,7 @@ mod benchmarks {
     fn register_sfid_institution() -> Result<(), BenchmarkError> {
         let relayer: T::AccountId = frame_benchmarking::account("relayer", 0, 0);
 
-        let (sfid_id, duoqian_address) = find_safe_sfid::<T>()?;
+        let (sfid_number, duoqian_address) = find_safe_sfid::<T>()?;
         let account_name = bench_account_name::<T>()?;
         let register_nonce: RegisterNonceOf<T> = b"bench-register-nonce"
             .to_vec()
@@ -164,7 +164,7 @@ mod benchmarks {
         #[extrinsic_call]
         register_sfid_institution(
             RawOrigin::Signed(relayer.clone()),
-            sfid_id.clone(),
+            sfid_number.clone(),
             account_name.clone(),
             account_names,
             register_nonce,
@@ -174,7 +174,7 @@ mod benchmarks {
         );
 
         assert_eq!(
-            SfidRegisteredAddress::<T>::get(&sfid_id, &account_name),
+            SfidRegisteredAddress::<T>::get(&sfid_number, &account_name),
             Some(duoqian_address.clone())
         );
         assert!(AddressRegisteredSfid::<T>::contains_key(&duoqian_address));

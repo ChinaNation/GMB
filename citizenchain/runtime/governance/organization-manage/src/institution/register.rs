@@ -2,7 +2,7 @@
 //!
 //! `do_register_sfid_institution` 由 lib.rs 内 call_index=2 入口 delegate 调用。
 //! 业务流程：
-//! 1. 校验参数非空（sfid_id / institution_name / account_names / province）
+//! 1. 校验参数非空（sfid_number / institution_name / account_names / province）
 //! 2. 校验 register_nonce 未被复用
 //! 3. 调 `SfidInstitutionVerifier` 双层验签（ADR-008 step2b: province + signer_admin_pubkey）
 //! 4. 遍历 account_names 派生机构账户地址 + 校验保留名/重复/已注册
@@ -21,7 +21,7 @@ use sp_runtime::{traits::Hash, DispatchResult};
 
 use crate::pallet::{
     self, AccountNameOf, AddressRegisteredSfid, Error, Event, InstitutionAccountNamesOf, Pallet,
-    RegisterNonceOf, RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress, UsedRegisterNonce,
+    RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAddress, UsedRegisterNonce,
 };
 use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
@@ -32,7 +32,7 @@ use crate::RegisteredInstitution;
 /// 处理 SFID 机构登记业务逻辑。
 pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
     submitter: T::AccountId,
-    sfid_id: SfidIdOf<T>,
+    sfid_number: SfidNumberOf<T>,
     institution_name: AccountNameOf<T>,
     account_names: InstitutionAccountNamesOf<T>,
     register_nonce: RegisterNonceOf<T>,
@@ -40,7 +40,7 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
     province: Vec<u8>,
     signer_admin_pubkey: [u8; 32],
 ) -> DispatchResult {
-    ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+    ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
     ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!account_names.is_empty(), Error::<T>::MissingMainAccount);
     ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
@@ -54,7 +54,7 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
     let account_name_payload = Pallet::<T>::account_names_payload_from_names(&account_names)?;
     ensure!(
         T::SfidInstitutionVerifier::verify_institution_registration(
-            sfid_id.as_slice(),
+            sfid_number.as_slice(),
             &institution_name,
             &account_name_payload,
             &register_nonce,
@@ -75,11 +75,11 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
             Error::<T>::DuplicateAccountName
         );
         ensure!(
-            !SfidRegisteredAddress::<T>::contains_key(&sfid_id, account_name),
+            !SfidRegisteredAddress::<T>::contains_key(&sfid_number, account_name),
             Error::<T>::SfidAlreadyRegistered
         );
         let role = Pallet::<T>::role_from_account_name(account_name.as_slice())?;
-        let duoqian_address = Pallet::<T>::derive_institution_address(sfid_id.as_slice(), role)?;
+        let duoqian_address = Pallet::<T>::derive_institution_address(sfid_number.as_slice(), role)?;
         ensure!(
             !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
             Error::<T>::AddressAlreadyExists
@@ -101,16 +101,16 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
 
     UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
     for (account_name, duoqian_address) in derived {
-        SfidRegisteredAddress::<T>::insert(&sfid_id, &account_name, &duoqian_address);
+        SfidRegisteredAddress::<T>::insert(&sfid_number, &account_name, &duoqian_address);
         AddressRegisteredSfid::<T>::insert(
             &duoqian_address,
             RegisteredInstitution {
-                sfid_id: sfid_id.clone(),
+                sfid_number: sfid_number.clone(),
                 account_name: account_name.clone(),
             },
         );
         Pallet::<T>::deposit_event(Event::<T>::SfidInstitutionRegistered {
-            sfid_id: sfid_id.clone(),
+            sfid_number: sfid_number.clone(),
             account_name,
             duoqian_address,
             submitter: submitter.clone(),

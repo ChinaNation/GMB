@@ -8,7 +8,7 @@
 // 5. 管理员状态变为已激活，提案按钮解锁
 //
 // 激活 payload 格式（非链上交易）：
-//   "GMB_ACTIVATE"(12B) + shenfen_id(48B) + timestamp(8B) + nonce(16B) = 84 bytes
+//   "GMB_ACTIVATE"(12B) + sfid_number(48B) + timestamp(8B) + nonce(16B) = 84 bytes
 
 use crate::home;
 use crate::settings::device_password;
@@ -38,8 +38,8 @@ const ACTIVATE_PREFIX: &[u8; 12] = b"GMB_ACTIVATE";
 pub struct ActivatedAdmin {
     /// 管理员公钥 hex（不含 0x，小写）。
     pub pubkey_hex: String,
-    /// 所属机构身份码。
-    pub shenfen_id: String,
+    /// 所属机构身份号码。
+    pub sfid_number: String,
     /// 激活时间（毫秒时间戳）。
     pub activated_at_ms: u64,
 }
@@ -49,8 +49,8 @@ pub struct ActivatedAdmin {
 struct StoredActivation {
     /// 管理员公钥 hex（不含 0x，小写）。
     pubkey_hex: String,
-    /// 所属机构身份码。
-    shenfen_id: String,
+    /// 所属机构身份号码。
+    sfid_number: String,
     /// 激活时间（毫秒时间戳）。
     activated_at_ms: u64,
     /// 激活时的签名（用于凭证校验）。
@@ -127,13 +127,13 @@ fn now_secs() -> u64 {
 }
 
 /// 构建 84 字节激活 payload：
-///   "GMB_ACTIVATE"(12B) + shenfen_id(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
-fn build_activate_payload(shenfen_id: &str, timestamp: u64) -> Vec<u8> {
+///   "GMB_ACTIVATE"(12B) + sfid_number(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
+fn build_activate_payload(sfid_number: &str, timestamp: u64) -> Vec<u8> {
     let mut payload = Vec::with_capacity(84);
     // 前缀
     payload.extend_from_slice(ACTIVATE_PREFIX);
-    // shenfen_id 固定 48 字节，右补零
-    let id_bytes = shenfen_id.as_bytes();
+    // sfid_number 固定 48 字节，右补零
+    let id_bytes = sfid_number.as_bytes();
     let mut id_buf = [0u8; 48];
     let copy_len = id_bytes.len().min(48);
     id_buf[..copy_len].copy_from_slice(&id_bytes[..copy_len]);
@@ -156,7 +156,7 @@ fn build_activate_payload(shenfen_id: &str, timestamp: u64) -> Vec<u8> {
 pub async fn build_activate_admin_request(
     app: AppHandle,
     pubkey_hex: String,
-    shenfen_id: String,
+    sfid_number: String,
 ) -> Result<ActivateRequestResult, String> {
     // 检查节点状态
     let status = home::current_status(&app)?;
@@ -178,12 +178,12 @@ pub async fn build_activate_admin_request(
     let activations = load_activations(&app)?;
     if activations
         .iter()
-        .any(|a| a.pubkey_hex == pubkey_clean && a.shenfen_id == shenfen_id)
+        .any(|a| a.pubkey_hex == pubkey_clean && a.sfid_number == sfid_number)
     {
         return Err("该管理员已激活，无需重复操作".to_string());
     }
 
-    let sid = shenfen_id.clone();
+    let sid = sfid_number.clone();
     let pk = pubkey_clean.clone();
 
     // 在链上验证管理员身份
@@ -197,11 +197,11 @@ pub async fn build_activate_admin_request(
 
     // 查找机构名称（用于 display）
     let institution_name =
-        super::find_institution_name(&shenfen_id).unwrap_or_else(|| shenfen_id.clone());
+        super::find_institution_name(&sfid_number).unwrap_or_else(|| sfid_number.clone());
 
     // 构建激活 payload
     let timestamp = now_secs();
-    let payload = build_activate_payload(&shenfen_id, timestamp);
+    let payload = build_activate_payload(&sfid_number, timestamp);
     let payload_hex = format!("0x{}", hex::encode(&payload));
 
     // 计算 payload hash
@@ -215,14 +215,14 @@ pub async fn build_activate_admin_request(
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
     // display 字段:wumin 端据此展示激活确认界面。
-    // Registry activate_admin fields 严格只含 `shenfen_id`(对齐 wumin
+    // Registry activate_admin fields 严格只含 `sfid_number`(对齐 wumin
     // decoder `_decodeActivateAdmin` 输出),机构名属辅助信息,通过 summary
     // 展示即可(2026-04-22 两色识别整改)。
     let display = serde_json::json!({
         "action": "activate_admin",
         "summary": format!("激活管理员 - {institution_name}"),
         "fields": [
-            { "key": "shenfen_id", "label": "身份码", "value": shenfen_id }
+            { "key": "sfid_number", "label": "身份号码", "value": sfid_number }
         ]
     });
 
@@ -356,23 +356,23 @@ pub async fn verify_activate_admin(
         return Err("sr25519 签名验证失败，无法证明管理员身份".to_string());
     }
 
-    // 从 payload 中提取 shenfen_id（偏移 12，长度 48，去尾零）
+    // 从 payload 中提取 sfid_number（偏移 12，长度 48，去尾零）
     let id_bytes = &payload_bytes[12..60];
     let end = id_bytes
         .iter()
         .rposition(|&b| b != 0)
         .map(|i| i + 1)
         .unwrap_or(0);
-    let shenfen_id = String::from_utf8_lossy(&id_bytes[..end]).to_string();
+    let sfid_number = String::from_utf8_lossy(&id_bytes[..end]).to_string();
 
     // 写入本地存储
     let mut activations = load_activations(&app)?;
-    // 去重：同一 (pubkey, shenfen_id) 只保留最新
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.shenfen_id == shenfen_id));
+    // 去重：同一 (pubkey, sfid_number) 只保留最新
+    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.sfid_number == sfid_number));
     let activated_at = now_ms();
     activations.push(StoredActivation {
         pubkey_hex: pubkey_clean.clone(),
-        shenfen_id: shenfen_id.clone(),
+        sfid_number: sfid_number.clone(),
         activated_at_ms: activated_at,
         signature_hex: sig_hex.to_string(),
         payload_hash_hex: response_hash,
@@ -385,7 +385,7 @@ pub async fn verify_activate_admin(
         &format!(
             "success pubkey={} shenfen={}",
             &pubkey_clean[..8],
-            &shenfen_id
+            &sfid_number
         ),
     ) {
         eprintln!("[审计] activate_admin success 日志写入失败: {e}");
@@ -393,7 +393,7 @@ pub async fn verify_activate_admin(
 
     Ok(ActivatedAdmin {
         pubkey_hex: pubkey_clean,
-        shenfen_id,
+        sfid_number,
         activated_at_ms: activated_at,
     })
 }
@@ -406,14 +406,14 @@ pub async fn verify_activate_admin(
 #[tauri::command]
 pub async fn get_activated_admins(
     app: AppHandle,
-    shenfen_id: String,
+    sfid_number: String,
 ) -> Result<Vec<ActivatedAdmin>, String> {
     let mut activations = load_activations(&app)?;
 
     // 筛选该机构的激活记录
     let institution_activations: Vec<&StoredActivation> = activations
         .iter()
-        .filter(|a| a.shenfen_id == shenfen_id)
+        .filter(|a| a.sfid_number == sfid_number)
         .collect();
 
     if institution_activations.is_empty() {
@@ -423,7 +423,7 @@ pub async fn get_activated_admins(
     // 如果节点运行中，与链上管理员列表交叉校验
     let status = home::current_status(&app)?;
     if status.running {
-        let sid = shenfen_id.clone();
+        let sid = sfid_number.clone();
         let admins = tauri::async_runtime::spawn_blocking(move || institution::fetch_admins(&sid))
             .await
             .map_err(|e| format!("查询管理员列表失败: {e}"));
@@ -432,7 +432,7 @@ pub async fn get_activated_admins(
             // 删除不再是链上管理员的激活记录
             let before_len = activations.len();
             activations.retain(|a| {
-                if a.shenfen_id != shenfen_id {
+                if a.sfid_number != sfid_number {
                     return true; // 不是当前机构的，保留
                 }
                 chain_admins.iter().any(|admin| *admin == a.pubkey_hex)
@@ -448,10 +448,10 @@ pub async fn get_activated_admins(
     // 返回该机构的有效激活记录
     Ok(activations
         .iter()
-        .filter(|a| a.shenfen_id == shenfen_id)
+        .filter(|a| a.sfid_number == sfid_number)
         .map(|a| ActivatedAdmin {
             pubkey_hex: a.pubkey_hex.clone(),
-            shenfen_id: a.shenfen_id.clone(),
+            sfid_number: a.sfid_number.clone(),
             activated_at_ms: a.activated_at_ms,
         })
         .collect())
@@ -462,7 +462,7 @@ pub async fn get_activated_admins(
 pub fn deactivate_admin(
     app: AppHandle,
     pubkey_hex: String,
-    shenfen_id: String,
+    sfid_number: String,
     unlock_password: String,
 ) -> Result<(), String> {
     if let Err(e) = security::append_audit_log(&app, "deactivate_admin", "attempt") {
@@ -480,7 +480,7 @@ pub fn deactivate_admin(
 
     let mut activations = load_activations(&app)?;
     let before_len = activations.len();
-    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.shenfen_id == shenfen_id));
+    activations.retain(|a| !(a.pubkey_hex == pubkey_clean && a.sfid_number == sfid_number));
 
     if activations.len() == before_len {
         return Err("未找到该管理员的激活记录".to_string());
@@ -494,7 +494,7 @@ pub fn deactivate_admin(
         &format!(
             "success pubkey={} shenfen={}",
             &pubkey_clean[..pubkey_clean.len().min(8)],
-            &shenfen_id
+            &sfid_number
         ),
     ) {
         eprintln!("[审计] deactivate_admin success 日志写入失败: {e}");

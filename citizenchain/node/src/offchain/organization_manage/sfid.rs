@@ -12,7 +12,7 @@
 //!   "code": 0,
 //!   "message": "ok",
 //!   "data": [
-//!     { "sfid_id": "...", "a3": "...", "main_chain_status": "NOT_ON_CHAIN", ... }
+//!     { "sfid_number": "...", "a3": "...", "main_chain_status": "NOT_ON_CHAIN", ... }
 //!   ]
 //! }
 //! ```
@@ -58,14 +58,14 @@ struct EligibleSearchEnvelope {
 /// SFID 端原始字段(snake_case)。仅本文件内部用,不对外暴露。
 #[derive(Deserialize)]
 struct SfidEligibleRow {
-    sfid_id: String,
+    sfid_number: String,
     #[serde(default)]
     institution_name: Option<String>,
     a3: String,
     #[serde(default)]
     sub_type: Option<String>,
     #[serde(default)]
-    parent_sfid_id: Option<String>,
+    parent_sfid_number: Option<String>,
     #[serde(default)]
     parent_institution_name: Option<String>,
     #[serde(default)]
@@ -108,11 +108,11 @@ fn map_chain_status(status: SfidMultisigChainStatus) -> &'static str {
 
 fn into_candidate(row: SfidEligibleRow) -> EligibleClearingBankCandidate {
     EligibleClearingBankCandidate {
-        sfid_id: row.sfid_id,
+        sfid_number: row.sfid_number,
         institution_name: row.institution_name.unwrap_or_default(),
         a3: row.a3,
         sub_type: row.sub_type,
-        parent_sfid_id: row.parent_sfid_id,
+        parent_sfid_number: row.parent_sfid_number,
         parent_institution_name: row.parent_institution_name,
         parent_a3: row.parent_a3,
         province: row.province,
@@ -123,7 +123,7 @@ fn into_candidate(row: SfidEligibleRow) -> EligibleClearingBankCandidate {
     }
 }
 
-/// `q` 关键字模糊匹配 sfid_id 或机构名。`limit` 上限 50,默认 20。
+/// `q` 关键字模糊匹配 sfid_number 或机构名。`limit` 上限 50,默认 20。
 pub fn search_eligible_clearing_banks(
     q: &str,
     limit: u32,
@@ -177,18 +177,18 @@ struct InstitutionRegistrationInfoEnvelope {
     message: Option<String>,
 }
 
-/// 调 SFID `GET /api/v1/app/institutions/:sfid_id/registration-info` 拉链上注册专用信息。
+/// 调 SFID `GET /api/v1/app/institutions/:sfid_number/registration-info` 拉链上注册专用信息。
 ///
 /// 中文注释:这里刻意不调用普通机构详情接口。普通详情可用于展示,但不能证明
 /// "机构名称 + 账户名称列表"确实由 SFID 系统签发给链上注册流程。
 pub fn fetch_institution_registration_info(
-    sfid_id: &str,
+    sfid_number: &str,
 ) -> Result<InstitutionRegistrationInfoResp, String> {
-    // sfid_id 字符集仅 ASCII 字母 + 数字 + `-`(SFID 生成器锁定),无需 URL 编码。
+    // sfid_number 字符集仅 ASCII 字母 + 数字 + `-`(SFID 生成器锁定),无需 URL 编码。
     let url = format!(
         "{}/api/v1/app/institutions/{}/registration-info",
         sfid_config::sfid_base_url(),
-        sfid_id
+        sfid_number
     );
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(SFID_REQUEST_TIMEOUT)

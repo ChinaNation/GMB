@@ -36,6 +36,15 @@
   - 只讲标准开发流程与门禁
 - `memory/07-ai/ci-path-routing.md`
   - 只讲 GitHub workflow 的目录路由
+- `memory/07-ai/unified-required-reading.md`
+  - 只讲每次设计、编程、改协议、改命名、改文档、改流程前必须读取和遵守哪些文件
+  - 不替代具体规则文件；只做必读入口和读取分流
+- `memory/07-ai/unified-protocols.md`
+  - 只讲协议、载荷、接口契约、字段顺序、签名验签、nonce、era、pallet/call index、storage key、subject id 的统一登记和变更规则
+  - 不展开模块内部实现细节；实现细节继续放在 `memory/05-modules/` 或对应架构文档
+- `memory/07-ai/unified-naming.md`
+  - 只讲目录、文件、字段、变量、类、模块、API 字段、storage 字段、QR display 字段、任务卡文件名、文档文件名的统一命名规则和登记
+  - 不替代模块技术文档；模块内特殊命名必须回链到本文件
 
 ## 6. 模板层
 

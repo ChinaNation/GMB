@@ -1,7 +1,4 @@
 //! 核心常量 = core_const.rs
-//!
-//! 包含:货币基础参数(1)、省储行年利率模型(3)、安全与反滥用参数(4)、统一签名/派生域(5)。
-//! 第 (2) 段"交易手续费模型"已于 2026-05-03 整体迁出至 `primitives::fee_policy`。
 
 /// 1. 货币基础参数（Economic Base）
 pub const TOKEN_SYMBOL: &str = "GMB"; // 公民币符号
@@ -15,23 +12,19 @@ pub const BLOCK_HASH_COUNT: u32 = 2400; // 最近区块哈希保留数量
 pub const NORMAL_DISPATCH_PERCENT: u32 = 75; // 普通交易可用区块权重比例
 pub const MAX_BLOCK_BYTES: u32 = 100 * 1024 * 1024; // 单区块最大字节数：100MB
 
-// 2. 交易手续费模型(Fee Model)已于 2026-05-03 整体迁出至
-//    `primitives::fee_policy` —— 全链费率规则的单一权威源。
-//    含 ONCHAIN_*, OFFCHAIN_*, VOTE_FLAT_FEE, OPERATIONAL_FEE_MULTIPLIER。
-
-/// 3. 省储行质押年利率模型 (Annual Interest Rate)
+/// 2. 省储行质押年利率模型 (Annual Interest Rate)
 pub const SHENGBANK_INITIAL_INTEREST_BP: u32 = 100; // 省储行初始年利率（第一年）：1.00%
 pub const SHENGBANK_INTEREST_DECREASE_BP: u32 = 1; // 年利率递减值：0.01%
 pub const SHENGBANK_INTEREST_DURATION_YEARS: u32 = 100; // 利率递减年限（100 年后归零）
 pub const ENABLE_SHENGBANK_INTEREST_DECAY: bool = true; // 是否启用逐年递减利率模型
 
-// 4. 安全与反滥用参数（Security）
+// 3. 安全与反滥用参数（Security）
 pub const ACCOUNT_EXISTENTIAL_DEPOSIT: u128 = 111; // 账户存在最低余额（Existential Deposit），余额 < 111 分 → 链上账户状态被删除，剩余余额销毁
 pub const ALLOW_ZERO_BALANCE_ACCOUNT: bool = false; // 是否允许零余额账户存在（必须关闭）
 pub const ENABLE_DUST_CLEANUP: bool = true; // 是否允许 Dust 回收（必须开启）
 pub const ALLOW_LOCAL_ADDRESS_GENERATION: bool = true; // 是否允许无限地址本地生成（链下）
 
-/// 5. 统一签名/派生域铁律（Unified Signature & Derivation Domain）
+/// 4. 统一签名/派生域铁律（Unified Signature & Derivation Domain）
 /// 全仓库地址派生（BLAKE2-256）+ 签名 payload（sr25519）统一使用 `DUOQIAN_DOMAIN` 前缀，后接 1 字节 `op_tag` 做子命名空间。
 /// preimage = DUOQIAN_DOMAIN (10B) || op_tag (1B) || ss58_prefix_le (2B) || payload_bytes
 /// 地址派生：`address = BLAKE2-256(preimage)` → 32 字节 AccountId
@@ -41,12 +34,12 @@ pub const DUOQIAN_DOMAIN: &[u8; 10] = b"DUOQIAN_V1";
 // 地址派生 op_tag (0x00-0x0F)
 // 每个 op_tag 单一派生公式，不得复用，OP_MAIN / OP_FEE 覆盖所有机构，保留名 "主账户"/"费用账户"
 // 必须强制走这两个 tag，禁止落到 OP_INSTITUTION。OP_INSTITUTION 仅容纳 SFID 机构的自定义命名账户。
-pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: ss58 || sfid_id
-pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: ss58 || sfid_id
+pub const OP_MAIN: u8 = 0x00; // 所有机构主账户 · input: ss58 || sfid_number
+pub const OP_FEE: u8 = 0x01; // 所有机构费用账户 · input: ss58 || sfid_number
 pub const OP_STAKE: u8 = 0x02; // 仅 PRB 质押账户 · input: ss58 || citizens_number_u64_le
-pub const OP_AN: u8 = 0x03; // 仅 NRC 安全基金账户 · input: ss58 || NRC_shenfen_id
+pub const OP_AN: u8 = 0x03; // 仅 NRC 安全基金账户 · input: ss58 || NRC_sfid_number
 pub const OP_PERSONAL: u8 = 0x04; // 个人多签账户 · input: ss58 || creator_32 || account_name
-pub const OP_INSTITUTION: u8 = 0x05; // SFID 机构自定义命名账户 · input: ss58 || sfid_id || account_name
+pub const OP_INSTITUTION: u8 = 0x05; // SFID 机构自定义命名账户 · input: ss58 || sfid_number || account_name
                                      //（account_name 非空且不得为 "主账户"/"费用账户" 等保留角色名）
 
 // 签名 payload op_tag (0x10-0x1F)

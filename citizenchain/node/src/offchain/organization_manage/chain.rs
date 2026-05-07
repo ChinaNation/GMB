@@ -30,18 +30,18 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
-/// SCALE 编码 sfid_id 的 `BoundedVec<u8, ConstU32<96>>` 形式(用作 storage key data)。
+/// SCALE 编码 sfid_number 的 `BoundedVec<u8, ConstU32<96>>` 形式(用作 storage key data)。
 ///
 /// 字段编码:`Compact<u32>(len)` + `bytes`。
-fn encode_sfid_key_data(sfid_id: &str) -> Result<Vec<u8>, String> {
-    let raw = sfid_id.as_bytes();
+fn encode_sfid_key_data(sfid_number: &str) -> Result<Vec<u8>, String> {
+    let raw = sfid_number.as_bytes();
     if raw.is_empty() || raw.len() > 96 {
-        return Err(format!("sfid_id 长度需在 1..=96 字节,实际:{}", raw.len()));
+        return Err(format!("sfid_number 长度需在 1..=96 字节,实际:{}", raw.len()));
     }
     let bv: BoundedVec<u8, ConstU32<96>> = raw
         .to_vec()
         .try_into()
-        .map_err(|_| "sfid_id 超出链上 BoundedVec<u8, 96>".to_string())?;
+        .map_err(|_| "sfid_number 超出链上 BoundedVec<u8, 96>".to_string())?;
     Ok(bv.encode())
 }
 
@@ -150,14 +150,14 @@ fn fetch_account_free_balance(account: &AccountId32) -> Result<u128, String> {
     }
 }
 
-/// 链上查询某机构的多签信息。返回 `None` = 该 sfid_id 尚未创建机构(进入创建流程)。
+/// 链上查询某机构的多签信息。返回 `None` = 该 sfid_number 尚未创建机构(进入创建流程)。
 ///
 /// 数据来源:
-/// 1. `OrganizationManage::Institutions[sfid_id]` 取机构主体
-/// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[sfid_id, *]` 取账户列表
+/// 1. `OrganizationManage::Institutions[sfid_number]` 取机构主体
+/// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[sfid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
-pub fn fetch_institution_detail(sfid_id: &str) -> Result<Option<InstitutionDetail>, String> {
-    let key_data = encode_sfid_key_data(sfid_id)?;
+pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionDetail>, String> {
+    let key_data = encode_sfid_key_data(sfid_number)?;
     let key = storage_keys::map_key("OrganizationManage", "Institutions", &key_data);
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     let raw = match result {
@@ -170,8 +170,8 @@ pub fn fetch_institution_detail(sfid_id: &str) -> Result<Option<InstitutionDetai
     let inst = OnChainInstitution::decode(&mut &bytes[..])
         .map_err(|e| format!("Institutions SCALE 解码失败:{e}"))?;
 
-    // 拉机构下所有账户(InstitutionAccounts[sfid_id, *] 是 DoubleMap)。
-    let accounts = fetch_institution_accounts(sfid_id, &inst)?;
+    // 拉机构下所有账户(InstitutionAccounts[sfid_number, *] 是 DoubleMap)。
+    let accounts = fetch_institution_accounts(sfid_number, &inst)?;
 
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
     let main_addr_bytes: [u8; 32] = inst.main_address.clone().into();
@@ -228,7 +228,7 @@ pub fn fetch_institution_detail(sfid_id: &str) -> Result<Option<InstitutionDetai
         .map_err(|_| "institution_name 非 UTF-8".to_string())?;
 
     Ok(Some(InstitutionDetail {
-        sfid_id: sfid_id.to_string(),
+        sfid_number: sfid_number.to_string(),
         institution_name,
         main_account,
         fee_account,
@@ -243,16 +243,16 @@ pub fn fetch_institution_detail(sfid_id: &str) -> Result<Option<InstitutionDetai
     }))
 }
 
-/// 用 `state_getKeysPaged` 列出 `InstitutionAccounts[sfid_id, *]` 全部账户名,
+/// 用 `state_getKeysPaged` 列出 `InstitutionAccounts[sfid_number, *]` 全部账户名,
 /// 然后逐个 `state_getStorage` 拉取账户内容并查链上余额。
 fn fetch_institution_accounts(
-    sfid_id: &str,
+    sfid_number: &str,
     inst: &OnChainInstitution,
 ) -> Result<Vec<AccountWithBalance>, String> {
     // 第一层 key 哈希器是 Blake2_128Concat,完整 storage key 前缀 =
     //   twox_128("OrganizationManage") ++ twox_128("InstitutionAccounts")
-    //   ++ blake2_128(sfid_id_bytes) ++ sfid_id_bytes(BoundedVec 编码)
-    let sfid_key = encode_sfid_key_data(sfid_id)?;
+    //   ++ blake2_128(sfid_number_bytes) ++ sfid_number_bytes(BoundedVec 编码)
+    let sfid_key = encode_sfid_key_data(sfid_number)?;
     let mut sfid_prefix_data = Vec::with_capacity(16 + sfid_key.len());
     sfid_prefix_data.extend_from_slice(&storage_keys::blake2b_128(&sfid_key));
     sfid_prefix_data.extend_from_slice(&sfid_key);
@@ -389,12 +389,12 @@ fn decode_account_name_from_key(full_key_hex: &str, sfid_prefix_hex: &str) -> Op
 /// 机构提案列表分页。
 ///
 /// 当前阶段返回空列表占位。提案存储在 `votingengine::Proposals[id]`,
-/// 按 sfid_id 过滤需要扫描全表 + 反查 ProposalMeta.institution_hex,
+/// 按 sfid_number 过滤需要扫描全表 + 反查 ProposalMeta.institution_hex,
 /// 实现略显重,放 follow-up 任务卡(本任务卡 §8 风险表)。
 ///
 /// 前端 UI 展示"暂无提案"行兜底,未来填充时无需改 UI 结构。
 pub fn fetch_institution_proposals(
-    _sfid_id: &str,
+    _sfid_number: &str,
     _start_id: u64,
     _page_size: u32,
 ) -> Result<InstitutionProposalPage, String> {
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn encode_sfid_key_data_round_trip() {
-        let raw = "GFR-LN001-CB0C-617776487-20260222";
+        let raw = "GFR-LN001-CB0X-944805165-2026";
         let encoded = encode_sfid_key_data(raw).unwrap();
         // Compact<u32> 长度前缀(单字节模式 raw.len() < 64)+ raw 字节
         assert_eq!(encoded[0], (raw.len() as u8) << 2);

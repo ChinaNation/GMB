@@ -555,7 +555,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                     let accs: Vec<MultisigAccount> = store
                         .multisig_accounts
                         .values()
-                        .filter(|a| a.sfid_id == inst.sfid_id)
+                        .filter(|a| a.sfid_number == inst.sfid_number)
                         .cloned()
                         .collect();
                     (inst, accs)
@@ -590,10 +590,10 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                 for (inst, accs) in group {
                     shard
                         .multisig_institutions
-                        .entry(inst.sfid_id.clone())
+                        .entry(inst.sfid_number.clone())
                         .or_insert(inst.clone());
                     for acc in accs {
-                        let key = account_key_to_string(&acc.sfid_id, &acc.account_name);
+                        let key = account_key_to_string(&acc.sfid_number, &acc.account_name);
                         // 已存在账户保留链上状态/地址;不存在才补
                         shard.multisig_accounts.entry(key).or_insert(acc);
                     }
@@ -626,9 +626,9 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                 .filter(|i| matches!(i.category, InstitutionCategory::PublicSecurity))
             {
                 for name in crate::institutions::service::DEFAULT_ACCOUNT_NAMES {
-                    let key = account_key_to_string(&inst.sfid_id, name);
+                    let key = account_key_to_string(&inst.sfid_number, name);
                     if !store.multisig_accounts.contains_key(&key) {
-                        out.insert((inst.province.clone(), inst.sfid_id.clone()));
+                        out.insert((inst.province.clone(), inst.sfid_number.clone()));
                     }
                 }
             }
@@ -668,7 +668,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
                                 .multisig_accounts
                                 .entry(key)
                                 .or_insert_with(|| MultisigAccount {
-                                    sfid_id: sfid.clone(),
+                                    sfid_number: sfid.clone(),
                                     account_name: (*name).to_string(),
                                     duoqian_address: addr,
                                     chain_status: MultisigChainStatus::NotOnChain,

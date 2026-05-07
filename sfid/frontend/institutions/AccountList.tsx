@@ -43,7 +43,7 @@ export const AccountList: React.FC<Props> = ({
 }) => {
   return (
     <Table<MultisigAccount>
-      rowKey={(r) => `${r.sfid_id}|${r.account_name}`}
+      rowKey={(r) => `${r.sfid_number}|${r.account_name}`}
       loading={loading}
       dataSource={accounts}
       pagination={false}

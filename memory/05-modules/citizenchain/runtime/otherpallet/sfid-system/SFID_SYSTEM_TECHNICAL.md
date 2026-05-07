@@ -63,7 +63,7 @@
 
 `duoqian_info/` 是 DUOQIAN 链接收 SFID 机构注册信息的历史辅助目录,当前不再承担"备案"流程。
 正式创建机构多签统一走 `organization-manage::propose_create_institution`,并由 SFID 后端
-`/api/v1/app/institutions/:sfid_id/registration-info` 签发注册信息凭证。
+`/api/v1/app/institutions/:sfid_number/registration-info` 签发注册信息凭证。
 
 当前目录结构:
 
@@ -79,7 +79,7 @@ duoqian_info/
 边界:
 
 - 不再新增备案入口,不再把该目录作为 SFID 与 DUOQIAN 正式注册链路。
-- 机构注册业务字段以 `sfid_id`、`institution_name`、`account_names[]` 为准。
+- 机构注册业务字段以 `sfid_number`、`institution_name`、`account_names[]` 为准。
 - 正式多签机构注册由 `organization-manage` 校验 SFID 注册凭证并写入机构 storage。
 - 如后续确认该目录无运行时引用,应单独开清理任务删除历史辅助类型。
 
@@ -291,11 +291,11 @@ payload 代码锚点:`src/sheng_admins/payload.rs`。
 
 ### 功能 4：机构 SFID 登记（多签模块）
 需要提供：
-1. `sfid_id`
+1. `sfid_number`
 2. 由省级签名公钥签发的机构注册凭证
 
 说明：
-- 当前实现不校验“sfid_id 哈希与链下回传是否一致”这类二次证明；
+- 当前实现不校验“sfid_number 哈希与链下回传是否一致”这类二次证明；
 - 当前是“链上唯一性 + 省级签名凭证 + 派生地址”模型。
 
 ### 功能 5：省管理员名册与签名密钥运维
@@ -386,4 +386,4 @@ payload 代码锚点:`src/sheng_admins/payload.rs`。
 3. 每次签名使用新 nonce，避免被链上防重放拒绝。
 4. 绑定签名 payload 中 `account` 必须是实际发交易账户。
 5. 投票签名 payload 中 `proposal_id` 必须与链上提案一致。
-6. 机构登记由 SFID 当前 `MAIN` 发起，并只提交 `sfid_id`。
+6. 机构登记由 SFID 当前 `MAIN` 发起，并只提交 `sfid_number`。

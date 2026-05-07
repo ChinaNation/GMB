@@ -15,14 +15,14 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///
 /// 中文注释:
 /// - 入口:`offchain_scan_flow.dart` 扫商户码成功后跳转过来
-///   (商户码 `UserTransferBody` 的 `bank` 字段是收款方清算行 `shenfen_id`)。
+///   (商户码 `UserTransferBody` 的 `bank` 字段是收款方清算行 `sfid_number`)。
 /// - Step 3 范围:同行 / 跨行都提交到**收款方清算行节点**,与 runtime
 ///   `submit_offchain_batch_v2` 的收款方主导模型对齐。
 /// - 流程:
 ///   1. 连清算行节点 RPC,查 `offchain_queryUserBank(user)` 得付款方清算行
 ///      `payer_bank` SS58(未绑定 → 结束);
 ///   2. 通过 SFID `/api/v1/app/clearing-banks/search` 把 QR 里的收款方
-///      `shenfen_id` 解析为 `recipient_bank` 主账户 hex;
+///      `sfid_number` 解析为 `recipient_bank` 主账户 hex;
 ///   3. 同行校验(`payer_bank` == `recipient_bank` hex → SS58 对比);
 ///   4. 查 `offchain_queryFeeRate(payer_bank)` 得 `(rate_bp, min_fee_fen)`,本地
 ///      计算 `fee_fen`(与 runtime 一致的四舍五入);
@@ -36,7 +36,7 @@ class OffchainClearingPayPage extends StatefulWidget {
     super.key,
     required this.wallet,
     required this.toAddress,
-    required this.recipientBankShenfenId,
+    required this.recipientBankSfidNumber,
     required this.clearingNodeWssUrl,
     required this.sfidBaseUrl,
     this.initialAmountYuan,
@@ -49,13 +49,13 @@ class OffchainClearingPayPage extends StatefulWidget {
   /// 商户 QR `UserTransferBody.address` 收款方地址(SS58 或 0x hex pubkey)。
   final String toAddress;
 
-  /// 商户 QR `UserTransferBody.bank` 收款方清算行 `shenfen_id`。
-  final String recipientBankShenfenId;
+  /// 商户 QR `UserTransferBody.bank` 收款方清算行 `sfid_number`。
+  final String recipientBankSfidNumber;
 
   /// 收款方清算行节点 WSS URL。
   final String clearingNodeWssUrl;
 
-  /// SFID 后端 baseUrl(用于按 `shenfen_id` 查收款方清算行主账户地址)。
+  /// SFID 后端 baseUrl(用于按 `sfid_number` 查收款方清算行主账户地址)。
   final String sfidBaseUrl;
 
   /// 商户 QR 预填金额(元,字符串)。空 → 由用户输入。
@@ -78,7 +78,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
 
   // 预取:付款方绑定的清算行主账户 SS58
   String? _payerBankSs58;
-  // 预取:QR 收款方 shenfen_id 解析出的清算行主账户 hex
+  // 预取:QR 收款方 sfid_number 解析出的清算行主账户 hex
   String? _recipientBankHex;
   String? _recipientBankSs58;
   // 预取:费率
@@ -118,16 +118,16 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         return;
       }
 
-      // 2. 收款方清算行(通过 SFID 按 shenfen_id 查)
+      // 2. 收款方清算行(通过 SFID 按 sfid_number 查)
       final sfid = SfidPublicApi(baseUrl: widget.sfidBaseUrl);
       try {
         final search = await sfid.searchClearingBanks(
-          keyword: widget.recipientBankShenfenId,
+          keyword: widget.recipientBankSfidNumber,
         );
         final match = search.items.firstWhere(
-          (b) => b.sfidId == widget.recipientBankShenfenId,
+          (b) => b.sfidNumber == widget.recipientBankSfidNumber,
           orElse: () => throw Exception(
-              '收款方清算行 ${widget.recipientBankShenfenId} 未在 SFID 系统查到'),
+              '收款方清算行 ${widget.recipientBankSfidNumber} 未在 SFID 系统查到'),
         );
         final recHex = match.mainAccount;
         if (recHex == null || recHex.isEmpty) {
@@ -354,7 +354,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
         children: [
           _kv('收款方地址', widget.toAddress),
           if (_payerBankSs58 != null) _kv('付款方清算行', _payerBankSs58!),
-          _kv('收款方清算行', widget.recipientBankShenfenId),
+          _kv('收款方清算行', widget.recipientBankSfidNumber),
           if (_payerBankSs58 != null && _recipientBankSs58 != null)
             _kv(
               '清算类型',
@@ -467,7 +467,7 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
           SignDisplayField(label: '收款方', value: widget.toAddress),
           SignDisplayField(
             label: '收款清算行',
-            value: widget.recipientBankShenfenId,
+            value: widget.recipientBankSfidNumber,
           ),
         ],
       ),

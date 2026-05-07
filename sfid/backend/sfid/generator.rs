@@ -88,7 +88,10 @@ pub fn generate_sfid_code(input: GenerateSfidInput<'_>) -> Result<String, &'stat
     if a3 == "FFR" && !matches!(t2, "ZG" | "TG") {
         return Err("FFR requires institution in ZG/TG");
     }
-    let d = Utc::now().format("%Y%m%d").to_string();
+    // 中文注释:D4 段只取年份(2026-05-07 改造,从 D8 缩为 D4)。
+    // 同 (a3, 省, 市, 机构, year) 5 元组共享 10 亿 n9 桶,
+    // 单省 1.5 亿人口仅占 15% 桶填充,搭配调用方 1000 次重试基本不会撞光。
+    let d = Utc::now().format("%Y").to_string();
     let province_code = province_code_by_name(input.province)
         .ok_or("province not found in code table")?
         .to_string();

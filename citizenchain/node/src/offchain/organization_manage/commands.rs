@@ -29,17 +29,17 @@ pub async fn search_eligible_clearing_banks(
     .map_err(|e| format!("search_eligible_clearing_banks task failed:{e}"))?
 }
 
-/// 链上查询某机构的多签信息。返回 `None` = 该 sfid_id 链上尚未创建机构。
+/// 链上查询某机构的多签信息。返回 `None` = 该 sfid_number 链上尚未创建机构。
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_detail(
     app: AppHandle,
-    sfid_id: String,
+    sfid_number: String,
 ) -> Result<Option<InstitutionDetail>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行,无法查询链上数据".to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || super::chain::fetch_institution_detail(&sfid_id))
+    tauri::async_runtime::spawn_blocking(move || super::chain::fetch_institution_detail(&sfid_number))
         .await
         .map_err(|e| format!("fetch_clearing_bank_institution_detail task failed:{e}"))?
 }
@@ -48,7 +48,7 @@ pub async fn fetch_clearing_bank_institution_detail(
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_proposals(
     app: AppHandle,
-    sfid_id: String,
+    sfid_number: String,
     start_id: u64,
     page_size: u32,
 ) -> Result<InstitutionProposalPage, String> {
@@ -57,7 +57,7 @@ pub async fn fetch_clearing_bank_institution_proposals(
         return Err("节点未运行,无法查询链上数据".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::chain::fetch_institution_proposals(&sfid_id, start_id, page_size)
+        super::chain::fetch_institution_proposals(&sfid_number, start_id, page_size)
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_proposals task failed:{e}"))?
@@ -66,10 +66,10 @@ pub async fn fetch_clearing_bank_institution_proposals(
 /// 调 SFID 拉链上注册专用机构信息 + 签发凭证。
 #[tauri::command]
 pub async fn fetch_clearing_bank_institution_registration_info(
-    sfid_id: String,
+    sfid_number: String,
 ) -> Result<InstitutionRegistrationInfoResp, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        super::sfid::fetch_institution_registration_info(&sfid_id)
+        super::sfid::fetch_institution_registration_info(&sfid_number)
     })
     .await
     .map_err(|e| format!("fetch_clearing_bank_institution_registration_info task failed:{e}"))?
@@ -106,7 +106,7 @@ fn parse_initial_accounts(
 pub async fn build_propose_create_institution_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_id: String,
+    sfid_number: String,
     institution_name: String,
     accounts: Vec<InitialAccountInputDto>,
     admin_pubkeys: Vec<String>,
@@ -125,7 +125,7 @@ pub async fn build_propose_create_institution_request(
         let admin_count = admin_pubkeys.len() as u32;
         super::signing::build_propose_create_institution_sign_request(
             &pubkey_hex,
-            &sfid_id,
+            &sfid_number,
             &institution_name,
             &parsed_accounts,
             admin_count,
@@ -148,7 +148,7 @@ pub async fn submit_propose_create_institution(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_id: String,
+    sfid_number: String,
     institution_name: String,
     accounts: Vec<InitialAccountInputDto>,
     admin_pubkeys: Vec<String>,
@@ -169,7 +169,7 @@ pub async fn submit_propose_create_institution(
         let parsed_accounts = parse_initial_accounts(&accounts)?;
         let admin_count = admin_pubkeys.len() as u32;
         let call_data = super::signing::build_propose_create_institution_call_data(
-            &sfid_id,
+            &sfid_number,
             &institution_name,
             &parsed_accounts,
             admin_count,

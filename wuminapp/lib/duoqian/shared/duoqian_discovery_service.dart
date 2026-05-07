@@ -11,7 +11,7 @@
 // 4. kind ∈ {1=Sfid, 2=Personal} 且 admins ∩ myPubkeys ≠ ∅ 则命中
 // 5. 按 kind 反查详情:
 //    - Personal:institution_id 前 32B = personal_address;查 PersonalDuoqianInfo
-//    - Sfid:institution_id = sfid_id padded;翻页查 SfidRegisteredAddress 拿全部 account
+//    - Sfid:institution_id = sfid_number padded;翻页查 SfidRegisteredAddress 拿全部 account
 // 6. upsert Isar(标 discoveredViaAdmin=true + matchedAdminPubkeys)
 // 7. 反向校验:Isar 中 discoveredViaAdmin=true 但本次未命中的 entity 全部删除
 
@@ -141,7 +141,7 @@ class DuoqianDiscoveryService {
 
     // ── Step 3: 批量取 value + 解码 + 过滤命中 ──
     final matchedPersonalAddrs = <String, List<String>>{};   // address → matched admin pubkeys
-    final matchedSfidIds = <String, List<String>>{};         // sfid_id_hex → matched admin pubkeys
+    final matchedSfidNumbers = <String, List<String>>{};         // sfid_number_hex → matched admin pubkeys
     var matchedCount = 0;
 
     for (var batchStart = 0; batchStart < allKeys.length; batchStart += _batchSize) {
@@ -190,9 +190,9 @@ class DuoqianDiscoveryService {
           }
         } else {
           // SFID 机构
-          final sfidId = AdminInstitutionCodec.sfidIdFromInstitutionId(instId);
-          if (sfidId != null) {
-            matchedSfidIds[_hexEncode(sfidId)] = hits;
+          final sfidNumber = AdminInstitutionCodec.sfidNumberFromInstitutionId(instId);
+          if (sfidNumber != null) {
+            matchedSfidNumbers[_hexEncode(sfidNumber)] = hits;
             matchedCount++;
           }
         }
@@ -226,16 +226,16 @@ class DuoqianDiscoveryService {
     }
 
     // SFID 机构反查
-    for (final entry in matchedSfidIds.entries) {
-      final sfidIdHex = entry.key;
+    for (final entry in matchedSfidNumbers.entries) {
+      final sfidNumberHex = entry.key;
       final hits = entry.value;
-      final sfidId = _hexDecode(sfidIdHex);
+      final sfidNumber = _hexDecode(sfidNumberHex);
 
       List<({String accountName, String duoqianAddressHex})> accounts;
       try {
-        accounts = await _manage.listSfidAccounts(Uint8List.fromList(sfidId));
+        accounts = await _manage.listSfidAccounts(Uint8List.fromList(sfidNumber));
       } catch (e) {
-        debugPrint('[DuoqianDiscovery] listSfidAccounts $sfidIdHex 失败: $e');
+        debugPrint('[DuoqianDiscovery] listSfidAccounts $sfidNumberHex 失败: $e');
         partialFailure = true;
         continue;
       }
@@ -246,7 +246,7 @@ class DuoqianDiscoveryService {
           isar: isar,
           duoqianAddrHex: acc.duoqianAddressHex,
           name: acc.accountName,
-          sfidIdUtf8: _utf8FromBytes(Uint8List.fromList(sfidId)),
+          sfidNumberUtf8: _utf8FromBytes(Uint8List.fromList(sfidNumber)),
           matchedAdmins: hits,
         );
         if (added) newlyAdded++;
@@ -337,7 +337,7 @@ class DuoqianDiscoveryService {
     required Isar isar,
     required String duoqianAddrHex,
     required String name,
-    required String sfidIdUtf8,
+    required String sfidNumberUtf8,
     required List<String> matchedAdmins,
   }) async {
     final exists = await isar.duoqianInstitutionEntitys
@@ -357,7 +357,7 @@ class DuoqianDiscoveryService {
     await isar.writeTxn(() async {
       final entity = DuoqianInstitutionEntity()
         ..duoqianAddress = duoqianAddrHex
-        ..sfidId = sfidIdUtf8
+        ..sfidNumber = sfidNumberUtf8
         ..name = name
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true

@@ -5,7 +5,7 @@ import { governanceApi as api } from './api';
 import type { GovernanceOverview, InstitutionListItem } from './types';
 
 type Props = {
-  onSelect: (shenfenId: string) => void;
+  onSelect: (sfidNumber: string) => void;
   /** 按机构类型过滤：1=省储会, 2=省储行。不传则显示全部。 */
   orgTypeFilter?: number;
 };
@@ -60,9 +60,9 @@ export function InstitutionListView({ onSelect, orgTypeFilter }: Props) {
       <div className="institution-grid">
         {items.map((item) => (
           <div
-            key={item.shenfenId}
+            key={item.sfidNumber}
             className="institution-card"
-            onClick={() => onSelect(item.shenfenId)}
+            onClick={() => onSelect(item.sfidNumber)}
           >
             <div className="institution-card-name">{item.name}</div>
             <div className="institution-card-meta">

@@ -28,14 +28,14 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 #[tauri::command]
 pub async fn query_clearing_bank_node_info(
     app: AppHandle,
-    sfid_id: String,
+    sfid_number: String,
 ) -> Result<Option<ClearingBankNodeOnChainInfo>, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行,无法查询链上数据".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::endpoint::fetch_clearing_bank_node(&sfid_id)
+        super::endpoint::fetch_clearing_bank_node(&sfid_number)
     })
     .await
     .map_err(|e| format!("query_clearing_bank_node_info task failed:{e}"))?
@@ -80,7 +80,7 @@ pub async fn test_clearing_bank_endpoint_connectivity(
 pub async fn build_register_clearing_bank_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_id: String,
+    sfid_number: String,
     peer_id: String,
     rpc_domain: String,
     rpc_port: u16,
@@ -92,7 +92,7 @@ pub async fn build_register_clearing_bank_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_register_sign_request(
             &pubkey_hex,
-            &sfid_id,
+            &sfid_number,
             &peer_id,
             &rpc_domain,
             rpc_port,
@@ -109,7 +109,7 @@ pub async fn submit_register_clearing_bank(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_id: String,
+    sfid_number: String,
     peer_id: String,
     rpc_domain: String,
     rpc_port: u16,
@@ -123,7 +123,7 @@ pub async fn submit_register_clearing_bank(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let call_data =
-            super::signing::build_register_call_data(&sfid_id, &peer_id, &rpc_domain, rpc_port)?;
+            super::signing::build_register_call_data(&sfid_number, &peer_id, &rpc_domain, rpc_port)?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,
@@ -142,7 +142,7 @@ pub async fn submit_register_clearing_bank(
 pub async fn build_update_clearing_bank_endpoint_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_id: String,
+    sfid_number: String,
     new_domain: String,
     new_port: u16,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
@@ -153,7 +153,7 @@ pub async fn build_update_clearing_bank_endpoint_request(
     tauri::async_runtime::spawn_blocking(move || {
         super::signing::build_update_endpoint_sign_request(
             &pubkey_hex,
-            &sfid_id,
+            &sfid_number,
             &new_domain,
             new_port,
         )
@@ -169,7 +169,7 @@ pub async fn submit_update_clearing_bank_endpoint(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_id: String,
+    sfid_number: String,
     new_domain: String,
     new_port: u16,
     sign_nonce: u32,
@@ -182,7 +182,7 @@ pub async fn submit_update_clearing_bank_endpoint(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let call_data =
-            super::signing::build_update_endpoint_call_data(&sfid_id, &new_domain, new_port)?;
+            super::signing::build_update_endpoint_call_data(&sfid_number, &new_domain, new_port)?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,
@@ -201,14 +201,14 @@ pub async fn submit_update_clearing_bank_endpoint(
 pub async fn build_unregister_clearing_bank_request(
     app: AppHandle,
     pubkey_hex: String,
-    sfid_id: String,
+    sfid_number: String,
 ) -> Result<gov_signing::VoteSignRequestResult, String> {
     let status = home::current_status(&app)?;
     if !status.running {
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        super::signing::build_unregister_sign_request(&pubkey_hex, &sfid_id)
+        super::signing::build_unregister_sign_request(&pubkey_hex, &sfid_number)
     })
     .await
     .map_err(|e| format!("build_unregister_clearing_bank task failed:{e}"))?
@@ -221,7 +221,7 @@ pub async fn submit_unregister_clearing_bank(
     request_id: String,
     expected_pubkey_hex: String,
     expected_payload_hash: String,
-    sfid_id: String,
+    sfid_number: String,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -231,7 +231,7 @@ pub async fn submit_unregister_clearing_bank(
         return Err("节点未运行".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = super::signing::build_unregister_call_data(&sfid_id)?;
+        let call_data = super::signing::build_unregister_call_data(&sfid_number)?;
         gov_signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

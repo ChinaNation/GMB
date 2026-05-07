@@ -1,19 +1,19 @@
 import 'dart:typed_data';
 
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, SignatureType, SigningPayload;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_rpc.dart';
-import 'nonce_manager.dart';
+import 'signed_extrinsic_builder.dart';
 
 /// 交易确认状态。
 enum TxConfirmResult {
   /// 交易哈希在链上找到，已确认。
   confirmed,
+
   /// nonce 已被其他交易消耗，本笔交易丢失（未上链）。
   lost,
+
   /// 尚未确认，继续等待。
   pending,
 }
@@ -23,9 +23,6 @@ class OnchainRpc {
   OnchainRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
-
-  /// Mortal era 周期（区块数）。64 ≈ 约 6.4 分钟有效期。
-  static const _eraPeriod = 64;
 
   /// Balances pallet index（citizenchain runtime 定义）。
   static const _balancesPalletIndex = 2;
@@ -51,67 +48,18 @@ class OnchainRpc {
     required double amountYuan,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    // 1. 获取链常量（缓存）
-    final metadata = await _rpc.fetchMetadata();
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    // 2. 并行获取动态参数
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock =
-        results[2] as ({Uint8List blockHash, int blockNumber});
-
-    // 3. 构造 call data
     final destAccountId = Keyring().decodeAddress(toAddress);
     final amountFen = BigInt.from((amountYuan * 100).round());
     final callData = _buildTransferKeepAliveCall(destAccountId, amountFen);
-
-    // 4. 构造签名载荷
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'OnchainRpc',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
     );
-    final payloadBytes = signingPayload.encode(registry);
-
-    // 5. 签名
-    final signature = await sign(payloadBytes);
-
-    // 6. 构造最终 extrinsic
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-
-    // 7. 提交（失败时回退 nonce，避免跳号）
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      rethrow;
-    }
   }
 
   /// 交易提交后超过此时间仍未被打包，判定为丢失（节点重启 / 交易池清空等）。
@@ -195,10 +143,6 @@ class OnchainRpc {
 
   // ──── 内部：extrinsic 编码 ────
 
-  static String _hexEncode(Uint8List bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
   /// 构造 Balances::transfer_keep_alive 的 SCALE 编码 call data。
   ///
   /// 格式：[pallet_index] [call_index] [MultiAddress::Id(0x00) + dest_32bytes] [Compact<u128>(fen)]
@@ -214,5 +158,4 @@ class OnchainRpc {
     output.write(CompactBigIntCodec.codec.encode(amountFen));
     return output.toBytes();
   }
-
 }

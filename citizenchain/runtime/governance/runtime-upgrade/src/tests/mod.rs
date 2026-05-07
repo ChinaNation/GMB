@@ -1,0 +1,420 @@
+#![cfg(test)]
+
+use super::*;
+use codec::Decode;
+use core::cell::RefCell;
+use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
+use frame_system as system;
+use sp_runtime::{
+    traits::{Hash, IdentityLookup},
+    AccountId32, BuildStorage, DispatchError,
+};
+
+type Block = frame_system::mocking::MockBlock<Test>;
+
+#[frame_support::runtime]
+mod runtime {
+    #[runtime::runtime]
+    #[runtime::derive(
+        RuntimeCall,
+        RuntimeEvent,
+        RuntimeError,
+        RuntimeOrigin,
+        RuntimeFreezeReason,
+        RuntimeHoldReason,
+        RuntimeSlashReason,
+        RuntimeLockId,
+        RuntimeTask,
+        RuntimeViewFunction
+    )]
+    pub struct Test;
+
+    #[runtime::pallet_index(0)]
+    pub type System = frame_system;
+
+    #[runtime::pallet_index(1)]
+    pub type VotingEngine = votingengine;
+
+    #[runtime::pallet_index(99)]
+    pub type InternalVote = internal_vote;
+
+    #[runtime::pallet_index(2)]
+    pub type RuntimeUpgrade = super;
+}
+
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+impl system::Config for Test {
+    type Block = Block;
+    type AccountId = AccountId32;
+    type Lookup = IdentityLookup<Self::AccountId>;
+}
+
+pub struct EnsureJointProposerForTest;
+impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureJointProposerForTest {
+    type Success = AccountId32;
+
+    fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+        let who = frame_system::EnsureSigned::<AccountId32>::try_origin(o)?;
+        if who == nrc_admin() || who == prc_admin() {
+            Ok(who)
+        } else {
+            Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
+        }
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+        Err(())
+    }
+}
+
+thread_local! {
+    static NEXT_JOINT_ID: RefCell<u64> = const { RefCell::new(100) };
+}
+thread_local! {
+    static EXEC_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
+}
+
+pub struct TestJointVoteEngine;
+impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
+    fn create_joint_proposal(
+        _who: AccountId32,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        _signer_admin_pubkey: &[u8; 32],
+    ) -> Result<u64, DispatchError> {
+        if eligible_total == 0
+            || snapshot_nonce.is_empty()
+            || signature.is_empty()
+            || province.is_empty()
+        {
+            return Err(DispatchError::Other("bad snapshot"));
+        }
+        NEXT_JOINT_ID.with(|id| {
+            let mut id = id.borrow_mut();
+            let v = *id;
+            *id = id.saturating_add(1);
+            Ok(v)
+        })
+    }
+
+    fn create_joint_proposal_with_data(
+        who: AccountId32,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+        module_tag: &[u8],
+        data: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let proposal_id = Self::create_joint_proposal(
+            who,
+            eligible_total,
+            snapshot_nonce,
+            signature,
+            province,
+            signer_admin_pubkey,
+        )?;
+        let bounded_data: frame_support::BoundedVec<
+            u8,
+            <Test as votingengine::Config>::MaxProposalDataLen,
+        > = data
+            .try_into()
+            .map_err(|_| DispatchError::Other("proposal data too large"))?;
+        let owner: frame_support::BoundedVec<
+            u8,
+            <Test as votingengine::Config>::MaxModuleTagLen,
+        > = module_tag
+            .to_vec()
+            .try_into()
+            .map_err(|_| DispatchError::Other("module tag too large"))?;
+        votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+        votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        Ok(proposal_id)
+    }
+
+    fn create_joint_proposal_with_data_and_object(
+        who: AccountId32,
+        eligible_total: u64,
+        snapshot_nonce: &[u8],
+        signature: &[u8],
+        province: &[u8],
+        signer_admin_pubkey: &[u8; 32],
+        module_tag: &[u8],
+        data: Vec<u8>,
+        object_kind: u8,
+        object_data: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let proposal_id = Self::create_joint_proposal_with_data(
+            who,
+            eligible_total,
+            snapshot_nonce,
+            signature,
+            province,
+            signer_admin_pubkey,
+            module_tag,
+            data,
+        )?;
+        let object_len = u32::try_from(object_data.len())
+            .map_err(|_| DispatchError::Other("proposal object too large"))?;
+        let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
+        let bounded_object: frame_support::BoundedVec<
+            u8,
+            <Test as votingengine::Config>::MaxProposalObjectLen,
+        > = object_data
+            .try_into()
+            .map_err(|_| DispatchError::Other("proposal object too large"))?;
+        votingengine::ProposalObject::<Test>::insert(proposal_id, bounded_object);
+        votingengine::ProposalObjectMeta::<Test>::insert(
+            proposal_id,
+            votingengine::ProposalObjectMetadata {
+                kind: object_kind,
+                object_len,
+                object_hash,
+            },
+        );
+        Ok(proposal_id)
+    }
+}
+
+pub struct TestTimeProvider;
+impl frame_support::traits::UnixTime for TestTimeProvider {
+    fn now() -> core::time::Duration {
+        core::time::Duration::from_secs(1_782_864_000) // 2026-07-01
+    }
+}
+
+pub struct TestInternalThresholdProvider;
+impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
+    fn pass_threshold(
+        org: u8,
+        _institution: votingengine::SubjectId,
+    ) -> Option<u32> {
+        votingengine::types::fixed_governance_pass_threshold(org)
+    }
+}
+
+impl votingengine::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type MaxVoteNonceLength = ConstU32<64>;
+    type MaxVoteSignatureLength = ConstU32<64>;
+    type MaxAutoFinalizePerBlock = ConstU32<64>;
+    type MaxProposalsPerExpiry = ConstU32<128>;
+    type MaxInternalProposalMutexBindings = ConstU32<256>;
+    type MaxActiveProposals = ConstU32<10>;
+    type MaxCleanupStepsPerBlock = ConstU32<8>;
+    type MaxCleanupQueueBucketLimit = ConstU32<50>;
+    type MaxCleanupScheduleOffset = ConstU32<100>;
+    type CleanupKeysPerStep = ConstU32<64>;
+    type MaxProposalDataLen = ConstU32<{ 100 * 1024 }>;
+    type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
+    type MaxModuleTagLen = ConstU32<32>;
+    type MaxManualExecutionAttempts = ConstU32<3>;
+    type ExecutionRetryGraceBlocks = frame_support::traits::ConstU64<216>;
+    type MaxExecutionRetryDeadlinesPerBlock = ConstU32<128>;
+    type MaxPendingRetryExpirationsPerBlock = ConstU32<16>;
+    type SfidEligibility = ();
+    type PopulationSnapshotVerifier = ();
+    type JointVoteResultCallback = ();
+    type InternalVoteResultCallback = ();
+    type InternalAdminProvider = ();
+    type InternalThresholdProvider = TestInternalThresholdProvider;
+    type InternalAdminCountProvider = ();
+    type MaxAdminsPerInstitution = ConstU32<32>;
+    type TimeProvider = TestTimeProvider;
+    type WeightInfo = ();
+    type InternalFinalizer = InternalVote;
+    type InternalCleanup = InternalVote;
+    type JointFinalizer = ();
+    type JointCleanup = ();
+}
+
+impl internal_vote::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+}
+
+// 测试用开发者直升开关：默认开启，可通过 thread_local 控制。
+thread_local! {
+    static DEV_UPGRADE_ENABLED: RefCell<bool> = const { RefCell::new(true) };
+}
+pub struct TestDeveloperUpgradeCheck;
+impl genesis_pallet::DeveloperUpgradeCheck for TestDeveloperUpgradeCheck {
+    fn is_enabled() -> bool {
+        DEV_UPGRADE_ENABLED.with(|v| *v.borrow())
+    }
+}
+
+impl pallet::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type ProposeOrigin = EnsureJointProposerForTest;
+    type JointVoteEngine = TestJointVoteEngine;
+    type RuntimeCodeExecutor = TestRuntimeCodeExecutor;
+    type DeveloperUpgradeCheck = TestDeveloperUpgradeCheck;
+    type MaxReasonLen = ConstU32<64>;
+    type MaxRuntimeCodeSize = ConstU32<1024>;
+    type MaxSnapshotNonceLength = ConstU32<64>;
+    type MaxSnapshotSignatureLength = ConstU32<64>;
+    type WeightInfo = ();
+}
+
+thread_local! {
+    static RUNTIME_CODE_EXECUTED: RefCell<bool> = const { RefCell::new(false) };
+}
+
+pub struct TestRuntimeCodeExecutor;
+impl RuntimeCodeExecutor for TestRuntimeCodeExecutor {
+    fn execute_runtime_code(_code: &[u8]) -> DispatchResult {
+        let should_fail = EXEC_SHOULD_FAIL.with(|v| *v.borrow());
+        if should_fail {
+            return Err(DispatchError::Other("set_code failed"));
+        }
+        RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = true);
+        Ok(())
+    }
+}
+
+fn new_test_ext() -> sp_io::TestExternalities {
+    let storage = frame_system::GenesisConfig::<Test>::default()
+        .build_storage()
+        .expect("test storage should build");
+    let mut ext: sp_io::TestExternalities = storage.into();
+    ext.execute_with(|| {
+        RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = false);
+        EXEC_SHOULD_FAIL.with(|v| *v.borrow_mut() = false);
+        NEXT_JOINT_ID.with(|id| *id.borrow_mut() = 100);
+        DEV_UPGRADE_ENABLED.with(|v| *v.borrow_mut() = true);
+    });
+    ext
+}
+
+fn nrc_admin() -> AccountId32 {
+    AccountId32::new([1u8; 32])
+}
+
+fn outsider() -> AccountId32 {
+    AccountId32::new([2u8; 32])
+}
+
+fn prc_admin() -> AccountId32 {
+    AccountId32::new([3u8; 32])
+}
+
+fn reason_ok() -> pallet::ReasonOf<Test> {
+    b"upgrade reason"
+        .to_vec()
+        .try_into()
+        .expect("reason should fit")
+}
+
+fn code_ok() -> pallet::CodeOf<Test> {
+    vec![1, 2, 3, 4, 5]
+        .try_into()
+        .expect("runtime code should fit")
+}
+
+fn nonce_ok() -> pallet::SnapshotNonceOf<Test> {
+    b"snap-nonce"
+        .to_vec()
+        .try_into()
+        .expect("snapshot nonce should fit")
+}
+
+fn sig_ok() -> pallet::SnapshotSignatureOf<Test> {
+    b"snap-signature"
+        .to_vec()
+        .try_into()
+        .expect("snapshot signature should fit")
+}
+
+/// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
+/// `TestJointVoteEngine` 仅做空字段非空检验,真实 sr25519 验签覆盖留 runtime 层。
+fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
+    b"liaoning"
+        .to_vec()
+        .try_into()
+        .expect("province should fit")
+}
+
+fn signer_admin_pubkey_ok() -> [u8; 32] {
+    [7u8; 32]
+}
+
+/// 从 ProposalData 读取并跳过 MODULE_TAG 后 decode 提案摘要。
+fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
+    let raw = votingengine::Pallet::<Test>::get_proposal_data(proposal_id)
+        .expect("proposal data should exist");
+    let tag = crate::MODULE_TAG;
+    assert!(
+        raw.len() >= tag.len() && &raw[..tag.len()] == tag,
+        "MODULE_TAG mismatch"
+    );
+    pallet::Proposal::<Test>::decode(&mut &raw[tag.len()..]).expect("should decode proposal")
+}
+
+fn propose_ok() {
+    assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
+        RuntimeOrigin::signed(nrc_admin()),
+        reason_ok(),
+        code_ok(),
+        10,
+        nonce_ok(),
+        sig_ok(),
+        province_ok(),
+        signer_admin_pubkey_ok()
+    ));
+}
+
+/// 在投票引擎中插入一个 PASSED 状态的 Proposal，使回调执行结果写入可用。
+/// 测试 mock 的 TestJointVoteEngine 不创建真实 Proposals 条目，
+/// 需手工补一个以模拟真实回调上下文。
+fn insert_engine_proposal(proposal_id: u64) {
+    votingengine::pallet::Proposals::<Test>::insert(
+        proposal_id,
+        votingengine::Proposal {
+            kind: votingengine::PROPOSAL_KIND_JOINT,
+            stage: votingengine::STAGE_JOINT,
+            status: votingengine::STATUS_PASSED,
+            internal_org: None,
+            internal_institution: None,
+            start: 0u64,
+            end: 100u64,
+            citizen_eligible_total: 10,
+        },
+    );
+}
+
+fn call_joint_callback(
+    proposal_id: u64,
+    approved: bool,
+) -> Result<votingengine::ProposalExecutionOutcome, DispatchError> {
+    votingengine::pallet::CallbackExecutionScopes::<Test>::insert(proposal_id, ());
+    let result = RuntimeUpgrade::on_joint_vote_finalized(proposal_id, approved);
+    votingengine::pallet::CallbackExecutionScopes::<Test>::remove(proposal_id);
+    match result {
+        Ok(outcome) => {
+            if approved {
+                votingengine::pallet::Proposals::<Test>::mutate(proposal_id, |maybe| {
+                    if let Some(proposal) = maybe {
+                        proposal.status = match outcome {
+                            votingengine::ProposalExecutionOutcome::Executed => {
+                                votingengine::STATUS_EXECUTED
+                            }
+                            votingengine::ProposalExecutionOutcome::FatalFailed => {
+                                votingengine::STATUS_EXECUTION_FAILED
+                            }
+                            _ => proposal.status,
+                        };
+                    }
+                });
+            }
+            Ok(outcome)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+mod cases;

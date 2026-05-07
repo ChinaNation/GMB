@@ -6,13 +6,13 @@
 //! [u8; 48] 布局:
 //!   byte[0]:    kind tag(SubjectKind 枚举字节值)
 //!     0x01 = Builtin           (内置主体:NRC/PRC/PRB,共 44 条 china_cb/china_ch)
-//!     0x02 = SfidInstitution   (SFID 注册机构,任意账户经 sfid_id 派生)
+//!     0x02 = SfidInstitution   (SFID 注册机构,任意账户经 sfid_number 派生)
 //!     0x03 = PersonalDuoqian   (个人多签,creator+account_name 派生地址)
 //!     0xFF = Reserved          (协议升级哨兵)
 //!     其他  = 非法,parse 返回 None
 //!   byte[1..48]: payload (47B)
-//!     Builtin:           shenfen_id 字节(≤47B)右填零
-//!     SfidInstitution:   sfid_id 字节(≤47B)右填零
+//!     Builtin:           sfid_number 字节(≤47B)右填零
+//!     SfidInstitution:   sfid_number 字节(≤47B)右填零
 //!     PersonalDuoqian:   32B AccountId + 15B 零填充
 //! ```
 //!
@@ -25,8 +25,8 @@
 //! - 反向解析:`parse_subject_id(id) -> (kind, payload)`
 //! - 语义 helper:
 //!   - `subject_id_from_account(account)` → PersonalDuoqian
-//!   - `subject_id_from_sfid_id(sfid_id)` → SfidInstitution
-//!   - `subject_id_from_shenfen_id(shenfen_id)` → Builtin
+//!   - `subject_id_from_registered_sfid_number(sfid_number)` → SfidInstitution(运行时注册)
+//!   - `subject_id_from_sfid_number(sfid_number)` → Builtin(创世硬编码)
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::DecodeWithMemTracking;
@@ -49,7 +49,7 @@ use sp_runtime::RuntimeDebug;
 pub enum SubjectKind {
     /// 内置主体:国储会 / 省储会 / 省储行(china::china_cb / china_ch)。
     Builtin = 0x01,
-    /// SFID 注册机构(任意机构账户经 sfid_id 派生)。
+    /// SFID 注册机构(任意机构账户经 sfid_number 派生)。
     SfidInstitution = 0x02,
     /// 个人多签(creator + account_name 派生地址)。
     PersonalDuoqian = 0x03,
@@ -98,20 +98,24 @@ pub fn subject_id_from_account<AccountId: Encode>(account: &AccountId) -> [u8; 4
         .expect("32B AccountId ≤ 47B payload, infallible")
 }
 
-/// SFID 注册机构派生:`SfidInstitution` kind + sfid_id 字节(≤47B)右填零。
+/// SFID 注册机构派生:`SfidInstitution` kind + sfid_number 字节(≤47B)右填零。
 ///
-/// MaxSfidIdLength 在 runtime config 强制 ≤47;BoundedVec 入链已守门。
-/// sfid_id 为空或超过 47B 返回 None,调用方应在 ensure! 拦截。
-pub fn subject_id_from_sfid_id(sfid_id: &[u8]) -> Option<[u8; 48]> {
-    build_subject_id(SubjectKind::SfidInstitution, sfid_id)
+/// MaxSfidNumberLength 在 runtime config 强制 ≤47;BoundedVec 入链已守门。
+/// sfid_number 为空或超过 47B 返回 None,调用方应在 ensure! 拦截。
+///
+/// 与 [`subject_id_from_sfid_number`] 区别:本函数用于运行时通过 SFID 系统注册的
+/// 机构多签(BoundedVec<u8> 字节),kind tag = 0x02;后者用于创世硬编码内置机构
+/// (china_cb/ch/lf/sf/jc/jy/zf 的 &'static str 字面量),kind tag = 0x01。
+pub fn subject_id_from_registered_sfid_number(sfid_number: &[u8]) -> Option<[u8; 48]> {
+    build_subject_id(SubjectKind::SfidInstitution, sfid_number)
 }
 
-/// 内置主体派生:`Builtin` kind + shenfen_id ASCII 字节(≤47B)右填零。
+/// 内置主体派生:`Builtin` kind + sfid_number ASCII 字节(≤47B)右填零。
 ///
-/// 当前 china_cb/china_ch 实测 shenfen_id 长度 33B,远小于 47B。
-/// shenfen_id 字符串为空或字节数超过 47 时返回 None。
-pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> Option<[u8; 48]> {
-    build_subject_id(SubjectKind::Builtin, shenfen_id.as_bytes())
+/// 当前 china_cb/china_ch 实测 sfid_number 长度 33B,远小于 47B。
+/// sfid_number 字符串为空或字节数超过 47 时返回 None。
+pub fn subject_id_from_sfid_number(sfid_number: &str) -> Option<[u8; 48]> {
+    build_subject_id(SubjectKind::Builtin, sfid_number.as_bytes())
 }
 
 #[cfg(test)]
@@ -120,20 +124,20 @@ mod tests {
 
     #[test]
     fn builtin_id_starts_with_0x01() {
-        let id = subject_id_from_shenfen_id("GFR-LN001-CB0C-617776487-20260222").unwrap();
+        let id = subject_id_from_sfid_number("GFR-LN001-CB0X-944805165-2026").unwrap();
         assert_eq!(id[0], 0x01);
-        assert_eq!(&id[1..34], b"GFR-LN001-CB0C-617776487-20260222");
+        assert_eq!(&id[1..34], b"GFR-LN001-CB0X-944805165-2026");
         // payload 长度 33B,后续应全零
         assert!(id[34..].iter().all(|&b| b == 0));
     }
 
     #[test]
-    fn sfid_id_starts_with_0x02() {
-        let sfid_id = b"CN-110000-XXXX";
-        let id = subject_id_from_sfid_id(sfid_id).unwrap();
+    fn sfid_number_starts_with_0x02() {
+        let sfid_number = b"CN-110000-XXXX";
+        let id = subject_id_from_sfid_number(sfid_number).unwrap();
         assert_eq!(id[0], 0x02);
-        assert_eq!(&id[1..1 + sfid_id.len()], sfid_id);
-        assert!(id[1 + sfid_id.len()..].iter().all(|&b| b == 0));
+        assert_eq!(&id[1..1 + sfid_number.len()], sfid_number);
+        assert!(id[1 + sfid_number.len()..].iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -175,7 +179,7 @@ mod tests {
 
     #[test]
     fn parse_round_trip() {
-        let payload = b"GFR-LN001-CB0C-617776487-20260222";
+        let payload = b"GFR-LN001-CB0X-944805165-2026";
         let id = build_subject_id(SubjectKind::Builtin, payload).unwrap();
         let (kind, parsed_payload) = parse_subject_id(&id).unwrap();
         assert_eq!(kind, SubjectKind::Builtin);

@@ -8,7 +8,7 @@ import { governanceApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
-  shenfenId: string;
+  sfidNumber: string;
   institutionName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
@@ -18,7 +18,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function SweepProposalPage({
-  shenfenId, institutionName, adminWallets, onBack, onSuccess,
+  sfidNumber, institutionName, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -57,7 +57,7 @@ export function SweepProposalPage({
     try {
       formValuesRef.current = { amountYuan: amount };
       const result = await api.buildProposeSweepRequest(
-        selectedWallet.pubkeyHex, shenfenId, amount,
+        selectedWallet.pubkeyHex, sfidNumber, amount,
       );
       setSignRequest(result);
       setRequestJson(result.requestJson);
@@ -78,7 +78,7 @@ export function SweepProposalPage({
     try {
       const result = await api.submitProposeSweep(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        shenfenId, formValuesRef.current.amountYuan,
+        sfidNumber, formValuesRef.current.amountYuan,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -87,7 +87,7 @@ export function SweepProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [shenfenId]);
+  }, [sfidNumber]);
 
   return (
     <div className="governance-section">

@@ -14,19 +14,19 @@ import type {
 } from './types';
 
 type Props = {
-  shenfenId: string;
+  sfidNumber: string;
   onBack: () => void;
   onOpenAdminList?: () => void;
-  onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], shenfenId: string) => void;
-  onCreateProposal?: (shenfenId: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
+  onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], sfidNumber: string) => void;
+  onCreateProposal?: (sfidNumber: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
-  onCreateSweep?: (shenfenId: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateSweep?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
+export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -51,15 +51,15 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
     // 双层 ID v1:不再需要 getNextProposalId 找起点 — 反向索引内部按 startId 过滤,
     // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
     Promise.all([
-      api.getInstitutionDetail(shenfenId),
-      api.getActivatedAdmins(shenfenId).catch(() => [] as ActivatedAdmin[]),
+      api.getInstitutionDetail(sfidNumber),
+      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
     ])
       .then(async ([d, aa]) => {
         setDetail(d);
         setActivatedAdmins(aa);
         try {
           const page = await api.getInstitutionProposalPage(
-            shenfenId,
+            sfidNumber,
             Number.MAX_SAFE_INTEGER,
             PROPOSAL_PAGE_SIZE,
           );
@@ -76,7 +76,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [shenfenId]);
+  }, [sfidNumber]);
 
   // 只刷新链上金额和告警，不改现有页面结构。
   useEffect(() => {
@@ -89,11 +89,11 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
         unlisten = await listen<InstitutionBalanceUpdate>(
           'governance-balance-updated',
           (event) => {
-            if (cancelled || event.payload.shenfenId !== shenfenId) return;
+            if (cancelled || event.payload.sfidNumber !== sfidNumber) return;
             setDetail((prev) => (prev ? { ...prev, ...event.payload } : prev));
           },
         );
-        await api.startGovernanceBalanceWatch(shenfenId);
+        await api.startGovernanceBalanceWatch(sfidNumber);
       } catch {
         // 监听不可用时静默降级为详情页初次加载结果。
       }
@@ -102,15 +102,15 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
     return () => {
       cancelled = true;
       unlisten?.();
-      api.stopGovernanceBalanceWatch(shenfenId).catch(() => undefined);
+      api.stopGovernanceBalanceWatch(sfidNumber).catch(() => undefined);
     };
-  }, [shenfenId]);
+  }, [sfidNumber]);
 
   // 加载更多提案
   const loadMoreProposals = useCallback(() => {
     if (loadingMoreProposals || proposalNextStartId == null || !proposalHasMore) return;
     setLoadingMoreProposals(true);
-    api.getInstitutionProposalPage(shenfenId, proposalNextStartId, PROPOSAL_PAGE_SIZE)
+    api.getInstitutionProposalPage(sfidNumber, proposalNextStartId, PROPOSAL_PAGE_SIZE)
       .then((page) => {
         setProposals(prev => [...prev, ...page.items]);
         setProposalHasMore(page.hasMore);
@@ -123,7 +123,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
       })
       .catch(() => setProposalHasMore(false))
       .finally(() => setLoadingMoreProposals(false));
-  }, [shenfenId, loadingMoreProposals, proposalNextStartId, proposalHasMore]);
+  }, [sfidNumber, loadingMoreProposals, proposalNextStartId, proposalHasMore]);
 
   if (loading) {
     return <div className="governance-section"><p>加载中…</p></div>;
@@ -160,7 +160,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
       {/* 机构信息卡片 */}
       <div className="institution-detail-grid">
         <div className="metric-card">
-          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.shenfenId}</code></div>
+          <div className="metric-label">机构类型 /身份ID <code className="metric-label-id">{detail.sfidNumber}</code></div>
           <div className="metric-value">{detail.orgTypeLabel}</div>
         </div>
         <div className="metric-card">
@@ -258,7 +258,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
             className="proposal-type-button"
             disabled={!isAdmin}
             onClick={() => isAdmin && onCreateProposal?.(
-              shenfenId, detail.orgType, detail.name, detail.mainAddress, adminWallets
+              sfidNumber, detail.orgType, detail.name, detail.mainAddress, adminWallets
             )}
           >转账</button>
           <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
@@ -267,7 +267,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
             <button
               className="proposal-type-button"
               disabled={!isAdmin}
-              onClick={() => isAdmin && onCreateSweep?.(shenfenId, detail.name, adminWallets)}
+              onClick={() => isAdmin && onCreateSweep?.(sfidNumber, detail.name, adminWallets)}
             >手续费划转</button>
           )}
           {detail.orgType === 0 && (
@@ -306,7 +306,7 @@ export function InstitutionDetailPage({ shenfenId, onBack, onOpenAdminList, onSe
                 key={item.proposalId}
                 className="proposal-card clickable"
                 onClick={() => {
-                  onSelectProposal?.(item.proposalId, adminWallets, shenfenId);
+                  onSelectProposal?.(item.proposalId, adminWallets, sfidNumber);
                 }}
               >
                 <div className="proposal-card-header">

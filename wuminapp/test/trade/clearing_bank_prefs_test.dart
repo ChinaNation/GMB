@@ -44,7 +44,7 @@ void main() {
       await ClearingBankPrefs.saveSnapshot(
         0,
         const ClearingBankBindingSnapshot(
-          sfidId: 'SFR-GD-SZ01-CB01-N9-D8',
+          sfidNumber: 'SFR-GD-SZ01-CB01-N9-D8',
           institutionName: '测试清算行',
           mainAccount: 'aa',
           feeAccount: 'bb',
@@ -58,7 +58,7 @@ void main() {
 
       final snapshot = await ClearingBankPrefs.loadSnapshot(0);
       expect(snapshot, isNotNull);
-      expect(snapshot!.sfidId, 'SFR-GD-SZ01-CB01-N9-D8');
+      expect(snapshot!.sfidNumber, 'SFR-GD-SZ01-CB01-N9-D8');
       expect(snapshot.wssUrl, 'ws://127.0.0.1:9944');
       expect(await ClearingBankPrefs.load(0), 'SFR-GD-SZ01-CB01-N9-D8');
     });

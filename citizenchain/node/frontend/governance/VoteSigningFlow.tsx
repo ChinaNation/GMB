@@ -10,7 +10,7 @@ type Props = {
   proposalId: number;
   proposalKind: number;
   adminWallets: AdminWalletMatch[];
-  shenfenId?: string;
+  sfidNumber?: string;
   onClose: () => void;
   onSuccess: (txHash: string) => void;
 };
@@ -18,7 +18,7 @@ type Props = {
 type FlowStep = 'select' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function VoteSigningFlow({
-  proposalId, proposalKind, adminWallets, shenfenId, onClose, onSuccess,
+  proposalId, proposalKind, adminWallets, sfidNumber, onClose, onSuccess,
 }: Props) {
   const [step, setStep] = useState<FlowStep>('select');
   const [selectedWallet, setSelectedWallet] = useState<AdminWalletMatch | null>(
@@ -53,9 +53,9 @@ export function VoteSigningFlow({
       let cdHex: string;
       // 内部投票(管理员一人一票)统一走 InternalVote::cast(22.0),
       // 联合投票走 JointVote::cast_admin(23.0),由 proposalKind===1 分支决定。
-      if (proposalKind === 1 && shenfenId) {
-        result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, shenfenId, approve);
-        cdHex = buildJointVoteCallDataHex(proposalId, shenfenId, approve);
+      if (proposalKind === 1 && sfidNumber) {
+        result = await api.buildJointVoteRequest(proposalId, selectedWallet.pubkeyHex, sfidNumber, approve);
+        cdHex = buildJointVoteCallDataHex(proposalId, sfidNumber, approve);
       } else {
         result = await api.buildVoteRequest(proposalId, selectedWallet.pubkeyHex, approve);
         cdHex = buildInternalVoteCallDataHex(proposalId, approve);
@@ -69,7 +69,7 @@ export function VoteSigningFlow({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [proposalId, proposalKind, selectedWallet, approve, shenfenId]);
+  }, [proposalId, proposalKind, selectedWallet, approve, sfidNumber]);
 
   const handleScanResult = useCallback(async (responseText: string) => {
     const req = signRequestRef.current;
@@ -177,9 +177,9 @@ function buildInternalVoteCallDataHex(proposalId: number, approve: boolean): str
  * 联合投票 call 编码:`[0x17][0x00][proposal_id:u64_le][institution:48][approve:bool]` = 59 bytes
  * (JointVote::cast_admin = pallet 23 / call 0,2026-05-05 sub-pallet 拆分后从 votingengine 迁出)。
  */
-function buildJointVoteCallDataHex(proposalId: number, shenfenId: string, approve: boolean): string {
+function buildJointVoteCallDataHex(proposalId: number, sfidNumber: string, approve: boolean): string {
   const encoder = new TextEncoder();
-  const shenfenBytes = encoder.encode(shenfenId);
+  const shenfenBytes = encoder.encode(sfidNumber);
   const institution = new Uint8Array(48);
   institution.set(shenfenBytes.subarray(0, Math.min(48, shenfenBytes.length)));
   const buf = new Uint8Array(59);

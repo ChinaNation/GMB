@@ -12,7 +12,7 @@
 ## 省份定位
 
 - 从 `ctx.admin_province`(handler 已有的 AdminAuthContext)
-- 或从 sfid_id 字符串解析:第二段省代码(如 `AH`)→ `province_name_by_code`
+- 或从 sfid_number 字符串解析:第二段省代码(如 `AH`)→ `province_name_by_code`
 
 ## legacy store 保留路径(过渡期)
 

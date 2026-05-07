@@ -49,13 +49,13 @@ CPMS 系统安装、QR2 注册、QR3 匿名证书、站点状态治理归
 链端正式注册机构前,调用:
 
 ```text
-GET /api/v1/app/institutions/:sfid_id/registration-info
+GET /api/v1/app/institutions/:sfid_number/registration-info
 ```
 
 业务字段只包含:
 
 ```text
-sfid_id
+sfid_number
 institution_name
 account_names[]
 ```
@@ -69,7 +69,7 @@ account_names[]
 - `signature`
 - `meta`
 
-`a3/sub_type/parent_sfid_id`、照片、章程、许可证、股东会决议、法人授权书等
+`a3/sub_type/parent_sfid_number`、照片、章程、许可证、股东会决议、法人授权书等
 SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、金额、投票等仍归
 `duoqian-manage` 自己校验。
 
@@ -80,9 +80,9 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 | `GET /api/v1/app/voters/count` | `citizens::chain_joint_vote::app_voters_count` |
 | `POST /api/v1/app/vote/credential` | `citizens::chain_vote::app_vote_credential` |
 | `GET /api/v1/app/institutions/search` | `institutions::chain_duoqian_info::app_search_institutions` |
-| `GET /api/v1/app/institutions/:sfid_id` | `institutions::chain_duoqian_info::app_get_institution` |
-| `GET /api/v1/app/institutions/:sfid_id/registration-info` | `institutions::chain_duoqian_info::app_get_institution_registration_info` |
-| `GET /api/v1/app/institutions/:sfid_id/accounts` | `institutions::chain_duoqian_info::app_list_accounts` |
+| `GET /api/v1/app/institutions/:sfid_number` | `institutions::chain_duoqian_info::app_get_institution` |
+| `GET /api/v1/app/institutions/:sfid_number/registration-info` | `institutions::chain_duoqian_info::app_get_institution_registration_info` |
+| `GET /api/v1/app/institutions/:sfid_number/accounts` | `institutions::chain_duoqian_info::app_list_accounts` |
 | `GET /api/v1/app/clearing-banks/search` | `institutions::chain_duoqian_info::app_search_clearing_banks` |
 | `GET /api/v1/app/clearing-banks/eligible-search` | `institutions::chain_duoqian_info::app_search_eligible_clearing_banks` |
 

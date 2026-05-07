@@ -1,15 +1,29 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
 import 'duoqian_manage_models.dart';
+import 'duoqian_storage_codec.dart';
+
+/// 机构多签创建时的初始账户资金条目。
+class InstitutionInitialAccountInput {
+  const InstitutionInitialAccountInput({
+    required this.accountName,
+    required this.amountFen,
+  });
+
+  /// 账户名称必须使用 SFID `/registration-info.account_names` 返回值。
+  final String accountName;
+
+  /// 初始资金,单位为分。
+  final BigInt amountFen;
+}
 
 // 业务目录 lib/duoqian/ 按多签业务分层（个人 + 机构共用入口），
 // 链端 pallet 名为 OrganizationManage（pallet_index=17）；目录名与 pallet 名解耦不需要同步迁移。
@@ -37,17 +51,14 @@ class DuoqianManageService {
   /// PersonalManage pallet index(runtime pallet_index=7,B 阶段拆分 2026-05-06)。
   static const _personalPalletIndex = 7;
 
-  /// propose_create call_index=0(legacy 单账户机构入口已废弃,call_index 留洞)。
-  static const _proposeCreateCallIndex = 0;
+  /// OrganizationManage::propose_create_institution call_index=5。
+  static const _proposeCreateInstitutionCallIndex = 5;
 
   /// OrganizationManage::propose_close call_index=1(机构关闭)。
   static const _proposeCloseCallIndex = 1;
 
   /// PersonalManage::propose_close call_index=1(个人关闭)。
   static const _personalProposeCloseCallIndex = 1;
-
-  /// Mortal era 周期。
-  static const _eraPeriod = 64;
 
   /// PersonalManage::propose_create call_index=0(B 阶段拆分 2026-05-06,
   /// 独立 pallet 后从 0 起编号)。
@@ -63,57 +74,147 @@ class DuoqianManageService {
 
   // ──── Extrinsic 提交 ────
 
-  /// 提交机构多签 propose_create extrinsic。
+  /// 提交机构多签 propose_create_institution extrinsic。
   ///
-  /// 参数编码：[0x11][0x00] + sfid_id(BoundedVec<u8>) + account_name(BoundedVec<u8>)
-  ///   + admin_count(u32 LE) + duoqian_admins(BoundedVec<AccountId32>)
-  ///   + threshold(u32 LE) + amount(u128 LE)
+  /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
+  /// [0x11][0x05] + sfid_number + institution_name + accounts + admin_count
+  ///   + duoqian_admins + threshold + register_nonce + signature
+  ///   + province + signer_admin_pubkey。
   Future<({String txHash, int usedNonce})> submitProposeCreateInstitution({
-    required Uint8List sfidId,
-    required Uint8List accountName,
+    required String sfidNumber,
+    required String institutionName,
+    required List<InstitutionInitialAccountInput> accounts,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
-    required BigInt amountFen,
+    required String registerNonce,
+    required String signatureHex,
+    required String province,
+    required String signerAdminPubkeyHex,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
+    final callData = buildProposeCreateInstitutionCallData(
+      sfidNumber: sfidNumber,
+      institutionName: institutionName,
+      accounts: accounts,
+      adminCount: adminCount,
+      adminPubkeys: adminPubkeys,
+      threshold: threshold,
+      registerNonce: registerNonce,
+      signatureHex: signatureHex,
+      province: province,
+      signerAdminPubkeyHex: signerAdminPubkeyHex,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 构造机构创建 call_data。仅用于生产提交与测试逐字节对齐。
+  @visibleForTesting
+  static Uint8List buildProposeCreateInstitutionCallData({
+    required String sfidNumber,
+    required String institutionName,
+    required List<InstitutionInitialAccountInput> accounts,
+    required int adminCount,
+    required List<Uint8List> adminPubkeys,
+    required int threshold,
+    required String registerNonce,
+    required String signatureHex,
+    required String province,
+    required String signerAdminPubkeyHex,
+  }) {
+    final sfidBytes = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
+    final institutionNameBytes =
+        Uint8List.fromList(utf8.encode(institutionName.trim()));
+    final registerNonceBytes =
+        Uint8List.fromList(utf8.encode(registerNonce.trim()));
+    final provinceBytes = Uint8List.fromList(utf8.encode(province.trim()));
+    final signatureBytes = _hexDecodeFixed(signatureHex,
+        expectedLength: 64, fieldName: 'signature');
+    final signerAdminPubkey = _hexDecodeFixed(
+      signerAdminPubkeyHex,
+      expectedLength: 32,
+      fieldName: 'signer_admin_pubkey',
+    );
+
+    if (sfidBytes.isEmpty || sfidBytes.length > 96) {
+      throw ArgumentError('sfid_number 长度需在 1..=96 字节');
+    }
+    if (institutionNameBytes.isEmpty || institutionNameBytes.length > 128) {
+      throw ArgumentError('institution_name 长度需在 1..=128 字节');
+    }
+    if (accounts.isEmpty) {
+      throw ArgumentError('accounts 不可为空');
+    }
+    if (adminCount < 2 || adminCount != adminPubkeys.length) {
+      throw ArgumentError('admin_count 必须 >=2 且等于管理员公钥数量');
+    }
+    final minThresholdRaw = (adminCount + 1) ~/ 2;
+    final minThreshold = minThresholdRaw < 2 ? 2 : minThresholdRaw;
+    if (threshold < minThreshold || threshold > adminCount) {
+      throw ArgumentError('threshold 范围必须在 $minThreshold..=$adminCount');
+    }
+    if (registerNonceBytes.isEmpty) {
+      throw ArgumentError('register_nonce 不可为空');
+    }
+    if (provinceBytes.isEmpty) {
+      throw ArgumentError('province 不可为空');
+    }
+
     final output = ByteOutput();
     output.pushByte(_palletIndex);
-    output.pushByte(_proposeCreateCallIndex);
+    output.pushByte(_proposeCreateInstitutionCallIndex);
 
-    // sfid_id: BoundedVec<u8> = Compact<u32> length + bytes
-    output.write(CompactBigIntCodec.codec.encode(BigInt.from(sfidId.length)));
-    output.write(sfidId);
+    // sfid_number: BoundedVec<u8> = Compact<u32> length + bytes
+    _writeBoundedBytes(output, sfidBytes);
 
-    // account_name: BoundedVec<u8> = Compact<u32> length + bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
-    output.write(accountName);
+    // institution_name: BoundedVec<u8>
+    _writeBoundedBytes(output, institutionNameBytes);
+
+    // accounts: BoundedVec<InstitutionInitialAccount> = Compact<N> + N 项。
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(accounts.length)));
+    for (final account in accounts) {
+      final accountNameBytes =
+          Uint8List.fromList(utf8.encode(account.accountName.trim()));
+      if (accountNameBytes.isEmpty || accountNameBytes.length > 128) {
+        throw ArgumentError('account_name 长度需在 1..=128 字节');
+      }
+      if (account.amountFen <= BigInt.zero) {
+        throw ArgumentError('account.amount_fen 必须大于 0');
+      }
+      _writeBoundedBytes(output, accountNameBytes);
+      output.write(_u128ToLeBytesStatic(account.amountFen));
+    }
 
     // admin_count: u32 little-endian
-    output.write(_u32ToLeBytes(adminCount));
+    output.write(_u32ToLeBytesStatic(adminCount));
 
     // duoqian_admins: BoundedVec<AccountId32> = Compact<u32> length + N × 32 bytes
     output.write(
         CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
     for (final pubkey in adminPubkeys) {
+      if (pubkey.length != 32) {
+        throw ArgumentError('duoqian_admins 每项必须为 32 字节');
+      }
       output.write(pubkey);
     }
 
     // threshold: u32 little-endian
-    output.write(_u32ToLeBytes(threshold));
+    output.write(_u32ToLeBytesStatic(threshold));
 
-    // amount: u128 little-endian（非 Compact）
-    output.write(_u128ToLeBytes(amountFen));
+    // register_nonce / signature / province / signer_admin_pubkey
+    _writeBoundedBytes(output, registerNonceBytes);
+    _writeBoundedBytes(output, signatureBytes);
+    _writeBoundedBytes(output, provinceBytes);
+    output.write(signerAdminPubkey);
 
-    return _signAndSubmit(
-      callData: output.toBytes(),
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
+    return output.toBytes();
   }
 
   /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 SFID）。
@@ -250,21 +351,13 @@ class DuoqianManageService {
   Future<({String creatorAddressHex, String accountName})?> fetchPersonalMeta(
     String personalAddressHex,
   ) async {
-    final key = _buildStorageKey(
-      'OrganizationManage',
-      'PersonalDuoqianInfo',
-      _hexDecode(personalAddressHex),
-    );
+    final key = DuoqianStorageCodec.personalDuoqianInfoKey(personalAddressHex);
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 33) return null;
-
-    final creator = _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
-    var offset = 32;
-    final (nameLen, nameLenBytes) = _decodeCompact(data, offset);
-    offset += nameLenBytes;
-    if (offset + nameLen > data.length) return null;
-    final nameBytes = data.sublist(offset, offset + nameLen);
-    final name = _utf8Decode(nameBytes);
+    if (data == null) return null;
+    final meta = DuoqianStorageCodec.decodePersonalMeta(data);
+    if (meta == null) return null;
+    final creator = _hexEncode(meta.creator);
+    final name = _utf8Decode(meta.accountName);
     return (creatorAddressHex: creator, accountName: name);
   }
 
@@ -272,14 +365,14 @@ class DuoqianManageService {
   ///
   /// 内部:`state_getKeysPaged` prefix = twox128("OrganizationManage")
   ///       || twox128("SfidRegisteredAddress")
-  ///       || blake2_128_concat(sfid_id);每个 key 后段:
+  ///       || blake2_128_concat(sfid_number);每个 key 后段:
   ///       blake2_128(account_name)(16B) || account_name 真值(变长 BoundedVec)。
   ///       value = duoqian_address(32B)。
   Future<List<({String accountName, String duoqianAddressHex})>>
-      listSfidAccounts(Uint8List sfidId) async {
+      listSfidAccounts(Uint8List sfidNumber) async {
     final palletHash = Hasher.twoxx128.hashString('OrganizationManage');
     final storageHash = Hasher.twoxx128.hashString('SfidRegisteredAddress');
-    final sfidKeyHash = _blake2128Concat(sfidId);
+    final sfidKeyHash = _blake2128Concat(sfidNumber);
     final prefix = Uint8List(
       palletHash.length + storageHash.length + sfidKeyHash.length,
     );
@@ -317,7 +410,8 @@ class DuoqianManageService {
 
         final value = await _rpc.fetchStorage(keyHex);
         if (value == null || value.length < 32) continue;
-        final duoqianAddrHex = _hexEncode(Uint8List.fromList(value.sublist(0, 32)));
+        final duoqianAddrHex =
+            _hexEncode(Uint8List.fromList(value.sublist(0, 32)));
         results.add((
           accountName: accountName,
           duoqianAddressHex: duoqianAddrHex,
@@ -331,13 +425,13 @@ class DuoqianManageService {
     return results;
   }
 
-  /// 查询 SFID (sfid_id + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
+  /// 查询 SFID (sfid_number + account_name) 是否已注册，返回派生的多签地址 hex（null 表示未注册）。
   Future<String?> fetchSfidRegisteredAddress(
-      Uint8List sfidId, Uint8List accountName) async {
+      Uint8List sfidNumber, Uint8List accountName) async {
     final key = _buildDoubleMapStorageKey(
       'OrganizationManage',
       'SfidRegisteredAddress',
-      sfidId,
+      sfidNumber,
       accountName,
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
@@ -345,56 +439,67 @@ class DuoqianManageService {
     return _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
   }
 
-  /// 查询多签账户信息（从 DuoqianAccounts 存储解码）。
+  /// 查询多签账户信息。
   ///
-  /// 链上 SCALE 布局：
-  ///   admin_count: u32 + threshold: u32
-  ///   + duoqian_admins: BoundedVec<AccountId32>（Compact len + N × 32B）
-  ///   + creator: AccountId32(32) + created_at: BlockNumber(u32)
-  ///   + status: enum(u8)（0=Pending, 1=Active）
+  /// 注册机构账户走 `AddressRegisteredSfid -> Institutions + InstitutionAccounts`；
+  /// 个人多签账户走 `PersonalManage::PersonalDuoqians`。
   Future<DuoqianAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
-    final key = _buildStorageKey(
-      'OrganizationManage',
-      'DuoqianAccounts',
-      _hexDecode(duoqianAddressHex),
+    final institution =
+        await _fetchInstitutionDuoqianAccount(duoqianAddressHex);
+    if (institution != null) return institution;
+    return _fetchPersonalDuoqianAccount(duoqianAddressHex);
+  }
+
+  Future<DuoqianAccountInfo?> _fetchInstitutionDuoqianAccount(
+    String duoqianAddressHex,
+  ) async {
+    final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
+      duoqianAddressHex,
     );
-    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
-    if (data == null || data.length < 8) return null;
+    final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
+    if (refData == null) return null;
+    final ref = DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+    if (ref == null) return null;
 
-    var offset = 0;
+    final institutionKey = DuoqianStorageCodec.institutionKey(ref.sfidNumber);
+    final institutionData =
+        await _rpc.fetchStorage('0x${_hexEncode(institutionKey)}');
+    if (institutionData == null) return null;
+    final institution =
+        DuoqianStorageCodec.decodeInstitutionInfo(institutionData);
+    if (institution == null) return null;
 
-    // admin_count: u32
-    final adminCount = _decodeU32(data, offset);
-    offset += 4;
-
-    // threshold: u32
-    final threshold = _decodeU32(data, offset);
-    offset += 4;
-
-    // duoqian_admins: BoundedVec<AccountId32> = Compact<u32> len + N × 32
-    final (adminLen, lenSize) = _decodeCompact(data, offset);
-    offset += lenSize;
-    final pubkeys = <String>[];
-    for (var i = 0; i < adminLen && offset + 32 <= data.length; i++) {
-      pubkeys.add(
-          _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32))));
-      offset += 32;
-    }
-
-    // creator: AccountId32(32) + created_at: u32(4)
-    offset += 32 + 4;
-
-    // status: enum u8（0=Pending, 1=Active）
-    final statusByte = offset < data.length ? data[offset] : 0;
-    final status =
-        statusByte == 1 ? DuoqianStatus.active : DuoqianStatus.pending;
-
+    final accountKey = DuoqianStorageCodec.institutionAccountKey(
+      ref.sfidNumber,
+      ref.accountName,
+    );
+    final accountData = await _rpc.fetchStorage('0x${_hexEncode(accountKey)}');
+    final account = accountData == null
+        ? null
+        : DuoqianStorageCodec.decodeInstitutionAccount(accountData);
+    final statusByte = account?.statusByte ?? institution.statusByte;
     return DuoqianAccountInfo(
-      adminCount: adminCount,
-      threshold: threshold,
-      adminPubkeys: pubkeys,
-      status: status,
+      adminCount: institution.adminCount,
+      threshold: institution.threshold,
+      adminPubkeys: institution.adminPubkeys,
+      status: _statusFromByte(statusByte),
+    );
+  }
+
+  Future<DuoqianAccountInfo?> _fetchPersonalDuoqianAccount(
+    String duoqianAddressHex,
+  ) async {
+    final key = DuoqianStorageCodec.personalDuoqiansKey(duoqianAddressHex);
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null) return null;
+    final personal = DuoqianStorageCodec.decodePersonalDuoqian(data);
+    if (personal == null) return null;
+    return DuoqianAccountInfo(
+      adminCount: personal.adminCount,
+      threshold: personal.threshold,
+      adminPubkeys: personal.adminPubkeys,
+      status: _statusFromByte(personal.statusByte),
     );
   }
 
@@ -517,92 +622,18 @@ class DuoqianManageService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    debugPrint('[OrganizationManage] 步骤1: 获取 metadata...');
-    final metadata = await _rpc.fetchMetadata();
-    debugPrint('[OrganizationManage] 步骤2: 获取 genesisHash...');
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    debugPrint('[OrganizationManage] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint(
-        '[OrganizationManage] nonce=$nonce, block=${latestBlock.blockNumber}');
-
-    debugPrint('[OrganizationManage] 步骤4: 构造签名载荷...');
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'OrganizationManage',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
     );
-    final payloadBytes = signingPayload.encode(registry);
-
-    debugPrint('[OrganizationManage] 步骤5: 签名 (${payloadBytes.length} bytes)...');
-    final signature = await sign(payloadBytes);
-    debugPrint('[OrganizationManage] 签名完成 (${signature.length} bytes)');
-
-    debugPrint('[OrganizationManage] 步骤6: 编码 extrinsic...');
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[OrganizationManage] extrinsic 编码完成 (${encoded.length} bytes)');
-
-    debugPrint('[OrganizationManage] 步骤7: 提交到链...');
-    debugPrint('[OrganizationManage] call data hex: ${_hexEncode(callData)}');
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      debugPrint('[OrganizationManage] 提交成功: 0x${_hexEncode(txHash)}');
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[OrganizationManage] 提交失败，原始错误: $e');
-      rethrow;
-    }
   }
 
   // ──── 内部：storage key 构造 ────
-
-  Uint8List _buildStorageKey(
-    String palletName,
-    String storageName,
-    Uint8List keyData,
-  ) {
-    final palletHash = Hasher.twoxx128.hashString(palletName);
-    final storageHash = Hasher.twoxx128.hashString(storageName);
-    final keyHash = _blake2128Concat(keyData);
-
-    final result =
-        Uint8List(palletHash.length + storageHash.length + keyHash.length);
-    var offset = 0;
-    result.setAll(offset, palletHash);
-    offset += palletHash.length;
-    result.setAll(offset, storageHash);
-    offset += storageHash.length;
-    result.setAll(offset, keyHash);
-    return result;
-  }
 
   /// StorageDoubleMap key: twox128(pallet) + twox128(storage) + blake2_128_concat(key1) + blake2_128_concat(key2)
   Uint8List _buildDoubleMapStorageKey(
@@ -641,6 +672,50 @@ class DuoqianManageService {
 
   // ──── 内部：编码工具 ────
 
+  DuoqianStatus _statusFromByte(int statusByte) {
+    return statusByte == 1 ? DuoqianStatus.active : DuoqianStatus.pending;
+  }
+
+  static void _writeBoundedBytes(ByteOutput output, Uint8List bytes) {
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(bytes.length)));
+    output.write(bytes);
+  }
+
+  static Uint8List _u32ToLeBytesStatic(int value) {
+    final bytes = Uint8List(4);
+    final bd = ByteData.sublistView(bytes);
+    bd.setUint32(0, value, Endian.little);
+    return bytes;
+  }
+
+  static Uint8List _u128ToLeBytesStatic(BigInt value) {
+    final bytes = Uint8List(16);
+    var v = value;
+    for (var i = 0; i < 16; i++) {
+      bytes[i] = (v & BigInt.from(0xFF)).toInt();
+      v >>= 8;
+    }
+    return bytes;
+  }
+
+  static Uint8List _hexDecodeFixed(
+    String hex, {
+    required int expectedLength,
+    required String fieldName,
+  }) {
+    final raw = hex.trim();
+    final h = raw.startsWith('0x') ? raw.substring(2) : raw;
+    if (h.length != expectedLength * 2 ||
+        !RegExp(r'^[0-9a-fA-F]+$').hasMatch(h)) {
+      throw ArgumentError('$fieldName 必须为 $expectedLength 字节 hex');
+    }
+    final result = Uint8List(expectedLength);
+    for (var i = 0; i < result.length; i++) {
+      result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return result;
+  }
+
   Uint8List _u32ToLeBytes(int value) {
     final bytes = Uint8List(4);
     final bd = ByteData.sublistView(bytes);
@@ -663,7 +738,8 @@ class DuoqianManageService {
     return bd.getUint32(offset, Endian.little);
   }
 
-  String _utf8Decode(Uint8List bytes) => utf8.decode(bytes, allowMalformed: true);
+  String _utf8Decode(Uint8List bytes) =>
+      utf8.decode(bytes, allowMalformed: true);
 
   (int, int) _decodeCompact(Uint8List data, int offset) {
     final first = data[offset];

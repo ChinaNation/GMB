@@ -1,10 +1,9 @@
-import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, SignatureType, SigningPayload;
+import 'dart:typed_data';
+
 import 'package:polkadart/scale_codec.dart' show ByteOutput;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 
 /// 投票引擎统一投票入口服务。
 ///
@@ -32,9 +31,6 @@ class InternalVoteService {
 
   /// InternalVote::cast call_index=0。
   static const int internalVoteCallIndex = 0;
-
-  /// Mortal era 周期（与其他业务 service 保持一致）。
-  static const int _eraPeriod = 64;
 
   // ──── 公开 API ────
 
@@ -82,67 +78,15 @@ class InternalVoteService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    debugPrint('[InternalVote] 步骤1: 获取 metadata...');
-    final metadata = await _rpc.fetchMetadata();
-    debugPrint('[InternalVote] 步骤2: 获取 genesisHash...');
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    debugPrint('[InternalVote] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint('[InternalVote] nonce=$nonce, block=${latestBlock.blockNumber}');
-
-    debugPrint('[InternalVote] 步骤4: 构造签名载荷...');
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'InternalVote',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
     );
-    final payloadBytes = signingPayload.encode(registry);
-
-    debugPrint('[InternalVote] 步骤5: 签名 (${payloadBytes.length} bytes)...');
-    final signature = await sign(payloadBytes);
-    debugPrint('[InternalVote] 签名完成 (${signature.length} bytes)');
-
-    debugPrint('[InternalVote] 步骤6: 编码 extrinsic...');
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[InternalVote] extrinsic 编码完成 (${encoded.length} bytes)');
-
-    debugPrint('[InternalVote] 步骤7: 提交到链...');
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      debugPrint('[InternalVote] 提交成功: 0x${_hexEncode(txHash)}');
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[InternalVote] 提交失败: $e');
-      rethrow;
-    }
   }
 
   // ──── 内部：编码工具 ────
@@ -152,9 +96,5 @@ class InternalVoteService {
     final bd = ByteData.sublistView(bytes);
     bd.setUint64(0, value, Endian.little);
     return bytes;
-  }
-
-  static String _hexEncode(Uint8List bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }

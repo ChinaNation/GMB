@@ -48,5 +48,5 @@
 - 已确认：`duoqian-manage` 当前真实职责是 `sfid` 机构登记、注册型多签机构创建、注册型多签机构关闭；创建/关闭当前都走 `ORG_DUOQIAN` 内部投票，不是旧文档里的离线 M-of-N 一次性签名提交。
 - 已记录关键问题：在 `propose_create`（`citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`，约第 490 行）里，模块会先把 `DuoqianAccounts` 写成 `Pending`，然后才创建内部投票提案。
 - 已进一步确认：当前模块中可以看到 `execute_create` 把 `Pending` 改成 `Active`，`execute_close` 删除 `Active` 账户，但未看到“创建提案被拒绝 / 超时后清理 Pending 记录”的路径。
-- 风险结论：若创建提案未通过，链上可能残留一条 `Pending` 的 `DuoqianAccounts`，后续再次对同一 `sfid_id / duoqian_address` 发起创建时，可能命中 `AddressAlreadyExists`。
+- 风险结论：若创建提案未通过，链上可能残留一条 `Pending` 的 `DuoqianAccounts`，后续再次对同一 `sfid_number / duoqian_address` 发起创建时，可能命中 `AddressAlreadyExists`。
 - 已把上述口径同步回模块技术文档，避免继续沿用旧版离线签名描述。

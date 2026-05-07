@@ -167,7 +167,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         builder: (_) => InstitutionDuoqianCreatePage(
           institution: const InstitutionInfo(
             name: '新建多签机构',
-            shenfenId:
+            sfidNumber:
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.duoqian,
             duoqianAddress:
@@ -205,7 +205,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   InstitutionInfo _itemToInstitutionInfo(_DuoqianListItem item) {
     return InstitutionInfo(
       name: item.name,
-      shenfenId: item.isPersonal
+      sfidNumber: item.isPersonal
           ? 'personal:${item.duoqianAddress}'
           : registeredDuoqianIdentity(item.duoqianAddress),
       orgType: OrgType.duoqian,

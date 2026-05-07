@@ -38,7 +38,7 @@ const MAX_CITY_CHARS: usize = 100;
 /// 不携带 register_nonce/signature,也不暴露 created_by 等 SFID 内部字段。
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionDetail {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) institution_name: Option<String>,
     pub(crate) category: crate::sfid::InstitutionCategory,
@@ -52,7 +52,7 @@ pub(crate) struct AppInstitutionDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_sfid_id: Option<String>,
+    pub(crate) parent_sfid_number: Option<String>,
     pub(crate) chain_status: InstitutionChainStatus,
 }
 
@@ -60,7 +60,7 @@ pub(crate) struct AppInstitutionDetail {
 
 /// 链端注册时使用的验签包装字段。
 ///
-/// 中文注释:业务注册字段只有外层的 `sfid_id / institution_name / account_names`。
+/// 中文注释:业务注册字段只有外层的 `sfid_number / institution_name / account_names`。
 /// 本结构里的字段只用于链端确认这些信息确实由 SFID 系统签发,并做防重放。
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionRegistrationCredential {
@@ -75,10 +75,10 @@ pub(crate) struct AppInstitutionRegistrationCredential {
 
 /// `app_get_institution_registration_info` 的响应。
 ///
-/// 中文注释:不得在这里加入 a3/sub_type/parent_sfid_id 等链端注册不需要的业务字段。
+/// 中文注释:不得在这里加入 a3/sub_type/parent_sfid_number 等链端注册不需要的业务字段。
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionRegistrationInfo {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     pub(crate) institution_name: String,
     pub(crate) account_names: Vec<String>,
     pub(crate) credential: AppInstitutionRegistrationCredential,
@@ -94,7 +94,7 @@ pub(crate) struct AppInstitutionSearchQuery {
 
 #[derive(Serialize, Clone)]
 pub(crate) struct AppInstitutionSearchRow {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     pub(crate) institution_name: Option<String>,
     pub(crate) category: crate::sfid::InstitutionCategory,
     pub(crate) a3: String,
@@ -117,7 +117,7 @@ pub(crate) struct AppAccountEntry {
 
 #[derive(Serialize)]
 pub(crate) struct AppInstitutionAccounts {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     pub(crate) institution_name: String,
     pub(crate) accounts: Vec<AppAccountEntry>,
 }
@@ -128,7 +128,7 @@ pub(crate) struct AppInstitutionAccounts {
 ///
 /// - `province`:省份名(如"广东省"),省略=全国
 /// - `city`:市名(需搭配 province),省略=本省全部
-/// - `keyword`:关键字,匹配 sfid_id / institution_name 子串(大小写不敏感)
+/// - `keyword`:关键字,匹配 sfid_number / institution_name 子串(大小写不敏感)
 /// - `page`:页码,从 1 起(默认 1)
 /// - `size`:每页条数,1~100(默认 20)
 #[derive(Debug, Deserialize)]
@@ -146,7 +146,7 @@ pub(crate) struct AppClearingBankSearchQuery {
 /// (例如"招商银行 → 招商银行广州民主路支行")。
 #[derive(Serialize, Clone)]
 pub(crate) struct AppClearingBankRow {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     /// 机构中文名(两步式未命名时为空串)。
     pub(crate) institution_name: String,
     /// 主体属性:SFR(私法人)或 FFR(非法人)。
@@ -154,9 +154,9 @@ pub(crate) struct AppClearingBankRow {
     /// 私法人子类型(仅 a3=SFR 有值)。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sub_type: Option<String>,
-    /// 所属法人 sfid_id(仅 a3=FFR 有值)。
+    /// 所属法人 sfid_number(仅 a3=FFR 有值)。
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_sfid_id: Option<String>,
+    pub(crate) parent_sfid_number: Option<String>,
     /// 所属法人中文名(FFR 用)。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_institution_name: Option<String>,
@@ -186,7 +186,7 @@ pub(crate) struct AppClearingBankSearchOutput {
 /// 候选清算行搜索参数。
 #[derive(Debug, Deserialize)]
 pub(crate) struct EligibleClearingBankSearchQuery {
-    /// 关键字,匹配 sfid_id / institution_name 子串(大小写不敏感)。
+    /// 关键字,匹配 sfid_number / institution_name 子串(大小写不敏感)。
     pub q: Option<String>,
     /// 上限(默认 20,最大 50)。
     pub limit: Option<u32>,
@@ -202,7 +202,7 @@ pub(crate) struct EligibleClearingBankSearchQuery {
 /// DTO 必须严格对齐(否则 JSON 解析失败)。
 #[derive(Serialize, Clone)]
 pub(crate) struct EligibleClearingBankRow {
-    pub(crate) sfid_id: String,
+    pub(crate) sfid_number: String,
     /// 机构中文名(两步式未命名时不出现该字段)。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) institution_name: Option<String>,
@@ -210,7 +210,7 @@ pub(crate) struct EligibleClearingBankRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sub_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) parent_sfid_id: Option<String>,
+    pub(crate) parent_sfid_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) parent_institution_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -235,10 +235,10 @@ fn extract_province_code(sfid: &str) -> String {
         .unwrap_or_default()
 }
 
-/// 从 sfid_id 解析省代码并映射到省名。
+/// 从 sfid_number 解析省代码并映射到省名。
 /// 用于 handler 层确定 sharded_store 分片 key。
-fn resolve_province_from_sfid_id(sfid_id: &str) -> Option<String> {
-    let code = extract_province_code(sfid_id);
+fn resolve_province_from_sfid_number(sfid_number: &str) -> Option<String> {
+    let code = extract_province_code(sfid_number);
     if code.is_empty() {
         return None;
     }
@@ -274,7 +274,7 @@ pub(crate) async fn app_search_institutions(
                 let mut local = Vec::new();
                 for inst in shard.multisig_institutions.values() {
                     if let Some(ref kw) = q_inner {
-                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let sfid_lc = inst.sfid_number.to_lowercase();
                         let name_lc = inst
                             .institution_name
                             .as_deref()
@@ -285,7 +285,7 @@ pub(crate) async fn app_search_institutions(
                         }
                     }
                     local.push(AppInstitutionSearchRow {
-                        sfid_id: inst.sfid_id.clone(),
+                        sfid_number: inst.sfid_number.clone(),
                         institution_name: inst.institution_name.clone(),
                         category: inst.category,
                         a3: inst.a3.clone(),
@@ -308,7 +308,7 @@ pub(crate) async fn app_search_institutions(
         a.province
             .cmp(&b.province)
             .then(a.city.cmp(&b.city))
-            .then(a.sfid_id.cmp(&b.sfid_id))
+            .then(a.sfid_number.cmp(&b.sfid_number))
     });
     if rows.len() > limit {
         rows.truncate(limit);
@@ -323,7 +323,7 @@ pub(crate) async fn app_search_institutions(
 
 // ─── 2. 单机构详情 ─────────────────────────────────────────────
 
-/// `GET /api/v1/app/institutions/:sfid_id`
+/// `GET /api/v1/app/institutions/:sfid_number`
 ///
 /// 区块链/钱包公开读取机构详情。机构名称变更后,链端重新调用本接口即可更新展示。
 ///
@@ -331,23 +331,23 @@ pub(crate) async fn app_search_institutions(
 /// 链端注册请调用 `/registration-info` 专用接口。
 pub(crate) async fn app_get_institution(
     State(state): State<AppState>,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read = state
         .sharded_store
         .read_province(&province, move |shard| {
-            shard.multisig_institutions.get(&sfid_id_r).cloned()
+            shard.multisig_institutions.get(&sfid_number_r).cloned()
         })
         .await;
     let inst = match read {
@@ -366,7 +366,7 @@ pub(crate) async fn app_get_institution(
         code: 0,
         message: "ok".to_string(),
         data: AppInstitutionDetail {
-            sfid_id: inst.sfid_id,
+            sfid_number: inst.sfid_number,
             institution_name: inst.institution_name,
             category: inst.category,
             a3: inst.a3,
@@ -377,48 +377,48 @@ pub(crate) async fn app_get_institution(
             city_code: inst.city_code,
             institution_code: inst.institution_code,
             sub_type: inst.sub_type,
-            parent_sfid_id: inst.parent_sfid_id,
+            parent_sfid_number: inst.parent_sfid_number,
             chain_status: inst.chain_status,
         },
     })
     .into_response()
 }
 
-/// `GET /api/v1/app/institutions/:sfid_id/registration-info`
+/// `GET /api/v1/app/institutions/:sfid_number/registration-info`
 ///
 /// 链端注册专用接口。业务字段只返回:
-/// - `sfid_id`
+/// - `sfid_number`
 /// - `institution_name`
 /// - `account_names`
 ///
 /// 其余字段放在 `credential` 下,只用于链端验签和防重放。
 pub(crate) async fn app_get_institution_registration_info(
     State(state): State<AppState>,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let sfid_id = sfid_id.trim().to_string();
-    if sfid_id.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_id is required");
+    let sfid_number = sfid_number.trim().to_string();
+    if sfid_number.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_number is required");
     }
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let inst = shard.multisig_institutions.get(&sfid_number_r).cloned();
             let mut account_names: Vec<String> = shard
                 .multisig_accounts
                 .values()
-                .filter(|account| account.sfid_id == sfid_id_r)
+                .filter(|account| account.sfid_number == sfid_number_r)
                 .filter(|account| !account.account_name.trim().is_empty())
                 .map(|account| account.account_name.clone())
                 .collect();
@@ -500,7 +500,7 @@ pub(crate) async fn app_get_institution_registration_info(
     let register_nonce = Uuid::new_v4().to_string();
     let credential = match build_institution_registration_info_credential(
         &state,
-        sfid_id.as_str(),
+        sfid_number.as_str(),
         institution_name.as_str(),
         &account_names,
         register_nonce,
@@ -522,7 +522,7 @@ pub(crate) async fn app_get_institution_registration_info(
         code: 0,
         message: "ok".to_string(),
         data: AppInstitutionRegistrationInfo {
-            sfid_id,
+            sfid_number,
             institution_name,
             account_names,
             credential: AppInstitutionRegistrationCredential {
@@ -540,36 +540,36 @@ pub(crate) async fn app_get_institution_registration_info(
 
 // ─── 3. 机构账户列表(脱敏) ─────────────────────────────────
 
-/// `GET /api/v1/app/institutions/:sfid_id/accounts`
+/// `GET /api/v1/app/institutions/:sfid_number/accounts`
 ///
 /// 只返回机构名/账户名/多签地址/链上状态,不暴露管理员/创建人等敏感字段。
 pub(crate) async fn app_list_accounts(
     State(state): State<AppState>,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
-    let sfid_id = sfid_id.trim().to_string();
-    if sfid_id.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_id is required");
+    let sfid_number = sfid_number.trim().to_string();
+    if sfid_number.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_number is required");
     }
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let inst = shard.multisig_institutions.get(&sfid_number_r).cloned();
             let accounts: Vec<AppAccountEntry> = shard
                 .multisig_accounts
                 .values()
-                .filter(|a| a.sfid_id == sfid_id_r)
+                .filter(|a| a.sfid_number == sfid_number_r)
                 .map(|a| AppAccountEntry {
                     account_name: a.account_name.clone(),
                     duoqian_address: a.duoqian_address.clone(),
@@ -600,7 +600,7 @@ pub(crate) async fn app_list_accounts(
         code: 0,
         message: "ok".to_string(),
         data: AppInstitutionAccounts {
-            sfid_id,
+            sfid_number,
             institution_name: inst.institution_name.unwrap_or_default(),
             accounts,
         },
@@ -616,12 +616,12 @@ pub(crate) async fn app_list_accounts(
 /// - 仅返回**资格白名单**机构 ∩ **主账户已激活上链**(`ActiveOnChain`)
 /// - 资格白名单:(SFR ∧ sub_type=JOINT_STOCK) ∨ (FFR ∧ parent.SFR ∧ parent.JOINT_STOCK)
 /// - 默认跨全国 43 省;传 `province` 限定单省
-/// - 主账户/费用账户地址从 `MultisigAccount` 对应 `(sfid_id, "主账户" | "费用账户")` 反查
+/// - 主账户/费用账户地址从 `MultisigAccount` 对应 `(sfid_number, "主账户" | "费用账户")` 反查
 ///
 /// 跨省 parent 解析:
-/// - FFR 候选的 parent_sfid_id 可能在另一省 shard,采用 2 轮跨省读取:
-///   - 第 1 轮:跨 43 省构建全国"SFR ∧ JOINT_STOCK"的 sfid_id 集合
-///   - 第 2 轮:扫描候选时,FFR 仅当 parent_sfid_id ∈ 第 1 轮集合时通过
+/// - FFR 候选的 parent_sfid_number 可能在另一省 shard,采用 2 轮跨省读取:
+///   - 第 1 轮:跨 43 省构建全国"SFR ∧ JOINT_STOCK"的 sfid_number 集合
+///   - 第 2 轮:扫描候选时,FFR 仅当 parent_sfid_number ∈ 第 1 轮集合时通过
 pub(crate) async fn app_search_clearing_banks(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<AppClearingBankSearchQuery>,
@@ -651,7 +651,7 @@ pub(crate) async fn app_search_clearing_banks(
         }
     }
 
-    // 第 1 轮:跨全国 43 省构建"SFR ∧ JOINT_STOCK"的快查表 sfid_id → (institution_name, a3)。
+    // 第 1 轮:跨全国 43 省构建"SFR ∧ JOINT_STOCK"的快查表 sfid_number → (institution_name, a3)。
     // FFR 候选过滤时用此表判定 parent 是否合规。
     // 第 1 轮永远跨全国(不受 query.province 限制),因为 FFR 的 parent 可能在外省。
     let mut sfr_jointstock_lookup: std::collections::HashMap<String, (Option<String>, String)> =
@@ -664,7 +664,7 @@ pub(crate) async fn app_search_clearing_banks(
                 for inst in shard.multisig_institutions.values() {
                     if inst.a3 == "SFR" && inst.sub_type.as_deref() == Some("JOINT_STOCK") {
                         hits.push((
-                            inst.sfid_id.clone(),
+                            inst.sfid_number.clone(),
                             inst.institution_name.clone(),
                             inst.a3.clone(),
                         ));
@@ -713,10 +713,10 @@ pub(crate) async fn app_search_clearing_banks(
                     };
                     match acc.account_name.as_str() {
                         "主账户" => {
-                            main_addr.insert(acc.sfid_id.clone(), addr.clone());
+                            main_addr.insert(acc.sfid_number.clone(), addr.clone());
                         }
                         "费用账户" => {
-                            fee_addr.insert(acc.sfid_id.clone(), addr.clone());
+                            fee_addr.insert(acc.sfid_number.clone(), addr.clone());
                         }
                         _ => {}
                     }
@@ -724,14 +724,14 @@ pub(crate) async fn app_search_clearing_banks(
 
                 let mut prov_rows: Vec<AppClearingBankRow> = Vec::new();
                 for inst in shard.multisig_institutions.values() {
-                    if !main_addr.contains_key(&inst.sfid_id) {
+                    if !main_addr.contains_key(&inst.sfid_number) {
                         continue;
                     }
 
                     let (eligible, parent_info): (bool, Option<(String, Option<String>, String)>) =
                         match inst.a3.as_str() {
                             "SFR" => (inst.sub_type.as_deref() == Some("JOINT_STOCK"), None),
-                            "FFR" => match inst.parent_sfid_id.as_deref() {
+                            "FFR" => match inst.parent_sfid_number.as_deref() {
                                 Some(pid) => match lookup_inner.get(pid) {
                                     Some((p_name, p_a3)) => (
                                         true,
@@ -753,7 +753,7 @@ pub(crate) async fn app_search_clearing_banks(
                         }
                     }
                     if let Some(ref kw) = q_kw_inner {
-                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let sfid_lc = inst.sfid_number.to_lowercase();
                         let name_lc = inst
                             .institution_name
                             .as_deref()
@@ -764,22 +764,22 @@ pub(crate) async fn app_search_clearing_banks(
                         }
                     }
 
-                    let (parent_sfid_id, parent_institution_name, parent_a3) = match parent_info {
+                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info {
                         Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
                         None => (None, None, None),
                     };
                     prov_rows.push(AppClearingBankRow {
-                        sfid_id: inst.sfid_id.clone(),
+                        sfid_number: inst.sfid_number.clone(),
                         institution_name: inst.institution_name.clone().unwrap_or_default(),
                         a3: inst.a3.clone(),
                         sub_type: inst.sub_type.clone(),
-                        parent_sfid_id,
+                        parent_sfid_number,
                         parent_institution_name,
                         parent_a3,
                         province: inst.province.clone(),
                         city: inst.city.clone(),
-                        main_account: main_addr.get(&inst.sfid_id).cloned(),
-                        fee_account: fee_addr.get(&inst.sfid_id).cloned(),
+                        main_account: main_addr.get(&inst.sfid_number).cloned(),
+                        fee_account: fee_addr.get(&inst.sfid_number).cloned(),
                     });
                 }
                 prov_rows
@@ -797,7 +797,7 @@ pub(crate) async fn app_search_clearing_banks(
         a.province
             .cmp(&b.province)
             .then(a.city.cmp(&b.city))
-            .then(a.sfid_id.cmp(&b.sfid_id))
+            .then(a.sfid_number.cmp(&b.sfid_number))
     });
 
     let total = all_rows.len();
@@ -830,7 +830,7 @@ pub(crate) async fn app_search_clearing_banks(
 /// - 仅按资格白名单过滤(SFR + JOINT_STOCK 或 FFR + 合规 parent)
 /// - 不要求主账户已激活上链(节点桌面 UI"添加清算行"用,可能正在创建中)
 /// - 单页返回(无分页),`limit` 默认 20 上限 50
-/// - 不按 province/city 过滤(sfid_id 全局唯一,精确定位)
+/// - 不按 province/city 过滤(sfid_number 全局唯一,精确定位)
 pub(crate) async fn app_search_eligible_clearing_banks(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<EligibleClearingBankSearchQuery>,
@@ -855,7 +855,7 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                 for inst in shard.multisig_institutions.values() {
                     if inst.a3 == "SFR" && inst.sub_type.as_deref() == Some("JOINT_STOCK") {
                         hits.push((
-                            inst.sfid_id.clone(),
+                            inst.sfid_number.clone(),
                             inst.institution_name.clone(),
                             inst.a3.clone(),
                         ));
@@ -898,13 +898,13 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                     match acc.account_name.as_str() {
                         "主账户" => {
                             main_addr.insert(
-                                acc.sfid_id.clone(),
+                                acc.sfid_number.clone(),
                                 (acc.duoqian_address.clone(), acc.chain_status.clone()),
                             );
                         }
                         "费用账户" => {
                             if let Some(ref addr) = acc.duoqian_address {
-                                fee_addr.insert(acc.sfid_id.clone(), addr.clone());
+                                fee_addr.insert(acc.sfid_number.clone(), addr.clone());
                             }
                         }
                         _ => {}
@@ -916,7 +916,7 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                     let (eligible, parent_info): (bool, Option<(String, Option<String>, String)>) =
                         match inst.a3.as_str() {
                             "SFR" => (inst.sub_type.as_deref() == Some("JOINT_STOCK"), None),
-                            "FFR" => match inst.parent_sfid_id.as_deref() {
+                            "FFR" => match inst.parent_sfid_number.as_deref() {
                                 Some(pid) => match lookup_inner.get(pid) {
                                     Some((p_name, p_a3)) => (
                                         true,
@@ -933,7 +933,7 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                     }
 
                     if let Some(ref kw) = q_kw_inner {
-                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let sfid_lc = inst.sfid_number.to_lowercase();
                         let name_lc = inst
                             .institution_name
                             .as_deref()
@@ -944,27 +944,27 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                         }
                     }
 
-                    let (parent_sfid_id, parent_institution_name, parent_a3) = match parent_info {
+                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info {
                         Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
                         None => (None, None, None),
                     };
-                    let (main_account_addr, main_chain_status) = match main_addr.get(&inst.sfid_id)
+                    let (main_account_addr, main_chain_status) = match main_addr.get(&inst.sfid_number)
                     {
                         Some((addr, status)) => (addr.clone(), status.clone()),
                         None => (None, MultisigChainStatus::NotOnChain),
                     };
                     prov_rows.push(EligibleClearingBankRow {
-                        sfid_id: inst.sfid_id.clone(),
+                        sfid_number: inst.sfid_number.clone(),
                         institution_name: inst.institution_name.clone(),
                         a3: inst.a3.clone(),
                         sub_type: inst.sub_type.clone(),
-                        parent_sfid_id,
+                        parent_sfid_number,
                         parent_institution_name,
                         parent_a3,
                         province: inst.province.clone(),
                         city: inst.city.clone(),
                         main_account: main_account_addr,
-                        fee_account: fee_addr.get(&inst.sfid_id).cloned(),
+                        fee_account: fee_addr.get(&inst.sfid_number).cloned(),
                         main_chain_status,
                     });
                 }
@@ -983,7 +983,7 @@ pub(crate) async fn app_search_eligible_clearing_banks(
         a.province
             .cmp(&b.province)
             .then(a.city.cmp(&b.city))
-            .then(a.sfid_id.cmp(&b.sfid_id))
+            .then(a.sfid_number.cmp(&b.sfid_number))
     });
     if all_rows.len() > limit {
         all_rows.truncate(limit);

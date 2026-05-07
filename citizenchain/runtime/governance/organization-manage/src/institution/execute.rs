@@ -17,7 +17,7 @@ use frame_support::{
 };
 use sp_runtime::{traits::Zero, DispatchResult};
 
-use primitives::derive::subject_id_from_sfid_id;
+use primitives::derive::subject_id_from_registered_sfid_number;
 use crate::institution::types::InstitutionLifecycleStatus;
 use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionActionOf, Error, Event, InstitutionAccounts,
@@ -32,21 +32,21 @@ pub(crate) fn cleanup_pending_institution_create<T: Config>(
 ) {
     let _ = T::Currency::unreserve(&action.proposer, action.reserve_total);
     PendingInstitutionCreate::<T>::remove(proposal_id);
-    Institutions::<T>::remove(&action.sfid_id);
+    Institutions::<T>::remove(&action.sfid_number);
     for account in action.accounts.iter() {
-        InstitutionAccounts::<T>::remove(&action.sfid_id, &account.account_name);
-        SfidRegisteredAddress::<T>::remove(&action.sfid_id, &account.account_name);
+        InstitutionAccounts::<T>::remove(&action.sfid_number, &account.account_name);
+        SfidRegisteredAddress::<T>::remove(&action.sfid_number, &account.account_name);
         AddressRegisteredSfid::<T>::remove(&account.address);
     }
     // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
     // 机构主账户的 admin 配置由 admins-change::Subjects[institution_id] 承载,无需 mirror 清理。
-    if let Some(institution_id) = subject_id_from_sfid_id(action.sfid_id.as_slice()) {
+    if let Some(institution_id) = subject_id_from_registered_sfid_number(action.sfid_number.as_slice()) {
         Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
     }
     if emit_event {
         Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateRejected {
             proposal_id,
-            sfid_id: action.sfid_id.clone(),
+            sfid_number: action.sfid_number.clone(),
             main_address: action.main_address.clone(),
             reserve_total: action.reserve_total,
         });
@@ -87,7 +87,7 @@ pub(crate) fn execute_create_institution_with_finalizer<T: Config>(
         )
         .map_err(|_| Error::<T>::TransferFailed)?;
         InstitutionAccounts::<T>::mutate(
-            &action.sfid_id,
+            &action.sfid_number,
             &account.account_name,
             |maybe_account| {
                 if let Some(stored) = maybe_account {
@@ -97,23 +97,23 @@ pub(crate) fn execute_create_institution_with_finalizer<T: Config>(
         );
     }
 
-    Institutions::<T>::try_mutate(&action.sfid_id, |maybe_institution| -> DispatchResult {
+    Institutions::<T>::try_mutate(&action.sfid_number, |maybe_institution| -> DispatchResult {
         let institution = maybe_institution
             .as_mut()
             .ok_or(Error::<T>::InstitutionNotRegistered)?;
         institution.status = InstitutionLifecycleStatus::Active;
         Ok(())
     })?;
-    // B 阶段后机构主账户状态唯一在 Institutions[sfid_id].status 与
-    // InstitutionAccounts[(sfid_id, "主账户")].status 双写;不再 mirror 到 DuoqianAccounts。
-    let institution_id = subject_id_from_sfid_id(action.sfid_id.as_slice())
-        .ok_or(Error::<T>::EmptySfidId)?;
+    // B 阶段后机构主账户状态唯一在 Institutions[sfid_number].status 与
+    // InstitutionAccounts[(sfid_number, "主账户")].status 双写;不再 mirror 到 DuoqianAccounts。
+    let institution_id = subject_id_from_registered_sfid_number(action.sfid_number.as_slice())
+        .ok_or(Error::<T>::EmptySfidNumber)?;
     Pallet::<T>::activate_admin_subject(proposal_id, institution_id)?;
     PendingInstitutionCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreated {
         proposal_id,
-        sfid_id: action.sfid_id.clone(),
+        sfid_number: action.sfid_number.clone(),
         main_address: action.main_address.clone(),
         account_count: action.accounts.len() as u32,
         initial_total: action.initial_total,

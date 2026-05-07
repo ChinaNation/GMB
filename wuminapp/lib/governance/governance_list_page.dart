@@ -31,8 +31,8 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
   List<InstitutionInfo> _sorted(List<InstitutionInfo> list) {
     final sorted = List<InstitutionInfo>.from(list);
     sorted.sort((a, b) {
-      final aAdmin = ProposalContextResolver.isAdminInstitution(a.shenfenId);
-      final bAdmin = ProposalContextResolver.isAdminInstitution(b.shenfenId);
+      final aAdmin = ProposalContextResolver.isAdminInstitution(a.sfidNumber);
+      final bAdmin = ProposalContextResolver.isAdminInstitution(b.sfidNumber);
       if (aAdmin && !bAdmin) return -1;
       if (!aAdmin && bAdmin) return 1;
       return 0;
@@ -144,7 +144,7 @@ class _GovernanceSection extends StatelessWidget {
               itemBuilder: (context, index) {
                 final inst = institutions[index];
                 final isAdmin = ProposalContextResolver.isAdminInstitution(
-                  inst.shenfenId,
+                  inst.sfidNumber,
                 );
                 return _GovernanceCard(
                   institution: inst,

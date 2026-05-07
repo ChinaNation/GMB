@@ -10,7 +10,7 @@
 
 extern crate alloc;
 
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_registered_sfid_number;
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -18,8 +18,6 @@ use frame_support::{
     traits::ReservableCurrency,
 };
 use sp_runtime::{traits::Hash, DispatchResult};
-
-use primitives::derive::subject_id_from_sfid_id;
 use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
 };
@@ -29,7 +27,7 @@ use crate::institution::types::{
 use crate::pallet::{
     AccountNameOf, AddressRegisteredSfid, Config, DuoqianAdminsOf, Error, Event,
     InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
-    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidIdOf, SfidRegisteredAddress,
+    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAddress,
     UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
 };
 use crate::traits::{ProtectedSourceChecker, SfidInstitutionVerifier};
@@ -40,7 +38,7 @@ use votingengine::InternalVoteEngine;
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn do_propose_create_institution<T: Config>(
     who: T::AccountId,
-    sfid_id: SfidIdOf<T>,
+    sfid_number: SfidNumberOf<T>,
     institution_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
     admin_count: u32,
@@ -55,11 +53,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         !T::ProtectedSourceChecker::is_protected(&who),
         Error::<T>::ProtectedSource
     );
-    ensure!(!sfid_id.is_empty(), Error::<T>::EmptySfidId);
+    ensure!(!sfid_number.is_empty(), Error::<T>::EmptySfidNumber);
     ensure!(!institution_name.is_empty(), Error::<T>::EmptyAccountName);
     ensure!(!province.is_empty(), Error::<T>::EmptyProvince);
     ensure!(
-        !Institutions::<T>::contains_key(&sfid_id),
+        !Institutions::<T>::contains_key(&sfid_number),
         Error::<T>::InstitutionAlreadyExists
     );
     Pallet::<T>::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
@@ -72,7 +70,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let account_name_payload = account_names_payload_from_initial_accounts::<T>(&accounts)?;
     ensure!(
         T::SfidInstitutionVerifier::verify_institution_registration(
-            sfid_id.as_slice(),
+            sfid_number.as_slice(),
             &institution_name,
             &account_name_payload,
             &register_nonce,
@@ -84,20 +82,20 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     );
 
     let (created_accounts, main_address, fee_address, initial_total) =
-        validate_initial_accounts::<T>(&sfid_id, &accounts)?;
+        validate_initial_accounts::<T>(&sfid_number, &accounts)?;
     // 共用余额预检查 helper(2026-05-03):amount + fee + ED 必须够。
     let (reserve_total, fee) =
         crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释:机构治理索引直接由 sfid_id 派生(2026-05-03 整改),
-    // 与 NRC/PRC/PRB 的 subject_id_from_shenfen_id 协议一致(D 阶段 SubjectKind=0x02),
+    // 中文注释:机构治理索引直接由 sfid_number 派生(2026-05-03 整改),
+    // 与 NRC/PRC/PRB 的 subject_id_from_sfid_number 协议一致(D 阶段 SubjectKind=0x02),
     // 不再绕道 main_address。
-    let institution = subject_id_from_sfid_id(sfid_id.as_slice())
-        .ok_or(Error::<T>::EmptySfidId)?;
+    let institution = subject_id_from_registered_sfid_number(sfid_number.as_slice())
+        .ok_or(Error::<T>::EmptySfidNumber)?;
     let org = votingengine::types::ORG_REN;
     let action = CreateInstitutionAction {
-        sfid_id: sfid_id.clone(),
+        sfid_number: sfid_number.clone(),
         institution_name: institution_name.clone(),
         main_address: main_address.clone(),
         fee_address: fee_address.clone(),
@@ -119,7 +117,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
         }
         Institutions::<T>::insert(
-            &sfid_id,
+            &sfid_number,
             InstitutionInfo {
                 institution_name: institution_name.clone(),
                 main_address: main_address.clone(),
@@ -136,7 +134,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
         for account in created_accounts.iter() {
             InstitutionAccounts::<T>::insert(
-                &sfid_id,
+                &sfid_number,
                 &account.account_name,
                 InstitutionAccountInfo {
                     address: account.address.clone(),
@@ -146,18 +144,18 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                     created_at: now,
                 },
             );
-            SfidRegisteredAddress::<T>::insert(&sfid_id, &account.account_name, &account.address);
+            SfidRegisteredAddress::<T>::insert(&sfid_number, &account.account_name, &account.address);
             AddressRegisteredSfid::<T>::insert(
                 &account.address,
                 RegisteredInstitution {
-                    sfid_id: sfid_id.clone(),
+                    sfid_number: sfid_number.clone(),
                     account_name: account.account_name.clone(),
                 },
             );
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[subject_id_from_sfid_id(sfid_id)],
+        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[subject_id_from_sfid_number(sfid_number)],
         // duoqian-transfer 通过 InstitutionMultisigQuery trait 查询。
 
         // 中文注释:创建提案需全员管理员通过(2026-05-03 整改)。
@@ -197,7 +195,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
 
     Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateProposed {
         proposal_id,
-        sfid_id,
+        sfid_number,
         institution_name,
         main_address,
         proposer: who,

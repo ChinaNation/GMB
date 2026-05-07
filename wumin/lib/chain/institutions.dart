@@ -4,8 +4,8 @@
 //   - NATIONAL_COUNCILS   （国储会 Nrc，1 个）
 //   - PROVINCIAL_COUNCILS （省储会 Prc，43 个）
 //   - PROVINCIAL_BANKS    （省储行 Prb，43 个）
-// 合计 87 个机构。服务端 `find_entry(shenfen_id)` 会在这三个数组中依次查找，
-// 冷钱包解码 payload 时用同一套映射把 `shenfen_id` 还原成中文名，
+// 合计 87 个机构。服务端 `find_entry(sfid_number)` 会在这三个数组中依次查找，
+// 冷钱包解码 payload 时用同一套映射把 `sfid_number` 还原成中文名，
 // 保证 `display.fields.institution` 与 `decoded.fields.institution` 逐字节一致。
 //
 // 任何机构名/身份号变更必须同时更新此文件与服务端 mod.rs。
@@ -25,12 +25,12 @@ enum InstitutionType {
 
 class Institution {
   const Institution({
-    required this.shenfenId,
+    required this.sfidNumber,
     required this.name,
     required this.type,
   });
 
-  final String shenfenId;
+  final String sfidNumber;
   final String name;
   final InstitutionType type;
 }
@@ -38,7 +38,7 @@ class Institution {
 /// 国储会（1）。
 const List<Institution> kNationalCouncils = [
   Institution(
-    shenfenId: 'GFR-LN001-CB0C-617776487-20260222',
+    sfidNumber: 'GFR-LN001-CB0X-944805165-2026',
     name: '国家储备委员会',
     type: InstitutionType.nrc,
   ),
@@ -46,96 +46,96 @@ const List<Institution> kNationalCouncils = [
 
 /// 省储会（43）。
 const List<Institution> kProvincialCouncils = [
-  Institution(shenfenId: 'GFR-ZS001-CB0X-464088047-20260222', name: '中枢省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-LN002-CB0Q-850177236-20260222', name: '岭南省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-GD000-CB0O-261883838-20260222', name: '广东省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-GX000-CB0X-936039238-20260222', name: '广西省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-FJ000-CB0I-232415560-20260222', name: '福建省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HN000-CB04-832186703-20260222', name: '海南省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-YN000-CB0G-574048259-20260222', name: '云南省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-GZ000-CB03-700488596-20260222', name: '贵州省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HU000-CB0V-865805553-20260222', name: '湖南省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-JX000-CB09-183645800-20260222', name: '江西省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-ZJ000-CB0Y-452554562-20260222', name: '浙江省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-JS000-CB0T-266669398-20260222', name: '江苏省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-SD000-CB0A-354794960-20260222', name: '山东省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-SX000-CB0T-700141630-20260222', name: '山西省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HE000-CB0R-527771281-20260222', name: '河南省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HB000-CB04-025532397-20260222', name: '河北省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HI000-CB0M-247491104-20260222', name: '湖北省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-SI000-CB0Q-626717092-20260222', name: '陕西省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-CQ001-CB00-452250444-20260222', name: '重庆省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-SC000-CB0N-676087668-20260222', name: '四川省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-GS000-CB02-451145443-20260222', name: '甘肃省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-BP001-CB0C-164347900-20260222', name: '北平省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HA000-CB02-156526094-20260222', name: '海滨省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-SJ000-CB0A-005282342-20260222', name: '松江省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-LJ000-CB0A-105584375-20260222', name: '龙江省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-JL000-CB0T-855212821-20260222', name: '吉林省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-LI000-CB03-221473214-20260222', name: '辽宁省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-NX000-CB0A-240866560-20260222', name: '宁夏省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-QH000-CB0N-229555853-20260222', name: '青海省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-AH000-CB0Q-714959233-20260222', name: '安徽省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-TW000-CB0U-188063480-20260222', name: '台湾省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-XZ000-CB0R-085197231-20260222', name: '西藏省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-XJ000-CB0I-803866647-20260222', name: '新疆省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-XK000-CB0B-810391358-20260222', name: '西康省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-AL000-CB08-769336671-20260222', name: '阿里省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-CL000-CB0Z-914234080-20260222', name: '葱岭省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-TS000-CB0O-063508625-20260222', name: '天山省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HX000-CB0J-238307168-20260222', name: '河西省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-KL000-CB00-453003140-20260222', name: '昆仑省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HT000-CB0F-763975330-20260222', name: '河套省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-RH000-CB0T-258553387-20260222', name: '热河省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-XA000-CB0D-997757073-20260222', name: '兴安省储备委员会', type: InstitutionType.prc),
-  Institution(shenfenId: 'GFR-HJ000-CB0C-544834501-20260222', name: '合江省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-ZS001-CB0Y-016974075-2026', name: '中枢省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-LN001-CB02-773405642-2026', name: '岭南省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-GD001-CB0L-067440774-2026', name: '广东省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-GX001-CB0I-663454043-2026', name: '广西省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-FJ001-CB03-389570546-2026', name: '福建省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HN001-CB0X-545676096-2026', name: '海南省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-YN001-CB0K-145427171-2026', name: '云南省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-GZ001-CB0I-969970096-2026', name: '贵州省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HU001-CB03-400319700-2026', name: '湖南省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-JX001-CB0Q-458681566-2026', name: '江西省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-ZJ001-CB0J-471270801-2026', name: '浙江省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-JS001-CB08-358467174-2026', name: '江苏省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-SD001-CB03-027328848-2026', name: '山东省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-SX001-CB08-104465679-2026', name: '山西省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HE001-CB02-849245626-2026', name: '河南省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HB001-CB07-499533387-2026', name: '河北省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HI001-CB01-659443961-2026', name: '湖北省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-SI001-CB0Y-711309909-2026', name: '陕西省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-CQ001-CB0Z-478472058-2026', name: '重庆省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-SC001-CB0N-935659021-2026', name: '四川省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-GS001-CB0K-679051155-2026', name: '甘肃省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-BP001-CB06-189323546-2026', name: '北平省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HA001-CB0C-214178517-2026', name: '海滨省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-SJ001-CB0V-044490898-2026', name: '松江省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-LJ001-CB05-279890045-2026', name: '龙江省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-JL001-CB0C-850461124-2026', name: '吉林省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-LI001-CB0P-978545133-2026', name: '辽宁省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-NX001-CB0C-389752794-2026', name: '宁夏省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-QH001-CB0C-882026762-2026', name: '青海省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-AH001-CB0O-589856828-2026', name: '安徽省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-TW001-CB0H-265218823-2026', name: '台湾省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-XZ001-CB05-435616961-2026', name: '西藏省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-XJ001-CB0F-671044381-2026', name: '新疆省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-XK001-CB05-695945392-2026', name: '西康省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-AL001-CB0Z-487847725-2026', name: '阿里省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-CL001-CB0B-771698743-2026', name: '葱岭省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-TS001-CB0T-293160581-2026', name: '天山省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HX001-CB0I-475713213-2026', name: '河西省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-KL001-CB0Q-091969119-2026', name: '昆仑省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HT001-CB07-481172908-2026', name: '河套省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-RH001-CB08-697831866-2026', name: '热河省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-XA001-CB0V-384161601-2026', name: '兴安省储备委员会', type: InstitutionType.prc),
+  Institution(sfidNumber: 'GFR-HJ001-CB0K-963948997-2026', name: '合江省储备委员会', type: InstitutionType.prc),
 ];
 
 /// 省储行（43）。
 const List<Institution> kProvincialBanks = [
-  Institution(shenfenId: 'SFR-ZS001-CH1Z-572590896-20260222', name: '中枢省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-LN001-CH1D-067241191-20260222', name: '岭南省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-GD000-CH1S-539766913-20260222', name: '广东省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-GX000-CH17-770836097-20260222', name: '广西省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-FJ000-CH1Y-285514007-20260222', name: '福建省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HN000-CH1W-701494632-20260222', name: '海南省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-YN000-CH1M-088552001-20260222', name: '云南省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-GZ000-CH17-073795499-20260222', name: '贵州省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HU000-CH1P-721228492-20260222', name: '湖南省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-JX000-CH1T-532829662-20260222', name: '江西省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-ZJ000-CH19-249528657-20260222', name: '浙江省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-JS000-CH1C-191178842-20260222', name: '江苏省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-SD000-CH1V-887886640-20260222', name: '山东省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-SX000-CH1F-755750488-20260222', name: '山西省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HE000-CH1T-357503840-20260222', name: '河南省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HB000-CH12-172598053-20260222', name: '河北省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HI000-CH1W-584177104-20260222', name: '湖北省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-SI000-CH1G-814942227-20260222', name: '陕西省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-CQ001-CH1A-811483361-20260222', name: '重庆省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-SC000-CH19-320507619-20260222', name: '四川省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-GS000-CH1U-319639307-20260222', name: '甘肃省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-BP001-CH19-330141933-20260222', name: '北平省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HA000-CH1N-832919801-20260222', name: '海滨省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-SJ000-CH17-991726244-20260222', name: '松江省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-LJ000-CH1U-321069400-20260222', name: '龙江省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-JL000-CH1Z-114671562-20260222', name: '吉林省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-LI000-CH1O-060821950-20260222', name: '辽宁省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-NX000-CH1W-927112322-20260222', name: '宁夏省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-QH000-CH15-480036803-20260222', name: '青海省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-AH000-CH14-243470490-20260222', name: '安徽省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-TW000-CH1O-339827620-20260222', name: '台湾省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-XZ000-CH1A-076183922-20260222', name: '西藏省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-XJ000-CH1T-624864385-20260222', name: '新疆省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-XK000-CH19-727906387-20260222', name: '西康省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-AL000-CH1Z-823361903-20260222', name: '阿里省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-CL000-CH1I-930688147-20260222', name: '葱岭省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-TS000-CH1S-351739678-20260222', name: '天山省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HX000-CH1X-115163356-20260222', name: '河西省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-KL000-CH1F-853206078-20260222', name: '昆仑省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HT000-CH1H-294801127-20260222', name: '河套省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-RH000-CH14-762808938-20260222', name: '热河省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-XA000-CH1P-285320269-20260222', name: '兴安省公民储备银行', type: InstitutionType.prb),
-  Institution(shenfenId: 'SFR-HJ000-CH1C-538936570-20260222', name: '合江省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-ZS001-CH1J-233384677-2026', name: '中枢省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-LN001-CH1O-703127075-2026', name: '岭南省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-GD001-CH1I-239565809-2026', name: '广东省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-GX001-CH1Q-025559630-2026', name: '广西省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-FJ001-CH1L-504679612-2026', name: '福建省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HN001-CH1L-723623074-2026', name: '海南省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-YN001-CH11-692525950-2026', name: '云南省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-GZ001-CH1R-490015860-2026', name: '贵州省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HU001-CH1G-084835673-2026', name: '湖南省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-JX001-CH13-243765987-2026', name: '江西省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-ZJ001-CH1B-296232973-2026', name: '浙江省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-JS001-CH16-890774605-2026', name: '江苏省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-SD001-CH1B-114256751-2026', name: '山东省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-SX001-CH1X-520132196-2026', name: '山西省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HE001-CH12-158889343-2026', name: '河南省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HB001-CH1R-484022741-2026', name: '河北省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HI001-CH1G-514948302-2026', name: '湖北省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-SI001-CH1D-245618374-2026', name: '陕西省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-CQ001-CH18-694162045-2026', name: '重庆省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-SC001-CH1Y-764253139-2026', name: '四川省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-GS001-CH14-005784877-2026', name: '甘肃省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-BP001-CH1M-434307982-2026', name: '北平省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HA001-CH19-969179618-2026', name: '海滨省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-SJ001-CH1G-644104544-2026', name: '松江省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-LJ001-CH1J-280510636-2026', name: '龙江省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-JL001-CH17-129935340-2026', name: '吉林省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-LI001-CH10-249814963-2026', name: '辽宁省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-NX001-CH1N-292327153-2026', name: '宁夏省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-QH001-CH12-075657014-2026', name: '青海省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-AH001-CH1D-388477914-2026', name: '安徽省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-TW001-CH1X-266238196-2026', name: '台湾省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-XZ001-CH1U-210788637-2026', name: '西藏省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-XJ001-CH1J-233325633-2026', name: '新疆省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-XK001-CH1Z-300401625-2026', name: '西康省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-AL001-CH1J-527686065-2026', name: '阿里省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-CL001-CH1Z-951267669-2026', name: '葱岭省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-TS001-CH1A-142800261-2026', name: '天山省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HX001-CH1N-215310265-2026', name: '河西省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-KL001-CH1R-682838027-2026', name: '昆仑省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HT001-CH1V-210616196-2026', name: '河套省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-RH001-CH10-380830938-2026', name: '热河省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-XA001-CH1P-928028839-2026', name: '兴安省公民储备银行', type: InstitutionType.prb),
+  Institution(sfidNumber: 'SFR-HJ001-CH1M-089279108-2026', name: '合江省公民储备银行', type: InstitutionType.prb),
 ];
 
 /// 所有机构（87）。按服务端 find_entry 的查找顺序：NRC → PRC → PRB。
@@ -145,14 +145,14 @@ final List<Institution> kAllInstitutions = List.unmodifiable([
   ...kProvincialBanks,
 ]);
 
-/// 根据 shenfen_id 查找机构中文名（任意类型：国储会 / 省储会 / 省储行）。
+/// 根据 sfid_number 查找机构中文名（任意类型：国储会 / 省储会 / 省储行）。
 ///
-/// 返回 null 表示链上交易含未知机构 —— 解码器会 fallback 成原始 shenfen_id 字符串，
+/// 返回 null 表示链上交易含未知机构 —— 解码器会 fallback 成原始 sfid_number 字符串，
 /// 但与服务端 `display` 字段对不上会触发"交易内容与摘要不符"。
 /// 若遇到此情况，说明两端数据未对齐，应补齐本文件。
-String? institutionName(String shenfenId) {
+String? institutionName(String sfidNumber) {
   for (final inst in kAllInstitutions) {
-    if (inst.shenfenId == shenfenId) return inst.name;
+    if (inst.sfidNumber == sfidNumber) return inst.name;
   }
   return null;
 }

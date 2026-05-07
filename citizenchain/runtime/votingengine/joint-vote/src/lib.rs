@@ -11,7 +11,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_sfid_number;
 use frame_support::pallet_prelude::DispatchResult;
 use sp_runtime::DispatchError;
 
@@ -55,14 +55,14 @@ pub fn institution_info(id: SubjectId) -> Option<u32> {
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
         .any(|pid| pid == id)
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
         .any(|pid| pid == id)
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);

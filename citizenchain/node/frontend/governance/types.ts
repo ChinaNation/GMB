@@ -47,7 +47,7 @@ export type AdminWalletMatch = {
 
 export type ActivatedAdmin = {
   pubkeyHex: string;
-  shenfenId: string;
+  sfidNumber: string;
   activatedAtMs: number;
 };
 
@@ -62,7 +62,7 @@ export type ActivateRequestResult = {
 
 export type InstitutionListItem = {
   name: string;
-  shenfenId: string;
+  sfidNumber: string;
   orgType: number;
   orgTypeLabel: string;
   mainAddress: string;
@@ -82,7 +82,7 @@ export type AdminInfo = {
 
 export type InstitutionDetail = {
   name: string;
-  shenfenId: string;
+  sfidNumber: string;
   orgType: number;
   orgTypeLabel: string;
   mainAddress: string;
@@ -104,7 +104,7 @@ export type InstitutionDetail = {
 };
 
 export type InstitutionBalanceUpdate = {
-  shenfenId: string;
+  sfidNumber: string;
   balanceFen: string | null;
   stakingBalanceFen: string | null;
   feeBalanceFen: string | null;

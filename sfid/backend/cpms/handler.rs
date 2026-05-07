@@ -10,7 +10,7 @@ use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
 // 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
-use crate::sfid::validate_sfid_id_format;
+use crate::sfid::validate_sfid_number_format;
 use crate::*;
 
 type Blake2b256 = Blake2b<U32>;
@@ -155,14 +155,14 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             "institution_name too long (max 30)",
         );
     }
-    // ── 查找已有机构,直接读机构当前 sfid_id,无第二阶段 ──
+    // ── 查找已有机构,直接读机构当前 sfid_number,无第二阶段 ──
     let site_sfid = match state.store.read() {
         Ok(store) => {
             let found = store.multisig_institutions.values().find(|i| {
                 i.province == province && i.city == city && i.institution_code == institution
             });
             match found {
-                Some(inst) => inst.sfid_id.clone(),
+                Some(inst) => inst.sfid_number.clone(),
                 None => {
                     return api_error(
                         StatusCode::NOT_FOUND,
@@ -177,7 +177,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
         }
     };
-    let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
     };
@@ -711,7 +711,7 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let site_sfid_validated = match validate_sfid_id_format(site_sfid.trim()) {
+    let site_sfid_validated = match validate_sfid_number_format(site_sfid.trim()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
@@ -920,7 +920,7 @@ pub(crate) async fn delete_cpms_keys(
     if site_sfid.trim().is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "site_sfid is required");
     }
-    let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
@@ -1074,43 +1074,43 @@ pub(crate) async fn list_cpms_keys(
 }
 
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
-/// 按市公安局机构 sfid_id 反查其 CPMS 站点(`cpms_site_keys`)。
+/// 按市公安局机构 sfid_number 反查其 CPMS 站点(`cpms_site_keys`)。
 ///
-/// 中文注释:`multisig_institutions.sfid_id` 和 `cpms_site_keys.site_sfid`
+/// 中文注释:`multisig_institutions.sfid_number` 和 `cpms_site_keys.site_sfid`
 /// **不是同一个值**(CPMS 站点的 site_sfid 是生成安装二维码时随机派生的),
 /// 所以用 `(admin_province, city_name, institution_code)` 元组匹配——公安局
 /// 每市唯一,元组保证一一对应。返回 `null` 表示该公安局尚未生成过 CPMS 站点。
 pub(crate) async fn get_cpms_site_by_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let sfid_id = sfid_id.trim().to_string();
-    if sfid_id.is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_id is required");
+    let sfid_number = sfid_number.trim().to_string();
+    if sfid_number.is_empty() {
+        return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_number is required");
     }
 
     // Phase 2 Day 3 Round 2:机构也从 sharded_store 读
-    let province_code = extract_province_code_from_sfid(&sfid_id);
+    let province_code = extract_province_code_from_sfid(&sfid_number);
     let province_name = match crate::sfid::province::province_name_by_code(&province_code) {
         Some(n) => n.to_string(),
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let inst_result = state
         .sharded_store
         .read_province(&province_name, move |shard| {
-            shard.multisig_institutions.get(&sfid_id_r).cloned()
+            shard.multisig_institutions.get(&sfid_number_r).cloned()
         })
         .await;
     let inst = match inst_result {
@@ -1184,7 +1184,7 @@ async fn update_cpms_site_status(
     if site_sfid.trim().is_empty() {
         return api_error(StatusCode::BAD_REQUEST, 1001, "site_sfid is required");
     }
-    let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+    let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
@@ -1354,7 +1354,7 @@ fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
     }
 }
 
-// 中文注释:`validate_sfid_id_format` 和 SFID_ID_* 常量已搬到
+// 中文注释:`validate_sfid_number_format` 和 SFID_NUMBER_* 常量已搬到
 // `crate::sfid::validator`,本文件通过 import 使用。见任务卡 1。
 
 fn can_transition_cpms_site_status(current: &CpmsSiteStatus, target: &CpmsSiteStatus) -> bool {

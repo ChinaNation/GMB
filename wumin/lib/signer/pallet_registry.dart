@@ -40,13 +40,16 @@ class PalletRegistry {
 
   // ---- InternalVote sub-pallet (22) · 内部投票管理员一人一票 ----
   static const int internalVotePallet = 22;
+
   /// `cast(proposal_id, approve)`。
   static const int internalVoteCall = 0;
 
   // ---- JointVote sub-pallet (23) · 联合投票(内部投票阶段 + 联合公投)----
   static const int jointVotePallet = 23;
+
   /// `cast_admin(proposal_id, institution_id_48, approve)` — 联合投票内部投票阶段。
   static const int jointVoteCall = 0;
+
   /// `cast_referendum(proposal_id, binding_id, nonce, signature, ...)` —
   /// 联合公投联合公投阶段(SFID 持有者投票)。
   static const int castReferendumCall = 1;
@@ -77,9 +80,9 @@ class PalletRegistry {
   static const int registerSfidInstitutionCall = 2;
   static const int cleanupRejectedProposalCall = 4;
 
-  /// `propose_create_institution(sfid_id, institution_name, accounts,
+  /// `propose_create_institution(sfid_number, institution_name, accounts,
   /// admin_count, duoqian_admins, threshold, register_nonce, signature,
-  /// province, signer_admin_pubkey, a3, sub_type, parent_sfid_id)` —
+  /// province, signer_admin_pubkey)` —
   /// 机构多签账户创建提案,凭证由 SFID 后端按 (province, admin_pubkey)
   /// 双层签发(ADR-008 step2b)。
   static const int proposeCreateInstitutionCall = 5;

@@ -633,18 +633,18 @@ impl InternalAdminCountProvider for () {
         match org {
             crate::types::ORG_NRC | crate::types::ORG_PRC => {
                 use primitives::china::china_cb::CHINA_CB;
-                use primitives::derive::subject_id_from_shenfen_id;
+                use primitives::derive::subject_id_from_sfid_number;
                 CHINA_CB
                     .iter()
-                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             crate::types::ORG_PRB => {
                 use primitives::china::china_ch::CHINA_CH;
-                use primitives::derive::subject_id_from_shenfen_id;
+                use primitives::derive::subject_id_from_sfid_number;
                 CHINA_CH
                     .iter()
-                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             _ => None,

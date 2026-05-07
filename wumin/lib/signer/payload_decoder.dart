@@ -573,32 +573,32 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）
-  // 格式：GMB_ACTIVATE(12B) + shenfen_id(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
+  // 格式：GMB_ACTIVATE(12B) + sfid_number(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeActivateAdmin(Uint8List bytes) {
     if (bytes.length < 84) return null;
 
-    // shenfen_id: 48 bytes (offset 12), 去尾部零字节
+    // sfid_number: 48 bytes (offset 12), 去尾部零字节
     final idBytes = bytes.sublist(12, 60);
     var endIndex = 48;
     while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
       endIndex--;
     }
     if (endIndex == 0) return null;
-    final shenfenId = String.fromCharCodes(idBytes.sublist(0, endIndex));
+    final sfidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
 
     return DecodedPayload(
       action: 'activate_admin',
-      summary: '激活管理员 - $shenfenId',
+      summary: '激活管理员 - $sfidNumber',
       fields: {
-        'shenfen_id': shenfenId,
+        'sfid_number': sfidNumber,
       },
     );
   }
 
   // ---------------------------------------------------------------------------
   // 清算行管理员解密（非链上交易）
-  // 格式：GMB_DECRYPT_V1(14B) + sfid_id(48B, 右补零) + pubkey(32B)
+  // 格式：GMB_DECRYPT_V1(14B) + sfid_number(48B, 右补零) + pubkey(32B)
   //      + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeDecryptAdmin(Uint8List bytes) {
@@ -610,13 +610,13 @@ class PayloadDecoder {
       endIndex--;
     }
     if (endIndex == 0) return null;
-    final sfidId = String.fromCharCodes(idBytes.sublist(0, endIndex));
+    final sfidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
 
     return DecodedPayload(
       action: 'decrypt_admin',
-      summary: '解密清算行管理员 - $sfidId',
+      summary: '解密清算行管理员 - $sfidNumber',
       fields: {
-        'sfid_id': sfidId,
+        'sfid_number': sfidNumber,
       },
     );
   }
@@ -627,7 +627,7 @@ class PayloadDecoder {
   // 链端签名(ADR-008 step2b 双层凭证):
   //   pub fn propose_create_institution(
   //     origin,
-  //     sfid_id: SfidIdOf<T>,                 // BoundedVec<u8>
+  //     sfid_number: SfidNumberOf<T>,                 // BoundedVec<u8>
   //     institution_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
@@ -638,24 +638,21 @@ class PayloadDecoder {
   //     signature: RegisterSignatureOf<T>,    // BoundedVec<u8> (64B sr25519)
   //     province: Vec<u8>,                    // ★ ADR-008 step2b 必填省份
   //     signer_admin_pubkey: [u8; 32],        // ★ ADR-008 step2b 签名 admin
-  //     a3: A3Of<T>,                          // BoundedVec<u8> (3 ASCII chars)
-  //     sub_type: Option<SubTypeOf<T>>,       // Option<BoundedVec<u8>>
-  //     parent_sfid_id: Option<SfidIdOf<T>>,  // Option<BoundedVec<u8>>
   //   )
   //
-  // SCALE 顺序与上述完全一致;新字段位置在 register_nonce/signature 后、
-  // a3/sub_type/parent_sfid_id 前。链端 RuntimeSfidInstitutionVerifier 走
+  // SCALE 顺序与上述完全一致。链端 RuntimeSfidInstitutionVerifier 走
   // sheng_signing_pubkey_for_admin(province, signer_admin_pubkey) 双层匹配。
+  // 禁止在尾部追加 a3/sub_type/parent_sfid_number 等旧字段。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
     if (bytes.length < 10) return null;
     var offset = 2;
 
-    // sfid_id: BoundedVec<u8>
+    // sfid_number: BoundedVec<u8>
     final (sfidLen, sfidLenSize) = _decodeCompactU32(bytes, offset);
     offset += sfidLenSize;
     if (offset + sfidLen > bytes.length) return null;
-    final sfidId = utf8.decode(bytes.sublist(offset, offset + sfidLen),
+    final sfidNumber = utf8.decode(bytes.sublist(offset, offset + sfidLen),
         allowMalformed: true);
     offset += sfidLen;
 
@@ -663,8 +660,7 @@ class PayloadDecoder {
     final (nameLen, nameLenSize) = _decodeCompactU32(bytes, offset);
     offset += nameLenSize;
     if (offset + nameLen > bytes.length) return null;
-    final institutionName = utf8.decode(
-        bytes.sublist(offset, offset + nameLen),
+    final institutionName = utf8.decode(bytes.sublist(offset, offset + nameLen),
         allowMalformed: true);
     offset += nameLen;
 
@@ -673,12 +669,19 @@ class PayloadDecoder {
     final (accountsLen, accountsLenSize) = _decodeCompactU32(bytes, offset);
     offset += accountsLenSize;
     BigInt accountsTotal = BigInt.zero;
+    final accountAmounts = <String, BigInt>{};
     for (var i = 0; i < accountsLen; i++) {
       final (subNameLen, subNameLenSize) = _decodeCompactU32(bytes, offset);
       offset += subNameLenSize;
       if (offset + subNameLen + 16 > bytes.length) return null;
+      final accountName = utf8.decode(
+        bytes.sublist(offset, offset + subNameLen),
+        allowMalformed: true,
+      );
       offset += subNameLen;
-      accountsTotal += _readU128Le(bytes, offset);
+      final amount = _readU128Le(bytes, offset);
+      accountAmounts[accountName] = amount;
+      accountsTotal += amount;
       offset += 16;
     }
 
@@ -731,32 +734,27 @@ class PayloadDecoder {
     final signerAdminPubkey = bytes.sublist(offset, offset + 32);
     offset += 32;
 
-    // a3: BoundedVec<u8> (3 ASCII chars - SFR/FFR/GFR/SF)
-    final (a3Len, a3LenSize) = _decodeCompactU32(bytes, offset);
-    offset += a3LenSize;
-    if (offset + a3Len > bytes.length) return null;
-    final a3 = utf8.decode(
-      bytes.sublist(offset, offset + a3Len),
-      allowMalformed: true,
-    );
-    offset += a3Len;
+    if (offset != bytes.length) return null;
 
     final amountYuan = _fenToYuan(accountsTotal);
+    final fields = <String, String>{
+      'sfid_number': sfidNumber,
+      'institution_name': institutionName,
+      'admin_count': adminCount.toString(),
+      'threshold': '$threshold/$adminCount',
+      'total_amount_yuan': '$amountYuan GMB',
+    };
+    for (final entry in accountAmounts.entries) {
+      fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
+    }
+    fields['province'] = province;
+    fields['signer_admin_pubkey'] = _bytesToLowerHex(signerAdminPubkey);
 
     return DecodedPayload(
       action: 'propose_create_institution',
       summary:
           '创建机构多签账户「$institutionName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
-      fields: {
-        'sfid_id': sfidId,
-        'institution_name': institutionName,
-        'admin_count': adminCount.toString(),
-        'threshold': '$threshold/$adminCount',
-        'amount_yuan': '$amountYuan GMB',
-        'a3': a3,
-        'province': province,
-        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
-      },
+      fields: fields,
     );
   }
 
@@ -842,8 +840,7 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'propose_resolution_issuance',
-      summary:
-          '决议发行 $amountYuan GMB（$allocLen 项分配,合格人数 $eligibleTotal）',
+      summary: '决议发行 $amountYuan GMB（$allocLen 项分配,合格人数 $eligibleTotal）',
       fields: {
         'reason': reason,
         'amount_yuan': '$amountYuan GMB',
@@ -979,10 +976,10 @@ class PayloadDecoder {
     while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
       endIndex--;
     }
-    final shenfenId = endIndex > 0
+    final sfidNumber = endIndex > 0
         ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
         : '';
-    final bankName = institutionName(shenfenId) ?? shenfenId;
+    final bankName = institutionName(sfidNumber) ?? sfidNumber;
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
@@ -1056,7 +1053,7 @@ class PayloadDecoder {
     while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
       endIndex--;
     }
-    final shenfenId = endIndex > 0
+    final sfidNumber = endIndex > 0
         ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
         : '';
     final keyBytes = bytes.sublist(offset, offset + 32);
@@ -1066,7 +1063,7 @@ class PayloadDecoder {
       action: 'propose_replace_grandpa_key',
       summary: 'GRANDPA 密钥替换提案',
       fields: {
-        'institution': shenfenId,
+        'institution': sfidNumber,
         'new_key': '0x$keyHex',
       },
     );
@@ -1146,12 +1143,12 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / register_clearing_bank(50)
-  // 格式：[21][50][Vec sfid_id][Vec peer_id][Vec rpc_domain][u16 rpc_port]
+  // 格式：[21][50][Vec sfid_number][Vec peer_id][Vec rpc_domain][u16 rpc_port]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeRegisterClearingBank(Uint8List bytes) {
     var offset = 2;
-    final (sfidId, sfidNext) = _readUtf8Vec(bytes, offset);
-    if (sfidId == null) return null;
+    final (sfidNumber, sfidNext) = _readUtf8Vec(bytes, offset);
+    if (sfidNumber == null) return null;
     offset = sfidNext;
     final (peerId, peerNext) = _readUtf8Vec(bytes, offset);
     if (peerId == null) return null;
@@ -1164,9 +1161,9 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'register_clearing_bank',
-      summary: '声明清算行节点 $sfidId @ $rpcDomain:$rpcPort',
+      summary: '声明清算行节点 $sfidNumber @ $rpcDomain:$rpcPort',
       fields: {
-        'sfid_id': sfidId,
+        'sfid_number': sfidNumber,
         'peer_id': peerId,
         'rpc_domain': rpcDomain,
         'rpc_port': rpcPort.toString(),
@@ -1176,12 +1173,12 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / update_clearing_bank_endpoint(51)
-  // 格式：[21][51][Vec sfid_id][Vec new_domain][u16 new_port]
+  // 格式：[21][51][Vec sfid_number][Vec new_domain][u16 new_port]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeUpdateClearingBankEndpoint(Uint8List bytes) {
     var offset = 2;
-    final (sfidId, sfidNext) = _readUtf8Vec(bytes, offset);
-    if (sfidId == null) return null;
+    final (sfidNumber, sfidNext) = _readUtf8Vec(bytes, offset);
+    if (sfidNumber == null) return null;
     offset = sfidNext;
     final (newDomain, domainNext) = _readUtf8Vec(bytes, offset);
     if (newDomain == null) return null;
@@ -1191,9 +1188,9 @@ class PayloadDecoder {
 
     return DecodedPayload(
       action: 'update_clearing_bank_endpoint',
-      summary: '更新清算行 $sfidId 端点 → $newDomain:$newPort',
+      summary: '更新清算行 $sfidNumber 端点 → $newDomain:$newPort',
       fields: {
-        'sfid_id': sfidId,
+        'sfid_number': sfidNumber,
         'new_domain': newDomain,
         'new_port': newPort.toString(),
       },
@@ -1202,16 +1199,16 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OffchainTransaction(21) / unregister_clearing_bank(52)
-  // 格式：[21][52][Vec sfid_id]
+  // 格式：[21][52][Vec sfid_number]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeUnregisterClearingBank(Uint8List bytes) {
-    final (sfidId, _) = _readUtf8Vec(bytes, 2);
-    if (sfidId == null) return null;
+    final (sfidNumber, _) = _readUtf8Vec(bytes, 2);
+    if (sfidNumber == null) return null;
     return DecodedPayload(
       action: 'unregister_clearing_bank',
-      summary: '注销清算行节点 $sfidId',
+      summary: '注销清算行节点 $sfidNumber',
       fields: {
-        'sfid_id': sfidId,
+        'sfid_number': sfidNumber,
       },
     );
   }

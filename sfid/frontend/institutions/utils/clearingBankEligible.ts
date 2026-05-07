@@ -13,7 +13,7 @@
 export interface ClearingEligibleInst {
   a3: string;
   sub_type?: string | null;
-  parent_sfid_id?: string | null;
+  parent_sfid_number?: string | null;
 }
 
 /** 资格判定所需的 parent 最小字段集。 */

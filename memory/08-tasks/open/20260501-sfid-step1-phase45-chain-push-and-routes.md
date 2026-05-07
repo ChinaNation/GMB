@@ -71,14 +71,14 @@ POST /shi-admin/manage/revoke
 
 GET  /institutions
 POST /institutions
-GET  /institutions/:sfid_id
-POST /institutions/:sfid_id/credential
+GET  /institutions/:sfid_number
+POST /institutions/:sfid_number/credential
 
 GET  /citizens/:identity_id
 POST /citizens/:identity_id/binding-credential
 POST /citizens/:identity_id/vote-credential
 
-GET  /chain/institution-info/:sfid_id
+GET  /chain/institution-info/:sfid_number
 GET  /chain/joint-vote/snapshot[?province=AH]
 GET  /chain/citizen-binding/:identity
 GET  /chain/citizen-vote/:identity

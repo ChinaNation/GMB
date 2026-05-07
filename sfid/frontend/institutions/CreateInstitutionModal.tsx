@@ -186,9 +186,9 @@ export const CreateInstitutionModal: React.FC<Props> = ({
           : undefined,
       });
       if (isPrivate) {
-        message.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_id}`);
+        message.success(`机构 SFID 已生成,请到详情页完善信息:${result.sfid_number}`);
       } else {
-        message.success(`机构已创建:${result.sfid_id}`);
+        message.success(`机构已创建:${result.sfid_number}`);
       }
       onCreated(result);
     } catch (err) {

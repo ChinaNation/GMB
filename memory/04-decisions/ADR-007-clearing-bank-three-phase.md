@@ -48,7 +48,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 
 **C. 机构元数据上链（Required，开发期彻底切换）**
 
-- 新增 `InstitutionMetadata: Map<SfidId, MetadataInfo>` storage，包含 `a3 / sub_type / parent_sfid_id`
+- 新增 `InstitutionMetadata: Map<SfidNumber, MetadataInfo>` storage，包含 `a3 / sub_type / parent_sfid_number`
 - `register_sfid_institution` / `propose_create` 等创建路径增加 a3/sub_type/parent 参数（Required）
 - `InstitutionMetadata` 随机构注册写入，开发期 fresh genesis 重建数据
 
@@ -57,15 +57,15 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 - `bank_check::ensure_can_be_bound` 校验链由 4 重收紧到 6 重：
   - 原 1-4：AddressRegisteredSfid / account_name="主账户" / a3 ∈ {SFR,FFR} / DuoqianAccount.status=Active
   - **新 5**：资格白名单（SFR-JOINT_STOCK ∨ FFR-parent.SFR.JOINT_STOCK），通过 SfidAccountQuery trait 查 InstitutionMetadata
-  - **新 6**：sfid_id ∈ ClearingBankNodes（必须是已声明的清算行节点）
+  - **新 6**：sfid_number ∈ ClearingBankNodes（必须是已声明的清算行节点）
 
 **E. 清算行节点声明 storage + extrinsic**
 
-- 新增 `ClearingBankNodes: Map<SfidId, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
-- 新增 `NodePeerToInstitution: Map<PeerId, SfidId>` 反向索引（防 PeerId 冒名）
-- 新增 `register_clearing_bank(sfid_id, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
-- 新增 `update_clearing_bank_endpoint(sfid_id, new_domain, new_port)`（仅改端点，不动 PeerId）
-- 新增 `unregister_clearing_bank(sfid_id)`（注销 + 反向索引清理）
+- 新增 `ClearingBankNodes: Map<SfidNumber, ClearingBankNodeInfo>` storage（peer_id / rpc_domain / rpc_port / registered_at / registered_by）
+- 新增 `NodePeerToInstitution: Map<PeerId, SfidNumber>` 反向索引（防 PeerId 冒名）
+- 新增 `register_clearing_bank(sfid_number, peer_id, rpc_domain, rpc_port)` extrinsic（任一 duoqian_admin 单签即可，不走内部投票）
+- 新增 `update_clearing_bank_endpoint(sfid_number, new_domain, new_port)`（仅改端点，不动 PeerId）
+- 新增 `unregister_clearing_bank(sfid_number)`（注销 + 反向索引清理）
 
 **F. spec_version 2 → 3**
 
@@ -77,7 +77,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 新增 Tauri command（2026-05-02 起按业务拆到 `citizenchain/node/src/offchain/{duoqian_manage,offchain_transaction,settlement}/commands.rs`）：
 
 - `search_eligible_clearing_banks(query, limit)`：转发 SFID `/clearing-banks/eligible-search`
-- `query_clearing_bank_node_info(sfid_id)`：链上查 `ClearingBankNodes[sfid_id]`
+- `query_clearing_bank_node_info(sfid_number)`：链上查 `ClearingBankNodes[sfid_number]`
 - `query_local_peer_id()`：调 RPC `system_localPeerId` 拿本机 PeerId
 - `test_clearing_bank_endpoint_connectivity(domain, port, expected_peer_id)`：连通性自测（DNS + wss 连接 + 链 ID 匹配 + system_localPeerId 匹配）
 - `build_register_clearing_bank_request` / `submit_register_clearing_bank`
@@ -110,7 +110,7 @@ GMB 区块链节点 UI 需要支持"清算行 tab"，让节点机构方在区块
 #### 2.4 SFID 端 Step 2 末尾联动
 
 - `sfid/backend/src/institutions/handler.rs::app_search_clearing_banks` 在第 2 轮跨省扫描里加过滤：
-  - `AND sfid_id IN (SELECT sfid_id FROM clearing_bank_nodes_cache)`
+  - `AND sfid_number IN (SELECT sfid_number FROM clearing_bank_nodes_cache)`
 - 新建 `sfid/backend/src/chain/clearing_bank_watcher.rs`：常驻 tokio task 订阅链上 `ClearingBankRegistered/Updated/Unregistered` 事件 + 全量启动 scan + SQLite 缓存（按 [feedback_no_dns_peerid_firewall](../feedback_no_dns_peerid_firewall.md) 不假设网络问题）
 - SFID 后端推链 `register_sfid_institution` 等调用增加 a3/sub_type/parent 参数
 

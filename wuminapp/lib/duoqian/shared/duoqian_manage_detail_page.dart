@@ -95,7 +95,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       debugPrint(
           '[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally...');
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.shenfenId),
+        _adminService.fetchAdmins(widget.institution.sfidNumber),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
       ]);
@@ -342,7 +342,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         ),
       );
 
-      _adminService.clearCache(widget.institution.shenfenId);
+      _adminService.clearCache(widget.institution.sfidNumber);
       // 中文注释:不再 await _load(),让 finally 立即把 _submitting 改回 false,
       // UI 的"投票中"转圈立即停;详情页数据后台异步刷新。即使 _load 内某个
       // smoldot RPC 卡住,也不会让按钮一直转 — 这是排查 GMB 链 6 分钟出块期
@@ -458,7 +458,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.shenfenId);
+        _adminService.clearCache(widget.institution.sfidNumber);
         await _load();
       },
       child: ListView(

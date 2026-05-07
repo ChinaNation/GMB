@@ -20,8 +20,8 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 
 /// 查询指定机构的管理员公钥列表。
 /// 返回不含 0x 前缀的小写 hex 公钥列表。
-pub fn fetch_admins(shenfen_id: &str) -> Result<Vec<String>, String> {
-    let storage_key = storage_keys::admin_subjects_key(shenfen_id);
+pub fn fetch_admins(sfid_number: &str) -> Result<Vec<String>, String> {
+    let storage_key = storage_keys::admin_subjects_key(sfid_number);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![Value::String(storage_key)]),
