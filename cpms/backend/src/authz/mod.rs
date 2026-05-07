@@ -62,9 +62,9 @@ pub(crate) async fn require_auth(
             return Err(err(StatusCode::UNAUTHORIZED, 2009, "token expired"));
         }
         // 滑动续期：每次请求刷新过期时间
-        let new_expires = (Utc::now() + chrono::Duration::seconds(
-            crate::login::TOKEN_EXPIRES_SECONDS,
-        )).timestamp();
+        let new_expires = (Utc::now()
+            + chrono::Duration::seconds(crate::login::TOKEN_EXPIRES_SECONDS))
+        .timestamp();
         let _ = sqlx::query("UPDATE sessions SET expires_at = $1 WHERE access_token = $2")
             .bind(new_expires)
             .bind(&token)

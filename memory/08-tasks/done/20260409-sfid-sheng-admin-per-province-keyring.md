@@ -162,7 +162,7 @@ fn is_authorized_sfid_writer<T: Config>(who: &T::AccountId) -> bool {
 
 ### 阶段 2 — sfid-backend(1 天)
 
-**2.1 Store 新增字段**(`sfid/backend/src/models/mod.rs`):
+**2.1 Store 新增字段**(`sfid/backend/models/mod.rs`):
 
 ```rust
 #[serde(default)]
@@ -424,7 +424,7 @@ export async function rotateShengSigner(auth, province): Promise<ShengSignerRow>
 
 **改动**(在现有 `AdminUser` / `sheng_admin_province_by_pubkey` 基础上扩展):
 ```rust
-// sfid/backend/src/models/mod.rs - 扩展现有 AdminUser
+// sfid/backend/models/mod.rs - 扩展现有 AdminUser
 pub(crate) struct AdminUser {
     pub(crate) id: u64,
     pub(crate) admin_pubkey: String,

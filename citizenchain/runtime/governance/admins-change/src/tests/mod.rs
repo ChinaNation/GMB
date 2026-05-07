@@ -3,17 +3,12 @@
 use super::*;
 use frame_support::{assert_noop, assert_ok, derive_impl, traits::ConstU32};
 use frame_system as system;
-use primitives::china::china_cb::{
-    CHINA_CB,
-};
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_cb::CHINA_CB;
+use primitives::china::china_ch::CHINA_CH;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
-    InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
-    STATUS_REJECTED,
+    InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -59,10 +54,7 @@ pub struct TestSfidEligibility;
 impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
-    fn is_eligible(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
     }
 
@@ -257,8 +249,14 @@ fn mark_proposal_passed_without_callback(proposal_id: u64) {
 /// 所有管理员通过投票引擎的公开 call 直接投票,通过后由 `InternalVoteExecutor` 回调
 /// 执行业务。
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-    frame_support::storage::with_transaction(|| -> frame_support::storage::TransactionOutcome<DispatchResult> { match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve,
-    ) { Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())), Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)) } })
+    frame_support::storage::with_transaction(
+        || -> frame_support::storage::TransactionOutcome<DispatchResult> {
+            match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+            }
+        },
+    )
 }
 
 fn finalized_event_count(proposal_id: u64, expected_status: u8) -> usize {

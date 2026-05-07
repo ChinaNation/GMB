@@ -5,7 +5,7 @@
 
 ## 当前现状(2026-04-08)
 
-- `sfid/frontend/src/components/App.tsx` = **3431 行 / 1 个 React 组件**
+- `sfid/frontend/App.tsx` = **3431 行 / 1 个 React 组件**
 - 60+ 个 `useState` / 10+ 个 `useRef` / 5+ 个 `Form.useForm` 全部在顶层组件里
 - 11 个 `capabilities.*` 分支 + 8 个 `activeView` 分支堆在同一个 return
 - `views/` 目录目前只有:

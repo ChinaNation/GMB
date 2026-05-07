@@ -1224,15 +1224,15 @@ fn build_signing_payload(
     payload.extend_from_slice(&spec_version.to_le_bytes()); // CheckSpecVersion: u32
     payload.extend_from_slice(&tx_version.to_le_bytes()); // CheckTxVersion: u32
     payload.extend_from_slice(genesis_hash); // CheckGenesis: H256
-    // CheckEra::additional_signed:
-    //   immortal → block_hash(0) = genesis_hash
-    //   mortal   → block_hash(birth_block_number)
-    // 当前固定 immortal,所以这里也填 genesis_hash(链上 frame_system::CheckEra
-    // 在 immortal 分支会用 birth=0 取 block_hash(0),与 genesis_hash 一致)。
-    // 之前误填 fetch_latest_block 拿到的最新块 hash → 与链端重建 payload 不匹配
-    // → blake2_256 不同 → "Transaction has a bad signature"。
+                                             // CheckEra::additional_signed:
+                                             //   immortal → block_hash(0) = genesis_hash
+                                             //   mortal   → block_hash(birth_block_number)
+                                             // 当前固定 immortal,所以这里也填 genesis_hash(链上 frame_system::CheckEra
+                                             // 在 immortal 分支会用 birth=0 取 block_hash(0),与 genesis_hash 一致)。
+                                             // 之前误填 fetch_latest_block 拿到的最新块 hash → 与链端重建 payload 不匹配
+                                             // → blake2_256 不同 → "Transaction has a bad signature"。
     payload.extend_from_slice(genesis_hash); // CheckEra: birth block hash = genesis(immortal)
-                                              // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
+                                             // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
     payload.push(0x00u8); // CheckMetadataHash: Option::None
                           // WeightReclaim(0)
 
@@ -1288,7 +1288,6 @@ fn decode_hash32(hex_str: &str) -> Result<[u8; 32], String> {
     out.copy_from_slice(&bytes);
     Ok(out)
 }
-
 
 /// Compact<u32> 编码（SCALE）。
 fn encode_compact_u32(value: u32) -> Vec<u8> {

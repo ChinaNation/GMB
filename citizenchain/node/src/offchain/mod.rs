@@ -19,9 +19,9 @@
 //! - `settlement`:只管本清算行交易打包上链与结算 worker。
 
 pub mod common;
-pub mod organization_manage;
 pub mod duoqian_transfer;
 pub mod offchain_transaction;
+pub mod organization_manage;
 pub mod settlement;
 
 use codec::{Decode, Encode};

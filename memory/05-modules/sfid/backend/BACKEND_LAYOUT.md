@@ -11,7 +11,7 @@
 
 ## 当前边界
 
-`sfid/backend/src/` 已删除。SFID 后端 Rust 源码不再放在 Cargo 默认
+SFID 后端旧源码壳已删除。SFID 后端 Rust 源码不再放在 Cargo 默认
 `src/main.rs` 下面,而是直接以 `sfid/backend/` 为源码根目录。
 
 `Cargo.toml` 使用显式入口:
@@ -51,8 +51,8 @@ sfid/backend/
 
 ## 目录铁律
 
-- 禁止恢复 `sfid/backend/src/` 源码壳。
-- 禁止恢复独立 `sfid/backend/chain/` 业务目录。
+- 禁止恢复旧后端源码壳。
+- 禁止恢复独立 chain 业务目录。
 - 后端新增功能模块直接放 `sfid/backend/<功能名>/`。
 - 功能模块如需和区块链交互,在所属目录中新建 `chain_*.rs`。
 - CPMS 系统管理归 `sfid/backend/cpms/`,不得再放入 `sheng_admins/institutions.rs`。

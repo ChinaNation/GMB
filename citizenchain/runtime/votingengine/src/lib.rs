@@ -24,6 +24,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarks;
 pub mod cleanup;
 pub mod data;
 pub mod id;
@@ -35,13 +37,11 @@ pub mod snapshot;
 pub mod traits;
 pub mod types;
 pub mod weights;
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarks;
 
-pub use types::ORG_REN;
-pub use traits::{SfidEligibility, VoteCredentialCleanup};
 pub use pallet::*;
 pub use traits::*;
+pub use traits::{SfidEligibility, VoteCredentialCleanup};
+pub use types::ORG_REN;
 pub use types::*;
 
 use frame_support::dispatch::DispatchResult;
@@ -50,7 +50,7 @@ use sp_runtime::DispatchError;
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    
+
     use frame_support::{
         pallet_prelude::*,
         storage::{with_transaction, TransactionOutcome},
@@ -377,15 +377,8 @@ pub mod pallet {
     /// 反向索引:institution(48 字节 PalletId) → 该机构所有提案 ID。
     /// 机构详情页直接迭代该表,不再走"全年扫描 + 客户端过滤"。
     #[pallet::storage]
-    pub type ProposalsByInstitution<T: Config> = StorageDoubleMap<
-        _,
-        Twox64Concat,
-        SubjectId,
-        Twox64Concat,
-        u64,
-        (),
-        OptionQuery,
-    >;
+    pub type ProposalsByInstitution<T: Config> =
+        StorageDoubleMap<_, Twox64Concat, SubjectId, Twox64Concat, u64, (), OptionQuery>;
 
     /// 反向索引:业务模块 MODULE_TAG → 该模块所有提案 ID。
     /// "只看 runtime 升级提案 / 只看决议销毁提案"等视图走该表。
@@ -592,7 +585,9 @@ pub mod pallet {
                 STAGE_REFERENDUM => {
                     <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                         BlockNumberFor<T>,
-                    >>::finalize_jointreferendum_timeout(&proposal, proposal_id)?;
+                    >>::finalize_jointreferendum_timeout(
+                        &proposal, proposal_id
+                    )?;
                 }
                 _ => return Err(Error::<T>::InvalidProposalStage.into()),
             }
@@ -709,7 +704,9 @@ pub mod pallet {
                     STAGE_REFERENDUM => {
                         <T::JointFinalizer as crate::traits::JointProposalFinalizer<
                             BlockNumberFor<T>,
-                        >>::finalize_jointreferendum_timeout(&proposal, proposal_id)
+                        >>::finalize_jointreferendum_timeout(
+                            &proposal, proposal_id
+                        )
                     }
                     _ => Ok(()),
                 };
@@ -742,7 +739,6 @@ pub mod pallet {
             (process_count, has_remaining, weight)
         }
 
-
         pub fn ensure_open_proposal(
             proposal_id: u64,
         ) -> Result<Proposal<BlockNumberFor<T>>, DispatchError> {
@@ -759,7 +755,6 @@ pub mod pallet {
 
             Ok(proposal)
         }
-
 
         fn should_release_internal_proposal_mutexes(kind: u8, stage: u8, final_status: u8) -> bool {
             matches!(
@@ -1225,34 +1220,33 @@ pub mod pallet {
         /// 更新提案状态，并按统一 executor 结果推进业务执行状态。
         pub fn set_status_and_emit(proposal_id: u64, status: u8) -> DispatchResult {
             with_transaction(|| {
-                let (kind, stage, institution, should_run_callback) = match Proposals::<
-                    T,
-                >::try_mutate(
-                    proposal_id,
-                    |maybe| -> Result<(u8, u8, Option<SubjectId>, bool), DispatchError> {
-                        let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
-                        let old_status = proposal.status;
-                        Self::ensure_valid_status_transition(old_status, status)?;
-                        let kind = proposal.kind;
-                        let stage = proposal.stage;
-                        let inst = proposal.internal_institution;
-                        proposal.status = status;
-                        if old_status == STATUS_VOTING && status == STATUS_PASSED {
-                            let now = frame_system::Pallet::<T>::block_number();
-                            Self::mark_proposal_passed_at(proposal_id, now);
-                        }
-                        Ok((
-                            kind,
-                            stage,
-                            inst,
-                            old_status == STATUS_VOTING
-                                && matches!(status, STATUS_PASSED | STATUS_REJECTED),
-                        ))
-                    },
-                ) {
-                    Ok(v) => v,
-                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                };
+                let (kind, stage, institution, should_run_callback) =
+                    match Proposals::<T>::try_mutate(
+                        proposal_id,
+                        |maybe| -> Result<(u8, u8, Option<SubjectId>, bool), DispatchError> {
+                            let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
+                            let old_status = proposal.status;
+                            Self::ensure_valid_status_transition(old_status, status)?;
+                            let kind = proposal.kind;
+                            let stage = proposal.stage;
+                            let inst = proposal.internal_institution;
+                            proposal.status = status;
+                            if old_status == STATUS_VOTING && status == STATUS_PASSED {
+                                let now = frame_system::Pallet::<T>::block_number();
+                                Self::mark_proposal_passed_at(proposal_id, now);
+                            }
+                            Ok((
+                                kind,
+                                stage,
+                                inst,
+                                old_status == STATUS_VOTING
+                                    && matches!(status, STATUS_PASSED | STATUS_REJECTED),
+                            ))
+                        },
+                    ) {
+                        Ok(v) => v,
+                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                    };
 
                 // 提案结束（通过或拒绝），立即释放活跃提案名额
                 if status != STATUS_VOTING {
@@ -1309,10 +1303,7 @@ pub mod pallet {
         /// 中文注释：仅供单测验证旧回调作用域保护；生产业务回调应直接返回
         /// `ProposalExecutionOutcome`，由外层 `set_status_and_emit` 统一收口状态、事件和清理。
         #[cfg(test)]
-        pub fn set_callback_execution_result(
-            proposal_id: u64,
-            final_status: u8,
-        ) -> DispatchResult {
+        pub fn set_callback_execution_result(proposal_id: u64, final_status: u8) -> DispatchResult {
             ensure!(
                 CallbackExecutionScopes::<T>::contains_key(proposal_id),
                 Error::<T>::InvalidProposalStatus
@@ -1393,8 +1384,7 @@ pub mod pallet {
                         <T::InternalCleanup as crate::traits::InternalCleanupHandler>::cleanup_internal_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
-                    let weight =
-                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::InternalVotes)
                     } else {
@@ -1407,8 +1397,7 @@ pub mod pallet {
                         <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_admin_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
-                    let weight =
-                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::JointAdminVotes)
                     } else {
@@ -1421,8 +1410,7 @@ pub mod pallet {
                         <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
-                    let weight =
-                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::JointInstitutionVotes)
                     } else {
@@ -1435,8 +1423,7 @@ pub mod pallet {
                         <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_joint_institution_tallies_chunk(
                             proposal_id, cleanup_limit,
                         );
-                    let weight =
-                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::JointInstitutionTallies)
                     } else {
@@ -1449,8 +1436,7 @@ pub mod pallet {
                         <T::JointCleanup as crate::traits::JointCleanupHandler>::cleanup_referendum_votes_chunk(
                             proposal_id, cleanup_limit,
                         );
-                    let weight =
-                        db_weight.reads_writes(u64::from(removed), u64::from(removed));
+                    let weight = db_weight.reads_writes(u64::from(removed), u64::from(removed));
                     let next = if has_remaining {
                         Some(PendingCleanupStage::CitizenVotes)
                     } else {
@@ -1505,4 +1491,3 @@ pub mod pallet {
         }
     }
 }
-

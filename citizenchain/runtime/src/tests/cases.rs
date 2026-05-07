@@ -4,7 +4,6 @@ use super::*;
 // 簇 1:Runtime 整体自检(原 lib.rs 末尾,4 个用例)
 // ============================================================================
 
-
 #[test]
 fn time_and_currency_constants_are_consistent() {
     assert_eq!(YUAN, 100 * FEN);
@@ -21,8 +20,8 @@ fn fee_payer_returns_none_for_transfer() {
     use onchain_transaction::CallFeePayer;
     use primitives::china::china_cb::CHINA_CB;
 
-    let institution =
-        subject_id_from_sfid_number(CHINA_CB[0].sfid_number).expect("NRC sfid_number must be valid");
+    let institution = subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
+        .expect("NRC sfid_number must be valid");
     let beneficiary = AccountId::new([99u8; 32]);
     let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
         org: 0,
@@ -94,16 +93,15 @@ fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
         // 统一 ID：proposal_id 即投票引擎 ID，不再有双 ID 映射
         let proposal_id = 99u64;
         let per_recipient_amount = 123u128;
-        let allocations: Vec<
-            resolution_issuance::proposal::RecipientAmount<AccountId, Balance>,
-        > = CHINA_CB
-            .iter()
-            .skip(1)
-            .map(|node| resolution_issuance::proposal::RecipientAmount {
-                recipient: AccountId::new(node.main_address),
-                amount: per_recipient_amount,
-            })
-            .collect();
+        let allocations: Vec<resolution_issuance::proposal::RecipientAmount<AccountId, Balance>> =
+            CHINA_CB
+                .iter()
+                .skip(1)
+                .map(|node| resolution_issuance::proposal::RecipientAmount {
+                    recipient: AccountId::new(node.main_address),
+                    amount: per_recipient_amount,
+                })
+                .collect();
         let recipient = allocations
             .first()
             .expect("CHINA_CB has province recipients")
@@ -252,11 +250,10 @@ fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
             onchain_transaction::AmountExtractResult::NoAmount
         ));
 
-        let transfer_call =
-            RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
-                dest: sp_runtime::MultiAddress::Id(recipient),
-                value: 123,
-            });
+        let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+            dest: sp_runtime::MultiAddress::Id(recipient),
+            value: 123,
+        });
         let amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
             AccountId,
             RuntimeCall,
@@ -267,11 +264,10 @@ fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
             _ => panic!("expected amount path"),
         }
 
-        let internal_vote_call =
-            RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
-                proposal_id: 1,
-                approve: true,
-            });
+        let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
+            proposal_id: 1,
+            approve: true,
+        });
         let vote_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
             AccountId,
             RuntimeCall,
@@ -312,15 +308,14 @@ fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
                 .try_into()
                 .expect("account_name should fit");
 
-        let create_call = RuntimeCall::PersonalManage(
-            personal_manage::pallet::Call::propose_create {
+        let create_call =
+            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 account_name,
                 admin_count: 2,
                 duoqian_admins: admins.clone(),
                 threshold: 2,
                 amount: 1_000,
-            },
-        );
+            });
         let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
             AccountId,
             RuntimeCall,
@@ -394,13 +389,12 @@ fn runtime_call_filter_blocks_force_transfer_from_stake() {
     });
     assert!(RuntimeCallFilter::contains(&allowed));
 
-    let blocked_force_unreserve =
-        RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
-            who: sp_runtime::MultiAddress::Id(AccountId::new(
-                primitives::china::china_ch::CHINA_CH[0].stake_address,
-            )),
-            amount: 1,
-        });
+    let blocked_force_unreserve = RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
+        who: sp_runtime::MultiAddress::Id(AccountId::new(
+            primitives::china::china_ch::CHINA_CH[0].stake_address,
+        )),
+        amount: 1,
+    });
     assert!(!RuntimeCallFilter::contains(&blocked_force_unreserve));
 
     let blocked_force_set_balance =
@@ -431,9 +425,7 @@ fn pow_digest_author_finds_pow_engine_author() {
 fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
     new_test_ext().execute_with(|| {
         // 不存在的提案 ID 应返回错误
-        assert!(
-            RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
-        );
+        assert!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err());
 
         // 测试中直接写入 votingengine 存储；生产路径必须走 create_*_with_data 原子入口。
         let proposal_id = 7u64;
@@ -483,9 +475,8 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
         );
 
         // 回调拒绝后，业务摘要保持创建时快照，终态由 votingengine 统一维护。
-        let outcome =
-            RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
-                .expect("runtime-upgrade callback should succeed");
+        let outcome = RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
+            .expect("runtime-upgrade callback should succeed");
         assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
         let raw = votingengine::Pallet::<Runtime>::get_proposal_data(proposal_id)
             .expect("proposal data should exist");
@@ -494,9 +485,8 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
             raw.len() >= tag.len() && &raw[..tag.len()] == tag,
             "MODULE_TAG mismatch"
         );
-        let updated =
-            runtime_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
-                .expect("should decode");
+        let updated = runtime_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
+            .expect("should decode");
         assert!(matches!(
             updated.status,
             runtime_upgrade::pallet::ProposalStatus::Voting
@@ -597,8 +587,7 @@ fn bind_with_main_admin_signature_succeeds() {
 #[test]
 fn bind_with_backup_admin_signature_succeeds() {
     new_test_ext().execute_with(|| {
-        let (_, _, backup_signing_pair, backup_admin_pubkey, province) =
-            setup_step3_test_admins();
+        let (_, _, backup_signing_pair, backup_admin_pubkey, province) = setup_step3_test_admins();
         let account = AccountId::new([22u8; 32]);
         let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-backup");
         let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
@@ -676,8 +665,7 @@ fn vote_cross_province_admin_rejected() {
         // 用 jilin 省查表(jilin 对应没有任何 ShengSigningPubkey 项)。
         let jilin: Vec<u8> = b"jilin".to_vec();
         let account = AccountId::new([25u8; 32]);
-        let binding_id =
-            <Runtime as frame_system::Config>::Hashing::hash(b"step3-cross-province");
+        let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-cross-province");
         let nonce: sfid_system::pallet::NonceOf<Runtime> =
             b"vote-cross-nonce".to_vec().try_into().expect("nonce");
         // 故意让 admin 在 jilin 域下被查 → verifier 必拒。
@@ -791,9 +779,7 @@ fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
         assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(ok_origin).is_ok());
         let bad_origin = RuntimeOrigin::signed(outsider.clone());
-        assert!(
-            <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
-        );
+        assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err());
 
         admins_change::pallet::Subjects::<Runtime>::remove(nrc_id);
         assert!(!is_nrc_admin(&nrc_admin));
@@ -866,8 +852,7 @@ fn runtime_sfid_institution_verifier_double_layer_lookup() {
                 .to_vec()
                 .try_into()
                 .expect("institution_name should fit");
-        let account_names: Vec<Vec<u8>> =
-            vec![b"main-account".to_vec(), b"fee-account".to_vec()];
+        let account_names: Vec<Vec<u8>> = vec![b"main-account".to_vec(), b"fee-account".to_vec()];
 
         let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
             let payload = (

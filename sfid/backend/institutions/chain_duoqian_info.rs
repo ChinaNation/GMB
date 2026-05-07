@@ -764,7 +764,8 @@ pub(crate) async fn app_search_clearing_banks(
                         }
                     }
 
-                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info {
+                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info
+                    {
                         Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
                         None => (None, None, None),
                     };
@@ -944,15 +945,16 @@ pub(crate) async fn app_search_eligible_clearing_banks(
                         }
                     }
 
-                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info {
+                    let (parent_sfid_number, parent_institution_name, parent_a3) = match parent_info
+                    {
                         Some((pid, pname, pa3)) => (Some(pid), pname, Some(pa3)),
                         None => (None, None, None),
                     };
-                    let (main_account_addr, main_chain_status) = match main_addr.get(&inst.sfid_number)
-                    {
-                        Some((addr, status)) => (addr.clone(), status.clone()),
-                        None => (None, MultisigChainStatus::NotOnChain),
-                    };
+                    let (main_account_addr, main_chain_status) =
+                        match main_addr.get(&inst.sfid_number) {
+                            Some((addr, status)) => (addr.clone(), status.clone()),
+                            None => (None, MultisigChainStatus::NotOnChain),
+                        };
                     prov_rows.push(EligibleClearingBankRow {
                         sfid_number: inst.sfid_number.clone(),
                         institution_name: inst.institution_name.clone(),

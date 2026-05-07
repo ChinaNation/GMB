@@ -2,21 +2,19 @@
 
 extern crate alloc;
 
-use primitives::derive::subject_id_from_sfid_number;
 use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency};
 use frame_system::pallet_prelude::*;
+use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
 use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC},
-    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -199,11 +197,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn is_internal_admin(
-            org: u8,
-            institution: SubjectId,
-            who: &T::AccountId,
-        ) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
@@ -223,8 +217,8 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let raw_account = subject_pallet_address(action.institution)
-                .ok_or(Error::<T>::InvalidInstitution)?;
+            let raw_account =
+                subject_pallet_address(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
             let institution_account = T::AccountId::decode(&mut &raw_account[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 

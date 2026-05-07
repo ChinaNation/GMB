@@ -1260,7 +1260,9 @@ async fn background_task<TPlat: PlatformRef>(
                         tx_id = ?new_tx_id,
                         pool_size = worker.pending_transactions.num_transactions(),
                     );
-                    worker.next_reannounce.push(Box::pin(async move { new_tx_id }));
+                    worker
+                        .next_reannounce
+                        .push(Box::pin(async move { new_tx_id }));
                 }
             }
         }

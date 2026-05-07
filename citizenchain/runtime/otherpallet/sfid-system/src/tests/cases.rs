@@ -157,10 +157,7 @@ fn bind_rejects_empty_nonce() {
         let empty_credential = BindCredential {
             binding_id: binding_id(b"id-empty"),
             bind_nonce: Vec::<u8>::new().try_into().expect("empty vec fits"),
-            province: b"liaoning"
-                .to_vec()
-                .try_into()
-                .expect("province fits"),
+            province: b"liaoning".to_vec().try_into().expect("province fits"),
             signer_admin_pubkey: [7u8; 32],
             signature: signature("bind-ok"),
         };
@@ -310,8 +307,8 @@ fn make_nonce(seed: u8) -> ShengNonce {
 }
 
 fn fresh_keypair(seed_phrase: &str) -> (sr25519::Pair, [u8; 32]) {
-    let pair = sr25519::Pair::from_string(&format!("//{}", seed_phrase), None)
-        .expect("pair from seed");
+    let pair =
+        sr25519::Pair::from_string(&format!("//{}", seed_phrase), None).expect("pair from seed");
     let public = pair.public().0;
     (pair, public)
 }
@@ -322,21 +319,11 @@ fn build_add_backup_payload(
     new_pubkey: &[u8; 32],
     nonce: &ShengNonce,
 ) -> [u8; 32] {
-    let payload = (
-        crate::ADD_BACKUP_DOMAIN,
-        province,
-        slot,
-        new_pubkey,
-        nonce,
-    );
+    let payload = (crate::ADD_BACKUP_DOMAIN, province, slot, new_pubkey, nonce);
     blake2_256(&payload.encode())
 }
 
-fn build_remove_backup_payload(
-    province: &[u8],
-    slot: Slot,
-    nonce: &ShengNonce,
-) -> [u8; 32] {
+fn build_remove_backup_payload(province: &[u8], slot: Slot, nonce: &ShengNonce) -> [u8; 32] {
     let payload = (crate::REMOVE_BACKUP_DOMAIN, province, slot, nonce);
     blake2_256(&payload.encode())
 }
@@ -420,7 +407,13 @@ fn activate_existing_admin_writes_signing_pubkey() {
         // 1. Main 已激活
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
         let main_signing = [9u8; 32];
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &main_signing, make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &main_signing,
+            make_nonce(1),
+        );
 
         // 2. Main 添加 backup1
         let (b1_pair, b1_pubkey) = fresh_keypair("bob-backup1");
@@ -439,8 +432,7 @@ fn activate_existing_admin_writes_signing_pubkey() {
         // 3. backup1 自己 activate 自己的 signing pubkey
         let b1_signing = [11u8; 32];
         let nonce2 = make_nonce(3);
-        let payload2 =
-            build_activate_payload(PROVINCE, &b1_pubkey, &b1_signing, &nonce2);
+        let payload2 = build_activate_payload(PROVINCE, &b1_pubkey, &b1_signing, &nonce2);
         let sig2 = sign_msg(&b1_pair, &payload2);
         assert_ok!(SfidSystem::activate_sheng_signing_pubkey(
             RuntimeOrigin::none(),
@@ -467,14 +459,19 @@ fn activate_existing_admin_writes_signing_pubkey() {
 fn activate_unknown_admin_rejected_when_main_filled() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         // 不在花名册的随机 admin 想 activate
         let (stranger_pair, stranger_pubkey) = fresh_keypair("eve-stranger");
         let signing = [12u8; 32];
         let nonce = make_nonce(2);
-        let payload =
-            build_activate_payload(PROVINCE, &stranger_pubkey, &signing, &nonce);
+        let payload = build_activate_payload(PROVINCE, &stranger_pubkey, &signing, &nonce);
         let sig = sign_msg(&stranger_pair, &payload);
 
         assert_noop!(
@@ -495,7 +492,13 @@ fn activate_unknown_admin_rejected_when_main_filled() {
 fn add_backup_signed_by_main_succeeds() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         let (_b1_pair, b1_pubkey) = fresh_keypair("bob-backup1");
         let nonce = make_nonce(2);
@@ -520,7 +523,13 @@ fn add_backup_signed_by_main_succeeds() {
 fn add_backup_unauthorized_signature_rejected() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         // 使用非 Main 的私钥伪造签名
         let (forger_pair, _forger_pubkey) = fresh_keypair("mallory");
@@ -547,7 +556,13 @@ fn add_backup_unauthorized_signature_rejected() {
 fn remove_backup_cascades_to_signing_pubkey() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         let (b1_pair, b1_pubkey) = fresh_keypair("bob-backup1");
         // add backup1
@@ -597,12 +612,8 @@ fn remove_backup_cascades_to_signing_pubkey() {
         ));
 
         // backup1 admin 槽 + signing pubkey 都被清
-        assert!(
-            ShengAdmins::<Test>::get(province_bounded(PROVINCE), Slot::Backup1).is_none()
-        );
-        assert!(
-            ShengSigningPubkey::<Test>::get(province_bounded(PROVINCE), b1_pubkey).is_none()
-        );
+        assert!(ShengAdmins::<Test>::get(province_bounded(PROVINCE), Slot::Backup1).is_none());
+        assert!(ShengSigningPubkey::<Test>::get(province_bounded(PROVINCE), b1_pubkey).is_none());
     });
 }
 
@@ -611,12 +622,17 @@ fn rotate_signing_pubkey_replaces_value() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
         let old_signing = [9u8; 32];
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &old_signing, make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &old_signing,
+            make_nonce(1),
+        );
 
         let new_signing = [99u8; 32];
         let nonce = make_nonce(2);
-        let payload =
-            build_rotate_payload(PROVINCE, &main_pubkey, &new_signing, &nonce);
+        let payload = build_rotate_payload(PROVINCE, &main_pubkey, &new_signing, &nonce);
         let sig = sign_msg(&main_pair, &payload);
         assert_ok!(SfidSystem::rotate_sheng_signing_pubkey(
             RuntimeOrigin::none(),
@@ -637,14 +653,19 @@ fn rotate_signing_pubkey_replaces_value() {
 fn rotate_unknown_admin_rejected() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         // 不在花名册的随机 admin 想 rotate
         let (stranger_pair, stranger_pubkey) = fresh_keypair("eve");
         let new_signing = [88u8; 32];
         let nonce = make_nonce(2);
-        let payload =
-            build_rotate_payload(PROVINCE, &stranger_pubkey, &new_signing, &nonce);
+        let payload = build_rotate_payload(PROVINCE, &stranger_pubkey, &new_signing, &nonce);
         let sig = sign_msg(&stranger_pair, &payload);
         assert_noop!(
             SfidSystem::rotate_sheng_signing_pubkey(
@@ -693,7 +714,13 @@ fn cross_province_admin_cannot_modify_other_province() {
     new_test_ext().execute_with(|| {
         // province A:Main = alice
         let (alice_pair, alice_pubkey) = fresh_keypair("alice-main-A");
-        activate_main(PROVINCE, &alice_pair, &alice_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &alice_pair,
+            &alice_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         // province B:Main = bob
         let (bob_pair, bob_pubkey) = fresh_keypair("bob-main-B");
@@ -804,8 +831,10 @@ fn validate_unsigned_rejects_unknown_call_path() {
         // bind_sfid 是 signed call,不应通过 ValidateUnsigned 入口
         let credential = bind_credential(b"bind-x", "n", "bind-ok");
         let call = Call::<Test>::bind_sfid { credential };
-        let result =
-            <Pallet<Test> as ValidateUnsigned>::validate_unsigned(TransactionSource::External, &call);
+        let result = <Pallet<Test> as ValidateUnsigned>::validate_unsigned(
+            TransactionSource::External,
+            &call,
+        );
         match result {
             Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
                 InvalidTransaction::Call,
@@ -831,9 +860,15 @@ fn validate_unsigned_passes_for_valid_activate() {
             nonce: nonce_v,
             sig,
         };
-        let result =
-            <Pallet<Test> as ValidateUnsigned>::validate_unsigned(TransactionSource::External, &call);
-        assert!(result.is_ok(), "validate_unsigned should pass: {:?}", result);
+        let result = <Pallet<Test> as ValidateUnsigned>::validate_unsigned(
+            TransactionSource::External,
+            &call,
+        );
+        assert!(
+            result.is_ok(),
+            "validate_unsigned should pass: {:?}",
+            result
+        );
     });
 }
 
@@ -841,7 +876,13 @@ fn validate_unsigned_passes_for_valid_activate() {
 fn helpers_is_sheng_admin_and_main_work() {
     new_test_ext().execute_with(|| {
         let (main_pair, main_pubkey) = fresh_keypair("alice-main");
-        activate_main(PROVINCE, &main_pair, &main_pubkey, &[9u8; 32], make_nonce(1));
+        activate_main(
+            PROVINCE,
+            &main_pair,
+            &main_pubkey,
+            &[9u8; 32],
+            make_nonce(1),
+        );
 
         assert_eq!(
             SfidSystem::is_sheng_admin(PROVINCE, &main_pubkey),
@@ -864,9 +905,9 @@ fn helpers_is_sheng_admin_and_main_work() {
 fn unbind_origin_is_root_in_test_runtime() {
     // sanity:确认 Test runtime 的 UnbindOrigin = Root
     new_test_ext().execute_with(|| {
-        assert!(<EnsureRoot<u64> as EnsureOrigin<RuntimeOrigin>>::try_origin(
-            RuntimeOrigin::root()
-        )
-        .is_ok());
+        assert!(
+            <EnsureRoot<u64> as EnsureOrigin<RuntimeOrigin>>::try_origin(RuntimeOrigin::root())
+                .is_ok()
+        );
     });
 }

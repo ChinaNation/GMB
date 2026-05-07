@@ -61,7 +61,7 @@ memory/05-modules/sfid/            # 中文注释:同步更新模块边界、链
   已拆为 `roster_api.ts`、`signing_keys_api.ts`、`types.ts`。
 - 旧本地更换省管理员前端入口与后端 `PUT /api/v1/admin/sheng-admins/:province`
   已下架;正式更换省管理员等待链上主备交换能力后重建。
-- 已更新 `memory/05-modules/sfid/backend/chain/CHAIN_TECHNICAL.md`、
+- 已更新 `memory/05-modules/sfid/backend/CHAIN_TECHNICAL.md`、
   `BACKEND_LAYOUT.md`、`frontend/FRONTEND_LAYOUT.md`、
   `backend/sheng_admins/SHENG_ADMINS_TECHNICAL.md` 和新增
   `backend/cpms/CPMS_TECHNICAL.md`。

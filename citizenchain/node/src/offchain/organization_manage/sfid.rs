@@ -6,7 +6,7 @@
 //!
 //! ## 反序列化契约(2026-05-01 修复 P0)
 //!
-//! SFID 端响应形态(参见 sfid/backend/src/chain/institution_info/dto.rs):
+//! SFID 端响应形态(参见 sfid/backend/institutions/chain_duoqian_info.rs):
 //! ```json
 //! {
 //!   "code": 0,

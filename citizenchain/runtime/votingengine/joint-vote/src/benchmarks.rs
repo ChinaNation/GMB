@@ -25,7 +25,10 @@ const STORAGES: &[(&[u8], &[u8])] = &[
     (b"JointTallies", b"JointTallies"),
     (b"CitizenVotesByBindingId", b"ReferendumVotesByBindingId"),
     (b"CitizenTallies", b"ReferendumTallies"),
-    (b"UsedPopulationSnapshotNonce", b"UsedPopulationSnapshotNonce"),
+    (
+        b"UsedPopulationSnapshotNonce",
+        b"UsedPopulationSnapshotNonce",
+    ),
 ];
 
 fn build_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {

@@ -16,8 +16,8 @@ use sp_core::sr25519;
 use sp_core::Pair;
 use sp_io::hashing::blake2_256;
 use sp_runtime::traits::Hash as HashTrait;
-use sp_runtime::transaction_validity::{InvalidTransaction, TransactionSource};
 use sp_runtime::traits::ValidateUnsigned;
+use sp_runtime::transaction_validity::{InvalidTransaction, TransactionSource};
 use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -53,8 +53,7 @@ impl system::Config for Test {
 }
 
 pub struct TestSfidVerifier;
-impl
-    SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
+impl SfidVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
     for TestSfidVerifier
 {
     fn verify(_account: &u64, credential: &CredentialOf<Test>) -> bool {
@@ -63,13 +62,8 @@ impl
 }
 
 pub struct TestSfidVoteVerifier;
-impl
-    SfidVoteVerifier<
-        u64,
-        <Test as frame_system::Config>::Hash,
-        NonceOf<Test>,
-        SignatureOf<Test>,
-    > for TestSfidVoteVerifier
+impl SfidVoteVerifier<u64, <Test as frame_system::Config>::Hash, NonceOf<Test>, SignatureOf<Test>>
+    for TestSfidVoteVerifier
 {
     fn verify_vote(
         _account: &u64,
@@ -135,10 +129,7 @@ fn bind_credential(seed: &[u8], bind_nonce: &str, sig: &str) -> CredentialOf<Tes
         bind_nonce: nonce(bind_nonce),
         // ADR-008 step3:每个 BindCredential 必带 (province, signer_admin_pubkey)。
         // 测试用占位值即可,sfid-system 自身不解析这两个字段(真实双层校验留 runtime verifier)。
-        province: b"liaoning"
-            .to_vec()
-            .try_into()
-            .expect("province fits"),
+        province: b"liaoning".to_vec().try_into().expect("province fits"),
         signer_admin_pubkey: [7u8; 32],
         signature: signature(sig),
     }

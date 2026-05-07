@@ -32,8 +32,8 @@ completed: 2026-04-21
 
 ## SFID 后端
 
-- [sfid/backend/src/institutions/chain.rs](sfid/backend/src/institutions/chain.rs)：跨层调用注释更新，链端字段已同步命名
-- [sfid/backend/src/sheng-admins/institutions.rs:1526-1530](sfid/backend/src/sheng-admins/institutions.rs)：storage 查询局部 `name_key` → `account_name_key`，注释对齐
+- [sfid/backend/institutions/chain_duoqian_info.rs](sfid/backend/institutions/chain_duoqian_info.rs)：跨层调用注释更新，链端字段已同步命名
+- [sfid/backend/sheng_admins/institutions.rs:1526-1530](sfid/backend/sheng_admins/institutions.rs)：storage 查询局部 `name_key` → `account_name_key`，注释对齐
 
 ## 文档
 

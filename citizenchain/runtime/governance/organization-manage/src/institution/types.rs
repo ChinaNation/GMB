@@ -148,8 +148,14 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList, AccountList))]
-pub struct CreateInstitutionAction<SfidNumber, AccountName, AccountId, Balance, AdminList, AccountList>
-{
+pub struct CreateInstitutionAction<
+    SfidNumber,
+    AccountName,
+    AccountId,
+    Balance,
+    AdminList,
+    AccountList,
+> {
     pub sfid_number: SfidNumber,
     pub institution_name: AccountName,
     pub main_address: AccountId,

@@ -369,6 +369,8 @@ impl OffchainLedger {
     ///
     /// [`l2_ack_sig_provider`] 清算行对"我承认这笔意图"的 64 字节签名。
     /// [`accepted_at`] RPC 层生成 ACK 前确定的 UNIX 秒时间戳,本地 pending 与响应共用。
+    /// 中文注释：Step 2b RPC 接入完成前保留直接验签入账入口，当前生产路径走链上批次提交。
+    #[allow(dead_code)]
     pub fn accept_payment(
         &self,
         intent: NodePaymentIntent,

@@ -11,8 +11,7 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
-    subject_id_from_sfid_number, BalanceOf, Call, Config, SubjectId, Pallet, CHINA_CB,
-    ORG_PRC,
+    subject_id_from_sfid_number, BalanceOf, Call, Config, Pallet, SubjectId, CHINA_CB, ORG_PRC,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {

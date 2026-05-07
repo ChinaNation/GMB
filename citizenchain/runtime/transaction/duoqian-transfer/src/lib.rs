@@ -8,10 +8,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use primitives::derive::subject_id_from_sfid_number;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency, BoundedVec};
 use frame_system::pallet_prelude::*;
+use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
@@ -20,15 +20,11 @@ use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 // 改造下线,不再从此处导入。
 extern crate alloc;
 
-use primitives::china::china_cb::{
-    CHINA_CB, NRC_ANQUAN_ADDRESS,
-};
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ADDRESS};
+use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
-    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -155,10 +151,10 @@ fn subject_id_has_zero_suffix(institution: SubjectId) -> bool {
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use organization_manage::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
     use institution_asset::{InstitutionAsset, InstitutionAssetAction};
+    use organization_manage::ProtectedSourceChecker;
     use votingengine::InternalAdminProvider;
     use votingengine::InternalVoteEngine;
 
@@ -377,7 +373,9 @@ pub mod pallet {
 
             // 不允许转到受保护地址（质押地址）
             ensure!(
-                !<T as organization_manage::Config>::ProtectedSourceChecker::is_protected(&beneficiary,),
+                !<T as organization_manage::Config>::ProtectedSourceChecker::is_protected(
+                    &beneficiary,
+                ),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -390,7 +388,8 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            let free = <T as organization_manage::Config>::Currency::free_balance(&institution_account);
+            let free =
+                <T as organization_manage::Config>::Currency::free_balance(&institution_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -480,7 +479,8 @@ pub mod pallet {
                 .checked_add(&fee)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             let ed: BalanceOf<T> = <T as organization_manage::Config>::Currency::minimum_balance();
-            let free = <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
+            let free =
+                <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
@@ -586,9 +586,7 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
-        fn registered_duoqian_account(
-            institution: SubjectId,
-        ) -> Result<T::AccountId, Error<T>> {
+        fn registered_duoqian_account(institution: SubjectId) -> Result<T::AccountId, Error<T>> {
             ensure!(
                 subject_id_has_zero_suffix(institution),
                 Error::<T>::InvalidInstitution
@@ -599,8 +597,8 @@ pub mod pallet {
             // B 阶段:DuoqianAccounts mirror 已删,union 查 personal-manage / organization-manage 两侧。
             // 任意机构账户(主/费用/自创)经 organization-manage 反查机构 admin 配置;
             // 个人多签经 personal-manage 直接查。
-            use personal_manage::traits::PersonalMultisigQuery;
             use organization_manage::traits::InstitutionMultisigQuery;
+            use personal_manage::traits::PersonalMultisigQuery;
             if <T as Config>::PersonalQuery::is_active(&account) {
                 return Ok(account);
             }
@@ -614,8 +612,8 @@ pub mod pallet {
             institution: SubjectId,
         ) -> Result<(u8, T::AccountId), Error<T>> {
             if let Some(actual_org) = subject_org(institution) {
-                let raw_account = subject_pallet_address(institution)
-                    .ok_or(Error::<T>::InvalidInstitution)?;
+                let raw_account =
+                    subject_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
                 let institution_account = T::AccountId::decode(&mut &raw_account[..])
                     .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
                 return Ok((actual_org, institution_account));
@@ -625,11 +623,7 @@ pub mod pallet {
             Ok((ORG_REN, institution_account))
         }
 
-        fn is_internal_admin(
-            org: u8,
-            institution: SubjectId,
-            who: &T::AccountId,
-        ) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
@@ -659,9 +653,7 @@ pub mod pallet {
         }
 
         /// 解析机构手续费账户。
-        fn resolve_fee_account(
-            institution: SubjectId,
-        ) -> Result<T::AccountId, DispatchError> {
+        fn resolve_fee_account(institution: SubjectId) -> Result<T::AccountId, DispatchError> {
             // 国储会：使用常量地址
             if CHINA_CB
                 .first()
@@ -681,11 +673,8 @@ pub mod pallet {
         }
 
         /// 解析机构主账户。
-        fn resolve_main_account(
-            institution: SubjectId,
-        ) -> Result<T::AccountId, DispatchError> {
-            let raw =
-                subject_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
+        fn resolve_main_account(institution: SubjectId) -> Result<T::AccountId, DispatchError> {
+            let raw = subject_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &raw[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
@@ -757,7 +746,8 @@ pub mod pallet {
             .map_err(|_| Error::<T>::InsufficientFeeReserve)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            let reserve_left = <T as organization_manage::Config>::Currency::free_balance(&fee_account);
+            let reserve_left =
+                <T as organization_manage::Config>::Currency::free_balance(&fee_account);
 
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
@@ -804,7 +794,8 @@ pub mod pallet {
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 余额检查：amount + fee + ED ──
-            let free = <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
+            let free =
+                <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
             let ed = <T as organization_manage::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
@@ -881,7 +872,8 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
 
             // ── 余额检查：需要 total + ED ──
-            let free = <T as organization_manage::Config>::Currency::free_balance(&institution_account);
+            let free =
+                <T as organization_manage::Config>::Currency::free_balance(&institution_account);
             let ed = <T as organization_manage::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)

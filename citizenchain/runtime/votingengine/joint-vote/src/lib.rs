@@ -11,22 +11,17 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use primitives::derive::subject_id_from_sfid_number;
 use frame_support::pallet_prelude::DispatchResult;
+use primitives::derive::subject_id_from_sfid_number;
 use sp_runtime::DispatchError;
 
 use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
-use votingengine::{
-    nrc_subject_id,
-    SubjectId, Proposal,
-};
+use votingengine::{nrc_subject_id, Proposal, SubjectId};
 
 pub mod jointinternal;
 pub mod jointreferendum;
@@ -142,15 +137,8 @@ pub mod pallet {
 
     /// 联合投票机构级汇总:(proposal_id, 机构) → 赞成/反对。
     #[pallet::storage]
-    pub type JointVotesByInstitution<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        u64,
-        Blake2_128Concat,
-        SubjectId,
-        bool,
-        OptionQuery,
-    >;
+    pub type JointVotesByInstitution<T: Config> =
+        StorageDoubleMap<_, Blake2_128Concat, u64, Blake2_128Concat, SubjectId, bool, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn joint_tally)]
@@ -316,9 +304,7 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
                 signer_admin_pubkey,
             ) {
                 Ok(id) => id,
-                Err(err) => {
-                    return frame_support::storage::TransactionOutcome::Rollback(Err(err))
-                }
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
             let now = <frame_system::Pallet<T>>::block_number();
             match <votingengine::Pallet<T>>::register_proposal_data(
@@ -363,9 +349,7 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
                 signer_admin_pubkey,
             ) {
                 Ok(id) => id,
-                Err(err) => {
-                    return frame_support::storage::TransactionOutcome::Rollback(Err(err))
-                }
+                Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
             let now = <frame_system::Pallet<T>>::block_number();
             if let Err(err) = <votingengine::Pallet<T>>::register_proposal_data(

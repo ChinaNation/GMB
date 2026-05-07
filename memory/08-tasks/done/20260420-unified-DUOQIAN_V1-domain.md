@@ -19,10 +19,10 @@ completed: 2026-04-20
   - `derive_duoqian_address_from_sfid_id` → `DUOQIAN_DOMAIN + OP_MAIN`
   - `derive_personal_duoqian_address` → `DUOQIAN_DOMAIN + OP_PERSONAL`
 - **configs/mod.rs 4 个 verifier 11 处**：BIND/VOTE/POP/INST 各自拼对应 op_tag
-- **SFID 后端**：`sfid/backend/src/chain/runtime_align.rs` 5 个旧 `*_DOMAIN` 统一成 `DUOQIAN_DOMAIN + OP_SIGN_*`
+- **SFID 后端**：`sfid/backend/app_core/chain_runtime.rs` 5 个旧 `*_DOMAIN` 统一成 `DUOQIAN_DOMAIN + OP_SIGN_*`
 - **前端镜像**：`deriveDuoqianAddress.ts` + `personal_duoqian_create_page.dart` 重写 preimage 组装
 - **Benchmarks**：`sfid-system/src/benchmarks.rs` 同步
-- **注释清理**：`china_cb.rs` / `china_ch.rs` 顶部注释、`sfid/backend/src/institutions/service.rs` 注释
+- **注释清理**：`china_cb.rs` / `china_ch.rs` 顶部注释、`sfid/backend/institutions/service.rs` 注释
 - **验证**：9 个 pallet `cargo check` 全通过；`cargo test -p primitives` 7/7 通过（含 `all_china_ch_main_addresses_are_unique`）
 
 # 彻底退役字符串（零保留）
@@ -101,10 +101,10 @@ pub const OP_SIGN_TRANSFER: u8 = 0x15;  // 预留：多签转账离线聚合
 - [ ] `configs/mod.rs` 11 处 `b"GMB_SFID_V1"` → `DUOQIAN_DOMAIN + OP_SIGN_*`（按 BIND/VOTE/POP/INST 匹配 tag）
 
 ## 第 5 步：SFID 后端
-- [ ] `sfid/backend/src/chain/runtime_align.rs` 5 个常量 + verifier 逻辑
+- [ ] `sfid/backend/app_core/chain_runtime.rs` 5 个常量 + verifier 逻辑
 
 ## 第 6 步：TS/Dart 镜像
-- [ ] `sfid/frontend/src/utils/deriveDuoqianAddress.ts`
+- [ ] `sfid/frontend/institutions/chain_duoqian_info.ts`
 - [ ] `wuminapp/lib/governance/personal_duoqian_create_page.dart`
 
 ## 第 7 步：bench + 注释

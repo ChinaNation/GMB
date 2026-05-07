@@ -8,7 +8,7 @@
 
 ## 0. 结论
 
-`sfid/backend/chain/` 已废止。SFID 后端不再维护独立 chain 业务目录。
+SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 chain 业务目录。
 
 任一功能模块如需和区块链交互,必须在所属功能模块目录中新增 `chain_*.rs`
 文件。普通业务 CRUD、页面展示、SFID 本地签名 seed 生命周期、CPMS 系统注册
@@ -35,7 +35,7 @@ CPMS 系统安装、QR2 注册、QR3 匿名证书、站点状态治理归
 
 ## 2. 目录铁律
 
-- 禁止恢复 `sfid/backend/chain/`。
+- 禁止恢复后端独立 chain 业务目录。
 - 新增链交互文件必须以 `chain_` 开头。
 - 链交互文件必须放在业务归属目录内,例如:
   - 机构 -> `institutions/chain_*`
@@ -97,7 +97,7 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 
 ## 5. 验收
 
-- `sfid/backend/chain/` 不存在。
+- 后端独立 chain 业务目录不存在。
 - `sfid/backend/main.rs` 不存在 `mod chain;`。
 - `rg "crate::chain|chain::" sfid/backend` 无活跃引用。
 - `sfid/backend/sheng_admins/` 不存在旧省管理员 add/remove/activate/rotate 链文件。

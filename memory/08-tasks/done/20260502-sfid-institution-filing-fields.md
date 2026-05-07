@@ -28,7 +28,7 @@
 ## 文档范围
 
 - `memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md`
-- `memory/05-modules/sfid/backend/chain/CHAIN_TECHNICAL.md`
+- `memory/05-modules/sfid/backend/CHAIN_TECHNICAL.md`
 - `memory/05-modules/sfid/clearing-bank-eligibility.md`
 
 ## 验收

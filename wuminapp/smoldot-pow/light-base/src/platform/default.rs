@@ -223,60 +223,54 @@ impl PlatformRef for Arc<DefaultPlatform> {
         // 连接模式：TCP 直连 / WS（WebSocket 明文）/ WSS（WebSocket Secure）。
         enum ConnMode {
             Tcp,
-            Ws(String),        // host:port
+            Ws(String),          // host:port
             Wss(String, String), // host:port, hostname（TLS SNI 用）
         }
 
-        let (tcp_socket_addr, mode): (
-            either::Either<SocketAddr, (String, u16)>,
-            ConnMode,
-        ) = match multiaddr {
-            Address::TcpDns { hostname, port } => {
-                (either::Right((hostname.to_string(), port)), ConnMode::Tcp)
-            }
-            Address::TcpIp {
-                ip: IpAddr::V4(ip),
-                port,
-            } => (either::Left(SocketAddr::from((ip, port))), ConnMode::Tcp),
-            Address::TcpIp {
-                ip: IpAddr::V6(ip),
-                port,
-            } => (either::Left(SocketAddr::from((ip, port))), ConnMode::Tcp),
-            Address::WebSocketDns {
-                hostname,
-                port,
-                secure: false,
-            } => (
-                either::Right((hostname.to_string(), port)),
-                ConnMode::Ws(format!("{}:{}", hostname, port)),
-            ),
-            Address::WebSocketDns {
-                hostname,
-                port,
-                secure: true,
-            } => (
-                either::Right((hostname.to_string(), port)),
-                ConnMode::Wss(format!("{}:{}", hostname, port), hostname.to_string()),
-            ),
-            Address::WebSocketIp {
-                ip: IpAddr::V4(ip),
-                port,
-            } => {
-                let addr = SocketAddr::from((ip, port));
-                (either::Left(addr), ConnMode::Ws(addr.to_string()))
-            }
-            Address::WebSocketIp {
-                ip: IpAddr::V6(ip),
-                port,
-            } => {
-                let addr = SocketAddr::from((ip, port));
-                (either::Left(addr), ConnMode::Ws(addr.to_string()))
-            }
-
-            // The API user of the `PlatformRef` trait is never supposed to open connections of
-            // a type that isn't supported.
-            _ => unreachable!(),
-        };
+        let (tcp_socket_addr, mode): (either::Either<SocketAddr, (String, u16)>, ConnMode) =
+            match multiaddr {
+                Address::TcpDns { hostname, port } => {
+                    (either::Right((hostname.to_string(), port)), ConnMode::Tcp)
+                }
+                Address::TcpIp {
+                    ip: IpAddr::V4(ip),
+                    port,
+                } => (either::Left(SocketAddr::from((ip, port))), ConnMode::Tcp),
+                Address::TcpIp {
+                    ip: IpAddr::V6(ip),
+                    port,
+                } => (either::Left(SocketAddr::from((ip, port))), ConnMode::Tcp),
+                Address::WebSocketDns {
+                    hostname,
+                    port,
+                    secure: false,
+                } => (
+                    either::Right((hostname.to_string(), port)),
+                    ConnMode::Ws(format!("{}:{}", hostname, port)),
+                ),
+                Address::WebSocketDns {
+                    hostname,
+                    port,
+                    secure: true,
+                } => (
+                    either::Right((hostname.to_string(), port)),
+                    ConnMode::Wss(format!("{}:{}", hostname, port), hostname.to_string()),
+                ),
+                Address::WebSocketIp {
+                    ip: IpAddr::V4(ip),
+                    port,
+                } => {
+                    let addr = SocketAddr::from((ip, port));
+                    (either::Left(addr), ConnMode::Ws(addr.to_string()))
+                }
+                Address::WebSocketIp {
+                    ip: IpAddr::V6(ip),
+                    port,
+                } => {
+                    let addr = SocketAddr::from((ip, port));
+                    (either::Left(addr), ConnMode::Ws(addr.to_string()))
+                }
+            };
 
         let socket_future = async move {
             let tcp_socket = match tcp_socket_addr {
@@ -312,7 +306,9 @@ impl PlatformRef for Arc<DefaultPlatform> {
                     // 禁用 ALPN，避免与 WebSocket 握手冲突。
                     tls_config.alpn_protocols.clear();
                     let connector = async_tls::TlsConnector::from(Arc::new(tls_config));
-                    let tls_stream = connector.connect(&hostname, tcp_socket).await
+                    let tls_stream = connector
+                        .connect(&hostname, tcp_socket)
+                        .await
                         .map_err(|e| io::Error::new(io::ErrorKind::ConnectionRefused, e))?;
                     websocket::websocket_client_handshake(websocket::Config {
                         tcp_socket: tls_stream,

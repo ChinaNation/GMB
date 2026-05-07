@@ -1,4 +1,6 @@
 // 统一封装“设备开机密码校验”能力，供 settings/home 多处敏感操作复用。
+#![allow(unsafe_code)]
+// 中文注释：本模块需要调用 libc/PAM 做本机账户校验，unsafe 边界集中在平台 FFI 封装内。
 use crate::shared::security;
 use serde::{Deserialize, Serialize};
 use std::{

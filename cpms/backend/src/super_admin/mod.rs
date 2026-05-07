@@ -5,7 +5,7 @@
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post, put},
+    routing::{get, put},
     Json, Router,
 };
 use chrono::Utc;
@@ -126,21 +126,28 @@ async fn create_operator(
     }
     // 归一化公钥：支持 SS58 地址或 0x hex
     let admin_pubkey = {
-        let stripped = raw_input.strip_prefix("0x").or_else(|| raw_input.strip_prefix("0X")).unwrap_or(&raw_input);
+        let stripped = raw_input
+            .strip_prefix("0x")
+            .or_else(|| raw_input.strip_prefix("0X"))
+            .unwrap_or(&raw_input);
         if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
             stripped.to_lowercase()
         } else if let Some(hex_with_prefix) = crate::ss58::ss58_to_pubkey_hex(&raw_input) {
-            hex_with_prefix.strip_prefix("0x").unwrap_or(&hex_with_prefix).to_lowercase()
+            hex_with_prefix
+                .strip_prefix("0x")
+                .unwrap_or(&hex_with_prefix)
+                .to_lowercase()
         } else {
-            return Err(err(StatusCode::BAD_REQUEST, 1001, "admin_pubkey must be SS58 address or 32-byte hex"));
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "admin_pubkey must be SS58 address or 32-byte hex",
+            ));
         }
     };
     let admin_name = req.admin_name.as_deref().unwrap_or("").trim().to_string();
 
-    if find_admin_by_pubkey(&state, &admin_pubkey)
-        .await
-        .is_ok()
-    {
+    if find_admin_by_pubkey(&state, &admin_pubkey).await.is_ok() {
         return Err(err(
             StatusCode::CONFLICT,
             3001,
@@ -418,7 +425,6 @@ async fn update_operator_status(
 
     Ok(Json(ok(serde_json::json!({}))))
 }
-
 
 async fn update_archive_citizen_status(
     State(state): State<AppState>,

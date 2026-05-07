@@ -7,20 +7,17 @@
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`
 //! trait 实现中被调用。
 
-use primitives::derive::subject_id_from_sfid_number;
-use codec::Encode;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     storage::{with_transaction, TransactionOutcome},
 };
+use primitives::derive::subject_id_from_sfid_number;
 use sp_runtime::traits::{Hash, SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
 use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::{
     JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
     VOTING_DURATION_BLOCKS,
@@ -30,8 +27,8 @@ use votingengine::{
     nrc_subject_id,
     pallet::{Proposals, ProposalsByExpiry},
     types::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
-    SubjectId, InternalAdminProvider, InternalProposalMutexKind,
-    PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
+    InternalAdminProvider, InternalProposalMutexKind, PopulationSnapshotVerifier, Proposal,
+    SubjectId, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
 use super::pallet::{
@@ -148,8 +145,8 @@ impl<T: Config> Pallet<T> {
         province: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> Result<u64, DispatchError> {
-        let proposer_institution =
-            resolve_proposer_institution::<T>(&who).ok_or(votingengine::Error::<T>::NoPermission)?;
+        let proposer_institution = resolve_proposer_institution::<T>(&who)
+            .ok_or(votingengine::Error::<T>::NoPermission)?;
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
         ensure!(
             !snapshot_nonce.is_empty(),
@@ -255,8 +252,9 @@ impl<T: Config> Pallet<T> {
                 frame_support::defensive!(
                     "do_create_joint_proposal: proposer is missing from admin snapshot"
                 );
-                return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::NoPermission
-                    .into()));
+                return TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::NoPermission.into()
+                ));
             }
 
             UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
@@ -296,8 +294,8 @@ impl<T: Config> Pallet<T> {
             !JointVotesByInstitution::<T>::contains_key(proposal_id, institution),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let (org, _) = institution_profile(institution)
-            .ok_or(votingengine::Error::<T>::InvalidInstitution)?;
+        let (org, _) =
+            institution_profile(institution).ok_or(votingengine::Error::<T>::InvalidInstitution)?;
         ensure!(
             <votingengine::Pallet<T>>::is_admin_in_snapshot(proposal_id, institution, &who),
             votingengine::Error::<T>::NoPermission

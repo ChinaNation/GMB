@@ -274,19 +274,18 @@ pub(crate) async fn citizen_bind(
                 } else {
                     format!("{}#{retry}", account_pubkey_hex)
                 };
-                let candidate = match crate::sfid::generate_sfid_code(
-                    crate::sfid::GenerateSfidInput {
+                let candidate =
+                    match crate::sfid::generate_sfid_code(crate::sfid::GenerateSfidInput {
                         account_pubkey: attempt_pubkey.as_str(),
                         a3: "GMR",
                         p1: "1",
                         province: province_name.as_str(),
                         city: "省辖市",
                         institution: "ZG",
-                    },
-                ) {
-                    Ok(v) => v,
-                    Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
-                };
+                    }) {
+                        Ok(v) => v,
+                        Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
+                    };
                 if !store.citizen_id_by_sfid_code.contains_key(&candidate) {
                     sfid_attempt = Some(candidate);
                     break;

@@ -13,7 +13,7 @@
 ### chain/ 二级目录目标形态(7 业务模块 + 3 共享文件)
 
 ```
-sfid/backend/src/chain/
+sfid/backend/app_core/
 ├── mod.rs                       # INSTITUTION_DOMAIN 等共享域常量
 ├── url.rs                       # SFID_CHAIN_WS_URL 入口
 ├── runtime_align.rs             # SCALE 编码 + genesis_hash 缓存

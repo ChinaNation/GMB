@@ -15,8 +15,8 @@ completed: 2026-04-21
   - 新增 `role_from_name(name)` 翻译辅助："主账户"→Main, "费用账户"→Fee, 其他非空→Named(name), 空→`EmptySfidName`
   - 新增 `ReservedAccountName` 错误变体，拦截 `Role::Named("主账户")` / `Role::Named("费用账户")`
 - **调用点同步**：`register_sfid_institution` 用 `role_from_name` + `derive_institution_address` 两步；[benchmarks.rs](citizenchain/runtime/transaction/duoqian-manage/src/benchmarks.rs) 改用 `Role::Main`
-- **SFID 后端**：[service.rs](sfid/backend/src/institutions/service.rs) CLEARING_BANK_NAMES 注释更新，[INSTITUTIONS_TECHNICAL.md](memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md) 补 2026-04-21 段
-- **TS 镜像**：[deriveDuoqianAddress.ts](sfid/frontend/src/utils/deriveDuoqianAddress.ts) 重写为 3 路派生（按 name 值路由到 Main/Fee/Named）
+- **SFID 后端**：[service.rs](sfid/backend/institutions/service.rs) CLEARING_BANK_NAMES 注释更新，[INSTITUTIONS_TECHNICAL.md](memory/05-modules/sfid/backend/institutions/INSTITUTIONS_TECHNICAL.md) 补 2026-04-21 段
+- **TS 镜像**：[deriveDuoqianAddress.ts](sfid/frontend/institutions/chain_duoqian_info.ts) 重写为 3 路派生（按 name 值路由到 Main/Fee/Named）
 - **Dart 镜像**：wuminapp 只有 OP_PERSONAL 派生，本次无改动；wumin 无本地派生
 - **文档**：[BLAKE2_ADDRESS_DERIVATION.md](memory/05-modules/citizenchain/runtime/primitives/BLAKE2_ADDRESS_DERIVATION.md)、[DUOQIAN_TECHNICAL.md](memory/05-modules/citizenchain/runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md)、[feedback_sfid_sheng_signing_keyring.md](memory/feedback_sfid_sheng_signing_keyring.md)、[20260405-sfid-多签地址派生加入name字段](memory/08-tasks/open/20260405-sfid-多签地址派生加入name字段.md) 全部加 2026-04-21 尾注
 - **验证**：10 个 pallet `cargo check` 全通过；`cargo test -p primitives` 7/7 通过；全仓库活代码 `rg derive_duoqian_address_from_sfid_id` 零残留
@@ -82,13 +82,13 @@ SFID 机构创建 `Named(name)` 账户时：
   - 更新 `AddressRegisteredSfid` / `SfidRegisteredAddress` 存储键值（按 role 归一化）
 
 ## 第 3 步：SFID 后端
-- [ ] `sfid/backend/src/institutions/service.rs`：`CLEARING_BANK_NAMES` 改 `DEFAULT_CLEARING_BANK_ROLES`
-- [ ] `sfid/backend/src/institutions/handler.rs`：创建账户调用点按 role 分流
-- [ ] `sfid/backend/src/institutions/chain.rs`：链上 extrinsic 提交按 role
+- [ ] `sfid/backend/institutions/service.rs`：`CLEARING_BANK_NAMES` 改 `DEFAULT_CLEARING_BANK_ROLES`
+- [ ] `sfid/backend/institutions/handler.rs`：创建账户调用点按 role 分流
+- [ ] `sfid/backend/institutions/chain_duoqian_info.rs`：链上 extrinsic 提交按 role
 
 ## 第 4 步：前端镜像
-- [ ] `sfid/frontend/src/utils/deriveDuoqianAddress.ts`：3 种派生（Main / Fee / Named）
-- [ ] `sfid/frontend/src/views/institutions/CreateAccountModal.tsx`：表单先选 role
+- [ ] `sfid/frontend/institutions/chain_duoqian_info.ts`：3 种派生（Main / Fee / Named）
+- [ ] `sfid/frontend/institutions/CreateAccountModal.tsx`：表单先选 role
 - [ ] wuminapp Dart 镜像同步
 
 ## 第 5 步：验证

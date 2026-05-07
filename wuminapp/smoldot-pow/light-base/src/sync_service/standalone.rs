@@ -963,9 +963,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                 let outcome: Vec<_> = if block_number <= sync.finalized_block_number() {
                     // finalized 区块是共识终局，任何 gossip-connected peer 都是合法 source。
                     let _ = block_hash;
-                    sync.sources()
-                        .map(|id| sync[id].0.clone())
-                        .collect()
+                    sync.sources().map(|id| sync[id].0.clone()).collect()
                 } else {
                     // 非 finalized 区块：先用 smoldot 内部已记录的 "knows_non_finalized_block"
                     // 列表（最权威），如果为空则放宽到所有 best 高度 ≥ block_number 的
@@ -977,7 +975,8 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                     if !primary.is_empty() {
                         primary
                     } else {
-                        let relaxed: Vec<_> = sync.sources()
+                        let relaxed: Vec<_> = sync
+                            .sources()
                             .filter(|source_id| {
                                 sync.source_best_block(*source_id).0 >= block_number
                             })
@@ -987,9 +986,7 @@ pub(super) async fn start_standalone_chain<TPlat: PlatformRef>(
                             relaxed
                         } else {
                             // 终极兜底：所有已连接 source，让网络层自行尝试。
-                            sync.sources()
-                                .map(|id| sync[id].0.clone())
-                                .collect()
+                            sync.sources().map(|id| sync[id].0.clone()).collect()
                         }
                     }
                 };

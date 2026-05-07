@@ -25,9 +25,7 @@ use sp_runtime::{
     DispatchResult, SaturatedConversion,
 };
 
-use crate::pallet::{
-    Config, Error, Event, Pallet, PendingCloseProposal, PersonalDuoqians,
-};
+use crate::pallet::{Config, Error, Event, Pallet, PendingCloseProposal, PersonalDuoqians};
 use crate::types::{CloseDuoqianAction, DuoqianStatus};
 use crate::BalanceOf;
 use crate::ACTION_CLOSE;

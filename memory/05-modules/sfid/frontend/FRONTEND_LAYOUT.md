@@ -12,8 +12,8 @@
 
 ## 当前边界
 
-`sfid/frontend/src/`、`sfid/frontend/src/views/`、`sfid/frontend/api/`、`sfid/frontend/chain/`
-已删除。前端不再保留“src + views”这层空壳,也不再维护全局业务 API 或全局链目录。
+SFID 前端旧源码壳、旧 views 壳、旧全局业务 API 目录、旧全局链目录已删除。
+前端不再保留“src + views”这层空壳,也不再维护全局业务 API 或全局链目录。
 所有页面、hook、通用组件、业务 API 和链交互 API 都直接按业务目录放在 `sfid/frontend/` 下。
 
 ```text

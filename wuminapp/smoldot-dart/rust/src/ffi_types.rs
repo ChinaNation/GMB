@@ -1,4 +1,7 @@
-//! FFI type definitions
+#![allow(dead_code)]
+//! FFI type definitions.
+//!
+//! 中文注释：部分 JSON DTO 保留给 Dart 侧 typed binding，当前 native 导出仍直接解析轻量字段。
 
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_char;
@@ -15,11 +18,7 @@ pub type ChainHandle = u64;
 /// * `callback_id` - ID to match callback with request
 /// * `result` - Result value (handle, string pointer, or 0 for error)
 /// * `error` - Error message pointer (null if success)
-pub type DartCallback = unsafe extern "C" fn(
-    callback_id: i64,
-    result: i64,
-    error: *const c_char,
-);
+pub type DartCallback = unsafe extern "C" fn(callback_id: i64, result: i64, error: *const c_char);
 
 /// Client configuration (JSON-serializable)
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,10 +18,10 @@
 
 ## 明确边界
 
-- `sfid/backend/src/institutions` 只负责 SFID 本地机构创建、资料和账户名称维护。
-- `sfid/backend/src/chain/duoqian_info` 负责 SFID 与 DUOQIAN 链之间的机构信息交互。
+- `sfid/backend/institutions` 只负责 SFID 本地机构创建、资料和账户名称维护。
+- `sfid/backend/app_core/duoqian_info` 负责 SFID 与 DUOQIAN 链之间的机构信息交互。
 - `sfid/frontend/institutions` 负责机构相关前端页面。
-- `sfid/frontend/chain/duoqian-info` 负责机构备案、链交互状态等前端组件。
+- `sfid/frontend/institutions/duoqian-info` 负责机构备案、链交互状态等前端组件。
 - 不迁移登录、公民、省管理员、市管理员等旧前端功能。
 
 ## 验收
@@ -37,9 +37,9 @@
 ## 完成记录
 
 - `sfid/frontend/institutions/` 已承接机构页面和清算行资格前端工具。
-- `sfid/frontend/api/institution.ts` 已承接机构本地数据 API。
-- `sfid/frontend/chain/duoqian-info/` 与 `sfid/frontend/api/chain/duoqianInfo.ts` 已建立。
-- `sfid/backend/src/chain/institution_info/` 已改名为 `sfid/backend/src/chain/duoqian_info/`,外部 HTTP 路径保持不变。
+- `sfid/frontend/institutions/api.ts` 已承接机构本地数据 API。
+- `sfid/frontend/institutions/` 与 `sfid/frontend/institutions/chain_duoqian_info.ts` 已建立。
+- `sfid/backend/institutions/` 已改名为 `sfid/backend/institutions/`,外部 HTTP 路径保持不变。
 - `citizenchain/runtime/otherpallet/sfid-system/src/duoqian_info/` 已建立,包含备案三字段类型、基础校验和单测。
 - 已更新 repo-map、SFID 前端布局文档、SFID chain 文档、清算行资格文档、runtime sfid-system 文档。
 

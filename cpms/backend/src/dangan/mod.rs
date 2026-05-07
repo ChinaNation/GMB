@@ -9,9 +9,8 @@ use std::{
 
 use axum::{http::StatusCode, Json};
 use chrono::Utc;
-use rand::rngs::OsRng;
 use schnorrkel::{signing_context, MiniSecretKey};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -37,7 +36,6 @@ pub(crate) struct QrPayload {
     pub(crate) sig_alg: String,
     pub(crate) signature: String,
 }
-
 
 /// 档案号 V4 格式：{省代码2}{校验位1}{随机8}{年份4} = 15 位
 /// 市代码统一用 000（省辖市），不编码具体城市，保护地理隐私。
@@ -130,17 +128,35 @@ pub(crate) async fn build_qr4_payload(
     archive: &crate::Archive,
 ) -> Result<ArchiveQr4Payload, (StatusCode, Json<ApiError>)> {
     // 读取匿名证书和匿名私钥
-    let row = sqlx::query("SELECT anon_cert, anon_key_encrypted, anon_pubkey FROM system_install WHERE id = 1")
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query anon_cert failed"))?
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
+    let row = sqlx::query(
+        "SELECT anon_cert, anon_key_encrypted, anon_pubkey FROM system_install WHERE id = 1",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query anon_cert failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
 
     let anon_cert_json: Option<String> = row.get("anon_cert");
-    let anon_cert_json = anon_cert_json
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_cert not found, complete QR3 first"))?;
-    let anon_cert: serde_json::Value = serde_json::from_str(&anon_cert_json)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "parse anon_cert failed"))?;
+    let anon_cert_json = anon_cert_json.ok_or_else(|| {
+        err(
+            StatusCode::CONFLICT,
+            4003,
+            "anon_cert not found, complete QR3 first",
+        )
+    })?;
+    let anon_cert: serde_json::Value = serde_json::from_str(&anon_cert_json).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "parse anon_cert failed",
+        )
+    })?;
 
     let province_code = anon_cert
         .get("prov")
@@ -150,10 +166,16 @@ pub(crate) async fn build_qr4_payload(
 
     // 解密匿名私钥
     let anon_secret_stored: Option<String> = row.get("anon_key_encrypted");
-    let anon_secret_stored = anon_secret_stored
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_key not found"))?;
+    let anon_secret_stored =
+        anon_secret_stored.ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_key not found"))?;
     let anon_secret_bytes = crate::initialize::decrypt_secret_public("ANON", &anon_secret_stored)
-        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5003, "decrypt anon key failed"))?;
+        .ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "decrypt anon key failed",
+        )
+    })?;
 
     let voting_eligible = archive.citizen_status == "NORMAL";
 
@@ -177,11 +199,7 @@ pub(crate) async fn build_qr4_payload(
 }
 
 /// V4 校验位：blake2b_256("cpms-archive-v4|{省代码}{随机8}{年份4}") 字节之和 mod 10
-pub(crate) fn archive_checksum_digit_v4(
-    province_code: &str,
-    random8: &str,
-    year: &str,
-) -> char {
+pub(crate) fn archive_checksum_digit_v4(province_code: &str, random8: &str, year: &str) -> char {
     let payload = format!("cpms-archive-v4|{}{}{}", province_code, random8, year);
     use blake2::digest::consts::U32;
     use blake2::{Blake2b, Digest};
@@ -228,7 +246,6 @@ pub(crate) async fn build_qr_payload(
         signature,
     })
 }
-
 
 async fn install_snapshot(
     state: &AppState,

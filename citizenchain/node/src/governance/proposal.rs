@@ -225,6 +225,8 @@ enum ProposalAction {
     RuntimeUpgrade(Box<RuntimeUpgradeDetail>),
     ResolutionIssuance(Box<ResolutionIssuanceDetail>),
     ResolutionDestroy(Box<ResolutionDestroyDetail>),
+    /// 中文注释：费率提案详情展示结构已保留，链上查询接入前该动作分支暂不构造。
+    #[allow(dead_code)]
     FeeRate(Box<FeeRateProposalDetail>),
     SafetyFund(Box<SafetyFundProposalDetail>),
     Sweep(Box<SweepProposalDetail>),
@@ -480,8 +482,7 @@ pub fn fetch_institution_proposal_page(
                         status_label: status_label(meta.status).to_string(),
                     },
                 };
-                let institution_name =
-                    resolve_institution_name(meta.institution_hex.as_deref());
+                let institution_name = resolve_institution_name(meta.institution_hex.as_deref());
                 let display_meta = fetch_proposal_display_id(id).ok().flatten();
                 items.push(ProposalListItem {
                     proposal_id: id,
@@ -1005,8 +1006,11 @@ fn format_proposal_id(id: u64, display_meta: Option<&ProposalDisplayMeta>) -> St
 /// 查询 `VotingEngine::ProposalDisplayId[id]` → `ProposalDisplayMeta { year:u16, seq_in_year:u32 }`。
 /// 6 字节 SCALE:u16 LE + u32 LE。
 pub fn fetch_proposal_display_id(proposal_id: u64) -> Result<Option<ProposalDisplayMeta>, String> {
-    let key =
-        storage_keys::map_key("VotingEngine", "ProposalDisplayId", &proposal_id.to_le_bytes());
+    let key = storage_keys::map_key(
+        "VotingEngine",
+        "ProposalDisplayId",
+        &proposal_id.to_le_bytes(),
+    );
     let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
     let hex_value = match result.as_str() {
         Some(s) => s,
@@ -1355,12 +1359,6 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
 }
 
 // ──── 费率提案 ────
-
-/// 费率提案详情。
-struct RateProposalActionDetail {
-    institution_hex: String,
-    new_rate_bp: u32,
-}
 
 /// 从链上 SafetyFundProposalActions 存储查询安全基金提案数据。
 fn fetch_safety_fund_proposal_action(

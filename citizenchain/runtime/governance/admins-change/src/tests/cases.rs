@@ -40,10 +40,7 @@ fn pending_subject_is_not_exposed_to_active_business_api() {
             institution,
             &admin_a
         ));
-        assert!(
-            AdminsChange::pending_subject_admins_for_snapshot(ORG_REN, institution)
-                .is_none()
-        );
+        assert!(AdminsChange::pending_subject_admins_for_snapshot(ORG_REN, institution).is_none());
     });
 }
 
@@ -114,8 +111,8 @@ fn builtin_subjects_cannot_be_closed() {
                 Error::<Test>::BuiltinSubjectCannotClose
             );
 
-            let subject = Subjects::<Test>::get(institution)
-                .expect("builtin subject should remain stored");
+            let subject =
+                Subjects::<Test>::get(institution).expect("builtin subject should remain stored");
             assert_eq!(subject.kind, AdminSubjectKind::BuiltinInstitution);
             assert_eq!(subject.status, AdminSubjectStatus::Active);
             assert!(AdminsChange::is_active_subject_admin(
@@ -150,8 +147,8 @@ fn dynamic_subjects_can_be_closed() {
             assert_ok!(AdminsChange::do_activate_subject(institution));
             assert_ok!(AdminsChange::do_close_subject(institution));
 
-            let subject = Subjects::<Test>::get(institution)
-                .expect("dynamic subject should remain stored");
+            let subject =
+                Subjects::<Test>::get(institution).expect("dynamic subject should remain stored");
             assert_eq!(subject.kind, kind);
             assert_eq!(subject.status, AdminSubjectStatus::Closed);
             assert!(!AdminsChange::is_active_subject_admin(
@@ -471,21 +468,19 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
-        let proposal =
-            votingengine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
+        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal should exist");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
         assert_eq!(finalized_event_count(pid, STATUS_EXECUTION_FAILED), 1);
         assert!(
-            votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
-                .is_none()
+            votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution).is_none()
         );
         let data = votingengine::Pallet::<Test>::get_proposal_data(pid)
             .expect("proposal data should exist");
         assert!(votingengine::Pallet::<Test>::is_proposal_owner(
             pid, MODULE_TAG
         ));
-        let _action = AdminReplacementAction::<AccountId32>::decode(&mut &data[..])
-            .expect("should decode");
+        let _action =
+            AdminReplacementAction::<AccountId32>::decode(&mut &data[..]).expect("should decode");
         assert_noop!(
             VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
             votingengine::pallet::Error::<Test>::ProposalNotRetryable
@@ -671,8 +666,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
         );
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
         assert!(
-            votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
-                .is_none()
+            votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution).is_none()
         );
 
         Subjects::<Test>::mutate(institution, |maybe| {
@@ -830,10 +824,7 @@ fn invalid_institution_is_rejected() {
 fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        assert_eq!(
-            current_admins(institution).len() as u32,
-            NRC_ADMIN_COUNT
-        );
+        assert_eq!(current_admins(institution).len() as u32, NRC_ADMIN_COUNT);
 
         for i in 13..NRC_ADMIN_COUNT as usize {
             let old_admin = nrc_admin(i);
@@ -857,8 +848,14 @@ fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
                 NRC_ADMIN_COUNT,
                 "round {i}: admin count must stay at NRC_ADMIN_COUNT"
             );
-            assert!(admins.contains(&new_admin), "round {i}: new admin must be in list");
-            assert!(!admins.contains(&old_admin), "round {i}: old admin must be out");
+            assert!(
+                admins.contains(&new_admin),
+                "round {i}: new admin must be in list"
+            );
+            assert!(
+                !admins.contains(&old_admin),
+                "round {i}: old admin must be out"
+            );
             assert!(
                 votingengine::Pallet::<Test>::internal_proposal_mutex(ORG_NRC, institution)
                     .is_none(),

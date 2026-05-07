@@ -89,7 +89,9 @@ impl organization_manage::DuoqianAddressValidator<AccountId32> for TestAddressVa
 }
 
 pub struct TestReservedAddressChecker;
-impl organization_manage::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+impl organization_manage::DuoqianReservedAddressChecker<AccountId32>
+    for TestReservedAddressChecker
+{
     fn is_reserved(address: &AccountId32) -> bool {
         *address == AccountId32::new([0xAA; 32])
     }
@@ -125,10 +127,7 @@ pub struct TestSfidEligibility;
 impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
-    fn is_eligible(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
     }
 
@@ -324,10 +323,7 @@ impl organization_manage::ProtectedSourceChecker<AccountId32> for TestProtectedS
 
 pub struct TestInstitutionAsset;
 impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
-    fn can_spend(
-        source: &AccountId32,
-        _action: institution_asset::InstitutionAssetAction,
-    ) -> bool {
+    fn can_spend(source: &AccountId32, _action: institution_asset::InstitutionAssetAction) -> bool {
         DENIED_SPEND_SOURCE.with(|blocked| blocked.borrow().as_ref() != Some(source))
     }
 }
@@ -440,11 +436,7 @@ impl pallet::Config for Test {
 ///
 /// 同 (org, institution, index) 每次调用返回相同 keypair,保证测试确定性。
 /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
-fn derive_admin_pair(
-    org: u8,
-    institution: &SubjectId,
-    index: u8,
-) -> (AccountId32, sr25519::Pair) {
+fn derive_admin_pair(org: u8, institution: &SubjectId, index: u8) -> (AccountId32, sr25519::Pair) {
     let mut seed_bytes = [0u8; 32];
     seed_bytes[0] = org;
     seed_bytes[1] = index;
@@ -483,8 +475,7 @@ fn prb_pallet_id() -> SubjectId {
 }
 
 fn institution_account(institution: SubjectId) -> AccountId32 {
-    let raw =
-        subject_pallet_address(institution).expect("institution pallet address must exist");
+    let raw = subject_pallet_address(institution).expect("institution pallet address must exist");
     AccountId32::new(raw)
 }
 
@@ -523,11 +514,7 @@ fn last_proposal_id() -> u64 {
 }
 
 /// 返回 (org, institution) 对应的前 `count` 个 sr25519 admin keypair。
-fn admin_pairs(
-    org: u8,
-    institution: SubjectId,
-    count: u8,
-) -> Vec<(AccountId32, sr25519::Pair)> {
+fn admin_pairs(org: u8, institution: SubjectId, count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
         .map(|i| derive_admin_pair(org, &institution, i))
         .collect()
@@ -630,12 +617,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
         let prc = prc_pallet_id();
         let prb = prb_pallet_id();
         let dq = registered_duoqian_institution();
-        let nrc_accts: Vec<AccountId32> =
-            nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
-        let prc_accts: Vec<AccountId32> =
-            prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
-        let prb_accts: Vec<AccountId32> =
-            prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
+        let nrc_accts: Vec<AccountId32> = nrc_pass_pairs().into_iter().map(|(a, _)| a).collect();
+        let prc_accts: Vec<AccountId32> = prc_pass_pairs().into_iter().map(|(a, _)| a).collect();
+        let prb_accts: Vec<AccountId32> = prb_pass_pairs().into_iter().map(|(a, _)| a).collect();
         set_extra_admins(ORG_NRC, nrc, nrc_accts);
         set_extra_admins(ORG_PRC, prc, prc_accts);
         set_extra_admins(ORG_PRB, prb, prb_accts);

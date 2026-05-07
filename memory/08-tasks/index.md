@@ -6,6 +6,10 @@
 
 ## done
 
+- `memory/08-tasks/done/20260507-rust-warning-and-marker-cleanup.md`
+- `memory/08-tasks/done/20260507-cargo-pubspec-todo-cleanup.md`
+- `memory/08-tasks/done/20260507-root-cargo-member-cleanup.md`
+- `memory/08-tasks/done/20260507-clean-old-path-text.md`
 - `memory/08-tasks/done/20260507-pr-e-registry-freeze.md`
 - `memory/08-tasks/done/20260507-clear-open-task-cards.md`
 - `memory/08-tasks/done/20260507-p2-5-wuminapp-isar-dir.md`

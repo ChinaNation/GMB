@@ -124,8 +124,8 @@ citizenchain/
 
 ## 6b. SFID 目录策略
 
-2026-05-02 起,`sfid/backend/src/`、`sfid/frontend/src/`、`sfid/frontend/src/views/`、
-`sfid/backend/chain/`、`sfid/frontend/chain/`、`sfid/frontend/api/` 均已删除。
+2026-05-02 起,SFID 后端旧源码壳、SFID 前端旧源码壳、前端旧 views 壳、
+后端独立 chain 业务目录、前端独立 chain 业务目录、前端独立业务 API 目录均已删除。
 SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 
 - `sfid/backend/main.rs`:后端入口,`Cargo.toml` 显式 `[[bin]] path = "main.rs"`。

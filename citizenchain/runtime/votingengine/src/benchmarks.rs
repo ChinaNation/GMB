@@ -4,5 +4,5 @@
 //! cancel_passed_proposal),mode-specific 投票/创建 benchmark 由 internal-vote /
 //! joint-vote / citizen-vote sub-pallet 各自承担。
 //!
-//! TODO:等 substrate-benchmark-cli 真实跑测后填充。
+//! 待 substrate-benchmark-cli 完成真实跑测后填充具体权重数据。
 #![cfg(feature = "runtime-benchmarks")]

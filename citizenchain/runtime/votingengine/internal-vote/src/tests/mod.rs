@@ -1,7 +1,7 @@
-use primitives::derive::subject_id_from_sfid_number;
 use super::*;
 use codec::Encode;
 use core::cell::RefCell;
+use primitives::derive::subject_id_from_sfid_number;
 use std::collections::BTreeSet;
 
 use frame_support::{
@@ -13,32 +13,26 @@ use frame_system as system;
 // `use super::*` 拉进 internal-vote 自有的 pallet items(Pallet/Event/Error/Config/InternalVotesByAccount/...);
 // 这里追加 votingengine 的 storage 与 trait 名,让测试代码用短名引用。
 use votingengine::pallet::{
-    CleanupQueue,
-    CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
-    PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups, ProposalDisplayId, ProposalExecutionRetryStates, Proposals,
-    ProposalsByExpiry, ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner,
-    ProposalsByYear, YearProposalCounter,
+    CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
+    PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
+    ProposalDisplayId, ProposalExecutionRetryStates, Proposals, ProposalsByExpiry,
+    ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner, ProposalsByYear, YearProposalCounter,
 };
 // joint mode storage 在 joint-vote sub-pallet
+use primitives::china::china_cb::CHINA_CB;
+use primitives::china::china_ch::CHINA_CH;
+use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 use votingengine::traits::{
-    InternalAdminProvider, InternalThresholdProvider,
-    InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine, JointVoteResultCallback,
+    InternalAdminProvider, InternalThresholdProvider, InternalVoteEngine,
+    InternalVoteResultCallback, JointVoteEngine, JointVoteResultCallback,
     PopulationSnapshotVerifier,
 };
 use votingengine::SfidEligibility;
 use votingengine::{
-    SubjectId, PendingCleanupStage, Proposal, ProposalExecutionOutcome, VoteCountU32, VoteCountU64, VoteCredentialCleanup,
-    PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_REFERENDUM, STAGE_INTERNAL, STAGE_JOINT,
-    STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
-};
-use primitives::china::china_cb::{
-    CHINA_CB,
-};
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
-use sp_runtime::{
-    traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError,
+    PendingCleanupStage, Proposal, ProposalExecutionOutcome, SubjectId, VoteCountU32, VoteCountU64,
+    VoteCredentialCleanup, PROPOSAL_KIND_INTERNAL, PROPOSAL_KIND_JOINT, STAGE_INTERNAL,
+    STAGE_JOINT, STAGE_REFERENDUM, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED,
+    STATUS_REJECTED, STATUS_VOTING,
 };
 
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -227,10 +221,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         }
     }
 
-    fn get_admin_list(
-        org: u8,
-        institution: SubjectId,
-    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId32>> {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
@@ -252,22 +243,16 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .map(AccountId32::new)
                         .collect()
                 }),
-            ORG_REN if institution == registered_subject_institution() => {
-                Some(sp_std::vec![
-                    registered_subject_admin(0),
-                    registered_subject_admin(1),
-                    registered_subject_admin(2),
-                ])
-            }
+            ORG_REN if institution == registered_subject_institution() => Some(sp_std::vec![
+                registered_subject_admin(0),
+                registered_subject_admin(1),
+                registered_subject_admin(2),
+            ]),
             _ => None,
         }
     }
 
-    fn is_pending_internal_admin(
-        org: u8,
-        institution: SubjectId,
-        who: &AccountId32,
-    ) -> bool {
+    fn is_pending_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
         org == ORG_REN
             && institution == pending_subject_institution()
             && [pending_subject_admin(0), pending_subject_admin(1)]
@@ -299,15 +284,11 @@ impl InternalThresholdProvider for TestInternalThresholdProvider {
     }
 
     fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org == ORG_REN && institution == registered_subject_institution()
-        {
+        if org == ORG_REN && institution == registered_subject_institution() {
             return REGISTERED_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()));
         }
         // 中文注释：治理机构返回“毒化阈值”，用于证明治理投票不再依赖动态 Provider。
-        if matches!(
-            org,
-            ORG_NRC | ORG_PRC | ORG_PRB
-        ) {
+        if matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
             return Some(1);
         }
         None
@@ -353,10 +334,7 @@ impl
 }
 
 impl SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash> for TestSfidEligibility {
-    fn is_eligible(
-        binding_id: &<Test as frame_system::Config>::Hash,
-        who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(binding_id: &<Test as frame_system::Config>::Hash, who: &AccountId32) -> bool {
         *binding_id == binding_id_ok() && who == &nrc_admin(0)
     }
 
@@ -460,9 +438,7 @@ impl InternalVoteResultCallback for TestInternalVoteResultCallback {
         if INTERNAL_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow()) {
             Err(DispatchError::Other("internal callback failed"))
         } else {
-            if let Some(status) =
-                INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow())
-            {
+            if let Some(status) = INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow()) {
                 return Ok(match status {
                     STATUS_EXECUTED => ProposalExecutionOutcome::Executed,
                     STATUS_EXECUTION_FAILED => ProposalExecutionOutcome::FatalFailed,
@@ -604,11 +580,7 @@ fn institution_threshold(institution: SubjectId) -> usize {
     panic!("unknown institution");
 }
 
-fn cast_joint_votes_until_finalized(
-    proposal_id: u64,
-    institution: SubjectId,
-    approve: bool,
-) {
+fn cast_joint_votes_until_finalized(proposal_id: u64, institution: SubjectId, approve: bool) {
     let admins = institution_admins(institution);
     let threshold = institution_threshold(institution);
     let required_votes = if approve {
@@ -720,11 +692,7 @@ fn has_used_vote_nonce(
     })
 }
 
-fn create_internal_proposal_via_engine(
-    who: AccountId32,
-    org: u8,
-    institution: SubjectId,
-) -> u64 {
+fn create_internal_proposal_via_engine(who: AccountId32, org: u8, institution: SubjectId) -> u64 {
     <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
         who,
         org,
@@ -832,10 +800,7 @@ fn clear_cleanup_schedule_window(current_block: u64) {
 
 fn fill_retry_deadline_window(from: u64) {
     for offset in 0..100u64 {
-        ExecutionRetryDeadlines::<Test>::insert(
-            from + offset,
-            full_retry_deadline_bucket(offset),
-        );
+        ExecutionRetryDeadlines::<Test>::insert(from + offset, full_retry_deadline_bucket(offset));
     }
 }
 
@@ -844,7 +809,6 @@ fn clear_retry_deadline_window(from: u64) {
         ExecutionRetryDeadlines::<Test>::remove(from + offset);
     }
 }
-
 
 mod cases;
 mod dual_id;

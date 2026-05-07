@@ -9,6 +9,7 @@ use crate::configs::*;
 use crate::ResolutionDestro;
 use frame_support::assert_ok;
 use frame_support::traits::{Contains, Currency, EnsureOrigin, FindAuthor};
+use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 use organization_manage::DuoqianReservedAddressChecker;
 use primitives::china::china_cb::CHINA_CB;
 use primitives::derive::subject_id_from_sfid_number;
@@ -19,7 +20,6 @@ use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, M
 use votingengine::{
     InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier, SfidEligibility,
 };
-use institution_asset::{InstitutionAsset, InstitutionAssetAction};
 
 fn new_test_ext() -> sp_io::TestExternalities {
     let storage = crate::RuntimeGenesisConfig::default()
@@ -38,8 +38,7 @@ fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32
         province.clone().try_into().expect("province fits");
 
     let main_pair = sr25519::Pair::from_string("//main-step3", None).expect("pair");
-    let main_signing_pair =
-        sr25519::Pair::from_string("//main-signing-step3", None).expect("pair");
+    let main_signing_pair = sr25519::Pair::from_string("//main-signing-step3", None).expect("pair");
     let main_admin_pubkey = main_pair.public().0;
     let main_signing_pubkey = main_signing_pair.public().0;
 
@@ -165,7 +164,6 @@ fn build_pop_signature(
         .try_into()
         .expect("signature fits")
 }
-
 
 fn stake_account() -> AccountId {
     AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address)

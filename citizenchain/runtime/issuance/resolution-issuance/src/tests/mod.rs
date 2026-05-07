@@ -39,8 +39,8 @@ mod runtime {
     #[runtime::pallet_index(2)]
     pub type VotingEngine = votingengine;
 
-        #[runtime::pallet_index(99)]
-        pub type InternalVote = internal_vote;
+    #[runtime::pallet_index(99)]
+    pub type InternalVote = internal_vote;
 
     #[runtime::pallet_index(8)]
     pub type ResolutionIssuance = super;
@@ -238,16 +238,16 @@ impl votingengine::Config for Test {
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
-        type InternalFinalizer = InternalVote;
-        type InternalCleanup = InternalVote;
-        type JointFinalizer = ();
-        type JointCleanup = ();
-    }
+    type InternalFinalizer = InternalVote;
+    type InternalCleanup = InternalVote;
+    type JointFinalizer = ();
+    type JointCleanup = ();
+}
 
-    impl internal_vote::Config for Test {
-        type RuntimeEvent = RuntimeEvent;
-        type WeightInfo = ();
-    }
+impl internal_vote::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
+}
 
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;

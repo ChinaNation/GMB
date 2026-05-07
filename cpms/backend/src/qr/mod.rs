@@ -35,6 +35,8 @@ impl QrKind {
         }
     }
 
+    // 中文注释：固定码判断由前后端统一协议保留，当前后端暂未调用。
+    #[allow(dead_code)]
     pub fn is_fixed(&self) -> bool {
         matches!(self, Self::UserContact)
     }
@@ -49,6 +51,8 @@ pub struct LoginChallengeBody {
     pub sys_sig: String,
 }
 
+// 中文注释：登录回执解析由统一二维码协议保留，当前登录流程先走手动字段校验。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginReceiptBody {
     pub system: String,
@@ -76,6 +80,7 @@ pub struct QrEnvelope<B> {
 }
 
 pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
+#[allow(dead_code)]
 pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 
 impl LoginChallengeEnvelope {
@@ -91,6 +96,7 @@ impl LoginChallengeEnvelope {
     }
 }
 
+#[allow(dead_code)]
 impl LoginReceiptEnvelope {
     pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
         Self {
@@ -138,6 +144,8 @@ pub fn build_signature_message(
 
 // ---------- parse helpers ----------
 
+// 中文注释：回执解析错误类型预留给后端切换统一解析入口。
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum QrParseError {
     BadJson(String),
@@ -164,6 +172,7 @@ impl std::fmt::Display for QrParseError {
 impl std::error::Error for QrParseError {}
 
 /// 解析 login_receipt envelope。后端收到 wumin 冷钱包的回执后使用。
+#[allow(dead_code)]
 pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;

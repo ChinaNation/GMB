@@ -17,12 +17,12 @@ use frame_support::{
 };
 use sp_runtime::{traits::Zero, DispatchResult};
 
-use primitives::derive::subject_id_from_registered_sfid_number;
 use crate::institution::types::InstitutionLifecycleStatus;
 use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionActionOf, Error, Event, InstitutionAccounts,
     Institutions, Pallet, PendingInstitutionCreate, SfidRegisteredAddress,
 };
+use primitives::derive::subject_id_from_registered_sfid_number;
 
 /// 投票否决/超时/执行失败终态时清理机构整体创建相关存储。
 pub(crate) fn cleanup_pending_institution_create<T: Config>(
@@ -40,7 +40,9 @@ pub(crate) fn cleanup_pending_institution_create<T: Config>(
     }
     // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
     // 机构主账户的 admin 配置由 admins-change::Subjects[institution_id] 承载,无需 mirror 清理。
-    if let Some(institution_id) = subject_id_from_registered_sfid_number(action.sfid_number.as_slice()) {
+    if let Some(institution_id) =
+        subject_id_from_registered_sfid_number(action.sfid_number.as_slice())
+    {
         Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
     }
     if emit_event {

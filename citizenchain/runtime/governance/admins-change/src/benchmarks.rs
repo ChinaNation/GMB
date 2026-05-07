@@ -7,8 +7,7 @@
 
 use crate::Pallet as AdminsChange;
 use crate::{
-    subject_id_from_sfid_number, BlockNumberFor, Call, Config, SubjectId, Pallet,
-    CHINA_CB, ORG_PRC,
+    subject_id_from_sfid_number, BlockNumberFor, Call, Config, Pallet, SubjectId, CHINA_CB, ORG_PRC,
 };
 use codec::Decode;
 use frame_benchmarking::v2::*;

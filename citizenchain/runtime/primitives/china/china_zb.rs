@@ -418,7 +418,5 @@ pub const CHINA_RESERVED_MAIN_ADDRESSES: &[[u8; 32]; 408] = &[
 
 /// 检查地址是否属于制度保留地址（静态常量数组二分查找）。
 pub fn is_reserved_main_address(address: &[u8; 32]) -> bool {
-    CHINA_RESERVED_MAIN_ADDRESSES
-        .binary_search(address)
-        .is_ok()
+    CHINA_RESERVED_MAIN_ADDRESSES.binary_search(address).is_ok()
 }

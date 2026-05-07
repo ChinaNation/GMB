@@ -124,13 +124,11 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
         > = data
             .try_into()
             .map_err(|_| DispatchError::Other("proposal data too large"))?;
-        let owner: frame_support::BoundedVec<
-            u8,
-            <Test as votingengine::Config>::MaxModuleTagLen,
-        > = module_tag
-            .to_vec()
-            .try_into()
-            .map_err(|_| DispatchError::Other("module tag too large"))?;
+        let owner: frame_support::BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> =
+            module_tag
+                .to_vec()
+                .try_into()
+                .map_err(|_| DispatchError::Other("module tag too large"))?;
         votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
         votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
         Ok(proposal_id)
@@ -189,10 +187,7 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
 
 pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(
-        org: u8,
-        _institution: votingengine::SubjectId,
-    ) -> Option<u32> {
+    fn pass_threshold(org: u8, _institution: votingengine::SubjectId) -> Option<u32> {
         votingengine::types::fixed_governance_pass_threshold(org)
     }
 }

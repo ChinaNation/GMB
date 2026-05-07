@@ -8,7 +8,7 @@
 
 ## 背景
 
-任务卡 3 的前端模块化只完成了 20% —— 只把"私权/公权/公安局"三个 tab 的内容抽到了 `views/institutions/`,其他功能(登录、注册局、业务员绑定、操作员管理、密钥轮换、Dashboard)原封不动留在 `sfid/frontend/src/components/App.tsx`,导致该文件长期维持在 **3769 行**。每次动这个文件都战战兢兢,极易误伤不相关模块。
+任务卡 3 的前端模块化只完成了 20% —— 只把"私权/公权/公安局"三个 tab 的内容抽到了 `views/institutions/`,其他功能(登录、注册局、业务员绑定、操作员管理、密钥轮换、Dashboard)原封不动留在 `sfid/frontend/App.tsx`,导致该文件长期维持在 **3769 行**。每次动这个文件都战战兢兢,极易误伤不相关模块。
 
 目前 `views/` 下只有 `institutions/` + `common/`,缺少 `auth/` `registration/` `binding/` `operators/` `dashboard/` 等子目录。
 
@@ -86,7 +86,7 @@ App.tsx 最终形态:
 
 ## 验收标准
 
-- `sfid/frontend/src/components/App.tsx` ≤ 300 行
+- `sfid/frontend/App.tsx` ≤ 300 行
 - `views/` 下有 `auth/` `dashboard/` `registration/` `binding/` `operators/` `key-management/` `institutions/` `common/` 完整结构
 - `npm run build` 全绿
 - 手工回归:登录、注册、绑定、机构、密钥、操作员、Dashboard **全部功能行为不变**
@@ -141,7 +141,7 @@ src/views/
 - 新增 `ActiveView` 类型别名替代行内长 union
 
 ### 新增文档/feedback
-- `sfid/frontend/src/views/README.md`(追加铁律段)
+- `sfid/frontend/<feature>/README.md`(追加铁律段)
 - `memory/feedback_sfid_frontend_modular_structure.md`(新建)
 - `memory/MEMORY.md` 索引追加
 

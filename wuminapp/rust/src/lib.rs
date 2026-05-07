@@ -3,18 +3,18 @@
 //! This library provides C-compatible FFI exports for the smoldot-light
 //! Rust library, enabling Dart applications to use a lightweight Substrate/Polkadot client.
 
+use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use smoldot_light::{
-    AddChainConfig, AddChainConfigJsonRpc, AddChainSuccess, ChainId, Client,
-    JsonRpcResponses, platform::DefaultPlatform,
+    platform::DefaultPlatform, AddChainConfig, AddChainConfigJsonRpc, AddChainSuccess, ChainId,
+    Client, JsonRpcResponses,
 };
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use once_cell::sync::Lazy;
+use std::sync::Arc;
 
 mod error;
 mod ffi_types;
@@ -39,8 +39,7 @@ struct SmoldotClientWrapper {
 struct SmoldotChainWrapper {
     chain_id: ChainId,
     client_handle: ClientHandle,
-    raw_json_rpc_responses:
-        Arc<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<String>>>,
+    raw_json_rpc_responses: Arc<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<String>>>,
     pending_native_requests:
         Arc<tokio::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<String>>>>,
     next_native_request_id: AtomicU64,
@@ -109,14 +108,13 @@ pub unsafe extern "C" fn smoldot_client_init(
     };
 
     // Get system name and version
-    let system_name = config.system_name.unwrap_or_else(|| "Polkadart".to_string());
+    let system_name = config
+        .system_name
+        .unwrap_or_else(|| "Polkadart".to_string());
     let system_version = config.system_version.unwrap_or_else(|| "0.1.0".to_string());
 
     // Initialize smoldot client (Client::new wraps platform in Arc internally)
-    let platform = DefaultPlatform::new(
-        system_name.into(),
-        system_version.into(),
-    );
+    let platform = DefaultPlatform::new(system_name.into(), system_version.into());
 
     let client = Client::new(platform);
 
@@ -189,18 +187,15 @@ pub unsafe extern "C" fn smoldot_add_chain(
     };
 
     // Parse potential relay chains
-    let relay_chains: Vec<ChainId> = if !potential_relay_chains.is_null() && relay_chains_count > 0 {
-        let chains_slice = std::slice::from_raw_parts(
-            potential_relay_chains,
-            relay_chains_count as usize,
-        );
+    let relay_chains: Vec<ChainId> = if !potential_relay_chains.is_null() && relay_chains_count > 0
+    {
+        let chains_slice =
+            std::slice::from_raw_parts(potential_relay_chains, relay_chains_count as usize);
 
         let chains_lock = CHAINS.lock();
         chains_slice
             .iter()
-            .filter_map(|&handle| {
-                chains_lock.get(&handle).map(|wrapper| wrapper.chain_id)
-            })
+            .filter_map(|&handle| chains_lock.get(&handle).map(|wrapper| wrapper.chain_id))
             .collect()
     } else {
         Vec::new()
@@ -239,14 +234,11 @@ pub unsafe extern "C" fn smoldot_add_chain(
                 let chain_wrapper = Arc::new(SmoldotChainWrapper {
                     chain_id,
                     client_handle,
-                    raw_json_rpc_responses:
-                        Arc::new(tokio::sync::Mutex::new(raw_rx)),
-                    pending_native_requests:
-                        Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+                    raw_json_rpc_responses: Arc::new(tokio::sync::Mutex::new(raw_rx)),
+                    pending_native_requests: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
                     next_native_request_id: AtomicU64::new(1),
                 });
-                let pending_native_requests =
-                    Arc::clone(&chain_wrapper.pending_native_requests);
+                let pending_native_requests = Arc::clone(&chain_wrapper.pending_native_requests);
 
                 if let Some(json_rpc_responses) = json_rpc_responses {
                     client_wrapper_clone.runtime.spawn(async move {
@@ -404,8 +396,8 @@ pub unsafe extern "C" fn smoldot_next_json_rpc_response(
         match response_result {
             Ok(response) => {
                 // Convert response to C string
-                let response_cstr = CString::new(response)
-                    .unwrap_or_else(|_| CString::new("").unwrap());
+                let response_cstr =
+                    CString::new(response).unwrap_or_else(|_| CString::new("").unwrap());
                 callback(callback_id, response_cstr.as_ptr() as i64, std::ptr::null());
                 std::mem::forget(response_cstr); // Dart must free
             }
@@ -656,16 +648,19 @@ pub unsafe extern "C" fn smoldot_get_account_next_index(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let next_index_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_account_next_index(chain_wrapper.chain_id, account_id)
-                .map_err(|error| error.to_string())?
-        };
-        let next_index = next_index_future.await.map_err(|error| error.to_string())?;
-        Ok(next_index.to_string())
-    }) {
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let next_index_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_account_next_index(chain_wrapper.chain_id, account_id)
+                    .map_err(|error| error.to_string())?
+            };
+            let next_index = next_index_future.await.map_err(|error| error.to_string())?;
+            Ok(next_index.to_string())
+        },
+    ) {
         Ok(next_index) => string_into_raw(next_index, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -708,45 +703,47 @@ pub unsafe extern "C" fn smoldot_get_block_hash(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        // 优先查本地缓存（快路径，无网络开销）。
-        let known_block_hash_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_known_block_hash(chain_wrapper.chain_id, block_number)
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            // 优先查本地缓存（快路径，无网络开销）。
+            let known_block_hash_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_known_block_hash(chain_wrapper.chain_id, block_number)
+                    .map_err(|error| error.to_string())?
+            };
+
+            if let Some(block_hash) = known_block_hash_future
+                .await
                 .map_err(|error| error.to_string())?
-        };
+            {
+                return Ok(format!("0x{}", hex::encode(block_hash)));
+            }
 
-        if let Some(block_hash) = known_block_hash_future
-            .await
-            .map_err(|error| error.to_string())?
-        {
-            return Ok(format!("0x{}", hex::encode(block_hash)));
-        }
+            // 本地缓存未命中，回退到 JSON-RPC（通过 smoldot P2P 网络查询）。
+            let result = native_json_rpc_request(
+                Arc::clone(&chain_wrapper),
+                Arc::clone(&client_wrapper),
+                "chain_getBlockHash",
+                json!([block_number]),
+            )
+            .await?;
 
-        // 本地缓存未命中，回退到 JSON-RPC（通过 smoldot P2P 网络查询）。
-        let result = native_json_rpc_request(
-            Arc::clone(&chain_wrapper),
-            Arc::clone(&client_wrapper),
-            "chain_getBlockHash",
-            json!([block_number]),
-        )
-        .await?;
-
-        // 轻节点正常情况：finalized 之前的旧区块没在 smoldot 缓存里，
-        // chain_getBlockHash 返回 null。把 null 当作"未知"返回空串，
-        // 由 dart 层判定为 None，绝不抛错（否则 PendingTxReconciler 会
-        // 对每个老区块号刷一条 non-string 错误日志，淹没真问题）。
-        if result.is_null() {
-            return Ok(String::new());
-        }
-        result
-            .as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| format!(
-                "chain_getBlockHash returned non-string for height {block_number}: {result}"
-            ))
-    }) {
+            // 轻节点正常情况：finalized 之前的旧区块没在 smoldot 缓存里，
+            // chain_getBlockHash 返回 null。把 null 当作"未知"返回空串，
+            // 由 dart 层判定为 None，绝不抛错（否则 PendingTxReconciler 会
+            // 对每个老区块号刷一条 non-string 错误日志，淹没真问题）。
+            if result.is_null() {
+                return Ok(String::new());
+            }
+            result.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                format!(
+                    "chain_getBlockHash returned non-string for height {block_number}: {result}"
+                )
+            })
+        },
+    ) {
         Ok(block_hash) => string_into_raw(block_hash, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -794,15 +791,17 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let native_extrinsics_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_block_extrinsics(chain_wrapper.chain_id, block_hash)
-                .map_err(|error| error.to_string())?
-        };
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let native_extrinsics_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_block_extrinsics(chain_wrapper.chain_id, block_hash)
+                    .map_err(|error| error.to_string())?
+            };
 
-        let values = match native_extrinsics_future.await {
+            let values = match native_extrinsics_future.await {
             Ok(extrinsics) => extrinsics
                 .into_iter()
                 .map(|extrinsic| format!("0x{}", hex::encode(extrinsic)))
@@ -814,9 +813,10 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics(
             }
         };
 
-        serde_json::to_string(&values)
-            .map_err(|error| format!("Failed to encode block extrinsics JSON: {error}"))
-    }) {
+            serde_json::to_string(&values)
+                .map_err(|error| format!("Failed to encode block extrinsics JSON: {error}"))
+        },
+    ) {
         Ok(extrinsics_json) => string_into_raw(extrinsics_json, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -851,20 +851,23 @@ pub unsafe extern "C" fn smoldot_submit_extrinsic(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let result = native_json_rpc_request(
-            Arc::clone(&chain_wrapper),
-            Arc::clone(&client_wrapper),
-            "author_submitExtrinsic",
-            json!([extrinsic_hex]),
-        )
-        .await?;
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let result = native_json_rpc_request(
+                Arc::clone(&chain_wrapper),
+                Arc::clone(&client_wrapper),
+                "author_submitExtrinsic",
+                json!([extrinsic_hex]),
+            )
+            .await?;
 
-        let tx_hash = result
-            .as_str()
-            .ok_or_else(|| "author_submitExtrinsic result is not a string".to_string())?;
-        Ok(tx_hash.to_string())
-    }) {
+            let tx_hash = result
+                .as_str()
+                .ok_or_else(|| "author_submitExtrinsic result is not a string".to_string())?;
+            Ok(tx_hash.to_string())
+        },
+    ) {
         Ok(tx_hash) => string_into_raw(tx_hash, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -907,60 +910,63 @@ pub unsafe extern "C" fn smoldot_get_system_account(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let storage_key = build_system_account_storage_key(&account_id);
-        let storage_key_bytes = decode_prefixed_hex(&storage_key)?;
-        let native_storage_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let storage_key = build_system_account_storage_key(&account_id);
+            let storage_key_bytes = decode_prefixed_hex(&storage_key)?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
+
+            // 中文注释：余额/nonce 主路径已经切到原生 storage proof，这里不再回退 legacy `state_getStorage`。
+            let storage_value_hex = native_storage_future
+                .await
                 .map_err(|error| error.to_string())?
-        };
+                .pop()
+                .flatten()
+                .map(|value_bytes| format!("0x{}", hex::encode(value_bytes)));
 
-        // 中文注释：余额/nonce 主路径已经切到原生 storage proof，这里不再回退 legacy `state_getStorage`。
-        let storage_value_hex = native_storage_future
-            .await
-            .map_err(|error| error.to_string())?
-            .pop()
-            .flatten()
-            .map(|value_bytes| format!("0x{}", hex::encode(value_bytes)));
+            if storage_value_hex.is_none() {
+                return Ok(json!({
+                    "storageKey": storage_key,
+                    "exists": false,
+                })
+                .to_string());
+            }
 
-        if storage_value_hex.is_none() {
-            return Ok(json!({
+            let value_hex = storage_value_hex.unwrap();
+            let value_bytes = decode_prefixed_hex(&value_hex)?;
+
+            let nonce = if value_bytes.len() >= 4 {
+                Some(u32::from_le_bytes([
+                    value_bytes[0],
+                    value_bytes[1],
+                    value_bytes[2],
+                    value_bytes[3],
+                ]) as u64)
+            } else {
+                None
+            };
+            let free_fen = if value_bytes.len() >= 32 {
+                Some(read_u128_le_string(&value_bytes, 16)?)
+            } else {
+                None
+            };
+
+            Ok(json!({
                 "storageKey": storage_key,
-                "exists": false,
+                "exists": true,
+                "valueHex": value_hex,
+                "nonce": nonce,
+                "freeFen": free_fen,
             })
-            .to_string());
-        }
-
-        let value_hex = storage_value_hex.unwrap();
-        let value_bytes = decode_prefixed_hex(&value_hex)?;
-
-        let nonce = if value_bytes.len() >= 4 {
-            Some(u32::from_le_bytes([
-                value_bytes[0],
-                value_bytes[1],
-                value_bytes[2],
-                value_bytes[3],
-            ]) as u64)
-        } else {
-            None
-        };
-        let free_fen = if value_bytes.len() >= 32 {
-            Some(read_u128_le_string(&value_bytes, 16)?)
-        } else {
-            None
-        };
-
-        Ok(json!({
-            "storageKey": storage_key,
-            "exists": true,
-            "valueHex": value_hex,
-            "nonce": nonce,
-            "freeFen": free_fen,
-        })
-        .to_string())
-    }) {
+            .to_string())
+        },
+    ) {
         Ok(json_str) => string_into_raw(json_str, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -1002,21 +1008,24 @@ pub unsafe extern "C" fn smoldot_get_storage_value(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let native_storage_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
-                .map_err(|error| error.to_string())?
-        };
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
 
-        let storage_value = native_storage_future
-            .await
-            .map_err(|error| error.to_string())?
-            .pop()
-            .flatten();
-        Ok(json_storage_value_response_from_bytes(&storage_key_hex, storage_value).to_string())
-    }) {
+            let storage_value = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .flatten();
+            Ok(json_storage_value_response_from_bytes(&storage_key_hex, storage_value).to_string())
+        },
+    ) {
         Ok(json_str) => string_into_raw(json_str, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -1062,33 +1071,36 @@ pub unsafe extern "C" fn smoldot_get_storage_values(
         }
     };
 
-    match block_on_native_capability(chain_handle, move |chain_wrapper, client_wrapper| async move {
-        let decoded_storage_keys = storage_keys
-            .iter()
-            .map(|storage_key_hex| decode_prefixed_hex(storage_key_hex))
-            .collect::<Result<Vec<_>, _>>()?;
-        let native_storage_future = {
-            let client = client_wrapper.client.lock();
-            client
-                .chain_storage_values(chain_wrapper.chain_id, decoded_storage_keys)
-                .map_err(|error| error.to_string())?
-        };
+    match block_on_native_capability(
+        chain_handle,
+        move |chain_wrapper, client_wrapper| async move {
+            let decoded_storage_keys = storage_keys
+                .iter()
+                .map(|storage_key_hex| decode_prefixed_hex(storage_key_hex))
+                .collect::<Result<Vec<_>, _>>()?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_storage_values(chain_wrapper.chain_id, decoded_storage_keys)
+                    .map_err(|error| error.to_string())?
+            };
 
-        let native_values = native_storage_future
-            .await
-            .map_err(|error| error.to_string())?;
-        let mut values = serde_json::Map::with_capacity(storage_keys.len());
-        for (storage_key_hex, storage_value) in
-            storage_keys.iter().zip(native_values.into_iter())
-        {
-            let value_hex = storage_value
-                .map(|value_bytes| Value::String(format!("0x{}", hex::encode(value_bytes))))
-                .unwrap_or(Value::Null);
-            values.insert(storage_key_hex.clone(), value_hex);
-        }
+            let native_values = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?;
+            let mut values = serde_json::Map::with_capacity(storage_keys.len());
+            for (storage_key_hex, storage_value) in
+                storage_keys.iter().zip(native_values.into_iter())
+            {
+                let value_hex = storage_value
+                    .map(|value_bytes| Value::String(format!("0x{}", hex::encode(value_bytes))))
+                    .unwrap_or(Value::Null);
+                values.insert(storage_key_hex.clone(), value_hex);
+            }
 
-        Ok(Value::Object(values).to_string())
-    }) {
+            Ok(Value::Object(values).to_string())
+        },
+    ) {
         Ok(json_str) => string_into_raw(json_str, error_out),
         Err(message) => {
             set_error(error_out, &message);
@@ -1117,20 +1129,18 @@ where
     let chain_wrapper = get_chain_wrapper(chain_handle)?;
     let client_wrapper = get_client_wrapper(chain_wrapper.client_handle)?;
     std::thread::spawn(move || {
-        let result = client_wrapper.runtime.block_on(f(
-            Arc::clone(&chain_wrapper),
-            Arc::clone(&client_wrapper),
-        ));
+        let result = client_wrapper
+            .runtime
+            .block_on(f(Arc::clone(&chain_wrapper), Arc::clone(&client_wrapper)));
         match result {
             Ok(json_str) => {
-                let cstr = CString::new(json_str)
-                    .unwrap_or_else(|_| CString::new("{}").unwrap());
+                let cstr = CString::new(json_str).unwrap_or_else(|_| CString::new("{}").unwrap());
                 unsafe { callback(callback_id, cstr.as_ptr() as i64, std::ptr::null()) };
                 std::mem::forget(cstr);
             }
             Err(msg) => {
-                let cstr = CString::new(msg)
-                    .unwrap_or_else(|_| CString::new("Unknown error").unwrap());
+                let cstr =
+                    CString::new(msg).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
                 unsafe { callback(callback_id, 0, cstr.as_ptr()) };
                 std::mem::forget(cstr);
             }
@@ -1159,7 +1169,11 @@ pub unsafe extern "C" fn smoldot_get_status_snapshot_async(
     callback: DartCallback,
     error_out: *mut *mut c_char,
 ) -> c_int {
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         |chain_wrapper, client_wrapper| async move {
             let snapshot_future = {
                 let client = client_wrapper.client.lock();
@@ -1188,7 +1202,11 @@ pub unsafe extern "C" fn smoldot_get_runtime_version_async(
     callback: DartCallback,
     error_out: *mut *mut c_char,
 ) -> c_int {
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         |chain_wrapper, client_wrapper| async move {
             let snapshot_future = {
                 let client = client_wrapper.client.lock();
@@ -1200,7 +1218,9 @@ pub unsafe extern "C" fn smoldot_get_runtime_version_async(
             let apis = runtime_version
                 .apis
                 .iter()
-                .map(|(name_hash, version)| json!([format!("0x{}", hex::encode(name_hash)), *version]))
+                .map(|(name_hash, version)| {
+                    json!([format!("0x{}", hex::encode(name_hash)), *version])
+                })
                 .collect::<Vec<_>>();
             Ok(json!({
                 "specName": runtime_version.spec_name,
@@ -1224,7 +1244,11 @@ pub unsafe extern "C" fn smoldot_get_metadata_async(
     callback: DartCallback,
     error_out: *mut *mut c_char,
 ) -> c_int {
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         |chain_wrapper, client_wrapper| async move {
             let metadata_future = {
                 let client = client_wrapper.client.lock();
@@ -1265,7 +1289,11 @@ pub unsafe extern "C" fn smoldot_get_account_next_index_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let next_index_future = {
                 let client = client_wrapper.client.lock();
@@ -1306,7 +1334,11 @@ pub unsafe extern "C" fn smoldot_get_block_hash_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let known_block_hash_future = {
                 let client = client_wrapper.client.lock();
@@ -1334,12 +1366,11 @@ pub unsafe extern "C" fn smoldot_get_block_hash_async(
             if result.is_null() {
                 return Ok(String::new());
             }
-            result
-                .as_str()
-                .map(|s| s.to_string())
-                .ok_or_else(|| format!(
+            result.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                format!(
                     "chain_getBlockHash returned non-string for height {block_number}: {result}"
-                ))
+                )
+            })
         }
     )
 }
@@ -1377,7 +1408,11 @@ pub unsafe extern "C" fn smoldot_get_block_extrinsics_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let native_extrinsics_future = {
                 let client = client_wrapper.client.lock();
@@ -1422,7 +1457,11 @@ pub unsafe extern "C" fn smoldot_submit_extrinsic_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let result = native_json_rpc_request(
                 Arc::clone(&chain_wrapper),
@@ -1466,7 +1505,11 @@ pub unsafe extern "C" fn smoldot_get_system_account_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let storage_key = build_system_account_storage_key(&account_id);
             let storage_key_bytes = decode_prefixed_hex(&storage_key)?;
@@ -1495,7 +1538,10 @@ pub unsafe extern "C" fn smoldot_get_system_account_async(
             let value_bytes = decode_prefixed_hex(&value_hex)?;
             let nonce = if value_bytes.len() >= 4 {
                 Some(u32::from_le_bytes([
-                    value_bytes[0], value_bytes[1], value_bytes[2], value_bytes[3],
+                    value_bytes[0],
+                    value_bytes[1],
+                    value_bytes[2],
+                    value_bytes[3],
                 ]) as u64)
             } else {
                 None
@@ -1545,7 +1591,11 @@ pub unsafe extern "C" fn smoldot_get_storage_value_async(
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let native_storage_future = {
                 let client = client_wrapper.client.lock();
@@ -1585,12 +1635,19 @@ pub unsafe extern "C" fn smoldot_get_storage_values_async(
     let storage_keys: Vec<String> = match serde_json::from_str(&storage_keys_json) {
         Ok(value) => value,
         Err(error) => {
-            set_error(error_out, &format!("Failed to parse storage_keys_json: {error}"));
+            set_error(
+                error_out,
+                &format!("Failed to parse storage_keys_json: {error}"),
+            );
             return -1;
         }
     };
 
-    async_ffi_entry!(chain_handle, callback_id, callback, error_out,
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
         move |chain_wrapper, client_wrapper| async move {
             let decoded_storage_keys = storage_keys
                 .iter()
@@ -1635,8 +1692,8 @@ fn generate_chain_handle() -> ChainHandle {
 
 unsafe fn set_error(error_out: *mut *mut c_char, message: &str) {
     if !error_out.is_null() {
-        let error_cstr = CString::new(message)
-            .unwrap_or_else(|_| CString::new("Unknown error").unwrap());
+        let error_cstr =
+            CString::new(message).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
         *error_out = error_cstr.into_raw();
     }
 }
@@ -1690,10 +1747,7 @@ async fn dispatch_native_response(
 /// # Safety (threading)
 /// 必须从非 tokio 线程调用（即 Dart FFI 同步回调线程）。
 /// 如果从 tokio runtime 内部调用会导致死锁。
-fn block_on_native_capability<T, F, Fut>(
-    chain_handle: ChainHandle,
-    f: F,
-) -> Result<T, String>
+fn block_on_native_capability<T, F, Fut>(chain_handle: ChainHandle, f: F) -> Result<T, String>
 where
     F: FnOnce(Arc<SmoldotChainWrapper>, Arc<SmoldotClientWrapper>) -> Fut,
     Fut: std::future::Future<Output = Result<T, String>>,
@@ -1728,7 +1782,9 @@ async fn native_json_rpc_request(
 ) -> Result<Value, String> {
     let request_id = format!(
         "__native_{}",
-        chain_wrapper.next_native_request_id.fetch_add(1, Ordering::Relaxed)
+        chain_wrapper
+            .next_native_request_id
+            .fetch_add(1, Ordering::Relaxed)
     );
     let (sender, receiver) = tokio::sync::oneshot::channel::<String>();
 

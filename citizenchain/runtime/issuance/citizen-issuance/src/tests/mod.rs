@@ -7,8 +7,8 @@ use frame_support::{
 };
 use frame_system as system;
 use primitives::citizen_const::{
-    CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_HIGH_REWARD_COUNT,
-    CITIZEN_ISSUANCE_MAX_COUNT, CITIZEN_ISSUANCE_NORMAL_REWARD,
+    CITIZEN_ISSUANCE_HIGH_REWARD, CITIZEN_ISSUANCE_HIGH_REWARD_COUNT, CITIZEN_ISSUANCE_MAX_COUNT,
+    CITIZEN_ISSUANCE_NORMAL_REWARD,
 };
 use sp_runtime::{
     traits::{Hash, IdentityLookup},
@@ -133,13 +133,12 @@ fn max_cap_stops_reward() {
 #[test]
 fn max_count_minus_one_allows_last_reward_then_rejects_next() {
     new_test_ext().execute_with(|| {
-        let last_reward_amount = if CITIZEN_ISSUANCE_MAX_COUNT.saturating_sub(1)
-            < CITIZEN_ISSUANCE_HIGH_REWARD_COUNT
-        {
-            CITIZEN_ISSUANCE_HIGH_REWARD
-        } else {
-            CITIZEN_ISSUANCE_NORMAL_REWARD
-        };
+        let last_reward_amount =
+            if CITIZEN_ISSUANCE_MAX_COUNT.saturating_sub(1) < CITIZEN_ISSUANCE_HIGH_REWARD_COUNT {
+                CITIZEN_ISSUANCE_HIGH_REWARD
+            } else {
+                CITIZEN_ISSUANCE_NORMAL_REWARD
+            };
         let binding_id_a = <Test as frame_system::Config>::Hashing::hash(b"sfid-last-slot");
         let binding_id_b = <Test as frame_system::Config>::Hashing::hash(b"sfid-over-cap");
 

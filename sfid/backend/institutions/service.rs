@@ -247,7 +247,9 @@ pub fn is_clearing_bank_eligible(
 /// 校验机构主键 sfid_number 未被占用。
 pub fn ensure_institution_not_exists(store: &Store, sfid_number: &str) -> Result<(), ServiceError> {
     if store::contains_institution(store, sfid_number) {
-        return Err(ServiceError::Conflict("institution sfid_number already exists"));
+        return Err(ServiceError::Conflict(
+            "institution sfid_number already exists",
+        ));
     }
     Ok(())
 }
@@ -415,7 +417,9 @@ pub fn reconcile_public_security_for_province(
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };
-            store.multisig_institutions.insert(sfid_number.clone(), inst);
+            store
+                .multisig_institutions
+                .insert(sfid_number.clone(), inst);
             // 公安局 reconcile 同步插入 2 条默认未上链账户。
             insert_default_accounts_into_global_store(store, &sfid_number, actor);
             report.inserted += 1;
@@ -459,7 +463,11 @@ pub fn reconcile_public_security_for_province(
 ///
 /// 幂等:已存在账户不覆盖;仅在该 `(sfid_number, account_name)` 缺失时补齐。
 /// reconcile 本身持全局 store 写锁;sharded_store 的同步由启动后的分片同步流程补齐。
-pub fn insert_default_accounts_into_global_store(store: &mut Store, sfid_number: &str, actor: &str) {
+pub fn insert_default_accounts_into_global_store(
+    store: &mut Store,
+    sfid_number: &str,
+    actor: &str,
+) {
     use crate::institutions::derive::derive_duoqian_address;
     use crate::institutions::model::{account_key_to_string, MultisigAccount};
     let now = Utc::now();

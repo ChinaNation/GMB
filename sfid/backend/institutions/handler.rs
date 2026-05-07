@@ -673,7 +673,13 @@ pub(crate) async fn update_institution(
         // 校验目标机构存在 + a3 ∈ {SFR, GFR}
         let target_province = match resolve_province_from_sfid_number(&raw) {
             Some(p) => p,
-            None => return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人 sfid_number 格式无效"),
+            None => {
+                return api_error(
+                    StatusCode::BAD_REQUEST,
+                    1001,
+                    "所属法人 sfid_number 格式无效",
+                )
+            }
         };
         let raw_clone = raw.clone();
         let target_read = state

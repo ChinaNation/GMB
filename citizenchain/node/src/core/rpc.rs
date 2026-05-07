@@ -21,9 +21,7 @@ use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::crypto::KeyTypeId;
 use sp_keystore::Keystore;
-use sp_runtime::{
-    generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic, SaturatedConversion,
-};
+use sp_runtime::{generic::Era, traits::IdentifyAccount, MultiSigner, OpaqueExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 
 /// PoW 矿工密钥类型（与 service.rs 中 POW_AUTHOR_KEY_TYPE 一致）。

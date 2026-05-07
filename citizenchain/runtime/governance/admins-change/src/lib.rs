@@ -6,7 +6,6 @@
 
 extern crate alloc;
 
-use primitives::derive::subject_id_from_sfid_number;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use frame_support::{
@@ -17,23 +16,21 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
+use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_runtime::{traits::Zero, RuntimeDebug};
 use sp_std::collections::btree_set::BTreeSet;
 
 use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::{
     NRC_ADMIN_COUNT, NRC_INTERNAL_THRESHOLD, PRB_ADMIN_COUNT, PRB_INTERNAL_THRESHOLD,
     PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
 };
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
-    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome,
-    PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED,
-    STATUS_REJECTED, STATUS_VOTING,
+    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, PROPOSAL_KIND_INTERNAL,
+    STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
 
 pub use pallet::*;
@@ -284,8 +281,8 @@ pub mod pallet {
                 sfid_number
             )
         });
-        let threshold = default_threshold(org)
-            .unwrap_or_else(|| panic!("genesis: org {} 没有默认阈值", org));
+        let threshold =
+            default_threshold(org).unwrap_or_else(|| panic!("genesis: org {} 没有默认阈值", org));
         AdminSubject {
             org,
             kind: AdminSubjectKind::BuiltinInstitution,
@@ -333,11 +330,7 @@ pub mod pallet {
                 };
                 Subjects::<T>::insert(
                     institution,
-                    build_builtin_institution::<T>(
-                        node.sfid_number,
-                        ORG_PRB,
-                        node.duoqian_admins,
-                    ),
+                    build_builtin_institution::<T>(node.sfid_number, ORG_PRB, node.duoqian_admins),
                 );
             }
         }
@@ -447,8 +440,7 @@ pub mod pallet {
             );
 
             // 1) 校验管理员主体已激活且 org 匹配。
-            let subject =
-                Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 subject.status == AdminSubjectStatus::Active,
                 Error::<T>::SubjectNotActive
@@ -505,8 +497,7 @@ pub mod pallet {
             institution: SubjectId,
         ) -> Result<Vec<T::AccountId>, DispatchError> {
             // 中文注释：创世后只信任链上管理员状态，不再回退常量管理员。
-            let stored =
-                Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let stored = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
             Ok(stored.admins.into_inner())
         }
 
@@ -673,9 +664,7 @@ pub mod pallet {
         }
 
         /// 清理尚未激活的 Pending 管理员主体。
-        pub(crate) fn do_remove_pending_subject(
-            institution: SubjectId,
-        ) -> DispatchResult {
+        pub(crate) fn do_remove_pending_subject(institution: SubjectId) -> DispatchResult {
             if let Some(subject) = Subjects::<T>::get(institution) {
                 ensure!(
                     subject.status == AdminSubjectStatus::Pending,
@@ -740,10 +729,7 @@ pub mod pallet {
         }
 
         /// 读取 Active 主体管理员列表。普通业务提案创建和投票快照默认使用此 API。
-        pub fn active_subject_admins(
-            org: u8,
-            institution: SubjectId,
-        ) -> Option<Vec<T::AccountId>> {
+        pub fn active_subject_admins(org: u8, institution: SubjectId) -> Option<Vec<T::AccountId>> {
             let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
             Some(subject.admins.into_inner())
         }
@@ -755,19 +741,13 @@ pub mod pallet {
         }
 
         /// 读取 Active 主体管理员数量。普通业务阈值兜底判断只能使用 Active 主体。
-        pub fn active_subject_admin_count(
-            org: u8,
-            institution: SubjectId,
-        ) -> Option<u32> {
+        pub fn active_subject_admin_count(org: u8, institution: SubjectId) -> Option<u32> {
             let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
             Some(subject.admins.len() as u32)
         }
 
         /// 查询 Pending 主体是否存在。仅用于创建/激活该主体时判断主体合法性。
-        pub fn pending_subject_exists_for_snapshot(
-            org: u8,
-            institution: SubjectId,
-        ) -> bool {
+        pub fn pending_subject_exists_for_snapshot(org: u8, institution: SubjectId) -> bool {
             Self::subject_with_status(org, institution, AdminSubjectStatus::Pending).is_some()
         }
 

@@ -10,14 +10,6 @@
 
 extern crate alloc;
 
-use primitives::derive::subject_id_from_registered_sfid_number;
-use codec::Encode;
-use frame_support::{
-    ensure,
-    storage::{with_transaction, TransactionOutcome},
-    traits::ReservableCurrency,
-};
-use sp_runtime::{traits::Hash, DispatchResult};
 use crate::institution::accounts::{
     account_names_payload_from_initial_accounts, validate_initial_accounts,
 };
@@ -27,11 +19,19 @@ use crate::institution::types::{
 use crate::pallet::{
     AccountNameOf, AddressRegisteredSfid, Config, DuoqianAdminsOf, Error, Event,
     InstitutionAccounts, InstitutionInitialAccountsOf, Institutions, Pallet,
-    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidNumberOf, SfidRegisteredAddress,
-    UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
+    PendingInstitutionCreate, RegisterNonceOf, RegisterSignatureOf, SfidNumberOf,
+    SfidRegisteredAddress, UsedRegisterNonce, ACTION_CREATE_INSTITUTION,
 };
 use crate::traits::{ProtectedSourceChecker, SfidInstitutionVerifier};
 use crate::RegisteredInstitution;
+use codec::Encode;
+use frame_support::{
+    ensure,
+    storage::{with_transaction, TransactionOutcome},
+    traits::ReservableCurrency,
+};
+use primitives::derive::subject_id_from_registered_sfid_number;
+use sp_runtime::{traits::Hash, DispatchResult};
 use votingengine::InternalVoteEngine;
 
 /// 机构整体创建提案 (call_index=5,ADR-008 step2b)。
@@ -84,8 +84,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let (created_accounts, main_address, fee_address, initial_total) =
         validate_initial_accounts::<T>(&sfid_number, &accounts)?;
     // 共用余额预检查 helper(2026-05-03):amount + fee + ED 必须够。
-    let (reserve_total, fee) =
-        crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
+    let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
     // 中文注释:机构治理索引直接由 sfid_number 派生(2026-05-03 整改),
@@ -144,7 +143,11 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                     created_at: now,
                 },
             );
-            SfidRegisteredAddress::<T>::insert(&sfid_number, &account.account_name, &account.address);
+            SfidRegisteredAddress::<T>::insert(
+                &sfid_number,
+                &account.account_name,
+                &account.address,
+            );
             AddressRegisteredSfid::<T>::insert(
                 &account.address,
                 RegisteredInstitution {

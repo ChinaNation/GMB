@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env};
+use std::env;
 
 use axum::{
     extract::State,
@@ -9,11 +9,10 @@ use axum::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use rand::rngs::OsRng;
-use schnorrkel::{signing_context, MiniSecretKey, PublicKey, Signature};
+use schnorrkel::MiniSecretKey;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use uuid::Uuid;
 use crate::{err, ok, write_audit, ApiError, ApiResponse, AppState};
 
 // ── 密钥加密存储 ──────────────────────────────────────────────────────────
@@ -80,11 +79,12 @@ fn decrypt_secret(key_id: &str, stored: &str) -> Option<Vec<u8>> {
 }
 
 const FIXED_SUPER_ADMIN_COUNT: usize = 1;
-const FIXED_QR_SIGN_KEY_COUNT: usize = 1;
 
 #[derive(Clone)]
 pub struct QrSignKeyRuntime {
     pub key_id: String,
+    // 中文注释：当前只按 ACTIVE 取用；purpose 保留为数据库中的密钥用途审计字段。
+    #[allow(dead_code)]
     pub purpose: String,
     pub status: String,
     pub pubkey: String,
@@ -204,7 +204,6 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/admin/anon-cert", post(process_anon_cert))
 }
 
-
 async fn install_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<InstallStatusData>>, (StatusCode, Json<ApiError>)> {
@@ -219,17 +218,29 @@ async fn install_status(
             )
         })?;
 
-    let site_sfid = install_row.as_ref()
+    let site_sfid = install_row
+        .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten());
-    let province_name: Option<String> = install_row.as_ref()
-        .and_then(|r| r.try_get::<Option<String>, _>("province_name").ok().flatten());
-    let city_name: Option<String> = install_row.as_ref()
+    let province_name: Option<String> = install_row.as_ref().and_then(|r| {
+        r.try_get::<Option<String>, _>("province_name")
+            .ok()
+            .flatten()
+    });
+    let city_name: Option<String> = install_row
+        .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("city_name").ok().flatten());
-    let institution_name_val: Option<String> = install_row.as_ref()
-        .and_then(|r| r.try_get::<Option<String>, _>("institution_name").ok().flatten());
-    let anon_cert_stored: Option<String> = install_row.as_ref()
+    let institution_name_val: Option<String> = install_row.as_ref().and_then(|r| {
+        r.try_get::<Option<String>, _>("institution_name")
+            .ok()
+            .flatten()
+    });
+    let anon_cert_stored: Option<String> = install_row
+        .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("anon_cert").ok().flatten());
-    let anon_cert_done = anon_cert_stored.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+    let anon_cert_done = anon_cert_stored
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
 
     let keys = load_qr_sign_keys(&state).await?;
 
@@ -248,14 +259,16 @@ async fn install_status(
 
     // QR2 在超级管理员绑定后才可生成
     let admin_bound = super_admin_bound_count as usize >= FIXED_SUPER_ADMIN_COUNT;
-    let has_anon_pubkey = install_row.as_ref()
+    let has_anon_pubkey = install_row
+        .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("anon_pubkey").ok().flatten())
         .map(|s| !s.is_empty())
         .unwrap_or(false);
     let qr2_ready = admin_bound && has_anon_pubkey;
 
     // 从 DB 读取已持久化的 qr2_payload
-    let qr2_payload: Option<String> = install_row.as_ref()
+    let qr2_payload: Option<String> = install_row
+        .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("qr2_payload").ok().flatten())
         .filter(|s| !s.is_empty());
 
@@ -356,7 +369,13 @@ async fn initialize_install(
         .bind(qr_payload.institution_name.as_deref())
         .execute(tx.as_mut())
         .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "reauthorize update failed"))?;
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "reauthorize update failed",
+            )
+        })?;
 
         // qr_sign_keys / admin_users / archives 全部保留，不动
 
@@ -403,9 +422,7 @@ async fn initialize_install(
                 )
             })?;
 
-        let key_meta = [
-            ("K1", "PRIMARY", "ACTIVE"),
-        ];
+        let key_meta = [("K1", "PRIMARY", "ACTIVE")];
 
         for (key_id, purpose, status) in key_meta {
             let (pubkey, secret_raw) = generate_sr25519_keypair_raw();
@@ -459,7 +476,13 @@ async fn generate_qr2(
     )
     .fetch_one(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "count super admin failed"))?;
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "count super admin failed",
+        )
+    })?;
     if (admin_count as usize) < FIXED_SUPER_ADMIN_COUNT {
         return Err(err(StatusCode::CONFLICT, 4003, "super admin not bound yet"));
     }
@@ -471,19 +494,28 @@ async fn generate_qr2(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query install failed"))?
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "not initialized"))?;
 
-    let site_sfid: String = row.try_get::<Option<String>, _>("site_sfid")
-        .ok().flatten()
+    let site_sfid: String = row
+        .try_get::<Option<String>, _>("site_sfid")
+        .ok()
+        .flatten()
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "site_sfid not found"))?;
-    let install_token: String = row.try_get::<Option<String>, _>("install_token")
-        .ok().flatten()
+    let install_token: String = row
+        .try_get::<Option<String>, _>("install_token")
+        .ok()
+        .flatten()
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "install_token not found"))?;
-    let rsa_pubkey_pem: String = row.try_get::<Option<String>, _>("rsa_public_key_pem")
-        .ok().flatten()
+    let rsa_pubkey_pem: String = row
+        .try_get::<Option<String>, _>("rsa_public_key_pem")
+        .ok()
+        .flatten()
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "rsa_public_key_pem not found"))?;
 
     // 如果已经生成过匿名密钥，直接返回 QR2（幂等）
-    let existing_anon: Option<String> = row.try_get::<Option<String>, _>("anon_pubkey")
-        .ok().flatten().filter(|s| !s.is_empty());
+    let existing_anon: Option<String> = row
+        .try_get::<Option<String>, _>("anon_pubkey")
+        .ok()
+        .flatten()
+        .filter(|s| !s.is_empty());
     if existing_anon.is_some() {
         // 需要从 DB 重建 QR2，但 blind_msg 没有单独存储
         // 重新盲化（幂等生成新 QR2）
@@ -501,7 +533,13 @@ async fn generate_qr2(
         &anon_pubkey_hex,
         &province_code,
     )
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("blind failed: {e}")))?;
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            &format!("blind failed: {e}"),
+        )
+    })?;
 
     let blinding_secret_hex = hex::encode(&blinding_output.blinding_secret);
     sqlx::query(
@@ -522,15 +560,26 @@ async fn generate_qr2(
         token: install_token,
         blind: format!("0x{}", blinding_output.blind_msg_hex),
     };
-    let qr2_payload = serde_json::to_string(&qr2)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize QR2 failed"))?;
+    let qr2_payload = serde_json::to_string(&qr2).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "serialize QR2 failed",
+        )
+    })?;
 
     // 持久化 qr2_payload，重新生成时覆盖旧值
     sqlx::query("UPDATE system_install SET qr2_payload = $1 WHERE id = 1")
         .bind(&qr2_payload)
         .execute(&state.db)
         .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save qr2_payload failed"))?;
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "save qr2_payload failed",
+            )
+        })?;
 
     write_audit(
         &state,
@@ -561,40 +610,70 @@ async fn process_anon_cert(
         return Err(err(StatusCode::BAD_REQUEST, 1001, "empty qr content"));
     }
 
-    let qr3: SfidAnonCertQrPayload =
-        serde_json::from_str(req.sfid_anon_cert_qr_content.trim())
-            .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid QR3 payload"))?;
+    let qr3: SfidAnonCertQrPayload = serde_json::from_str(req.sfid_anon_cert_qr_content.trim())
+        .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid QR3 payload"))?;
 
     if qr3.r#type != "CERT" {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "type must be CERT"));
     }
+    if qr3.proto != "SFID_CPMS_V1" {
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "proto must be SFID_CPMS_V1",
+        ));
+    }
     if qr3.prov.trim().is_empty() || qr3.bsig.trim().is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "prov and bsig are required"));
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "prov and bsig are required",
+        ));
     }
 
     // 读取本机 anon_pubkey、blinding_factor 和 RSA 公钥
-    let row = sqlx::query("SELECT anon_pubkey, blinding_factor, rsa_public_key_pem FROM system_install WHERE id = 1")
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query anon_pubkey failed"))?
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "not initialized"))?;
+    let row = sqlx::query(
+        "SELECT anon_pubkey, blinding_factor, rsa_public_key_pem FROM system_install WHERE id = 1",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query anon_pubkey failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "not initialized"))?;
 
     let anon_pubkey: Option<String> = row.get("anon_pubkey");
     let anon_pubkey = anon_pubkey.ok_or_else(|| {
-        err(StatusCode::CONFLICT, 4003, "anon_pubkey not found, run initialize first")
+        err(
+            StatusCode::CONFLICT,
+            4003,
+            "anon_pubkey not found, run initialize first",
+        )
     })?;
 
     let blinding_factor_hex: Option<String> = row.get("blinding_factor");
     let blinding_factor_hex = blinding_factor_hex.ok_or_else(|| {
-        err(StatusCode::CONFLICT, 4003, "blinding_factor not found, run initialize first")
+        err(
+            StatusCode::CONFLICT,
+            4003,
+            "blinding_factor not found, run initialize first",
+        )
     })?;
-    let blinding_secret = hex::decode(blinding_factor_hex.trim())
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "blinding_factor hex decode failed"))?;
+    let blinding_secret = hex::decode(blinding_factor_hex.trim()).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "blinding_factor hex decode failed",
+        )
+    })?;
 
     let rsa_pubkey_pem: Option<String> = row.get("rsa_public_key_pem");
-    let rsa_pubkey_pem = rsa_pubkey_pem.ok_or_else(|| {
-        err(StatusCode::CONFLICT, 4003, "rsa_public_key_pem not found")
-    })?;
+    let rsa_pubkey_pem = rsa_pubkey_pem
+        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "rsa_public_key_pem not found"))?;
 
     // 解盲 blind_anon_sig
     let finalized = crate::rsa_blind_client::finalize_signature(
@@ -604,7 +683,13 @@ async fn process_anon_cert(
         &anon_pubkey,
         &qr3.prov,
     )
-    .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, &format!("finalize failed: {e}")))?;
+    .map_err(|e| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            &format!("finalize failed: {e}"),
+        )
+    })?;
 
     let anon_cert = AnonCert {
         prov: qr3.prov.clone(),
@@ -613,15 +698,26 @@ async fn process_anon_cert(
         mr: finalized.msg_randomizer_hex,
     };
 
-    let anon_cert_json = serde_json::to_string(&anon_cert)
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "serialize anon_cert failed"))?;
+    let anon_cert_json = serde_json::to_string(&anon_cert).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "serialize anon_cert failed",
+        )
+    })?;
 
     // 持久化匿名证书
     sqlx::query("UPDATE system_install SET anon_cert = $1 WHERE id = 1")
         .bind(&anon_cert_json)
         .execute(&state.db)
         .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save anon_cert failed"))?;
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "save anon_cert failed",
+            )
+        })?;
 
     write_audit(
         &state,
@@ -645,20 +741,33 @@ async fn bind_super_admin_from_wuminapp(
 ) -> Result<Json<ApiResponse<BindSuperAdminData>>, (StatusCode, Json<ApiError>)> {
     let raw_input = req.admin_pubkey.trim().to_string();
     if raw_input.is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "admin_pubkey is required"));
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "admin_pubkey is required",
+        ));
     }
     // 归一化公钥：支持 SS58 地址或 0x hex 公钥
     let admin_pubkey = {
         // 先尝试 0x hex
-        let stripped = raw_input.strip_prefix("0x").or_else(|| raw_input.strip_prefix("0X")).unwrap_or(&raw_input);
+        let stripped = raw_input
+            .strip_prefix("0x")
+            .or_else(|| raw_input.strip_prefix("0X"))
+            .unwrap_or(&raw_input);
         if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
             stripped.to_lowercase()
         } else if let Some(hex_with_prefix) = crate::ss58::ss58_to_pubkey_hex(&raw_input) {
             // SS58 地址 → 解码为 0x hex → 去掉 0x 前缀
-            hex_with_prefix.strip_prefix("0x").unwrap_or(&hex_with_prefix).to_lowercase()
+            hex_with_prefix
+                .strip_prefix("0x")
+                .unwrap_or(&hex_with_prefix)
+                .to_lowercase()
         } else {
-            return Err(err(StatusCode::BAD_REQUEST, 1001,
-                "admin_pubkey must be SS58 address or 32-byte hex (64 hex chars)"));
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "admin_pubkey must be SS58 address or 32-byte hex (64 hex chars)",
+            ));
         }
     };
 
@@ -685,11 +794,7 @@ async fn bind_super_admin_from_wuminapp(
                 )
             })?;
     if count as usize >= FIXED_SUPER_ADMIN_COUNT {
-        return Err(err(
-            StatusCode::CONFLICT,
-            4004,
-            "super admin already bound",
-        ));
+        return Err(err(StatusCode::CONFLICT, 4004, "super admin already bound"));
     }
 
     let pubkey_exists: Option<String> =
@@ -803,8 +908,6 @@ pub(crate) async fn load_qr_sign_keys(
     Ok(out)
 }
 
-
-
 fn parse_sfid_install_qr_content(content: &str) -> Result<SfidInstallQrPayload, String> {
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -831,8 +934,16 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
         || payload.sfid.trim().is_empty()
         || payload.token.trim().is_empty()
         || payload.rsa.trim().is_empty()
+        || payload.sig.trim().is_empty()
     {
         return Err("invalid sfid install qr payload".to_string());
+    }
+
+    if payload.proto != "SFID_CPMS_V1" {
+        return Err(format!(
+            "invalid sfid install proto '{}', expected SFID_CPMS_V1",
+            payload.proto
+        ));
     }
 
     if payload.r#type != "INSTALL" {
@@ -847,56 +958,16 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
     Ok(())
 }
 
-fn verify_sr25519_signature(
-    pubkey: &str,
-    payload: &str,
-    signature: &str,
-    context: &[u8],
-) -> Result<(), String> {
-    let pubkey_bytes = decode_bytes(pubkey).ok_or_else(|| "invalid pubkey encoding".to_string())?;
-    if pubkey_bytes.len() != 32 {
-        return Err("invalid pubkey length".to_string());
-    }
-
-    let sig_bytes =
-        decode_bytes(signature).ok_or_else(|| "invalid signature encoding".to_string())?;
-    if sig_bytes.len() != 64 {
-        return Err("invalid signature length".to_string());
-    }
-
-    let pk = PublicKey::from_bytes(&pubkey_bytes)
-        .map_err(|_| "invalid sr25519 public key".to_string())?;
-    let sig =
-        Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature".to_string())?;
-    pk.verify(signing_context(context).bytes(payload.as_bytes()), &sig)
-        .map_err(|_| "sr25519 verify failed".to_string())
-}
-
 /// 生成 sr25519 密钥对，返回 (0x hex pubkey, secret_raw_32bytes)。
 /// pubkey 统一 0x 小写 hex 格式（feedback_pubkey_format_rule.md）。
 fn generate_sr25519_keypair_raw() -> (String, [u8; 32]) {
     let mini = MiniSecretKey::generate_with(OsRng);
     let secret = mini.to_bytes();
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
-    (format!("0x{}", hex::encode(keypair.public.to_bytes())), secret)
-}
-
-fn decode_bytes(input: &str) -> Option<Vec<u8>> {
-    let trimmed = input.trim();
-
-    let hex_raw = trimmed
-        .strip_prefix("0x")
-        .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed);
-    if let Ok(v) = hex::decode(hex_raw) {
-        return Some(v);
-    }
-
-    if let Ok(v) = STANDARD.decode(trimmed) {
-        return Some(v);
-    }
-
-    None
+    (
+        format!("0x{}", hex::encode(keypair.public.to_bytes())),
+        secret,
+    )
 }
 
 /// 从裸 base64 重建 PEM 信封。

@@ -44,5 +44,5 @@ sfid 后端存在两个看起来都叫 `sfid_number` 的东西,**但它们不是
 ## 参考
 
 - 任务卡 `20260408-sfid-public-security-cpms-embed`
-- `sfid/backend/src/sheng-admins/institutions.rs::get_cpms_site_by_institution`
-- `sfid/backend/src/app_core/runtime_ops.rs::cleanup_orphan_cpms_sites`
+- `sfid/backend/sheng_admins/institutions.rs::get_cpms_site_by_institution`
+- `sfid/backend/app_core/runtime_ops.rs::cleanup_orphan_cpms_sites`

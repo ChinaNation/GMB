@@ -15,12 +15,12 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use sp_runtime::traits::Hash as _;
 use sp_runtime::DispatchError;
 
+#[cfg(feature = "runtime-benchmarks")]
+use crate::pallet::ProposalExecutionRetryStates;
 use crate::pallet::{
     self, Error, ProposalData, ProposalDisplayId, ProposalMeta, ProposalObject, ProposalObjectMeta,
     ProposalOwner, Proposals,
 };
-#[cfg(feature = "runtime-benchmarks")]
-use crate::pallet::ProposalExecutionRetryStates;
 #[cfg(feature = "runtime-benchmarks")]
 use crate::ExecutionRetryState;
 #[cfg(feature = "runtime-benchmarks")]
@@ -73,10 +73,9 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         // 双层 ID v1:写入 4 张反向索引(org / institution / owner / year)。
         // 索引依赖此时已落地的 Proposals[id](allocate_proposal_id 已写入)与
         // ProposalDisplayId[id](同上)。任一失败,本事务整体回滚。
-        let proposal = Proposals::<T>::get(proposal_id)
-            .ok_or(Error::<T>::ProposalNotFound)?;
-        let display = ProposalDisplayId::<T>::get(proposal_id)
-            .ok_or(Error::<T>::ProposalNotFound)?;
+        let proposal = Proposals::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
+        let display =
+            ProposalDisplayId::<T>::get(proposal_id).ok_or(Error::<T>::ProposalNotFound)?;
         Self::register_proposal_indexes(
             proposal_id,
             proposal.internal_org,
@@ -89,10 +88,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     /// 存储提案业务数据(仅保留给 votingengine crate 内部测试/迁移使用)。
     #[cfg(test)]
-    pub fn store_proposal_data(
-        proposal_id: u64,
-        data: sp_std::vec::Vec<u8>,
-    ) -> DispatchResult {
+    pub fn store_proposal_data(proposal_id: u64, data: sp_std::vec::Vec<u8>) -> DispatchResult {
         let bounded: BoundedVec<u8, T::MaxProposalDataLen> = data
             .try_into()
             .map_err(|_| DispatchError::Other("ProposalDataTooLarge"))?;
@@ -170,9 +166,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 读取提案对象层元数据。
-    pub fn get_proposal_object_meta(
-        proposal_id: u64,
-    ) -> Option<ProposalObjectMetadata<T::Hash>> {
+    pub fn get_proposal_object_meta(proposal_id: u64) -> Option<ProposalObjectMetadata<T::Hash>> {
         ProposalObjectMeta::<T>::get(proposal_id)
     }
 

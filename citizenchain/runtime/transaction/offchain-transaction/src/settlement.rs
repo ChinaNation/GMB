@@ -54,7 +54,10 @@ fn calc_fee(transfer_amount: u128, rate_bp: u32) -> Result<u128, &'static str> {
     } else {
         quotient
     };
-    Ok(core::cmp::max(rounded, primitives::fee_policy::OFFCHAIN_MIN_FEE))
+    Ok(core::cmp::max(
+        rounded,
+        primitives::fee_policy::OFFCHAIN_MIN_FEE,
+    ))
 }
 
 /// 清算行批次上链的完整执行。
