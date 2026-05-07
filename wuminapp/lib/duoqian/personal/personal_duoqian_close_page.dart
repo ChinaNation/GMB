@@ -148,13 +148,11 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
         }
         // 冷钱包路径
         final qrSigner = QrSigner();
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'close-dq-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'propose_close_personal',
             summary: '发起关闭个人多签账户提案',

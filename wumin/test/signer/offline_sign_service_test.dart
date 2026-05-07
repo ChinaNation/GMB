@@ -6,7 +6,6 @@ import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:sr25519/sr25519.dart' as sr25519;
 import 'package:substrate_bip39/crypto_scheme.dart';
 import 'package:wumin/signer/offline_sign_service.dart';
-import 'package:wumin/signer/pallet_registry.dart';
 import 'package:wumin/qr/qr_protocols.dart';
 import 'package:wumin/qr/envelope.dart';
 import 'package:wumin/qr/bodies/sign_request_body.dart';
@@ -19,7 +18,6 @@ SignRequestEnvelope _buildTestRequest({
   required String address,
   required String pubkey,
   required String payloadHex,
-  required int specVersion,
   required SignDisplay display,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -33,7 +31,6 @@ SignRequestEnvelope _buildTestRequest({
       pubkey: pubkey,
       sigAlg: 'sr25519',
       payloadHex: payloadHex,
-      specVersion: specVersion,
       display: display,
     ),
   );
@@ -57,13 +54,11 @@ void main() {
       // 所有管理员投票走 InternalVote(22).cast(0)
       // payload = [0x16][0x00][u64 LE proposal_id=1][bool approve=1]
       const payloadHex = '0x16000100000000000000' '01';
-      final knownSpec = PalletRegistry.supportedSpecVersions.first;
       final request = _buildTestRequest(
         requestId: 'offline-req-test-0001',
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: payloadHex,
-        specVersion: knownSpec,
         display: const SignDisplay(
           action: 'internal_vote',
           summary: '管理员投票 提案 #1：赞成',
@@ -94,55 +89,8 @@ void main() {
       );
     });
 
-    test('verifyPayload returns decodeFailed for unknown specVersion', () {
-      final request = _buildTestRequest(
-        requestId: 'offline-req-test-spec',
-        address: hotWallet.address,
-        pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex: '0x0203000102030405060708091011121314151617181920212223242526272829303132330401',
-        specVersion: 999,
-        display: const SignDisplay(
-          action: 'transfer',
-          summary: 'test transfer',
-        ),
-      );
-
-      final verification = service.verifyPayload(request);
-      expect(verification.displayMatch, DisplayMatchStatus.decodeFailed);
-      expect(verification.decoded, isNull);
-    });
-
-    test('signParsedRequest 拒绝 decodeFailed(未知 specVersion)', () async {
-      // 两色识别模型: decodeFailed → 红色拒签,不再有白名单兜底。
-      final request = _buildTestRequest(
-        requestId: 'offline-req-test-decode-fail',
-        address: hotWallet.address,
-        pubkey: '0x${hotWallet.pubkeyHex}',
-        payloadHex:
-            '0x130000' // 任意非本 runtime 合法 payload
-            'deadbeef',
-        specVersion: 999, // 未支持的 spec
-        display: const SignDisplay(
-          // 即便 action 恰是本仓库白名单旧条目,也必须拒签。
-          action: 'propose_transfer',
-          summary: 'fake propose',
-        ),
-      );
-
-      expect(
-        () => service.signParsedRequest(
-          walletIndex: hotWallet.walletIndex,
-          request: request,
-        ),
-        throwsA(
-          isA<OfflineSignException>().having(
-            (e) => e.code,
-            'code',
-            OfflineSignErrorCode.displayMismatch,
-          ),
-        ),
-      );
-    });
+    // spec_version 门控测试已删:strict 两色模式独家把关,
+    // 任何 spec_version 都尝试解码,布局变了 strict 模式自然拦下来。
 
     test('signParsedRequest 拒绝 mismatched(action 不一致)', () async {
       // decode 成功但 display.action 和 decoded.action 不一致 → 红色拒签。
@@ -152,7 +100,6 @@ void main() {
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: payloadHex,
-        specVersion: PalletRegistry.supportedSpecVersions.first,
         display: const SignDisplay(
           action: 'joint_vote', // decoder 会解码为 'internal_vote'
           summary: '恶意伪造',
@@ -178,16 +125,14 @@ void main() {
       );
     });
 
-    test('verifyPayload decodes known specVersion', () {
+    test('verifyPayload decodes transfer payload', () {
       // Balances::transfer_keep_alive: pallet=2, call=3
       // MultiAddress::Id prefix=0x00, then 32 bytes dest, then compact amount
-      final knownSpecVersion = PalletRegistry.supportedSpecVersions.first;
       final request = _buildTestRequest(
         requestId: 'offline-req-test-known',
         address: hotWallet.address,
         pubkey: '0x${hotWallet.pubkeyHex}',
         payloadHex: '0x020300aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0491',
-        specVersion: knownSpecVersion,
         display: const SignDisplay(
           action: 'transfer',
           summary: 'test transfer',
@@ -210,7 +155,6 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x0102',
-        specVersion: PalletRegistry.supportedSpecVersions.first,
         display: const SignDisplay(
           action: 'login',
           summary: 'test login',

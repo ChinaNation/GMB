@@ -3,8 +3,9 @@
 /// 索引由 runtime 的 `construct_runtime!` 宏中声明顺序决定。
 /// 链升级调整 pallet 顺序后，需同步更新此文件中的常量。
 ///
-/// [supportedSpecVersions] 列出当前注册表适配的 spec_version 集合。
-/// 离线设备收到未知 spec_version 时应拒绝解码，提示用户升级冷钱包。
+/// 防误签靠两色严格模式:decoder 解析失败 / display.action 与 decoded.action 不一致
+/// 直接拒签,无需依赖 spec_version 门控(原 supportedSpecVersions / isSupported 已删,
+/// 因为它跟 strict 模式重叠且阻塞合法新 spec)。
 ///
 /// 投票引擎统一入口:
 /// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(22.0)
@@ -17,20 +18,6 @@
 /// `VotingEngine::cancel_passed_proposal`(9.5),业务 pallet 不承载 wrapper extrinsic。
 class PalletRegistry {
   const PalletRegistry._();
-
-  /// 当前注册表适配的链 spec_version 集合。
-  /// 遇到旧 spec 的离线请求视为过期,拒绝解码。
-  static const Set<int> supportedSpecVersions = {0};
-
-  /// 检查给定 spec_version 是否与当前注册表兼容。
-  ///
-  /// - 返回 `true`：可安全解码
-  /// - 返回 `false`：spec_version 未知，解码可能错位
-  /// - [specVersion] 为 null 时（旧版在线端未发送），返回 `false`
-  static bool isSupported(int? specVersion) {
-    if (specVersion == null) return false;
-    return supportedSpecVersions.contains(specVersion);
-  }
 
   // ---- Balances (2) ----
   static const int balancesPallet = 2;

@@ -269,14 +269,12 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final summaryType = _isCreateProposal ? '创建多签' : '关闭多签';
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'internal_vote',
             summary: '$summaryType提案 #${widget.proposalId} 投票：$voteText',

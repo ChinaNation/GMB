@@ -112,7 +112,6 @@ where
     // 3. 查询链信息
     let info = (*client).info();
     let best_hash = info.best_hash;
-    let best_number = info.best_number;
     let genesis_hash = client
         .hash(0)
         .map_err(|e| ErrorObject::owned(-1, format!("查询创世块哈希失败: {e}"), None::<()>))?
@@ -131,11 +130,7 @@ where
         .version(best_hash)
         .map_err(|e| ErrorObject::owned(-1, format!("查询运行时版本失败: {e}"), None::<()>))?;
 
-    // 5. 构造 TxExtension（与 benchmarking.rs 完全一致）
-    let period = runtime::configs::BlockHashCount::get()
-        .checked_next_power_of_two()
-        .map(|c| c / 2)
-        .unwrap_or(2) as u64;
+    // 5. 构造 TxExtension(immortal era,与 benchmarking.rs / signing.rs 一致)
     let tx_ext: runtime::TxExtension = (
         frame_system::AuthorizeCall::<runtime::Runtime>::new(),
         frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
@@ -143,10 +138,7 @@ where
         frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
         frame_system::CheckTxVersion::<runtime::Runtime>::new(),
         frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::mortal(
-            period,
-            best_number.saturated_into(),
-        )),
+        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
         frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
         frame_system::CheckWeight::<runtime::Runtime>::new(),
         pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
@@ -154,7 +146,7 @@ where
         frame_system::WeightReclaim::<runtime::Runtime>::new(),
     );
 
-    // 6. 签名
+    // 6. 签名(immortal: CheckEra additional_signed = genesis_hash)
     let raw_payload = runtime::SignedPayload::from_raw(
         call.clone(),
         tx_ext.clone(),
@@ -165,7 +157,7 @@ where
             on_chain_version.spec_version,
             on_chain_version.transaction_version,
             genesis_hash,
-            best_hash,
+            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash
             (),
             (),
             (),

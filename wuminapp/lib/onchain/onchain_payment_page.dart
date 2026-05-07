@@ -10,7 +10,6 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/onchain/onchain_payment_models.dart';
 import 'package:wuminapp_mobile/onchain/onchain_payment_service.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
@@ -330,13 +329,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                   AmountFormat.tryParse(_amountController.text) ?? 0,
                   symbol: '')
               .trim();
-          final rv = await ChainRpc().fetchRuntimeVersion();
           final request = qrSigner.buildRequest(
             requestId: requestId,
             address: wallet.address,
             pubkey: '0x${wallet.pubkeyHex}',
             payloadHex: '0x${_toHex(payload)}',
-            specVersion: rv.specVersion,
             display: SignDisplay(
               action: 'transfer',
               summary: '转账 $amountFormatted $_selectedSymbol 给 $toAddr',

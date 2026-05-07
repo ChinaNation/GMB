@@ -221,15 +221,7 @@ pub fn build_signed_extrinsic(
         .map_err(|e| format!("读取 genesis_hash 失败:{e}"))?
         .ok_or_else(|| "Genesis block 尚未可用".to_string())?;
 
-    let info = client.info();
-    let best_hash = info.best_hash;
-    let best_block = info.best_number;
-
-    let period = runtime::configs::BlockHashCount::get()
-        .checked_next_power_of_two()
-        .map(|c| c / 2)
-        .unwrap_or(2) as u64;
-
+    // immortal era(feedback_sfid_pow_chain_recipe.md):PoW 链 offchain submitter 一律 immortal
     let tx_ext: runtime::TxExtension = (
         frame_system::AuthorizeCall::<runtime::Runtime>::new(),
         frame_system::CheckNonZeroSender::<runtime::Runtime>::new(),
@@ -237,10 +229,7 @@ pub fn build_signed_extrinsic(
         frame_system::CheckSpecVersion::<runtime::Runtime>::new(),
         frame_system::CheckTxVersion::<runtime::Runtime>::new(),
         frame_system::CheckGenesis::<runtime::Runtime>::new(),
-        frame_system::CheckEra::<runtime::Runtime>::from(Era::mortal(
-            period,
-            best_block.saturated_into(),
-        )),
+        frame_system::CheckEra::<runtime::Runtime>::from(Era::Immortal),
         frame_system::CheckNonce::<runtime::Runtime>::from(nonce),
         frame_system::CheckWeight::<runtime::Runtime>::new(),
         pallet_transaction_payment::ChargeTransactionPayment::<runtime::Runtime>::from(0),
@@ -258,7 +247,7 @@ pub fn build_signed_extrinsic(
             runtime::VERSION.spec_version,
             runtime::VERSION.transaction_version,
             genesis_hash,
-            best_hash,
+            genesis_hash, // CheckEra: immortal → block_hash(0) = genesis_hash
             (),
             (),
             (),

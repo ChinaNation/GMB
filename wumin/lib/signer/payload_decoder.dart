@@ -47,11 +47,7 @@ class PayloadDecoder {
   /// [payloadHex] 为完整 SigningPayload 编码的 hex 字符串。
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
-  /// [specVersion] 为链 runtime 版本号。当 spec_version 不在
-  /// [PalletRegistry.supportedSpecVersions] 中时直接返回 null，
-  /// 避免因 pallet 索引偏移导致错误解码。
-  ///
-  /// 返回 null 表示无法识别或解码失败。
+  /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
   /// "GMB_ACTIVATE" 前缀（12 字节 ASCII）。
   static const _activatePrefix = [
     0x47, 0x4D, 0x42, 0x5F, // GMB_
@@ -69,7 +65,7 @@ class PayloadDecoder {
     0x56, 0x31, // V1
   ];
 
-  static DecodedPayload? decode(String payloadHex, {int? specVersion}) {
+  static DecodedPayload? decode(String payloadHex) {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
@@ -101,8 +97,10 @@ class PayloadDecoder {
       // 非 challenge payload，继续正常解码。
     }
 
-    // spec_version 不在已知列表中时放弃解码，由调用方走 decodeFailed 路径。
-    if (!PalletRegistry.isSupported(specVersion)) return null;
+    // 防误签由 strict 两色模式独家把关:
+    // - decoder 解析失败(任何分支不匹配返回 null) → decodeFailed → 禁止签名
+    // - 解析成功但 display.action != decoded.action → mismatched → 禁止签名
+    // 不再额外按 spec_version 锁布局,合法新 spec 可直接解码,布局变了 strict 模式自动拦截。
     try {
       final bytes = _hexToBytes(payloadHex);
       if (bytes.length < 2) return null;

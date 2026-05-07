@@ -137,7 +137,6 @@ class ActivationService {
       address: account,
       pubkey: '0x$pk',
       payloadHex: payloadHex,
-      specVersion: 0,
       display: SignDisplay(
         action: 'activate_admin',
         summary: '激活机构管理员',

@@ -54,7 +54,6 @@ void main() {
           'pubkey': testPubkeyHex,
           'sig_alg': 'sr25519',
           'payload_hex': '0x0102',
-          'spec_version': 100,
           'display': {'action': 'test', 'summary': '测试', 'fields': []},
         },
       };
@@ -71,7 +70,6 @@ void main() {
       expect(parsed.body.pubkey, testPubkeyHex);
       expect(parsed.body.sigAlg, 'sr25519');
       expect(parsed.body.payloadHex, '0x0102');
-      expect(parsed.body.specVersion, 100);
       expect(parsed.body.display.action, 'test');
       expect(parsed.body.display.summary, '测试');
     });
@@ -168,7 +166,6 @@ void main() {
           pubkey: testPubkeyHex,
           sigAlg: 'sr25519',
           payloadHex: '0x01020304',
-          specVersion: 100,
           display: const SignDisplay(action: 'test', summary: '测试'),
         ),
       );

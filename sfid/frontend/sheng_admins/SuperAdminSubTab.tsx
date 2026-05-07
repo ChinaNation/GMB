@@ -423,7 +423,6 @@ function buildSignerQr(adminPubkey: string, prepare: SignerPrepareResult) {
       pubkey: adminPubkey,
       sig_alg: 'sr25519',
       payload_hex: prepare.payload_hex,
-      spec_version: 0,
       display: {
         action: prepare.display_action,
         summary: prepare.display_summary,

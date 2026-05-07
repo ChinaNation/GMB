@@ -14,7 +14,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const PROTOCOL_VERSION: &str = "WUMIN_QR_V1";
 const DEFAULT_TTL_SECS: u64 = 90;
-const MORTAL_ERA_PERIOD: u64 = 64;
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 /// SS58 前缀 2027。
@@ -46,13 +45,16 @@ pub(crate) fn format_amount(yuan: f64) -> String {
 // ──── QR 协议数据结构 ────
 
 /// 签名请求 body(节点桌面端 → 离线设备)。
+///
+/// 注:历史上含 `spec_version: u32` 字段供冷钱包 decoder 锁布局,已随 strict
+/// 两色模式独家把关而删除(2026-05-07)。SCALE additional_signed 的 spec_version
+/// 仍在 payload_hex 内部 4 字节编码,链端验签直接拿这个,不依赖 envelope 字段。
 #[derive(Debug, Serialize)]
 pub struct SignRequestBody {
     pub address: String,
     pub pubkey: String,
     pub sig_alg: String,
     pub payload_hex: String,
-    pub spec_version: u32,
     pub display: serde_json::Value,
 }
 
@@ -198,7 +200,6 @@ pub fn build_vote_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
             display,
         },
     };
@@ -287,7 +288,6 @@ pub fn build_joint_vote_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
             display,
         },
     };
@@ -414,7 +414,6 @@ pub fn build_propose_transfer_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
             display,
         },
     };
@@ -512,7 +511,6 @@ pub fn build_propose_safety_fund_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
             display,
         },
     };
@@ -607,7 +605,6 @@ pub fn build_propose_sweep_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version: spec_version,
             display,
         },
     };
@@ -707,7 +704,6 @@ pub fn build_developer_upgrade_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
-            spec_version: spec_version,
             display,
         },
     };
@@ -818,7 +814,6 @@ pub fn build_propose_runtime_upgrade_sign_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(payload_for_qr.as_bytes())),
-            spec_version: spec_version,
             display,
         },
     };
@@ -1297,17 +1292,6 @@ fn decode_hash32(hex_str: &str) -> Result<[u8; 32], String> {
     Ok(out)
 }
 
-/// Mortal era 编码（与 Substrate 的 MortalEra::new(period, block_number) 一致）。
-fn encode_mortal_era(period: u64, block_number: u64) -> Vec<u8> {
-    let period = period.next_power_of_two().max(4).min(1 << 16);
-    let phase = block_number % period;
-    let quantize_factor = (period >> 12).max(1);
-    let quantized_phase = phase / quantize_factor * quantize_factor;
-    let encoded = period.trailing_zeros() as u16 - 1;
-    let encoded = encoded.max(1).min(15);
-    let era_val = ((quantized_phase as u16) << 4) | encoded;
-    vec![era_val as u8, (era_val >> 8) as u8]
-}
 
 /// Compact<u32> 编码（SCALE）。
 fn encode_compact_u32(value: u32) -> Vec<u8> {
@@ -1438,7 +1422,6 @@ pub fn build_sign_request_from_call_data(
             pubkey: format!("0x{pubkey_hex}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: format!("0x{}", hex::encode(&payload)),
-            spec_version,
             display,
         },
     };
@@ -1469,15 +1452,6 @@ mod tests {
     #[test]
     fn encode_compact_u32_two_bytes() {
         assert_eq!(encode_compact_u32(64), vec![0x01, 0x01]);
-    }
-
-    #[test]
-    fn encode_mortal_era_period64() {
-        let era = encode_mortal_era(64, 100);
-        assert_eq!(era.len(), 2);
-        // period=64, phase=100%64=36, encoded=5
-        // era_val = (36 << 4) | 5 = 576 | 5 = 581 = 0x0245
-        assert_eq!(era, vec![0x45, 0x02]);
     }
 
     #[test]
