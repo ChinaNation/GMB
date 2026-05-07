@@ -473,91 +473,10 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // propose_runtime_upgrade / developer_direct_upgrade 字段对齐(2026-04-22):
-    // Registry 要求 fields 含 `wasm_hash`(sha256 of code, 与节点 Tauri UI
-    // 用同一算法计算)和 `eligible_total`(propose_runtime_upgrade 独有)。
-    // -----------------------------------------------------------------------
-
-    test('decodes developer_direct_upgrade 含 wasm_hash (sha256)', () {
-      // WASM 内容:4 字节 "abcd" 便于手算 sha256。
-      // sha256("abcd") = 88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589
-      final wasmBytes = [0x61, 0x62, 0x63, 0x64];
-      final wasmLen = wasmBytes.length;
-      final payload = Uint8List.fromList([
-        0x0d, 0x02, // pallet=13 call=2
-        // Compact<u32>(wasmLen) single-byte mode (wasmLen<64): (wasmLen<<2)|0
-        (wasmLen << 2) & 0xff,
-        ...wasmBytes,
-      ]);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'developer_direct_upgrade');
-      expect(decoded.fields['wasm_size'], '0 KB'); // 4 字节 < 1 KB
-      expect(
-        decoded.fields['wasm_hash'],
-        '0x88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589',
-      );
-    });
-
-    test(
-        'decodes propose_runtime_upgrade 含 wasm_hash + eligible_total + province + signer_admin_pubkey',
-        () {
-      // reason="ok" + wasm="abcd" + eligible_total=1234567
-      // sha256("abcd") 同上 test。
-      // ADR-008 step3:SCALE 末尾在 signature 后加 (province, signer_admin_pubkey)。
-      final reasonBytes = 'ok'.codeUnits; // 2 字节
-      final wasmBytes = [0x61, 0x62, 0x63, 0x64]; // 4 字节
-      const eligibleTotal = 1234567;
-      // 模拟 SFID 后端返回的 nonce + 64 字节 sr25519 签名
-      final nonceBytes = utf8.encode('snap-2026-05-01-AH');
-      final sigBytes = List<int>.filled(64, 0xCC);
-      final province = utf8.encode('安徽省');
-      final adminPubkey = List<int>.generate(32, (i) => 0xB0 + (i & 0x0F));
-
-      final payload = Uint8List.fromList([
-        0x0d, 0x00, // pallet=13 call=0
-        (reasonBytes.length << 2) & 0xff, // Compact(2)
-        ...reasonBytes,
-        (wasmBytes.length << 2) & 0xff, // Compact(4)
-        ...wasmBytes,
-        // u64_le(1234567)
-        eligibleTotal & 0xff,
-        (eligibleTotal >> 8) & 0xff,
-        (eligibleTotal >> 16) & 0xff,
-        (eligibleTotal >> 24) & 0xff,
-        0, 0, 0, 0,
-        // snapshot_nonce: Vec<u8>
-        (nonceBytes.length << 2) & 0xff,
-        ...nonceBytes,
-        // signature: Vec<u8> (64 字节, len=64=0x40 → Compact mode 1: (0x40<<2)|1 = 0x101 → 两字节)
-        // 0x101 = 0x01 0x01 LE
-        0x01, 0x01,
-        ...sigBytes,
-        // ★ province: Vec<u8>
-        (province.length << 2) & 0xff,
-        ...province,
-        // ★ signer_admin_pubkey: [u8;32]
-        ...adminPubkey,
-      ]);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_runtime_upgrade');
-      expect(decoded.fields['reason'], 'ok');
-      expect(decoded.fields['wasm_size'], '0 KB');
-      expect(
-        decoded.fields['wasm_hash'],
-        '0x88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589',
-      );
-      expect(decoded.fields['eligible_total'], '1234567');
-      expect(decoded.fields['province'], '安徽省');
-      expect(
-        decoded.fields['signer_admin_pubkey'],
-        '0x${adminPubkey.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
-      );
-    });
-
+    // propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
+    // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2
+    // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
+    // 相关回归测试见 wumin/test/signer/offline_sign_service_*_test.dart。
     // -----------------------------------------------------------------------
     // ADR-008 step2d 新加 decoder:
     // - propose_create_institution(17.5):机构多签账户创建提案
@@ -681,22 +600,8 @@ void main() {
           (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
     });
 
-    test('fixture step2d propose_runtime_upgrade: decoder 解出新字段',
-        () {
-      final fixture = readFixture();
-      final caseEntry = (fixture['cases'] as List)
-          .firstWhere((e) => e['name'] == 'propose_runtime_upgrade');
-      final hex = caseEntry['expected_call_data_hex'] as String;
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_runtime_upgrade');
-      expect(decoded.fields['province'],
-          (caseEntry['fields'] as Map)['province_utf8']);
-      expect(decoded.fields['signer_admin_pubkey'],
-          (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
-      expect(decoded.fields['eligible_total'],
-          (caseEntry['fields'] as Map)['eligible_total'].toString());
-    });
+    // fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
+    // 整体下线,fixture 走 OfflineSignService.verifyPayload 的哈希直签例外。
 
     test('fixture step2d propose_resolution_issuance: decoder 解出新字段',
         () {

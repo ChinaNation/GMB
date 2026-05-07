@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' show sha256;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import '../chain/chain_constants.dart';
@@ -168,14 +167,11 @@ class PayloadDecoder {
       }
 
       // ── RuntimeUpgrade(13) ──
-      if (palletIndex == PalletRegistry.runtimeUpgradePallet) {
-        if (callIndex == PalletRegistry.proposeRuntimeUpgradeCall) {
-          return _decodeProposeRuntimeUpgrade(bytes);
-        }
-        if (callIndex == PalletRegistry.developerDirectUpgradeCall) {
-          return _decodeDeveloperUpgrade(bytes);
-        }
-      }
+      // 路由分支删除:propose_runtime_upgrade / developer_direct_upgrade 的
+      // call_data 含完整 WASM(600KB+),物理上塞不进 QR。server 在 QR 里只放
+      // blake2_256(payload) = 32 字节哈希,decoder 拿不到 call_data,无法
+      // SCALE 解析。改走 OfflineSignService.verifyPayload 的"哈希直签例外"
+      // 路径:用户在冷钱包屏幕上肉眼核对 display.fields.wasm_hash 即放行。
 
       // ── OrganizationManage(17) ──
       // 投票入口统一到 InternalVote::cast(22.0)。本 pallet 承载
@@ -562,146 +558,20 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // RuntimeUpgrade(13) / propose_runtime_upgrade(0)
+  // RuntimeUpgrade(13) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
   //
-  // 链端签名(ADR-008 step3 双层凭证):
-  //   pub fn propose_runtime_upgrade(
-  //     origin,
-  //     reason: ReasonOf<T>,                  // BoundedVec<u8>
-  //     code: CodeOf<T>,                      // BoundedVec<u8> —— 实际 WASM
-  //     eligible_total: u64,
-  //     snapshot_nonce: SnapshotNonceOf<T>,   // BoundedVec<u8>
-  //     signature: SnapshotSignatureOf<T>,    // BoundedVec<u8>
-  //     province: BoundedVec<u8, ConstU32<64>>,   // ★ ADR-008 step3
-  //     signer_admin_pubkey: [u8; 32],            // ★ ADR-008 step3
-  //   )
+  // 已删除原 SCALE decoder:
+  //   - call_data 含完整 WASM(600KB+),物理上塞不进 QR
+  //   - server signing.rs 对这两个 action 在 QR 里只放 blake2_256(payload)
+  //     = 32 字节哈希,decoder 永远拿不到完整 call_data
+  //   - "在 decoder 里复算 sha256(wasm_bytes)"是死路径,因为 wasm_bytes 不在 QR 里
   //
-  // SCALE 编码：
-  //   [13][0]
-  //   + Compact<u32> reason_len + reason_bytes
-  //   + Compact<u32> wasm_len   + wasm_bytes
-  //   + u64_le eligible_total
-  //   + Compact<u32> nonce_len  + nonce_bytes
-  //   + Compact<u32> sig_len    + sig_bytes
-  //   + Compact<u32> province_len + province_bytes
-  //   + 32B signer_admin_pubkey
-  //
-  // display.fields 对齐 Registry: `reason` / `wasm_size` / `wasm_hash` /
-  // `eligible_total` / `province` / `signer_admin_pubkey`。
-  // `wasm_hash` 由 decoder 现场 `sha256(wasm_bytes)` 计算,
-  // 与节点 Tauri UI 用同一算法生成的哈希逐字对齐 — 这样用户才能独立核对
-  // "我签的就是这份 WASM"。signer_admin_pubkey 用小写 0x hex 展示,
-  // 内部统一格式遵循 feedback_pubkey_format_rule.md。
+  // 走 OfflineSignService.verifyPayload 的"哈希直签例外":
+  //   - 收到 32 字节 payload + display.action ∈ {两个 wasm 升级 action}
+  //     + display.fields 含 wasm_hash → matched
+  //   - 用户在冷钱包屏幕上肉眼核对 display.fields.wasm_hash 与桌面 app 显示
+  //     的 sha256 一致即放行,签的就是这份 WASM。
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeRuntimeUpgrade(Uint8List bytes) {
-    if (bytes.length < 3) return null;
-
-    var offset = 2; // 跳过 pallet_index + call_index
-
-    // reason: Vec<u8>
-    final (reasonLen, reasonLenSize) = _decodeCompactU32(bytes, offset);
-    offset += reasonLenSize;
-    var reason = '';
-    if (reasonLen > 0 && offset + reasonLen <= bytes.length) {
-      reason = utf8.decode(
-        bytes.sublist(offset, offset + reasonLen),
-        allowMalformed: true,
-      );
-    }
-    offset += reasonLen;
-
-    // wasm: Vec<u8>
-    if (offset >= bytes.length) return null;
-    final (wasmLen, wasmLenSize) = _decodeCompactU32(bytes, offset);
-    offset += wasmLenSize;
-    if (offset + wasmLen > bytes.length) return null;
-
-    final wasmBytes = bytes.sublist(offset, offset + wasmLen);
-    final wasmHash = sha256.convert(wasmBytes).toString(); // 64 hex (小写)
-    offset += wasmLen;
-
-    // eligible_total: u64_le
-    if (offset + 8 > bytes.length) return null;
-    final eligibleTotal = _readU64Le(bytes, offset);
-    offset += 8;
-
-    // snapshot_nonce: Vec<u8>(本卡只跳过)
-    final (nonceLen, nonceLenSize) = _decodeCompactU32(bytes, offset);
-    offset += nonceLenSize;
-    if (offset + nonceLen > bytes.length) return null;
-    offset += nonceLen;
-
-    // signature: Vec<u8>(本卡只跳过)
-    final (sigLen, sigLenSize) = _decodeCompactU32(bytes, offset);
-    offset += sigLenSize;
-    if (offset + sigLen > bytes.length) return null;
-    offset += sigLen;
-
-    // ADR-008 step3 ★ province: BoundedVec<u8, 64>(SCALE Vec)
-    final (provinceLen, provinceLenSize) = _decodeCompactU32(bytes, offset);
-    offset += provinceLenSize;
-    if (offset + provinceLen > bytes.length) return null;
-    final province = utf8.decode(
-      bytes.sublist(offset, offset + provinceLen),
-      allowMalformed: true,
-    );
-    offset += provinceLen;
-
-    // ADR-008 step3 ★ signer_admin_pubkey: [u8; 32](固定 32 字节)
-    if (offset + 32 > bytes.length) return null;
-    final signerAdminPubkey = bytes.sublist(offset, offset + 32);
-
-    return DecodedPayload(
-      action: 'propose_runtime_upgrade',
-      summary: 'Runtime 升级提案（WASM ${_formatWasmSize(wasmLen)}, '
-          '合格人数 $eligibleTotal）',
-      fields: {
-        'reason': reason,
-        'wasm_size': _formatWasmSize(wasmLen),
-        'wasm_hash': '0x$wasmHash',
-        'eligible_total': eligibleTotal.toString(),
-        'province': province,
-        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // RuntimeUpgrade(13) / developer_direct_upgrade(2)
-  //
-  // 链端签名：pub fn developer_direct_upgrade(origin, code: CodeOf<T>)
-  // SCALE 编码：[13][2] + Compact<u32> wasm_len + wasm_bytes
-  //
-  // display.fields 对齐 Registry: `wasm_size` / `wasm_hash`。hash 同 sha256。
-  // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeDeveloperUpgrade(Uint8List bytes) {
-    if (bytes.length < 3) return null;
-
-    var offset = 2; // 跳过 pallet_index + call_index
-    final (wasmLen, lenSize) = _decodeCompactU32(bytes, offset);
-    offset += lenSize;
-    if (offset + wasmLen > bytes.length) return null;
-
-    final wasmBytes = bytes.sublist(offset, offset + wasmLen);
-    final wasmHash = sha256.convert(wasmBytes).toString(); // 64 hex (小写)
-
-    return DecodedPayload(
-      action: 'developer_direct_upgrade',
-      summary: '开发者直升 Runtime（WASM ${_formatWasmSize(wasmLen)}）',
-      fields: {
-        'wasm_size': _formatWasmSize(wasmLen),
-        'wasm_hash': '0x$wasmHash',
-      },
-    );
-  }
-
-  /// WASM 字节数的人可读渲染: `X.XX MB`(≥1 MB) 或 `X KB`。
-  static String _formatWasmSize(int wasmLen) {
-    if (wasmLen > 1024 * 1024) {
-      return '${(wasmLen / (1024 * 1024)).toStringAsFixed(2)} MB';
-    }
-    return '${(wasmLen / 1024).toStringAsFixed(0)} KB';
-  }
 
   // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）

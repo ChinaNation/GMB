@@ -1051,7 +1051,10 @@ pub fn verify_and_submit(
 
     // 使用签名时保存的 nonce 和 block_number，必须与签名载荷一致
     eprintln!("[签名提交] sign_nonce={sign_nonce}, sign_block_number={sign_block_number}");
-    let era_bytes = encode_mortal_era(MORTAL_ERA_PERIOD, sign_block_number);
+    // immortal era(单字节 0x00):PoW 链块速变化大 + 冷钱包签名流程数分钟,
+    // mortal era=64 块经常导致 "ancient birth block",改 immortal 永不过期。
+    // 防重放靠 nonce(链上一次性消费)。规则:feedback_sfid_pow_chain_recipe.md
+    let era_bytes = vec![0x00u8];
     eprintln!("[签名提交] era_bytes: {:?}", era_bytes);
     let nonce_compact = encode_compact_u32(sign_nonce);
     let tip_compact = encode_compact_u32(0);
@@ -1202,7 +1205,12 @@ fn build_signing_payload(
     spec_version: u32,
     tx_version: u32,
 ) -> Vec<u8> {
-    let era_bytes = encode_mortal_era(MORTAL_ERA_PERIOD, block_number);
+    // immortal era(单字节 0x00):必须与 verify_and_submit 路径完全一致,
+    // 否则签名 payload 与最终 extrinsic body 的 era 字节不匹配,链上签名校验失败。
+    // 使用 immortal 的原因见 verify_and_submit 中同款注释。
+    let _ = block_number; // immortal 不需要 block_number,保留参数兼容签名
+    let _ = block_hash; // immortal 不需要 birth block hash,保留参数兼容签名
+    let era_bytes = vec![0x00u8];
     let nonce_compact = encode_compact_u32(nonce);
     let tip_compact = encode_compact_u32(0);
 
@@ -1212,7 +1220,7 @@ fn build_signing_payload(
     // extensions_signed（与 extrinsic body 中的扩展字节相同）
     // AuthorizeCall(0) + CheckNonZeroSender(0) + CheckNonStakeSender(0)
     // + CheckSpecVersion(0) + CheckTxVersion(0) + CheckGenesis(0)
-    payload.extend_from_slice(&era_bytes); // CheckEra: mortal era 2 bytes
+    payload.extend_from_slice(&era_bytes); // CheckEra: 1 byte 0x00 (immortal)
     payload.extend_from_slice(&nonce_compact); // CheckNonce: compact nonce
                                                // CheckWeight(0)
     payload.extend_from_slice(&tip_compact); // ChargeTransactionPayment: compact tip
@@ -1224,8 +1232,15 @@ fn build_signing_payload(
     payload.extend_from_slice(&spec_version.to_le_bytes()); // CheckSpecVersion: u32
     payload.extend_from_slice(&tx_version.to_le_bytes()); // CheckTxVersion: u32
     payload.extend_from_slice(genesis_hash); // CheckGenesis: H256
-    payload.extend_from_slice(block_hash); // CheckEra: birth block hash H256
-                                           // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
+    // CheckEra::additional_signed:
+    //   immortal → block_hash(0) = genesis_hash
+    //   mortal   → block_hash(birth_block_number)
+    // 当前固定 immortal,所以这里也填 genesis_hash(链上 frame_system::CheckEra
+    // 在 immortal 分支会用 birth=0 取 block_hash(0),与 genesis_hash 一致)。
+    // 之前误填 fetch_latest_block 拿到的最新块 hash → 与链端重建 payload 不匹配
+    // → blake2_256 不同 → "Transaction has a bad signature"。
+    payload.extend_from_slice(genesis_hash); // CheckEra: birth block hash = genesis(immortal)
+                                              // CheckNonce(0) + CheckWeight(0) + ChargeTransactionPayment(0)
     payload.push(0x00u8); // CheckMetadataHash: Option::None
                           // WeightReclaim(0)
 
