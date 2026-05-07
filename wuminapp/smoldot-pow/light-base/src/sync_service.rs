@@ -662,7 +662,10 @@ impl<TPlat: PlatformRef> StorageQuery<TPlat> {
                     // peer 列表为空，等待 P2P 层发现/重连后重试（最多 3 次 × 2 秒）。
                     let mut found = None;
                     for _ in 0..3u8 {
-                        self.sync_service.platform.sleep(Duration::from_secs(2)).await;
+                        self.sync_service
+                            .platform
+                            .sleep(Duration::from_secs(2))
+                            .await;
                         let retry = self
                             .sync_service
                             .peers_assumed_know_blocks(self.block_number, &self.block_hash)

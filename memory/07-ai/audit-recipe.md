@@ -25,7 +25,7 @@
 
 ### 2. 审计报告每条 finding 必须给「证据锚点」
 
-格式: `[标记] file:line — 一句描述 (证据: ADR-XXX 第 N 节 / 项目记忆 X)`
+格式: `[标记] file:line — 一句描述 (证据: ADR-000 第 N 节 / 项目记忆 X)`
 
 无锚点的 finding **直接不写进正式报告**。
 
@@ -45,6 +45,10 @@
 ### 5. 与代码强相关的 audit 必须 `cargo check` / `flutter analyze` 兜底
 
 注释 / doc 改完后跑一遍编译 + 静态检查,确保没误碰逻辑。如果跑出新警告,要逐一定位到本次改动还是 pre-existing baseline。
+
+### 6. fork/vendor 残留标记必须单独统计
+
+`wuminapp/smoldot-pow/` 和 `citizenchain/node/vendor/` 属于收编 fork/vendor,保留上游注释脉络。普通清理任务只统计这些目录的残留标记,不和 GMB 自有代码清零门禁混算。具体边界见 `memory/07-ai/fork-vendor-baseline.md`。
 
 ## 适用范围
 

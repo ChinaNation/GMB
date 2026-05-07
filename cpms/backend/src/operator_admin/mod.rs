@@ -87,7 +87,10 @@ struct UpdateArchiveRequest {
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v1/archives", post(create_archive).get(list_archives))
-        .route("/api/v1/archives/:archive_id", get(get_archive).put(update_archive))
+        .route(
+            "/api/v1/archives/:archive_id",
+            get(get_archive).put(update_archive),
+        )
         .route(
             "/api/v1/archives/:archive_id/qr/generate",
             post(generate_archive_qr),
@@ -136,7 +139,11 @@ async fn create_archive(
 
     let addr = req.address.unwrap_or_default();
     if addr.chars().count() > 100 {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "address too long (max 100)"));
+        return Err(err(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "address too long (max 100)",
+        ));
     }
 
     let voting = req.voting_eligible.unwrap_or(citizen_status == "NORMAL");
@@ -318,15 +325,31 @@ async fn update_archive(
     authz::require_auth(&state, &headers).await?;
     let mut archive = fetch_archive_by_id(&state, &archive_id).await?;
 
-    if let Some(v) = req.full_name { archive.full_name = v; }
-    if let Some(v) = req.birth_date { archive.birth_date = v; }
-    if let Some(v) = req.gender_code { archive.gender_code = v; }
-    if let Some(v) = req.height_cm { archive.height_cm = Some(v); }
-    if let Some(v) = req.town_code { archive.town_code = v; }
-    if let Some(v) = req.village_id { archive.village_id = v; }
+    if let Some(v) = req.full_name {
+        archive.full_name = v;
+    }
+    if let Some(v) = req.birth_date {
+        archive.birth_date = v;
+    }
+    if let Some(v) = req.gender_code {
+        archive.gender_code = v;
+    }
+    if let Some(v) = req.height_cm {
+        archive.height_cm = Some(v);
+    }
+    if let Some(v) = req.town_code {
+        archive.town_code = v;
+    }
+    if let Some(v) = req.village_id {
+        archive.village_id = v;
+    }
     if let Some(v) = req.address {
         if v.chars().count() > 100 {
-            return Err(err(StatusCode::BAD_REQUEST, 1001, "address too long (max 100)"));
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "address too long (max 100)",
+            ));
         }
         archive.address = v;
     }
@@ -334,7 +357,9 @@ async fn update_archive(
         dangan::validate_citizen_status(&v)?;
         archive.citizen_status = v;
     }
-    if let Some(v) = req.voting_eligible { archive.voting_eligible = v; }
+    if let Some(v) = req.voting_eligible {
+        archive.voting_eligible = v;
+    }
 
     archive.updated_at = Utc::now().timestamp();
 

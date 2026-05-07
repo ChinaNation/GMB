@@ -75,10 +75,7 @@ pub struct TestSfidEligibility;
 impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
-    fn is_eligible(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
     }
 
@@ -139,10 +136,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         }
     }
 
-    fn get_admin_list(
-        org: u8,
-        institution: SubjectId,
-    ) -> Option<sp_std::vec::Vec<AccountId32>> {
+    fn get_admin_list(org: u8, institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId32>> {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
@@ -256,8 +250,7 @@ fn prb_pallet_id() -> SubjectId {
 }
 
 fn institution_account(institution: SubjectId) -> AccountId32 {
-    let raw =
-        subject_pallet_address(institution).expect("institution pallet address must exist");
+    let raw = subject_pallet_address(institution).expect("institution pallet address must exist");
     AccountId32::new(raw)
 }
 
@@ -268,8 +261,14 @@ fn last_proposal_id() -> u64 {
 
 /// 测试辅助:走投票引擎公开 `internal_vote` extrinsic 投票(Phase 2 统一入口)。
 fn cast_vote(who: AccountId32, proposal_id: u64, approve: bool) -> DispatchResult {
-    frame_support::storage::with_transaction(|| -> frame_support::storage::TransactionOutcome<DispatchResult> { match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve,
-    ) { Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())), Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)) } })
+    frame_support::storage::with_transaction(
+        || -> frame_support::storage::TransactionOutcome<DispatchResult> {
+            match internal_vote::Pallet::<Test>::do_internal_vote(who, proposal_id, approve) {
+                Ok(()) => frame_support::storage::TransactionOutcome::Commit(Ok(())),
+                Err(e) => frame_support::storage::TransactionOutcome::Rollback(Err(e)),
+            }
+        },
+    )
 }
 
 fn new_test_ext() -> sp_io::TestExternalities {

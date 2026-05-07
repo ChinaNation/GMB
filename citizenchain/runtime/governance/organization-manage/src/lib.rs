@@ -27,7 +27,6 @@ pub use traits::{
 
 use admins_change::SubjectLifecycle;
 use codec::{Decode, Encode};
-use primitives::derive::subject_id_from_registered_sfid_number;
 use frame_support::{
     ensure,
     pallet_prelude::*,
@@ -35,18 +34,19 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
+use primitives::derive::subject_id_from_registered_sfid_number;
 use sp_core::sr25519::Public as Sr25519Public;
 use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use votingengine::{
-    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_REJECTED,
+    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_REJECTED,
 };
 
 pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
 pub use institution::types::{
     CloseInstitutionAction, CreateInstitutionAccount, CreateInstitutionAction,
-    InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount,
-    InstitutionLifecycleStatus, RegisteredInstitution,
+    InstitutionAccountInfo, InstitutionInfo, InstitutionInitialAccount, InstitutionLifecycleStatus,
+    RegisteredInstitution,
 };
 
 pub(crate) type BalanceOf<T> =
@@ -666,7 +666,9 @@ pub mod pallet {
         // derive_personal_duoqian_address 已迁至 personal-manage::Pallet,
         // organization-manage 不再提供该派生(机构地址只走 derive_institution_address)。
 
-        pub(crate) fn ensure_unique_admins(admins: &DuoqianAdminsOf<T>) -> Result<(), DispatchError> {
+        pub(crate) fn ensure_unique_admins(
+            admins: &DuoqianAdminsOf<T>,
+        ) -> Result<(), DispatchError> {
             let mut seen = BTreeSet::new();
             for admin in admins.iter() {
                 ensure!(seen.insert(admin.clone()), Error::<T>::DuplicateAdmin);
@@ -782,9 +784,7 @@ pub mod pallet {
         ///
         /// 个人多签的 subject_id 解析由 personal-manage 自持(直接 subject_id_from_account),
         /// 本函数仅服务机构账户;对个人地址返回 None,调用方必须自行选 pallet。
-        pub fn resolve_admin_subject_for_account(
-            account: &T::AccountId,
-        ) -> Option<SubjectId> {
+        pub fn resolve_admin_subject_for_account(account: &T::AccountId) -> Option<SubjectId> {
             let registered = AddressRegisteredSfid::<T>::get(account)?;
             subject_id_from_registered_sfid_number(registered.sfid_number.as_slice())
         }
@@ -803,7 +803,6 @@ pub mod pallet {
             }
             Ok(names)
         }
-
 
         // 投票回调执行体:
         // - ACTION_CLOSE → crate::close::execute_institution_close_with_finalizer
@@ -824,8 +823,9 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         addr: &T::AccountId,
     ) -> Option<primitives::types::MultisigConfigSnapshot<T::AccountId>> {
         let registered = pallet::AddressRegisteredSfid::<T>::get(addr)?;
-        let institution_id =
-            primitives::derive::subject_id_from_registered_sfid_number(registered.sfid_number.as_slice())?;
+        let institution_id = primitives::derive::subject_id_from_registered_sfid_number(
+            registered.sfid_number.as_slice(),
+        )?;
         let org = votingengine::types::ORG_REN;
         let admins = admins_change::Pallet::<T>::active_subject_admins(org, institution_id)?;
         let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, institution_id)?;
@@ -842,8 +842,11 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
             return false;
         };
         matches!(
-            pallet::InstitutionAccounts::<T>::get(&registered.sfid_number, &registered.account_name)
-                .map(|a| a.status),
+            pallet::InstitutionAccounts::<T>::get(
+                &registered.sfid_number,
+                &registered.account_name
+            )
+            .map(|a| a.status),
             Some(institution::types::InstitutionLifecycleStatus::Active)
         )
     }
@@ -884,11 +887,10 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     let action = CreateInstitutionActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
                         .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let exec_result = with_transaction(|| {
-                        match crate::institution::execute::execute_create_institution_with_finalizer::<T>(
-                            proposal_id,
-                            &action,
-                            true,
-                        ) {
+                        match crate::institution::execute::execute_create_institution_with_finalizer::<
+                            T,
+                        >(proposal_id, &action, true)
+                        {
                             Ok(()) => TransactionOutcome::Commit(Ok(())),
                             Err(e) => TransactionOutcome::Rollback(Err(e)),
                         }
@@ -909,16 +911,16 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     let action =
                         CloseInstitutionAction::<T::AccountId>::decode(&mut &raw[tag.len() + 1..])
                             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                    let exec_result = with_transaction(
-                        || match crate::close::execute_institution_close_with_finalizer::<T>(
+                    let exec_result = with_transaction(|| {
+                        match crate::close::execute_institution_close_with_finalizer::<T>(
                             proposal_id,
                             &action,
                             true,
                         ) {
                             Ok(()) => TransactionOutcome::Commit(Ok(())),
                             Err(e) => TransactionOutcome::Rollback(Err(e)),
-                        },
-                    );
+                        }
+                    });
                     if exec_result.is_err() {
                         pallet::Pallet::<T>::deposit_event(
                             pallet::Event::<T>::InstitutionCloseExecutionFailed {

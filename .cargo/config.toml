@@ -1,0 +1,4 @@
+# 中文注释：仓库根 Cargo 门禁只检查 GMB 自有代码 warning。
+# 第三方依赖 future-incompat 报告由专项依赖升级处理，不阻断本轮重新创世清理。
+[future-incompat-report]
+frequency = "never"

@@ -898,9 +898,9 @@ pub(super) async fn run<TPlat: PlatformRef>(
                         let _ = me
                             .responses_tx
                             .send(
-                                methods::Response::author_submitExtrinsic(
-                                    methods::HashHexString(transaction_hash),
-                                )
+                                methods::Response::author_submitExtrinsic(methods::HashHexString(
+                                    transaction_hash,
+                                ))
                                 .to_json_response(request_id_json),
                             )
                             .await;

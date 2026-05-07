@@ -290,18 +290,18 @@ pub(crate) struct AppState {
 |---|---|---|
 | `citizenchain/frame/sfid-system/src/lib.rs` | 1 | 新增 ShengAdminPubkey storage + extrinsic + verifier |
 | `citizenchain/frame/sfid-system/src/lib.rs` | 3 | 新增 `register_sfid_institution_batch` extrinsic |
-| `sfid/backend/src/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
-| `sfid/backend/src/sheng-admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
-| `sfid/backend/src/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
-| `sfid/backend/src/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
-| `sfid/backend/src/pg_backend.rs` | 2 | append-only WAL 写 shard changes |
-| `sfid/backend/src/sheng-admins/institutions.rs` | 3 | 改 submit 为入队 |
-| `sfid/backend/src/submit_queue/`(新建) | 3 | 省级 flush task + batch 聚合 |
+| `sfid/backend/models/mod.rs` | 1 | AdminUser 扩展 encrypted_privkey + chain_version |
+| `sfid/backend/sheng_admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
+| `sfid/backend/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
+| `sfid/backend/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
+| `sfid/backend/store_shards/pg_backend.rs` | 2 | append-only WAL 写 shard changes |
+| `sfid/backend/sheng_admins/institutions.rs` | 3 | 改 submit 为入队 |
+| `sfid/backend/store_shards/`(新建) | 3 | 省级 flush task + batch 聚合 |
 | `sfid/backend/Cargo.toml` | 3 | 加 `crossbeam-queue` 依赖 |
-| `sfid/frontend/src/api/` | 3 | 增加任务状态轮询接口 |
-| `sfid/frontend/src/views/institutions/` | 3 | UI 改"已提交,等待上链"状态显示 |
+| `sfid/frontend/<feature>/api.ts` | 3 | 增加任务状态轮询接口 |
+| `sfid/frontend/institutions/` | 3 | UI 改"已提交,等待上链"状态显示 |
 | 部署:`nginx.conf` | 4 | sticky routing by province header |
-| `sfid/backend/src/chain/events.rs`(新建) | 4 | 链事件订阅,同步 sheng signer cache |
+| `sfid/backend/indexer/event_parser.rs`(新建) | 4 | 链事件订阅,同步 sheng signer cache |
 | `sfid/backend/tools/load_test/`(新建) | 4 | 自写 Rust 压测脚本 |
 
 ---

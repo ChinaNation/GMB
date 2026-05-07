@@ -14,8 +14,7 @@ fn setup_creator_balance() -> AccountId32 {
 }
 
 fn proposed_duoqian_address(creator: &AccountId32, name: &[u8]) -> AccountId32 {
-    PersonalManage::derive_personal_duoqian_address(creator, name)
-        .expect("derive should succeed")
+    PersonalManage::derive_personal_duoqian_address(creator, name).expect("derive should succeed")
 }
 
 // ─── 1. propose_create:写 Pending + reserve fee + 发事件 ─────────────
@@ -66,8 +65,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let name = account_name(b"alice-personal");
         let dq = proposed_duoqian_address(&c, b"alice-personal");
 
@@ -104,8 +102,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let name = account_name(b"alice-personal");
         let dq = proposed_duoqian_address(&c, b"alice-personal");
 
@@ -140,13 +137,7 @@ fn propose_create_rejects_duplicate_personal_address() {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"alice-personal");
         // 直接把目标地址灌成 Active,模拟"地址已存在"
-        seed_active_duoqian(
-            &dq,
-            &c,
-            &[admin(0), admin(1), admin(2)],
-            2,
-            500,
-        );
+        seed_active_duoqian(&dq, &c, &[admin(0), admin(1), admin(2)], 2, 500);
 
         assert_noop!(
             PersonalManage::propose_create(
@@ -202,8 +193,7 @@ fn propose_create_rejects_duplicate_admins() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let v = vec![admin(0), admin(1), admin(0)]; // admin(0) 重复
-        let dup_admins: pallet::DuoqianAdminsOf<Test> =
-            BoundedVec::try_from(v).expect("fits");
+        let dup_admins: pallet::DuoqianAdminsOf<Test> = BoundedVec::try_from(v).expect("fits");
 
         assert_noop!(
             PersonalManage::propose_create(
@@ -259,18 +249,11 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
         ));
 
         let pid = last_proposal_id();
-        assert_eq!(
-            pallet::PendingCloseProposal::<Test>::get(&dq),
-            Some(pid)
-        );
+        assert_eq!(pallet::PendingCloseProposal::<Test>::get(&dq), Some(pid));
 
         // 第二次发起应被阻止
         assert_noop!(
-            PersonalManage::propose_close(
-                RuntimeOrigin::signed(admin(1)),
-                dq,
-                beneficiary_acc,
-            ),
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(1)), dq, beneficiary_acc,),
             pallet::Error::<Test>::CloseAlreadyPending
         );
     });
@@ -320,11 +303,7 @@ fn propose_close_rejects_when_balance_below_minimum() {
         seed_active_duoqian(&dq, &c, &admins_acc, 2, 50);
 
         assert_noop!(
-            PersonalManage::propose_close(
-                RuntimeOrigin::signed(admin(0)),
-                dq,
-                beneficiary(),
-            ),
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
             pallet::Error::<Test>::CloseBalanceBelowMinimum
         );
     });
@@ -337,8 +316,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let admins = admins_vec(3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
@@ -352,10 +330,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
 
         // STATUS_VOTING 期间禁止 cleanup
         assert_noop!(
-            PersonalManage::cleanup_rejected_proposal(
-                RuntimeOrigin::signed(admin(0)),
-                pid,
-            ),
+            PersonalManage::cleanup_rejected_proposal(RuntimeOrigin::signed(admin(0)), pid,),
             pallet::Error::<Test>::ProposalNotRejected
         );
 
@@ -403,8 +378,7 @@ fn non_admin_cannot_propose_or_vote() {
                 RuntimeOrigin::signed(c),
                 account_name(b"x"),
                 3,
-                BoundedVec::try_from(vec![admin(1), admin(2), admin(3)])
-                    .expect("fits"),
+                BoundedVec::try_from(vec![admin(1), admin(2), admin(3)]).expect("fits"),
                 2,
                 CREATE_AMOUNT,
             ),

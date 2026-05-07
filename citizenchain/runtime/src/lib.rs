@@ -381,6 +381,5 @@ mod runtime {
     pub type OffchainTransaction = offchain_transaction::pallet;
 }
 
-
 #[cfg(test)]
 mod tests;

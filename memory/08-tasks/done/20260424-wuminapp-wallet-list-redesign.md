@@ -54,7 +54,7 @@
 ### PR-1 · 数据层:`sortOrder` 字段 + 拖拽持久化
 
 文件:
-- `wuminapp/lib/Isar/wallet_isar.dart`
+- `wuminapp/lib/isar/wallet_isar.dart`
 - `wuminapp/lib/wallet/core/wallet_manager.dart`
 
 改动:

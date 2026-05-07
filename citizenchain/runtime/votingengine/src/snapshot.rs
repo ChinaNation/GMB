@@ -11,7 +11,7 @@
 use frame_support::pallet_prelude::{BoundedVec, DispatchResult};
 
 use crate::pallet::{self, AdminSnapshot, Error};
-use crate::{SubjectId, InternalAdminProvider};
+use crate::{InternalAdminProvider, SubjectId};
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 查询快照中某管理员是否在指定机构的管理员名单中。
@@ -26,10 +26,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     }
 
     /// 查询快照中某机构的管理员数量。
-    pub fn snapshot_admin_count(
-        proposal_id: u64,
-        institution: SubjectId,
-    ) -> Option<u32> {
+    pub fn snapshot_admin_count(proposal_id: u64, institution: SubjectId) -> Option<u32> {
         AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
     }
 

@@ -4,8 +4,7 @@
 //! 签名原文 `sfid-anon-cert-v1|{province_code}|{anon_pubkey}` 整体盲化。
 
 use blind_rsa_signatures::{
-    BlindSignature, BlindingResult, MessageRandomizer, Signature,
-    PSS, Randomized, Sha384, DefaultRng,
+    BlindSignature, BlindingResult, DefaultRng, MessageRandomizer, Randomized, Sha384, PSS,
 };
 
 type BssaPublicKey = blind_rsa_signatures::PublicKey<Sha384, PSS, Randomized>;
@@ -61,9 +60,8 @@ pub(crate) fn finalize_signature(
     let pk = parse_rsa_pubkey(rsa_public_key_pem)?;
     let message = format!("sfid-anon-cert-v1|{}|{}", province_code, anon_pubkey_hex);
 
-    let blind_sig_bytes =
-        hex::decode(blind_sig_hex.trim().trim_start_matches("0x"))
-            .map_err(|_| "blind_sig hex decode failed".to_string())?;
+    let blind_sig_bytes = hex::decode(blind_sig_hex.trim().trim_start_matches("0x"))
+        .map_err(|_| "blind_sig hex decode failed".to_string())?;
     let blind_sig = BlindSignature::from(blind_sig_bytes);
     let blinding_result = deserialize_blinding_result(blinding_secret)?;
 

@@ -10,7 +10,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use primitives::derive::subject_id_from_sfid_number;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use frame_support::{
@@ -22,13 +21,14 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::*;
 use primitives::china::china_cb::CHINA_CB;
+use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
     types::{ORG_NRC, ORG_PRC},
-    SubjectId, InternalVoteResultCallback, ProposalCancelDecision,
-    ProposalExecutionOutcome, STATUS_PASSED,
+    InternalVoteResultCallback, ProposalCancelDecision, ProposalExecutionOutcome, SubjectId,
+    STATUS_PASSED,
 };
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
@@ -85,9 +85,7 @@ pub mod pallet {
     use votingengine::{InternalAdminProvider, InternalVoteEngine};
 
     #[pallet::config]
-    pub trait Config:
-        frame_system::Config + votingengine::Config + pallet_grandpa::Config
-    {
+    pub trait Config: frame_system::Config + votingengine::Config + pallet_grandpa::Config {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -344,11 +342,7 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         /// 中文注释：检查调用者是否为指定机构的内部管理员。
-        fn is_internal_admin(
-            org: u8,
-            institution: SubjectId,
-            who: &T::AccountId,
-        ) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 org,
                 institution,
@@ -357,10 +351,7 @@ pub mod pallet {
         }
 
         /// 中文注释：检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
-        fn is_key_used_by_other_institution(
-            institution: SubjectId,
-            key: &[u8; 32],
-        ) -> bool {
+        fn is_key_used_by_other_institution(institution: SubjectId, key: &[u8; 32]) -> bool {
             GrandpaKeyOwnerByKey::<T>::get(*key)
                 .map(|owner| owner != institution)
                 .unwrap_or(false)

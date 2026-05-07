@@ -50,9 +50,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
-use votingengine::{
-    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome,
-};
+use votingengine::{InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId};
 
 pub(crate) type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -74,7 +72,9 @@ pub mod pallet {
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
 
         type AddressValidator: primitives::traits::DuoqianAddressValidator<Self::AccountId>;
-        type ReservedAddressChecker: primitives::traits::DuoqianReservedAddressChecker<Self::AccountId>;
+        type ReservedAddressChecker: primitives::traits::DuoqianReservedAddressChecker<
+            Self::AccountId,
+        >;
         type ProtectedSourceChecker: primitives::traits::ProtectedSourceChecker<Self::AccountId>;
         type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
 
@@ -447,10 +447,7 @@ pub mod pallet {
             )
         }
 
-        pub(crate) fn remove_pending_admin_subject(
-            proposal_id: u64,
-            institution_id: SubjectId,
-        ) {
+        pub(crate) fn remove_pending_admin_subject(proposal_id: u64, institution_id: SubjectId) {
             let _ = admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
@@ -520,10 +517,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         if approved {
             match action_byte {
                 ACTION_CREATE => {
-                    let action = pallet::CreateDuoqianActionOf::<T>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
-                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action =
+                        pallet::CreateDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let outcome = with_transaction(
                         || -> TransactionOutcome<Result<ProposalExecutionOutcome, sp_runtime::DispatchError>> {
                             match crate::execute::execute_create_with_finalizer::<T>(
@@ -549,10 +545,9 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                     Ok(outcome)
                 }
                 ACTION_CLOSE => {
-                    let action = pallet::CloseDuoqianActionOf::<T>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
-                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action =
+                        pallet::CloseDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let outcome = with_transaction(
                         || -> TransactionOutcome<Result<ProposalExecutionOutcome, sp_runtime::DispatchError>> {
                             match crate::execute::execute_close_with_finalizer::<T>(
@@ -583,18 +578,16 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             // 否决路径:清理 Pending 存储 + unreserve 资金。
             match action_byte {
                 ACTION_CREATE => {
-                    let action = pallet::CreateDuoqianActionOf::<T>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
-                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action =
+                        pallet::CreateDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     crate::execute::cleanup_pending_create::<T>(proposal_id, &action, true);
                     Ok(ProposalExecutionOutcome::Executed)
                 }
                 ACTION_CLOSE => {
-                    let action = pallet::CloseDuoqianActionOf::<T>::decode(
-                        &mut &raw[tag.len() + 1..],
-                    )
-                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action =
+                        pallet::CloseDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
+                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     pallet::PendingCloseProposal::<T>::remove(&action.duoqian_address);
                     Ok(ProposalExecutionOutcome::Executed)
                 }

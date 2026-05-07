@@ -19,8 +19,8 @@
 use sp_core::{sr25519, Pair};
 use std::sync::{Arc, RwLock};
 
-use super::packer::BatchSigner;
 use super::keystore::SigningKey;
+use super::packer::BatchSigner;
 
 /// 基于 `SigningKey` 的 `BatchSigner` 实现。
 pub struct KeystoreBatchSigner {

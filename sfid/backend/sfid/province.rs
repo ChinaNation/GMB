@@ -3,17 +3,23 @@
 //! 本文件只保存编码与行政区层级,不再承载省管理员公钥、槽位或链上名册逻辑。
 //! 省管理员归属统一放在 `crate::sheng_admins::province_admins`。
 
+// 中文注释：镇/村层级由代码生成器一次性写入，当前 API 只读取到省/市层级，保留完整结构给后续下钻查询使用。
+#[allow(dead_code)]
 pub struct VillageCode {
     pub name: &'static str,
     pub code: &'static str,
 }
 
+// 中文注释：镇级字段暂未被当前接口逐项读取，但属于行政区完整层级数据的一部分。
+#[allow(dead_code)]
 pub struct TownCode {
     pub name: &'static str,
     pub code: &'static str,
     pub villages: &'static [VillageCode],
 }
 
+// 中文注释：城市下的镇村列表暂未开放查询接口，保留用于后续行政区下钻。
+#[allow(dead_code)]
 pub struct CityCode {
     pub name: &'static str,
     pub code: &'static str,

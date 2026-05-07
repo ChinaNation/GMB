@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 ///
 /// 中文注释:
 /// - 对接 sfid-backend 的 `GET /api/v1/app/clearing-banks/search` 端点
-///   (实现见 `sfid/backend/src/institutions/handler.rs::app_search_clearing_banks`)。
+///   (实现见 `sfid/backend/institutions/handler.rs::app_search_clearing_banks`)。
 /// - 该端点**无鉴权**,wuminapp 在用户绑定清算行前展示列表用。
 /// - 仅返回 `is_clearing_bank == true` 的机构,带主账户/费用账户地址。
 class SfidPublicApi {

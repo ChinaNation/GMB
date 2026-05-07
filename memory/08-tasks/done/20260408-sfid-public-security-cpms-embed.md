@@ -36,15 +36,15 @@
 - 见 `feedback_cpms_institution_tuple_match.md`
 
 ### 改动文件
-- `sfid/backend/src/sheng-admins/institutions.rs`(新增 handler)
-- `sfid/backend/src/sheng-admins/mod.rs`(re-export)
-- `sfid/backend/src/main.rs`(路由 + 启动钩子调用)
-- `sfid/backend/src/app_core/runtime_ops.rs`(新增 `cleanup_orphan_cpms_sites`)
+- `sfid/backend/sheng_admins/institutions.rs`(新增 handler)
+- `sfid/backend/sheng_admins/mod.rs`(re-export)
+- `sfid/backend/main.rs`(路由 + 启动钩子调用)
+- `sfid/backend/app_core/runtime_ops.rs`(新增 `cleanup_orphan_cpms_sites`)
 
 ## 前端改动
 
 ### 新增文件
-- `sfid/frontend/src/views/institutions/CpmsSitePanel.tsx`(~300 行)
+- `sfid/frontend/institutions/CpmsSitePanel.tsx`(~300 行)
   - 公安局详情页上半部分主组件
   - 无站点态:显示"生成 CPMS 安装二维码"按钮
   - 有站点态:Descriptions 展示 site_sfid、安装令牌状态(Tag)、站点状态(Tag)、
@@ -54,16 +54,16 @@
     `reissueInstallToken` / `disableCpmsKeys` / `revokeCpmsKeys` / `deleteCpmsKeys`
   - 调新增 API `getCpmsSiteByInstitution`
 
-- `sfid/frontend/src/views/institutions/CpmsRegisterModal.tsx`(~105 行)
+- `sfid/frontend/institutions/CpmsRegisterModal.tsx`(~105 行)
   - QR2 payload 粘贴输入 → `registerCpms` → 展示 QR3 payload + 复制
   - 本次不做摄像头扫码(老 App.tsx 里的扫码实现后续拆分任务再搬)
 
 ### 改动文件
-- `sfid/frontend/src/api/institution.ts`
+- `sfid/frontend/institutions/api.ts`
   - 新增 `getCpmsSiteByInstitution(auth, sfidId) → Promise<CpmsSiteRow | null>`
   - 从 `client.ts` re-export `CpmsSiteRow` 类型
 
-- `sfid/frontend/src/views/institutions/InstitutionDetailPage.tsx`
+- `sfid/frontend/institutions/InstitutionDetailPage.tsx`
   - 仅 `inst.category === 'PUBLIC_SECURITY'` 时在账户列表 Card **之上**
     插入 `<CpmsSitePanel>`
   - 其他机构类别完全不渲染 Panel
@@ -106,7 +106,7 @@ npm run build                           # 成功, 1.69s
 
 ```
 INFO sfid_backend::app_core::runtime_ops: cleaned up orphan CPMS sites (no matching institution)
-  count=3 sample=["SFID-XXX", "SFID-YYY", "SFID-ZZZ"]
+  count=3 sample=["SFID-000", "SFID-001", "SFID-002"]
 ```
 
 ## 不做的事

@@ -172,7 +172,7 @@ struct ImportedArchive {
 
 ### 1.4 前端变更
 
-**文件：** `sfid/frontend/src/components/App.tsx`
+**文件：** `sfid/frontend/App.tsx`
 
 #### 表格列改造
 

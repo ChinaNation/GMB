@@ -56,7 +56,12 @@ pub fn insert_account(store: &mut Store, account: MultisigAccount) {
     store.multisig_accounts.insert(key, account);
 }
 
-pub fn update_account_chain<F>(store: &mut Store, sfid_number: &str, account_name: &str, f: F) -> bool
+pub fn update_account_chain<F>(
+    store: &mut Store,
+    sfid_number: &str,
+    account_name: &str,
+    f: F,
+) -> bool
 where
     F: FnOnce(&mut MultisigAccount),
 {

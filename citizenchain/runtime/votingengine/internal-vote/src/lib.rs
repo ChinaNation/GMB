@@ -27,21 +27,15 @@ use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
 use primitives::china::china_cb::CHINA_CB;
-use primitives::china::china_ch::{
-    CHINA_CH,
-};
+use primitives::china::china_ch::CHINA_CH;
 use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
     nrc_subject_id,
     pallet::{AdminSnapshot, Proposals},
-    types::{
-        fixed_governance_pass_threshold, is_valid_org, ORG_NRC, ORG_PRB, ORG_PRC,
-        ORG_REN,
-    },
-    SubjectId, InternalAdminProvider, InternalProposalMutexKind,
-    InternalThresholdProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
-    STATUS_REJECTED,
+    types::{fixed_governance_pass_threshold, is_valid_org, ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
+    InternalAdminProvider, InternalProposalMutexKind, InternalThresholdProvider, Proposal,
+    SubjectId, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED, STATUS_REJECTED,
 };
 
 pub mod migrations;
@@ -124,11 +118,7 @@ pub mod pallet {
         /// 内部投票:管理员一人一票。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::cast())]
-        pub fn cast(
-            origin: OriginFor<T>,
-            proposal_id: u64,
-            approve: bool,
-        ) -> DispatchResult {
+        pub fn cast(origin: OriginFor<T>, proposal_id: u64, approve: bool) -> DispatchResult {
             let who = ensure_signed(origin)?;
             Self::do_internal_vote(who, proposal_id, approve)
         }
@@ -172,12 +162,10 @@ fn is_valid_internal_institution<T: Config>(
                 institution,
             )
         }
-        ORG_REN => {
-            <T as votingengine::Config>::InternalThresholdProvider::is_known_subject(
-                org,
-                institution,
-            )
-        }
+        ORG_REN => <T as votingengine::Config>::InternalThresholdProvider::is_known_subject(
+            org,
+            institution,
+        ),
         _ => false,
     }
 }
@@ -309,9 +297,7 @@ impl<T: Config> Pallet<T> {
                 Ok(id) => id,
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
-            if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(institution, id)
-            {
+            if let Err(err) = votingengine::limit::try_add_active_proposal::<T>(institution, id) {
                 return TransactionOutcome::Rollback(Err(err));
             }
             if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
@@ -391,9 +377,7 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(institution, id)
-            {
+            if let Err(err) = votingengine::limit::try_add_active_proposal::<T>(institution, id) {
                 return TransactionOutcome::Rollback(Err(err));
             }
             if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
@@ -414,13 +398,17 @@ impl<T: Config> Pallet<T> {
                 frame_support::defensive!(
                     "do_create_internal_proposal_with_explicit_threshold: proposer is missing from admin snapshot"
                 );
-                return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::NoPermission.into()));
+                return TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::NoPermission.into()
+                ));
             }
             let snapshot_size =
                 AdminSnapshot::<T>::get(id, institution).map(|admins| admins.len() as u32);
             if let Some(size) = snapshot_size {
                 if threshold > size {
-                    return TransactionOutcome::Rollback(Err(Error::<T>::InvalidInternalOrg.into()));
+                    return TransactionOutcome::Rollback(
+                        Err(Error::<T>::InvalidInternalOrg.into()),
+                    );
                 }
             }
             InternalThresholdSnapshot::<T>::insert(id, threshold);
@@ -478,13 +466,14 @@ impl<T: Config> Pallet<T> {
                 Err(err) => return TransactionOutcome::Rollback(Err(err)),
             };
 
-            if let Err(err) =
-                votingengine::limit::try_add_active_proposal::<T>(institution, id)
-            {
+            if let Err(err) = votingengine::limit::try_add_active_proposal::<T>(institution, id) {
                 return TransactionOutcome::Rollback(Err(err));
             }
             if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
-                id, org, institution, mutex_kind,
+                id,
+                org,
+                institution,
+                mutex_kind,
             ) {
                 return TransactionOutcome::Rollback(Err(err));
             }
@@ -501,7 +490,9 @@ impl<T: Config> Pallet<T> {
                 frame_support::defensive!(
                     "do_create_internal_proposal: proposer is missing from admin snapshot"
                 );
-                return TransactionOutcome::Rollback(Err(votingengine::Error::<T>::NoPermission.into()));
+                return TransactionOutcome::Rollback(Err(
+                    votingengine::Error::<T>::NoPermission.into()
+                ));
             }
             InternalThresholdSnapshot::<T>::insert(id, threshold);
 
@@ -519,11 +510,7 @@ impl<T: Config> Pallet<T> {
         })
     }
 
-    pub fn do_internal_vote(
-        who: T::AccountId,
-        proposal_id: u64,
-        approve: bool,
-    ) -> DispatchResult {
+    pub fn do_internal_vote(who: T::AccountId, proposal_id: u64, approve: bool) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
 
         ensure!(
@@ -570,11 +557,9 @@ impl<T: Config> Pallet<T> {
         if tally.yes >= threshold {
             <votingengine::Pallet<T>>::set_status_and_emit(proposal_id, STATUS_PASSED)?;
         } else {
-            let admin_count = <votingengine::Pallet<T>>::snapshot_admin_count(
-                proposal_id,
-                institution,
-            )
-            .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
+            let admin_count =
+                <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution)
+                    .ok_or(votingengine::Error::<T>::MissingAdminSnapshot)?;
             let casted = tally.yes.saturating_add(tally.no);
             let remaining = admin_count.saturating_sub(casted);
             if tally.yes.saturating_add(remaining) < threshold {
@@ -776,7 +761,8 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     }
 }
 
-impl<T: Config> votingengine::traits::InternalProposalFinalizer<frame_system::pallet_prelude::BlockNumberFor<T>>
+impl<T: Config>
+    votingengine::traits::InternalProposalFinalizer<frame_system::pallet_prelude::BlockNumberFor<T>>
     for Pallet<T>
 {
     fn finalize_internal_timeout(

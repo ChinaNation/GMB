@@ -16,23 +16,23 @@
 
 | 文件 | 说明 |
 |---|---|
-| `sfid/backend/src/store_shards/mod.rs` | 模块入口,StoreShard / GlobalShard / ShardedStore / ShardBackend trait 定义 + 8 单测 |
-| `sfid/backend/src/store_shards/shard_types.rs` | StoreShard / GlobalShard 类型定义与序列化 |
-| `sfid/backend/src/store_shards/backend.rs` | ShardBackend trait + ShardedStore 核心实现(DashMap 分片 + read/write/for_each_province) |
-| `sfid/backend/src/store_shards/pg_backend.rs` | PostgresShardBackend 实现(store_shards 表 CRUD + 乐观并发 version) |
-| `sfid/backend/src/store_shards/migration.rs` | 启动时幂等迁移:从 runtime_cache_entries 拆分灌入 store_shards 表 |
+| `sfid/backend/store_shards/mod.rs` | 模块入口,StoreShard / GlobalShard / ShardedStore / ShardBackend trait 定义 + 8 单测 |
+| `sfid/backend/store_shards/shard_types.rs` | StoreShard / GlobalShard 类型定义与序列化 |
+| `sfid/backend/store_shards/backend.rs` | ShardBackend trait + ShardedStore 核心实现(DashMap 分片 + read/write/for_each_province) |
+| `sfid/backend/store_shards/pg_backend.rs` | PostgresShardBackend 实现(store_shards 表 CRUD + 乐观并发 version) |
+| `sfid/backend/store_shards/migration.rs` | 启动时幂等迁移:从 runtime_cache_entries 拆分灌入 store_shards 表 |
 
 ### 改动文件(7 个)
 
 | 文件 | 改动内容 |
 |---|---|
-| `sfid/backend/src/main.rs` | AppState 接入 ShardedStore,启动时初始化 + 迁移 + 预加载 |
+| `sfid/backend/main.rs` | AppState 接入 ShardedStore,启动时初始化 + 迁移 + 预加载 |
 | `sfid/backend/Cargo.toml` | 新增依赖(dashmap 等) |
-| `sfid/backend/src/institutions/handler.rs` | cpms_site_keys 读写迁移到 sharded_store |
-| `sfid/backend/src/sheng-admins/institutions.rs` | multisig_institutions + multisig_accounts 读写迁移到 sharded_store |
-| `sfid/backend/src/operate/status.rs` | 状态查询迁移到 sharded_store |
-| `sfid/backend/src/app_core/runtime_ops.rs` | 启动路径保留 legacy store(迁移 + backfill + orphan cleanup) |
-| `sfid/backend/src/main_tests.rs` | store_shards 8 个单测 |
+| `sfid/backend/institutions/handler.rs` | cpms_site_keys 读写迁移到 sharded_store |
+| `sfid/backend/sheng_admins/institutions.rs` | multisig_institutions + multisig_accounts 读写迁移到 sharded_store |
+| `sfid/backend/scope/rules.rs` | 状态查询迁移到 sharded_store |
+| `sfid/backend/app_core/runtime_ops.rs` | 启动路径保留 legacy store(迁移 + backfill + orphan cleanup) |
+| `sfid/backend/main_tests.rs` | store_shards 8 个单测 |
 
 ### 迁移到 sharded_store 的三个字段
 
@@ -101,7 +101,7 @@
 
 ### 2.1 当前 Store 结构
 
-`sfid/backend/src/models/mod.rs::BackendStore` 是一个 single big struct,包含:
+`sfid/backend/models/mod.rs::BackendStore` 是一个 single big struct,包含:
 - 43 省所有 citizen 记录
 - 43 省所有机构/账户
 - 全局 admin_users_by_pubkey(KEY + SHENG + SHI 混合)

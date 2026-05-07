@@ -43,7 +43,10 @@ pub fn multiaddr_to_address(
 ) -> Result<AddressOrMultiStreamAddress<'_>, Error> {
     // Strip trailing /p2p/... component — peer discovery returns addresses
     // with the peer ID appended, but we only need the transport part.
-    let mut iter = multiaddr.iter().filter(|p| !matches!(p, Protocol::P2p(_))).fuse();
+    let mut iter = multiaddr
+        .iter()
+        .filter(|p| !matches!(p, Protocol::P2p(_)))
+        .fuse();
 
     let proto1 = iter.next().ok_or(Error::UnknownCombination)?;
     let proto2 = iter.next().ok_or(Error::UnknownCombination)?;

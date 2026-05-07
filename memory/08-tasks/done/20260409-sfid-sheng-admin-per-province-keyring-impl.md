@@ -290,7 +290,7 @@ getrandom = "0.2"
 
 ### 2.2 Store 数据模型
 
-**文件**:`sfid/backend/src/models/mod.rs`
+**文件**:`sfid/backend/models/mod.rs`
 
 扩展现有 `AdminUser`:
 
@@ -534,7 +534,7 @@ action:
 
 #### 2.5.2 省登录管理员登录 handler 改造
 
-**文件**:`sfid/backend/src/login/sheng_admin_login.rs`(或登录 handler 所在位置)
+**文件**:`sfid/backend/login/sheng_admin_login.rs`(或登录 handler 所在位置)
 
 在现有登录验签成功后追加:
 
@@ -632,7 +632,7 @@ if ctx.role == AdminRole::ShengAdmin {
 
 #### 2.5.4 更换省登录管理员 handler 改造
 
-**文件**:`sfid/backend/src/sheng_admins/catalog.rs::replace_sheng_admin`
+**文件**:`sfid/backend/sheng_admins/catalog.rs::replace_sheng_admin`
 
 在现有逻辑之后追加:
 
@@ -751,7 +751,7 @@ tracing::info!(
 
 **位置**:首页 Header 或侧边栏底部新增 "系统状态" 指示
 
-**组件**:`sfid/frontend/src/components/SystemLockBanner.tsx`(新)
+**组件**:`sfid/frontend/common/SystemLockBanner.tsx`(新)
 
 ```tsx
 // 顶部 Banner 条,所有角色都能看到
@@ -767,7 +767,7 @@ tracing::info!(
 
 ### 3.2 解锁 Modal
 
-**组件**:`sfid/frontend/src/components/UnlockBackendModal.tsx`(新)
+**组件**:`sfid/frontend/common/UnlockBackendModal.tsx`(新)
 
 流程:
 2. 签一个固定 challenge "sfid-system-unlock-v1-{timestamp}"

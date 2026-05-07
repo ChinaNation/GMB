@@ -47,7 +47,7 @@
 
 | 后端 | 生成 | 接收 |
 |---|---|---|
-| `sfid/backend/src/login/mod.rs` | `login_challenge` | `login_receipt` |
+| `sfid/backend/login/mod.rs` | `login_challenge` | `login_receipt` |
 | `cpms/backend/src/login/mod.rs` | `login_challenge` | `login_receipt` |
 
 sfid / cpms 前端只是扫码 UI 宿主:

@@ -1076,8 +1076,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Future<void> _submitCitizenVote(bool approve) async {
-    // TODO: 联合公投提交逻辑（需要链上 cast_referendum extrinsic）
-    // 暂时提示功能开发中
+    // 中文注释：联合公投提交依赖链上 cast_referendum extrinsic，入口未开放前只提示状态。
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

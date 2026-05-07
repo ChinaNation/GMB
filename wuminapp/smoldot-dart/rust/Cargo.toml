@@ -39,3 +39,6 @@ opt-level = 1          # Faster compilation in dev
 
 [build-dependencies]
 cbindgen = "0.27"
+
+[workspace]
+resolver = "2"

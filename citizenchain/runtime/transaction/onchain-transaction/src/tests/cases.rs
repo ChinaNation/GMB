@@ -10,13 +10,11 @@ fn onchain_fee_round_and_min_work() {
     assert_eq!(fee_small, 10);
 
     // 10000分(100元)*0.1%=10分，刚好最低线
-    let fee_boundary =
-        mul_perbill_round(10_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
+    let fee_boundary = mul_perbill_round(10_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
     assert_eq!(fee_boundary, 10);
 
     // 50000分(500元)*0.1%=50分，大于最低线按实际收取
-    let fee_large =
-        mul_perbill_round(50_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
+    let fee_large = mul_perbill_round(50_000, rate).max(primitives::fee_policy::ONCHAIN_MIN_FEE);
     assert_eq!(fee_large, 50);
 }
 
@@ -50,17 +48,15 @@ fn custom_fee_with_tip_handles_all_extract_results() {
         assert_eq!(fee_amount, 53);
 
         // NoAmount：不收基础费，仅返回 tip
-        let fee_no_amount = custom_fee_with_tip::<Test, Balances, AmountExtractorNoAmount>(
-            &who, &call, &info, 7,
-        )
-        .expect("no-amount call must only charge tip");
+        let fee_no_amount =
+            custom_fee_with_tip::<Test, Balances, AmountExtractorNoAmount>(&who, &call, &info, 7)
+                .expect("no-amount call must only charge tip");
         assert_eq!(fee_no_amount, 7);
 
         // Unknown：拒绝交易，避免漏提取手续费
-        let unknown_err = custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(
-            &who, &call, &info, 0,
-        )
-        .expect_err("unknown extract result should be rejected");
+        let unknown_err =
+            custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(&who, &call, &info, 0)
+                .expect_err("unknown extract result should be rejected");
         assert_eq!(unknown_err, InvalidTransaction::Call.into());
     });
 }
@@ -78,10 +74,9 @@ fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
             &who, &call, &info, 0, 2
         ));
 
-        let liq =
-            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
-                .expect("withdraw should succeed")
-                .expect("non-zero fee must return liquidity info");
+        let liq = <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&who, &call, &info, 0, 2)
+            .expect("withdraw should succeed")
+            .expect("non-zero fee must return liquidity info");
 
         assert_eq!(Balances::free_balance(who), 988);
         assert_eq!(liq.0.peek(), 10);
@@ -143,10 +138,10 @@ fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
         )
         .is_err());
 
-        assert!(<Adapter as OnChargeTransaction<Test>>::withdraw_fee(
-            &poor, &call, &info, 0, 0
-        )
-        .is_err());
+        assert!(
+            <Adapter as OnChargeTransaction<Test>>::withdraw_fee(&poor, &call, &info, 0, 0)
+                .is_err()
+        );
     });
 }
 
@@ -162,8 +157,7 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -172,8 +166,7 @@ fn fee_router_distributes_to_bound_author_wallet_and_nrc_and_safety_fund() {
         let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
@@ -218,8 +211,7 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -228,8 +220,7 @@ fn fee_router_burns_fullnode_share_when_author_not_bound() {
         let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
         // 无作者钱包时：全节点分成销毁，NRC 和安全基金正常分配。
@@ -280,8 +271,7 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -290,8 +280,7 @@ fn fee_router_burns_fullnode_share_when_author_not_found() {
         let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
         // 无作者时：全节点分成销毁，NRC 和安全基金正常分配。
@@ -337,8 +326,7 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
         let total_fee = 100u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -348,8 +336,7 @@ fn fee_router_burns_nrc_share_when_nrc_account_missing() {
         let expected_nrc_for_split = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc_for_split);
         let expected_burn = expected_nrc_for_split;
@@ -395,15 +382,14 @@ fn fee_router_burns_fullnode_share_when_reward_wallet_resolve_fails() {
         let total_fee = 50u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
         let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
         let remainder = total_fee.saturating_sub(expected_fullnode);
-        let expected_nrc = remainder.saturating_mul(nrc_percent)
-            / nrc_percent.saturating_add(safety_fund_percent);
+        let expected_nrc =
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent);
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
@@ -468,15 +454,14 @@ fn fee_router_burns_nrc_share_when_resolve_fails() {
         let total_fee = 500u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
         let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
         let remainder = total_fee.saturating_sub(expected_fullnode);
-        let expected_nrc = remainder.saturating_mul(nrc_percent)
-            / nrc_percent.saturating_add(safety_fund_percent);
+        let expected_nrc =
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent);
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
         // NRC resolve 失败（ED 过高），NRC 份额销毁；安全基金正常分配。
         let expected_burn = expected_nrc;
@@ -534,15 +519,14 @@ fn fee_router_burns_safety_fund_share_when_resolve_fails() {
         let total_fee = 500u128;
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
         let expected_fullnode = total_fee.saturating_mul(fullnode_percent) / total_percent;
         let remainder = total_fee.saturating_sub(expected_fullnode);
-        let expected_nrc = remainder.saturating_mul(nrc_percent)
-            / nrc_percent.saturating_add(safety_fund_percent);
+        let expected_nrc =
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent);
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 
         TestExistentialDeposit::set(100);
@@ -612,8 +596,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
         let total_fee = 55u128; // base 50 + tip 5
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -622,8 +605,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
         let expected_nrc_split = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc_split);
         // 无作者 + 无 NRC 账户：全节点分成和 NRC 分成销毁，安全基金正常分配。
@@ -729,8 +711,7 @@ fn tip_is_routed_with_fee_using_same_distribution() {
         let total_fee = 15u128; // base 10 + tip 5
         let fullnode_percent = primitives::fee_policy::ONCHAIN_FEE_FULLNODE_PERCENT as u128;
         let nrc_percent = primitives::fee_policy::ONCHAIN_FEE_NRC_PERCENT as u128;
-        let safety_fund_percent =
-            primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
+        let safety_fund_percent = primitives::fee_policy::ONCHAIN_FEE_SAFETY_FUND_PERCENT as u128;
         let total_percent = fullnode_percent
             .saturating_add(nrc_percent)
             .saturating_add(safety_fund_percent);
@@ -739,8 +720,7 @@ fn tip_is_routed_with_fee_using_same_distribution() {
         let expected_nrc = if nrc_percent.saturating_add(safety_fund_percent) == 0 {
             0
         } else {
-            remainder.saturating_mul(nrc_percent)
-                / nrc_percent.saturating_add(safety_fund_percent)
+            remainder.saturating_mul(nrc_percent) / nrc_percent.saturating_add(safety_fund_percent)
         };
         let expected_safety_fund = remainder.saturating_sub(expected_nrc);
 

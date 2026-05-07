@@ -24,7 +24,6 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
-use primitives::derive::subject_id_from_sfid_number;
 use alloc::vec::Vec;
 use codec::Decode;
 use codec::Encode;
@@ -47,6 +46,7 @@ use frame_support::{
 use frame_system::limits::{BlockLength, BlockWeights};
 use onchain_transaction::NrcAccountProvider as _;
 use pallet_transaction_payment::{ConstFeeMultiplier, Multiplier};
+use primitives::derive::subject_id_from_sfid_number;
 use sp_core::{sr25519, Void};
 use sp_io::{crypto::sr25519_verify, hashing::blake2_256};
 #[allow(unused_imports)]
@@ -58,10 +58,10 @@ use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::RuntimeUpgrade;
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance,
-    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime,
-    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance, GenesisPallet,
+    Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime, RuntimeCall,
+    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
+    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -404,7 +404,9 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             // 货币政策类(决议发行 / 决议销毁)整体免费:不属于交易范畴。
             // ResolutionIssuance 仅 Root/管理员维护类 + propose_resolution_issuance(增发提案);
             // ResolutionDestro 仅 propose_destroy(销毁提案)。两者都是货币政策不入费率公式。
-            RuntimeCall::ResolutionIssuance(_) => onchain_transaction::AmountExtractResult::NoAmount,
+            RuntimeCall::ResolutionIssuance(_) => {
+                onchain_transaction::AmountExtractResult::NoAmount
+            }
             RuntimeCall::ResolutionDestro(_) => onchain_transaction::AmountExtractResult::NoAmount,
             // 投票引擎主 pallet 公开 call 共 3 个:
             //   finalize_proposal — 任意人推动超时结算,免费;
@@ -441,9 +443,7 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             // 多签转账模块 3 个 propose_X 全部按金额计费(amount × 0.1%, ≥0.1 元)。
             RuntimeCall::DuoqianTransfer(ref dt_call) => match dt_call {
                 duoqian_transfer::pallet::Call::propose_transfer { amount, .. }
-                | duoqian_transfer::pallet::Call::propose_safety_fund_transfer {
-                    amount, ..
-                }
+                | duoqian_transfer::pallet::Call::propose_safety_fund_transfer { amount, .. }
                 | duoqian_transfer::pallet::Call::propose_sweep_to_main { amount, .. } => {
                     onchain_transaction::AmountExtractResult::Amount(*amount)
                 }
@@ -1145,8 +1145,10 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     }
 
     fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: organization_manage::SfidNumberOf<Runtime> = sfid_number.to_vec().try_into().ok()?;
-        let an: organization_manage::AccountNameOf<Runtime> = account_name.to_vec().try_into().ok()?;
+        let id: organization_manage::SfidNumberOf<Runtime> =
+            sfid_number.to_vec().try_into().ok()?;
+        let an: organization_manage::AccountNameOf<Runtime> =
+            account_name.to_vec().try_into().ok()?;
         organization_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
     }
 
@@ -1480,15 +1482,10 @@ impl genesis_pallet::Config for Runtime {
     type MaxDeclarationLen = MaxDeclarationLen;
 }
 
-
 pub struct RuntimeInternalAdminProvider;
 
 impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
-    fn is_internal_admin(
-        org: u8,
-        institution: votingengine::SubjectId,
-        who: &AccountId,
-    ) -> bool {
+    fn is_internal_admin(org: u8, institution: votingengine::SubjectId, who: &AccountId) -> bool {
         admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who)
     }
 
@@ -1550,10 +1547,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
         }
     }
 
-    fn pending_pass_threshold(
-        org: u8,
-        institution: votingengine::SubjectId,
-    ) -> Option<u32> {
+    fn pending_pass_threshold(org: u8, institution: votingengine::SubjectId) -> Option<u32> {
         if org != votingengine::types::ORG_REN {
             return None;
         }

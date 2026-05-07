@@ -3,16 +3,16 @@
 //! This library provides C-compatible FFI exports for the smoldot-light
 //! Rust library, enabling Dart applications to use a lightweight Substrate/Polkadot client.
 
+use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use smoldot_light::{
-    AddChainConfig, AddChainConfigJsonRpc, AddChainSuccess, ChainId, Client,
-    JsonRpcResponses, platform::DefaultPlatform,
+    platform::DefaultPlatform, AddChainConfig, AddChainConfigJsonRpc, AddChainSuccess, ChainId,
+    Client, JsonRpcResponses,
 };
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
-use once_cell::sync::Lazy;
 
 mod error;
 mod ffi_types;
@@ -84,14 +84,13 @@ pub unsafe extern "C" fn smoldot_client_init(
     };
 
     // Get system name and version
-    let system_name = config.system_name.unwrap_or_else(|| "Polkadart".to_string());
+    let system_name = config
+        .system_name
+        .unwrap_or_else(|| "Polkadart".to_string());
     let system_version = config.system_version.unwrap_or_else(|| "0.1.0".to_string());
 
     // Initialize smoldot client (Client::new wraps platform in Arc internally)
-    let platform = DefaultPlatform::new(
-        system_name.into(),
-        system_version.into(),
-    );
+    let platform = DefaultPlatform::new(system_name.into(), system_version.into());
 
     let client = Client::new(platform);
 
@@ -164,18 +163,15 @@ pub unsafe extern "C" fn smoldot_add_chain(
     };
 
     // Parse potential relay chains
-    let relay_chains: Vec<ChainId> = if !potential_relay_chains.is_null() && relay_chains_count > 0 {
-        let chains_slice = std::slice::from_raw_parts(
-            potential_relay_chains,
-            relay_chains_count as usize,
-        );
+    let relay_chains: Vec<ChainId> = if !potential_relay_chains.is_null() && relay_chains_count > 0
+    {
+        let chains_slice =
+            std::slice::from_raw_parts(potential_relay_chains, relay_chains_count as usize);
 
         let chains_lock = CHAINS.lock();
         chains_slice
             .iter()
-            .filter_map(|&handle| {
-                chains_lock.get(&handle).map(|wrapper| wrapper.chain_id)
-            })
+            .filter_map(|&handle| chains_lock.get(&handle).map(|wrapper| wrapper.chain_id))
             .collect()
     } else {
         Vec::new()
@@ -335,7 +331,8 @@ pub unsafe extern "C" fn smoldot_next_json_rpc_response(
     };
 
     // Clone the response handle with explicit type
-    let responses_arc: Arc<tokio::sync::Mutex<Option<JsonRpcResponses<Arc<DefaultPlatform>>>>> = Arc::clone(&chain_wrapper.json_rpc_responses);
+    let responses_arc: Arc<tokio::sync::Mutex<Option<JsonRpcResponses<Arc<DefaultPlatform>>>>> =
+        Arc::clone(&chain_wrapper.json_rpc_responses);
 
     // Spawn async task
     client_wrapper.runtime.spawn(async move {
@@ -363,8 +360,8 @@ pub unsafe extern "C" fn smoldot_next_json_rpc_response(
         match response_result {
             Ok(response) => {
                 // Convert response to C string
-                let response_cstr = CString::new(response)
-                    .unwrap_or_else(|_| CString::new("").unwrap());
+                let response_cstr =
+                    CString::new(response).unwrap_or_else(|_| CString::new("").unwrap());
                 callback(callback_id, response_cstr.as_ptr() as i64, std::ptr::null());
                 std::mem::forget(response_cstr); // Dart must free
             }
@@ -484,8 +481,8 @@ fn generate_chain_handle() -> ChainHandle {
 
 unsafe fn set_error(error_out: *mut *mut c_char, message: &str) {
     if !error_out.is_null() {
-        let error_cstr = CString::new(message)
-            .unwrap_or_else(|_| CString::new("Unknown error").unwrap());
+        let error_cstr =
+            CString::new(message).unwrap_or_else(|_| CString::new("Unknown error").unwrap());
         *error_out = error_cstr.into_raw();
     }
 }

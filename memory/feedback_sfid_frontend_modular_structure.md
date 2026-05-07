@@ -34,5 +34,5 @@ src/views/
 
 ## 参考
 
-- `sfid/frontend/src/views/README.md`
+- `sfid/frontend/<feature>/README.md`
 - 任务卡:`memory/08-tasks/done/20260408-sfid-frontend-app-tsx-split.md`

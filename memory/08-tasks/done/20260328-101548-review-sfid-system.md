@@ -54,7 +54,7 @@
 ### 已确认
 
 - 未发现 `sfid-system` 模块内可直接利用的高危逻辑漏洞
-- 按当前 runtime 与 `sfid/backend/src/chain/runtime_align.rs` 的对齐口径，核心功能已实现：绑定/解绑、一对一映射、投票资格校验、主备验签账户轮换、链域隔离、绑定成功后回调发行模块
+- 按当前 runtime 与 `sfid/backend/app_core/chain_runtime.rs` 的对齐口径，核心功能已实现：绑定/解绑、一对一映射、投票资格校验、主备验签账户轮换、链域隔离、绑定成功后回调发行模块
 - 关键业务代码已包含中文注释，但测试覆盖与技术文档同步性明显不足
 
 ### 已确认问题与改进点
@@ -86,5 +86,5 @@
 
 ### 说明
 
-- 若以当前 runtime 代码和 `sfid/backend/src/chain/runtime_align.rs` 为真相源，则“绑定凭证过期回收”不是现行实现，而是旧文档残留
+- 若以当前 runtime 代码和 `sfid/backend/app_core/chain_runtime.rs` 为真相源，则“绑定凭证过期回收”不是现行实现，而是旧文档残留
 - 若项目仍坚持保留“过期块高回收绑定 nonce”的需求，则当前模块并未实现这一能力，需要单独澄清

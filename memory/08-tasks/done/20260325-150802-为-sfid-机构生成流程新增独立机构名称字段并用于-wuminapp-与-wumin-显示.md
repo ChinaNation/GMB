@@ -12,11 +12,11 @@
 
 ## 2. 范围
 
-- `sfid/frontend/src/components/App.tsx`
-- `sfid/frontend/src/api/client.ts`
-- `sfid/backend/src/super-admins/institutions.rs`
-- `sfid/backend/src/models/mod.rs`
-- `sfid/backend/src/chain/app_api.rs`
+- `sfid/frontend/App.tsx`
+- `sfid/frontend/utils/http.ts`
+- `sfid/backend/sheng_admins/institutions.rs`
+- `sfid/backend/models/mod.rs`
+- `sfid/backend/citizens/chain_vote.rs`
 - `wuminapp/lib/governance/`
 - `wumin/lib/signer/`
 - 对应模块文档与任务记录

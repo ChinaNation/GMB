@@ -10,7 +10,7 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_core::Pair;
 
-use crate::{pallet, subject_id_from_sfid_number, Call, Config, SubjectId, Pallet, CHINA_CB};
+use crate::{pallet, subject_id_from_sfid_number, Call, Config, Pallet, SubjectId, CHINA_CB};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")

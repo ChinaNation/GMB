@@ -19,8 +19,8 @@ use sp_runtime::{
 };
 
 use crate::pallet::{
-    Config, Error, Event, Pallet, PendingCloseProposal, PendingPersonalCreate,
-    PersonalDuoqianInfo, PersonalDuoqians,
+    Config, Error, Event, Pallet, PendingCloseProposal, PendingPersonalCreate, PersonalDuoqianInfo,
+    PersonalDuoqians,
 };
 use crate::types::{CloseDuoqianAction, CreateDuoqianAction, DuoqianStatus};
 use crate::BalanceOf;

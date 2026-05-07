@@ -143,10 +143,7 @@ pub struct TestSfidEligibility;
 impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
-    fn is_eligible(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
     }
 
@@ -204,8 +201,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         if org != ORG_REN {
             return None;
         }
-        admins_change::Subjects::<Test>::get(institution)
-            .map(|s| s.admins.into_inner())
+        admins_change::Subjects::<Test>::get(institution).map(|s| s.admins.into_inner())
     }
 }
 
@@ -376,20 +372,20 @@ pub fn admins_vec(count: u8) -> pallet::DuoqianAdminsOf<Test> {
 }
 
 pub fn account_names_bv(names: &[&[u8]]) -> pallet::InstitutionAccountNamesOf<Test> {
-    let v: alloc::vec::Vec<pallet::AccountNameOf<Test>> = names
-        .iter()
-        .map(|n| account_name(n))
-        .collect();
+    let v: alloc::vec::Vec<pallet::AccountNameOf<Test>> =
+        names.iter().map(|n| account_name(n)).collect();
     BoundedVec::try_from(v).expect("account names fit")
 }
 
 pub fn initial_accounts(items: &[(&[u8], Balance)]) -> pallet::InstitutionInitialAccountsOf<Test> {
     let v: alloc::vec::Vec<pallet::InstitutionInitialAccountOf<Test>> = items
         .iter()
-        .map(|(n, amt)| crate::institution::types::InstitutionInitialAccount {
-            account_name: account_name(n),
-            amount: *amt,
-        })
+        .map(
+            |(n, amt)| crate::institution::types::InstitutionInitialAccount {
+                account_name: account_name(n),
+                amount: *amt,
+            },
+        )
         .collect();
     BoundedVec::try_from(v).expect("initial accounts fit")
 }

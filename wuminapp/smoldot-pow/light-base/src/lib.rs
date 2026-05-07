@@ -347,8 +347,9 @@ impl RecentBlockCache {
         subscribe_all: &sync_service::SubscribeAll,
         block_number_bytes: usize,
     ) -> Result<(), String> {
-        let finalized_hash =
-            header::hash_from_scale_encoded_header(&subscribe_all.finalized_block_scale_encoded_header);
+        let finalized_hash = header::hash_from_scale_encoded_header(
+            &subscribe_all.finalized_block_scale_encoded_header,
+        );
         let finalized_number = header::decode(
             &subscribe_all.finalized_block_scale_encoded_header,
             block_number_bytes,
@@ -394,9 +395,12 @@ impl RecentBlockCache {
     ) -> Result<(), String> {
         match notification {
             sync_service::Notification::Block(block) => {
-                let decoded_header = header::decode(&block.scale_encoded_header, block_number_bytes)
-                    .map_err(|error| format!("Failed to decode block notification header: {error}"))?;
-                let block_hash = header::hash_from_scale_encoded_header(&block.scale_encoded_header);
+                let decoded_header =
+                    header::decode(&block.scale_encoded_header, block_number_bytes).map_err(
+                        |error| format!("Failed to decode block notification header: {error}"),
+                    )?;
+                let block_hash =
+                    header::hash_from_scale_encoded_header(&block.scale_encoded_header);
                 self.observed_blocks.insert(
                     block_hash,
                     RecentObservedBlock {
@@ -504,12 +508,19 @@ impl RecentBlockCache {
             }
         }
 
-        if !rebuilt.iter().any(|(number, _)| *number == finalized_number) {
+        if !rebuilt
+            .iter()
+            .any(|(number, _)| *number == finalized_number)
+        {
             rebuilt.push((finalized_number, finalized_hash));
         }
 
         for (number, hash) in old_chain {
-            if number < finalized_number && !rebuilt.iter().any(|(entry_number, _)| *entry_number == number) {
+            if number < finalized_number
+                && !rebuilt
+                    .iter()
+                    .any(|(entry_number, _)| *entry_number == number)
+            {
                 rebuilt.push((number, hash));
             }
         }
@@ -632,10 +643,12 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
             .public_api_chains
             .get(usize::from(chain_id))
             .ok_or_else(|| format!("Invalid chain id: {}", usize::from(chain_id)))?;
-        let chains_by_key = self
-            .chains_by_key
-            .as_ref()
-            .ok_or_else(|| format!("Chain services not initialized for {}", usize::from(chain_id)))?;
+        let chains_by_key = self.chains_by_key.as_ref().ok_or_else(|| {
+            format!(
+                "Chain services not initialized for {}",
+                usize::from(chain_id)
+            )
+        })?;
         let running_chain = chains_by_key
             .get(&public_api_chain.key)
             .ok_or_else(|| format!("Chain services missing for {}", usize::from(chain_id)))?;
@@ -656,8 +669,9 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
         Ok(Box::pin(async move {
             // 中文注释：直接从同步服务抓当前 finalized/best 视图，避免再经过 system_health。
             let subscribe_all = services.sync_service.subscribe_all(16, false).await;
-            let finalized_block_hash =
-                header::hash_from_scale_encoded_header(&subscribe_all.finalized_block_scale_encoded_header);
+            let finalized_block_hash = header::hash_from_scale_encoded_header(
+                &subscribe_all.finalized_block_scale_encoded_header,
+            );
             let finalized_block_number = header::decode(
                 &subscribe_all.finalized_block_scale_encoded_header,
                 block_number_bytes,
@@ -671,22 +685,24 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                     .iter()
                     .find(|block| block.is_new_best)
             {
-                let best_block_number = header::decode(
+                let best_block_number =
+                    header::decode(&best_non_finalized.scale_encoded_header, block_number_bytes)
+                        .map_err(|error| format!("Failed to decode best block header: {error}"))?
+                        .number;
+                let best_block_hash = header::hash_from_scale_encoded_header(
                     &best_non_finalized.scale_encoded_header,
-                    block_number_bytes,
-                )
-                .map_err(|error| format!("Failed to decode best block header: {error}"))?
-                .number;
-                let best_block_hash =
-                    header::hash_from_scale_encoded_header(&best_non_finalized.scale_encoded_header);
+                );
                 (best_block_number, best_block_hash)
             } else {
                 (finalized_block_number, finalized_block_hash)
             };
 
-            let peer_count =
-                u64::try_from(services.sync_service.syncing_peers().await.len()).unwrap_or(u64::MAX);
-            let is_syncing = !services.runtime_service.is_near_head_of_chain_heuristic().await;
+            let peer_count = u64::try_from(services.sync_service.syncing_peers().await.len())
+                .unwrap_or(u64::MAX);
+            let is_syncing = !services
+                .runtime_service
+                .is_near_head_of_chain_heuristic()
+                .await;
 
             Ok(ChainStatusSnapshot {
                 peer_count,
@@ -726,8 +742,9 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
             let block_number_bytes = services.sync_service.block_number_bytes();
             // 中文注释：缓存未命中时，再用一次当前同步视图兜住 finalized / non-finalized 头部区间。
             let subscribe_all = services.sync_service.subscribe_all(16, false).await;
-            let finalized_block_hash =
-                header::hash_from_scale_encoded_header(&subscribe_all.finalized_block_scale_encoded_header);
+            let finalized_block_hash = header::hash_from_scale_encoded_header(
+                &subscribe_all.finalized_block_scale_encoded_header,
+            );
             let finalized_block_number = header::decode(
                 &subscribe_all.finalized_block_scale_encoded_header,
                 block_number_bytes,
@@ -740,8 +757,9 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
             }
 
             for block in &subscribe_all.non_finalized_blocks_ancestry_order {
-                let decoded_header = header::decode(&block.scale_encoded_header, block_number_bytes)
-                    .map_err(|error| format!("Failed to decode known block header: {error}"))?;
+                let decoded_header =
+                    header::decode(&block.scale_encoded_header, block_number_bytes)
+                        .map_err(|error| format!("Failed to decode known block header: {error}"))?;
                 if decoded_header.number == block_number {
                     let block_hash =
                         header::hash_from_scale_encoded_header(&block.scale_encoded_header);
@@ -817,11 +835,11 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                     .iter()
                     .find(|block| block.is_new_best)
                 {
-                    let decoded_header =
-                        header::decode(&best_non_finalized.scale_encoded_header, block_number_bytes)
-                            .map_err(|error| {
-                                format!("Failed to decode best block header: {error}")
-                            })?;
+                    let decoded_header = header::decode(
+                        &best_non_finalized.scale_encoded_header,
+                        block_number_bytes,
+                    )
+                    .map_err(|error| format!("Failed to decode best block header: {error}"))?;
                     (
                         decoded_header.number,
                         header::hash_from_scale_encoded_header(
@@ -853,10 +871,13 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                     block_number,
                     block_hash,
                     block_state_trie_root_hash,
-                    storage_keys.iter().cloned().map(|key| sync_service::StorageRequestItem {
-                        key,
-                        ty: sync_service::StorageRequestItemTy::Value,
-                    }),
+                    storage_keys
+                        .iter()
+                        .cloned()
+                        .map(|key| sync_service::StorageRequestItem {
+                            key,
+                            ty: sync_service::StorageRequestItemTy::Value,
+                        }),
                     3,
                     Duration::from_secs(20),
                     NonZero::<u32>::new(3).unwrap(),
@@ -935,10 +956,7 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
     pub fn chain_metadata(
         &self,
         chain_id: ChainId,
-    ) -> Result<
-        Pin<Box<dyn core::future::Future<Output = Result<Vec<u8>, String>>>>,
-        String,
-    > {
+    ) -> Result<Pin<Box<dyn core::future::Future<Output = Result<Vec<u8>, String>>>>, String> {
         let services = self.clone_chain_services(chain_id)?;
 
         Ok(Box::pin(async move {
@@ -1086,7 +1104,9 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
                     NonZero::<u32>::new(1).unwrap(),
                 )
                 .await
-                .map_err(|error| format!("Failed to execute AccountNonceApi_account_nonce: {error}"));
+                .map_err(|error| {
+                    format!("Failed to execute AccountNonceApi_account_nonce: {error}")
+                });
 
             if let Some(best_block_hash) = unpin_hash {
                 subscription.unpin_block(best_block_hash).await;
@@ -1907,7 +1927,7 @@ async fn compile_runtime_for_block<TPlat: platform::PlatformRef>(
             }
             sync_service::StorageQueryProgress::Progress { .. } => unreachable!(),
             sync_service::StorageQueryProgress::Error(error) => {
-                return Err(format!("Failed to download runtime storage: {error}"))
+                return Err(format!("Failed to download runtime storage: {error}"));
             }
         }
     }
@@ -1992,7 +2012,8 @@ fn start_services<TPlat: platform::PlatformRef>(
     config: StartServicesChainTy<'_, TPlat>,
     network_identify_agent_version: String,
 ) -> ChainServices<TPlat> {
-    let genesis_block_hash = header::hash_from_scale_encoded_header(&genesis_block_scale_encoded_header);
+    let genesis_block_hash =
+        header::hash_from_scale_encoded_header(&genesis_block_scale_encoded_header);
     let network_service = network_service.get_or_insert_with(|| {
         network_service::NetworkService::new(network_service::Config {
             platform: platform.clone(),
@@ -2041,10 +2062,7 @@ fn start_services<TPlat: platform::PlatformRef>(
                         header::hash_from_scale_encoded_header(finalized_block_header),
                     )
                 } else {
-                    (
-                        0,
-                        genesis_block_hash,
-                    )
+                    (0, genesis_block_hash)
                 }
             }
         },

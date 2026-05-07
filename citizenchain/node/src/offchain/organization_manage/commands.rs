@@ -39,9 +39,11 @@ pub async fn fetch_clearing_bank_institution_detail(
     if !status.running {
         return Err("节点未运行,无法查询链上数据".to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || super::chain::fetch_institution_detail(&sfid_number))
-        .await
-        .map_err(|e| format!("fetch_clearing_bank_institution_detail task failed:{e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        super::chain::fetch_institution_detail(&sfid_number)
+    })
+    .await
+    .map_err(|e| format!("fetch_clearing_bank_institution_detail task failed:{e}"))?
 }
 
 /// 机构提案分页查询。本阶段返回空列表占位。

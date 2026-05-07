@@ -5,7 +5,7 @@
 
 ## 需求
 
-删除 `sfid/backend/src/` 这一层目录,把 `src` 下所有后端源码模块平移到
+删除旧后端源码壳这一层目录,把其中所有后端源码模块平移到
 `sfid/backend/` 根目录,让后端源码布局与前端一样直接按功能目录展开。
 
 ## 边界规则
@@ -13,7 +13,7 @@
 - 只移动 SFID 后端 Rust 源码目录和入口文件。
 - 不移动 `sfid/backend/db/`、`sfid/backend/scripts/`、`sfid/backend/tests/`、`sfid/backend/target/`。
 - Cargo 入口改为显式 `[[bin]] path = "main.rs"`。
-- 删除空 `sfid/backend/src/`,不得留下兼容壳或影子目录。
+- 删除空旧后端源码壳,不得留下兼容壳或影子目录。
 - SFID 后端不得恢复独立 `backend/src/` 或 `backend/chain/` 业务目录。
 
 ## 预计修改目录
@@ -27,11 +27,11 @@
 - `memory/05-modules/sfid/`
   - 中文注释:更新 SFID 模块技术文档中的后端路径和目录规则。
 - `memory/07-ai/`、`memory/AGENTS.md`
-  - 中文注释:更新 AI 强制规则,禁止恢复 `sfid/backend/src/` 和独立 `backend/chain/`。
+  - 中文注释:更新 AI 强制规则,禁止恢复旧后端源码壳和独立 `backend/chain/`。
 
 ## 验收
 
-- `sfid/backend/src/` 不存在。
+- 旧后端源码壳不存在。
 - `sfid/backend/main.rs` 存在,`Cargo.toml` 显式配置 `[[bin]] path = "main.rs"`。
 - `cargo fmt && cargo check` 通过。
 - 新路径下无 `backend/src` 活跃代码引用。
@@ -39,9 +39,9 @@
 
 ## 完成记录
 
-- 已将 `sfid/backend/src/main.rs` 平移为 `sfid/backend/main.rs`。
+- 已将旧源码壳入口平移为 `sfid/backend/main.rs`。
 - 已将 `app_core`、`citizens`、`crypto`、`indexer`、`institutions`、`login`、`models`、`qr`、`scope`、`sfid`、`sheng_admins`、`shi_admins`、`store_shards` 平移到 `sfid/backend/` 根目录。
-- 已删除空 `sfid/backend/src/`。
+- 已删除空旧后端源码壳。
 - 已在 `sfid/backend/Cargo.toml` 显式配置 `[[bin]] path = "main.rs"`。
 - 已更新 SFID 后端/前端注释、模块文档、repo-map、AI 规则与上下文加载脚本。
 - 已新增 `memory/05-modules/sfid/backend/BACKEND_LAYOUT.md` 固化新目录规则。

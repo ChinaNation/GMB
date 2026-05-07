@@ -5,8 +5,7 @@ use std::path::PathBuf;
 
 fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let output_file = PathBuf::from(&crate_dir)
-        .join("../native/smoldot.h");
+    let output_file = PathBuf::from(&crate_dir).join("../native/smoldot.h");
 
     // Generate C bindings
     let config = cbindgen::Config {

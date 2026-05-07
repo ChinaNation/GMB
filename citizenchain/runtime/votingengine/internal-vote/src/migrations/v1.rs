@@ -164,7 +164,12 @@ mod tests {
             // 验证旧前缀全空
             for storage in STORAGES {
                 let n = count_keys(&build_prefix(OLD_PALLET, storage));
-                assert_eq!(n, 0, "old prefix {:?} not empty", core::str::from_utf8(storage).unwrap());
+                assert_eq!(
+                    n,
+                    0,
+                    "old prefix {:?} not empty",
+                    core::str::from_utf8(storage).unwrap()
+                );
             }
 
             // 验证新前缀有正确数据

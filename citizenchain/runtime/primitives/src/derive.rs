@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn sfid_number_starts_with_0x02() {
-        let sfid_number = b"CN-110000-XXXX";
+        let sfid_number = b"CN-110000-0001";
         let id = subject_id_from_sfid_number(sfid_number).unwrap();
         assert_eq!(id[0], 0x02);
         assert_eq!(&id[1..1 + sfid_number.len()], sfid_number);

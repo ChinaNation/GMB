@@ -173,11 +173,11 @@
 
 禁止新增或恢复以下目录：
 
-- `sfid/backend/src/`
-- `sfid/backend/chain/`
-- `sfid/frontend/chain/`
-- `sfid/frontend/api/`
-- `wuminapp/lib/Isar/`
+- SFID 后端源码壳目录。
+- SFID 后端独立链业务目录。
+- SFID 前端独立链业务目录。
+- SFID 前端独立业务 API 目录。
+- wuminapp 旧大写 Isar 目录。
 
 历史文件或外部工具生成物中已有的，不因此自动修改；新建命名禁止使用。
 

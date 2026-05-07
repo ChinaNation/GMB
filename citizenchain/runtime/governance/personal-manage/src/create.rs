@@ -159,4 +159,3 @@ pub(crate) fn do_propose_create<T: Config>(
 
     Ok(())
 }
-

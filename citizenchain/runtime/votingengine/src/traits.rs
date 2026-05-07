@@ -6,7 +6,7 @@
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
-use crate::{SubjectId, ProposalCancelDecision, ProposalExecutionOutcome};
+use crate::{ProposalCancelDecision, ProposalExecutionOutcome, SubjectId};
 
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(
@@ -591,19 +591,12 @@ pub trait InternalAdminProvider<AccountId> {
     fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
-    fn get_admin_list(
-        _org: u8,
-        _institution: SubjectId,
-    ) -> Option<sp_std::vec::Vec<AccountId>> {
+    fn get_admin_list(_org: u8, _institution: SubjectId) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 
     /// 查询 Pending 主体管理员权限。仅供创建/激活该主体的投票入口使用。
-    fn is_pending_internal_admin(
-        _org: u8,
-        _institution: SubjectId,
-        _who: &AccountId,
-    ) -> bool {
+    fn is_pending_internal_admin(_org: u8, _institution: SubjectId, _who: &AccountId) -> bool {
         false
     }
 
@@ -680,7 +673,6 @@ impl InternalThresholdProvider for () {
     }
 }
 
-
 // ──────────────────────────────────────────────────────────────────
 // 投票引擎核心 → mode pallet 的反向调用 trait
 // votingengine 主 crate 的 finalize / cleanup / on_initialize 路径通过这些
@@ -703,7 +695,9 @@ impl<BlockNumber> InternalProposalFinalizer<BlockNumber> for () {
         _proposal: &crate::Proposal<BlockNumber>,
         _proposal_id: u64,
     ) -> DispatchResult {
-        Err(DispatchError::Other("InternalProposalFinalizerNotConfigured"))
+        Err(DispatchError::Other(
+            "InternalProposalFinalizerNotConfigured",
+        ))
     }
 }
 
@@ -772,8 +766,7 @@ impl<BlockNumber> JointProposalFinalizer<BlockNumber> for () {
 pub trait JointCleanupHandler {
     fn cleanup_joint_admin_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
     fn cleanup_joint_institution_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
-    fn cleanup_joint_institution_tallies_chunk(proposal_id: u64, limit: u32)
-        -> CleanupChunkResult;
+    fn cleanup_joint_institution_tallies_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
     fn cleanup_referendum_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;
 
     /// 终态清理:删 JointTallies + ReferendumTallies(单步)。
@@ -784,10 +777,7 @@ impl JointCleanupHandler for () {
     fn cleanup_joint_admin_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
         (0, false)
     }
-    fn cleanup_joint_institution_votes_chunk(
-        _proposal_id: u64,
-        _limit: u32,
-    ) -> CleanupChunkResult {
+    fn cleanup_joint_institution_votes_chunk(_proposal_id: u64, _limit: u32) -> CleanupChunkResult {
         (0, false)
     }
     fn cleanup_joint_institution_tallies_chunk(

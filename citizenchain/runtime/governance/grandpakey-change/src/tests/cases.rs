@@ -439,10 +439,7 @@ fn execute_rejects_non_passed_proposal() {
         let pid = last_proposal_id();
         // 不投票，直接尝试执行
         assert_noop!(
-            VotingEngine::retry_passed_proposal(
-                RuntimeOrigin::signed(prc_admin(0)),
-                pid,
-            ),
+            VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(prc_admin(0)), pid,),
             votingengine::pallet::Error::<Test>::ProposalNotRetryable
         );
     });

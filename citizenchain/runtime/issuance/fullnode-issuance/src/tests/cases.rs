@@ -107,9 +107,7 @@ fn no_reward_outside_reward_range() {
         let has_event_block_0 = System::events().iter().any(|r| {
             matches!(
                 r.event,
-                RuntimeEvent::FullnodeIssuance(Event::FullnodeIssuanceSkippedNoAuthor {
-                    block: 0
-                })
+                RuntimeEvent::FullnodeIssuance(Event::FullnodeIssuanceSkippedNoAuthor { block: 0 })
             )
         });
         assert!(!has_event_block_0);
@@ -185,9 +183,7 @@ fn skip_event_emitted_when_author_not_found() {
         let has_event = System::events().iter().any(|r| {
             matches!(
                 r.event,
-                RuntimeEvent::FullnodeIssuance(Event::FullnodeIssuanceSkippedNoAuthor {
-                    block: 1
-                })
+                RuntimeEvent::FullnodeIssuance(Event::FullnodeIssuanceSkippedNoAuthor { block: 1 })
             )
         });
         assert!(has_event);

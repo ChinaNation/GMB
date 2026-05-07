@@ -306,7 +306,11 @@ async fn auth_verify(
 
     let access_token = generate_secure_token("atk");
     // 超管不过期，普通管理员 30 分钟无操作后过期
-    let ttl = if admin.role == "SUPER_ADMIN" { SUPER_ADMIN_TOKEN_EXPIRES_SECONDS } else { TOKEN_EXPIRES_SECONDS };
+    let ttl = if admin.role == "SUPER_ADMIN" {
+        SUPER_ADMIN_TOKEN_EXPIRES_SECONDS
+    } else {
+        TOKEN_EXPIRES_SECONDS
+    };
     let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     sqlx::query(
@@ -544,7 +548,11 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     let access_token = generate_secure_token("atk");
-    let ttl = if admin.role == "SUPER_ADMIN" { SUPER_ADMIN_TOKEN_EXPIRES_SECONDS } else { TOKEN_EXPIRES_SECONDS };
+    let ttl = if admin.role == "SUPER_ADMIN" {
+        SUPER_ADMIN_TOKEN_EXPIRES_SECONDS
+    } else {
+        TOKEN_EXPIRES_SECONDS
+    };
     let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     let mut tx2 = state
@@ -778,8 +786,11 @@ pub(crate) fn verify_wumin_login_signature(
 
     let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
     let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
-    pk.verify(signing_context(b"substrate").bytes(challenge_payload.as_bytes()), &sig)
-        .map_err(|_| "sr25519 verify failed")
+    pk.verify(
+        signing_context(b"substrate").bytes(challenge_payload.as_bytes()),
+        &sig,
+    )
+    .map_err(|_| "sr25519 verify failed")
 }
 
 pub(crate) async fn build_login_qr_system_signature(

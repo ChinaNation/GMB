@@ -14,12 +14,9 @@
 use frame_support::ensure;
 use frame_support::pallet_prelude::DispatchResult;
 
-use crate::pallet::{
-    self, Error, InternalProposalMutexes, ProposalMutexBindings,
-};
+use crate::pallet::{self, Error, InternalProposalMutexes, ProposalMutexBindings};
 use crate::{
-    SubjectId, InternalProposalMutexBinding, InternalProposalMutexKind,
-    InternalProposalMutexState,
+    InternalProposalMutexBinding, InternalProposalMutexKind, InternalProposalMutexState, SubjectId,
 };
 
 impl<T: pallet::Config> pallet::Pallet<T> {

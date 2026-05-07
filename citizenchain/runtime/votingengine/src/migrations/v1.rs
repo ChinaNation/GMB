@@ -52,10 +52,7 @@ impl<T: Config> OnRuntimeUpgrade for MigrateToV1<T> {
             let seq_in_year = (proposal_id % 1_000_000) as u32;
 
             // 1) 写展示号反查表
-            ProposalDisplayId::<T>::insert(
-                proposal_id,
-                ProposalDisplayMeta { year, seq_in_year },
-            );
+            ProposalDisplayId::<T>::insert(proposal_id, ProposalDisplayMeta { year, seq_in_year });
             weight = weight.saturating_add(T::DbWeight::get().writes(1));
 
             // 2) 反向索引:按 org / institution / owner / year 各写一条

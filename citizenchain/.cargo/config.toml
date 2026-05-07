@@ -3,3 +3,8 @@
 # 仅对 x86_64-pc-windows-msvc 目标生效,不影响 macOS / Linux 构建。
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# 中文注释：trie-db 0.30.0 是 polkadot-sdk 依赖链带入的第三方 future-incompat 报告，
+# GMB 自有 warning 已单独清零；该报告不作为本仓库自有代码门禁阻断项。
+[future-incompat-report]
+frequency = "never"

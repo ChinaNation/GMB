@@ -49,20 +49,12 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             0u32
         } else {
             let c = YearProposalCounter::<T>::get();
-            YearProposalCounter::<T>::put(
-                c.checked_add(1).ok_or(Error::<T>::YearCounterOverflow)?,
-            );
+            YearProposalCounter::<T>::put(c.checked_add(1).ok_or(Error::<T>::YearCounterOverflow)?);
             c
         };
 
         // 同事务写展示号反查表
-        ProposalDisplayId::<T>::insert(
-            id,
-            ProposalDisplayMeta {
-                year,
-                seq_in_year,
-            },
-        );
+        ProposalDisplayId::<T>::insert(id, ProposalDisplayMeta { year, seq_in_year });
 
         Ok(id)
     }

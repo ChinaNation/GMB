@@ -233,10 +233,7 @@ fn developer_direct_upgrade_fails_when_disabled() {
 fn developer_direct_upgrade_rejects_non_joint_proposer() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            RuntimeUpgrade::developer_direct_upgrade(
-                RuntimeOrigin::signed(outsider()),
-                code_ok(),
-            ),
+            RuntimeUpgrade::developer_direct_upgrade(RuntimeOrigin::signed(outsider()), code_ok(),),
             sp_runtime::DispatchError::BadOrigin
         );
     });

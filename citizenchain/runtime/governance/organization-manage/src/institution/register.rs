@@ -79,7 +79,8 @@ pub(crate) fn do_register_sfid_institution<T: pallet::Config>(
             Error::<T>::SfidAlreadyRegistered
         );
         let role = Pallet::<T>::role_from_account_name(account_name.as_slice())?;
-        let duoqian_address = Pallet::<T>::derive_institution_address(sfid_number.as_slice(), role)?;
+        let duoqian_address =
+            Pallet::<T>::derive_institution_address(sfid_number.as_slice(), role)?;
         ensure!(
             !AddressRegisteredSfid::<T>::contains_key(&duoqian_address),
             Error::<T>::AddressAlreadyExists

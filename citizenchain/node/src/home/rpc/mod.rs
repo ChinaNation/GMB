@@ -35,6 +35,8 @@ pub(super) fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     Err(last_err)
 }
 
+/// 中文注释：保留给节点切换前的快速自检入口，当前主流程改由 genesis 校验直接兜底。
+#[allow(dead_code)]
 pub(super) fn is_expected_rpc_node() -> bool {
     let Ok(properties) = rpc_post("system_properties", Value::Array(vec![])) else {
         return false;

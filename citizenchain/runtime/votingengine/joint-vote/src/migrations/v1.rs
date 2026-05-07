@@ -32,7 +32,10 @@ const STORAGES: &[(&[u8], &[u8])] = &[
     (b"JointTallies", b"JointTallies"),
     (b"CitizenVotesByBindingId", b"ReferendumVotesByBindingId"),
     (b"CitizenTallies", b"ReferendumTallies"),
-    (b"UsedPopulationSnapshotNonce", b"UsedPopulationSnapshotNonce"),
+    (
+        b"UsedPopulationSnapshotNonce",
+        b"UsedPopulationSnapshotNonce",
+    ),
 ];
 
 fn build_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
@@ -156,7 +159,8 @@ mod tests {
             for (old_name, _) in STORAGES {
                 let n = count_keys(&build_prefix(OLD_PALLET, old_name));
                 assert_eq!(
-                    n, 0,
+                    n,
+                    0,
                     "old prefix {:?} not empty",
                     core::str::from_utf8(old_name).unwrap()
                 );

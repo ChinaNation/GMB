@@ -9,13 +9,13 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+mod address;
 mod authz;
 mod dangan;
 mod initialize;
 mod login;
 mod operator_admin;
 mod qr;
-mod address;
 mod rsa_blind_client;
 mod ss58;
 mod super_admin;
@@ -106,8 +106,9 @@ async fn main() {
 
     // 前端静态文件目录：优先 CPMS_FRONTEND_DIR 环境变量，默认 ./frontend
     let frontend_dir = env::var("CPMS_FRONTEND_DIR").unwrap_or_else(|_| "./frontend".to_string());
-    let serve_frontend = tower_http::services::ServeDir::new(&frontend_dir)
-        .fallback(tower_http::services::ServeFile::new(format!("{}/index.html", frontend_dir)));
+    let serve_frontend = tower_http::services::ServeDir::new(&frontend_dir).fallback(
+        tower_http::services::ServeFile::new(format!("{}/index.html", frontend_dir)),
+    );
 
     let app = Router::new()
         .route("/api/v1/health", get(health))
@@ -166,8 +167,10 @@ async fn find_admin_by_pubkey(
     admin_pubkey: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
     // 归一化：去 0x 前缀，小写
-    let normalized = admin_pubkey.trim()
-        .strip_prefix("0x").or_else(|| admin_pubkey.trim().strip_prefix("0X"))
+    let normalized = admin_pubkey
+        .trim()
+        .strip_prefix("0x")
+        .or_else(|| admin_pubkey.trim().strip_prefix("0X"))
         .unwrap_or(admin_pubkey.trim())
         .to_lowercase();
     let row = sqlx::query(

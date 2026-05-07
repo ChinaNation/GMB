@@ -29,7 +29,7 @@
 
 ### 现状瓶颈
 
-当前 `sfid/backend/src/main.rs` 的 `load_store_postgres`:
+当前 `sfid/backend/main.rs` 的 `load_store_postgres`:
 
 ```
 每次 HTTP 请求中 store 状态变化时触发:

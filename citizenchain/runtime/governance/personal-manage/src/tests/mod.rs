@@ -115,10 +115,7 @@ pub struct TestSfidEligibility;
 impl votingengine::SfidEligibility<AccountId32, <Test as frame_system::Config>::Hash>
     for TestSfidEligibility
 {
-    fn is_eligible(
-        _binding_id: &<Test as frame_system::Config>::Hash,
-        _who: &AccountId32,
-    ) -> bool {
+    fn is_eligible(_binding_id: &<Test as frame_system::Config>::Hash, _who: &AccountId32) -> bool {
         true
     }
 

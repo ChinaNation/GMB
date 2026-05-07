@@ -83,7 +83,7 @@ WUMIN_QR_V1|<system>|<challenge>|<expires_at>
 - wumin 签名器：`wumin/lib/signer/qr_signer.dart`
 - wuminapp 登录服务：`wuminapp/lib/qr/login/login_service.dart`
 - wuminapp QR 路由：`wuminapp/lib/qr/qr_router.dart`
-- SFID 登录后端：`sfid/backend/src/login/mod.rs`
+- SFID 登录后端：`sfid/backend/login/mod.rs`
 - CPMS 登录后端：`cpms/backend/src/login/mod.rs`
-- SFID 前端：`sfid/frontend/src/`
+- SFID 前端：`sfid/frontend/`
 - CPMS 前端：`cpms/frontend/src/`（如果存在）

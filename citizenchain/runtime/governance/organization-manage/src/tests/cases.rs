@@ -237,8 +237,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let sfid = sfid_number(b"SFID-CR-2");
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -285,8 +284,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
         let sfid = sfid_number(b"SFID-CR-3");
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c.clone()),
@@ -478,12 +476,14 @@ fn propose_create_rejects_when_institution_already_exists() {
 // 关闭路径(5 个用例)
 // ============================================================
 
-fn create_and_activate_institution(sfid_number_bytes: &[u8], admin_count: u8) -> (pallet::SfidNumberOf<Test>, AccountId32) {
+fn create_and_activate_institution(
+    sfid_number_bytes: &[u8],
+    admin_count: u8,
+) -> (pallet::SfidNumberOf<Test>, AccountId32) {
     let c = creator();
     let _ = Balances::deposit_creating(&c, SEED_BALANCE);
     let sfid = sfid_number(sfid_number_bytes);
-    let admin_accounts: alloc::vec::Vec<AccountId32> =
-        (0..admin_count).map(|i| admin(i)).collect();
+    let admin_accounts: alloc::vec::Vec<AccountId32> = (0..admin_count).map(|i| admin(i)).collect();
 
     assert_ok!(OrganizationManage::propose_create_institution(
         RuntimeOrigin::signed(c.clone()),
@@ -531,8 +531,7 @@ fn propose_close_writes_pending() {
 fn close_executes_when_vote_reaches_threshold_returns_balance() {
     new_test_ext().execute_with(|| {
         let (_sfid, main) = create_and_activate_institution(b"SFID-CL-2", 3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
 
         assert_ok!(OrganizationManage::propose_close(
@@ -548,7 +547,9 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
 
         // ACCT_AMOUNT=1000 → fee = max(1, 10) = 10,beneficiary 收 990
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
-        assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(&main));
+        assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(
+            &main
+        ));
     });
 }
 
@@ -600,11 +601,7 @@ fn propose_close_rejects_self_beneficiary() {
         let (_sfid, main) = create_and_activate_institution(b"SFID-CL-5", 3);
         // beneficiary == duoqian_address 应拒
         assert_noop!(
-            OrganizationManage::propose_close(
-                RuntimeOrigin::signed(admin(0)),
-                main.clone(),
-                main,
-            ),
+            OrganizationManage::propose_close(RuntimeOrigin::signed(admin(0)), main.clone(), main,),
             pallet::Error::<Test>::InvalidBeneficiary
         );
     });
@@ -618,8 +615,7 @@ fn propose_close_rejects_self_beneficiary() {
 fn cleanup_rejected_proposal_only_after_engine_rejected() {
     new_test_ext().execute_with(|| {
         let c = fund_creator();
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
 
         assert_ok!(OrganizationManage::propose_create_institution(
             RuntimeOrigin::signed(c),
@@ -638,10 +634,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
 
         // STATUS_VOTING 期间 cleanup 应拒
         assert_noop!(
-            OrganizationManage::cleanup_rejected_proposal(
-                RuntimeOrigin::signed(admin(0)),
-                pid,
-            ),
+            OrganizationManage::cleanup_rejected_proposal(RuntimeOrigin::signed(admin(0)), pid,),
             pallet::Error::<Test>::ProposalNotRejected
         );
 
@@ -685,8 +678,7 @@ fn non_admin_cannot_propose_create() {
 fn existential_deposit_is_preserved_after_close() {
     new_test_ext().execute_with(|| {
         let (_sfid, main) = create_and_activate_institution(b"SFID-ED", 3);
-        let admin_accounts: alloc::vec::Vec<AccountId32> =
-            (0..3u8).map(|i| admin(i)).collect();
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
 
         assert_ok!(OrganizationManage::propose_close(

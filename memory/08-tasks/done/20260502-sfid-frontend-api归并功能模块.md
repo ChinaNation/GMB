@@ -5,13 +5,13 @@
 
 ## 需求
 
-整改 SFID 前端 API 目录边界:不再单独维护 `sfid/frontend/api/`。
+整改 SFID 前端 API 目录边界:不再单独维护旧全局 API 目录。
 今后某个功能需要调用后端 API,就在该功能模块目录中创建 API 专用文件。
 链交互 API 继续遵守 `chain_` 文件规则。
 
 ## 边界规则
 
-- 禁止新增或恢复 `sfid/frontend/api/` 业务目录。
+- 禁止新增或恢复旧全局业务 API 目录。
 - 通用 HTTP 请求封装放 `sfid/frontend/utils/http.ts`,不承载业务 API。
 - 登录/会话 API 放 `sfid/frontend/auth/api.ts`。
 - 机构 API 放 `sfid/frontend/institutions/api.ts`。
@@ -34,14 +34,14 @@
   - 中文注释:省管理员前端目录;承接省管理员本地业务 API,链交互 API 仍在 `chain_sheng_admins.ts`。
 - `sfid/frontend/shi_admins/`
   - 中文注释:市管理员前端目录;承接操作员管理 API。
-- `sfid/frontend/api/`
+- 旧全局 API 目录
   - 中文注释:旧全局 API 目录;已删除,不再作为业务接口入口。
 - `memory/05-modules/sfid/`、`memory/07-ai/`、`memory/AGENTS.md`
   - 中文注释:文档和 AI 规则目录;固化“前端 API 跟随功能模块”规则。
 
 ## 验收
 
-- `sfid/frontend/api/` 不存在。
+- 旧全局 API 目录不存在。
 - `rg "../api|./api|frontend/api|sfid/frontend/api" sfid/frontend` 无旧目录引用。
 - 前端业务 API 都位于对应功能模块。
 - 通用 HTTP 工具不包含业务接口。
@@ -52,7 +52,7 @@
 
 - 新增 `sfid/frontend/utils/http.ts`,通用 HTTP 能力只保留请求封装和 401 拦截。
 - 新增/调整 `auth/api.ts`、`sfid/api.ts`、`institutions/api.ts`、`citizens/api.ts`、`sheng_admins/api.ts`、`shi_admins/api.ts`。
-- 删除旧 `sfid/frontend/api/client.ts` 和 `sfid/frontend/api/` 目录。
+- 删除旧全局 API 目录，保留 `sfid/frontend/utils/http.ts` 作为通用 HTTP 封装。
 - 更新所有前端引用,不再引用 `../api/client` 或 `../api/institution`。
 - 更新 `sfid/frontend/tsconfig.json`,移除旧 `api`、`chain` include,新增 `sfid` include。
 - 更新 `memory/05-modules/sfid/frontend/FRONTEND_LAYOUT.md`、`memory/07-ai/agent-rules.md`、`memory/AGENTS.md`。

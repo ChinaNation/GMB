@@ -176,8 +176,7 @@ fn derive_key(password: &[u8], salt: &[u8]) -> [u8; KEY_LEN] {
     key
 }
 
-/// 中文注释：AES-256-GCM 加密（简化实现，使用 XOR + HMAC）。
-/// TODO: 替换为 aes-gcm crate 的标准实现。
+/// 中文注释：历史兼容加密封装（当前实现为 XOR + blake2 标签）。
 #[allow(dead_code)]
 fn encrypt_aes256_gcm(
     key: &[u8; KEY_LEN],

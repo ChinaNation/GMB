@@ -13,7 +13,7 @@ use frame_support::{ensure, pallet_prelude::DispatchResult};
 
 use votingengine::{Proposal, SfidEligibility, PROPOSAL_KIND_JOINT, STATUS_PASSED};
 
-use super::pallet::{ReferendumTallies, ReferendumVotesByBindingId, Config, Error, Event, Pallet};
+use super::pallet::{Config, Error, Event, Pallet, ReferendumTallies, ReferendumVotesByBindingId};
 use super::{is_jointreferendum_vote_passed, is_jointreferendum_vote_rejected};
 
 impl<T: Config> Pallet<T> {

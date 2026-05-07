@@ -48,7 +48,10 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 fn encode_sfid_key_data(sfid_number: &str) -> Result<Vec<u8>, String> {
     let raw = sfid_number.as_bytes();
     if raw.is_empty() || raw.len() > 64 {
-        return Err(format!("sfid_number 长度需在 1..=64 字节,实际:{}", raw.len()));
+        return Err(format!(
+            "sfid_number 长度需在 1..=64 字节,实际:{}",
+            raw.len()
+        ));
     }
     let bv: BoundedVec<u8, ConstU32<64>> = raw
         .to_vec()
