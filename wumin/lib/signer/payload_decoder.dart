@@ -856,8 +856,10 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // OrganizationManage(17) / propose_create_personal(4)
-  // 格式：[17][4][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // PersonalManage(7) / propose_create(0)
+  // 格式：[7][0][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
+  // 历史 OrganizationManage(17) call=3 已废除(留洞不复用)。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
     if (bytes.length < 10) return null;

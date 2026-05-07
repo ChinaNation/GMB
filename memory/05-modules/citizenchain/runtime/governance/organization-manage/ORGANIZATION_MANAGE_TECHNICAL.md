@@ -7,7 +7,7 @@
 
 `organization-manage` 负责链上多签机构和个人多签的创建、激活、关闭提案，以及与内部投票引擎 `ORG_DUOQIAN` 的对接。
 
-管理员、阈值和管理员人数的长期真源是 `admins-change::Institutions`；本模块只负责多签账户、机构账户、资金和生命周期。
+管理员、阈值和管理员人数的长期真源是 `admins-change::Subjects`；本模块只负责多签账户、机构账户、资金和生命周期。
 
 ## 2. 目录结构
 
@@ -46,7 +46,7 @@
 
 管理员主体：
 
-- 机构多签创建提案发起时，主账户地址会转换为 `InstitutionPalletId`，通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
+- 机构多签创建提案发起时，主账户地址会转换为 `SubjectId`，通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
 - 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_snapshot_data`，由显式管理员列表和阈值先锁定投票快照，再在同一事务中调用 `SubjectLifecycle::create_pending_subject_for_proposal` 写 Pending 主体、绑定 owner/data/meta。

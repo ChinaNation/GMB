@@ -251,7 +251,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   /// `tally.yes + remaining < threshold` 立即满足,提案直接进入 STATUS_REJECTED。
   /// `cleanup_pending_personal_create` 自动执行:unreserve 创建者锁仓 + 删
   /// `DuoqianAccounts` / `PersonalDuoqianInfo` / `PendingPersonalCreate` /
-  /// `admins-change::Institutions`。其他管理员设备的反向索引下次扫不到该
+  /// `admins-change::Subjects`。其他管理员设备的反向索引下次扫不到该
   /// institution_id,自动清理孤立 Isar entity。
   ///
   /// 仅个人 Pending 路径调用(机构 Pending 不展示此入口);Active 走 propose_close。

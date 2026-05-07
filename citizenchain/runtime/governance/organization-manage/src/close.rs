@@ -6,7 +6,7 @@
 //! 业务流程:
 //! 1. 校验地址是机构地址(否则返回 `NotInstitutionDuoqian`)
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
-//! 3. 校验发起人是该机构的活跃管理员(admins-change::Institutions[sfid_id])
+//! 3. 校验发起人是该机构的活跃管理员(admins-change::Subjects[sfid_id])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 全员投票阈值 = active_subject_admin_count
 //! 6. 写入 InstitutionPendingClose[address] = proposal_id 防并发

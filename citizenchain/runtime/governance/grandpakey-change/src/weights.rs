@@ -48,8 +48,8 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	/// Storage: `AdminsChange::Institutions` (r:1 w:0)
-	/// Proof: `AdminsChange::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsChange::Subjects` (r:1 w:0)
+	/// Proof: `AdminsChange::Subjects` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `GrandpaKeyChange::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::PendingProposalByNewKey` (r:1 w:1)
@@ -81,8 +81,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	/// Storage: `AdminsChange::Institutions` (r:1 w:0)
-	/// Proof: `AdminsChange::Institutions` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
+	/// Storage: `AdminsChange::Subjects` (r:1 w:0)
+	/// Proof: `AdminsChange::Subjects` (`max_values`: None, `max_size`: Some(1089), added: 3564, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::ActiveProposalByInstitution` (r:1 w:1)
 	/// Proof: `GrandpaKeyChange::ActiveProposalByInstitution` (`max_values`: None, `max_size`: Some(72), added: 2547, mode: `MaxEncodedLen`)
 	/// Storage: `GrandpaKeyChange::PendingProposalByNewKey` (r:1 w:1)

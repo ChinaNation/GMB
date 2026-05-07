@@ -81,7 +81,7 @@
 机构主账户地址有两种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `organization-manage::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Institutions` 读取。
+- 注册型机构：`SubjectId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `organization-manage::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Subjects` 读取。
 
 ### 1.3 institution-asset 边界
 
@@ -97,7 +97,7 @@
 pub fn propose_transfer(
     origin: OriginFor<T>,
     org: u8,                           // 机构类型：0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN
-    institution: InstitutionPalletId,   // 机构 pallet id [u8; 48]
+    institution: SubjectId,   // 机构 pallet id [u8; 48]
     beneficiary: T::AccountId,          // 收款地址
     amount: BalanceOf<T>,               // 转账金额
     remark: BoundedVec<u8, T::MaxRemarkLen>, // 备注
@@ -112,7 +112,7 @@ pub fn propose_transfer(
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
    - 注册型机构：能解码出主账户地址，且在 `DuoqianAccounts` 中存在并处于 Active。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
-5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Institutions`）。
+5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
@@ -163,7 +163,7 @@ InternalVote::cast(origin, proposal_id, approve)  // pallet 22.0
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
-    pub institution: InstitutionPalletId,       // 转出机构
+    pub institution: SubjectId,       // 转出机构
     pub beneficiary: AccountId,                  // 收款地址
     pub amount: Balance,                         // 转账金额
     pub remark: BoundedVec<u8, MaxRemarkLen>,    // 备注
@@ -180,7 +180,7 @@ pub enum Event<T: Config> {
     TransferProposed {
         proposal_id: u64,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         proposer: T::AccountId,
         from: T::AccountId,                             // 机构主账户
         beneficiary: T::AccountId,
@@ -189,11 +189,11 @@ pub enum Event<T: Config> {
         expires_at: BlockNumberFor<T>,                  // 投票超时区块
     },
     /// 投票通过但执行失败(可通过 VotingEngine::retry_passed_proposal 手动重试)
-    TransferExecutionFailed { proposal_id: u64, institution: InstitutionPalletId },
+    TransferExecutionFailed { proposal_id: u64, institution: SubjectId },
     /// 转账已执行(含手续费分账)
     TransferExecuted {
         proposal_id: u64,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         fee: BalanceOf<T>,
@@ -214,14 +214,14 @@ pub enum Event<T: Config> {
     // Sweep 组:
     SweepToMainProposed {
         proposal_id: u64,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         proposer: T::AccountId,
         from: T::AccountId,                             // fee_account
         to: T::AccountId,                               // main_account
         amount: BalanceOf<T>,
         expires_at: BlockNumberFor<T>,
     },
-    SweepToMainExecuted { proposal_id: u64, institution: InstitutionPalletId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
+    SweepToMainExecuted { proposal_id: u64, institution: SubjectId, amount: BalanceOf<T>, fee: BalanceOf<T>, reserve_left: BalanceOf<T> },
     SweepExecutionFailed { proposal_id: u64 },
 }
 ```

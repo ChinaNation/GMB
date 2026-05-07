@@ -58,7 +58,7 @@ Runtime 接线：
 ### 动作结构
 ```rust
 pub struct DestroyAction<Balance> {
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     pub amount: Balance,
 }
 ```

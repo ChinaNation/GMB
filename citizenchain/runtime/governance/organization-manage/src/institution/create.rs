@@ -157,7 +157,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的 admin/threshold 配置真源在 admins-change::Institutions[subject_id_from_sfid_id(sfid_id)],
+        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[subject_id_from_sfid_id(sfid_id)],
         // duoqian-transfer 通过 InstitutionMultisigQuery trait 查询。
 
         // 中文注释:创建提案需全员管理员通过(2026-05-03 整改)。

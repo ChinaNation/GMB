@@ -97,7 +97,7 @@ pub mod pallet {
         type MaxRegisterSignatureLength: Get<u32>;
 
         /// 管理员 sr25519 签名最大字节数(固定 64)。
-        /// 用于 `finalize_create` 聚合签名时的 BoundedVec 容量上限,防止过大输入。
+        /// `AdminSignatureOf` BoundedVec 容量上限,防止过大输入。
         #[pallet::constant]
         type MaxAdminSignatureLength: Get<u32>;
 
@@ -169,8 +169,9 @@ pub mod pallet {
 
     /// 管理员离线 sr25519 签名载体(固定 64 字节)。
     pub type AdminSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxAdminSignatureLength>;
-    /// finalize_create 聚合签名载荷:`Vec<(管理员地址, sr25519 签名)>`,
-    /// 容量上限等于该多签允许的最多管理员数。
+    /// 历史聚合签名载荷:`Vec<(管理员地址, sr25519 签名)>`,容量上限 = 多签允许的最多管理员数。
+    /// finalize_create(Phase 3 unified voting,2026-04-22)已删,本类型当前无 lib 引用,
+    /// 待清链重启后做物理删除(后续 PR)。
     pub type AdminSignaturesOf<T> = BoundedVec<
         (<T as frame_system::Config>::AccountId, AdminSignatureOf<T>),
         <T as Config>::MaxAdmins,
@@ -344,11 +345,11 @@ pub mod pallet {
             main_address: T::AccountId,
             reserve_total: BalanceOf<T>,
         },
-        /// finalize_create 代投完成(不论最终状态):统计接受的签名数 + 投票引擎返回状态。
-        /// 便于链下观测 "N 签提交 → 投票引擎状态" 的一一对应。
+        /// 历史 `finalize_create` 代投完成事件,Phase 3 unified voting(2026-04-22)
+        /// 已删 finalize_create extrinsic,本变体当前无 emit 路径,待物理删除(后续 PR)。
         CreateFinalized {
             proposal_id: u64,
-            /// 本次 finalize_create 接受并代投成功的签名数
+            /// 接受并代投成功的签名数(历史含义)
             signatures_accepted: u32,
             /// 调用结束时投票引擎的提案状态
             /// (STATUS_PASSED / STATUS_REJECTED / STATUS_VOTING / STATUS_EXECUTED / STATUS_EXECUTION_FAILED)
@@ -460,15 +461,18 @@ pub mod pallet {
         /// 账户名占用保留角色名（"主账户"/"费用账户" 必须走 Role::Main/Fee，
         /// 禁止作为 Role::Named 的自定义命名参数）
         ReservedAccountName,
-        /// finalize_create 提交的签名对应的 admin 不在该多签的管理员列表
+        // 以下 5 个 Error 变体原服务于 finalize_create(Phase 3 unified voting,
+        // 2026-04-22 已删)。`MalformedSignature` 在 lib.rs:723 仍被 emit,其它 4 个
+        // 当前无 emit 路径,待物理删除(后续 PR)。
+        /// (legacy)签名对应的 admin 不在该多签的管理员列表
         UnauthorizedSignature,
-        /// finalize_create 同一 admin 在同一批签名里重复出现
+        /// (legacy)同一 admin 在同一批签名里重复出现
         DuplicateSignature,
-        /// finalize_create sr25519 签名验证失败
+        /// (legacy)sr25519 签名验证失败
         InvalidSignature,
-        /// finalize_create 提交的签名数量少于阈值
+        /// (legacy)提交的签名数量少于阈值
         InsufficientSignatures,
-        /// finalize_create sr25519 签名长度必须恰好为 64 字节
+        /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
     }
 
@@ -844,7 +848,7 @@ pub mod pallet {
 // ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
 //
 // 输入任意机构账户(主/费用/自创),通过 AddressRegisteredSfid 反查 sfid_id,
-// 再通过 admins-change::Institutions[subject_id_from_sfid_id(sfid_id)] 取得
+// 再通过 admins-change::Subjects[subject_id_from_sfid_id(sfid_id)] 取得
 // admin 配置。这条路径让机构所有账户都能命中同一套 admin/threshold,
 // 取代 A 阶段 DuoqianAccounts mirror 的 fallback 查询(B 阶段已删)。
 
@@ -1024,6 +1028,6 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
 // 中文注释:测试模块已在 B 阶段(personal-manage 拆分)清空。
 // A 阶段 34 个 case 中:
 // - 个人多签 case 迁至 personal-manage 单测(待跟进 follow-up 任务)
-// - 机构 case (institution_create/register_sfid/finalize_create 等)
+// - 机构 case (institution_create/register_sfid 等;finalize_create Phase 3 已删)
 //   将在后续 PR 重新挂回此处,使用机构 mock(纯 InstitutionAccounts 路径)。
 // 当前 organization-manage 不带单元测试;集成验证通过 runtime --lib + duoqian-transfer 单测覆盖。

@@ -39,7 +39,7 @@ pub(crate) fn cleanup_pending_institution_create<T: Config>(
         AddressRegisteredSfid::<T>::remove(&account.address);
     }
     // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-    // 机构主账户的 admin 配置由 admins-change::Institutions[institution_id] 承载,无需 mirror 清理。
+    // 机构主账户的 admin 配置由 admins-change::Subjects[institution_id] 承载,无需 mirror 清理。
     if let Some(institution_id) = subject_id_from_sfid_id(action.sfid_id.as_slice()) {
         Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
     }

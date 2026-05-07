@@ -1137,7 +1137,7 @@ impl duoqian_transfer::Config for Runtime {
 /// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
 ///
 /// 委托给 `duoqian-manage` 的 SFID 地址索引和机构账户表；
-/// 管理员校验再统一转给 `admins-change::Institutions`。
+/// 管理员校验再统一转给 `admins-change::Subjects`。
 pub struct DuoqianSfidAccountQuery;
 
 impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {

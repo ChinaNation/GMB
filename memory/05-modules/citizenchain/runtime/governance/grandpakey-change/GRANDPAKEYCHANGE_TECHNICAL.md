@@ -51,10 +51,10 @@ Runtime 配置位置：
 ## 3. 存储模型
 本模块仅维护 2 个存储项，提案数据由 `votingengine` 统一管理。
 
-1. `CurrentGrandpaKeys: Map<InstitutionPalletId, [u8; 32]>`
+1. `CurrentGrandpaKeys: Map<SubjectId, [u8; 32]>`
 - 机构当前治理认可的 GRANDPA 公钥
 
-2. `GrandpaKeyOwnerByKey: Map<[u8; 32], InstitutionPalletId>`
+2. `GrandpaKeyOwnerByKey: Map<[u8; 32], SubjectId>`
 - 公钥到机构的反向索引，O(1) 判断 new_key 是否已被占用
 
 提案数据存储在 `votingengine` 中：

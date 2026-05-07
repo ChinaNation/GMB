@@ -10,7 +10,7 @@
 
 链上治理三类主体(内置主体 / SFID 注册机构 / 个人多签)共用同一个 48 字节 `SubjectId`(C 阶段命名修正后,A/B 阶段曾叫 `InstitutionPalletId`)作为 `admins-change::Subjects` 与 `votingengine` 反向索引的 storage key。
 
-A 阶段(2026-05-04)前的派生协议是"裸右填零":三类主体派生函数各写一份,字节布局都是 `payload + zeros`,**没有主体类型字节区分**。结果:
+A 阶段(2026-05-04 引入 SubjectKind)**之前**的派生协议是"裸右填零":三类主体派生函数各写一份,字节布局都是 `payload + zeros`,**没有主体类型字节区分**。结果:
 
 1. 内置主体(`shenfen_id` ASCII)与 SFID 机构(`sfid_id` ASCII)字节空间高度重叠,理论上存在撞 key 风险(运营约定靠 GFR-/SFR-/SCR- 前缀人为隔离,无协议级保护)
 2. 个人多签(32B blake2 hash)与 ASCII 主体的撞 key 概率 ≈ 2^-32(哈希熵巧合,工程上可忽略但不是结构性互斥)
