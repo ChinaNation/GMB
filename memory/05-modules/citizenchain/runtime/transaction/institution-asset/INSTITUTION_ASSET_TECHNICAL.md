@@ -7,7 +7,7 @@
 
 - 统一定义“哪些内部执行动作可以从哪些制度账户扣钱”。
 - 只管内部资金动作白名单，不管提案、投票、管理员变更等纯治理行为。
-- 供 `duoqian-manage`、`duoqian-transfer`、`offchain-transaction` 复用。
+- 供 `organization-manage`、`duoqian-transfer`、`offchain-transaction` 复用。
 
 ## 1. 设计边界
 
@@ -58,7 +58,7 @@ pub trait InstitutionAsset<AccountId> {
 
 ## 4. 接入点
 
-### 4.1 duoqian-manage
+### 4.1 organization-manage
 
 - `propose_close`
 - `execute_close_with_finalizer`(internal helper,投票通过后的 callback 执行路径)

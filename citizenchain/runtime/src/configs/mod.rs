@@ -24,6 +24,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
+use primitives::derive::subject_id_from_shenfen_id;
 use alloc::vec::Vec;
 use codec::Decode;
 use codec::Encode;
@@ -348,12 +349,22 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                 onchain_transaction::AmountExtractResult::Amount(value)
             }
             // call_index=0 (propose_create 单账户机构) 已于 2026-05-03 物理删除,机构走 propose_create_institution。
-            RuntimeCall::DuoqianManage(org_manage::pallet::Call::propose_create_personal {
+            // call_index=3 (propose_create_personal) 已迁至 PersonalManage(B 阶段拆分,2026-05-06)。
+            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 amount,
                 ..
             }) => onchain_transaction::AmountExtractResult::Amount(*amount),
-            RuntimeCall::DuoqianManage(
-                org_manage::pallet::Call::propose_create_institution { accounts, .. },
+            RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_close {
+                duoqian_address,
+                ..
+            }) => onchain_transaction::AmountExtractResult::Amount(Balances::free_balance(
+                duoqian_address,
+            )),
+            RuntimeCall::PersonalManage(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            RuntimeCall::OrganizationManage(
+                organization_manage::pallet::Call::propose_create_institution { accounts, .. },
             ) => {
                 let mut total: Balance = 0;
                 for account in accounts.iter() {
@@ -367,18 +378,18 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
                 }
                 onchain_transaction::AmountExtractResult::Amount(total)
             }
-            RuntimeCall::DuoqianManage(org_manage::pallet::Call::propose_close {
+            RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
                 duoqian_address,
                 ..
             }) => onchain_transaction::AmountExtractResult::Amount(Balances::free_balance(
                 duoqian_address,
             )),
             // 免费调用交易：SFID 注册是证明型操作
-            RuntimeCall::DuoqianManage(
-                org_manage::pallet::Call::register_sfid_institution { .. },
+            RuntimeCall::OrganizationManage(
+                organization_manage::pallet::Call::register_sfid_institution { .. },
             ) => onchain_transaction::AmountExtractResult::NoAmount,
             // 付费调用交易：多签管理其他操作（cleanup_X 等）按投票统一价 1 元/次
-            RuntimeCall::DuoqianManage(_) => onchain_transaction::AmountExtractResult::Amount(
+            RuntimeCall::OrganizationManage(_) => onchain_transaction::AmountExtractResult::Amount(
                 primitives::fee_policy::VOTE_FLAT_FEE,
             ),
             // 免费调用交易：系统内部 / 自动化 / 货币政策类
@@ -561,7 +572,7 @@ impl fullnode_issuance::Config for Runtime {
 
 pub struct RuntimeDuoqianAddressValidator;
 
-impl org_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
+impl organization_manage::DuoqianAddressValidator<AccountId> for RuntimeDuoqianAddressValidator {
     fn is_valid(address: &AccountId) -> bool {
         // 中文注释：禁止零地址。
         if address == &AccountId::new([0u8; 32]) {
@@ -612,7 +623,7 @@ pub struct RuntimeSfidInstitutionVerifier;
 pub struct RuntimeProtectedSourceChecker;
 pub struct RuntimeInstitutionAsset;
 
-impl org_manage::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
+impl organization_manage::ProtectedSourceChecker<AccountId> for RuntimeProtectedSourceChecker {
     fn is_protected(address: &AccountId) -> bool {
         is_stake_account(address)
     }
@@ -667,7 +678,7 @@ impl institution_asset::InstitutionAsset<AccountId> for RuntimeInstitutionAsset 
     }
 }
 
-impl org_manage::DuoqianReservedAddressChecker<AccountId>
+impl organization_manage::DuoqianReservedAddressChecker<AccountId>
     for RuntimeDuoqianReservedAddressChecker
 {
     fn is_reserved(address: &AccountId) -> bool {
@@ -702,18 +713,18 @@ impl org_manage::DuoqianReservedAddressChecker<AccountId>
 }
 
 impl
-    org_manage::SfidInstitutionVerifier<
-        org_manage::pallet::AccountNameOf<Runtime>,
-        org_manage::pallet::RegisterNonceOf<Runtime>,
-        org_manage::pallet::RegisterSignatureOf<Runtime>,
+    organization_manage::SfidInstitutionVerifier<
+        organization_manage::pallet::AccountNameOf<Runtime>,
+        organization_manage::pallet::RegisterNonceOf<Runtime>,
+        organization_manage::pallet::RegisterSignatureOf<Runtime>,
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
         sfid_id: &[u8],
-        institution_name: &org_manage::pallet::AccountNameOf<Runtime>,
+        institution_name: &organization_manage::pallet::AccountNameOf<Runtime>,
         account_names: &[Vec<u8>],
-        nonce: &org_manage::pallet::RegisterNonceOf<Runtime>,
-        signature: &org_manage::pallet::RegisterSignatureOf<Runtime>,
+        nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
+        signature: &organization_manage::pallet::RegisterSignatureOf<Runtime>,
         province: &[u8],
         signer_admin_pubkey: &[u8; 32],
     ) -> bool {
@@ -772,7 +783,7 @@ impl
     }
 }
 
-impl org_manage::Config for Runtime {
+impl organization_manage::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type Currency = Balances;
     type InternalVoteEngine = InternalVote;
@@ -783,7 +794,7 @@ impl org_manage::Config for Runtime {
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
-    type MaxSfidIdLength = ConstU32<96>;
+    type MaxSfidIdLength = ConstU32<47>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -792,7 +803,23 @@ impl org_manage::Config for Runtime {
     type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
-    type WeightInfo = org_manage::weights::SubstrateWeight<Runtime>;
+    type WeightInfo = organization_manage::weights::SubstrateWeight<Runtime>;
+}
+
+impl personal_manage::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type InternalVoteEngine = InternalVote;
+    type AddressValidator = RuntimeDuoqianAddressValidator;
+    type ReservedAddressChecker = RuntimeDuoqianReservedAddressChecker;
+    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
+    type InstitutionAsset = RuntimeInstitutionAsset;
+    type FeeRouter = TransferFeeRouter;
+    type MaxAdmins = ConstU32<64>;
+    type MaxAccountNameLength = ConstU32<128>;
+    type MinCreateAmount = ConstU128<111>;
+    type MinCloseBalance = ConstU128<121>;
+    type WeightInfo = personal_manage::weights::SubstrateWeight<Runtime>;
 }
 
 // ADR-008 step3 注释:
@@ -1033,7 +1060,7 @@ parameter_types! {
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
     /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
     // 必须 >= admins_change::MaxAdminsPerInstitution (32)
-    // 且 >= org_manage::MaxAdmins (64)，否则快照写入会静默失败。
+    // 且 >= organization_manage::MaxAdmins (64)，否则快照写入会静默失败。
     pub const MaxAdminsPerInstitution: u32 = 64;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
@@ -1096,6 +1123,10 @@ impl duoqian_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = TransferFeeRouter;
+    // B 阶段(personal-manage 拆分)新增:把多签 admin 配置查询拆给两个独立 pallet。
+    // 转账治理时 duoqian-transfer 通过 union 调用,先问个人侧、再问机构侧。
+    type PersonalQuery = personal_manage::Pallet<Runtime>;
+    type InstitutionQuery = organization_manage::Pallet<Runtime>;
     type WeightInfo = duoqian_transfer::weights::SubstrateWeight<Runtime>;
 }
 
@@ -1111,31 +1142,33 @@ pub struct DuoqianSfidAccountQuery;
 
 impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
-        org_manage::AddressRegisteredSfid::<Runtime>::get(addr)
+        organization_manage::AddressRegisteredSfid::<Runtime>::get(addr)
             .map(|info| (info.sfid_id.to_vec(), info.account_name.to_vec()))
     }
 
     fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: org_manage::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
-        let an: org_manage::AccountNameOf<Runtime> = account_name.to_vec().try_into().ok()?;
-        org_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
+        let id: organization_manage::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
+        let an: organization_manage::AccountNameOf<Runtime> = account_name.to_vec().try_into().ok()?;
+        organization_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
     }
 
     fn is_active(addr: &AccountId) -> bool {
-        if let Some(registered) = org_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
+        if let Some(registered) = organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             return matches!(
-                org_manage::InstitutionAccounts::<Runtime>::get(
+                organization_manage::InstitutionAccounts::<Runtime>::get(
                     &registered.sfid_id,
                     &registered.account_name,
                 )
                 .map(|a| a.status),
-                Some(org_manage::InstitutionLifecycleStatus::Active)
+                Some(organization_manage::InstitutionLifecycleStatus::Active)
             );
         }
 
+        // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
+        // 个人多签状态查询走 personal-manage::PersonalDuoqians。
         matches!(
-            org_manage::DuoqianAccounts::<Runtime>::get(addr).map(|a| a.status),
-            Some(org_manage::DuoqianStatus::Active)
+            personal_manage::PersonalDuoqians::<Runtime>::get(addr).map(|a| a.status),
+            Some(personal_manage::DuoqianStatus::Active)
         )
     }
 
@@ -1143,7 +1176,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(subject_id) =
-            org_manage::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
+            organization_manage::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
         else {
             return false;
         };
@@ -1158,29 +1191,29 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     /// 链上不再保存 a3/sub_type/parent_sfid_id,这里只确认该地址属于已注册且 Active 的
     /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
-        let registered = match org_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
+        let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             Some(info) => info,
             None => return false,
         };
         matches!(
-            org_manage::InstitutionAccounts::<Runtime>::get(
+            organization_manage::InstitutionAccounts::<Runtime>::get(
                 &registered.sfid_id,
                 &registered.account_name,
             )
             .map(|account| account.status),
-            Some(org_manage::InstitutionLifecycleStatus::Active)
+            Some(organization_manage::InstitutionLifecycleStatus::Active)
         )
     }
 
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
     /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_id 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
-        let registered = match org_manage::AddressRegisteredSfid::<Runtime>::get(bank) {
+        let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(bank) {
             Some(info) => info,
             None => return false,
         };
         // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
-        // 把 SfidIdOf<Runtime>(BoundedVec<u8, MaxSfidIdLength=96>) 转换过去
+        // 把 SfidIdOf<Runtime>(BoundedVec<u8, MaxSfidIdLength=47>) 转换过去
         let sfid_bytes: Vec<u8> = registered.sfid_id.to_vec();
         let key: BoundedVec<u8, ConstU32<64>> = match sfid_bytes.try_into() {
             Ok(b) => b,
@@ -1224,7 +1257,7 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
 fn is_nrc_admin(who: &AccountId) -> bool {
     let nrc_institution = primitives::china::china_cb::CHINA_CB
         .first()
-        .and_then(|n| primitives::china::china_cb::shenfen_id_to_fixed48(n.shenfen_id))
+        .and_then(|n| primitives::derive::subject_id_from_shenfen_id(n.shenfen_id))
         .expect("NRC shenfen_id must be valid");
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
@@ -1259,12 +1292,12 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureJointProposer {
 
 /// 国储会和省储会管理员均可发起联合提案（含运行时升级、决议发行等）。
 fn is_joint_proposer(who: &AccountId) -> bool {
-    use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
+    use primitives::china::china_cb::CHINA_CB;
     let nrc_institution = CHINA_CB
         .first()
-        .and_then(|n| shenfen_id_to_fixed48(n.shenfen_id));
+        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id));
     for entry in CHINA_CB.iter() {
-        if let Some(institution) = shenfen_id_to_fixed48(entry.shenfen_id) {
+        if let Some(institution) = subject_id_from_shenfen_id(entry.shenfen_id) {
             let org = if Some(institution) == nrc_institution {
                 votingengine::types::ORG_NRC
             } else {
@@ -1401,7 +1434,8 @@ impl votingengine::Config for Runtime {
     // 非己方提案直接 Ok(()) skip,顺序不影响行为正确性。
     type InternalVoteResultCallback = (
         duoqian_transfer::InternalVoteExecutor<Runtime>,
-        org_manage::InternalVoteExecutor<Runtime>,
+        organization_manage::InternalVoteExecutor<Runtime>,
+        personal_manage::InternalVoteExecutor<Runtime>,
         admins_change::InternalVoteExecutor<Runtime>,
         resolution_destro::InternalVoteExecutor<Runtime>,
         grandpakey_change::InternalVoteExecutor<Runtime>,
@@ -1452,11 +1486,11 @@ impl genesis_pallet::Config for Runtime {
 mod tests {
     use super::*;
     use crate::ResolutionDestro;
-    use org_manage::DuoqianReservedAddressChecker;
+    use organization_manage::DuoqianReservedAddressChecker;
     use frame_support::assert_ok;
     use frame_support::traits::Currency;
     use primitives::china::china_cb::{
-        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
+        CHINA_CB,
     };
     use sfid_system::{SfidVerifier, SfidVoteVerifier};
     use sp_core::Pair;
@@ -1585,7 +1619,7 @@ mod tests {
     #[test]
     fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() {
         new_test_ext().execute_with(|| {
-            let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+            let nrc_institution = subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id)
                 .expect("nrc institution id must be valid");
             let nrc_account = AccountId::new(CHINA_CB[0].main_address);
             let initial_balance: Balance = 1_000;
@@ -1688,20 +1722,21 @@ mod tests {
 
             let duoqian_address = AccountId::new([77u8; 32]);
             let beneficiary = AccountId::new([78u8; 32]);
-            let admins: org_manage::pallet::DuoqianAdminsOf<Runtime> =
+            let admins: personal_manage::pallet::DuoqianAdminsOf<Runtime> =
                 vec![who.clone(), admin2.clone()]
                     .try_into()
                     .expect("admins should fit");
-            // 中文注释:propose_create 单账户机构入口已于 2026-05-03 删除,
-            // 本测试改用 propose_create_personal 验证"按 amount 字段计费"规则。
-            let account_name: org_manage::pallet::AccountNameOf<Runtime> =
+            // 中文注释:propose_create 单账户机构入口已于 2026-05-03 删除;
+            // propose_create_personal 已于 B 阶段拆分迁至 PersonalManage(2026-05-06)。
+            // 本测试改用 PersonalManage::propose_create 验证"按 amount 字段计费"规则。
+            let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
                 b"runtime-test-personal"
                     .to_vec()
                     .try_into()
                     .expect("account_name should fit");
 
-            let create_call = RuntimeCall::DuoqianManage(
-                org_manage::pallet::Call::propose_create_personal {
+            let create_call = RuntimeCall::PersonalManage(
+                personal_manage::pallet::Call::propose_create {
                     account_name,
                     admin_count: 2,
                     duoqian_admins: admins.clone(),
@@ -1721,7 +1756,7 @@ mod tests {
 
             let _ = Balances::deposit_creating(&duoqian_address, 777);
             let close_call =
-                RuntimeCall::DuoqianManage(org_manage::pallet::Call::propose_close {
+                RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
                     duoqian_address,
                     beneficiary,
                 });
@@ -2306,7 +2341,7 @@ mod tests {
     #[test]
     fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
         new_test_ext().execute_with(|| {
-            let nrc_id = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id");
+            let nrc_id = subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("nrc id");
             let nrc_admin = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
             let outsider = AccountId::new([99u8; 32]);
 
@@ -2317,7 +2352,7 @@ mod tests {
                 <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
             );
 
-            admins_change::pallet::Institutions::<Runtime>::remove(nrc_id);
+            admins_change::pallet::Subjects::<Runtime>::remove(nrc_id);
             assert!(!is_nrc_admin(&nrc_admin));
             assert!(!is_nrc_admin(&outsider));
             assert!(!RuntimeInternalAdminProvider::is_internal_admin(
@@ -2378,12 +2413,12 @@ mod tests {
             );
 
             let sfid_id: &[u8] = b"GFR-AH001-CB0C-000000001-20260222";
-            let register_nonce: org_manage::pallet::RegisterNonceOf<Runtime> =
+            let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
                 b"register-nonce-ah-1"
                     .to_vec()
                     .try_into()
                     .expect("nonce should fit");
-            let institution_name: org_manage::pallet::AccountNameOf<Runtime> =
+            let institution_name: organization_manage::pallet::AccountNameOf<Runtime> =
                 b"test-institution"
                     .to_vec()
                     .try_into()
@@ -2405,7 +2440,7 @@ mod tests {
                 );
                 let msg = blake2_256(&payload.encode());
                 let sig = signing_pair.sign(&msg);
-                let bounded: org_manage::pallet::RegisterSignatureOf<Runtime> =
+                let bounded: organization_manage::pallet::RegisterSignatureOf<Runtime> =
                     sig.0.to_vec().try_into().expect("signature should fit");
                 bounded
             };
@@ -2413,10 +2448,10 @@ mod tests {
             // 1. main admin 派生签名 → ok
             let main_signature = make_signature(&main_signing_pair, &main_admin_pubkey);
             assert!(
-                <RuntimeSfidInstitutionVerifier as org_manage::SfidInstitutionVerifier<
-                    org_manage::pallet::AccountNameOf<Runtime>,
-                    org_manage::pallet::RegisterNonceOf<Runtime>,
-                    org_manage::pallet::RegisterSignatureOf<Runtime>,
+                <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                    organization_manage::pallet::AccountNameOf<Runtime>,
+                    organization_manage::pallet::RegisterNonceOf<Runtime>,
+                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
                     &institution_name,
@@ -2432,10 +2467,10 @@ mod tests {
             // 2. backup admin 派生签名 → ok
             let backup_signature = make_signature(&backup_signing_pair, &backup_admin_pubkey);
             assert!(
-                <RuntimeSfidInstitutionVerifier as org_manage::SfidInstitutionVerifier<
-                    org_manage::pallet::AccountNameOf<Runtime>,
-                    org_manage::pallet::RegisterNonceOf<Runtime>,
-                    org_manage::pallet::RegisterSignatureOf<Runtime>,
+                <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                    organization_manage::pallet::AccountNameOf<Runtime>,
+                    organization_manage::pallet::RegisterNonceOf<Runtime>,
+                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
                     &institution_name,
@@ -2451,10 +2486,10 @@ mod tests {
             // 3. 花名册之外 admin pubkey → reject(ShengSigningPubkey 查不到)
             let outsider_pubkey: [u8; 32] = [99u8; 32];
             assert!(
-                !<RuntimeSfidInstitutionVerifier as org_manage::SfidInstitutionVerifier<
-                    org_manage::pallet::AccountNameOf<Runtime>,
-                    org_manage::pallet::RegisterNonceOf<Runtime>,
-                    org_manage::pallet::RegisterSignatureOf<Runtime>,
+                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                    organization_manage::pallet::AccountNameOf<Runtime>,
+                    organization_manage::pallet::RegisterNonceOf<Runtime>,
+                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
                     &institution_name,
@@ -2473,10 +2508,10 @@ mod tests {
                 main_admin_pubkey,
             );
             assert!(
-                !<RuntimeSfidInstitutionVerifier as org_manage::SfidInstitutionVerifier<
-                    org_manage::pallet::AccountNameOf<Runtime>,
-                    org_manage::pallet::RegisterNonceOf<Runtime>,
-                    org_manage::pallet::RegisterSignatureOf<Runtime>,
+                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                    organization_manage::pallet::AccountNameOf<Runtime>,
+                    organization_manage::pallet::RegisterNonceOf<Runtime>,
+                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
                     &institution_name,
@@ -2495,13 +2530,13 @@ mod tests {
                 main_admin_pubkey,
                 main_signing_pubkey,
             );
-            let bad_signature: org_manage::pallet::RegisterSignatureOf<Runtime> =
+            let bad_signature: organization_manage::pallet::RegisterSignatureOf<Runtime> =
                 vec![9u8; 64].try_into().expect("signature should fit");
             assert!(
-                !<RuntimeSfidInstitutionVerifier as org_manage::SfidInstitutionVerifier<
-                    org_manage::pallet::AccountNameOf<Runtime>,
-                    org_manage::pallet::RegisterNonceOf<Runtime>,
-                    org_manage::pallet::RegisterSignatureOf<Runtime>,
+                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
+                    organization_manage::pallet::AccountNameOf<Runtime>,
+                    organization_manage::pallet::RegisterNonceOf<Runtime>,
+                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
                 >>::verify_institution_registration(
                     sfid_id,
                     &institution_name,
@@ -2522,7 +2557,7 @@ pub struct RuntimeInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProvider {
     fn is_internal_admin(
         org: u8,
-        institution: votingengine::InstitutionPalletId,
+        institution: votingengine::SubjectId,
         who: &AccountId,
     ) -> bool {
         admins_change::Pallet::<Runtime>::is_active_subject_admin(org, institution, who)
@@ -2530,14 +2565,14 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 
     fn get_admin_list(
         org: u8,
-        institution: votingengine::InstitutionPalletId,
+        institution: votingengine::SubjectId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
         admins_change::Pallet::<Runtime>::active_subject_admins(org, institution)
     }
 
     fn is_pending_internal_admin(
         org: u8,
-        institution: votingengine::InstitutionPalletId,
+        institution: votingengine::SubjectId,
         who: &AccountId,
     ) -> bool {
         admins_change::Pallet::<Runtime>::is_pending_subject_admin_for_snapshot(
@@ -2549,7 +2584,7 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 
     fn get_pending_admin_list(
         org: u8,
-        institution: votingengine::InstitutionPalletId,
+        institution: votingengine::SubjectId,
     ) -> Option<alloc::vec::Vec<AccountId>> {
         admins_change::Pallet::<Runtime>::pending_subject_admins_for_snapshot(org, institution)
     }
@@ -2558,21 +2593,21 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 pub struct RuntimeInternalThresholdProvider;
 
 impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
+    fn is_known_subject(org: u8, institution: votingengine::SubjectId) -> bool {
         if org != votingengine::types::ORG_REN {
             return false;
         }
         admins_change::Pallet::<Runtime>::active_subject_exists(org, institution)
     }
 
-    fn is_known_pending_subject(org: u8, institution: votingengine::InstitutionPalletId) -> bool {
+    fn is_known_pending_subject(org: u8, institution: votingengine::SubjectId) -> bool {
         if org != votingengine::types::ORG_REN {
             return false;
         }
         admins_change::Pallet::<Runtime>::pending_subject_exists_for_snapshot(org, institution)
     }
 
-    fn pass_threshold(org: u8, institution: votingengine::InstitutionPalletId) -> Option<u32> {
+    fn pass_threshold(org: u8, institution: votingengine::SubjectId) -> Option<u32> {
         match org {
             votingengine::types::ORG_NRC
             | votingengine::types::ORG_PRC
@@ -2588,7 +2623,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
 
     fn pending_pass_threshold(
         org: u8,
-        institution: votingengine::InstitutionPalletId,
+        institution: votingengine::SubjectId,
     ) -> Option<u32> {
         if org != votingengine::types::ORG_REN {
             return None;
@@ -2600,7 +2635,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
 pub struct RuntimeInternalAdminCountProvider;
 
 impl votingengine::InternalAdminCountProvider for RuntimeInternalAdminCountProvider {
-    fn admin_count(org: u8, institution: votingengine::InstitutionPalletId) -> Option<u32> {
+    fn admin_count(org: u8, institution: votingengine::SubjectId) -> Option<u32> {
         admins_change::Pallet::<Runtime>::active_subject_admin_count(org, institution)
     }
 }

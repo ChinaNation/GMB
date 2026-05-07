@@ -83,11 +83,11 @@ class PalletRegistry {
 
   // ---- OrganizationManage (17) ----
   // call_index=0 留洞不复用(原 propose_create 单账户机构已物理删除)。
+  // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
   // 机构多签最少 2 账户,统一走 call_index=5。
   static const int organizationManagePallet = 17;
   static const int proposeCloseCall = 1;
   static const int registerSfidInstitutionCall = 2;
-  static const int proposeCreatePersonalCall = 3;
   static const int cleanupRejectedProposalCall = 4;
 
   /// `propose_create_institution(sfid_id, institution_name, accounts,
@@ -96,6 +96,14 @@ class PalletRegistry {
   /// 机构多签账户创建提案,凭证由 SFID 后端按 (province, admin_pubkey)
   /// 双层签发(ADR-008 step2b)。
   static const int proposeCreateInstitutionCall = 5;
+
+  // ---- PersonalManage (7) ----
+  // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
+  // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
+  static const int personalManagePallet = 7;
+  static const int proposeCreatePersonalCall = 0;
+  static const int proposeClosePersonalCall = 1;
+  static const int cleanupRejectedPersonalProposalCall = 2;
 
   // ---- ResolutionDestro (14) ----
   // call_index 1 留洞不复用。

@@ -1,7 +1,7 @@
 # 任务卡：重命名 org-manage 为 organization-manage
 
 - 任务编号：20260505-215047
-- 状态：open
+- 状态：completed
 - 负责人：当前主聊天入口（Architect Agent + Blockchain Agent + Mobile Agent + SFID Agent 联合执行）
 - 关联前置：无
 - 关联后续：20260505-215048（拆分 personal-manage）
@@ -143,8 +143,54 @@ grep -rln "dq-mgmt" citizenchain/ wumin/ wuminapp/ sfid/ --include="*.rs" --incl
 
 ## 8. 执行结果
 
-（待填写）
+10 步全部按方案完成（2026-05-06）：
+
+1. **链端 crate mv**：`runtime/governance/org-manage/` → `organization-manage/`；workspace member、runtime/Cargo.toml 4 处 feature、`Cargo.toml name` 全部更新；`duoqian-transfer/Cargo.toml` 同步 dep。
+2. **runtime 装配**：`lib.rs` `pub type DuoqianManage = org_manage` → `pub type OrganizationManage = organization_manage`；`configs/mod.rs` 65 处全部替换；`benchmarks.rs` `[organization_manage, OrganizationManage]`。
+3. **依赖 crate**：duoqian-transfer / offchain-transaction / votingengine 全部 use path 修正；`weights.rs` 注释同步。
+4. **MODULE_TAG**：`organization-manage/src/lib.rs` 改 `b"org-mgmt"` 并加长度 8 字节注释；`admins-change` 5 处（lib.rs:1349/1356/1366/1375/1382）同步。
+5. **node 后端**：`offchain/duoqian_manage/` mv → `organization_manage/`；`desktop/mod.rs` 6 处 command path、`offchain/{mod,settlement,common/{mod,types}}.rs` use path、`organization_manage/{chain,signing}.rs` 内 3 处 `"DuoqianManage"` 字符串字面；`governance/proposal.rs` `TAG_DUOQIAN_MANAGE` → `TAG_ORGANIZATION_MANAGE`、函数 `is_organization_manage_proposal`；`governance/signing.rs:122` 注释。
+6. **node 前端**：`frontend/offchain/duoqian-manage/` mv → `organization-manage/`；`api.ts / types.ts / section.tsx` import + 4 个 `.tsx` 字符串字面；`tsc --noEmit` 通过。
+7. **wumin**：`pallet_registry.dart` 常量名 `duoqianManagePallet` → `organizationManagePallet`、注释；`payload_decoder.dart` 4 处注释；`pallet_registry_test.dart` 测试同步；`flutter analyze` 0 issues。
+8. **wuminapp**：`duoqian_manage_service.dart` 5 处 `'DuoqianManage'` 字符串字面 + MODULE_TAG 字节数组 7 → 8 字节 + 业务目录解耦顶部注释；`institution_admin_service.dart` 1 处 `'DuoqianManage'`；`duoqian_manage_service_test.dart` 测试同步；compound class names（`DuoqianManageService` / `DuoqianManageDetailPage`）按计划保留为业务命名。
+9. **sfid**：`indexer/event_parser.rs` 2 处 pallet 名字符串字面 + 1 处注释；`institutions/{derive,service}.rs` 注释路径。
+10. **文档**：`memory/05-modules/citizenchain/` + `memory/01-architecture/citizenchain/` 全文 grep 替换；doc 目录 `transaction/duoqian-manage/DUOQIAN_TECHNICAL.md` mv 到 `governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md`；`memory/scripts/load-context.sh` 路径键修正。auto-memory 新增 `project_org_manage_renamed_2026_05_06.md` 并入 MEMORY.md 索引。
 
 ## 9. 验证结果
 
-（待填写）
+### 编译
+- `cargo check --workspace`（含 WASM_FILE）：通过，仅 37 个 pre-existing dead-code warnings
+- `cargo check -p organization-manage`：通过
+- `cargo check -p duoqian-transfer`：通过
+- `cargo check -p admins-change`：通过
+- `cargo check -p sfid-backend`：通过
+- `cd citizenchain/node/frontend && npx tsc --noEmit`：exit 0
+
+### 测试
+- `cargo test -p organization-manage`：**34 passed / 0 failed**
+- `cargo test -p admins-change -p citizenchain --lib`：**37 passed / 0 failed**
+- `cargo test -p duoqian-transfer`：**20 passed / 0 failed**
+- wumin `flutter test`：**All tests passed!**（含 pallet_registry_test 共 105 case）
+- wuminapp `flutter test test/duoqian/`：**All tests passed!**（28 cases）
+
+### 残留扫描（任务卡 §5.3 四条全零）
+1. `org-manage / org_manage / OrgManage`：零
+2. `DuoqianManage`：零
+3. `duoqian_manage / duoqian-manage / duoqianManage`（节点 + wumin/lib/signer + sfid + 目标 doc 树）：零
+4. `dq-mgmt`：零
+
+### 不变量逐条核对（§六）
+- ✅ 业务行为零变更（无 storage 字段名 / extrinsic 入参签名 / event 字段 改动）
+- ✅ pallet_index = 17（未动）
+- ✅ call_index 全部保留（propose_create_personal=3 / propose_close=1 / register_sfid_institution=2 / propose_create_institution=5 / cleanup_rejected_proposal=4）
+- ✅ Event/Error 字面名保留（DuoqianCreated / DuoqianClosed / PersonalDuoqianProposed / PersonalDuoqianAlreadyExists 等）
+- ✅ storage 字段名保留（B 阶段才拆）
+- ✅ MODULE_TAG = `b"org-mgmt"`（8 字节），旧值 `b"dq-mgmt"` 主工作树零残留
+- ✅ wuminapp `lib/duoqian/` 业务目录结构不变
+
+### 风险闭环
+- R1（链未上线，fresh genesis 即生效）：零影响，已闭环
+- R2（业务目录 vs pallet 名错位）：`duoqian_manage_service.dart` 顶部注释已说明
+- R3（前端写死路径）：tsc --noEmit 通过、无 import 残留
+- R4（dq-mgmt 7→8 字节）：wuminapp 字节常量与注释同步更新
+- R5（sfid indexer 需配合 fresh genesis）：sfid 编译通过，运行时验证留待联调阶段

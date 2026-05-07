@@ -66,7 +66,8 @@ citizen-issuance = { path = "issuance/citizen-issuance", default-features = fals
 sfid-system = { path = "otherpallet/sfid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
-org-manage = { path = "governance/org-manage", default-features = false }
+organization-manage = { path = "governance/organization-manage", default-features = false }
+personal-manage = { path = "governance/personal-manage", default-features = false }
 resolution-issuance = { path = "issuance/resolution-issuance", default-features = false }
 votingengine = { path = "votingengine", default-features = false }
 internal-vote = { path = "votingengine/internal-vote", default-features = false }
@@ -104,7 +105,8 @@ std = [
 	"sfid-system/std",
 	"pow-difficulty/std",
 	"onchain-transaction/std",
-	"org-manage/std",
+	"organization-manage/std",
+	"personal-manage/std",
 	"resolution-issuance/std",
 	"votingengine/std",
 	"internal-vote/std",
@@ -155,7 +157,8 @@ runtime-benchmarks = [
 	"sfid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
-	"org-manage/runtime-benchmarks",
+	"organization-manage/runtime-benchmarks",
+	"personal-manage/runtime-benchmarks",
 	"resolution-issuance/runtime-benchmarks",
 	"votingengine/runtime-benchmarks",
 	"internal-vote/runtime-benchmarks",
@@ -186,7 +189,8 @@ try-runtime = [
 	"sfid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",
-	"org-manage/try-runtime",
+	"organization-manage/try-runtime",
+	"personal-manage/try-runtime",
 	"resolution-issuance/try-runtime",
 	"votingengine/try-runtime",
 	"internal-vote/try-runtime",

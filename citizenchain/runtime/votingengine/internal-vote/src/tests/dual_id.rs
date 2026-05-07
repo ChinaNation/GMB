@@ -14,7 +14,7 @@ use super::*;
 fn create_internal_proposal_with_data_via_engine(
 who: AccountId32,
 org: u8,
-institution: InstitutionPalletId,
+institution: SubjectId,
 module_tag: &[u8],
 ) -> u64 {
 <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal_with_data(

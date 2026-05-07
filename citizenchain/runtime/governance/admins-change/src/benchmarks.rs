@@ -7,7 +7,7 @@
 
 use crate::Pallet as AdminsChange;
 use crate::{
-    reserve_pallet_id_to_bytes, BlockNumberFor, Call, Config, InstitutionPalletId, Pallet,
+    subject_id_from_shenfen_id, BlockNumberFor, Call, Config, SubjectId, Pallet,
     CHINA_CB, ORG_PRC,
 };
 use codec::Decode;
@@ -19,8 +19,8 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> InstitutionPalletId {
-    reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
+fn prc_institution() -> SubjectId {
+    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {

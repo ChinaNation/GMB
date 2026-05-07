@@ -119,7 +119,7 @@ pub struct VoteSubmitResult {
 ///
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」:
 /// 所有业务 pallet(admins_change / resolution_destro /
-/// grandpakey_change / duoqian_manage / duoqian_transfer)的 vote_X
+/// grandpakey_change / organization_manage / duoqian_transfer)的 vote_X
 /// 已物理删除,管理员一人一票统一走 `InternalVote::cast`
 /// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
 /// `InternalVoteExecutor`。
@@ -236,7 +236,7 @@ pub fn build_joint_vote_sign_request(
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -350,7 +350,7 @@ pub fn build_propose_transfer_sign_request(
         return Err("收款地址不能为本机构多签地址".to_string());
     }
 
-    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -557,7 +557,7 @@ pub fn build_propose_sweep_sign_request(
     }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
 
-    let institution_id = super::storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
     let (block_hash, block_number) = fetch_latest_block()?;

@@ -10,8 +10,8 @@
 | `grandpakey-change` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `resolution-issuance` | `frame_system`, `votingengine`（通过 JointVoteEngine）, `pallet_balances`（通过 Currency） |
 | `runtime-upgrade` | `frame_system`, `votingengine`（通过 JointVoteEngine） |
-| `duoqian-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admins-change` |
-| `duoqian-transfer` | `frame_system`, `votingengine`, `duoqian-manage`, `admins-change`（测试/runtime 约束） |
+| `organization-manage` | `frame_system`, `votingengine`（通过 InternalVoteEngine）, `admins-change` |
+| `duoqian-transfer` | `frame_system`, `votingengine`, `organization-manage`, `admins-change`（测试/runtime 约束） |
 | `offchain-transaction` | `frame_system`, `votingengine`（通过 InternalVoteEngine） |
 | `sfid-system` | `frame_system` |
 | `citizen-issuance` | `frame_system`, `pallet_balances`（通过 Currency） |
@@ -20,22 +20,22 @@
 
 | Trait | 定义 Pallet | Runtime 实现体 | 消费 Pallet |
 |-------|------------|---------------|------------|
-| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `duoqian-manage`, `duoqian-transfer`(间接), `admins-change`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
+| `InternalVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `organization-manage`, `duoqian-transfer`(间接), `admins-change`, `resolution-destro`, `grandpakey-change`, `offchain-transaction` |
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
 | `InternalAdminCountProvider` | `votingengine` | `RuntimeInternalAdminCountProvider` | `votingengine` (Config 注入) |
 | `InternalThresholdProvider` | `votingengine` | `RuntimeInternalThresholdProvider` | `votingengine` (Config 注入) |
-| `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `duoqian-manage`, `duoqian-transfer`(间接), `offchain-transaction` |
+| `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `organization-manage`, `duoqian-transfer`(间接), `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
-| `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `duoqian-manage`, `duoqian-transfer` |
+| `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `organization-manage`, `duoqian-transfer` |
 | `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `AmountExtractor` (CallAmount) | `onchain-transaction` | `OnchainTxAmountExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
-| `ProtectedSourceChecker` | `duoqian-manage` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `duoqian-manage`, `offchain-transaction` |
+| `ProtectedSourceChecker` | `organization-manage` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `organization-manage`, `offchain-transaction` |
 | `SfidEligibility` | `votingengine` | `RuntimeSfidEligibility` (委托 sfid-system) | `votingengine` |
 | `PopulationSnapshotVerifier` | `votingengine` | `RuntimePopulationSnapshotVerifier` | `votingengine` |
 | `JointVoteResultCallback` | `votingengine` | `RuntimeJointVoteResultCallback` | `votingengine` (投票通过后回调) |
-| `SfidInstitutionVerifier` | `duoqian-manage` | `RuntimeSfidInstitutionVerifier` | `duoqian-manage` |
+| `SfidInstitutionVerifier` | `organization-manage` | `RuntimeSfidInstitutionVerifier` | `organization-manage` |
 | `SfidVerifier` / `SfidVoteVerifier` | `sfid-system` | `RuntimeSfidVerifier` / `RuntimeSfidVoteVerifier` | `sfid-system` |
 
 ## Runtime 级别适配器说明

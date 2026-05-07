@@ -18,7 +18,7 @@ use crate::pallet::{
     self, Error, InternalProposalMutexes, ProposalMutexBindings,
 };
 use crate::{
-    InstitutionPalletId, InternalProposalMutexBinding, InternalProposalMutexKind,
+    SubjectId, InternalProposalMutexBinding, InternalProposalMutexKind,
     InternalProposalMutexState,
 };
 
@@ -26,7 +26,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn acquire_internal_proposal_mutex(
         proposal_id: u64,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         kind: InternalProposalMutexKind,
     ) -> DispatchResult {
         InternalProposalMutexes::<T>::try_mutate_exists(
@@ -104,7 +104,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
 
     pub fn ensure_admin_set_mutation_lock_owner(
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         proposal_id: u64,
     ) -> DispatchResult {
         let state = InternalProposalMutexes::<T>::get(org, institution)

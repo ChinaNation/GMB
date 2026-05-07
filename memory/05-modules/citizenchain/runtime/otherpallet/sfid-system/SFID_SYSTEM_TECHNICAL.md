@@ -62,7 +62,7 @@
 ### 1.1 `duoqian_info/` 目录边界(2026-05-02)
 
 `duoqian_info/` 是 DUOQIAN 链接收 SFID 机构注册信息的历史辅助目录,当前不再承担"备案"流程。
-正式创建机构多签统一走 `duoqian-manage::propose_create_institution`,并由 SFID 后端
+正式创建机构多签统一走 `organization-manage::propose_create_institution`,并由 SFID 后端
 `/api/v1/app/institutions/:sfid_id/registration-info` 签发注册信息凭证。
 
 当前目录结构:
@@ -80,7 +80,7 @@ duoqian_info/
 
 - 不再新增备案入口,不再把该目录作为 SFID 与 DUOQIAN 正式注册链路。
 - 机构注册业务字段以 `sfid_id`、`institution_name`、`account_names[]` 为准。
-- 正式多签机构注册由 `duoqian-manage` 校验 SFID 注册凭证并写入机构 storage。
+- 正式多签机构注册由 `organization-manage` 校验 SFID 注册凭证并写入机构 storage。
 - 如后续确认该目录无运行时引用,应单独开清理任务删除历史辅助类型。
 
 ---

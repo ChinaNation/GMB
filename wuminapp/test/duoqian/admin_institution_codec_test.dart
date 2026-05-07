@@ -113,17 +113,32 @@ void main() {
   });
 
   group('personalAddressFromInstitutionId', () {
-    test('末 16 字节全零 → 返回前 32B hex', () {
+    test('D 协议: kind=0x03 + 32B account + 15B 零 → 返回 32B hex', () {
+      // D 协议: byte[0]=0x03 (PersonalDuoqian), byte[1..33]=AccountId, byte[33..48]=15B 零
       final id = Uint8List(48);
-      for (var i = 0; i < 32; i++) {
+      id[0] = 0x03; // SubjectKind::PersonalDuoqian
+      for (var i = 1; i < 33; i++) {
         id[i] = 0xAB;
       }
       final addr = AdminInstitutionCodec.personalAddressFromInstitutionId(id);
       expect(addr, 'ab' * 32);
     });
 
-    test('末 16 字节非全零 → 返回 null(不是个人多签 id)', () {
+    test('kind tag 不为 0x03 → 返回 null', () {
       final id = Uint8List(48);
+      id[0] = 0x01; // Builtin,不是 personal
+      for (var i = 1; i < 33; i++) {
+        id[i] = 0xAB;
+      }
+      expect(
+        AdminInstitutionCodec.personalAddressFromInstitutionId(id),
+        isNull,
+      );
+    });
+
+    test('末 15 字节(byte[33..48])非全零 → 返回 null', () {
+      final id = Uint8List(48);
+      id[0] = 0x03;
       id[40] = 1;
       expect(
         AdminInstitutionCodec.personalAddressFromInstitutionId(id),
@@ -140,15 +155,26 @@ void main() {
   });
 
   group('sfidIdFromInstitutionId', () {
-    test('提取 SFID UTF-8 字节,去尾部 0', () {
-      // 模拟 sfid_id = "SFR-LN001-CB0C-Z001-20260222"(28 字节 UTF-8)
+    test('D 协议: kind=0x02 + sfid_id + 右零填充 → 提取 sfid_id', () {
+      // D 协议: byte[0]=0x02 (SfidInstitution), byte[1..]=sfid_id 字节(右填零)
       const sfidStr = 'SFR-LN001-CB0C-Z001-20260222';
       final sfidBytes = sfidStr.codeUnits;
       final id = Uint8List(48);
-      id.setAll(0, sfidBytes);
+      id[0] = 0x02; // SubjectKind::SfidInstitution
+      id.setAll(1, sfidBytes);
       final extracted = AdminInstitutionCodec.sfidIdFromInstitutionId(id)!;
       expect(extracted.length, sfidBytes.length);
       expect(String.fromCharCodes(extracted), sfidStr);
+    });
+
+    test('kind tag 不为 0x02 → 返回 null', () {
+      final id = Uint8List(48);
+      id[0] = 0x03; // Personal,不是 sfid
+      id[1] = 0x41;
+      expect(
+        AdminInstitutionCodec.sfidIdFromInstitutionId(id),
+        isNull,
+      );
     });
 
     test('全零 institution_id → 返回 null', () {

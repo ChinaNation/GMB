@@ -63,11 +63,17 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
-      // call_index=0 留洞不复用(单账户机构 proposeCreate 已废弃)。
+      // OrganizationManage(17): call_index=0/3 留洞不复用
+      // (0 = 单账户机构 propose_create 已废弃; 3 = propose_create_personal 已迁出至 PersonalManage(7))
       expect(PalletRegistry.proposeCloseCall, 1);
       expect(PalletRegistry.registerSfidInstitutionCall, 2);
-      expect(PalletRegistry.proposeCreatePersonalCall, 3);
       expect(PalletRegistry.cleanupRejectedProposalCall, 4);
+      expect(PalletRegistry.proposeCreateInstitutionCall, 5);
+
+      // PersonalManage(7) B 阶段拆分(2026-05-06):独立命名空间
+      expect(PalletRegistry.proposeCreatePersonalCall, 0);
+      expect(PalletRegistry.proposeClosePersonalCall, 1);
+      expect(PalletRegistry.cleanupRejectedPersonalProposalCall, 2);
     });
 
     test('VotingEngine 统一手动重试/取消入口', () {

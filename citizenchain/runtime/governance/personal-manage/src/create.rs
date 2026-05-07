@@ -1,0 +1,162 @@
+//! 个人多签创建流程实现。
+//!
+//! `do_propose_create` 由 lib.rs 内 call_index=0 入口 delegate 调用。
+//! 业务流程：
+//! 1. 校验发起人未被保护、账户名非空、admin/threshold 合法、余额充足
+//! 2. 派生 `derive_personal_duoqian_address(creator, account_name)` —— 地址只依赖
+//!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
+//! 3. 同事务内：
+//!    - 写 Pending PersonalDuoqians 占位
+//!    - 写 PersonalDuoqianInfo 反向索引
+//!    - 调投票引擎 create_pending_subject_internal_proposal_with_snapshot_data
+//!    - 调 admins-change 写 Pending 主体
+//! 4. 从投票引擎回读 expires_at,发射 PersonalDuoqianProposed 事件
+
+extern crate alloc;
+
+use codec::Encode;
+use frame_support::{
+    ensure,
+    storage::{with_transaction, TransactionOutcome},
+    traits::{Get, ReservableCurrency},
+};
+use sp_runtime::DispatchResult;
+
+use crate::pallet::{
+    AccountNameOf, Config, DuoqianAdminsOf, Error, Event, Pallet, PendingPersonalCreate,
+    PersonalDuoqianInfo, PersonalDuoqians,
+};
+use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus, PersonalDuoqianMeta};
+use crate::BalanceOf;
+use crate::ACTION_CREATE;
+use primitives::derive::subject_id_from_account;
+use primitives::traits::{
+    DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
+};
+use votingengine::InternalVoteEngine;
+
+pub(crate) fn do_propose_create<T: Config>(
+    who: T::AccountId,
+    account_name: AccountNameOf<T>,
+    admin_count: u32,
+    duoqian_admins: DuoqianAdminsOf<T>,
+    threshold: u32,
+    amount: BalanceOf<T>,
+) -> DispatchResult {
+    ensure!(
+        !T::ProtectedSourceChecker::is_protected(&who),
+        Error::<T>::ProtectedSource
+    );
+    ensure!(!account_name.is_empty(), Error::<T>::EmptyPersonalName);
+    ensure!(
+        amount >= T::MinCreateAmount::get(),
+        Error::<T>::CreateAmountBelowMinimum
+    );
+    Pallet::<T>::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
+
+    let (reserve_total, _fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
+
+    let duoqian_address =
+        Pallet::<T>::derive_personal_duoqian_address(&who, account_name.as_slice())?;
+    ensure!(
+        !PersonalDuoqians::<T>::contains_key(&duoqian_address),
+        Error::<T>::PersonalDuoqianAlreadyExists
+    );
+    ensure!(
+        !T::ReservedAddressChecker::is_reserved(&duoqian_address),
+        Error::<T>::AddressReserved
+    );
+    ensure!(
+        T::AddressValidator::is_valid(&duoqian_address),
+        Error::<T>::InvalidAddress
+    );
+    ensure!(
+        !T::ProtectedSourceChecker::is_protected(&duoqian_address),
+        Error::<T>::ProtectedSource
+    );
+
+    let now = <frame_system::Pallet<T>>::block_number();
+    let institution = subject_id_from_account(&duoqian_address);
+    let org = votingengine::types::ORG_REN;
+    let action = CreateDuoqianAction {
+        duoqian_address: duoqian_address.clone(),
+        proposer: who.clone(),
+        admin_count,
+        threshold,
+        amount,
+    };
+    let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
+    data.push(ACTION_CREATE);
+    data.extend_from_slice(&action.encode());
+
+    let proposal_id = with_transaction(|| {
+        if T::Currency::reserve(&who, reserve_total).is_err() {
+            return TransactionOutcome::Rollback(Err(Error::<T>::ReserveFailed.into()));
+        }
+        PersonalDuoqians::<T>::insert(
+            &duoqian_address,
+            DuoqianAccount {
+                admin_count,
+                threshold,
+                duoqian_admins: duoqian_admins.clone(),
+                creator: who.clone(),
+                created_at: now,
+                status: DuoqianStatus::Pending,
+            },
+        );
+        PersonalDuoqianInfo::<T>::insert(
+            &duoqian_address,
+            PersonalDuoqianMeta {
+                creator: who.clone(),
+                account_name: account_name.clone(),
+            },
+        );
+        // 创建提案需全员管理员通过(2026-05-03 整改);此处投票阈值 = admins.len()。
+        // admins-change 主体里 threshold 字段保存用户自定义 m-of-n,
+        // 用于激活后日常治理(转账等),不影响此处投票阈值。
+        let create_threshold = duoqian_admins.len() as u32;
+        let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
+            who.clone(),
+            org,
+            institution,
+            duoqian_admins.iter().cloned().collect(),
+            create_threshold,
+            crate::MODULE_TAG,
+            data,
+        ) {
+            Ok(proposal_id) => proposal_id,
+            Err(err) => return TransactionOutcome::Rollback(Err(err)),
+        };
+        PendingPersonalCreate::<T>::insert(proposal_id, &action);
+        if let Err(err) = Pallet::<T>::create_pending_admin_subject_for_proposal(
+            proposal_id,
+            institution,
+            admins_change::AdminSubjectKind::PersonalDuoqian,
+            &duoqian_admins,
+            threshold,
+            &who,
+        ) {
+            return TransactionOutcome::Rollback(Err(err));
+        }
+        TransactionOutcome::Commit(Ok(proposal_id))
+    })?;
+
+    let expires_at = votingengine::Pallet::<T>::proposals(proposal_id)
+        .map(|p| p.end)
+        .ok_or(Error::<T>::VoteEngineError)?;
+
+    Pallet::<T>::deposit_event(Event::<T>::PersonalDuoqianProposed {
+        proposal_id,
+        duoqian_address,
+        proposer: who,
+        account_name,
+        admins: duoqian_admins,
+        admin_count,
+        threshold,
+        amount,
+        expires_at,
+    });
+
+    Ok(())
+}
+

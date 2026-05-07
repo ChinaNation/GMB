@@ -66,7 +66,7 @@ class InstitutionInfo {
   final String name;
 
   /// 链上身份标识（与 Rust 常量 `shenfen_id` 完全一致）。
-  /// 在查询链上存储时会右补零到 48 字节作为 `InstitutionPalletId`。
+  /// 在查询链上存储时按 D 协议派生为 48 字节 `SubjectId`(byte[0]=0x01 Builtin + payload)。
   final String shenfenId;
 
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
@@ -168,8 +168,8 @@ List<int> institutionIdentityToPalletId(String institutionIdentity) {
   return _shenfenIdToFixed48(institutionIdentity);
 }
 
-/// 通过 48 字节 InstitutionPalletId 反查机构信息。
-/// shenfenId UTF-8 右补零到 48 字节后与 palletIdBytes 比较。
+/// 通过 48 字节 `SubjectId`(D 协议)反查机构信息。
+/// shenfenId 按 SubjectKind=0x01 Builtin 派生(byte[0]=0x01 + payload UTF-8 + 右填零)后与 palletIdBytes 比较。
 InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
   if (palletIdBytes.length != 48) return null;
   for (final inst in [

@@ -40,10 +40,17 @@ class AdminInstitutionDecoded {
 class AdminInstitutionCodec {
   AdminInstitutionCodec._();
 
-  /// 链端 `AdminSubjectKind` 枚举值。
+  /// 链端 `AdminSubjectKind` 枚举值(`admins-change::AdminSubjectKind`)。
+  /// 注意:与 institution_id 的 `SubjectKind` kind tag(0x01/0x02/0x03)不同字节空间。
   static const int kindBuiltin = 0;
   static const int kindSfid = 1;
   static const int kindPersonal = 2;
+
+  /// `primitives::derive::SubjectKind` 字节值(D 阶段协议统一,2026-05-06)。
+  /// institution_id byte[0] 即为本枚举值。
+  static const int subjectKindBuiltin = 0x01;
+  static const int subjectKindSfidInstitution = 0x02;
+  static const int subjectKindPersonalDuoqian = 0x03;
 
   /// 解码 AdminInstitution SCALE bytes;格式不符返回 null(容错,不抛异常)。
   static AdminInstitutionDecoded? tryDecode(Uint8List bytes) {
@@ -84,27 +91,36 @@ class AdminInstitutionCodec {
   }
 
   /// 个人多签判别 + 提取 personal_address。
-  /// institution_id = personal_address(32B) || zeros(16B)。
-  /// 末 16 字节非全零则不是合法个人多签 institution_id,返回 null。
+  ///
+  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 institution_id 协议:
+  ///   byte[0]   = 0x03 (SubjectKind::PersonalDuoqian)
+  ///   byte[1..33] = personal_address(32B AccountId)
+  ///   byte[33..48] = 15B 零填充
+  /// kind tag 不为 0x03 或末 15 字节非全零返回 null。
   static String? personalAddressFromInstitutionId(Uint8List institutionId) {
     if (institutionId.length != 48) return null;
-    for (var i = 32; i < 48; i++) {
+    if (institutionId[0] != subjectKindPersonalDuoqian) return null;
+    for (var i = 33; i < 48; i++) {
       if (institutionId[i] != 0) return null;
     }
-    return _hexEncode(institutionId.sublist(0, 32));
+    return _hexEncode(institutionId.sublist(1, 33));
   }
 
   /// SFID 机构判别 + 提取 sfid_id(去除尾部 0x00 padding)。
-  /// institution_id = sfid_id_utf8 || zeros padded 48B。
-  /// 完全空(全零)返回 null。
+  ///
+  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 institution_id 协议:
+  ///   byte[0]    = 0x02 (SubjectKind::SfidInstitution)
+  ///   byte[1..48] = sfid_id_utf8(≤47B,右填零)
+  /// kind tag 不为 0x02 或 payload 全零返回 null。
   static Uint8List? sfidIdFromInstitutionId(Uint8List institutionId) {
     if (institutionId.length != 48) return null;
+    if (institutionId[0] != subjectKindSfidInstitution) return null;
     var realLen = 48;
-    while (realLen > 0 && institutionId[realLen - 1] == 0) {
+    while (realLen > 1 && institutionId[realLen - 1] == 0) {
       realLen--;
     }
-    if (realLen == 0) return null;
-    return Uint8List.fromList(institutionId.sublist(0, realLen));
+    if (realLen <= 1) return null; // payload 全零
+    return Uint8List.fromList(institutionId.sublist(1, realLen));
   }
 
   // ──── 内部工具 ────

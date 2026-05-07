@@ -11,20 +11,21 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use primitives::derive::subject_id_from_shenfen_id;
 use frame_support::pallet_prelude::DispatchResult;
 use sp_runtime::DispatchError;
 
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    CHINA_CH,
 };
 use primitives::count_const::{
     JOINT_VOTE_PASS_THRESHOLD, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
 };
 
 use votingengine::{
-    nrc_pallet_id_bytes,
-    InstitutionPalletId, Proposal,
+    nrc_subject_id,
+    SubjectId, Proposal,
 };
 
 pub mod jointinternal;
@@ -45,8 +46,8 @@ pub use pallet::*;
 // ──────────────────────────────────────────────────────────────────
 
 /// 机构 ID → 联合投票票权(NRC=43 / PRC=43 / PRB=19)。
-pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
-    if let Some(nrc) = nrc_pallet_id_bytes() {
+pub fn institution_info(id: SubjectId) -> Option<u32> {
+    if let Some(nrc) = nrc_subject_id() {
         if id == nrc {
             return Some(NRC_JOINT_VOTE_WEIGHT);
         }
@@ -54,14 +55,14 @@ pub fn institution_info(id: InstitutionPalletId) -> Option<u32> {
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some(PRC_JOINT_VOTE_WEIGHT);
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some(PRB_JOINT_VOTE_WEIGHT);
@@ -122,7 +123,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        (InstitutionPalletId, T::AccountId),
+        (SubjectId, T::AccountId),
         bool,
         OptionQuery,
     >;
@@ -134,7 +135,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        InstitutionPalletId,
+        SubjectId,
         votingengine::VoteCountU32,
         ValueQuery,
     >;
@@ -146,7 +147,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        InstitutionPalletId,
+        SubjectId,
         bool,
         OptionQuery,
     >;
@@ -178,14 +179,14 @@ pub mod pallet {
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             who: T::AccountId,
             approve: bool,
         },
         /// 联合投票中某机构已形成最终结果(赞成/反对)。
         JointInstitutionVoteFinalized {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             approved: bool,
         },
         /// 联合公投已投出一票(binding_id 为 SFID 哈希)。
@@ -220,7 +221,7 @@ pub mod pallet {
         pub fn cast_admin(
             origin: OriginFor<T>,
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             approve: bool,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;

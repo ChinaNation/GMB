@@ -7,7 +7,7 @@
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`
 //! trait 实现中被调用。
 
-#[cfg(test)]
+use primitives::derive::subject_id_from_shenfen_id;
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -17,9 +17,9 @@ use frame_support::{
 use sp_runtime::traits::{Hash, SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    CHINA_CH,
 };
 use primitives::count_const::{
     JOINT_VOTE_TOTAL, NRC_JOINT_VOTE_WEIGHT, PRB_JOINT_VOTE_WEIGHT, PRC_JOINT_VOTE_WEIGHT,
@@ -27,10 +27,10 @@ use primitives::count_const::{
 };
 
 use votingengine::{
-    nrc_pallet_id_bytes,
+    nrc_subject_id,
     pallet::{Proposals, ProposalsByExpiry},
     types::{fixed_governance_pass_threshold, ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    SubjectId, InternalAdminProvider, InternalProposalMutexKind,
     PopulationSnapshotVerifier, Proposal, PROPOSAL_KIND_JOINT, STAGE_JOINT, STATUS_PASSED,
 };
 
@@ -44,8 +44,8 @@ use super::{institution_info, is_joint_unanimous};
 // 私有 helper:发起人机构解析 + (org, weight) profile
 // ──────────────────────────────────────────────────────────────────
 
-pub(super) fn institution_profile(id: InstitutionPalletId) -> Option<(u8, u32)> {
-    if let Some(nrc) = nrc_pallet_id_bytes() {
+pub(super) fn institution_profile(id: SubjectId) -> Option<(u8, u32)> {
+    if let Some(nrc) = nrc_subject_id() {
         if id == nrc {
             return Some((ORG_NRC, NRC_JOINT_VOTE_WEIGHT));
         }
@@ -53,14 +53,14 @@ pub(super) fn institution_profile(id: InstitutionPalletId) -> Option<(u8, u32)> 
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some((ORG_PRC, PRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == id)
     {
         return Some((ORG_PRB, PRB_JOINT_VOTE_WEIGHT));
@@ -68,10 +68,10 @@ pub(super) fn institution_profile(id: InstitutionPalletId) -> Option<(u8, u32)> 
     None
 }
 
-fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<InstitutionPalletId> {
+fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<SubjectId> {
     #[cfg(not(test))]
     {
-        if let Some(nrc) = nrc_pallet_id_bytes() {
+        if let Some(nrc) = nrc_subject_id() {
             if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 ORG_NRC, nrc, who,
             ) {
@@ -79,7 +79,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Institu
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+            if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC, prc, who,
                 ) {
@@ -91,7 +91,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Institu
     }
     #[cfg(test)]
     {
-        if let Some(nrc) = nrc_pallet_id_bytes() {
+        if let Some(nrc) = nrc_subject_id() {
             if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                 ORG_NRC, nrc, who,
             ) {
@@ -99,7 +99,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Institu
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+            if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC, prc, who,
                 ) {
@@ -114,7 +114,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Institu
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
         for entry in CHINA_CB.iter() {
-            if let Some(institution) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+            if let Some(institution) = subject_id_from_shenfen_id(entry.shenfen_id) {
                 if entry.duoqian_admins.iter().any(|admin| *admin == who_arr) {
                     return Some(institution);
                 }
@@ -202,7 +202,7 @@ impl<T: Config> Pallet<T> {
             }
 
             // 锁定所有参与机构(NRC + 43 PRC + PRBs)的管理员快照。
-            if let Some(nrc) = nrc_pallet_id_bytes() {
+            if let Some(nrc) = nrc_subject_id() {
                 if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                     id,
                     ORG_NRC,
@@ -218,7 +218,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CB.iter().skip(1) {
-                if let Some(prc) = reserve_pallet_id_to_bytes(entry.shenfen_id) {
+                if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRC,
@@ -235,7 +235,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CH.iter() {
-                if let Some(prb) = shengbank_pallet_id_to_bytes(entry.shenfen_id) {
+                if let Some(prb) = subject_id_from_shenfen_id(entry.shenfen_id) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRB,
@@ -279,7 +279,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_joint_vote(
         who: T::AccountId,
         proposal_id: u64,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         approve: bool,
     ) -> DispatchResult {
         let proposal = <votingengine::Pallet<T>>::ensure_open_proposal(proposal_id)?;
@@ -343,7 +343,7 @@ impl<T: Config> Pallet<T> {
 
     fn finalize_joint_institution_vote(
         proposal_id: u64,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         approved: bool,
     ) -> DispatchResult {
         ensure!(

@@ -531,7 +531,7 @@ mod tests {
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         fn pass_threshold(
             org: u8,
-            _institution: votingengine::InstitutionPalletId,
+            _institution: votingengine::SubjectId,
         ) -> Option<u32> {
             votingengine::types::fixed_governance_pass_threshold(org)
         }

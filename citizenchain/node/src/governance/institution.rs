@@ -21,7 +21,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 /// 查询指定机构的管理员公钥列表。
 /// 返回不含 0x 前缀的小写 hex 公钥列表。
 pub fn fetch_admins(shenfen_id: &str) -> Result<Vec<String>, String> {
-    let storage_key = storage_keys::admin_institutions_key(shenfen_id);
+    let storage_key = storage_keys::admin_subjects_key(shenfen_id);
     let result = rpc_post(
         "state_getStorage",
         Value::Array(vec![Value::String(storage_key)]),
@@ -79,9 +79,9 @@ fn decode_hex_storage(hex_str: &str) -> Result<Vec<u8>, String> {
     hex::decode(clean).map_err(|e| format!("hex 解码失败: {e}"))
 }
 
-/// 解码 `AdminsChange::Institutions` 中的管理员列表。
+/// 解码 `AdminsChange::Subjects` 中的管理员列表(C 阶段命名修正,2026-05-06)。
 ///
-/// AdminInstitution 布局前缀为 org:u8 + kind:enum(u8) + admins:BoundedVec<AccountId32>。
+/// `AdminSubject` 布局前缀为 org:u8 + kind:enum(u8) + admins:BoundedVec<AccountId32>。
 fn decode_admin_institution_admins(data: &[u8]) -> Result<Vec<String>, String> {
     if data.len() < 2 {
         return Ok(Vec::new());

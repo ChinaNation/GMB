@@ -18,11 +18,12 @@ pub mod pallet {
 
     // ===== 引入制度常量 =====
     use primitives::{
-        china::china_ch::{shenfen_id_to_fixed48, CHINA_CH}, // 固定 43 个省储行多签地址
+        china::china_ch::CHINA_CH, // 固定 43 个省储行多签地址
         core_const::{
             ENABLE_SHENGBANK_INTEREST_DECAY, SHENGBANK_INITIAL_INTEREST_BP,
             SHENGBANK_INTEREST_DECREASE_BP, SHENGBANK_INTEREST_DURATION_YEARS,
         },
+        derive::subject_id_from_shenfen_id, // D 阶段统一治理主体派生
     };
 
     // 中文注释：自动路径只允许每个年度边界块结算 1 年，避免历史欠账集中压进单块。
@@ -321,7 +322,7 @@ pub mod pallet {
             }
 
             for (idx, bank) in CHINA_CH.iter().enumerate() {
-                let Some(pallet_id) = shenfen_id_to_fixed48(bank.shenfen_id) else {
+                let Some(pallet_id) = subject_id_from_shenfen_id(bank.shenfen_id) else {
                     Self::deposit_event(Event::<T>::ShengBankIdEncodeFailed {
                         year,
                         index: idx as u32,

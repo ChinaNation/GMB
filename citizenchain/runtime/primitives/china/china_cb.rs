@@ -1,6 +1,7 @@
 //! 国储会 + 43 个初始省储会常量=china_cb.rs
 //! 费用账户地址（DUOQIAN_DOMAIN + OP_FEE + SS58前缀 + shenfen_id → BLAKE2-256）。
 
+// (D 阶段自动 import 工具误加,本文件无需此 import - shenfen_id_to_fixed48 已删,内置主体的 institution_id 由调用方走 primitives::derive 派生)
 use hex_literal::hex;
 
 /// 单个储委会的常量结构
@@ -13,17 +14,12 @@ pub struct ChinaCb {
     pub duoqian_admins: &'static [[u8; 32]],
 }
 
-/// 将 shenfen_id 编码为固定 48 字节 `votingengine::InstitutionPalletId`（右侧补零）。
-/// 用于治理提案 / 投票计票 / 管理员注册等按机构身份索引的场景（storage key、
-pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> Option<[u8; 48]> {
-    let raw = shenfen_id.as_bytes();
-    if raw.is_empty() || raw.len() > 48 {
-        return None;
-    }
-    let mut out = [0u8; 48];
-    out[..raw.len()].copy_from_slice(raw);
-    Some(out)
-}
+// D 阶段(SubjectKind 协议统一,2026-05-06)起,本地 shenfen_id_to_fixed48 已删除。
+// 内置主体派生统一走 `primitives::derive::subject_id_from_shenfen_id`,
+// kind tag 0x01 + payload 47B 右填零。
+//
+// 历史原因:A 阶段为兼容性保留独立实现,B 阶段后 mirror 表删除,
+// D 阶段彻底统一协议,本地副本一并清理。
 
 /// 国储会安全基金账户地址（DUOQIAN_DOMAIN + OP_AN + SS58前缀 + 国储会 shenfen_id → BLAKE2-256）。
 pub const NRC_ANQUAN_ADDRESS: [u8; 32] =

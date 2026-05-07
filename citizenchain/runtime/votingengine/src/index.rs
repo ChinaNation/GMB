@@ -17,7 +17,7 @@ use crate::pallet::{
     self, ProposalDisplayId, ProposalOwner, Proposals, ProposalsByInstitution, ProposalsByOrg,
     ProposalsByOwner, ProposalsByYear,
 };
-use crate::InstitutionPalletId;
+use crate::SubjectId;
 
 impl<T: pallet::Config> pallet::Pallet<T> {
     /// 写入四张反向索引。
@@ -28,7 +28,7 @@ impl<T: pallet::Config> pallet::Pallet<T> {
     pub fn register_proposal_indexes(
         proposal_id: u64,
         org: Option<u8>,
-        institution: Option<InstitutionPalletId>,
+        institution: Option<SubjectId>,
         module_tag: BoundedVec<u8, T::MaxModuleTagLen>,
         year: u16,
     ) {

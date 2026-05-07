@@ -242,7 +242,7 @@ pub mod pallet {
         Blake2_128Concat,
         u64,
         Blake2_128Concat,
-        InstitutionPalletId,
+        SubjectId,
         BoundedVec<T::AccountId, T::MaxAdminsPerInstitution>,
         OptionQuery,
     >;
@@ -321,7 +321,7 @@ pub mod pallet {
     pub type ActiveProposalsByInstitution<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        InstitutionPalletId,
+        SubjectId,
         BoundedVec<u64, T::MaxActiveProposals>,
         ValueQuery,
     >;
@@ -334,7 +334,7 @@ pub mod pallet {
         Blake2_128Concat,
         u8,
         Blake2_128Concat,
-        InstitutionPalletId,
+        SubjectId,
         InternalProposalMutexState,
         OptionQuery,
     >;
@@ -372,7 +372,7 @@ pub mod pallet {
     pub type ProposalsByInstitution<T: Config> = StorageDoubleMap<
         _,
         Twox64Concat,
-        InstitutionPalletId,
+        SubjectId,
         Twox64Concat,
         u64,
         (),
@@ -1221,7 +1221,7 @@ pub mod pallet {
                     T,
                 >::try_mutate(
                     proposal_id,
-                    |maybe| -> Result<(u8, u8, Option<InstitutionPalletId>, bool), DispatchError> {
+                    |maybe| -> Result<(u8, u8, Option<SubjectId>, bool), DispatchError> {
                         let proposal = maybe.as_mut().ok_or(Error::<T>::ProposalNotFound)?;
                         let old_status = proposal.status;
                         Self::ensure_valid_status_transition(old_status, status)?;

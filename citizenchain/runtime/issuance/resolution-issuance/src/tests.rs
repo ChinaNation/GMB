@@ -202,7 +202,7 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
 
 pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: votingengine::InstitutionPalletId) -> Option<u32> {
+    fn pass_threshold(org: u8, _institution: votingengine::SubjectId) -> Option<u32> {
         votingengine::types::fixed_governance_pass_threshold(org)
     }
 }

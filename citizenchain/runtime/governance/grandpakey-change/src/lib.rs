@@ -10,6 +10,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use primitives::derive::subject_id_from_shenfen_id;
 use codec::{Decode, DecodeWithMemTracking, Encode, MaxEncodedLen};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use frame_support::{
@@ -20,13 +21,13 @@ use frame_support::{
     Blake2_128Concat,
 };
 use frame_system::pallet_prelude::*;
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_cb::CHINA_CB;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::AuthorityId as GrandpaAuthorityId;
 use sp_core::ed25519;
 use votingengine::{
     types::{ORG_NRC, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, ProposalCancelDecision,
+    SubjectId, InternalVoteResultCallback, ProposalCancelDecision,
     ProposalExecutionOutcome, STATUS_PASSED,
 };
 
@@ -45,29 +46,29 @@ const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 )]
 /// 中文注释：密钥替换提案动作，封装机构、旧公钥和新公钥。
 pub struct GrandpaKeyReplacementAction {
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     pub old_key: [u8; 32],
     pub new_key: [u8; 32],
 }
 
 /// 中文注释：获取国储会（NRC）的机构 pallet ID。
-fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
+fn nrc_subject_id() -> Option<SubjectId> {
     CHINA_CB
         .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
 }
 
 /// 中文注释：判断机构属于 NRC 还是 PRC，不属于任何一类则返回 None。
 /// PRB（省储行）不参与 GRANDPA 共识出块，故不纳入密钥治理范围。
-fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
-    if Some(institution) == nrc_pallet_id_bytes() {
+fn subject_org(institution: SubjectId) -> Option<u8> {
+    if Some(institution) == nrc_subject_id() {
         return Some(ORG_NRC);
     }
 
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -107,13 +108,13 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn current_grandpa_key)]
     pub type CurrentGrandpaKeys<T: Config> =
-        StorageMap<_, Blake2_128Concat, InstitutionPalletId, [u8; 32], OptionQuery>;
+        StorageMap<_, Blake2_128Concat, SubjectId, [u8; 32], OptionQuery>;
 
     /// 中文注释：公钥到机构的反向索引，O(1) 判断 new_key 是否已被其他机构占用。
     #[pallet::storage]
     #[pallet::getter(fn key_owner)]
     pub type GrandpaKeyOwnerByKey<T: Config> =
-        StorageMap<_, Blake2_128Concat, [u8; 32], InstitutionPalletId, OptionQuery>;
+        StorageMap<_, Blake2_128Concat, [u8; 32], SubjectId, OptionQuery>;
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -133,7 +134,7 @@ pub mod pallet {
         fn build(&self) {
             // 中文注释：初始 GRANDPA 公钥与 CHINA_CB 的机构地址一一对应（1 国储会 + 43 省储会）。
             for node in CHINA_CB.iter() {
-                let Some(institution) = reserve_pallet_id_to_bytes(node.shenfen_id) else {
+                let Some(institution) = subject_id_from_shenfen_id(node.shenfen_id) else {
                     continue;
                 };
                 assert!(
@@ -220,7 +221,7 @@ pub mod pallet {
         GrandpaKeyReplacementProposed {
             proposal_id: u64,
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             proposer: T::AccountId,
             old_key: [u8; 32],
             new_key: [u8; 32],
@@ -236,14 +237,14 @@ pub mod pallet {
         /// GRANDPA 密钥替换已完成并已调度 GRANDPA authority set 变更
         GrandpaKeyReplaced {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             old_key: [u8; 32],
             new_key: [u8; 32],
         },
         /// 已通过但不可执行的提案被取消
         FailedProposalCancelled {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         },
     }
 
@@ -282,7 +283,7 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::propose_replace_grandpa_key())]
         pub fn propose_replace_grandpa_key(
             origin: OriginFor<T>,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             new_key: [u8; 32],
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -294,7 +295,7 @@ pub mod pallet {
             // 中文注释：仅”能解压”为曲线点还不够，small-order 弱公钥可能导致 GRANDPA 签名安全性失真。
             ensure!(!point.is_small_order(), Error::<T>::InvalidEd25519Key);
 
-            let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let actual_org = subject_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 Self::is_internal_admin(actual_org, institution, &who),
                 Error::<T>::UnauthorizedAdmin
@@ -345,7 +346,7 @@ pub mod pallet {
         /// 中文注释：检查调用者是否为指定机构的内部管理员。
         fn is_internal_admin(
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             who: &T::AccountId,
         ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
@@ -357,7 +358,7 @@ pub mod pallet {
 
         /// 中文注释：检查 new_key 是否已被其他机构占用（通过反向索引 O(1) 判断）。
         fn is_key_used_by_other_institution(
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             key: &[u8; 32],
         ) -> bool {
             GrandpaKeyOwnerByKey::<T>::get(*key)
@@ -642,13 +643,13 @@ mod tests {
     }
 
     impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-        fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
             let mut who_raw = [0u8; 32];
             who_raw.copy_from_slice(who.as_ref());
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|node| reserve_pallet_id_to_bytes(node.shenfen_id) == Some(institution))
+                    .find(|node| subject_id_from_shenfen_id(node.shenfen_id) == Some(institution))
                     .map(|node| node.duoqian_admins.iter().any(|admin| *admin == who_raw))
                     .unwrap_or(false),
                 _ => false,
@@ -657,12 +658,12 @@ mod tests {
 
         fn get_admin_list(
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Option<sp_std::vec::Vec<AccountId32>> {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|node| reserve_pallet_id_to_bytes(node.shenfen_id) == Some(institution))
+                    .find(|node| subject_id_from_shenfen_id(node.shenfen_id) == Some(institution))
                     .map(|node| {
                         node.duoqian_admins
                             .iter()
@@ -677,7 +678,7 @@ mod tests {
     pub struct TestTimeProvider;
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+        fn pass_threshold(org: u8, _institution: SubjectId) -> Option<u32> {
             votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
@@ -777,8 +778,8 @@ mod tests {
         AccountId32::new(CHINA_CB[node_index].duoqian_admins[admin_index])
     }
 
-    fn cb_pallet_id(node_index: usize) -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[node_index].shenfen_id)
+    fn cb_pallet_id(node_index: usize) -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CB[node_index].shenfen_id)
             .expect("institution should map to pallet id")
     }
 
@@ -786,7 +787,7 @@ mod tests {
         cb_admin(1, index)
     }
 
-    fn prc_pallet_id() -> InstitutionPalletId {
+    fn prc_pallet_id() -> SubjectId {
         cb_pallet_id(1)
     }
 
@@ -1244,7 +1245,7 @@ mod tests {
     #[test]
     fn propose_rejects_invalid_institution() {
         new_test_ext().execute_with(|| {
-            let fake_institution: InstitutionPalletId = [99u8; 48];
+            let fake_institution: SubjectId = [99u8; 48];
             assert_noop!(
                 GrandpaKeyChange::propose_replace_grandpa_key(
                     RuntimeOrigin::signed(prc_admin(0)),

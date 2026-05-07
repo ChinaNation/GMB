@@ -50,7 +50,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 - `Active`：创建提案通过并执行成功，主体可继续发起转账、清算等内部投票；管理员替换入口仅面向制度内置治理主体。
 - `Closed`：主体已关闭，管理员不再有效。
 
-`duoqian-manage` 在创建机构多签或个人多签时只能通过 `SubjectLifecycle` trait 调用生命周期写状态：
+`organization-manage` 在创建机构多签或个人多签时只能通过 `SubjectLifecycle` trait 调用生命周期写状态：
 
 - `create_pending_subject_for_proposal`
 - `activate_subject_for_proposal`
@@ -107,7 +107,7 @@ Pending 快照专用 API：
 入口边界：
 
 - 只允许 `ORG_NRC / ORG_PRC / ORG_PRB`。
-- `ORG_DUOQIAN` 的 `SfidInstitution / PersonalDuoqian` 主体不能走本入口替换管理员；该类主体的创建、激活、关闭等生命周期由 `duoqian-manage` 维护，避免出现第二条多签治理入口。
+- `ORG_DUOQIAN` 的 `SfidInstitution / PersonalDuoqian` 主体不能走本入口替换管理员；该类主体的创建、激活、关闭等生命周期由 `organization-manage` 维护，避免出现第二条多签治理入口。
 
 1. 读取 `Institutions[institution]`。
 2. 校验 `org` 属于制度内置治理主体范围。
@@ -168,7 +168,7 @@ Pending 快照专用 API：
 - `RuntimeInternalAdminCountProvider` 从 `active_subject_admin_count` 读取。
 - `EnsureNrcAdmin` 与联合治理发起人校验也从统一主体表读取。
 
-`duoqian-manage` 不再作为管理员长期真源；它只保留账户、资金和生命周期 storage。
+`organization-manage` 不再作为管理员长期真源；它只保留账户、资金和生命周期 storage。
 
 ## 7. 事件
 

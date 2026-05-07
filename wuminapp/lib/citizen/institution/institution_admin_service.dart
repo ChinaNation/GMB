@@ -91,7 +91,7 @@ class InstitutionAdminService {
   }
 
   Future<InstitutionAdminState> _fetchGovernanceAdmins(String shenfenId) async {
-    final storageKey = _buildAdminInstitutionKey(shenfenId);
+    final storageKey = _buildAdminSubjectKey(shenfenId);
     final keyHex = '0x${_hexEncode(storageKey)}';
     final data = await _rpc.fetchStorage(keyHex);
     if (data == null) {
@@ -112,21 +112,22 @@ class InstitutionAdminService {
     return _decodeDuoqianAccountState(data);
   }
 
-  /// 构造 `AdminsChange::Institutions(institution_id)` 的 storage key。
+  /// 构造 `AdminsChange::Subjects(subject_id)` 的 storage key。
   ///
-  /// 格式：twox_128("AdminsChange") + twox_128("Institutions")
-  ///        + blake2_128(institution_48bytes) + institution_48bytes
-  Uint8List _buildAdminInstitutionKey(String shenfenId) {
-    final institutionId = _shenfenIdToFixed48(shenfenId);
+  /// C 阶段(命名修正,2026-05-06)起 storage 改名 Institutions → Subjects。
+  /// 格式：twox_128("AdminsChange") + twox_128("Subjects")
+  ///        + blake2_128(subject_48bytes) + subject_48bytes
+  Uint8List _buildAdminSubjectKey(String shenfenId) {
+    final subjectId = _shenfenIdToFixed48(shenfenId);
     final palletHash = Hasher.twoxx128.hashString('AdminsChange');
-    final storageHash = Hasher.twoxx128.hashString('Institutions');
-    final blake2Hash = Hasher.blake2b128.hash(institutionId);
+    final storageHash = Hasher.twoxx128.hashString('Subjects');
+    final blake2Hash = Hasher.blake2b128.hash(subjectId);
 
     final key = Uint8List(
       palletHash.length +
           storageHash.length +
           blake2Hash.length +
-          institutionId.length,
+          subjectId.length,
     );
     var offset = 0;
     key.setAll(offset, palletHash);
@@ -135,7 +136,7 @@ class InstitutionAdminService {
     offset += storageHash.length;
     key.setAll(offset, blake2Hash);
     offset += blake2Hash.length;
-    key.setAll(offset, institutionId);
+    key.setAll(offset, subjectId);
     return key;
   }
 
@@ -163,14 +164,18 @@ class InstitutionAdminService {
     return key;
   }
 
-  /// 将 shenfen_id 编码为固定 48 字节（与 Rust `shenfen_id_to_fixed48` 一致）。
+  /// 将 shenfen_id 编码为固定 48 字节(SubjectKind=0x01 Builtin + 47B payload 右填零)。
+  ///
+  /// 与 Rust `primitives::derive::subject_id_from_shenfen_id` 一致(D 阶段协议统一 + C 阶段命名修正,2026-05-06)。
+  /// shenfen_id 的 UTF-8 字节长度必须 ≤47(预留 1B kind tag)。
   Uint8List _shenfenIdToFixed48(String shenfenId) {
     final raw = utf8.encode(shenfenId);
-    if (raw.isEmpty || raw.length > 48) {
-      throw ArgumentError('shenfenId 长度必须在 1..48 字节，实际: ${raw.length}');
+    if (raw.isEmpty || raw.length > 47) {
+      throw ArgumentError('shenfenId UTF-8 字节长度必须在 1..47 字节(D 协议预留 1B kind tag),实际: ${raw.length}');
     }
     final out = Uint8List(48);
-    out.setAll(0, raw);
+    out[0] = 0x01; // SubjectKind::Builtin
+    out.setAll(1, raw);
     return out;
   }
 
@@ -178,9 +183,9 @@ class InstitutionAdminService {
   // SCALE 解码
   // ---------------------------------------------------------------------------
 
-  /// 解码 `AdminsChange::Institutions` 的管理员与阈值。
+  /// 解码 `AdminsChange::Subjects` 的管理员与阈值(C 阶段命名修正,2026-05-06)。
   ///
-  /// AdminInstitution 前缀布局：
+  /// `AdminSubject` 前缀布局：
   /// - org: u8
   /// - kind: enum(u8)
   /// - admins: BoundedVec<AccountId32>

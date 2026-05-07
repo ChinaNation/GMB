@@ -28,11 +28,11 @@ import type {
   EligibleClearingBankCandidate,
   InstitutionDetail,
 } from './types';
-import { ClearingBankAddPage } from './duoqian-manage/add-candidate';
+import { ClearingBankAddPage } from './organization-manage/add-candidate';
 import { ClearingBankDeclareNodePage } from './offchain-transaction/node-register';
-import { ClearingBankInstitutionDetailPage } from './duoqian-manage/institution-detail';
-import { CreateMultisigInstitutionPage } from './duoqian-manage/create-multisig';
-import { OtherAccountsListPage } from './duoqian-manage/other-accounts';
+import { ClearingBankInstitutionDetailPage } from './organization-manage/institution-detail';
+import { CreateMultisigInstitutionPage } from './organization-manage/create-multisig';
+import { OtherAccountsListPage } from './organization-manage/other-accounts';
 import { ClearingBankAdminListPage } from './settlement/admin-unlock';
 import './styles.css';
 

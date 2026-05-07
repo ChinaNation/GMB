@@ -16,7 +16,7 @@ export type EligibleClearingBankCandidate = {
   feeAccount?: string | null;
 };
 
-// ── 机构详情(链上 duoqian-manage::Institutions[sfid_id] 的对前端形态)──
+// ── 机构详情(链上 organization-manage::Institutions[sfid_id] 的对前端形态)──
 
 export type AccountWithBalance = {
   accountName: string;

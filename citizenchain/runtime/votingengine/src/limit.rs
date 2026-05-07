@@ -1,6 +1,6 @@
 //! 全局活跃提案数量限制。
 //!
-//! 每个机构（InstitutionPalletId）同时最多允许 Runtime 配置数量的活跃提案，
+//! 每个机构（SubjectId）同时最多允许 Runtime 配置数量的活跃提案，
 //! 不区分提案类型（转账、销毁、换管理员等），由投票引擎统一管控。
 //!
 //! 使用方式：
@@ -9,13 +9,13 @@
 //! - App 端查询活跃数调用 `active_proposal_count`
 
 use crate::pallet::{self, Config, Error};
-use crate::InstitutionPalletId;
+use crate::SubjectId;
 use frame_support::pallet_prelude::*;
 
 /// 尝试为机构新增一个活跃提案。
 /// 成功返回 Ok(())，达到上限返回 Err。
 pub fn try_add_active_proposal<T: Config>(
-    institution: InstitutionPalletId,
+    institution: SubjectId,
     proposal_id: u64,
 ) -> DispatchResult {
     pallet::ActiveProposalsByInstitution::<T>::try_mutate(institution, |ids| {
@@ -30,13 +30,13 @@ pub fn try_add_active_proposal<T: Config>(
 }
 
 /// 从机构的活跃提案列表中移除指定提案。
-pub fn remove_active_proposal<T: Config>(institution: InstitutionPalletId, proposal_id: u64) {
+pub fn remove_active_proposal<T: Config>(institution: SubjectId, proposal_id: u64) {
     pallet::ActiveProposalsByInstitution::<T>::mutate(institution, |ids| {
         ids.retain(|&id| id != proposal_id);
     });
 }
 
 /// 查询机构当前活跃提案数量。
-pub fn active_proposal_count<T: Config>(institution: InstitutionPalletId) -> u32 {
+pub fn active_proposal_count<T: Config>(institution: SubjectId) -> u32 {
     pallet::ActiveProposalsByInstitution::<T>::get(institution).len() as u32
 }

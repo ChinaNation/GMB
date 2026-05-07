@@ -710,7 +710,7 @@ pub async fn submit_propose_transfer(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
-        let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
+        let institution_id = storage_keys::subject_id_from_shenfen_id(&shenfen_id);
         let beneficiary_bytes = signing::decode_ss58_to_pubkey(&beneficiary_address)?;
         let remark_bytes = remark.as_bytes();
         let remark_compact = signing::encode_compact_u32_pub(remark_bytes.len() as u32);
@@ -852,7 +852,7 @@ pub async fn submit_propose_sweep(
     }
     tauri::async_runtime::spawn_blocking(move || {
         let amount_fen = (amount_yuan * 100.0).round() as u128;
-        let institution_id = storage_keys::shenfen_id_to_fixed48(&shenfen_id);
+        let institution_id = storage_keys::subject_id_from_shenfen_id(&shenfen_id);
         let mut call_data = Vec::with_capacity(66);
         call_data.push(19u8); // DuoqianTransfer pallet
         call_data.push(2u8); // propose_sweep_to_main call (Phase 2 重排,原 5)

@@ -35,13 +35,13 @@
 - 管理员个人账户不承担任何费用。
 - 覆盖两类来源：
   - 创世预置的治理机构 `main_address`（NRC / PRC / PRB）
-  - `duoqian-manage` 注册并激活的 `ORG_DUOQIAN` 多签地址（`action.duoqian_address`）
+  - `organization-manage` 注册并激活的 `ORG_DUOQIAN` 多签地址（`action.duoqian_address`）
 
 ### 0.2 功能边界
 
 - 本模块处理两类机构转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `duoqian-manage` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
+  - `organization-manage` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
@@ -50,11 +50,11 @@
 - 且对应管理员与阈值已接入 runtime 的 `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider`，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
-### 0.3 与 `duoqian-manage` 的关系
+### 0.3 与 `organization-manage` 的关系
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `duoqian-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
+| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
 | `duoqian-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
@@ -81,7 +81,7 @@
 机构主账户地址有两种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `duoqian-manage::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Institutions` 读取。
+- 注册型机构：`InstitutionPalletId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户仍从 `organization-manage::DuoqianAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Institutions` 读取。
 
 ### 1.3 institution-asset 边界
 
@@ -382,7 +382,7 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 ```rust
 #[pallet::config]
 pub trait Config:
-    frame_system::Config + votingengine::Config + duoqian_manage::Config
+    frame_system::Config + votingengine::Config + organization_manage::Config
 {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -392,7 +392,7 @@ pub trait Config:
 
     /// 手续费分账路由（复用 OnchainFeeRouter）
     type FeeRouter: frame_support::traits::OnUnbalanced<
-        <<Self as duoqian_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
+        <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
     /// Weight 配置
@@ -400,7 +400,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `duoqian_manage::Config` 和 `votingengine::Config` 提供，本模块不再单独声明。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供，本模块不再单独声明。
 
 ## 11. Weight 估算
 
