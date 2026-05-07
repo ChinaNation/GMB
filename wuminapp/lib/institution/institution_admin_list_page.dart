@@ -224,7 +224,7 @@ class _AdminTile extends StatelessWidget {
     final activationService = ActivationService();
     final (:request, :json) = activationService.buildActivationRequest(
       pubkeyHex: pubkeyHex,
-      shenfenId: institution.shenfenId,
+      sfidNumber: institution.sfidNumber,
     );
 
     if (!context.mounted) return;
@@ -246,7 +246,7 @@ class _AdminTile extends StatelessWidget {
     try {
       await activationService.activateViaQr(
         pubkeyHex: pubkeyHex,
-        shenfenId: institution.shenfenId,
+        sfidNumber: institution.sfidNumber,
         response: response,
       );
       onActivated();

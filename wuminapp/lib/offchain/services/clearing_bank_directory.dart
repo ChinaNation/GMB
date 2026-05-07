@@ -9,11 +9,11 @@ import 'package:wuminapp_mobile/rpc/sfid_public.dart';
 /// 清算行节点链上声明。
 ///
 /// 中文注释:
-/// - 该结构来自链上 `OffchainTransaction::ClearingBankNodes[sfid_id]`。
+/// - 该结构来自链上 `OffchainTransaction::ClearingBankNodes[sfid_number]`。
 /// - SFID 只提供机构资料;节点端点必须以链上 storage 为准。
 class ClearingBankNodeEndpoint {
   const ClearingBankNodeEndpoint({
-    required this.sfidId,
+    required this.sfidNumber,
     required this.peerId,
     required this.rpcDomain,
     required this.rpcPort,
@@ -21,7 +21,7 @@ class ClearingBankNodeEndpoint {
     required this.registeredBy,
   });
 
-  final String sfidId;
+  final String sfidNumber;
   final String peerId;
   final String rpcDomain;
   final int rpcPort;
@@ -72,7 +72,7 @@ class ClearingBankDirectory {
       final result = await api.searchClearingBanks(keyword: query, size: 20);
       final out = <ClearingBankCandidate>[];
       for (final item in result.items) {
-        final endpoint = await fetchEndpoint(item.sfidId);
+        final endpoint = await fetchEndpoint(item.sfidNumber);
         out.add(ClearingBankCandidate(info: item, endpoint: endpoint));
       }
       return out;
@@ -81,11 +81,11 @@ class ClearingBankDirectory {
     }
   }
 
-  Future<ClearingBankNodeEndpoint?> fetchEndpoint(String sfidId) async {
-    final key = _clearingBankNodesKey(sfidId);
+  Future<ClearingBankNodeEndpoint?> fetchEndpoint(String sfidNumber) async {
+    final key = _clearingBankNodesKey(sfidNumber);
     final raw = await _chainRpc.fetchStorage(key);
     if (raw == null || raw.isEmpty) return null;
-    return _decodeEndpoint(sfidId, raw);
+    return _decodeEndpoint(sfidNumber, raw);
   }
 
   /// 查询链上 `UserBank[user]`,返回用户当前绑定清算行主账户 SS58。
@@ -98,7 +98,7 @@ class ClearingBankDirectory {
   }
 
   static ClearingBankNodeEndpoint? _decodeEndpoint(
-    String sfidId,
+    String sfidNumber,
     Uint8List raw,
   ) {
     var offset = 0;
@@ -118,7 +118,7 @@ class ClearingBankDirectory {
       2027,
     );
     return ClearingBankNodeEndpoint(
-      sfidId: sfidId,
+      sfidNumber: sfidNumber,
       peerId: peerId,
       rpcDomain: domain,
       rpcPort: port,
@@ -127,8 +127,8 @@ class ClearingBankDirectory {
     );
   }
 
-  static String _clearingBankNodesKey(String sfidId) {
-    final keyData = _encodeBytes(utf8.encode(sfidId));
+  static String _clearingBankNodesKey(String sfidNumber) {
+    final keyData = _encodeBytes(utf8.encode(sfidNumber));
     return _mapKey('OffchainTransaction', 'ClearingBankNodes', keyData);
   }
 

@@ -3,7 +3,7 @@ use frame_support::pallet_prelude::DecodeWithMemTracking;
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 
-/// SFID 机构登记反向索引项：duoqian_address → (sfid_id, account_name)。
+/// SFID 机构登记反向索引项：duoqian_address → (sfid_number, account_name)。
 ///
 /// 由 `register_sfid_institution` extrinsic 写入,后续创建/查询机构多签时
 /// 用作反向校验。
@@ -18,8 +18,8 @@ use sp_runtime::RuntimeDebug;
     PartialEq,
     Eq,
 )]
-pub struct RegisteredInstitution<SfidId, AccountName> {
-    pub sfid_id: SfidId,
+pub struct RegisteredInstitution<SfidNumber, AccountName> {
+    pub sfid_number: SfidNumber,
     pub account_name: AccountName,
 }
 
@@ -148,9 +148,9 @@ pub struct CreateInstitutionAccount<AccountName, AccountId, Balance> {
     Eq,
 )]
 #[scale_info(skip_type_params(AdminList, AccountList))]
-pub struct CreateInstitutionAction<SfidId, AccountName, AccountId, Balance, AdminList, AccountList>
+pub struct CreateInstitutionAction<SfidNumber, AccountName, AccountId, Balance, AdminList, AccountList>
 {
-    pub sfid_id: SfidId,
+    pub sfid_number: SfidNumber,
     pub institution_name: AccountName,
     pub main_address: AccountId,
     pub fee_address: AccountId,

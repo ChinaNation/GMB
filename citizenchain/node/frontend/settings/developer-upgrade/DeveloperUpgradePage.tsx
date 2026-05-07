@@ -53,7 +53,7 @@ export function DeveloperUpgradePage() {
         ];
         const adminGroups = await Promise.all(
           institutions.map(async (institution) => {
-            const list = await api.getActivatedAdmins(institution.shenfenId).catch(() => [] as ActivatedAdmin[]);
+            const list = await api.getActivatedAdmins(institution.sfidNumber).catch(() => [] as ActivatedAdmin[]);
             return list.map((admin) => ({
               ...admin,
               institutionName: institution.name,

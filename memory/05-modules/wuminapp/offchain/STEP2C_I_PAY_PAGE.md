@@ -21,7 +21,7 @@ Step 2b-iv-a 把老省储行清算代码从节点和 wuminapp 的 onchain 入口
 落地)自动把这笔支付打包上链并清理 pending。
 
 2026-04-29 Step 3 补齐后,付款页不再强制同行。扫码得到收款方 `bank`
-后,wuminapp 先从链上 `ClearingBankNodes[sfid_id]` 读取收款方清算节点端点,
+后,wuminapp 先从链上 `ClearingBankNodes[sfid_number]` 读取收款方清算节点端点,
 再把支付意图提交给**收款方清算节点**;页面同时展示付款方清算行、收款方
 清算行与同行/跨行状态。冷钱包支付授权仍留给后续 QR 往返签名流程。
 

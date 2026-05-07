@@ -218,11 +218,11 @@ pub fn build_vote_sign_request(
 /// sub-pallet 拆分(2026-05-05):JointVote 独立成 pallet,`cast_admin` 在 23.0,
 /// `cast_referendum` 在 23.1(联合公投阶段需 ADR-008 step3 双层凭证,本函数不覆盖)。
 ///
-/// shenfen_id 用于构造 institution_id 48 字节参数。
+/// sfid_number 用于构造 institution_id 48 字节参数。
 pub fn build_joint_vote_sign_request(
     proposal_id: u64,
     pubkey_hex: &str,
-    shenfen_id: &str,
+    sfid_number: &str,
     approve: bool,
 ) -> Result<VoteSignRequestResult, String> {
     let pubkey_clean = pubkey_hex
@@ -234,7 +234,7 @@ pub fn build_joint_vote_sign_request(
     }
     let pubkey_bytes = hex::decode(&pubkey_clean).map_err(|e| format!("公钥解码失败: {e}"))?;
 
-    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_sfid_number(sfid_number);
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -304,7 +304,7 @@ pub fn build_joint_vote_sign_request(
 /// 构建 propose_transfer 签名请求（创建转账提案：pallet=19, call=0）。
 pub fn build_propose_transfer_sign_request(
     pubkey_hex: &str,
-    shenfen_id: &str,
+    sfid_number: &str,
     org_type: u8,
     beneficiary_address: &str,
     amount_yuan: f64,
@@ -339,15 +339,15 @@ pub fn build_propose_transfer_sign_request(
     let beneficiary_bytes = decode_ss58_to_pubkey(beneficiary_address)?;
 
     // 验证收款地址不等于本机构多签地址
-    let entry = super::registry::find_institution(shenfen_id)
-        .ok_or_else(|| format!("未知的机构 shenfenId: {shenfen_id}"))?;
+    let entry = super::registry::find_institution(sfid_number)
+        .ok_or_else(|| format!("未知的机构 sfidNumber: {sfid_number}"))?;
     let institution_duoqian =
         hex::decode(entry.main_address_hex()).map_err(|e| format!("主账户地址解码失败: {e}"))?;
     if beneficiary_bytes[..] == institution_duoqian[..] {
         return Err("收款地址不能为本机构多签地址".to_string());
     }
 
-    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_sfid_number(sfid_number);
 
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
@@ -536,7 +536,7 @@ pub fn build_propose_safety_fund_sign_request(
 /// 留洞 call_index 不复用。
 pub fn build_propose_sweep_sign_request(
     pubkey_hex: &str,
-    shenfen_id: &str,
+    sfid_number: &str,
     amount_yuan: f64,
 ) -> Result<VoteSignRequestResult, String> {
     let pubkey_clean = pubkey_hex
@@ -552,7 +552,7 @@ pub fn build_propose_sweep_sign_request(
     }
     let amount_fen = (amount_yuan * 100.0).round() as u128;
 
-    let institution_id = super::storage_keys::subject_id_from_shenfen_id(shenfen_id);
+    let institution_id = super::storage_keys::subject_id_from_sfid_number(sfid_number);
     let (spec_version, tx_version) = fetch_runtime_version()?;
     let genesis_hash = fetch_genesis_hash()?;
     let (block_hash, block_number) = fetch_latest_block()?;
@@ -578,7 +578,7 @@ pub fn build_propose_sweep_sign_request(
     let request_id = generate_request_id("sweep");
     let account_ss58 = pubkey_to_ss58(&pubkey_bytes)?;
 
-    let entry = super::registry::find_institution(shenfen_id);
+    let entry = super::registry::find_institution(sfid_number);
     let inst_name = entry.map(|e| e.name()).unwrap_or("未知机构");
 
     let display = serde_json::json!({

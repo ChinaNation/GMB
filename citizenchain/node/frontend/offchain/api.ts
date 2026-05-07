@@ -17,8 +17,8 @@ export const offchainApi = {
   searchEligibleClearingBanks: (query: string, limit?: number) =>
     invoke<EligibleClearingBankCandidate[]>('search_eligible_clearing_banks', { query, limit }),
 
-  queryClearingBankNodeInfo: (sfidId: string) =>
-    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { sfidId }),
+  queryClearingBankNodeInfo: (sfidNumber: string) =>
+    invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { sfidNumber }),
 
   queryLocalPeerId: () => invoke<string>('query_local_peer_id'),
 
@@ -31,14 +31,14 @@ export const offchainApi = {
 
   buildRegisterClearingBankRequest: (
     pubkeyHex: string,
-    sfidId: string,
+    sfidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_register_clearing_bank_request', {
       pubkeyHex,
-      sfidId,
+      sfidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -48,7 +48,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidId: string,
+    sfidNumber: string,
     peerId: string,
     rpcDomain: string,
     rpcPort: number,
@@ -60,7 +60,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidId,
+      sfidNumber,
       peerId,
       rpcDomain,
       rpcPort,
@@ -71,13 +71,13 @@ export const offchainApi = {
 
   buildUpdateClearingBankEndpointRequest: (
     pubkeyHex: string,
-    sfidId: string,
+    sfidNumber: string,
     newDomain: string,
     newPort: number,
   ) =>
     invoke<VoteSignRequestResult>('build_update_clearing_bank_endpoint_request', {
       pubkeyHex,
-      sfidId,
+      sfidNumber,
       newDomain,
       newPort,
     }),
@@ -86,7 +86,7 @@ export const offchainApi = {
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidId: string,
+    sfidNumber: string,
     newDomain: string,
     newPort: number,
     signNonce: number,
@@ -97,7 +97,7 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidId,
+      sfidNumber,
       newDomain,
       newPort,
       signNonce,
@@ -105,14 +105,14 @@ export const offchainApi = {
       responseJson,
     }),
 
-  buildUnregisterClearingBankRequest: (pubkeyHex: string, sfidId: string) =>
-    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, sfidId }),
+  buildUnregisterClearingBankRequest: (pubkeyHex: string, sfidNumber: string) =>
+    invoke<VoteSignRequestResult>('build_unregister_clearing_bank_request', { pubkeyHex, sfidNumber }),
 
   submitUnregisterClearingBank: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidId: string,
+    sfidNumber: string,
     signNonce: number,
     signBlockNumber: number,
     responseJson: string,
@@ -121,14 +121,14 @@ export const offchainApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidId,
+      sfidNumber,
       signNonce,
       signBlockNumber,
       responseJson,
     }),
 
-  buildDecryptAdminRequest: (pubkeyHex: string, sfidId: string) =>
-    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, sfidId }),
+  buildDecryptAdminRequest: (pubkeyHex: string, sfidNumber: string) =>
+    invoke<DecryptAdminRequestResult>('build_decrypt_admin_request', { pubkeyHex, sfidNumber }),
 
   verifyAndDecryptAdmin: (
     requestId: string,
@@ -143,35 +143,35 @@ export const offchainApi = {
       responseJson,
     }),
 
-  listDecryptedAdmins: (sfidId: string) =>
-    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { sfidId }),
+  listDecryptedAdmins: (sfidNumber: string) =>
+    invoke<DecryptedAdminInfo[]>('list_decrypted_admins', { sfidNumber }),
 
   lockDecryptedAdmin: (pubkeyHex: string) =>
     invoke<void>('lock_decrypted_admin', { pubkeyHex }),
 
-  // ── 机构详情(链上 organization-manage::Institutions[sfid_id]) ──
+  // ── 机构详情(链上 organization-manage::Institutions[sfid_number]) ──
 
-  fetchInstitutionDetail: (sfidId: string) =>
-    invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { sfidId }),
+  fetchInstitutionDetail: (sfidNumber: string) =>
+    invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { sfidNumber }),
 
-  fetchInstitutionProposals: (sfidId: string, startId: number, pageSize: number) =>
+  fetchInstitutionProposals: (sfidNumber: string, startId: number, pageSize: number) =>
     invoke<InstitutionProposalPage>('fetch_clearing_bank_institution_proposals', {
-      sfidId,
+      sfidNumber,
       startId,
       pageSize,
     }),
 
   // ── 创建机构多签:拉 SFID registration-info + 构 extrinsic + 提交 ──
 
-  fetchInstitutionRegistrationInfo: (sfidId: string) =>
+  fetchInstitutionRegistrationInfo: (sfidNumber: string) =>
     invoke<InstitutionRegistrationInfoResp>(
       'fetch_clearing_bank_institution_registration_info',
-      { sfidId },
+      { sfidNumber },
     ),
 
   buildProposeCreateInstitutionRequest: (params: {
     pubkeyHex: string;
-    sfidId: string;
+    sfidNumber: string;
     institutionName: string;
     accounts: InitialAccountInputDto[];
     adminPubkeys: string[];
@@ -183,7 +183,7 @@ export const offchainApi = {
   }) =>
     invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
       pubkeyHex: params.pubkeyHex,
-      sfidId: params.sfidId,
+      sfidNumber: params.sfidNumber,
       institutionName: params.institutionName,
       accounts: params.accounts,
       adminPubkeys: params.adminPubkeys,
@@ -198,7 +198,7 @@ export const offchainApi = {
     requestId: string;
     expectedPubkeyHex: string;
     expectedPayloadHash: string;
-    sfidId: string;
+    sfidNumber: string;
     institutionName: string;
     accounts: InitialAccountInputDto[];
     adminPubkeys: string[];
@@ -215,7 +215,7 @@ export const offchainApi = {
       requestId: params.requestId,
       expectedPubkeyHex: params.expectedPubkeyHex,
       expectedPayloadHash: params.expectedPayloadHash,
-      sfidId: params.sfidId,
+      sfidNumber: params.sfidNumber,
       institutionName: params.institutionName,
       accounts: params.accounts,
       adminPubkeys: params.adminPubkeys,

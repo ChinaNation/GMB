@@ -12,10 +12,10 @@ pub type SubjectId = [u8; 48];
 /// 公共函数，供 internal_vote、joint_vote 等子模块共用。
 pub fn nrc_subject_id() -> Option<SubjectId> {
     use primitives::china::china_cb::CHINA_CB;
-    use primitives::derive::subject_id_from_shenfen_id;
+    use primitives::derive::subject_id_from_sfid_number;
     CHINA_CB
         .first()
-        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
+        .and_then(|n| subject_id_from_sfid_number(n.sfid_number))
 }
 
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
@@ -162,7 +162,7 @@ pub struct Proposal<BlockNumber> {
     pub status: u8,
     /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
     pub internal_org: Option<u8>,
-    /// 仅内部投票使用：机构 shenfen_id 标识（全链唯一）
+    /// 仅内部投票使用：机构 sfid_number 标识（全链唯一）
     pub internal_institution: Option<SubjectId>,
     /// 本阶段起始区块
     pub start: BlockNumber,

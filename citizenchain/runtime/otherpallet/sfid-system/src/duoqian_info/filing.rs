@@ -8,7 +8,7 @@ pub fn same_filing_payload<BlockNumber>(
     record: &InstitutionFilingRecord<BlockNumber>,
     payload: &InstitutionFilingPayload,
 ) -> bool {
-    record.sfid_id == payload.sfid_id
+    record.sfid_number == payload.sfid_number
         && record.institution_name == payload.institution_name
         && record.account_name == payload.account_name
 }

@@ -10,7 +10,6 @@ mod benchmarks;
 pub mod configs;
 
 extern crate alloc;
-use primitives::derive::subject_id_from_shenfen_id;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode};
 use frame_support::weights::Weight;
@@ -382,85 +381,6 @@ mod runtime {
     pub type OffchainTransaction = offchain_transaction::pallet;
 }
 
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn time_and_currency_constants_are_consistent() {
-        assert_eq!(YUAN, 100 * FEN);
-        assert_eq!(UNIT, YUAN);
-        assert_eq!(HOURS, MINUTES * 60);
-        assert_eq!(DAYS, HOURS * 24);
-        assert_eq!(SLOT_DURATION, MILLI_SECS_PER_BLOCK);
-    }
-
-    #[test]
-    fn fee_payer_returns_none_for_transfer() {
-        use configs::RuntimeFeePayerExtractor;
-        use frame_support::BoundedVec;
-        use onchain_transaction::CallFeePayer;
-        use primitives::china::china_cb::CHINA_CB;
-
-        let institution =
-            subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
-        let beneficiary = AccountId::new([99u8; 32]);
-        let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
-            org: 0,
-            institution,
-            beneficiary,
-            amount: 10000,
-            remark: BoundedVec::default(),
-        });
-        let signer = AccountId::new([1u8; 32]);
-        // 机构转账提案/投票为 NoAmount（免费），手续费在 pallet 内部扣取，
-        // RuntimeFeePayerExtractor 不再参与。
-        let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
-        assert!(
-            payer.is_none(),
-            "fee_payer must return None for DuoqianTransfer (fees handled internally)"
-        );
-    }
-
-    /// Phase 2 回归:7 个治理业务 pallet 的 `MODULE_TAG` 必须全局唯一。
-    ///
-    /// 背景:投票引擎达终态后通过 `InternalVoteResultCallback` tuple 广播到
-    /// 全部业务 Executor,各 Executor 靠 `ProposalData` 前缀的 MODULE_TAG 互斥
-    /// 认领自己的提案。若两个模块碰撞,同一个提案可能被两个 Executor 同时执行,
-    /// 产生数据层异常。本测试在编译时固定捕获。
-    #[test]
-    fn governance_module_tags_are_globally_unique() {
-        use std::collections::HashSet;
-        let tags: [(&str, &[u8]); 8] = [
-            ("admins_change", admins_change::MODULE_TAG),
-            ("grandpakey_change", grandpakey_change::MODULE_TAG),
-            ("resolution_destro", resolution_destro::MODULE_TAG),
-            ("resolution_issuance", resolution_issuance::MODULE_TAG),
-            ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
-            ("organization_manage", organization_manage::MODULE_TAG),
-            ("personal_manage", personal_manage::MODULE_TAG),
-            ("duoqian_transfer", duoqian_transfer::MODULE_TAG),
-        ];
-        let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();
-        assert_eq!(
-            unique.len(),
-            tags.len(),
-            "MODULE_TAG must be globally unique across governance pallets; got: {:?}",
-            tags,
-        );
-    }
-
-    #[test]
-    fn runtime_version_and_block_types_are_sane() {
-        assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
-        assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
-        assert_eq!(VERSION.authoring_version, 0);
-        assert_eq!(VERSION.spec_version, 1);
-        assert_eq!(VERSION.impl_version, 0);
-        assert_eq!(VERSION.transaction_version, 0);
-        assert_eq!(VERSION.system_version, 0);
-
-        let _opaque_block_id: opaque::BlockId = generic::BlockId::Number(0);
-        let _runtime_block_id: BlockId = generic::BlockId::Number(0);
-    }
-}
+mod tests;

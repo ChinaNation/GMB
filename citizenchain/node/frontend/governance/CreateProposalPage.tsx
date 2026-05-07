@@ -9,7 +9,7 @@ import { governanceApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
-  shenfenId: string;
+  sfidNumber: string;
   orgType: number;
   institutionName: string;
   mainAddress: string;
@@ -21,7 +21,7 @@ type Props = {
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
 export function CreateProposalPage({
-  shenfenId, orgType, institutionName, mainAddress, adminWallets, onBack, onSuccess,
+  sfidNumber, orgType, institutionName, mainAddress, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
 
@@ -83,7 +83,7 @@ export function CreateProposalPage({
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
       const result = await api.buildProposeTransferRequest(
-        selectedWallet!.pubkeyHex, shenfenId, orgType,
+        selectedWallet!.pubkeyHex, sfidNumber, orgType,
         beneficiary.trim(), amount, remark,
       );
 
@@ -112,7 +112,7 @@ export function CreateProposalPage({
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
       const result = await api.submitProposeTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
-        shenfenId, orgType, ben, amt, rmk,
+        sfidNumber, orgType, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -121,7 +121,7 @@ export function CreateProposalPage({
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [shenfenId, orgType]);
+  }, [sfidNumber, orgType]);
 
   return (
     <div className="governance-section">

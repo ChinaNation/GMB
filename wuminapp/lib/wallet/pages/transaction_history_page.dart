@@ -463,8 +463,8 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
           if (record.txHash != null)
             _buildRow(context,
                 label: '交易哈希', value: record.txHash!, copyable: true),
-          if (record.bankShenfenId != null)
-            _buildRow(context, label: '清算行', value: record.bankShenfenId!),
+          if (record.bankSfidNumber != null)
+            _buildRow(context, label: '清算行', value: record.bankSfidNumber!),
         ],
       ),
     );

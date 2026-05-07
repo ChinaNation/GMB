@@ -31,7 +31,7 @@
 - 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
 
 ## 3.1 区块链五项能力模块归属（对齐口径）
-1. 机构 SFID 登记（多签创建前置）：`sheng-admins` 模块（`sfid_id` 对应内部 `site_sfid`）。
+1. 机构 SFID 登记（多签创建前置）：`sheng-admins` 模块（`sfid_number` 对应内部 `site_sfid`）。
 2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
 4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
@@ -387,7 +387,7 @@
 - SFID 按 `site_sfid + sign_key_id` 维护该机构受信任公钥并用于验签。
 - 当前版本是单向验签：CPMS 签、SFID 验；CPMS 不需要保存 SFID 公钥。
 - `archive_no` 作为唯一用户标识，不再引入额外用户 ID 字段。
-- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYYMMDD)`（日期为档案号创建时间）。
+- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYY)`（日期为档案号创建时间）。
 - `archive_no` 的省市代码来源与 CPMS 同步使用 `sheng_cities` 数据。
 - `archive_no` 不承载年龄与状态语义，SFID 不得从 `archive_no` 推导投票资格。
 

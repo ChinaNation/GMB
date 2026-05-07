@@ -1,7 +1,7 @@
-// "添加清算行"页:输入 sfid_id / 关键字 → debounce 自动搜 SFID 候选 → 选中即进入下一步。
+// "添加清算行"页:输入 sfid_number / 关键字 → debounce 自动搜 SFID 候选 → 选中即进入下一步。
 //
 // 2026-05-01 重构:删除"查询"按钮(input debounce 已自动搜),回车也直接选第一个候选,
-// 不再走 onSelectKnownSfid 走 sfidId 字符串透传(链上判定改由 check-multisig 视图统一处理)。
+// 不再走 onSelectKnownSfid 走 sfidNumber 字符串透传(链上判定改由 check-multisig 视图统一处理)。
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
@@ -11,8 +11,8 @@ import type { EligibleClearingBankCandidate } from '../types';
 type Props = {
   onBack: () => void;
   onSelectCandidate: (c: EligibleClearingBankCandidate) => void;
-  /** 已知 sfid_id 直接进入下一步(empty 视图列表 → 直接 check-multisig)。 */
-  onSelectKnownSfid: (sfidId: string) => void;
+  /** 已知 sfid_number 直接进入下一步(empty 视图列表 → 直接 check-multisig)。 */
+  onSelectKnownSfid: (sfidNumber: string) => void;
 };
 
 export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSfid: _onSelectKnownSfid }: Props) {
@@ -53,7 +53,7 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
         <input
           autoFocus
           type="text"
-          placeholder="机构身份码或名称关键字(自动搜索)"
+          placeholder="机构身份号码或名称关键字(自动搜索)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -70,7 +70,7 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
         <div className="admin-grid">
           {results.map((r) => (
             <div
-              key={r.sfidId}
+              key={r.sfidNumber}
               className="metric-card admin-card"
               role="button"
               tabIndex={0}
@@ -80,7 +80,7 @@ export function ClearingBankAddPage({ onBack, onSelectCandidate, onSelectKnownSf
               }}
             >
               <strong>{r.institutionName}</strong>
-              <code className="admin-card-address">{r.sfidId}</code>
+              <code className="admin-card-address">{r.sfidNumber}</code>
             </div>
           ))}
         </div>

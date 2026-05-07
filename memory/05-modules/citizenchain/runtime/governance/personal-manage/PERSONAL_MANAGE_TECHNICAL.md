@@ -88,8 +88,8 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 | 关注点 | personal-manage | organization-manage |
 |---|---|---|
 | 主体来源 | 用户自定义 | SFID 注册机构 |
-| 地址派生 | creator + account_name | sfid_id + account_name(主/费用/自创) |
-| 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(SfidId-keyed) + `InstitutionAccounts`(机构下多账户) |
+| 地址派生 | creator + account_name | sfid_number + account_name(主/费用/自创) |
+| 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(SfidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
 | MODULE_TAG | `b"per-mgmt"` | `b"org-mgmt"` |
 | pallet_index | 7 | 17 |
 | 客户端 dispatch | `PersonalDuoqianInfo.has(addr)` 命中走此 pallet | `AddressRegisteredSfid.has(addr)` 命中走 organization-manage |
@@ -110,6 +110,9 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 
 ## follow-up debt
 
-- personal-manage 自持单测从 organization-manage 旧个人 case 迁移
 - benchmarks 补 propose_create / propose_close / cleanup_rejected_proposal 三个用例
-- organization-manage 单测重写(B 阶段清空了)
+
+## 已清的 follow-up(2026-05-07)
+
+- ~~personal-manage 自持单测~~ → 14 用例已补(`src/tests/{mod.rs(423 行), cases.rs(460 行)}`,16 passed)
+- ~~organization-manage 单测重写~~ → 22 用例已补(`src/tests/{mod.rs(441 行), cases.rs(716 行)}`,24 passed)

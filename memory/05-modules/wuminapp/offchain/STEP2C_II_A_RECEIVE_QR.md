@@ -5,7 +5,7 @@
   `wuminapp/lib/offchain/`;若恢复/补齐收款码页面,应落在
   `lib/offchain/pages/offchain_receive_page.dart`。
 - **范围**:新建清算行**收款 QR 页**(与老 `ReceiveQrPage` 并存),`bind_clearing_bank_page`
-  绑定成功写本地 shenfen_id 缓存,收款页读缓存并轮询余额。
+  绑定成功写本地 sfid_number 缓存,收款页读缓存并轮询余额。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2C_I_PAY_PAGE.md`(付款端新版)
 - **后续**:`STEP2C_II_B_BALANCE_SUBSCRIBE.md`(WS 订阅 `PaymentSettled` 实时推送,
@@ -17,25 +17,25 @@
 
 Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 字段"的 QR,
 付款方无处扫码。本步给:
-- 收款方生成含新清算行 `shenfen_id` 的 QR 码
-- 生成 QR 的前置条件:知道收款方自己绑的清算行 `shenfen_id`
+- 收款方生成含新清算行 `sfid_number` 的 QR 码
+- 生成 QR 的前置条件:知道收款方自己绑的清算行 `sfid_number`
 - 实时展示收款方清算行余额(到账后刷新)
 
 端到端同行 MVP 至此**在 app 层可演示**。
 
 ---
 
-## 2. 关键决策:`shenfen_id` 从哪里来?
+## 2. 关键决策:`sfid_number` 从哪里来?
 
 链上 `OffchainTransaction::UserBank[user]` 存的是清算行**主账户** `AccountId32`
-(32 字节),**不是** SFID `shenfen_id` 字符串。但收款 QR 里写的是 `shenfen_id`
+(32 字节),**不是** SFID `sfid_number` 字符串。但收款 QR 里写的是 `sfid_number`
 (付款方用 SFID 公开 API 反查主账户做同行校验)。从 `AccountId32` 反查
-`shenfen_id` 需要 SFID 后端配一个 "按主账户 hex 精确查" 端点,SFID 公开
+`sfid_number` 需要 SFID 后端配一个 "按主账户 hex 精确查" 端点,SFID 公开
 `searchClearingBanks` 只支持 keyword 模糊匹配。
 
 **本步务实方案**:`ClearingBankPrefs`(`SharedPreferences` 封装,key:
-`clearing_bank_shenfen_id_{walletIndex}`):
-- **写入**:`bind_clearing_bank_page` 链上绑定成功后立即 `save(walletIndex, sfidId)`
+`clearing_bank_sfid_number_{walletIndex}`):
+- **写入**:`bind_clearing_bank_page` 链上绑定成功后立即 `save(walletIndex, sfidNumber)`
 - **读取**:`offchain_receive_page` 初始化时 `load(walletIndex)`,为
   `null` 时提示"请先绑定"
 - **失去缓存的处置**(重装 / 清数据 / CLI 或别机绑定):提示重新从"选择/绑定
@@ -53,19 +53,19 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
 | 文件 | 内容 |
 |---|---|
 | `lib/offchain/services/clearing_bank_prefs.dart` | 4 个静态方法 `save` / `load` / `clear`(按 walletIndex 隔离);空串等价于清除 |
-| `lib/offchain/pages/offchain_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `WUMIN_QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=shenfen_id`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
+| `lib/offchain/pages/offchain_receive_page.dart` | 新收款页:WalletProfile + 可选 `clearingNodeWssUrl`;读 prefs → 生成 `WUMIN_QR_V1 kind=user_transfer` QR(`address` / `name` / `amount` / `memo` / `bank=sfid_number`);每 5 秒轮询 `offchain_queryBalance(user)` 刷新余额 |
 | `test/trade/clearing_bank_prefs_test.dart` | 5 个单测(空 load / 双 walletIndex roundtrip / 空串等价清除 / 选择性 clear / 覆盖写入)。全部通过 |
 
 ### 3.2 修改
 
 | 文件 | 变更 |
 |---|---|
-| `lib/offchain/pages/bind_clearing_bank_page.dart` | 绑定成功后 `await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId)`,紧接 SnackBar 提示 |
+| `lib/offchain/pages/bind_clearing_bank_page.dart` | 绑定成功后 `await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidNumber)`,紧接 SnackBar 提示 |
 | `lib/offchain/pages/offchain_home_page.dart` | 追加"生成收款码"入口,落 `OffchainReceivePage`;提示文本同步更新(付款入口仍在主页扫码;老省储行页面 ADR-006 已退出) |
 
 ### 3.3 不动(保留老路径)
 
-- `lib/wallet/ui/receive_qr_page.dart`:老省储行 `ReceiveQrPage`,`bankShenfenId`
+- `lib/wallet/ui/receive_qr_page.dart`:老省储行 `ReceiveQrPage`,`bankSfidNumber`
   从 `OnchainRpc.queryClearingInstitution`(老 `bind_clearing_institution` call_index 9)
   取。与新 `offchain_receive_page` 并存,不冲突。Step 2b-iv-b runtime
   老 Calls 清理时再下架老页面 + 老 `wallet_page._openReceiveQr` 入口重写。
@@ -83,17 +83,17 @@ Step 2c-i 付款端可用后,demo 闭环缺收款端:商户扫不到"带 `bank` 
   "amount":  "100",                       // 商户预填元,可空
   "symbol":  "GMB",
   "memo":    "午餐",
-  "bank":    "SFR-GD-SZ01-CB01-N9-D8"      // 收款方清算行 shenfen_id
+  "bank":    "SFR-GD-SZ01-CB01-N9-D4"      // 收款方清算行 sfid_number
 }
 ```
 
 付款方 `offchain_clearing_pay_page`(Step 2c-i)扫到后:
 - `toAddress = body.address`
-- `recipientBankShenfenId = body.bank`
+- `recipientBankSfidNumber = body.bank`
 - `initialAmountYuan = body.amount`
 - `memo = body.memo`
 
-SFID `searchClearingBanks(keyword=recipientBankShenfenId)` 反查主账户,同行校
+SFID `searchClearingBanks(keyword=recipientBankSfidNumber)` 反查主账户,同行校
 验 + 费率查询 + 签名提交。
 
 ---
@@ -154,7 +154,7 @@ All tests passed!  (5 个)
 - **Step 2c-ii-b**:WS 订阅 `PaymentSettled` 事件推送,取代轮询;收到支付时 Toast
   通知 + 动画高亮
 - **Step 2c-iii**:冷钱包扫签两段握手,让冷钱包也能付款
-- **Step 3**:SFID 后端补"按主账户反查 shenfen_id"API,移除本步本地缓存依赖;
+- **Step 3**:SFID 后端补"按主账户反查 sfid_number"API,移除本步本地缓存依赖;
   加历史收款列表(从 `PaymentSettled` 事件构建)
 - **UI 精修**:中央 logo 留白 / 保存到相册 / 分享 / 识别粘贴板
 

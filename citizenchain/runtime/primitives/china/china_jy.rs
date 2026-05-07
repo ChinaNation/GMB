@@ -4,8 +4,8 @@ use hex_literal::hex;
 
 /// 公民教育委员会机构常量结构。
 pub struct ChinaJy {
-    pub shenfen_id: &'static str,
-    pub shenfen_name: &'static str,
+    pub sfid_name: &'static str,
+    pub sfid_number: &'static str,
     pub main_address: [u8; 32],
     pub duoqian_admins: &'static [[u8; 32]],
 }
@@ -13,9 +13,9 @@ pub struct ChinaJy {
 pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
 
 pub const CHINA_JY: &[ChinaJy] = &[ChinaJy {
-    shenfen_id: "GFR-BP001-JY0E-413041075-20260221",
-    shenfen_name: "公民教育委员会",
-    main_address: hex!("bc2dbf091de15eb2fb9e6e1740d2bd3783848bb9fb5c794a8eb09548492f32bd"),
+    sfid_name: "公民教育委员会",
+    sfid_number: "GFR-BP001-JY00-689724263-2026",
+    main_address: hex!("52c7daea85284602479d2ca8c93735302e59998d3ae844cdd035ef80c0a97910"),
     duoqian_admins: &[
         hex!("54e0451ef8d23e2f79d28756567dcdbc3fd475e7fc090b8c655ad243655f8231"),
         hex!("c48d9b25e6bf3fee1c8002bb7e91112a54a44fb99317483bd5dc73416eb48904"),

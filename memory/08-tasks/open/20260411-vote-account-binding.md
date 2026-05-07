@@ -275,7 +275,7 @@ class VoteSignPage extends StatefulWidget {
 
 保持现有 `generate_sfid_code()` 逻辑不变：
 - 输入：`account_pubkey + GMR + 省 + 市 + ZG + 日期`
-- 输出：`A3-R5-T2P1C1-N9-D8`
+- 输出：`A3-R5-T2P1C1-N9-D4`
 - 只在首次扫 QR4 时调用一次，结果永久存入 sfid_registry
 
 ### 防重复

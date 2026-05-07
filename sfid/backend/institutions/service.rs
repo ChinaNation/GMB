@@ -121,7 +121,7 @@ pub fn derive_category(
 
 /// 检查机构名称是否已被全国任意机构占用(私权机构使用)。
 /// 两步式改造:institution_name 为 `Option<String>`,未命名机构视为不占名。
-/// 可选 `exclude_sfid_id` 用于更新自身时排除自己。
+/// 可选 `exclude_sfid_number` 用于更新自身时排除自己。
 pub fn institution_name_exists(store: &Store, name: &str) -> bool {
     institution_name_exists_excluding(store, name, None)
 }
@@ -129,11 +129,11 @@ pub fn institution_name_exists(store: &Store, name: &str) -> bool {
 pub fn institution_name_exists_excluding(
     store: &Store,
     name: &str,
-    exclude_sfid_id: Option<&str>,
+    exclude_sfid_number: Option<&str>,
 ) -> bool {
     store.multisig_institutions.values().any(|i| {
         i.institution_name.as_deref() == Some(name)
-            && exclude_sfid_id.map_or(true, |ex| i.sfid_id != ex)
+            && exclude_sfid_number.map_or(true, |ex| i.sfid_number != ex)
     })
 }
 
@@ -244,30 +244,30 @@ pub fn is_clearing_bank_eligible(
     }
 }
 
-/// 校验机构主键 sfid_id 未被占用。
-pub fn ensure_institution_not_exists(store: &Store, sfid_id: &str) -> Result<(), ServiceError> {
-    if store::contains_institution(store, sfid_id) {
-        return Err(ServiceError::Conflict("institution sfid_id already exists"));
+/// 校验机构主键 sfid_number 未被占用。
+pub fn ensure_institution_not_exists(store: &Store, sfid_number: &str) -> Result<(), ServiceError> {
+    if store::contains_institution(store, sfid_number) {
+        return Err(ServiceError::Conflict("institution sfid_number already exists"));
     }
     Ok(())
 }
 
 /// 校验机构存在。
-pub fn ensure_institution_exists(store: &Store, sfid_id: &str) -> Result<(), ServiceError> {
-    if !store::contains_institution(store, sfid_id) {
+pub fn ensure_institution_exists(store: &Store, sfid_number: &str) -> Result<(), ServiceError> {
+    if !store::contains_institution(store, sfid_number) {
         return Err(ServiceError::NotFound("institution not found"));
     }
     Ok(())
 }
 
-/// 校验同 sfid_id 下账户名未被占用。
+/// 校验同 sfid_number 下账户名未被占用。
 /// 这是**进链前**的硬校验,避免白交链上手续费。
 pub fn ensure_account_name_unique(
     store: &Store,
-    sfid_id: &str,
+    sfid_number: &str,
     account_name: &str,
 ) -> Result<(), ServiceError> {
-    if store::contains_account(store, sfid_id, account_name) {
+    if store::contains_account(store, sfid_number, account_name) {
         return Err(ServiceError::Conflict(
             "account_name already exists under this institution",
         ));
@@ -294,7 +294,7 @@ pub struct ReconcileReport {
 /// - 删:multisig_institutions 有但 sfid 工具没有的 city_code → 删除机构
 ///      (不触链,账户记录由后续清理任务统一处理)
 /// - 改:city_code 相同但 city 字符串不同 → 更新 city + institution_name
-///      sfid_id 不变
+///      sfid_number 不变
 ///
 /// 特殊处理:
 /// - 跳过 city_code == "000" 的保留占位
@@ -321,7 +321,7 @@ pub fn reconcile_public_security_for_province(
         .map(|c| (c.name.to_string(), c.code.to_string()))
         .collect();
 
-    // 2. 现有该省的公安局机构索引:city_code → sfid_id
+    // 2. 现有该省的公安局机构索引:city_code → sfid_number
     let existing_by_code: std::collections::HashMap<String, String> = store
         .multisig_institutions
         .values()
@@ -330,14 +330,14 @@ pub fn reconcile_public_security_for_province(
                 && i.province == province_name
                 && !i.city_code.is_empty()
         })
-        .map(|i| (i.city_code.clone(), i.sfid_id.clone()))
+        .map(|i| (i.city_code.clone(), i.sfid_number.clone()))
         .collect();
 
     // 3. 增 + 改
     for (city_name, city_code) in &authoritative_cities {
-        if let Some(sfid_id) = existing_by_code.get(city_code) {
+        if let Some(sfid_number) = existing_by_code.get(city_code) {
             // 存在 → 检查市名是否需要更新
-            if let Some(inst) = store.multisig_institutions.get_mut(sfid_id) {
+            if let Some(inst) = store.multisig_institutions.get_mut(sfid_number) {
                 let new_name = format!("{}公安局", city_name);
                 if inst.city != *city_name
                     || inst.institution_name.as_deref() != Some(new_name.as_str())
@@ -348,32 +348,55 @@ pub fn reconcile_public_security_for_province(
                 }
             }
         } else {
-            // 缺失 → 生成新机构
+            // 缺失 → 生成新机构(碰撞重试,1000 次保护栏)
+            //
+            // 公安局桶 = (a3=GFR, 一省一市, 机构=ZF, year),全国仅几百市级公安局,
+            // 桶填充率 < 0.001%,几乎不可能撞;1000 次保护栏只是防代码 bug 死循环。
             let account_placeholder = format!("PS-{}-{}", province_entry.code, city_code);
-            let sfid_id = match generate_sfid_code(GenerateSfidInput {
-                account_pubkey: account_placeholder.as_str(),
-                a3: "GFR",
-                p1: "0",
-                province: province_name,
-                city: city_name.as_str(),
-                institution: "ZF",
-            }) {
-                Ok(v) => v,
-                Err(err) => {
-                    tracing::warn!(
+            let mut generated: Option<String> = None;
+            for retry in 0..1000u32 {
+                let attempt_account = if retry == 0 {
+                    account_placeholder.clone()
+                } else {
+                    format!("{account_placeholder}#{retry}")
+                };
+                let candidate = match generate_sfid_code(GenerateSfidInput {
+                    account_pubkey: attempt_account.as_str(),
+                    a3: "GFR",
+                    p1: "0",
+                    province: province_name,
+                    city: city_name.as_str(),
+                    institution: "ZF",
+                }) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        tracing::warn!(
+                            province = %province_name,
+                            city = %city_name,
+                            error = %err,
+                            "reconcile: failed to generate sfid for public security"
+                        );
+                        break;
+                    }
+                };
+                if !store.multisig_institutions.contains_key(&candidate) {
+                    generated = Some(candidate);
+                    break;
+                }
+            }
+            let sfid_number = match generated {
+                Some(v) => v,
+                None => {
+                    tracing::error!(
                         province = %province_name,
                         city = %city_name,
-                        error = %err,
-                        "reconcile: failed to generate sfid for public security"
+                        "reconcile: sfid generation exhausted 1000 retries (bucket near-saturation)"
                     );
                     continue;
                 }
             };
-            if store.multisig_institutions.contains_key(&sfid_id) {
-                continue; // 极小概率碰撞
-            }
             let inst = MultisigInstitution {
-                sfid_id: sfid_id.clone(),
+                sfid_number: sfid_number.clone(),
                 institution_name: Some(format!("{}公安局", city_name)),
                 category: InstitutionCategory::PublicSecurity,
                 a3: "GFR".to_string(),
@@ -384,7 +407,7 @@ pub fn reconcile_public_security_for_province(
                 city_code: city_code.clone(),
                 institution_code: "ZF".to_string(),
                 sub_type: None,
-                parent_sfid_id: None,
+                parent_sfid_number: None,
                 chain_status: InstitutionChainStatus::NotRegistered,
                 chain_tx_hash: None,
                 chain_block_number: None,
@@ -392,9 +415,9 @@ pub fn reconcile_public_security_for_province(
                 created_by: actor.to_string(),
                 created_at: Utc::now(),
             };
-            store.multisig_institutions.insert(sfid_id.clone(), inst);
+            store.multisig_institutions.insert(sfid_number.clone(), inst);
             // 公安局 reconcile 同步插入 2 条默认未上链账户。
-            insert_default_accounts_into_global_store(store, &sfid_id, actor);
+            insert_default_accounts_into_global_store(store, &sfid_number, actor);
             report.inserted += 1;
         }
     }
@@ -413,10 +436,10 @@ pub fn reconcile_public_security_for_province(
                 && !i.city_code.is_empty()
                 && !authoritative_codes.contains(&i.city_code)
         })
-        .map(|i| i.sfid_id.clone())
+        .map(|i| i.sfid_number.clone())
         .collect();
-    for sfid_id in to_remove {
-        store.multisig_institutions.remove(&sfid_id);
+    for sfid_number in to_remove {
+        store.multisig_institutions.remove(&sfid_number);
         report.removed += 1;
     }
 
@@ -434,22 +457,22 @@ pub fn reconcile_public_security_for_province(
 
 /// 给指定机构写入 2 条默认未上链账户(全局 store)。
 ///
-/// 幂等:已存在账户不覆盖;仅在该 `(sfid_id, account_name)` 缺失时补齐。
+/// 幂等:已存在账户不覆盖;仅在该 `(sfid_number, account_name)` 缺失时补齐。
 /// reconcile 本身持全局 store 写锁;sharded_store 的同步由启动后的分片同步流程补齐。
-pub fn insert_default_accounts_into_global_store(store: &mut Store, sfid_id: &str, actor: &str) {
+pub fn insert_default_accounts_into_global_store(store: &mut Store, sfid_number: &str, actor: &str) {
     use crate::institutions::derive::derive_duoqian_address;
     use crate::institutions::model::{account_key_to_string, MultisigAccount};
     let now = Utc::now();
     for name in DEFAULT_ACCOUNT_NAMES {
-        let key = account_key_to_string(sfid_id, name);
+        let key = account_key_to_string(sfid_number, name);
         // DUOQIAN_V1 本地派生(主账户→0x00 / 费用账户→0x01);公安局 SFID 固定,
         // 账户地址在 reconcile 时即可完全确定,无需等激活上链。
-        let addr = derive_duoqian_address(sfid_id, name);
+        let addr = derive_duoqian_address(sfid_number, name);
         store
             .multisig_accounts
             .entry(key)
             .or_insert_with(|| MultisigAccount {
-                sfid_id: sfid_id.to_string(),
+                sfid_number: sfid_number.to_string(),
                 account_name: (*name).to_string(),
                 duoqian_address: addr,
                 chain_status: MultisigChainStatus::NotOnChain,
@@ -473,16 +496,16 @@ pub fn backfill_public_security_city_codes(store: &mut Store) -> usize {
         .filter(|i| {
             matches!(i.category, InstitutionCategory::PublicSecurity) && i.city_code.is_empty()
         })
-        .map(|i| (i.sfid_id.clone(), i.province.clone(), i.city.clone()))
+        .map(|i| (i.sfid_number.clone(), i.province.clone(), i.city.clone()))
         .collect();
-    for (sfid_id, province, city) in targets {
+    for (sfid_number, province, city) in targets {
         let Some(entry) = PROVINCES.iter().find(|p| p.name == province) else {
             continue;
         };
         let Some(cc) = entry.cities.iter().find(|c| c.name == city).map(|c| c.code) else {
             continue;
         };
-        if let Some(inst) = store.multisig_institutions.get_mut(&sfid_id) {
+        if let Some(inst) = store.multisig_institutions.get_mut(&sfid_number) {
             inst.city_code = cc.to_string();
             fixed += 1;
         }
@@ -524,14 +547,14 @@ mod tests {
     // ─── 清算行资格白名单(ADR-007)─────────────────────────────
 
     /// 测试 fixture:按所需字段构造一个最小机构样本。
-    /// `a3`/`sub_type`/`parent_sfid_id` 是判定关键字段,其他用合理默认值。
+    /// `a3`/`sub_type`/`parent_sfid_number` 是判定关键字段,其他用合理默认值。
     fn fixture_institution(
         a3: &str,
         sub_type: Option<&str>,
-        parent_sfid_id: Option<&str>,
+        parent_sfid_number: Option<&str>,
     ) -> MultisigInstitution {
         MultisigInstitution {
-            sfid_id: format!("{a3}-GD-CB01-000000000-20260101"),
+            sfid_number: format!("{a3}-GD-CB01-000000000-20260101"),
             institution_name: Some("测试机构".to_string()),
             category: InstitutionCategory::PrivateInstitution,
             a3: a3.to_string(),
@@ -546,7 +569,7 @@ mod tests {
             city_code: "001".to_string(),
             institution_code: "CB".to_string(),
             sub_type: sub_type.map(|s| s.to_string()),
-            parent_sfid_id: parent_sfid_id.map(|s| s.to_string()),
+            parent_sfid_number: parent_sfid_number.map(|s| s.to_string()),
             chain_status: InstitutionChainStatus::NotRegistered,
             chain_tx_hash: None,
             chain_block_number: None,
@@ -581,7 +604,7 @@ mod tests {
     fn clearing_bank_eligible_ffr_with_jointstock_parent() {
         // case 4: FFR + parent(SFR + JOINT_STOCK) → ✅
         let parent = fixture_institution("SFR", Some("JOINT_STOCK"), None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_id));
+        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
         assert!(is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 
@@ -589,13 +612,13 @@ mod tests {
     fn clearing_bank_eligible_ffr_with_non_jointstock_parent_rejected() {
         // case 5: FFR + parent(SFR + LIMITED_LIABILITY) → ❌
         let parent = fixture_institution("SFR", Some("LIMITED_LIABILITY"), None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_id));
+        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
         assert!(!is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 
     #[test]
     fn clearing_bank_eligible_ffr_without_parent_rejected() {
-        // case 6: FFR + 缺 parent(查不到 / 未设置 parent_sfid_id) → ❌
+        // case 6: FFR + 缺 parent(查不到 / 未设置 parent_sfid_number) → ❌
         let inst = fixture_institution("FFR", None, None);
         assert!(!is_clearing_bank_eligible(&inst, None));
     }
@@ -613,7 +636,7 @@ mod tests {
     fn clearing_bank_eligible_ffr_with_gfr_parent_rejected() {
         // FFR 即使 parent 是 GFR 也不允许(必须 SFR + JOINT_STOCK)
         let parent = fixture_institution("GFR", None, None);
-        let inst = fixture_institution("FFR", None, Some(&parent.sfid_id));
+        let inst = fixture_institution("FFR", None, Some(&parent.sfid_number));
         assert!(!is_clearing_bank_eligible(&inst, Some(&parent)));
     }
 }

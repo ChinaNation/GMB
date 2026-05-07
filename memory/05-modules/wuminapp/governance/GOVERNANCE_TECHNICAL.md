@@ -512,7 +512,7 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.6 机构标识编码
 
-shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitives/china/china_ch.rs`（PRB），
+sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitives/china/china_ch.rs`（PRB），
 编码为 48 字节固定长度（UTF-8 右补零），与链上 `SubjectId` 一致。
 
 ### 7.7 关键文件
@@ -573,8 +573,8 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
-| `register_sfid_institution(sfid_id)` | 2 | SFID 系统登记机构，派生多签地址 | 不需要 |
-| `propose_create(sfid_id, admin_count, admins, threshold, amount)` | 0 | 发起"创建多签账户"提案 | 投票引擎 |
+| `register_sfid_institution(sfid_number)` | 2 | SFID 系统登记机构，派生多签地址 | 不需要 |
+| `propose_create(sfid_number, admin_count, admins, threshold, amount)` | 0 | 发起"创建多签账户"提案 | 投票引擎 |
 | `propose_close(duoqian_address, beneficiary)` | 1 | 发起"关闭多签账户"提案 | 投票引擎 |
 | `propose_create_personal(account_name, admin_count, admins, threshold, amount)` | 3 | 发起个人多签账户创建提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
@@ -595,7 +595,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 ### 8.7 转账接入
 
 - `wuminapp` 现已把注册型机构也编码为 `SubjectId(48)`：
-  - 治理机构：`shenfen_id` UTF-8 右补零到 48 字节
+  - 治理机构：`sfid_number` UTF-8 右补零到 48 字节
   - 注册型机构：`duoqian_address(32) + 16 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
 - `InstitutionAdminService` 对内置治理机构和注册型机构都读取 `AdminsChange.Institutions`，`DuoqianManage.DuoqianAccounts` 只作为账户、资金和生命周期信息来源。

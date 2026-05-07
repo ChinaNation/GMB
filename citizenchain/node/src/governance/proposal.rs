@@ -439,7 +439,7 @@ fn split_action_into_details(
 /// 遍历所有提案 ID，过滤 institution_hex 匹配的记录。
 /// 每页最多返回 count 条，has_more 表示是否还有更早的提案。
 pub fn fetch_institution_proposal_page(
-    shenfen_id: &str,
+    sfid_number: &str,
     start_id: u64,
     count: u32,
 ) -> Result<ProposalPageResult, String> {
@@ -448,7 +448,7 @@ pub fn fetch_institution_proposal_page(
 
     // 双层 ID v1:走 ProposalsByInstitution 反向索引,O(本机构提案数),
     // 不再扫主键 + 客户端过滤。
-    let mut ids = fetch_proposals_by_institution(shenfen_id)?;
+    let mut ids = fetch_proposals_by_institution(sfid_number)?;
     ids.sort_by(|a, b| b.cmp(a)); // 降序(主键单调,降序即按时间倒序)
 
     // start_id 是上一次翻页返回的最后一个 id - 1。本次取 ids 中 ≤ start_id 的部分。
@@ -517,8 +517,8 @@ pub fn fetch_institution_proposal_page(
 }
 
 /// 查询机构的活跃提案 ID 列表。
-pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
-    let institution_id = storage_keys::subject_id_from_shenfen_id(shenfen_id);
+pub fn fetch_active_proposal_ids(sfid_number: &str) -> Result<Vec<u64>, String> {
+    let institution_id = storage_keys::subject_id_from_sfid_number(sfid_number);
     let key = storage_keys::map_key(
         "VotingEngine",
         "ActiveProposalsByInstitution",
@@ -1063,8 +1063,8 @@ pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
 }
 
 /// 反向索引:`ProposalsByInstitution[institution]` → 本机构所有 proposal_id。
-pub fn fetch_proposals_by_institution(shenfen_id: &str) -> Result<Vec<u64>, String> {
-    let inst = storage_keys::subject_id_from_shenfen_id(shenfen_id);
+pub fn fetch_proposals_by_institution(sfid_number: &str) -> Result<Vec<u64>, String> {
+    let inst = storage_keys::subject_id_from_sfid_number(sfid_number);
     fetch_proposal_ids_by_index("ProposalsByInstitution", &inst)
 }
 
@@ -1115,9 +1115,9 @@ fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
         .rposition(|&b| b != 0)
         .map(|i| i + 1)
         .unwrap_or(0);
-    let shenfen_id = std::str::from_utf8(&bytes[..end]).ok()?;
+    let sfid_number = std::str::from_utf8(&bytes[..end]).ok()?;
     // 在静态数据中查找
-    super::find_institution_name(shenfen_id)
+    super::find_institution_name(sfid_number)
 }
 
 /// 列表卡片展示信息:一次解析,按动作变体生成 summary + status(runtime 升级需折叠状态)。
@@ -1288,7 +1288,7 @@ pub struct UserVoteStatus {
 pub fn fetch_user_vote_status(
     proposal_id: u64,
     pubkey_hex: &str,
-    shenfen_id: Option<&str>,
+    sfid_number: Option<&str>,
 ) -> Result<UserVoteStatus, String> {
     let meta =
         fetch_proposal_meta(proposal_id)?.ok_or_else(|| format!("提案 {proposal_id} 不存在"))?;
@@ -1307,10 +1307,10 @@ pub fn fetch_user_vote_status(
     };
 
     // 查询联合投票状态（JointVotesByAdmin: DoubleMap<u64, (InstitutionId48 ++ AccountId32)> → bool）
-    let joint_vote = if meta.kind == 1 && shenfen_id.is_some() {
-        // shenfen_id.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
+    let joint_vote = if meta.kind == 1 && sfid_number.is_some() {
+        // sfid_number.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
         let institution_id =
-            storage_keys::subject_id_from_shenfen_id(shenfen_id.expect("guarded by is_some()"));
+            storage_keys::subject_id_from_sfid_number(sfid_number.expect("guarded by is_some()"));
         let mut composite_key = Vec::with_capacity(48 + 32);
         composite_key.extend_from_slice(&institution_id);
         composite_key.extend_from_slice(&pubkey_bytes);

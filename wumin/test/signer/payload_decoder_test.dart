@@ -157,8 +157,7 @@ void main() {
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
       final decoded = PayloadDecoder.decode(hex);
-      expect(decoded, isNull,
-          reason: '旧凭证长度 45 < 78 必须被拒绝, 防止白盲签');
+      expect(decoded, isNull, reason: '旧凭证长度 45 < 78 必须被拒绝, 防止白盲签');
     });
 
     test('decodes finalize_proposal (pallet=9 call=3)', () {
@@ -194,13 +193,13 @@ void main() {
     // display.action 不一致 → mismatched → 禁止签名,无需 spec_version 锁布局。
 
     test('decodes clearing bank register node call', () {
-      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
       const peerId = '12D3KooWABCDEFG1234567890abcdefghijk';
       const domain = 'l2.example.com';
       final payload = Uint8List.fromList([
         21,
         50,
-        ...compactVec(sfidId),
+        ...compactVec(sfidNumber),
         ...compactVec(peerId),
         ...compactVec(domain),
         ...u16Le(9944),
@@ -210,19 +209,19 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_clearing_bank');
-      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['sfid_number'], sfidNumber);
       expect(decoded.fields['peer_id'], peerId);
       expect(decoded.fields['rpc_domain'], domain);
       expect(decoded.fields['rpc_port'], '9944');
     });
 
     test('decodes clearing bank endpoint update call', () {
-      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
       const domain = 'new-l2.example.com';
       final payload = Uint8List.fromList([
         21,
         51,
-        ...compactVec(sfidId),
+        ...compactVec(sfidNumber),
         ...compactVec(domain),
         ...u16Le(443),
       ]);
@@ -231,30 +230,30 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'update_clearing_bank_endpoint');
-      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['sfid_number'], sfidNumber);
       expect(decoded.fields['new_domain'], domain);
       expect(decoded.fields['new_port'], '443');
     });
 
     test('decodes clearing bank unregister call', () {
-      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
       final payload = Uint8List.fromList([
         21,
         52,
-        ...compactVec(sfidId),
+        ...compactVec(sfidNumber),
       ]);
 
       final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'unregister_clearing_bank');
-      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['sfid_number'], sfidNumber);
     });
 
     test('decodes clearing bank decrypt challenge', () {
-      const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
+      const sfidNumber = 'SFR-AH001-ZG1Y-883241719-2026';
       final idBytes = List<int>.filled(48, 0);
-      final rawId = ascii.encode(sfidId);
+      final rawId = ascii.encode(sfidNumber);
       for (var i = 0; i < rawId.length; i++) {
         idBytes[i] = rawId[i];
       }
@@ -277,15 +276,15 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'decrypt_admin');
-      expect(decoded.fields['sfid_id'], sfidId);
+      expect(decoded.fields['sfid_number'], sfidNumber);
       expect(decoded.summary, contains('解密清算行管理员'));
     });
 
     test('decodes propose_sweep_to_main 国储会 (pallet=19 call=2)', () {
       // Phase 2 重排：propose_sweep_to_main 由原 call=5 迁到 call=2。
-      const shenfenId = 'GFR-LN001-CB0C-617776487-20260222';
+      const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
       final idBytes = List<int>.filled(48, 0);
-      final idChars = shenfenId.codeUnits;
+      final idChars = sfidNumber.codeUnits;
       for (var i = 0; i < idChars.length; i++) {
         idBytes[i] = idChars[i];
       }
@@ -312,9 +311,9 @@ void main() {
     });
 
     test('decodes propose_sweep_to_main 省储会 (pallet=19 call=2)', () {
-      const shenfenId = 'GFR-ZS001-CB0X-464088047-20260222';
+      const sfidNumber = 'GFR-ZS001-CB0Y-016974075-2026';
       final idBytes = List<int>.filled(48, 0);
-      final idChars = shenfenId.codeUnits;
+      final idChars = sfidNumber.codeUnits;
       for (var i = 0; i < idChars.length; i++) {
         idBytes[i] = idChars[i];
       }
@@ -387,8 +386,7 @@ void main() {
       // Phase 4(2026-05-02): 业务 pallet 的 execute_xxx wrapper 全部物理删除,
       // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
       final payload = buildProposalIdPayload(0x09, 0x04, 100);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'retry_passed_proposal');
       expect(decoded.fields['proposal_id'], '100');
@@ -400,12 +398,11 @@ void main() {
       // SCALE: [0x09][0x05][proposal_id u64_le][Compact<u32> 0]
       final builder = BytesBuilder()
         ..add([0x09, 0x05])
-        ..add(Uint8List.fromList(buildProposalIdPayload(0x09, 0x05, 401)
-            .sublist(2, 10)))
+        ..add(Uint8List.fromList(
+            buildProposalIdPayload(0x09, 0x05, 401).sublist(2, 10)))
         ..add([0x00]); // Compact<u32> 0 (空 reason)
       final payload = builder.toBytes();
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '401');
@@ -419,13 +416,12 @@ void main() {
       final compactLen = reason.length << 2;
       final builder = BytesBuilder()
         ..add([0x09, 0x05])
-        ..add(Uint8List.fromList(buildProposalIdPayload(0x09, 0x05, 402)
-            .sublist(2, 10)))
+        ..add(Uint8List.fromList(
+            buildProposalIdPayload(0x09, 0x05, 402).sublist(2, 10)))
         ..add([compactLen])
         ..add(reason);
       final payload = builder.toBytes();
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '402');
@@ -445,8 +441,7 @@ void main() {
       ];
       for (final c in cases) {
         final payload = buildProposalIdPayload(c[0], c[1], 999);
-        final decoded =
-            PayloadDecoder.decode(encodeHex(payload));
+        final decoded = PayloadDecoder.decode(encodeHex(payload));
         expect(decoded, isNull,
             reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
       }
@@ -454,8 +449,7 @@ void main() {
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
       final payload = buildProposalIdPayload(0x11, 0x04, 500);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cleanup_rejected_proposal');
       expect(decoded.fields['proposal_id'], '500');
@@ -474,19 +468,23 @@ void main() {
     //   (走 PopulationSnapshotVerifier 双层签发)
     // -----------------------------------------------------------------------
 
-    test('decodes propose_create_institution (pallet=17 call=5) 含 province + signer_admin_pubkey',
-        () {
+    List<int> buildProposeCreateInstitutionPayload({bool legacyTail = false}) {
+      List<int> u128Le(BigInt value) {
+        final out = List<int>.filled(16, 0);
+        var tmp = value;
+        for (var i = 0; i < 16; i++) {
+          out[i] = (tmp & BigInt.from(0xFF)).toInt();
+          tmp = tmp >> 8;
+        }
+        return out;
+      }
+
       final sfid = utf8.encode('SFR-AH001-1234567890-20260501');
       final instName = utf8.encode('安徽省储行');
-      // accounts: 1 个账户 = (name="主", amount=10_000_00 fen = 10000 元)
-      final accountName = utf8.encode('主');
-      final amountFen = BigInt.from(1000000); // 10000.00 GMB
-      final amountLeBytes = List<int>.filled(16, 0);
-      var tmp = amountFen;
-      for (var i = 0; i < 16; i++) {
-        amountLeBytes[i] = (tmp & BigInt.from(0xFF)).toInt();
-        tmp = tmp >> 8;
-      }
+      final mainAccount = utf8.encode('主账户');
+      final feeAccount = utf8.encode('费用账户');
+      final mainAmount = u128Le(BigInt.from(1000000)); // 10,000.00 GMB
+      final feeAmount = u128Le(BigInt.from(222)); // 2.22 GMB
       final adminPubkeys = [
         List<int>.filled(32, 0x11),
         List<int>.filled(32, 0x22),
@@ -494,25 +492,24 @@ void main() {
       final registerNonce = utf8.encode('reg-nonce-001');
       final signature = List<int>.filled(64, 0xDD);
       final province = utf8.encode('安徽省');
-      final signerAdminPubkey = List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
-      final a3 = utf8.encode('SFR');
-      final subType = utf8.encode('SHENG_BANK');
-
-      final payload = Uint8List.fromList([
+      final signerAdminPubkey =
+          List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+      final payload = <int>[
         0x11, 0x05, // pallet=17 call=5
-        // sfid_id: Vec<u8>
+        // sfid_number: Vec<u8>
         (sfid.length << 2) & 0xff,
         ...sfid,
         // institution_name: Vec<u8>
         (instName.length << 2) & 0xff,
         ...instName,
-        // accounts: Vec<{name, amount}> count=1
-        (1 << 2) & 0xff,
-        // account[0].name
-        (accountName.length << 2) & 0xff,
-        ...accountName,
-        // account[0].amount: u128 LE
-        ...amountLeBytes,
+        // accounts: Vec<{name, amount}> count=2
+        (2 << 2) & 0xff,
+        (mainAccount.length << 2) & 0xff,
+        ...mainAccount,
+        ...mainAmount,
+        (feeAccount.length << 2) & 0xff,
+        ...feeAccount,
+        ...feeAmount,
         // admin_count: u32 LE
         2, 0, 0, 0,
         // duoqian_admins: BoundedVec<AccountId32> count=2
@@ -532,26 +529,41 @@ void main() {
         ...province,
         // ★ signer_admin_pubkey: [u8;32]
         ...signerAdminPubkey,
-        // a3: Vec<u8>
-        (a3.length << 2) & 0xff,
-        ...a3,
-        // sub_type: Option<Vec<u8>> = Some(...)
-        0x01,
-        (subType.length << 2) & 0xff,
-        ...subType,
-        // parent_sfid_id: Option<Vec<u8>> = None
-        0x00,
-      ]);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      ];
+      if (legacyTail) {
+        final a3 = utf8.encode('SFR');
+        final subType = utf8.encode('SHENG_BANK');
+        payload.addAll([
+          (a3.length << 2) & 0xff,
+          ...a3,
+          0x01,
+          (subType.length << 2) & 0xff,
+          ...subType,
+          0x00,
+        ]);
+      }
+      return payload;
+    }
+
+    test(
+        'decodes propose_create_institution (pallet=17 call=5) 含 province + signer_admin_pubkey',
+        () {
+      final signerAdminPubkey =
+          List<int>.generate(32, (i) => 0xC0 + (i & 0x0F));
+
+      final payload =
+          Uint8List.fromList(buildProposeCreateInstitutionPayload());
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
-      expect(decoded.fields['sfid_id'], 'SFR-AH001-1234567890-20260501');
+      expect(decoded.fields['sfid_number'], 'SFR-AH001-1234567890-20260501');
       expect(decoded.fields['institution_name'], '安徽省储行');
       expect(decoded.fields['admin_count'], '2');
       expect(decoded.fields['threshold'], '2/2');
-      expect(decoded.fields['amount_yuan'], '10,000.00 GMB');
-      expect(decoded.fields['a3'], 'SFR');
+      expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
+      expect(decoded.fields['amount_主账户'], '10,000.00 GMB');
+      expect(decoded.fields['amount_费用账户'], '2.22 GMB');
+      expect(decoded.fields.containsKey('a3'), isFalse);
       expect(decoded.fields['province'], '安徽省');
       expect(
         decoded.fields['signer_admin_pubkey'],
@@ -559,25 +571,45 @@ void main() {
       );
     });
 
+    test('propose_create_institution 带旧尾字段时拒绝解码', () {
+      final payload = Uint8List.fromList(
+          buildProposeCreateInstitutionPayload(legacyTail: true));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      expect(decoded, isNull,
+          reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 旧尾字段');
+    });
+
     // -----------------------------------------------------------------------
-    // ADR-008 step2d 双端字节一致性 fixture(test/fixtures/step2d_credential_payload.json):
+    // ADR-008 step2d 双端字节一致性 fixture:
     // 三组凭证的 SCALE 字节流由 Python 生成器(链端 codec.encode 等价产出)固化,
-    // wumin / wuminapp / 链端 runtime 三处必须产出同一序列。
+    // 统一真源在 ../memory/06-quality/fixtures/，wumin / wuminapp / 链端 runtime
+    // 三处必须产出同一序列。
     // 任何一端编码漂移 → 这里直接断言失败。
     // -----------------------------------------------------------------------
 
     Map<String, dynamic> readFixture() {
-      final file = File('test/fixtures/step2d_credential_payload.json');
+      final candidates = [
+        File('../memory/06-quality/fixtures/step2d_credential_payload.json'),
+        File('memory/06-quality/fixtures/step2d_credential_payload.json'),
+      ];
+      final file = candidates.firstWhere(
+        (candidate) => candidate.existsSync(),
+        orElse: () => candidates.first,
+      );
       final raw = file.readAsStringSync();
       return jsonDecode(raw) as Map<String, dynamic>;
     }
 
-    test('fixture step2d cast_referendum: decoder 解出 province + signer_admin_pubkey',
+    test(
+        'fixture step2d cast_referendum: decoder 解出 province + signer_admin_pubkey',
         () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'cast_referendum');
       final hex = caseEntry['expected_call_data_hex'] as String;
+      expect(caseEntry['pallet_index'], 23);
+      expect(caseEntry['call_index'], 1);
+      expect(hex.toLowerCase().startsWith('0x1701'), isTrue);
       final decoded = PayloadDecoder.decode(hex);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum');
@@ -592,8 +624,7 @@ void main() {
     // fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
     // 整体下线,fixture 走 OfflineSignService.verifyPayload 的哈希直签例外。
 
-    test('fixture step2d propose_resolution_issuance: decoder 解出新字段',
-        () {
+    test('fixture step2d propose_resolution_issuance: decoder 解出新字段', () {
       final fixture = readFixture();
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'propose_resolution_issuance');
@@ -610,7 +641,8 @@ void main() {
       expect(decoded.fields['allocation_count'], '2');
     });
 
-    test('decodes propose_resolution_issuance (pallet=8 call=0) 含 province + signer_admin_pubkey',
+    test(
+        'decodes propose_resolution_issuance (pallet=8 call=0) 含 province + signer_admin_pubkey',
         () {
       final reason = utf8.encode('紧急救灾');
       final totalFen = BigInt.from(50000000); // 500_000.00 GMB
@@ -662,8 +694,7 @@ void main() {
         // ★ signer_admin_pubkey
         ...signerAdmin,
       ]);
-      final decoded =
-          PayloadDecoder.decode(encodeHex(payload));
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['reason'], '紧急救灾');

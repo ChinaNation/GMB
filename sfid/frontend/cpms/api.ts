@@ -41,15 +41,15 @@ export type CpmsArchiveImportResult = {
 
 /**
  * 任务卡 `20260408-sfid-public-security-cpms-embed`:
- * 按机构 sfid_id 反查其 CPMS 站点。
+ * 按机构 sfid_number 反查其 CPMS 站点。
  * 后端通过 `(province, city, institution_code)` 三元组匹配,无则返回 null。
  */
 export async function getCpmsSiteByInstitution(
   auth: AdminAuth,
-  sfidId: string
+  sfidNumber: string
 ): Promise<CpmsSiteRow | null> {
   return adminRequest<CpmsSiteRow | null>(
-    `/api/v1/admin/cpms-keys/by-institution/${encodeURIComponent(sfidId)}`,
+    `/api/v1/admin/cpms-keys/by-institution/${encodeURIComponent(sfidNumber)}`,
     auth
   );
 }

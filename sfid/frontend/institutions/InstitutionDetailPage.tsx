@@ -26,7 +26,7 @@ import { PrivateInstitutionLayout } from './PrivateInstitutionLayout';
 
 interface Props {
   auth: AdminAuth;
-  sfidId: string;
+  sfidNumber: string;
   canWrite: boolean;
   onBack: () => void;
 }
@@ -38,7 +38,7 @@ const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
   REVOKED_ON_CHAIN: '已注销',
 };
 
-export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite, onBack }) => {
+export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onBack }) => {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
@@ -50,11 +50,11 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
 
   const load = useCallback(() => {
     setLoading(true);
-    getInstitution(auth, sfidId)
+    getInstitution(auth, sfidNumber)
       .then(setDetail)
       .catch(() => { /* 静默：后台刷新失败不弹窗 */ })
       .finally(() => setLoading(false));
-  }, [auth.access_token, sfidId]);
+  }, [auth.access_token, sfidNumber]);
 
   useEffect(() => {
     load();
@@ -64,8 +64,8 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
   const accounts = detail?.accounts || [];
 
   const loadCpms = useCallback(
-    (instSfidId: string) => {
-      getCpmsSiteByInstitution(auth, instSfidId)
+    (instSfidNumber: string) => {
+      getCpmsSiteByInstitution(auth, instSfidNumber)
         .then((row) => setCpmsSite(row))
         .catch(() => {
           // 静默：后台刷新失败不弹窗（404 是正常场景——尚未生成）
@@ -77,15 +77,15 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
 
   useEffect(() => {
     if (inst && inst.category === 'PUBLIC_SECURITY') {
-      loadCpms(inst.sfid_id);
+      loadCpms(inst.sfid_number);
     } else {
       setCpmsSite(null);
     }
-  }, [inst?.sfid_id, inst?.category, loadCpms]);
+  }, [inst?.sfid_number, inst?.category, loadCpms]);
 
   const onDeleteAccount = async (accountName: string) => {
     try {
-      await deleteAccount(auth, sfidId, accountName);
+      await deleteAccount(auth, sfidNumber, accountName);
       message.success(`账户 "${accountName}" 已删除`);
       load();
     } catch (err) {
@@ -118,7 +118,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
         created_at: new Date().toISOString(),
       });
       message.success('CPMS 安装二维码已生成');
-      // 首次生成 QR1 会替换机构 sfid_id,需刷新机构详情拿到新号
+      // 首次生成 QR1 会替换机构 sfid_number,需刷新机构详情拿到新号
       load();
       loadCpms(result.site_sfid);
     } catch (err) {
@@ -185,7 +185,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                     <Descriptions column={1} size="small">
                       <Descriptions.Item label="机构 SFID">
                         <Typography.Text code style={{ fontSize: 12, wordBreak: 'break-all' }}>
-                          {inst.sfid_id}
+                          {inst.sfid_number}
                         </Typography.Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="省份">{inst.province}</Descriptions.Item>
@@ -206,7 +206,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                         auth={auth}
                         site={cpmsSite}
                         canWrite={canWrite}
-                        onChanged={() => loadCpms(inst.sfid_id)}
+                        onChanged={() => loadCpms(inst.sfid_number)}
                       />
                     </Col>
                   )}
@@ -234,7 +234,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
 
               <CreateAccountModal
                 auth={auth}
-                sfidId={inst.sfid_id}
+                sfidNumber={inst.sfid_number}
                 institutionName={inst.institution_name ?? ''}
                 existingAccounts={accounts}
                 open={createAccountOpen}
@@ -251,7 +251,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidId, canWrite,
                 onClose={() => setCpmsRegisterOpen(false)}
                 onRegistered={() => {
                   setCpmsRegisterOpen(false);
-                  loadCpms(inst.sfid_id);
+                  loadCpms(inst.sfid_number);
                 }}
               />
             </>

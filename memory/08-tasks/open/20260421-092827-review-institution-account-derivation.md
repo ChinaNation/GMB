@@ -48,7 +48,7 @@
   - `genesis.rs`、`china_ch.rs` 中的人口、创世发行、质押本金汇总通过单元测试校验
 - 已追踪 runtime 消费路径：
   - `duoqian-manage` 是机构地址派生的唯一实现入口
-  - `offchain-transaction` 通过 `(sfid_id, "费用账户")` 反查费用账户
+  - `offchain-transaction` 通过 `(sfid_number, "费用账户")` 反查费用账户
   - `duoqian-transfer` 直接使用机构 `main_address` / `fee_address` / `NRC_ANQUAN_ADDRESS`
   - `runtime/src/configs/mod.rs` 负责机构账户保护与保留地址判定
 - 已执行验证：
@@ -82,9 +82,9 @@
   - `cargo test -p primitives --lib` 通过（8/8）
   - `cargo test -p duoqian-manage --lib` 通过（17/17）
 - 已继续核查 `sfid` / `wuminapp` 跨模块口径：
-  - `sfid/backend` 不再本地重算机构地址，创建/激活时只把 `account_name` 原样交给链端，注册成功后再从 `DuoqianManage::SfidRegisteredAddress(sfid_id, account_name)` 回读 `duoqian_address`
+  - `sfid/backend` 不再本地重算机构地址，创建/激活时只把 `account_name` 原样交给链端，注册成功后再从 `DuoqianManage::SfidRegisteredAddress(sfid_number, account_name)` 回读 `duoqian_address`
   - `sfid/frontend` 只管理 `account_name`、状态和展示，不持有第二套机构地址派生公式
-  - `wuminapp` 创建机构多签提案时，优先使用 SFID 返回的 `duoqian_address`，否则回退到链上查询 `SfidRegisteredAddress(sfid_id, account_name)`，也没有单独重算主账户/费用账户地址
+  - `wuminapp` 创建机构多签提案时，优先使用 SFID 返回的 `duoqian_address`，否则回退到链上查询 `SfidRegisteredAddress(sfid_number, account_name)`，也没有单独重算主账户/费用账户地址
 - 新发现并已修复的跨模块问题：
   - `sfid` 公开接口返回的 `chain_status` 为 `INACTIVE/PENDING/REGISTERED/FAILED`
   - `wuminapp` 旧代码仍按 `Pending/Confirmed/Failed` 解释，导致已注册账户不会命中“直接信任后端返回地址”分支，而会多做一次链上查询

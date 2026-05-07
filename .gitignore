@@ -9,6 +9,19 @@ citizenchain/citizenui/desktop/src-tauri/gen/schemas/
 citizenchain/nodekey_*
 *.sst
 
+# Local chain state
+citizenchain/.local-node/
+
+# Frontend build artifacts
+citizenchain/node/frontend/dist/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Local/generated backup files
+*.spec*-backup
+
 # OS / Editor junk
 .DS_Store
 **/.DS_Store

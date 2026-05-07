@@ -25,9 +25,9 @@
 
 | 账户 | op_tag | preimage |
 |---|---:|---|
-| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN_DOMAIN || OP_MAIN || ss58_prefix_le || sfid_id` |
-| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN_DOMAIN || OP_FEE || ss58_prefix_le || sfid_id` |
-| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN_DOMAIN || OP_INSTITUTION || ss58_prefix_le || sfid_id || account_name` |
+| 主账户 | `OP_MAIN = 0x00` | `DUOQIAN_DOMAIN || OP_MAIN || ss58_prefix_le || sfid_number` |
+| 费用账户 | `OP_FEE = 0x01` | `DUOQIAN_DOMAIN || OP_FEE || ss58_prefix_le || sfid_number` |
+| 自定义账户 | `OP_INSTITUTION = 0x05` | `DUOQIAN_DOMAIN || OP_INSTITUTION || ss58_prefix_le || sfid_number || account_name` |
 | 个人多签 | `OP_PERSONAL = 0x04` | `DUOQIAN_DOMAIN || OP_PERSONAL || ss58_prefix_le || creator || account_name` |
 
 `"主账户"` 和 `"费用账户"` 是保留名，只能分别落到 `OP_MAIN` 和 `OP_FEE`；禁止作为自定义账户名进入 `OP_INSTITUTION` 命名空间。
@@ -36,8 +36,8 @@
 
 核心 storage：
 
-- `Institutions<sfid_id, InstitutionInfo>`：机构级管理员、阈值、主账户、费用账户、机构状态。
-- `InstitutionAccounts<(sfid_id, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
+- `Institutions<sfid_number, InstitutionInfo>`：机构级管理员、阈值、主账户、费用账户、机构状态。
+- `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
 - `DuoqianAccounts<main_address, DuoqianAccount>`：只保存多签账户生命周期和创建时阈值快照，不作为管理员长期真源。
@@ -58,7 +58,7 @@
 
 ```text
 propose_create_institution(
-  sfid_id,
+  sfid_number,
   institution_name,
   accounts,
   admin_count,
@@ -80,9 +80,9 @@ propose_create_institution(
 - 管理员数量必须 `>= 2`，阈值必须满足 `ceil(admin_count / 2) <= threshold <= admin_count` 且最小为 2。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
-- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_id / institution_name / account_names[]`。
+- `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。
 - `province + signer_admin_pubkey` 只用于在 `sfid-system::ShengSigningPubkey` 中定位省管理员派生签名公钥。
-- `a3 / sub_type / parent_sfid_id` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
+- `a3 / sub_type / parent_sfid_number` 只属于 SFID 系统候选资格判断,不进入链上注册 storage、action 或 call payload。
 
 资金规则：
 
@@ -150,5 +150,5 @@ runtime 适配：
 
 ## 9. 变更记录
 
-- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_id`,签名业务字段收口为 `sfid_id / institution_name / account_names[]`。
+- 2026-05-02:机构注册协议对齐 SFID `registration-info`。删除链上 `InstitutionMetadata` 与注册参数中的 `a3/sub_type/parent_sfid_number`,签名业务字段收口为 `sfid_number / institution_name / account_names[]`。
 - 2026-05-02:创建 Pending 多签主体改为 votingengine 显式快照提案 + admins-change `SubjectLifecycle`，生命周期写状态不再依赖裸公共 mutator。

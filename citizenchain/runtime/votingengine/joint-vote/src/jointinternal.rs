@@ -7,7 +7,7 @@
 //! `cast_admin` extrinsic 与 `JointVoteEngine` / `JointProposalFinalizer`
 //! trait 实现中被调用。
 
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_sfid_number;
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -53,14 +53,14 @@ pub(super) fn institution_profile(id: SubjectId) -> Option<(u8, u32)> {
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
         .any(|pid| pid == id)
     {
         return Some((ORG_PRC, PRC_JOINT_VOTE_WEIGHT));
     }
     if CHINA_CH
         .iter()
-        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
+        .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
         .any(|pid| pid == id)
     {
         return Some((ORG_PRB, PRB_JOINT_VOTE_WEIGHT));
@@ -79,7 +79,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Subject
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
+            if let Some(prc) = subject_id_from_sfid_number(entry.sfid_number) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC, prc, who,
                 ) {
@@ -99,7 +99,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Subject
             }
         }
         for entry in CHINA_CB.iter().skip(1) {
-            if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
+            if let Some(prc) = subject_id_from_sfid_number(entry.sfid_number) {
                 if <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
                     ORG_PRC, prc, who,
                 ) {
@@ -114,7 +114,7 @@ fn resolve_proposer_institution<T: Config>(who: &T::AccountId) -> Option<Subject
         let mut who_arr = [0u8; 32];
         who_arr.copy_from_slice(&who_bytes);
         for entry in CHINA_CB.iter() {
-            if let Some(institution) = subject_id_from_shenfen_id(entry.shenfen_id) {
+            if let Some(institution) = subject_id_from_sfid_number(entry.sfid_number) {
                 if entry.duoqian_admins.iter().any(|admin| *admin == who_arr) {
                     return Some(institution);
                 }
@@ -218,7 +218,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CB.iter().skip(1) {
-                if let Some(prc) = subject_id_from_shenfen_id(entry.shenfen_id) {
+                if let Some(prc) = subject_id_from_sfid_number(entry.sfid_number) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRC,
@@ -235,7 +235,7 @@ impl<T: Config> Pallet<T> {
                 }
             }
             for entry in CHINA_CH.iter() {
-                if let Some(prb) = subject_id_from_shenfen_id(entry.shenfen_id) {
+                if let Some(prb) = subject_id_from_sfid_number(entry.sfid_number) {
                     if let Err(err) = <votingengine::Pallet<T>>::acquire_internal_proposal_mutex(
                         id,
                         ORG_PRB,

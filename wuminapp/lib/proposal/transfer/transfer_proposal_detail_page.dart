@@ -164,7 +164,7 @@ class _TransferProposalDetailPageState
 
       // 并行加载管理员列表、提案状态、投票计数、提案详情
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.shenfenId),
+        _adminService.fetchAdmins(widget.institution.sfidNumber),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
         detailFuture,
@@ -379,7 +379,7 @@ class _TransferProposalDetailPageState
       );
 
       // 刷新数据
-      _adminService.clearCache(widget.institution.shenfenId);
+      _adminService.clearCache(widget.institution.sfidNumber);
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -485,7 +485,7 @@ class _TransferProposalDetailPageState
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.shenfenId);
+        _adminService.clearCache(widget.institution.sfidNumber);
         await _load();
       },
       child: ListView(

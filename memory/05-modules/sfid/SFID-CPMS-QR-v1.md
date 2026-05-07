@@ -66,7 +66,7 @@ QR4: CPMS → SFID    档案业务二维码
 {
   "proto": "SFID_CPMS_V1",
   "type": "INSTALL",
-  "sfid": "GFR-GD001-ZG0X-123456789-20260330",
+  "sfid": "GFR-GD001-ZG0X-123456789-2026",
   "token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
   "rsa": "MIIBIjANBg...",
   "sig": "0x..."
@@ -90,7 +90,7 @@ CPMS 收到后先用预置的 SFID 公钥验签名，通过才接受安装。RSA
 {
   "proto": "SFID_CPMS_V1",
   "type": "REGISTER",
-  "sfid": "GFR-GD001-ZG0X-123456789-20260330",
+  "sfid": "GFR-GD001-ZG0X-123456789-2026",
   "token": "b1c8f0c2e0d84a5cb7c0d0e2f9a8c1d3",
   "blind": "0x..."
 }

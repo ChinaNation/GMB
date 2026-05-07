@@ -154,7 +154,7 @@ curl http://127.0.0.1:8899/api/v1/health
 
 ## CPMS 二维码约定（v1）
 - 档案号 `archive_no` 作为唯一用户标识。
-- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYYMMDD)`。
+- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYY)`。
 - 省市代码来源：与 CPMS 同步使用 `sheng_cities` 数据。
 - 校验位算法与 SFID `sfid_code` 一致：`BLAKE2b` 摘要字节和 `mod 10`。
 - `issuer_id` 固定为 `cpms`。

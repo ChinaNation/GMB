@@ -86,6 +86,41 @@ class PopulationSnapshotResponse {
   final String signerAdminPubkey;
 }
 
+/// SFID 机构注册凭证。
+///
+/// 中文注释:这些字段只用于链端验签和防重放,不得混入 a3/sub_type/parent_sfid_number
+/// 等业务分类字段。
+class InstitutionRegistrationCredential {
+  const InstitutionRegistrationCredential({
+    required this.genesisHash,
+    required this.registerNonce,
+    required this.province,
+    required this.signerAdminPubkey,
+    required this.signature,
+  });
+
+  final String genesisHash;
+  final String registerNonce;
+  final String province;
+  final String signerAdminPubkey;
+  final String signature;
+}
+
+/// SFID 机构链端注册信息。
+class InstitutionRegistrationInfoResponse {
+  const InstitutionRegistrationInfoResponse({
+    required this.sfidNumber,
+    required this.institutionName,
+    required this.accountNames,
+    required this.credential,
+  });
+
+  final String sfidNumber;
+  final String institutionName;
+  final List<String> accountNames;
+  final InstitutionRegistrationCredential credential;
+}
+
 class ApiClient {
   ApiClient({String? baseUrl}) : _baseUrl = baseUrl ?? _defaultBaseUrl;
 
@@ -340,8 +375,7 @@ class ApiClient {
     final signerAdminPubkeyRaw =
         (data['signer_admin_pubkey']?.toString() ?? '').trim();
     if (province.isEmpty) {
-      throw Exception(
-          'population snapshot 缺少 province 字段(ADR-008 step3 必填)');
+      throw Exception('population snapshot 缺少 province 字段(ADR-008 step3 必填)');
     }
     if (signerAdminPubkeyRaw.isEmpty) {
       throw Exception(
@@ -365,16 +399,16 @@ class ApiClient {
 
   /// 查询机构下所有多签账户。
   ///
-  /// 调用 SFID 后端 `GET /api/v1/app/institution/:sfid_id/accounts`，
+  /// 调用 SFID 后端 `GET /api/v1/app/institutions/:sfid_number/accounts`，
   /// 返回机构名称 + 账户列表（account_name / duoqian_address / chain_status）。
   Future<InstitutionAccountsResponse> fetchInstitutionAccounts(
-      String sfidId) async {
-    final trimmed = sfidId.trim();
+      String sfidNumber) async {
+    final trimmed = sfidNumber.trim();
     if (trimmed.isEmpty) {
       throw Exception('SFID ID 不能为空');
     }
     final uri = Uri.parse(
-        '$_baseUrl/api/v1/app/institution/${Uri.encodeComponent(trimmed)}/accounts');
+        '$_baseUrl/api/v1/app/institutions/${Uri.encodeComponent(trimmed)}/accounts');
     http.Response response;
     try {
       response = await http
@@ -429,9 +463,116 @@ class ApiClient {
     }
 
     return InstitutionAccountsResponse(
-      sfidId: (data['sfid_id']?.toString() ?? trimmed).trim(),
+      sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
       institutionName: (data['institution_name']?.toString() ?? '').trim(),
       accounts: accounts,
+    );
+  }
+
+  /// 查询机构链端注册信息。
+  ///
+  /// 调用 SFID 后端 `GET /api/v1/app/institutions/:sfid_number/registration-info`。
+  /// 该接口是 `OrganizationManage.propose_create_institution` 的唯一凭证来源。
+  Future<InstitutionRegistrationInfoResponse> fetchInstitutionRegistrationInfo(
+      String sfidNumber) async {
+    final trimmed = sfidNumber.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('SFID ID 不能为空');
+    }
+    final uri = Uri.parse(
+        '$_baseUrl/api/v1/app/institutions/${Uri.encodeComponent(trimmed)}/registration-info');
+    http.Response response;
+    try {
+      response = await http
+          .get(uri, headers: _headers())
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException catch (_) {
+      throw Exception('查询注册凭证超时，请检查网络连接');
+    } on SocketException catch (_) {
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          _baseUrl.contains('127.0.0.1')) {
+        throw Exception(
+          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
+        );
+      }
+      rethrow;
+    }
+    if (response.statusCode == 404) {
+      throw Exception('未找到该 SFID 机构');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('查询机构注册凭证失败: ${response.statusCode}');
+    }
+
+    final payload = jsonDecode(response.body) as Map<String, dynamic>;
+    final code = payload['code'] as int? ?? -1;
+    final message = payload['message']?.toString() ?? 'unknown';
+    if (code != 0) {
+      throw Exception('查询机构注册凭证被拒: code=$code message=$message');
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw Exception('机构注册凭证响应缺少 data 字段');
+    }
+    final credential = data['credential'];
+    if (credential is! Map) {
+      throw Exception('机构注册凭证响应缺少 credential 字段');
+    }
+    final credentialMap = credential.map((k, v) => MapEntry(k.toString(), v));
+
+    final rawAccountNames = data['account_names'];
+    if (rawAccountNames is! List) {
+      throw Exception('机构注册凭证响应缺少 account_names 字段');
+    }
+    final accountNames = rawAccountNames
+        .map((v) => v.toString().trim())
+        .where((v) => v.isNotEmpty)
+        .toList(growable: false);
+    if (accountNames.isEmpty) {
+      throw Exception('机构注册凭证 account_names 为空');
+    }
+
+    final institutionName = (data['institution_name']?.toString() ?? '').trim();
+    final registerNonce =
+        (credentialMap['register_nonce']?.toString() ?? '').trim();
+    final province = (credentialMap['province']?.toString() ?? '').trim();
+    final signerAdminPubkeyRaw =
+        (credentialMap['signer_admin_pubkey']?.toString() ?? '').trim();
+    final signature = (credentialMap['signature']?.toString() ?? '').trim();
+    if (institutionName.isEmpty) {
+      throw Exception('机构注册凭证 institution_name 为空');
+    }
+    if (registerNonce.isEmpty) {
+      throw Exception('机构注册凭证 register_nonce 为空');
+    }
+    if (province.isEmpty) {
+      throw Exception('机构注册凭证 province 为空');
+    }
+    if (signature.isEmpty) {
+      throw Exception('机构注册凭证 signature 为空');
+    }
+
+    final signerAdminPubkey =
+        _normalizePubkeyHex(signerAdminPubkeyRaw).toLowerCase();
+    final signerClean = signerAdminPubkey.substring(2);
+    if (signerClean.length != 64 ||
+        !RegExp(r'^[0-9a-f]+$').hasMatch(signerClean)) {
+      throw Exception('机构注册凭证 signer_admin_pubkey 必须为 32 字节 hex');
+    }
+    return InstitutionRegistrationInfoResponse(
+      sfidNumber: (data['sfid_number']?.toString() ?? trimmed).trim(),
+      institutionName: institutionName,
+      accountNames: accountNames,
+      credential: InstitutionRegistrationCredential(
+        genesisHash: (credentialMap['genesis_hash']?.toString() ?? '').trim(),
+        registerNonce: registerNonce,
+        province: province,
+        signerAdminPubkey: signerAdminPubkey,
+        signature: signature.startsWith('0x')
+            ? signature.toLowerCase()
+            : '0x${signature.toLowerCase()}',
+      ),
     );
   }
 
@@ -546,10 +687,17 @@ class InstitutionAccountEntry {
     final status = raw?.trim();
     switch (status) {
       case 'INACTIVE':
+      case 'NOT_ON_CHAIN':
+        return 'INACTIVE';
       case 'PENDING':
+      case 'PENDING_ON_CHAIN':
+        return 'PENDING';
       case 'REGISTERED':
+      case 'ACTIVE_ON_CHAIN':
+        return 'REGISTERED';
       case 'FAILED':
-        return status!;
+      case 'REVOKED_ON_CHAIN':
+        return 'FAILED';
       case 'Pending':
         return 'PENDING';
       case 'Confirmed':
@@ -565,12 +713,12 @@ class InstitutionAccountEntry {
 /// 机构账户列表响应。
 class InstitutionAccountsResponse {
   const InstitutionAccountsResponse({
-    required this.sfidId,
+    required this.sfidNumber,
     required this.institutionName,
     required this.accounts,
   });
 
-  final String sfidId;
+  final String sfidNumber;
   final String institutionName;
   final List<InstitutionAccountEntry> accounts;
 }

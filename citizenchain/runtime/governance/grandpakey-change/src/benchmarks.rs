@@ -10,14 +10,14 @@ use frame_benchmarking::v2::*;
 use frame_system::RawOrigin;
 use sp_core::Pair;
 
-use crate::{pallet, subject_id_from_shenfen_id, Call, Config, SubjectId, Pallet, CHINA_CB};
+use crate::{pallet, subject_id_from_sfid_number, Call, Config, SubjectId, Pallet, CHINA_CB};
 
 fn decode_account<T: pallet::Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
 fn prc_institution() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
+    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
 }
 
 fn prc_admin<T: pallet::Config>(index: usize) -> T::AccountId {

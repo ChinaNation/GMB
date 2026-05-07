@@ -79,9 +79,9 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
 - 不放 SFID 内部机构创建/修改页面,这些仍归 `frontend/institutions/`。
 - 不再提供“备案”按钮、备案弹窗或备案状态组件。
 - 当前封装公开查询:
-  - `getInstitutionInfo(sfidId)`:机构展示详情。
-  - `getInstitutionRegistrationInfo(sfidId)`:链端注册信息凭证。
-- 注册信息凭证的业务字段只有 `sfid_id / institution_name / account_names[]`;
+  - `getInstitutionInfo(sfidNumber)`:机构展示详情。
+  - `getInstitutionRegistrationInfo(sfidNumber)`:链端注册信息凭证。
+- 注册信息凭证的业务字段只有 `sfid_number / institution_name / account_names[]`;
   `credential` 下字段仅用于链端验签与防重放。
 
 ## TypeScript 覆盖

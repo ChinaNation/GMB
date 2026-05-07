@@ -16,7 +16,10 @@ pub(crate) use handler::{
     admin_auth_challenge, admin_auth_check, admin_auth_identify, admin_auth_verify, admin_logout,
     require_admin_session_middleware,
 };
-pub(crate) use model::{AdminAuthContext, AdminSession, LoginChallenge, QrLoginResultRecord};
+pub(crate) use model::{
+    AdminAuthContext, AdminQrChallengeInput, AdminQrCompleteInput, AdminQrResultQuery,
+    AdminSession, LoginChallenge, QrLoginResultRecord,
+};
 pub(crate) use qr_login::{admin_auth_qr_challenge, admin_auth_qr_complete, admin_auth_qr_result};
 pub(crate) use signature::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes,

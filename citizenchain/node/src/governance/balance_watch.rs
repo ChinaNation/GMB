@@ -16,46 +16,46 @@ const BALANCE_WATCH_INTERVAL: Duration = Duration::from_secs(1);
 static ACTIVE_WATCHES: LazyLock<Mutex<HashMap<String, u64>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn register_watch(shenfen_id: &str) -> Result<u64, String> {
+fn register_watch(sfid_number: &str) -> Result<u64, String> {
     let mut watches = ACTIVE_WATCHES
         .lock()
         .map_err(|_| "治理余额 watcher 状态锁获取失败".to_string())?;
-    let generation = watches.get(shenfen_id).copied().unwrap_or(0) + 1;
-    watches.insert(shenfen_id.to_string(), generation);
+    let generation = watches.get(sfid_number).copied().unwrap_or(0) + 1;
+    watches.insert(sfid_number.to_string(), generation);
     Ok(generation)
 }
 
-fn unregister_watch(shenfen_id: &str) -> Result<(), String> {
+fn unregister_watch(sfid_number: &str) -> Result<(), String> {
     let mut watches = ACTIVE_WATCHES
         .lock()
         .map_err(|_| "治理余额 watcher 状态锁获取失败".to_string())?;
-    watches.remove(shenfen_id);
+    watches.remove(sfid_number);
     Ok(())
 }
 
-fn is_watch_active(shenfen_id: &str, generation: u64) -> Result<bool, String> {
+fn is_watch_active(sfid_number: &str, generation: u64) -> Result<bool, String> {
     let watches = ACTIVE_WATCHES
         .lock()
         .map_err(|_| "治理余额 watcher 状态锁获取失败".to_string())?;
-    Ok(watches.get(shenfen_id).copied() == Some(generation))
+    Ok(watches.get(sfid_number).copied() == Some(generation))
 }
 
 #[tauri::command]
 pub async fn start_governance_balance_watch(
     app: AppHandle,
-    shenfen_id: String,
+    sfid_number: String,
 ) -> Result<(), String> {
-    if registry::find_institution(&shenfen_id).is_none() {
-        return Err(format!("未知的机构 shenfenId: {shenfen_id}"));
+    if registry::find_institution(&sfid_number).is_none() {
+        return Err(format!("未知的机构 sfidNumber: {sfid_number}"));
     }
 
-    let generation = register_watch(&shenfen_id)?;
+    let generation = register_watch(&sfid_number)?;
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut last_payload_json: Option<String> = None;
 
         loop {
-            match is_watch_active(&shenfen_id, generation) {
+            match is_watch_active(&sfid_number, generation) {
                 Ok(true) => {}
                 Ok(false) => break,
                 Err(_) => break,
@@ -63,8 +63,8 @@ pub async fn start_governance_balance_watch(
 
             let payload = tauri::async_runtime::spawn_blocking({
                 let app_handle = app_handle.clone();
-                let shenfen_id = shenfen_id.clone();
-                move || build_institution_balance_update_sync(&app_handle, &shenfen_id)
+                let sfid_number = sfid_number.clone();
+                move || build_institution_balance_update_sync(&app_handle, &sfid_number)
             })
             .await;
 
@@ -85,6 +85,6 @@ pub async fn start_governance_balance_watch(
 }
 
 #[tauri::command]
-pub async fn stop_governance_balance_watch(shenfen_id: String) -> Result<(), String> {
-    unregister_watch(&shenfen_id)
+pub async fn stop_governance_balance_watch(sfid_number: String) -> Result<(), String> {
+    unregister_watch(&sfid_number)
 }

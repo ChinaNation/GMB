@@ -20,7 +20,7 @@ import { offchainApi } from '../api';
 import type { ConnectivityTestReport } from '../types';
 
 type Props = {
-  sfidId: string;
+  sfidNumber: string;
   institutionName: string;
   onBack: () => void;
   onSuccess: () => void;
@@ -28,7 +28,7 @@ type Props = {
 
 type Step = 'form' | 'testing' | 'tested' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
-export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, onSuccess }: Props) {
+export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBack, onSuccess }: Props) {
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
     let cancelled = false;
     Promise.all([
       offchainApi.queryLocalPeerId().catch(() => ''),
-      api.getActivatedAdmins(sfidId).catch(() => [] as ActivatedAdmin[]),
+      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
     ]).then(([pid, aa]) => {
       if (cancelled) return;
       setPeerId(pid);
@@ -68,7 +68,7 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
       if (matches.length === 1) setSelectedAdmin(matches[0]);
     });
     return () => { cancelled = true; };
-  }, [sfidId]);
+  }, [sfidNumber]);
 
   useEffect(() => {
     if (step !== 'qr') return;
@@ -123,7 +123,7 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
     try {
       const r = await offchainApi.buildRegisterClearingBankRequest(
         selectedAdmin.pubkeyHex,
-        sfidId,
+        sfidNumber,
         peerId,
         rpcDomain.trim(),
         portNum,
@@ -133,7 +133,7 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [selectedAdmin, report, sfidId, peerId, rpcDomain, rpcPort]);
+  }, [selectedAdmin, report, sfidNumber, peerId, rpcDomain, rpcPort]);
 
   const handleScan = useCallback(async (responseJson: string) => {
     const sr = signRequestRef.current;
@@ -144,7 +144,7 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
         sr.requestId,
         selectedAdmin.pubkeyHex,
         sr.expectedPayloadHash,
-        sfidId,
+        sfidNumber,
         peerId,
         rpcDomain.trim(),
         parseInt(rpcPort, 10),
@@ -159,14 +159,14 @@ export function ClearingBankDeclareNodePage({ sfidId, institutionName, onBack, o
       setError(sanitizeError(e));
       setStep('error');
     }
-  }, [selectedAdmin, sfidId, peerId, rpcDomain, rpcPort, onSuccess]);
+  }, [selectedAdmin, sfidNumber, peerId, rpcDomain, rpcPort, onSuccess]);
 
   return (
     <>
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>声明清算行节点</h2>
-        <span className="admin-list-summary">{institutionName} ({sfidId})</span>
+        <span className="admin-list-summary">{institutionName} ({sfidNumber})</span>
       </div>
 
       {step === 'form' || step === 'testing' || step === 'tested' || step === 'error' ? (

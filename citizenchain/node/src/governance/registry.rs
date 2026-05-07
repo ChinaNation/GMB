@@ -15,15 +15,15 @@ pub(crate) enum InstitutionRef {
 impl InstitutionRef {
     pub(crate) fn name(self) -> &'static str {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.shenfen_name,
-            InstitutionRef::Prb(item) => item.shenfen_name,
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_name,
+            InstitutionRef::Prb(item) => item.sfid_name,
         }
     }
 
-    pub(crate) fn shenfen_id(self) -> &'static str {
+    pub(crate) fn sfid_number(self) -> &'static str {
         match self {
-            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.shenfen_id,
-            InstitutionRef::Prb(item) => item.shenfen_id,
+            InstitutionRef::Nrc(item) | InstitutionRef::Prc(item) => item.sfid_number,
+            InstitutionRef::Prb(item) => item.sfid_number,
         }
     }
 
@@ -67,7 +67,7 @@ impl InstitutionRef {
         let org_type = self.org_type();
         InstitutionListItem {
             name: self.name().to_string(),
-            shenfen_id: self.shenfen_id().to_string(),
+            sfid_number: self.sfid_number().to_string(),
             org_type: org_type as u8,
             org_type_label: org_type.label().to_string(),
             main_address: self.main_address_hex(),
@@ -95,10 +95,10 @@ pub(crate) fn governance_overview() -> GovernanceOverview {
     }
 }
 
-pub(crate) fn find_institution(shenfen_id: &str) -> Option<InstitutionRef> {
+pub(crate) fn find_institution(sfid_number: &str) -> Option<InstitutionRef> {
     if let Some(index) = CHINA_CB
         .iter()
-        .position(|item| item.shenfen_id == shenfen_id)
+        .position(|item| item.sfid_number == sfid_number)
     {
         return Some(if index == 0 {
             InstitutionRef::Nrc(&CHINA_CB[index])
@@ -109,10 +109,10 @@ pub(crate) fn find_institution(shenfen_id: &str) -> Option<InstitutionRef> {
 
     CHINA_CH
         .iter()
-        .find(|item| item.shenfen_id == shenfen_id)
+        .find(|item| item.sfid_number == sfid_number)
         .map(InstitutionRef::Prb)
 }
 
-pub(crate) fn find_institution_name(shenfen_id: &str) -> Option<&'static str> {
-    find_institution(shenfen_id).map(|item| item.name())
+pub(crate) fn find_institution_name(sfid_number: &str) -> Option<&'static str> {
+    find_institution(sfid_number).map(|item| item.name())
 }

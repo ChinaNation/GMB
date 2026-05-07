@@ -87,7 +87,7 @@
 - 关闭或归档 `20260428-115654-sfid-修复-clearing-bank-watcher-启动崩溃` 任务卡，避免状态残留。
 - 明确 `/api/v1/app/clearing-banks/search` 在 watcher 未首次 scan 成功时的降级策略是否符合产品预期。
 - 补联调验收：链上 `ClearingBankNodes` 注册 / 更新 / 注销后，SFID 搜索结果能按预期变化。
-- 为 wuminapp 所需字段补齐契约说明：清算行 sfid_id、主账户、费用账户、节点端点来源。
+- 为 wuminapp 所需字段补齐契约说明：清算行 sfid_number、主账户、费用账户、节点端点来源。
 - 检查 `clearing-bank-eligibility.md` 是否需要追加 Step 2 watcher 章节和 Step 3 移动端消费说明。
 
 ## 验收标准

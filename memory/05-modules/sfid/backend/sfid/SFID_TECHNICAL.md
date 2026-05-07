@@ -18,8 +18,8 @@
   - `GenerateSfidInput`:输入参数结构
   - `checksum/hash_text/resolve_p1`:私有辅助
 - `validator.rs`
-  - `validate_sfid_id_format`:格式校验 + 标准化
-  - `SFID_ID_MAX_BYTES` / `SFID_ID_SEGMENT_*` 常量(任务卡 1 从 sheng-admins/institutions.rs 搬回)
+  - `validate_sfid_number_format`:格式校验 + 标准化
+  - `SFID_NUMBER_MAX_BYTES` / `SFID_NUMBER_SEGMENT_*` 常量(任务卡 1 从 sheng-admins/institutions.rs 搬回)
 - `a3.rs`
   - `A3` 枚举(GMR/ZRR/ZNR/GFR/SFR/FFR)+ `from_str` / `as_code` / `label_zh` / `all_a3`
   - 兼容 legacy `resolve_a3(&str) -> Result<&'static str>`
@@ -47,13 +47,13 @@
 
 ## 3. 生成规则摘要
 
-- 编码段：`A3-R5-T2P1C1-N9-D8`
+- 编码段：`A3-R5-T2P1C1-N9-D4`
   - `A3`：主体类型（如 `GMR/ZRR/GFR/...`）
   - `R5`：省码 + 市码 / 省级占位码
   - `T2P1`：机构类型与盈利属性
   - `C1`：校验位
   - `N9`：稳定散列序列
-  - `D8`：日期（`YYYYMMDD`）
+  - `D4`：日期（`YYYY`）
 - 不同 `A3` 对 `T2/P1` 有严格组合约束，生成前强校验。
 - `GMR / ZRR / ZNR` 当前固定使用省级占位市码 `000`；真实市码从 `001` 起排。
 - `GFR / SFR / FFR` 与机构 `site_sfid` 继续使用真实市码。

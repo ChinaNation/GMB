@@ -180,9 +180,9 @@ class DuoqianInstitutionEntity {
   late String duoqianAddress;
 
   /// SFID 标识（UTF-8 字符串）。
-  late String sfidId;
+  late String sfidNumber;
 
-  /// 机构名称（链上升级前暂用 sfidId 代替）。
+  /// 机构名称（链上升级前暂用 sfidNumber 代替）。
   late String name;
 
   /// 添加时间戳（毫秒），用于排序。
@@ -228,8 +228,8 @@ class LocalTxEntity {
   /// 手续费（元）。
   double? feeYuan;
 
-  /// 链下交易的清算省储行 shenfen_id。
-  String? bankShenfenId;
+  /// 链下交易的清算省储行 sfid_number。
+  String? bankSfidNumber;
 
   /// 状态：pending / confirmed / onchain
   late String status;

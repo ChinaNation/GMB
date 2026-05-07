@@ -57,7 +57,7 @@
 
 | action | call_index | call | fields | 签发方 |
 |---|---|---|---|---|
-| `propose_create` | 0 | `propose_create` | `sfid_id`, `account_name`, `admin_count`, `threshold`, `amount_yuan` | wuminapp |
+| `propose_create` | 0 | `propose_create` | `sfid_number`, `account_name`, `admin_count`, `threshold`, `amount_yuan` | wuminapp |
 | `propose_close` | 1 | `propose_close` | `duoqian_address`, `beneficiary` | wuminapp |
 | `propose_create_personal` | 3 | `propose_create_personal` | `account_name`, `admin_count`, `threshold`, `amount_yuan` | wuminapp |
 | `cleanup_rejected_proposal` | 4 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
@@ -79,7 +79,7 @@
 
 | action | payload 结构 | fields | 签发方 | 用途 |
 |---|---|---|---|---|
-| `activate_admin` | `GMB_ACTIVATE`(12B) + `shenfen_id`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `shenfen_id` | node_ui(`citizenchain/node/src/governance/activation.rs`) / sfid 后端 | 管理员激活,sfid 后端验签。decoder 检测 `GMB_ACTIVATE` 前缀走专用分支。 |
+| `activate_admin` | `GMB_ACTIVATE`(12B) + `sfid_number`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `sfid_number` | node_ui(`citizenchain/node/src/governance/activation.rs`) / sfid 后端 | 管理员激活,sfid 后端验签。decoder 检测 `GMB_ACTIVATE` 前缀走专用分支。 |
 
 ## 二、字段渲染规则
 
@@ -90,15 +90,15 @@
 | `proposal_id` / `binding_id` / `nonce` | u64 | 十进制字符串 |
 | `approve` | bool | `"true"` / `"false"` |
 | `org` | u32 `ORG_CODE` | 机构名(查 `duoqian/institutions.rs` 表,找不到回退为 `"u32(<raw>)"`) |
-| `institution` | 48B shenfen_id(右补零 UTF-8) | decoder 解出 shenfen_id 后查 `chain/institutions.dart` 表转为机构中文名(找不到回退原 shenfen_id 字符串)。`propose_sweep_to_main` / `propose_replace_grandpa_key` 使用。 |
+| `institution` | 48B sfid_number(右补零 UTF-8) | decoder 解出 sfid_number 后查 `chain/institutions.dart` 表转为机构中文名(找不到回退原 sfid_number 字符串)。`propose_sweep_to_main` / `propose_replace_grandpa_key` 使用。 |
 | `institution_id` | **当前 decoder 跳过不回填** | 后续 UX 跟进:`joint_vote` payload 包含 48B 机构 id,冷钱包现只展示 `proposal_id` / `approve`,用户无法确认"投哪个机构身份"。见跟进任务卡 `20260422-joint-vote-institution-id-display.md`(待建)。 |
 | `wasm_size` | u32 字节 | `"X.XX MB"`(> 1 MB)或 `"X KB"` |
 | `wasm_hash` | **sha256** (`[u8;32]`) of wasm bytes | `"0x<64hex>"` 小写。三端共用 sha256 算法:节点 Tauri UI 的 `sha256_hash(&wasm_code)`、冷钱包 `package:crypto` 的 `sha256.convert(bytes)`。不是 blake2_256。 |
 | `eligible_total` | u64 | 十进制字符串。`propose_runtime_upgrade` 独有,对应链端 `eligible_total: u64` 参数。 |
 | `reason` / `remark` / `account_name` | UTF-8 bytes | 字符串(UI 超长截断加省略号,签名原文不截断) |
-| `sfid_id` | `[u8;32]` 或 UTF-8 | 按具体业务实现 |
+| `sfid_number` | `[u8;32]` 或 UTF-8 | 按具体业务实现 |
 | `admin_count` / `threshold` | u8 | 十进制字符串 |
-| `shenfen_id` | 48 字节 UTF-8 右补零 | 右 trim 零后的 UTF-8 字符串 |
+| `sfid_number` | 48 字节 UTF-8 右补零 | 右 trim 零后的 UTF-8 字符串 |
 | `new_key` | `[u8;32]` ed25519 pubkey | `"0x<64hex>"` 小写 |
 
 ## 三、字段约束

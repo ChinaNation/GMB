@@ -106,13 +106,13 @@ class AdminInstitutionCodec {
     return _hexEncode(institutionId.sublist(1, 33));
   }
 
-  /// SFID 机构判别 + 提取 sfid_id(去除尾部 0x00 padding)。
+  /// SFID 机构判别 + 提取 sfid_number(去除尾部 0x00 padding)。
   ///
   /// D 阶段(SubjectKind 协议统一,2026-05-06)起 institution_id 协议:
   ///   byte[0]    = 0x02 (SubjectKind::SfidInstitution)
-  ///   byte[1..48] = sfid_id_utf8(≤47B,右填零)
+  ///   byte[1..48] = sfid_number_utf8(≤47B,右填零)
   /// kind tag 不为 0x02 或 payload 全零返回 null。
-  static Uint8List? sfidIdFromInstitutionId(Uint8List institutionId) {
+  static Uint8List? sfidNumberFromInstitutionId(Uint8List institutionId) {
     if (institutionId.length != 48) return null;
     if (institutionId[0] != subjectKindSfidInstitution) return null;
     var realLen = 48;

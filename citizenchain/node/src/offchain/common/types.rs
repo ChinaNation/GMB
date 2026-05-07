@@ -2,7 +2,7 @@
 //
 // 类型设计与对应的链上 storage / SFID 接口对齐:
 // - `EligibleClearingBankCandidate` — SFID `/clearing-banks/eligible-search` 响应
-// - `ClearingBankNodeOnChainInfo`     — 链上 `ClearingBankNodes[sfid_id]` 反序列化
+// - `ClearingBankNodeOnChainInfo`     — 链上 `ClearingBankNodes[sfid_number]` 反序列化
 // - `ConnectivityTestReport`          — node Tauri 4 重连通性自测结果
 // - `DecryptedAdminInfo`              — 已解密私钥的清算行管理员条目(内存内)
 
@@ -16,12 +16,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EligibleClearingBankCandidate {
-    pub sfid_id: String,
+    pub sfid_number: String,
     /// 机构中文名;两步式未命名时为空串。
     pub institution_name: String,
     pub a3: String,
     pub sub_type: Option<String>,
-    pub parent_sfid_id: Option<String>,
+    pub parent_sfid_number: Option<String>,
     pub parent_institution_name: Option<String>,
     pub parent_a3: Option<String>,
     pub province: String,
@@ -33,13 +33,13 @@ pub struct EligibleClearingBankCandidate {
     pub fee_account: Option<String>,
 }
 
-/// 链上 `ClearingBankNodes[sfid_id]` 解码后的对前端形态。
+/// 链上 `ClearingBankNodes[sfid_number]` 解码后的对前端形态。
 ///
 /// 字段为字符串/u32 友好类型,前端无需做 Bytes/SS58 自行处理。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClearingBankNodeOnChainInfo {
-    pub sfid_id: String,
+    pub sfid_number: String,
     /// libp2p PeerId 字符串("12D3KooW..." 形式)。
     pub peer_id: String,
     pub rpc_domain: String,
@@ -76,7 +76,7 @@ pub struct ConnectivityTestReport {
 pub struct DecryptedAdminInfo {
     /// 管理员公钥(0x 前缀 hex,小写)。
     pub pubkey_hex: String,
-    pub sfid_id: String,
+    pub sfid_number: String,
     /// 解密时间(毫秒时间戳)。
     pub decrypted_at_ms: u64,
 }
@@ -92,7 +92,7 @@ pub struct DecryptAdminRequestResult {
     pub payload_hex: String,
 }
 
-// ─── 清算行机构详情(链上 Institutions[sfid_id] 的对前端形态) ────────
+// ─── 清算行机构详情(链上 Institutions[sfid_number] 的对前端形态) ────────
 
 /// 单账户的链上展示形态(地址 SS58 + 余额"分"+ is_default 标识)。
 #[derive(Debug, Clone, Serialize)]
@@ -108,14 +108,14 @@ pub struct AccountWithBalance {
     pub is_default: bool,
 }
 
-/// 机构详情 = `organization-manage::Institutions[sfid_id]` + 各账户余额 + 友好标签。
+/// 机构详情 = `organization-manage::Institutions[sfid_number]` + 各账户余额 + 友好标签。
 ///
-/// 当链上不存在该 sfid_id 的机构时,Tauri 命令返回 `Option::None`,
+/// 当链上不存在该 sfid_number 的机构时,Tauri 命令返回 `Option::None`,
 /// 节点桌面据此进入"创建多签机构"流程。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstitutionDetail {
-    pub sfid_id: String,
+    pub sfid_number: String,
     pub institution_name: String,
 
     pub main_account: AccountWithBalance,
@@ -158,15 +158,15 @@ pub struct InstitutionProposalItem {
 
 // ─── SFID `registration-info` 响应(链上注册专用) ──────────
 
-/// SFID `/api/v1/app/institutions/:sfid_id/registration-info` 的响应形态。
+/// SFID `/api/v1/app/institutions/:sfid_number/registration-info` 的响应形态。
 ///
-/// 中文注释:这是链上注册唯一可信输入,只暴露 sfid_id / 机构名称 / 账户名称列表
+/// 中文注释:这是链上注册唯一可信输入,只暴露 sfid_number / 机构名称 / 账户名称列表
 /// 和 SFID 省级签名凭证。机构类型、企业类型、所属法人关系只留在 SFID 查询侧做资格判断,
 /// 不进入节点注册 payload。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct InstitutionRegistrationInfoResp {
-    pub sfid_id: String,
+    pub sfid_number: String,
     pub institution_name: String,
     pub account_names: Vec<String>,
     pub credential: InstitutionRegistrationCredentialResp,

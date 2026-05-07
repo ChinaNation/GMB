@@ -1,4 +1,4 @@
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_sfid_number;
 use super::*;
 use codec::Encode;
 use core::cell::RefCell;
@@ -205,12 +205,12 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN => {
@@ -234,7 +234,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         match org {
             ORG_NRC | ORG_PRC => CHINA_CB
                 .iter()
-                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -244,7 +244,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 }),
             ORG_PRB => CHINA_CH
                 .iter()
-                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -505,18 +505,18 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 fn nrc_pid() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id)
-        .expect("nrc id should be shenfen_id bytes")
+    subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
+        .expect("nrc id should be sfid_number bytes")
 }
 
 fn prc_pid() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id)
-        .expect("prc id should be shenfen_id bytes")
+    subject_id_from_sfid_number(CHINA_CB[1].sfid_number)
+        .expect("prc id should be sfid_number bytes")
 }
 
 fn prb_pid() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CH[0].shenfen_id)
-        .expect("prb id should be shenfen_id bytes")
+    subject_id_from_sfid_number(CHINA_CH[0].sfid_number)
+        .expect("prb id should be sfid_number bytes")
 }
 
 fn nrc_admin(index: usize) -> AccountId32 {
@@ -529,8 +529,8 @@ fn all_prc_institutions() -> Vec<(SubjectId, AccountId32)> {
         .skip(1)
         .map(|n| {
             (
-                subject_id_from_shenfen_id(n.shenfen_id)
-                    .expect("prc id should be shenfen_id bytes"),
+                subject_id_from_sfid_number(n.sfid_number)
+                    .expect("prc id should be sfid_number bytes"),
                 AccountId32::new(n.duoqian_admins[0]),
             )
         })
@@ -542,8 +542,8 @@ fn all_prb_institutions() -> Vec<(SubjectId, AccountId32)> {
         .iter()
         .map(|n| {
             (
-                subject_id_from_shenfen_id(n.shenfen_id)
-                    .expect("prb id should be shenfen_id bytes"),
+                subject_id_from_sfid_number(n.sfid_number)
+                    .expect("prb id should be sfid_number bytes"),
                 AccountId32::new(n.duoqian_admins[0]),
             )
         })
@@ -561,7 +561,7 @@ fn prb_admin(index: usize) -> AccountId32 {
 fn institution_admins(institution: SubjectId) -> Vec<AccountId32> {
     CHINA_CB
         .iter()
-        .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+        .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
         .map(|n| {
             n.duoqian_admins
                 .iter()
@@ -572,7 +572,7 @@ fn institution_admins(institution: SubjectId) -> Vec<AccountId32> {
         .or_else(|| {
             CHINA_CH
                 .iter()
-                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| {
                     n.duoqian_admins
                         .iter()
@@ -591,13 +591,13 @@ fn institution_threshold(institution: SubjectId) -> usize {
     if CHINA_CB
         .iter()
         .skip(1)
-        .any(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+        .any(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
     {
         return primitives::count_const::PRC_INTERNAL_THRESHOLD as usize;
     }
     if CHINA_CH
         .iter()
-        .any(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
+        .any(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
     {
         return primitives::count_const::PRB_INTERNAL_THRESHOLD as usize;
     }

@@ -76,14 +76,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
     try {
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.shenfenId),
+        _adminService.fetchAdmins(widget.institution.sfidNumber),
         _contextResolver.resolve(
           knownInstitution: widget.institution,
         ),
         _transferService.fetchInstitutionVisibleProposals(
-          widget.institution.shenfenId,
+          widget.institution.sfidNumber,
         ),
-        _activationService.getActivatedAdmins(widget.institution.shenfenId),
+        _activationService.getActivatedAdmins(widget.institution.sfidNumber),
       ]);
       final admins = results[0] as List<String>;
       final ctx = results[1] as ProposalContext;
@@ -109,7 +109,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       // 记录管理员机构状态到公共缓存
       if (ctx.isAdmin) {
         ProposalContextResolver.markAdminInstitution(
-          widget.institution.shenfenId,
+          widget.institution.sfidNumber,
         );
       }
 
@@ -183,7 +183,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.shenfenId);
+        _adminService.clearCache(widget.institution.sfidNumber);
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
         await _load();
@@ -606,7 +606,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
     // 返回后刷新（可能新建了提案）
     if (mounted) {
-      _adminService.clearCache(widget.institution.shenfenId);
+      _adminService.clearCache(widget.institution.sfidNumber);
       ProposalCache.clear();
       _load();
     }
@@ -681,7 +681,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
     // 返回后刷新（投票状态可能变化）
     if (mounted) {
-      _adminService.clearCache(widget.institution.shenfenId);
+      _adminService.clearCache(widget.institution.sfidNumber);
       ProposalCache.clear();
       _load();
     }
@@ -698,7 +698,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           badgeColor: widget.badgeColor,
           onActivated: () {
             // 激活成功后刷新页面
-            _adminService.clearCache(widget.institution.shenfenId);
+            _adminService.clearCache(widget.institution.sfidNumber);
             _contextResolver.clearWalletCache();
             _load();
           },

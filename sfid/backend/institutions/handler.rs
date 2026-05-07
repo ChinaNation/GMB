@@ -6,16 +6,16 @@
 //!
 //! - GET    /api/v1/institution/check-name                → check_institution_name
 //! - POST   /api/v1/institution/create                    → create_institution
-//! - POST   /api/v1/institution/:sfid_id/account/create   → create_account
+//! - POST   /api/v1/institution/:sfid_number/account/create   → create_account
 //! - GET    /api/v1/institution/list                      → list_institutions
-//! - GET    /api/v1/institution/:sfid_id                  → get_institution
-//! - PATCH  /api/v1/institution/:sfid_id                  → update_institution(两步式第二步)
-//! - GET    /api/v1/institution/:sfid_id/accounts         → list_accounts
-//! - DELETE /api/v1/institution/:sfid_id/account/:account_name → delete_account
-//! - GET    /api/v1/institution/:sfid_id/documents        → list_documents
-//! - POST   /api/v1/institution/:sfid_id/documents        → upload_document
-//! - GET    /api/v1/institution/:sfid_id/documents/:doc_id/download → download_document
-//! - DELETE /api/v1/institution/:sfid_id/documents/:doc_id → delete_document
+//! - GET    /api/v1/institution/:sfid_number                  → get_institution
+//! - PATCH  /api/v1/institution/:sfid_number                  → update_institution(两步式第二步)
+//! - GET    /api/v1/institution/:sfid_number/accounts         → list_accounts
+//! - DELETE /api/v1/institution/:sfid_number/account/:account_name → delete_account
+//! - GET    /api/v1/institution/:sfid_number/documents        → list_documents
+//! - POST   /api/v1/institution/:sfid_number/documents        → upload_document
+//! - GET    /api/v1/institution/:sfid_number/documents/:doc_id/download → download_document
+//! - DELETE /api/v1/institution/:sfid_number/documents/:doc_id → delete_document
 //! - POST   /api/v1/public-security/reconcile             → reconcile_public_security
 //!
 //! ## 已搬迁(2026-05-01 chain/ 重构)
@@ -23,7 +23,7 @@
 //! 区块链 / 钱包 pull 用的"机构信息查询"5 个 endpoint(无鉴权)已搬到
 //! `crate::institutions::chain_duoqian_info::*`,本文件不再持有。
 //!
-//! 历史 `POST /api/v1/app/institutions/:sfid_id/chain-sync(sync_institution_chain_state)`
+//! 历史 `POST /api/v1/app/institutions/:sfid_number/chain-sync(sync_institution_chain_state)`
 //! 配套 SFID 主动读链场景,2026-05-01 一并下架(SFID 不再读链)。
 
 #![allow(dead_code)]
@@ -59,7 +59,7 @@ use crate::login::require_admin_any;
 use crate::models::ApiResponse;
 use crate::scope::{filter_by_scope, get_visible_scope};
 use crate::sfid::province::{province_name_by_code, PROVINCES};
-use crate::sfid::{generate_sfid_code, validate_sfid_id_format, GenerateSfidInput};
+use crate::sfid::{generate_sfid_code, validate_sfid_number_format, GenerateSfidInput};
 use crate::*;
 
 const MAX_PROVINCE_CHARS: usize = 100;
@@ -102,10 +102,10 @@ fn extract_city_code(sfid: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Phase 2 Day 3 Round 2:从 sfid_id 解析省代码并映射到省名。
+/// Phase 2 Day 3 Round 2:从 sfid_number 解析省代码并映射到省名。
 /// 用于 handler 层确定 sharded_store 分片 key。
-fn resolve_province_from_sfid_id(sfid_id: &str) -> Option<String> {
-    let code = extract_province_code(sfid_id);
+fn resolve_province_from_sfid_number(sfid_number: &str) -> Option<String> {
+    let code = extract_province_code(sfid_number);
     if code.is_empty() {
         return None;
     }
@@ -153,14 +153,14 @@ fn resolve_created_by(state: &AppState, created_by: &str) -> (Option<String>, Op
 /// 错误吞掉(tracing::warn):机构创建事务已成功提交,账户缺失不应影响主流程。
 async fn insert_default_accounts_best_effort(
     state: &AppState,
-    sfid_id: &str,
+    sfid_number: &str,
     province: &str,
     created_by: &str,
 ) {
     use crate::institutions::derive::derive_duoqian_address;
     use crate::institutions::service::DEFAULT_ACCOUNT_NAMES;
     let now = chrono::Utc::now();
-    let sfid_owned = sfid_id.to_string();
+    let sfid_owned = sfid_number.to_string();
     let creator_owned = created_by.to_string();
     let write_result = state
         .sharded_store
@@ -168,13 +168,13 @@ async fn insert_default_accounts_best_effort(
             for name in DEFAULT_ACCOUNT_NAMES {
                 let key = account_key_to_string(&sfid_owned, name);
                 // DUOQIAN_V1 派生:主账户→OP_MAIN(0x00)、费用账户→OP_FEE(0x01)。
-                // 两者 preimage 都不含 account_name,地址由 sfid_id 决定,本地立即确定。
+                // 两者 preimage 都不含 account_name,地址由 sfid_number 决定,本地立即确定。
                 let addr = derive_duoqian_address(&sfid_owned, name);
                 shard
                     .multisig_accounts
                     .entry(key)
                     .or_insert_with(|| MultisigAccount {
-                        sfid_id: sfid_owned.clone(),
+                        sfid_number: sfid_owned.clone(),
                         account_name: (*name).to_string(),
                         duoqian_address: addr,
                         chain_status: MultisigChainStatus::NotOnChain,
@@ -189,7 +189,7 @@ async fn insert_default_accounts_best_effort(
         .await;
     if let Err(e) = write_result {
         tracing::warn!(
-            sfid = sfid_id,
+            sfid = sfid_number,
             error = %e,
             "insert_default_accounts shard write failed; institution create already committed"
         );
@@ -198,13 +198,13 @@ async fn insert_default_accounts_best_effort(
     // 同步写全局 store(best-effort)。
     if let Ok(mut store) = state.store.write() {
         for name in DEFAULT_ACCOUNT_NAMES {
-            let key = account_key_to_string(sfid_id, name);
-            let addr = derive_duoqian_address(sfid_id, name);
+            let key = account_key_to_string(sfid_number, name);
+            let addr = derive_duoqian_address(sfid_number, name);
             store
                 .multisig_accounts
                 .entry(key)
                 .or_insert_with(|| MultisigAccount {
-                    sfid_id: sfid_id.to_string(),
+                    sfid_number: sfid_number.to_string(),
                     account_name: (*name).to_string(),
                     duoqian_address: addr,
                     chain_status: MultisigChainStatus::NotOnChain,
@@ -455,8 +455,12 @@ pub(crate) async fn create_institution(
         }
     }
 
-    // ── 生成 sfid_id(碰撞重试)──
-    for _ in 0..5 {
+    // ── 生成 sfid_number(碰撞重试,1000 次保护栏)──
+    //
+    // n9 桶 = 10⁹,单 (a3, 省, 市, 机构, year) 5 元组共享。最坏情况下
+    // 单省 1.5 亿人口仅占桶 15%,1000 次都撞概率 ≈ 0.15^1000 ≈ 10⁻⁸²⁴。
+    // 1000 次保护栏的实际作用是防极端饱和(桶填到 99% 以上)与代码 bug 死循环。
+    for _ in 0..1000u32 {
         let random_account = Uuid::new_v4().to_string();
         let site_sfid = match generate_sfid_code(GenerateSfidInput {
             account_pubkey: random_account.as_str(),
@@ -469,7 +473,7 @@ pub(crate) async fn create_institution(
             Ok(v) => v,
             Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
         };
-        let site_sfid = match validate_sfid_id_format(site_sfid.as_str()) {
+        let site_sfid = match validate_sfid_number_format(site_sfid.as_str()) {
             Ok(v) => v,
             Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
         };
@@ -478,7 +482,7 @@ pub(crate) async fn create_institution(
 
         // Phase 2 Day 3 Round 2:写 sharded_store 分片
         let inst = MultisigInstitution {
-            sfid_id: site_sfid.clone(),
+            sfid_number: site_sfid.clone(),
             institution_name: institution_name_opt.clone(),
             category,
             a3: a3.clone(),
@@ -489,7 +493,7 @@ pub(crate) async fn create_institution(
             city_code,
             institution_code: institution_code.clone(),
             sub_type: validated_sub_type.clone(),
-            parent_sfid_id: None, // 两步式:FFR 的所属法人由 update_institution 设置
+            parent_sfid_number: None, // 两步式:FFR 的所属法人由 update_institution 设置
             chain_status: InstitutionChainStatus::NotRegistered,
             chain_tx_hash: None,
             chain_block_number: None,
@@ -558,7 +562,7 @@ pub(crate) async fn create_institution(
             code: 0,
             message: "ok".to_string(),
             data: CreateInstitutionOutput {
-                sfid_id: site_sfid,
+                sfid_number: site_sfid,
                 institution_name: institution_name_opt.clone(),
                 category,
             },
@@ -569,13 +573,13 @@ pub(crate) async fn create_institution(
     api_error(
         StatusCode::CONFLICT,
         1005,
-        "institution sfid_id collision retry exhausted",
+        "institution sfid_number collision retry exhausted",
     )
 }
 
 // ─── 1b. 更新机构详情(两步式第二步)────────────────────────────
 //
-// PATCH /api/v1/institution/:sfid_id
+// PATCH /api/v1/institution/:sfid_number
 //   body: { institution_name?: string, sub_type?: string | null }
 //
 // 仅允许编辑 institution_name 与 sub_type,其他(A3/P1/institution_code/省市)一律
@@ -583,13 +587,13 @@ pub(crate) async fn create_institution(
 //
 // 校验:
 //   - scope:KEY=全国 / SHENG=本省 / SHI=本市
-//   - institution_name:格式 + 全国唯一(排除自身 sfid_id)
+//   - institution_name:格式 + 全国唯一(排除自身 sfid_number)
 //   - sub_type:与 (a3, p1) 联动(仅 SFR 可设,FFR/GFR 不得设)
 
 pub(crate) async fn update_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
     Json(input): Json<UpdateInstitutionInput>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
@@ -598,23 +602,23 @@ pub(crate) async fn update_institution(
     };
     let scope = get_visible_scope(&ctx);
 
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
 
     // 读取机构,做 scope 校验并缓存 a3/p1
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            shard.multisig_institutions.get(&sfid_id_r).cloned()
+            shard.multisig_institutions.get(&sfid_number_r).cloned()
         })
         .await;
     let existing = match read_result {
@@ -650,11 +654,11 @@ pub(crate) async fn update_institution(
         existing.sub_type.clone()
     };
 
-    // ── parent_sfid_id:仅 FFR(非法人)可设置,必须指向已存在的 SFR/GFR ──
-    let parent_change_requested = input.parent_sfid_id.is_some();
+    // ── parent_sfid_number:仅 FFR(非法人)可设置,必须指向已存在的 SFR/GFR ──
+    let parent_change_requested = input.parent_sfid_number.is_some();
     let new_parent: Option<String> = if parent_change_requested {
         let raw = input
-            .parent_sfid_id
+            .parent_sfid_number
             .as_deref()
             .unwrap_or("")
             .trim()
@@ -667,9 +671,9 @@ pub(crate) async fn update_institution(
             return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人不能为空");
         }
         // 校验目标机构存在 + a3 ∈ {SFR, GFR}
-        let target_province = match resolve_province_from_sfid_id(&raw) {
+        let target_province = match resolve_province_from_sfid_number(&raw) {
             Some(p) => p,
-            None => return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人 sfid_id 格式无效"),
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "所属法人 sfid_number 格式无效"),
         };
         let raw_clone = raw.clone();
         let target_read = state
@@ -698,13 +702,13 @@ pub(crate) async fn update_institution(
         }
         Some(raw)
     } else {
-        existing.parent_sfid_id.clone()
+        existing.parent_sfid_number.clone()
     };
 
     // 全国唯一校验(仅在真正要更新 name 时做)
     if let Some(ref name) = new_name {
         let conflict = match state.store.read() {
-            Ok(store) => institution_name_exists_excluding(&store, name, Some(&sfid_id)),
+            Ok(store) => institution_name_exists_excluding(&store, name, Some(&sfid_number)),
             Err(e) => {
                 tracing::warn!(error = %e, "update_institution: store read failed for name check");
                 return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "store read failed");
@@ -724,18 +728,18 @@ pub(crate) async fn update_institution(
         updated.sub_type = new_sub_type.clone();
     }
     if parent_change_requested {
-        updated.parent_sfid_id = new_parent.clone();
+        updated.parent_sfid_number = new_parent.clone();
     }
 
     // 写分片
-    let sfid_id_w = sfid_id.clone();
+    let sfid_number_w = sfid_number.clone();
     let updated_shard = updated.clone();
     if let Err(e) = state
         .sharded_store
         .write_province(&province, move |shard| {
             shard
                 .multisig_institutions
-                .insert(sfid_id_w.clone(), updated_shard);
+                .insert(sfid_number_w.clone(), updated_shard);
         })
         .await
     {
@@ -752,7 +756,7 @@ pub(crate) async fn update_institution(
             Ok(mut store) => {
                 store
                     .multisig_institutions
-                    .insert(sfid_id.clone(), updated.clone());
+                    .insert(sfid_number.clone(), updated.clone());
             }
             Err(e) => {
                 tracing::warn!(error = %e, "global store mirror failed (institution update)");
@@ -764,12 +768,12 @@ pub(crate) async fn update_institution(
         &state,
         "INSTITUTION_UPDATE",
         &ctx.admin_pubkey,
-        Some(sfid_id.clone()),
+        Some(sfid_number.clone()),
         None,
         "SUCCESS",
         format!(
             "sfid={} name={:?} sub_type={:?} parent={:?}",
-            sfid_id, updated.institution_name, updated.sub_type, updated.parent_sfid_id,
+            sfid_number, updated.institution_name, updated.sub_type, updated.parent_sfid_number,
         ),
     );
 
@@ -786,7 +790,7 @@ pub(crate) async fn update_institution(
 pub(crate) async fn create_account(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
     Json(input): Json<CreateAccountInput>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
@@ -800,27 +804,27 @@ pub(crate) async fn create_account(
         Err(e) => return service_error_to_response(e),
     };
 
-    // Phase 2 Day 3 Round 2:从 sfid_id 解析省份,读 sharded_store
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
 
     // ── 机构存在 + scope 校验 + 账户名唯一性(从分片读)──
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let account_name_r = account_name.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r);
+            let inst = shard.multisig_institutions.get(&sfid_number_r);
             let inst_clone = inst.cloned();
-            let acc_key = account_key_to_string(&sfid_id_r, &account_name_r);
+            let acc_key = account_key_to_string(&sfid_number_r, &account_name_r);
             let acc_exists = shard.multisig_accounts.contains_key(&acc_key);
             (inst_clone, acc_exists)
         })
@@ -858,10 +862,10 @@ pub(crate) async fn create_account(
     // 不等链上 receipt;链上同步时会再次断言地址一致。
     let now = Utc::now();
     let account = MultisigAccount {
-        sfid_id: sfid_id.clone(),
+        sfid_number: sfid_number.clone(),
         account_name: account_name.clone(),
         duoqian_address: crate::institutions::derive::derive_duoqian_address(
-            &sfid_id,
+            &sfid_number,
             &account_name,
         ),
         chain_status: MultisigChainStatus::NotOnChain,
@@ -872,12 +876,12 @@ pub(crate) async fn create_account(
         created_at: now,
     };
     let acc_for_shard = account.clone();
-    let sfid_id_w = sfid_id.clone();
+    let sfid_number_w = sfid_number.clone();
     let account_name_w = account_name.clone();
     if let Err(e) = state
         .sharded_store
         .write_province(&province, move |shard| {
-            let key = account_key_to_string(&sfid_id_w, &account_name_w);
+            let key = account_key_to_string(&sfid_number_w, &account_name_w);
             shard.multisig_accounts.insert(key, acc_for_shard);
         })
         .await
@@ -891,7 +895,7 @@ pub(crate) async fn create_account(
 
     // 同步写全局 store,保持后台反查与审计读取口径一致。
     {
-        let acc_key = account_key_to_string(&sfid_id, &account_name);
+        let acc_key = account_key_to_string(&sfid_number, &account_name);
         match state.store.write() {
             Ok(mut store) => {
                 store.multisig_accounts.insert(acc_key, account.clone());
@@ -906,10 +910,10 @@ pub(crate) async fn create_account(
         &state,
         "ACCOUNT_CREATE_NOT_ON_CHAIN",
         &ctx.admin_pubkey,
-        Some(sfid_id.clone()),
+        Some(sfid_number.clone()),
         None,
         "SUCCESS",
-        format!("sfid={} account_name={}", sfid_id, account_name),
+        format!("sfid={} account_name={}", sfid_number, account_name),
     );
 
     let duoqian_address = account.duoqian_address.clone();
@@ -917,7 +921,7 @@ pub(crate) async fn create_account(
         code: 0,
         message: "ok".to_string(),
         data: CreateAccountOutput {
-            sfid_id,
+            sfid_number,
             account_name,
             chain_status: MultisigChainStatus::NotOnChain,
             chain_synced_at: None,
@@ -936,7 +940,7 @@ pub(crate) struct ListInstitutionQuery {
     pub category: Option<String>,
     pub province: Option<String>,
     pub city: Option<String>,
-    /// 模糊搜索关键字:匹配 institution_name 或 sfid_id 子串(大小写不敏感)。
+    /// 模糊搜索关键字:匹配 institution_name 或 sfid_number 子串(大小写不敏感)。
     /// 为空或缺省时返回 scope 范围内全量。
     /// scope(密钥=全国 / 省级=本省 / 市级=本市)由上游 `filter_by_scope` 自动保证。
     pub q: Option<String>,
@@ -1011,11 +1015,11 @@ pub(crate) async fn list_institutions(
         let read_result = state
             .sharded_store
             .read_province(prov, move |shard| {
-                // 预计算 sfid_id → 账户数,避免 O(n*m) 遍历
+                // 预计算 sfid_number → 账户数,避免 O(n*m) 遍历
                 let account_counts: std::collections::HashMap<&str, usize> = {
                     let mut map = std::collections::HashMap::new();
                     for acc in shard.multisig_accounts.values() {
-                        *map.entry(acc.sfid_id.as_str()).or_default() += 1;
+                        *map.entry(acc.sfid_number.as_str()).or_default() += 1;
                     }
                     map
                 };
@@ -1049,9 +1053,9 @@ pub(crate) async fn list_institutions(
                     if q_city.as_deref().map_or(false, |c| inst.city != c) {
                         continue;
                     }
-                    // 模糊关键字:匹配 sfid_id 子串或 institution_name 子串(大小写不敏感)
+                    // 模糊关键字:匹配 sfid_number 子串或 institution_name 子串(大小写不敏感)
                     if let Some(ref kw) = q_kw {
-                        let sfid_lc = inst.sfid_id.to_lowercase();
+                        let sfid_lc = inst.sfid_number.to_lowercase();
                         let name_lc = inst
                             .institution_name
                             .as_deref()
@@ -1062,11 +1066,11 @@ pub(crate) async fn list_institutions(
                         }
                     }
                     let account_count = account_counts
-                        .get(inst.sfid_id.as_str())
+                        .get(inst.sfid_number.as_str())
                         .copied()
                         .unwrap_or(0);
                     province_rows.push(InstitutionListRow {
-                        sfid_id: inst.sfid_id.clone(),
+                        sfid_number: inst.sfid_number.clone(),
                         institution_name: inst.institution_name.clone(),
                         category: inst.category,
                         // above: institution_name 为 Option<String>;两步式私权机构未命名时为 None
@@ -1076,7 +1080,7 @@ pub(crate) async fn list_institutions(
                         city: inst.city.clone(),
                         institution_code: inst.institution_code.clone(),
                         sub_type: inst.sub_type.clone(),
-                        parent_sfid_id: inst.parent_sfid_id.clone(),
+                        parent_sfid_number: inst.parent_sfid_number.clone(),
                         chain_status: inst.chain_status.clone(),
                         account_count,
                         created_at: inst.created_at,
@@ -1123,7 +1127,7 @@ pub(crate) async fn list_institutions(
 // ─── 3b. 法人机构搜索(FFR 详情页"所属法人"选择器用)───────────
 //
 // GET /api/v1/institution/search-parents?q=关键字
-//   按 sfid_id 子串(大小写不敏感)或 institution_name 子串模糊匹配,
+//   按 sfid_number 子串(大小写不敏感)或 institution_name 子串模糊匹配,
 //   仅返回 a3 ∈ {SFR, GFR} 且 institution_name 已补填的机构,
 //   最多返回 20 条。**全国范围**可选(FFR 非法人可跨省挂靠法人)。
 
@@ -1174,13 +1178,13 @@ pub(crate) async fn search_parent_institutions(
                         Some(n) if !n.trim().is_empty() => n.clone(),
                         _ => continue,
                     };
-                    let sfid_lc = inst.sfid_id.to_lowercase();
+                    let sfid_lc = inst.sfid_number.to_lowercase();
                     let name_lc = name.to_lowercase();
                     if !sfid_lc.contains(&q_clone) && !name_lc.contains(&q_clone) {
                         continue;
                     }
                     local.push(crate::institutions::model::ParentInstitutionRow {
-                        sfid_id: inst.sfid_id.clone(),
+                        sfid_number: inst.sfid_number.clone(),
                         institution_name: name,
                         a3: inst.a3.clone(),
                         sub_type: inst.sub_type.clone(),
@@ -1212,7 +1216,7 @@ pub(crate) async fn search_parent_institutions(
 pub(crate) async fn get_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -1220,26 +1224,26 @@ pub(crate) async fn get_institution(
     };
     let scope = get_visible_scope(&ctx);
 
-    // Phase 2 Day 3 Round 2:从 sfid_id 解析省份,读 sharded_store
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let inst = shard.multisig_institutions.get(&sfid_number_r).cloned();
             let accounts: Vec<MultisigAccount> = shard
                 .multisig_accounts
                 .values()
-                .filter(|a| a.sfid_id == sfid_id_r)
+                .filter(|a| a.sfid_number == sfid_number_r)
                 .cloned()
                 .collect();
             (inst, accounts)
@@ -1284,7 +1288,7 @@ pub(crate) async fn get_institution(
 pub(crate) async fn list_accounts(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -1292,26 +1296,26 @@ pub(crate) async fn list_accounts(
     };
     let scope = get_visible_scope(&ctx);
 
-    // Phase 2 Day 3 Round 2:从 sfid_id 解析省份,读 sharded_store
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let inst = shard.multisig_institutions.get(&sfid_number_r).cloned();
             let accounts: Vec<MultisigAccount> = shard
                 .multisig_accounts
                 .values()
-                .filter(|a| a.sfid_id == sfid_id_r)
+                .filter(|a| a.sfid_number == sfid_number_r)
                 .cloned()
                 .collect();
             (inst, accounts)
@@ -1348,7 +1352,7 @@ pub(crate) async fn list_accounts(
 //   - app_search_institutions / app_get_institution / app_list_accounts
 //   - app_search_clearing_banks / app_search_eligible_clearing_banks
 //
-// 历史 sync_institution_chain_state(POST /app/institutions/:sfid_id/chain-sync)
+// 历史 sync_institution_chain_state(POST /app/institutions/:sfid_number/chain-sync)
 // 0 caller,与 SFID 不再读链铁律冲突,2026-05-01 一并下架。
 //
 // 调用入口现走 `crate::institutions::chain_duoqian_info::*` 重新导出。
@@ -1358,7 +1362,7 @@ pub(crate) async fn list_accounts(
 pub(crate) async fn delete_account(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path((sfid_id, account_name)): Path<(String, String)>,
+    Path((sfid_number, account_name)): Path<(String, String)>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -1377,28 +1381,28 @@ pub(crate) async fn delete_account(
         );
     }
 
-    // Phase 2 Day 3 Round 2:从 sfid_id 解析省份,操作 sharded_store
-    let province = match resolve_province_from_sfid_id(&sfid_id) {
+    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,操作 sharded_store
+    let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
             return api_error(
                 StatusCode::BAD_REQUEST,
                 1001,
-                "cannot resolve province from sfid_id",
+                "cannot resolve province from sfid_number",
             )
         }
     };
 
     // 先读:校验机构存在 + scope + 账户状态。SFID 不能删除仍在链上的账户名称。
-    let sfid_id_r = sfid_id.clone();
+    let sfid_number_r = sfid_number.clone();
     let account_name_r = account_name.clone();
     let read_result = state
         .sharded_store
         .read_province(&province, move |shard| {
-            let inst = shard.multisig_institutions.get(&sfid_id_r).cloned();
+            let inst = shard.multisig_institutions.get(&sfid_number_r).cloned();
             let account = shard
                 .multisig_accounts
-                .get(&account_key_to_string(&sfid_id_r, &account_name_r))
+                .get(&account_key_to_string(&sfid_number_r, &account_name_r))
                 .cloned();
             (inst, account)
         })
@@ -1427,12 +1431,12 @@ pub(crate) async fn delete_account(
     }
 
     // 写:删除账户
-    let sfid_id_w = sfid_id.clone();
+    let sfid_number_w = sfid_number.clone();
     let account_name_w = account_name.clone();
     let remove_result = state
         .sharded_store
         .write_province(&province, move |shard| {
-            let key = account_key_to_string(&sfid_id_w, &account_name_w);
+            let key = account_key_to_string(&sfid_number_w, &account_name_w);
             shard.multisig_accounts.remove(&key)
         })
         .await;
@@ -1450,7 +1454,7 @@ pub(crate) async fn delete_account(
 
     // 同步写全局 store,供审计与管理员反查读取同一份账户快照。
     {
-        let acc_key = account_key_to_string(&sfid_id, &account_name);
+        let acc_key = account_key_to_string(&sfid_number, &account_name);
         match state.store.write() {
             Ok(mut store) => {
                 store.multisig_accounts.remove(&acc_key);
@@ -1465,10 +1469,10 @@ pub(crate) async fn delete_account(
         &state,
         "ACCOUNT_DELETE",
         &ctx.admin_pubkey,
-        Some(sfid_id.clone()),
+        Some(sfid_number.clone()),
         None,
         "SUCCESS",
-        format!("sfid={} account={}", sfid_id, account_name),
+        format!("sfid={} account={}", sfid_number, account_name),
     );
     #[derive(Serialize)]
     struct Ok {
@@ -1566,11 +1570,11 @@ pub(crate) async fn reconcile_public_security(
 
 // ─── 资料库:机构文档 CRUD ──────────────────────────────────────
 
-/// GET /api/v1/institution/:sfid_id/documents — 列出某机构的所有文档
+/// GET /api/v1/institution/:sfid_number/documents — 列出某机构的所有文档
 pub(crate) async fn list_documents(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
 ) -> impl IntoResponse {
     if let Err(resp) = require_admin_any(&state, &headers) {
         return resp;
@@ -1582,7 +1586,7 @@ pub(crate) async fn list_documents(
     let mut docs: Vec<&InstitutionDocument> = store
         .institution_documents
         .values()
-        .filter(|d| d.sfid_id == sfid_id)
+        .filter(|d| d.sfid_number == sfid_number)
         .collect();
     docs.sort_by(|a, b| b.uploaded_at.cmp(&a.uploaded_at));
     let owned: Vec<InstitutionDocument> = docs.into_iter().cloned().collect();
@@ -1594,12 +1598,12 @@ pub(crate) async fn list_documents(
     .into_response()
 }
 
-/// POST /api/v1/institution/:sfid_id/documents — 上传文档(multipart/form-data)
+/// POST /api/v1/institution/:sfid_number/documents — 上传文档(multipart/form-data)
 /// 字段: file(文件), doc_type(文档类型)
 pub(crate) async fn upload_document(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(sfid_id): Path<String>,
+    Path(sfid_number): Path<String>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
@@ -1612,7 +1616,7 @@ pub(crate) async fn upload_document(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        let inst = match store.multisig_institutions.get(&sfid_id) {
+        let inst = match store.multisig_institutions.get(&sfid_number) {
             Some(v) => v,
             None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
         };
@@ -1681,8 +1685,8 @@ pub(crate) async fn upload_document(
         return api_error(StatusCode::BAD_REQUEST, 1001, "文件大小不能超过 10MB");
     }
 
-    // 写文件到 data/documents/{sfid_id}/
-    let doc_dir = format!("data/documents/{sfid_id}");
+    // 写文件到 data/documents/{sfid_number}/
+    let doc_dir = format!("data/documents/{sfid_number}");
     if let Err(e) = std::fs::create_dir_all(&doc_dir) {
         tracing::error!(error = %e, "create document dir failed");
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "create dir failed");
@@ -1712,7 +1716,7 @@ pub(crate) async fn upload_document(
     store.next_document_id += 1;
     let doc = InstitutionDocument {
         id: doc_id,
-        sfid_id: sfid_id.clone(),
+        sfid_number: sfid_number.clone(),
         file_name,
         doc_type,
         file_size,
@@ -1733,11 +1737,11 @@ pub(crate) async fn upload_document(
     .into_response()
 }
 
-/// GET /api/v1/institution/:sfid_id/documents/:doc_id/download — 下载文档
+/// GET /api/v1/institution/:sfid_number/documents/:doc_id/download — 下载文档
 pub(crate) async fn download_document(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path((sfid_id, doc_id)): Path<(String, String)>,
+    Path((sfid_number, doc_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
     if let Err(resp) = require_admin_any(&state, &headers) {
         return resp;
@@ -1747,7 +1751,7 @@ pub(crate) async fn download_document(
         Err(resp) => return resp,
     };
     let doc = match store.institution_documents.get(&doc_id) {
-        Some(d) if d.sfid_id == sfid_id => d.clone(),
+        Some(d) if d.sfid_number == sfid_number => d.clone(),
         _ => return api_error(StatusCode::NOT_FOUND, 1004, "document not found"),
     };
     drop(store);
@@ -1785,11 +1789,11 @@ pub(crate) async fn download_document(
         .into_response()
 }
 
-/// DELETE /api/v1/institution/:sfid_id/documents/:doc_id — 删除文档
+/// DELETE /api/v1/institution/:sfid_number/documents/:doc_id — 删除文档
 pub(crate) async fn delete_document(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path((sfid_id, doc_id)): Path<(String, String)>,
+    Path((sfid_number, doc_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -1801,7 +1805,7 @@ pub(crate) async fn delete_document(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if let Some(inst) = store.multisig_institutions.get(&sfid_id) {
+        if let Some(inst) = store.multisig_institutions.get(&sfid_number) {
             if let Some(ref locked_province) = ctx.admin_province {
                 if inst.province != *locked_province {
                     return api_error(StatusCode::FORBIDDEN, 1003, "province out of scope");
@@ -1819,7 +1823,7 @@ pub(crate) async fn delete_document(
         Err(resp) => return resp,
     };
     let doc = match store.institution_documents.get(&doc_id) {
-        Some(d) if d.sfid_id == sfid_id => d.clone(),
+        Some(d) if d.sfid_number == sfid_number => d.clone(),
         _ => return api_error(StatusCode::NOT_FOUND, 1004, "document not found"),
     };
     store.institution_documents.remove(&doc_id);

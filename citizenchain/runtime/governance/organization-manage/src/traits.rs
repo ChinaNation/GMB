@@ -17,7 +17,7 @@ pub use primitives::traits::{
 /// 机构多签账户的查询 trait,供 duoqian-transfer / runtime config 等下游调用。
 ///
 /// 输入任意机构账户(主/费用/自创)都返回该机构的 admin 配置,
-/// 实现:`AddressRegisteredSfid[addr]` → `admins-change::Subjects[sfid_id]`。
+/// 实现:`AddressRegisteredSfid[addr]` → `admins-change::Subjects[sfid_number]`。
 /// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
@@ -47,10 +47,10 @@ impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
 /// - 删除"用 SfidMainAccount 主公钥兜底"分支（链上 0 prior knowledge of SFID）；
 /// - `province` 从可选项改为必填；
 /// - 新增 `signer_admin_pubkey` 显式指明本次签名的省管理员公钥（main 或 backup_{1,2}）。
-/// - 中文注释:签名业务字段收口为 sfid_id / institution_name / account_names[]。
+/// - 中文注释:签名业务字段收口为 sfid_number / institution_name / account_names[]。
 pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
     fn verify_institution_registration(
-        sfid_id: &[u8],
+        sfid_number: &[u8],
         institution_name: &AccountName,
         account_names: &[Vec<u8>],
         nonce: &Nonce,
@@ -62,7 +62,7 @@ pub trait SfidInstitutionVerifier<AccountName, Nonce, Signature> {
 
 impl<AccountName, Nonce, Signature> SfidInstitutionVerifier<AccountName, Nonce, Signature> for () {
     fn verify_institution_registration(
-        _sfid_id: &[u8],
+        _sfid_number: &[u8],
         _institution_name: &AccountName,
         _account_names: &[Vec<u8>],
         _nonce: &Nonce,

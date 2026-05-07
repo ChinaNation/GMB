@@ -96,7 +96,7 @@ Runtime 接线：
 - `interest_bp_for_year` 不再保留 `!ENABLE_SHENGBANK_INTEREST_DECAY` 和超出制度年限的不可达返回分支；前者由编译期断言锁定，后者由年度结算边界保证。
 
 对每家省储行执行：
-1. 将 `shenfen_id` 编码成固定 48 字节 `pallet_id`。
+1. 将 `sfid_number` 编码成固定 48 字节 `pallet_id`。
 2. 由 `main_address` 解码出固定收款账户。
 3. 将 `stake_amount` 转成运行时 `Balance`，并做回写校验防止饱和截断。
 4. 使用 `checked_mul` 计算 `principal * rate_bp` 后再除以 `10_000`；若乘法溢出，发出 `ShengBankInterestOverflow` 并让该年度结算失败。

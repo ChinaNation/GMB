@@ -5,7 +5,7 @@
 // 沿用 governance/AdminListPage 模式即可。
 
 type Props = {
-  sfidId: string;
+  sfidNumber: string;
   admins: string[];
   threshold: number;
   adminCount: number;
@@ -13,7 +13,7 @@ type Props = {
 };
 
 export function ClearingBankAdminListPage({
-  sfidId,
+  sfidNumber,
   admins,
   threshold,
   adminCount,
@@ -24,7 +24,7 @@ export function ClearingBankAdminListPage({
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>管理员列表（{admins.length} 人,阈值 {threshold}/{adminCount}）</h2>
-        <code className="admin-card-address">{sfidId}</code>
+        <code className="admin-card-address">{sfidNumber}</code>
       </div>
 
       {admins.length === 0 ? (

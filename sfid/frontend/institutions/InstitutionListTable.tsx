@@ -29,7 +29,7 @@ interface Props {
   /** 为空字符串时表示"该省全部市",用于公安局省级总览 */
   city: string;
   /** 点击某行机构时回调(跳机构详情页) */
-  onSelectInstitution?: (sfidId: string) => void;
+  onSelectInstitution?: (sfidNumber: string) => void;
   /** 让父组件触发刷新 */
   refreshKey?: number;
   /** 模糊搜索关键字(机构名称或 SFID);空=不过滤。scope 由后端按角色自动限制 */
@@ -79,7 +79,7 @@ export const InstitutionListTable: React.FC<Props> = ({
 
   const columns = useMemo<ColumnsType<InstitutionListRow>>(() => {
     const cols: ColumnsType<InstitutionListRow> = [
-      { title: 'SFID', dataIndex: 'sfid_id', width: 260 },
+      { title: 'SFID', dataIndex: 'sfid_number', width: 260 },
       {
         title: '机构名称',
         dataIndex: 'institution_name',
@@ -143,13 +143,13 @@ export const InstitutionListTable: React.FC<Props> = ({
   return (
     <div>
       <Table<InstitutionListRow>
-        rowKey={(r) => r.sfid_id}
+        rowKey={(r) => r.sfid_number}
         loading={loading}
         dataSource={rows}
         pagination={{ pageSize: 10 }}
         // 中文注释:整行可点击,跳详情页。
         onRow={(row) => ({
-          onClick: () => onSelectInstitution?.(row.sfid_id),
+          onClick: () => onSelectInstitution?.(row.sfid_number),
           style: onSelectInstitution ? { cursor: 'pointer' } : undefined,
         })}
         columns={columns}

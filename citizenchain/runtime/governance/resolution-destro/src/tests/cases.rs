@@ -1,0 +1,350 @@
+use super::*;
+
+#[test]
+fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let account = institution_account(institution);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            100
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+
+        assert_eq!(Balances::free_balance(&account), 900);
+    });
+}
+
+#[test]
+fn prc_destroy_executes_when_yes_votes_reach_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = prc_pallet_id();
+        let account = institution_account(institution);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(prc_admin(0)),
+            ORG_PRC,
+            institution,
+            200
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..6 {
+            assert_ok!(cast_vote(prc_admin(i), pid, true));
+        }
+
+        assert_eq!(Balances::free_balance(&account), 800);
+    });
+}
+
+#[test]
+fn prb_destroy_executes_when_yes_votes_reach_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = prb_pallet_id();
+        let account = institution_account(institution);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(prb_admin(0)),
+            ORG_PRB,
+            institution,
+            300
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..6 {
+            assert_ok!(cast_vote(prb_admin(i), pid, true));
+        }
+
+        assert_eq!(Balances::free_balance(&account), 700);
+    });
+}
+
+#[test]
+fn non_admin_cannot_propose_or_vote() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+
+        assert_noop!(
+            ResolutionDestro::propose_destroy(
+                RuntimeOrigin::signed(prc_admin(0)),
+                ORG_NRC,
+                institution,
+                100
+            ),
+            Error::<Test>::UnauthorizedAdmin
+        );
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            100
+        ));
+        let pid = last_proposal_id();
+
+        assert_noop!(
+            cast_vote(prc_admin(0), pid, true),
+            votingengine::pallet::Error::<Test>::NoPermission
+        );
+    });
+}
+
+#[test]
+fn zero_amount_and_insufficient_balance_are_rejected() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+
+        assert_noop!(
+            ResolutionDestro::propose_destroy(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                0
+            ),
+            Error::<Test>::ZeroAmount
+        );
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            2_000
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..12 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+
+        // 第 13 票应被记录，自动执行失败不回滚投票，提案保留 PASSED 供后续重试。
+        assert_ok!(cast_vote(nrc_admin(12), pid, true));
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist")
+                .status,
+            STATUS_PASSED
+        );
+        assert_eq!(
+            Balances::free_balance(institution_account(institution)),
+            1_000
+        );
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
+        assert_ok!(VotingEngine::retry_passed_proposal(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            pid
+        ));
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposal_execution_retry_state(pid)
+                .expect("retry state should exist")
+                .manual_attempts,
+            1
+        );
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist")
+                .status,
+            STATUS_PASSED
+        );
+    });
+}
+
+#[test]
+fn existential_deposit_is_preserved() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let account = institution_account(institution);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            1_000
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+
+        // 如果不校验 ED，这里会被销毁到 0 并触发账户 reap。
+        assert_eq!(Balances::free_balance(&account), 1_000);
+        assert_ok!(VotingEngine::retry_passed_proposal(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            pid
+        ));
+        assert_eq!(Balances::free_balance(&account), 1_000);
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposal_execution_retry_state(pid)
+                .expect("retry state should exist")
+                .manual_attempts,
+            1
+        );
+    });
+}
+
+#[test]
+fn rejected_proposal_does_not_block_new_proposal() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            100
+        ));
+        let pid1 = last_proposal_id();
+
+        let end = votingengine::Pallet::<Test>::proposals(pid1)
+            .expect("proposal should exist")
+            .end;
+        System::set_block_number(end + 1);
+        assert_ok!(votingengine::Pallet::<Test>::finalize_proposal(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            pid1
+        ));
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid1)
+                .expect("proposal should exist")
+                .status,
+            STATUS_REJECTED
+        );
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            50
+        ));
+        let pid2 = last_proposal_id();
+        // 提案 2 应该已创建
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid2).is_some());
+    });
+}
+
+#[test]
+fn execute_destroy_succeeds_after_failed_auto_execution() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let account = institution_account(institution);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            1_100
+        ));
+        let pid = last_proposal_id();
+
+        for i in 0..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+
+        // 自动执行失败后状态保留为 PASSED，补充余额后可手动重试。
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist")
+                .status,
+            STATUS_PASSED
+        );
+        assert_eq!(Balances::free_balance(&account), 1_000);
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
+
+        // 补充余额后手动重试执行
+        let _ = Balances::deposit_creating(&account, 200);
+        assert_ok!(VotingEngine::retry_passed_proposal(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            pid
+        ));
+        assert_eq!(Balances::free_balance(&account), 100);
+    });
+}
+
+#[test]
+fn executed_proposal_does_not_block_new_proposal() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            100
+        ));
+        let pid1 = last_proposal_id();
+
+        for i in 0..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid1, true));
+        }
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            50
+        ));
+        let pid2 = last_proposal_id();
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(pid2).is_some());
+    });
+}
+
+#[test]
+fn duplicate_vote_is_rejected_by_votingengine() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            100
+        ));
+        let pid = last_proposal_id();
+        assert_ok!(cast_vote(nrc_admin(1), pid, true));
+        assert_noop!(
+            cast_vote(nrc_admin(1), pid, true),
+            votingengine::pallet::Error::<Test>::AlreadyVoted
+        );
+    });
+}
+
+#[test]
+fn execute_destroy_requires_snapshot_admin() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let account = institution_account(institution);
+        let outsider = AccountId32::new([99u8; 32]);
+
+        assert_ok!(ResolutionDestro::propose_destroy(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            ORG_NRC,
+            institution,
+            1_100
+        ));
+        let pid = last_proposal_id();
+        for i in 0..13 {
+            assert_ok!(cast_vote(nrc_admin(i), pid, true));
+        }
+        let _ = Balances::deposit_creating(&account, 200);
+        assert_noop!(
+            VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(outsider), pid),
+            votingengine::pallet::Error::<Test>::NoPermission
+        );
+        assert_ok!(VotingEngine::retry_passed_proposal(
+            RuntimeOrigin::signed(nrc_admin(0)),
+            pid
+        ));
+        assert_eq!(Balances::free_balance(&account), 100);
+    });
+}
+
+#[test]
+fn institution_org_returns_none_for_invalid_institution() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(subject_org([0u8; 48]), None);
+    });
+}

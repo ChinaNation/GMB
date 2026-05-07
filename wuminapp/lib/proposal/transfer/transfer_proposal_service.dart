@@ -1,15 +1,14 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_service.dart';
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
@@ -42,9 +41,6 @@ class TransferProposalService {
   /// propose_sweep_to_main call_index=2。
   static const _proposeSweepCallIndex = 2;
 
-  /// Mortal era 周期。
-  static const _eraPeriod = 64;
-
   // ──── Extrinsic 提交 ────
 
   /// 提交 propose_transfer extrinsic。
@@ -61,7 +57,7 @@ class TransferProposalService {
   }) async {
     final callData = _buildProposeTransferCall(
       org: institution.orgType,
-      institutionIdentity: institution.shenfenId,
+      institutionIdentity: institution.sfidNumber,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: BigInt.from((amountYuan * 100).round()),
       remark: remark,
@@ -105,7 +101,7 @@ class TransferProposalService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final callData = _buildProposeSweepCall(
-      institutionIdentity: institution.shenfenId,
+      institutionIdentity: institution.sfidNumber,
       amountYuan: amountYuan,
     );
     return _signAndSubmit(
@@ -182,10 +178,10 @@ class TransferProposalService {
   }
 
   /// 反向索引:`ProposalsByInstitution[institution_pallet_id(48 bytes)]` 下的所有 proposal_id。
-  Future<List<int>> fetchProposalIdsByInstitution(String shenfenId) async {
+  Future<List<int>> fetchProposalIdsByInstitution(String sfidNumber) async {
     return _fetchProposalIdsByDoubleMap(
       'ProposalsByInstitution',
-      _institutionIdentityToFixed48(shenfenId),
+      _institutionIdentityToFixed48(sfidNumber),
     );
   }
 
@@ -195,8 +191,8 @@ class TransferProposalService {
     // BoundedVec<u8> 的 SCALE 编码 = Compact<len> + bytes;作为 storage 的 K1 键时,
     // 链上对该编码后的字节做 twox64,然后 concat 原编码字节。
     final encoded = ByteOutput();
-    encoded.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(moduleTag.length)));
+    encoded
+        .write(CompactBigIntCodec.codec.encode(BigInt.from(moduleTag.length)));
     encoded.write(moduleTag);
     return _fetchProposalIdsByDoubleMap('ProposalsByOwner', encoded.toBytes());
   }
@@ -254,11 +250,11 @@ class TransferProposalService {
   static const maxActiveProposalsPerInstitution = 10;
 
   /// 查询机构活跃的提案 ID 列表（从 VotingEngine 全局存储读取）。
-  Future<List<int>> fetchActiveProposalIds(String shenfenId) async {
+  Future<List<int>> fetchActiveProposalIds(String sfidNumber) async {
     final key = _buildStorageKey(
       'VotingEngine',
       'ActiveProposalsByInstitution',
-      _institutionIdentityToFixed48(shenfenId),
+      _institutionIdentityToFixed48(sfidNumber),
     );
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null || data.isEmpty) return const [];
@@ -592,16 +588,15 @@ class TransferProposalService {
   /// 查询对指定机构用户可见的提案事件。
   ///
   /// **v1 双层 ID 模式**:
-  /// - 走 `ProposalsByInstitution[shenfenId]` 反向索引拿本机构所有提案 ID
+  /// - 走 `ProposalsByInstitution[sfidNumber]` 反向索引拿本机构所有提案 ID
   ///   (含内部投票如转账/费率设置/管理员变更等)
   /// - 联合投票提案(runtime 升级 / 决议)的 internal_institution = None,
   ///   不会落 `ProposalsByInstitution`,所以这里**额外**取本年所有 kind=1
   ///   提案,并入结果(机构页要让所有用户都能看到联合投票)
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
-      String shenfenId) async {
+      String sfidNumber) async {
     // 1) 本机构所有提案(含内部投票)
-    final institutionIds =
-        await fetchProposalIdsByInstitution(shenfenId);
+    final institutionIds = await fetchProposalIdsByInstitution(sfidNumber);
     final institutionProposals = await _fetchProposalsForIds(institutionIds);
 
     // 2) 联合投票提案(kind=1)在所有机构页可见 — 取本年所有 ProposalsByYear[当前年]
@@ -611,15 +606,13 @@ class TransferProposalService {
     final yearIds = currentYear == null
         ? const <int>[]
         : await _fetchProposalIdsByYearTwox(currentYear);
-    final extraJointIds = yearIds
-        .where((id) => !institutionIds.contains(id))
-        .toList();
+    final extraJointIds =
+        yearIds.where((id) => !institutionIds.contains(id)).toList();
     final extraJointProposals = extraJointIds.isEmpty
         ? const <ProposalWithDetail>[]
         : await _fetchProposalsForIds(extraJointIds);
-    final jointOnly = extraJointProposals
-        .where((p) => p.meta.kind == 1)
-        .toList();
+    final jointOnly =
+        extraJointProposals.where((p) => p.meta.kind == 1).toList();
 
     final all = <ProposalWithDetail>[...institutionProposals, ...jointOnly];
     all.sort((a, b) => b.meta.proposalId.compareTo(a.meta.proposalId));
@@ -647,9 +640,9 @@ class TransferProposalService {
 
   /// 查询指定机构的所有转账提案（包括已完成的），按 ID 倒序。
   Future<List<TransferProposalInfo>> fetchAllInstitutionProposals(
-      String shenfenId) async {
-    final visibleProposals = await fetchInstitutionVisibleProposals(shenfenId);
-    final institutionBytes = _institutionIdentityToFixed48(shenfenId);
+      String sfidNumber) async {
+    final visibleProposals = await fetchInstitutionVisibleProposals(sfidNumber);
+    final institutionBytes = _institutionIdentityToFixed48(sfidNumber);
     final proposals = <TransferProposalInfo>[];
 
     for (final proposal in visibleProposals) {
@@ -1091,141 +1084,89 @@ class TransferProposalService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    debugPrint('[TransferProposal] 步骤1: 获取 metadata...');
-    final metadata = await _rpc.fetchMetadata();
-    debugPrint('[TransferProposal] 步骤2: 获取 genesisHash...');
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    debugPrint(
-        '[TransferProposal] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint(
-        '[TransferProposal] nonce=$nonce, block=${latestBlock.blockNumber}');
-
-    debugPrint('[TransferProposal] 步骤4: 构造签名载荷...');
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'TransferProposal',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+      onTrace: _logSignedExtrinsicTrace,
     );
-    final payloadBytes = signingPayload.encode(registry);
+  }
 
-    debugPrint('[TransferProposal] 步骤5: 签名 (${payloadBytes.length} bytes)...');
-    final signature = await sign(payloadBytes);
-    debugPrint('[TransferProposal] 签名完成 (${signature.length} bytes)');
-
-    debugPrint('[TransferProposal] 步骤6: 编码 extrinsic...');
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[TransferProposal] extrinsic 编码完成 (${encoded.length} bytes)');
-
-    // ──── 诊断：逐字节打印 extrinsic 结构 ────
+  void _logSignedExtrinsicTrace(SignedExtrinsicTrace trace) {
     debugPrint('[TransferProposal] ════════ EXTRINSIC 诊断 ════════');
     debugPrint(
-        '[TransferProposal] signing payload hex (${payloadBytes.length} bytes): ${_hexEncode(payloadBytes)}');
+        '[TransferProposal] signing payload hex (${trace.payloadBytes.length} bytes): ${_hexEncode(trace.payloadBytes)}');
     debugPrint(
-        '[TransferProposal] signature hex (${signature.length} bytes): ${_hexEncode(signature)}');
+        '[TransferProposal] signature hex (${trace.signature.length} bytes): ${_hexEncode(trace.signature)}');
     debugPrint(
-        '[TransferProposal] signer pubkey hex: ${_hexEncode(signerPubkey)}');
+        '[TransferProposal] signer pubkey hex: ${_hexEncode(trace.signerPubkey)}');
     debugPrint(
-        '[TransferProposal] call data hex (${callData.length} bytes): ${_hexEncode(callData)}');
+        '[TransferProposal] call data hex (${trace.callData.length} bytes): ${_hexEncode(trace.callData)}');
     debugPrint(
-        '[TransferProposal] nonce=$nonce, eraPeriod=$_eraPeriod, blockNumber=${latestBlock.blockNumber}');
+        '[TransferProposal] nonce=${trace.nonce}, eraPeriod=${trace.eraPeriod}, blockNumber=${trace.blockNumber}');
     debugPrint(
-        '[TransferProposal] specVersion=${runtimeVersion.specVersion}, txVersion=${runtimeVersion.transactionVersion}');
-    debugPrint('[TransferProposal] genesisHash=0x${_hexEncode(genesisHash)}');
+        '[TransferProposal] specVersion=${trace.runtimeVersion.specVersion}, txVersion=${trace.runtimeVersion.transactionVersion}');
     debugPrint(
-        '[TransferProposal] blockHash=0x${_hexEncode(latestBlock.blockHash)}');
+        '[TransferProposal] genesisHash=0x${_hexEncode(trace.genesisHash)}');
     debugPrint(
-        '[TransferProposal] registry.extrinsicVersion=${registry.extrinsicVersion}');
-    // 打印 registry 中的 signedExtension 键列表（按序）
+        '[TransferProposal] CheckEra blockHash=0x${_hexEncode(trace.genesisHash)}');
+    debugPrint(
+        '[TransferProposal] registry.extrinsicVersion=${trace.registry.extrinsicVersion}');
     try {
       final extKeys =
-          (registry.getSignedExtensionTypes() as Map<String, dynamic>)
+          (trace.registry.getSignedExtensionTypes() as Map<String, dynamic>)
               .keys
               .toList();
       debugPrint(
           '[TransferProposal] signedExtension keys (${extKeys.length}): $extKeys');
-      final addExtKeys =
-          (registry.getAdditionalSignedExtensionTypes() as Map<String, dynamic>)
-              .keys
-              .toList();
+      final addExtKeys = (trace.registry.getAdditionalSignedExtensionTypes()
+              as Map<String, dynamic>)
+          .keys
+          .toList();
       debugPrint(
           '[TransferProposal] additionalSignedExtension keys (${addExtKeys.length}): $addExtKeys');
     } catch (e) {
       debugPrint('[TransferProposal] 获取 extension keys 失败: $e');
     }
     debugPrint(
-        '[TransferProposal] encoded extrinsic hex (${encoded.length} bytes): ${_hexEncode(encoded)}');
-    // 手工拆解 encoded extrinsic：compact_length + [0x84][0x00+signer(32)][0x01+sig(64)][extensions][calldata]
-    {
-      int pos = 0;
-      // 解析 compact length prefix
-      final firstByte = encoded[0];
-      int compactLen;
-      if (firstByte & 0x03 == 0x00) {
-        compactLen = firstByte >> 2;
-        pos = 1;
-      } else if (firstByte & 0x03 == 0x01) {
-        compactLen = ((encoded[1] << 8 | firstByte) >> 2);
-        pos = 2;
-      } else if (firstByte & 0x03 == 0x02) {
-        compactLen = ((encoded[3] << 24 |
-                encoded[2] << 16 |
-                encoded[1] << 8 |
-                firstByte) >>
-            2);
-        pos = 4;
-      } else {
-        compactLen = -1;
-        pos = 0;
-      }
-      debugPrint(
-          '[TransferProposal] compact length prefix: $compactLen, body starts at byte $pos');
-      if (pos < encoded.length) {
-        debugPrint(
-            '[TransferProposal] version byte: 0x${encoded[pos].toRadixString(16).padLeft(2, '0')}');
-        final bodyHex = _hexEncode(encoded.sublist(pos));
-        debugPrint(
-            '[TransferProposal] extrinsic body hex ($compactLen bytes): $bodyHex');
-      }
-    }
+        '[TransferProposal] encoded extrinsic hex (${trace.encoded.length} bytes): ${_hexEncode(trace.encoded)}');
+    _logExtrinsicBody(trace.encoded);
     debugPrint('[TransferProposal] ════════ 诊断结束 ════════');
+  }
 
-    debugPrint('[TransferProposal] 步骤7: 提交到链...');
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      debugPrint('[TransferProposal] 提交成功: 0x${_hexEncode(txHash)}');
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[TransferProposal] 提交失败，原始错误: $e');
-      rethrow;
+  void _logExtrinsicBody(Uint8List encoded) {
+    var pos = 0;
+    final firstByte = encoded[0];
+    int compactLen;
+    if (firstByte & 0x03 == 0x00) {
+      compactLen = firstByte >> 2;
+      pos = 1;
+    } else if (firstByte & 0x03 == 0x01) {
+      compactLen = ((encoded[1] << 8 | firstByte) >> 2);
+      pos = 2;
+    } else if (firstByte & 0x03 == 0x02) {
+      compactLen = ((encoded[3] << 24 |
+              encoded[2] << 16 |
+              encoded[1] << 8 |
+              firstByte) >>
+          2);
+      pos = 4;
+    } else {
+      compactLen = -1;
+      pos = 0;
+    }
+    debugPrint(
+        '[TransferProposal] compact length prefix: $compactLen, body starts at byte $pos');
+    if (pos < encoded.length) {
+      debugPrint(
+          '[TransferProposal] version byte: 0x${encoded[pos].toRadixString(16).padLeft(2, '0')}');
+      final bodyHex = _hexEncode(encoded.sublist(pos));
+      debugPrint(
+          '[TransferProposal] extrinsic body hex ($compactLen bytes): $bodyHex');
     }
   }
 

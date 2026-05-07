@@ -44,7 +44,7 @@
 - 已扩展 `duoqian-transfer` 支持 `ORG_DUOQIAN`，注册型 Active 多签地址现在可直接复用 `propose_transfer / vote_transfer / execute_transfer`
 - 已补链上单测，覆盖注册型多签地址达到阈值后自动执行转账
 - 已同步更新 `wuminapp`
-  - 统一 institution id 编码：治理机构用 `shenfen_id`，注册型机构用 `duoqian_address(32)+16字节0`
+  - 统一 institution id 编码：治理机构用 `sfid_number`，注册型机构用 `duoqian_address(32)+16字节0`
   - 注册型机构管理员与阈值改为从 `DuoqianManage.DuoqianAccounts` 动态读取
 - 已同步更新 `wumin` 冷钱包
   - `org = 3` 摘要显示为“注册多签机构”

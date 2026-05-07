@@ -4,8 +4,8 @@ use hex_literal::hex;
 
 /// 单个司法院机构常量结构。
 pub struct ChinaSf {
-    pub shenfen_id: &'static str,
-    pub shenfen_name: &'static str,
+    pub sfid_name: &'static str,
+    pub sfid_number: &'static str,
     pub main_address: [u8; 32],
     pub duoqian_admins: &'static [[u8; 32]],
 }
@@ -14,9 +14,9 @@ pub const EMPTY_DUOQIAN_ADMINS: &[[u8; 32]] = &[[0u8; 32]; 5];
 
 pub const CHINA_SF: &[ChinaSf] = &[
     ChinaSf {
-        shenfen_id: "GFR-ZS001-SF09-134090812-20260222",
-        shenfen_name: "国家司法院",
-        main_address: hex!("b615c86a52b56f9bf51e1e27ed002980752ae7f722ee36d7bc5c15dcfec85b35"),
+        sfid_name: "国家司法院",
+        sfid_number: "GFR-ZS001-SF0V-052283563-2026",
+        main_address: hex!("d6c7c1a0278e7f57d0ae0d6d928ec2aebaac86ab9cd8f0c51405c635272610c9"),
         duoqian_admins: &[
             hex!("e2128d8dffc81d154e6161d56607ab1fb3be541102272c09cb3d14a06cc08d43"),
             hex!("f66aaf07c8b48d5ed717019a3fc933269b12003afb1bb7c48f6a093d8240e571"),
@@ -30,9 +30,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-ZS001-SF0D-573135799-20260222",
-        shenfen_name: "中枢省司法院",
-        main_address: hex!("518b7ab4d6daf24a7def7ff8f1942dc041e96e2ad0e32c8c80b2b34b4b22535d"),
+        sfid_name: "中枢省司法院",
+        sfid_number: "GFR-ZS001-SF0N-801633498-2026",
+        main_address: hex!("a7698840af36178001ff8aa24e4888a87e8c559863e023ddee5498955ce2d863"),
         duoqian_admins: &[
             hex!("1c6f762bb44f0d175ad53886796e930b1e1981ac8d465b77df85bf6f60353d47"),
             hex!("0ac79f5bd7411ccd7dc84f5d40f2184fe17d9ee5f9a1955270b7038765b0232e"),
@@ -46,9 +46,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-LN001-SF0S-386487097-20260222",
-        shenfen_name: "岭南省司法院",
-        main_address: hex!("ceed9cd407d548467a25305ab5e499226e07adc3c2a4c0b60a8ac9f77838bbb9"),
+        sfid_name: "岭南省司法院",
+        sfid_number: "GFR-LN001-SF0T-735985207-2026",
+        main_address: hex!("2b04bed95ee20a06ad9cadd71d86ac81dd5d9f1902056292e0883ea5e3ab98a7"),
         duoqian_admins: &[
             hex!("709506fcd79ba9e6abd46c5236b562f6d9c2112e51e967fdf7ea14ae74b8df6a"),
             hex!("68f4e3f8ef4005897597fffb529feb6dd0e7c76c9d9bc84cc98ba55808d73272"),
@@ -62,9 +62,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-GD000-SF0H-636757945-20260222",
-        shenfen_name: "广东省司法院",
-        main_address: hex!("1dae3cdd6b025a8e6dcb09cf36e94381aa889538a9b0432c69879fb5590a6f1f"),
+        sfid_name: "广东省司法院",
+        sfid_number: "GFR-GD001-SF04-237972883-2026",
+        main_address: hex!("52ce967c41b7508c1be060b93e9923379a248a0f1ec621b7768428ae21ef674a"),
         duoqian_admins: &[
             hex!("247f4b692185b90b797d267c041c58b4d4917c16d01746c9b6856db8c6e29613"),
             hex!("b486b34c5cf1b877cfb2a575342051ec0646ea3c5e73c299b98c1c7164600649"),
@@ -78,9 +78,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-GX000-SF0B-577422807-20260222",
-        shenfen_name: "广西省司法院",
-        main_address: hex!("658bc57b6e6fb30ab16755159870ddea5743f0cfc97abf73e396f7616a8093fd"),
+        sfid_name: "广西省司法院",
+        sfid_number: "GFR-GX001-SF08-695571731-2026",
+        main_address: hex!("51ae8a2b2c9f27f3f7fcfcef9f4e19a723d5b6071ee124c88c5716feee1b89ac"),
         duoqian_admins: &[
             hex!("30c0cc73232aca9e13a61569084db7dbdcf21e8642588c28d52b2a20342e9d1b"),
             hex!("6c6c898cf8ad67b97c393a8f8e24e97aca498b651f3359e1847d2731a2121378"),
@@ -94,9 +94,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-FJ000-SF0Z-050954873-20260222",
-        shenfen_name: "福建省司法院",
-        main_address: hex!("75e6fdc3905bdd3a84b8428637d4b7b4caa4621e80349d4799a7c00c59768f38"),
+        sfid_name: "福建省司法院",
+        sfid_number: "GFR-FJ001-SF0D-514142694-2026",
+        main_address: hex!("89dd65e249900960b6d684786b5249cc59ebdd9e7391fca7e33bbda49231d97e"),
         duoqian_admins: &[
             hex!("786ef84f57fa1af1c03f124ffe98f0e797f1f42891f4d22e00250ac362ad712f"),
             hex!("e06a19fdd7b2e808fdf086636b38b0a0b4241d99ea8db31f4ebe70a9c306096f"),
@@ -110,9 +110,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HN000-SF0W-719849621-20260222",
-        shenfen_name: "海南省司法院",
-        main_address: hex!("ab0880f9aae7a5143f3236f3cad5491aee74b0b211331a3976b78195c63543cb"),
+        sfid_name: "海南省司法院",
+        sfid_number: "GFR-HN001-SF0V-404444213-2026",
+        main_address: hex!("70d2f096ba56ca3696dc749894cc73a2ef42cdbf9a359501a5d67fdc44f933fe"),
         duoqian_admins: &[
             hex!("b0499d90998a6a78f6b4cf48d15a12b0d9a4d89b0bbbca54d1057a0a84158635"),
             hex!("de631a1269127804f63c2af956903c19cdb6fa489bbdaf7ced018e937051b879"),
@@ -126,9 +126,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-YN000-SF0E-419030790-20260222",
-        shenfen_name: "云南省司法院",
-        main_address: hex!("3016a9ed3216ef224298b276d904f7c5699666931b9c27d2340efe055e3ad40f"),
+        sfid_name: "云南省司法院",
+        sfid_number: "GFR-YN001-SF0Q-150332223-2026",
+        main_address: hex!("780564c0113a8b47e6d8f8d68a02e0d9465d8294fa60e425574ccfd140f3989e"),
         duoqian_admins: &[
             hex!("d4598df860d0ab8bc62544cbdd81623d5e2b4effd4ab8ad541c50c54711be449"),
             hex!("c29bc3879ad67600be218cfdd28f44cd8e384b2dc957e62202a1e119c3236919"),
@@ -142,9 +142,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-GZ000-SF06-627760254-20260222",
-        shenfen_name: "贵州省司法院",
-        main_address: hex!("9f29a2bcbdb95a47668c50ccb753952aef1cf90a137e9e8a44bc441affff404e"),
+        sfid_name: "贵州省司法院",
+        sfid_number: "GFR-GZ001-SF00-943624249-2026",
+        main_address: hex!("4b282560433df85d14d2d854af7380fe58952addfce994ea97318824293d7675"),
         duoqian_admins: &[
             hex!("943350d828352141d93bfefaa8c261964490a7626a7d4a8342ba9e201b091d33"),
             hex!("a655d15418caa1cd1624724c985a0e19864cc97db23823f2e93e427827a55d2c"),
@@ -158,9 +158,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HU000-SF0P-517016256-20260222",
-        shenfen_name: "湖南省司法院",
-        main_address: hex!("7d81440325e7a0027956ad0f99e5a17490ea1f033c7f4a8742e4602c7f17b6c8"),
+        sfid_name: "湖南省司法院",
+        sfid_number: "GFR-HU001-SF0Z-664701408-2026",
+        main_address: hex!("8e08ca99c811906a5fbc2bea722abfd4e6f263aa303f80f692205351c0f2facb"),
         duoqian_admins: &[
             hex!("fa762510239495580b6d9a6816cbe9275cc2388d3483f57dd66eb571f3f32e16"),
             hex!("6e38f721139e9de70902057d85bfc45c6b23008d25cbd45714cf62c3b3616d1c"),
@@ -174,9 +174,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-JX000-SF0X-185259287-20260222",
-        shenfen_name: "江西省司法院",
-        main_address: hex!("e9762bd3a77d14f8cbf979e341ea952afbefe2eb12abdfcf4db7fd14b1575fa5"),
+        sfid_name: "江西省司法院",
+        sfid_number: "GFR-JX001-SF0Q-437316566-2026",
+        main_address: hex!("a0c07f49e917fc235ddc48b33926f7ea7b90f76a7a4ec0a444b2ece1089ada0a"),
         duoqian_admins: &[
             hex!("38498cb8243baec1f8dea05c4f76f22d5bb84d92e31098ebfde59b25bccd7b6b"),
             hex!("f074af2bacf550875ff41849080395bc99fac303fe74bbeee5ecffad16cf1079"),
@@ -190,9 +190,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-ZJ000-SF02-202699032-20260222",
-        shenfen_name: "浙江省司法院",
-        main_address: hex!("68621b0ee184c9ee7801c00e1d83df255ca30ba71b482d8b69f22c1843353ce8"),
+        sfid_name: "浙江省司法院",
+        sfid_number: "GFR-ZJ001-SF05-604747113-2026",
+        main_address: hex!("ed93795596931965c2ed5604c51a3e7d37f97217b2f82b3ec9de5f43bebf7913"),
         duoqian_admins: &[
             hex!("2a3b665089e3017cdfc3521df7992236b950d849c28579b79f87a5933854417e"),
             hex!("bc6cdc9568bbf4cf696cffca4dfcc2f13ef7834122b858603715b7b88eaa3d4c"),
@@ -206,9 +206,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-JS000-SF0Y-843964423-20260222",
-        shenfen_name: "江苏省司法院",
-        main_address: hex!("283834d1f74b4799495437100a27167b71ff4852c36f4d3453fa2cea04fecffb"),
+        sfid_name: "江苏省司法院",
+        sfid_number: "GFR-JS001-SF0X-777156747-2026",
+        main_address: hex!("f6e42ff521d3dc91797728d7517ff2c25b730e6189849afc5dadc7ad64d2d372"),
         duoqian_admins: &[
             hex!("fecc1694ed481f5fce0a879e8187b80474f719b28344559cf1d121cc9a278171"),
             hex!("b6a368573bf3fffd079e4b5dc1409b8e02f990f6b91acd0e5a8dd905abadad31"),
@@ -222,9 +222,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-SD000-SF09-958422262-20260222",
-        shenfen_name: "山东省司法院",
-        main_address: hex!("e06ea656342e0332ea3c112e238eda0ee8dd10df66253e453dc45a5f714ffff7"),
+        sfid_name: "山东省司法院",
+        sfid_number: "GFR-SD001-SF0D-333858828-2026",
+        main_address: hex!("05a5a85aa62081f5a0eb2009958ff2de6153a8a7612e61158a01271856f38efe"),
         duoqian_admins: &[
             hex!("10f1d5c678f0c4b8d4e9032cc0df2dde738eba561d94f232505042673d701769"),
             hex!("f6c2be08c0ad4f1c89022a2da265f3ea2901de51a5d4b2b597ac3a42a9336333"),
@@ -238,9 +238,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-SX000-SF0B-162856734-20260222",
-        shenfen_name: "山西省司法院",
-        main_address: hex!("986db21d07b834c78c0039a9f82447913e9dec43959385afc0f619b276265e18"),
+        sfid_name: "山西省司法院",
+        sfid_number: "GFR-SX001-SF0F-384489008-2026",
+        main_address: hex!("98384892ab78e0e97a4be6a14e3afec0b1bef5fea565d8a550f93fbcfd8d3431"),
         duoqian_admins: &[
             hex!("b240b21f0d7754ffeaa0e977f2870edb20bd9b92b92bea71930512e8e47f145c"),
             hex!("a689e2852dc39c571f20da19d154de247bb62f5a85f1f04a712ad51fa6e39638"),
@@ -254,9 +254,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HE000-SF0R-281881294-20260222",
-        shenfen_name: "河南省司法院",
-        main_address: hex!("5126ccc7158f82ba0a401200154336728fdd38a0c179f54835ed76017a6f0bfb"),
+        sfid_name: "河南省司法院",
+        sfid_number: "GFR-HE001-SF0Q-954910656-2026",
+        main_address: hex!("d06810fe2b12974405e28968090eb95d3bdc496ce19fb2a493a6e8c5c8bec0d6"),
         duoqian_admins: &[
             hex!("62d6f0c4f3941adfbc60d26f8cd1795c7c686c155a753d87b0546006d72d007e"),
             hex!("f2b4662473baf9136efa11100e792f4c0977bb103c93bc49517de39a51f9501f"),
@@ -270,9 +270,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HB000-SF0S-926728777-20260222",
-        shenfen_name: "河北省司法院",
-        main_address: hex!("a71d177937950dc90f0ce10110ecf636314341af762b8ebde13e0aabd8c74ae1"),
+        sfid_name: "河北省司法院",
+        sfid_number: "GFR-HB001-SF0K-157451848-2026",
+        main_address: hex!("178a8854c61836199e99d140d6cb1f414e380ede296d8abf07de445816cfd295"),
         duoqian_admins: &[
             hex!("c2f57ceb8cf1024999cd39505cd87bfbc5137c0d9b138906e0ea2f2fd7bf5932"),
             hex!("1696dc19a56ffe816011c2b621647277c2bf98c0b20167e7eabf60cf4403dc3f"),
@@ -286,9 +286,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HI000-SF0S-919487435-20260222",
-        shenfen_name: "湖北省司法院",
-        main_address: hex!("89049f4358e6fe9b62252ceb949bb2ed83d4406b3271fdf95350f749aa395bed"),
+        sfid_name: "湖北省司法院",
+        sfid_number: "GFR-HI001-SF0K-077291390-2026",
+        main_address: hex!("79ec03d9b0faf1a5bf5e6b334834d50a7094aad3930c097d294ca0c90dc9382e"),
         duoqian_admins: &[
             hex!("62ad586e10fe01347b722c948445c5c82e83847ee1d6d3cda03fb7fcf7796055"),
             hex!("a4c686e182a6f81dfedd4e549e8b256cb7768f96b81607f8196fef843c4d6925"),
@@ -302,9 +302,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-SI000-SF0Q-547837769-20260222",
-        shenfen_name: "陕西省司法院",
-        main_address: hex!("17c9e582e279fe0982aea34319469c62f9424e78f41716265b64706babedd4e0"),
+        sfid_name: "陕西省司法院",
+        sfid_number: "GFR-SI001-SF0W-249824979-2026",
+        main_address: hex!("eac9ccb8d02e95d08729dd3732c43bcac1ce28d6d82fddff91e1f27e042c37ba"),
         duoqian_admins: &[
             hex!("7099bfabb88f8980c668a3a2b2c5bed7503e20b4cbd72ad4e131bf1f07bc7f30"),
             hex!("4a10d862b8ad9eebb652a7ce5e5dd5c0c236ce5751cbcc2e971841936ea22b44"),
@@ -318,9 +318,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-CQ001-SF05-032749576-20260222",
-        shenfen_name: "重庆省司法院",
-        main_address: hex!("53f3c2014904d2b8a656310cafbbd6030498d7d6b3cb80850da25ccd49abe5c5"),
+        sfid_name: "重庆省司法院",
+        sfid_number: "GFR-CQ001-SF0B-088530239-2026",
+        main_address: hex!("23c0768547c95c4b441ead6df97371f4675960a340f8da5fd510c5222f5cdff0"),
         duoqian_admins: &[
             hex!("32b5e07bc11dc783c703d48c2bdf76ed01fe7033ca9d1c3c85e15414afb0bb49"),
             hex!("8e1c940778bb00d520a5e734599f6fcb332e89f56aebfabfc266246e250b2d61"),
@@ -334,9 +334,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-SC000-SF0B-751618450-20260222",
-        shenfen_name: "四川省司法院",
-        main_address: hex!("3872840f1e76d7ddabd75137c56bdc81f815acf8ccdae2d454b1871a843bcb54"),
+        sfid_name: "四川省司法院",
+        sfid_number: "GFR-SC001-SF0U-802330322-2026",
+        main_address: hex!("05d91db1655094a71820e041ad351742117c5b5e8736fff65610db3c4442fd49"),
         duoqian_admins: &[
             hex!("74c0df877aa31c344e705ee3805f7941ad66b6012db7f158dd64c62e31afdd5f"),
             hex!("301ccd8f399941fc1687e65e9058e08b39f6c337a58395731eac4d60f0c03e7d"),
@@ -350,9 +350,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-GS000-SF0I-197562170-20260222",
-        shenfen_name: "甘肃省司法院",
-        main_address: hex!("158ac15c07429edee06d06ec3f8d7648238cde58a9b764d8055869a305bc0532"),
+        sfid_name: "甘肃省司法院",
+        sfid_number: "GFR-GS001-SF01-611023108-2026",
+        main_address: hex!("28c8857eaef5720d8460319fc00703b473f2545aacc67a1e8e06c1789e5566c4"),
         duoqian_admins: &[
             hex!("0823417c71c3ebf50f8eb86ed9c97f459e58c7cfe7f092e4c1ed44f01ed2844a"),
             hex!("1e6ee2cdd6b5c13f7c0b9df2103c82b7f9da7e179e2afb1e35f95e86ca7c0a2f"),
@@ -366,9 +366,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-BP001-SF0E-834279244-20260222",
-        shenfen_name: "北平省司法院",
-        main_address: hex!("86266e98675945664e06e71f9f9c0a94055123cec6152f82d48e2c9041267595"),
+        sfid_name: "北平省司法院",
+        sfid_number: "GFR-BP001-SF0I-779326321-2026",
+        main_address: hex!("748e0a11355798c1c59e779979089f96e3599f4db4d51656f7e32939cece66f3"),
         duoqian_admins: &[
             hex!("32e41625cf220a2bbd211efe754e47b4b853c8499006c4aaf9e1afa26beeea72"),
             hex!("88321b35217ed9423d398d24258a45bb94ae584849ae624dd8d26256bd741e47"),
@@ -382,9 +382,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HA000-SF0Q-587131891-20260222",
-        shenfen_name: "海滨省司法院",
-        main_address: hex!("a165a108b76c1233cff759fa380ebbb927a24f8efc2f8bc010d217feca87289a"),
+        sfid_name: "海滨省司法院",
+        sfid_number: "GFR-HA001-SF00-346164340-2026",
+        main_address: hex!("f4d3efcf9b9ab2e50d6204477b1ba5a74d26f7f295255c601fca9571e450bb68"),
         duoqian_admins: &[
             hex!("a4064d937bf4b5bfa83bbc45fcb67f177d7ba06c81fce2190f7155b0a6b78452"),
             hex!("d2c278c606cd2d27355cf546565ea1ad295bee2154b3033bf8e04da80264a10d"),
@@ -398,9 +398,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-SJ000-SF08-631857147-20260222",
-        shenfen_name: "松江省司法院",
-        main_address: hex!("806e1dc481eb0a395c9ea75bb5f7ef680240aee339756c709df6d78563770548"),
+        sfid_name: "松江省司法院",
+        sfid_number: "GFR-SJ001-SF0Q-743382317-2026",
+        main_address: hex!("afeb981160e58f3bc17e69b5431e9ea794a158e2dd01cf65c89d8b048fbb9e49"),
         duoqian_admins: &[
             hex!("928adaa4a8b8b5b0fdde81225891548d733159aa9133e2042e5f1708bec7d612"),
             hex!("c0a5cfd03d53d624e6ee7bf08ccd7a6ece5b7f35f9668ebd5e01ad0406380c0c"),
@@ -414,9 +414,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-LJ000-SF0B-016343648-20260222",
-        shenfen_name: "龙江省司法院",
-        main_address: hex!("b813952690ad55476c0eac28d1a76eaa0c3efa18e99fa5d3ad42dda17cd26584"),
+        sfid_name: "龙江省司法院",
+        sfid_number: "GFR-LJ001-SF0O-503014903-2026",
+        main_address: hex!("beb6e8e1274f25231f2dbf1b001456dbc96b51e69ac49b08b2e675675795121b"),
         duoqian_admins: &[
             hex!("56d8cdb5c6dd38f491975209118598c85d5983aa5bc1f774b42ab0e5de24c62f"),
             hex!("72fca20fe2487cdebd745fea54f8dc33526ffa6cffb0626a4a98045e1364a219"),
@@ -430,9 +430,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-JL000-SF0S-993565077-20260222",
-        shenfen_name: "吉林省司法院",
-        main_address: hex!("237107d35b1cdcd56ab0042f60c80b71691e96dd63395da6676e7d8b02221a2c"),
+        sfid_name: "吉林省司法院",
+        sfid_number: "GFR-JL001-SF0U-140130793-2026",
+        main_address: hex!("f4a8a21bfa50494e60d24b180253849a3c37596af91c1ee6f23cbf9adbbe61a7"),
         duoqian_admins: &[
             hex!("d42c52f020c2e4e689f1b2f338fcd676e2d5b7eaa5d4fc626c30a2d8affee240"),
             hex!("086b22a5753a7dc0aa904d66af138e1c363f58049d32137ca9aaceb128a17c18"),
@@ -446,9 +446,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-LI000-SF0J-743563427-20260222",
-        shenfen_name: "辽宁省司法院",
-        main_address: hex!("294225d9e176b11274c92bc9fd35cc4ea9b81662d027ce8b4a56457c468a487f"),
+        sfid_name: "辽宁省司法院",
+        sfid_number: "GFR-LI001-SF0Q-647021209-2026",
+        main_address: hex!("7df92f549e9a9a3ba0669a780905ef8e30e677108253c918068881f01574b22d"),
         duoqian_admins: &[
             hex!("1cfe02fbb447db1640773adc5afe8dbf4424779a6fc7521ab36aea6be8bfe656"),
             hex!("98593b346f294d2f91798413235ad1999ec16958928dc6bfa3beac56720f9d63"),
@@ -462,9 +462,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-NX000-SF0I-627630284-20260222",
-        shenfen_name: "宁夏省司法院",
-        main_address: hex!("e8fdb3d1700a8b3e845a4eadd09ede76796a8947b865177114012dacdbe3cb2c"),
+        sfid_name: "宁夏省司法院",
+        sfid_number: "GFR-NX001-SF0G-853238754-2026",
+        main_address: hex!("3220eeb04db95e9dd4cefaa7c3f210955b62c9726ec1546260ef28894858bdbd"),
         duoqian_admins: &[
             hex!("6069ec90d4b81e9565f0837e6e6e9cc350711f4c2508f03f0a61cb6f4972fe3c"),
             hex!("d2bd2e75be0dae53d501b2f8cc044cad7681c251b8477ff271996abbcc09dc12"),
@@ -478,9 +478,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-QH000-SF0O-492162264-20260222",
-        shenfen_name: "青海省司法院",
-        main_address: hex!("98f43ebb5acd03196b26e0157f7c687be802a9b97f093ac077fd8e6d17c6f925"),
+        sfid_name: "青海省司法院",
+        sfid_number: "GFR-QH001-SF0N-940195791-2026",
+        main_address: hex!("69eb78bb2e4bb4843c0ca1dd99a18bd3e92a25d22c747acd3df5759dd14976c4"),
         duoqian_admins: &[
             hex!("10575690d45f2846561594aeacfb83ff77b105140aaacd57700f9866ff83de00"),
             hex!("10ce8219dd015f1bc98a1e8efdf3484ceed6385c4ff84db8caeb99d2309e8623"),
@@ -494,9 +494,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-AH000-SF0F-587460113-20260222",
-        shenfen_name: "安徽省司法院",
-        main_address: hex!("eff0c1fb728ebc3594cdf75ef5d9c97331320162b53883eb5900a5035c348e17"),
+        sfid_name: "安徽省司法院",
+        sfid_number: "GFR-AH001-SF0Q-454040736-2026",
+        main_address: hex!("be910b0f6c834124fae61c16d9a059acd6d4523d4d74ce54a62f288a96cec029"),
         duoqian_admins: &[
             hex!("f22e4b65e1a9c289412058838dd1f11ff3f34ddc54a7f900b6b71036bf591873"),
             hex!("80bd16d90be8df29ee4861d9ec79d0172642e7a8fd01c9ebd75e64cd9b965953"),
@@ -510,9 +510,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-TW000-SF0J-161879778-20260222",
-        shenfen_name: "台湾省司法院",
-        main_address: hex!("73b5fa8607284ff3eec4d09f06090aa86dc6ee67687f1534e800dc1ac2fb45bd"),
+        sfid_name: "台湾省司法院",
+        sfid_number: "GFR-TW001-SF0S-338903264-2026",
+        main_address: hex!("c3a45d85c41a7e4f15fbcf4817295ca5dffec100f25f39d2ab3bfa4154b44179"),
         duoqian_admins: &[
             hex!("18d9fda280dc338f3a98a85018bdac1ef020cf6bb544c392008f6c9d1b652751"),
             hex!("b81f53f09b72382618464d2570bde98ddd29092396175c9db44f13355b767414"),
@@ -526,9 +526,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-XZ000-SF0R-140596407-20260222",
-        shenfen_name: "西藏省司法院",
-        main_address: hex!("b562af17126bb5e9ad5aa5bfbab44ee88040f6f86de197601a841f56d488ad1a"),
+        sfid_name: "西藏省司法院",
+        sfid_number: "GFR-XZ001-SF0N-489864159-2026",
+        main_address: hex!("3fa3e01811169dda35a532a8d9bd5eb715b3f932fc1e7c49bddedd997d0ea16a"),
         duoqian_admins: &[
             hex!("e024bad46acdce84df4217f446fd64fa5941d45b331c0398326c1b16edab526e"),
             hex!("b442df0dbb86853836f00f5076ec8f030dff3d9670d0295d9c554867fa5aca21"),
@@ -542,9 +542,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-XJ000-SF0C-957175775-20260222",
-        shenfen_name: "新疆省司法院",
-        main_address: hex!("f86d68b1b633a9686e2d48785c7448070dff65d9e831d53ec0d652f74ba06a9e"),
+        sfid_name: "新疆省司法院",
+        sfid_number: "GFR-XJ001-SF01-665697727-2026",
+        main_address: hex!("e4344f95202ceb46149105aa99bae794cd4d40e774dd38e99b72f6682c6e2256"),
         duoqian_admins: &[
             hex!("4aee4e9a7a2cf05f4c45827924a9c16004d08226488aea62bad4ba0eba832258"),
             hex!("4cd50b7977c1154e1ed750d470c211d535222f5499dc43200b43a1c321d00b50"),
@@ -558,9 +558,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-XK000-SF0C-987642255-20260222",
-        shenfen_name: "西康省司法院",
-        main_address: hex!("86f4a9ac1337cdbf7845479fa18b14a23253dd423ed680dd13437e6699470cd5"),
+        sfid_name: "西康省司法院",
+        sfid_number: "GFR-XK001-SF07-039776546-2026",
+        main_address: hex!("f2ea571bfcceac16add69f93b157771957de457e9c22260c97d50a5f4eec8d81"),
         duoqian_admins: &[
             hex!("045c63e54895a86108ab0bab38836f1735842b617652636a63a64b32d6671600"),
             hex!("ba8730c50682e0b2aeea2a2872871817dda2a7758ebd5c8dd43693a2a9a6ce05"),
@@ -574,9 +574,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-AL000-SF0O-493141277-20260222",
-        shenfen_name: "阿里省司法院",
-        main_address: hex!("36ed86be6be90c810c6a0dbcb97f32ff6d34b064c6e15a91ad9e443fd667eb4d"),
+        sfid_name: "阿里省司法院",
+        sfid_number: "GFR-AL001-SF0L-773834149-2026",
+        main_address: hex!("0f1a4cd23f2be4a1561eea913a9cfec2166189ce0135f7b1dcd82cf054046950"),
         duoqian_admins: &[
             hex!("6853c0a0b2abb952b82c345c00d142e2ec5df44f5a75952dbc2a7b68a05b8777"),
             hex!("b65c087380221e01a25b57a5a0b3bd8e6b47c9ffcc20c5901d7d7ad76d76a86e"),
@@ -590,9 +590,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-CL000-SF0T-958194313-20260222",
-        shenfen_name: "葱岭省司法院",
-        main_address: hex!("903e6646d01f8662a66f2bdaad29f2136e4908cef7a74e462403e12a11ce507e"),
+        sfid_name: "葱岭省司法院",
+        sfid_number: "GFR-CL001-SF0F-213372415-2026",
+        main_address: hex!("c2104c705d4337983307b08487a590431e6ff41ccd93b668c5937f174892327a"),
         duoqian_admins: &[
             hex!("e021f20187b02ea3cf4f80a3c8058b6b2548d21861f493f15d7b399e2b3dd325"),
             hex!("044dc8d2e0b29880e6290af39bc793b222c6d8b0f0f3cb0f1823ed73725aa00c"),
@@ -606,9 +606,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-TS000-SF0V-916660314-20260222",
-        shenfen_name: "天山省司法院",
-        main_address: hex!("be5b8adf8e54768563df02ccf9fb7387bdf255877c938e6f8d41a3ce8c055e5e"),
+        sfid_name: "天山省司法院",
+        sfid_number: "GFR-TS001-SF0N-940493250-2026",
+        main_address: hex!("2483f7c23b94aa9bbf07fa6f6ce6e4f5f1f5a771b49e5fc1e85b9b62a63228c9"),
         duoqian_admins: &[
             hex!("e8213f3ff21707f89f3377f75c0b7f10a7c59e6fae27eaf4bece640035963602"),
             hex!("c441417b5b99c1d7614a9ff55f048657a0bc06f2df19c7f164019cf8c1bb430f"),
@@ -622,9 +622,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HX000-SF0P-155050943-20260222",
-        shenfen_name: "河西省司法院",
-        main_address: hex!("74572a60e231186878463a799f1ad84e1f61eb35e17b66b51f146cedd105616c"),
+        sfid_name: "河西省司法院",
+        sfid_number: "GFR-HX001-SF01-433393508-2026",
+        main_address: hex!("ac39e2122186cc2501699a5f63528e8df7e841306a6599a9e7feb57611555320"),
         duoqian_admins: &[
             hex!("dcd826dbfd05980b59943b29ac453031106e841e3736aecb128fa075dbd42647"),
             hex!("5a7696c1eef1c18fbc47152e4e9784e3441d9a1ea1f41bba4a2d0b1271089904"),
@@ -638,9 +638,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-KL000-SF0L-676785487-20260222",
-        shenfen_name: "昆仑省司法院",
-        main_address: hex!("c315f3c86ad3daff9adb847f86a56bc8386decabb95e5148473ed2d0d9b6a5b9"),
+        sfid_name: "昆仑省司法院",
+        sfid_number: "GFR-KL001-SF0P-811822340-2026",
+        main_address: hex!("00fbb32c690f2237ff190fc053b094c947e684ffd2f0a8510a44172b73ba7cc1"),
         duoqian_admins: &[
             hex!("a05cebf4c43759df1979d2c6ffdc87afe7b9256b28899292b83e404ba5a41b3c"),
             hex!("249f0a2f0fb2659c3c5a63c6a966ba6117b289f9bae661b1aadced3b1f67fa65"),
@@ -654,9 +654,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HT000-SF0V-152659255-20260222",
-        shenfen_name: "河套省司法院",
-        main_address: hex!("1d1c26e012d5987861fe0435d70158fcdb7fc56a255ef57047be14f073926778"),
+        sfid_name: "河套省司法院",
+        sfid_number: "GFR-HT001-SF0Q-354283262-2026",
+        main_address: hex!("bcc5c7e176e4e5cb9ea8f5949ecc8a7bfda0836985678d6457e9d729a966186e"),
         duoqian_admins: &[
             hex!("0e56737b842ea74a4dde0b5df91089696ecde493a742181db78bc1a5ea9de756"),
             hex!("38d6eba42cfff6cbdab92a0eccb75f3dc276454d2d6123d09c2305edfc208563"),
@@ -670,9 +670,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-RH000-SF0O-129133184-20260222",
-        shenfen_name: "热河省司法院",
-        main_address: hex!("6f47fc9f6ff79a15d8f0eace04096c5e15f36570921e1528a5e90758967ab61f"),
+        sfid_name: "热河省司法院",
+        sfid_number: "GFR-RH001-SF0W-647806782-2026",
+        main_address: hex!("148366f9abe5d68eb30d32e1e4521ecfc2c5a1393f2ddde7237a36b8102f9c15"),
         duoqian_admins: &[
             hex!("346ab4dc8f6925932f72a828f25b2beafb66ba2c4f4c5a7bc3d4891f39833870"),
             hex!("307cdc1cac71516ecd6d71d99d68533d39eff017abe5347242a438917ab6c005"),
@@ -686,9 +686,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-XA000-SF06-234674241-20260222",
-        shenfen_name: "兴安省司法院",
-        main_address: hex!("947b6dcfbbce99a535e95be97f7f7ff262fa3e3dcd9a5e8ae86b4c7dba63db5b"),
+        sfid_name: "兴安省司法院",
+        sfid_number: "GFR-XA001-SF09-948269419-2026",
+        main_address: hex!("fd98576419786fdc5d3bcc66bbfcd2b453e34bb5e30f26d89220da470a41a43c"),
         duoqian_admins: &[
             hex!("968013757fda161113a8671b33588b2cd681426e85b4e083f9f0b32914c63674"),
             hex!("86902dc07f94ec9067fd1ec70d7d3eeaa2269c66a191c62b14afe1f333dd9c40"),
@@ -702,9 +702,9 @@ pub const CHINA_SF: &[ChinaSf] = &[
         ],
     },
     ChinaSf {
-        shenfen_id: "GFR-HJ000-SF0F-384975396-20260222",
-        shenfen_name: "合江省司法院",
-        main_address: hex!("3b2545df1f026131154a4114ee53749c68735d076a5ef30c6a4c29e795d5f686"),
+        sfid_name: "合江省司法院",
+        sfid_number: "GFR-HJ001-SF0S-251417549-2026",
+        main_address: hex!("0e9c365887c69686f85b063ec7741187f17fc01e766ec5f6b7ea7fc6f3f45bd9"),
         duoqian_admins: &[
             hex!("3e6cfbaaa4a1cc1e27830161ca7800b3a0faa4ccd1812e9bbe6c6aa799c3701c"),
             hex!("0614cd787b1134aa8421823271f4bbb4669a18206dbc1596ce30440de9ae5240"),

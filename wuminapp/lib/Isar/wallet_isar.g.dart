@@ -10750,9 +10750,9 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
       name: r'name',
       type: IsarType.string,
     ),
-    r'sfidId': PropertySchema(
+    r'sfidNumber': PropertySchema(
       id: 5,
-      name: r'sfidId',
+      name: r'sfidNumber',
       type: IsarType.string,
     )
   },
@@ -10825,7 +10825,7 @@ int _duoqianInstitutionEntityEstimateSize(
     }
   }
   bytesCount += 3 + object.name.length * 3;
-  bytesCount += 3 + object.sfidId.length * 3;
+  bytesCount += 3 + object.sfidNumber.length * 3;
   return bytesCount;
 }
 
@@ -10840,7 +10840,7 @@ void _duoqianInstitutionEntitySerialize(
   writer.writeString(offsets[2], object.duoqianAddress);
   writer.writeStringList(offsets[3], object.matchedAdminPubkeys);
   writer.writeString(offsets[4], object.name);
-  writer.writeString(offsets[5], object.sfidId);
+  writer.writeString(offsets[5], object.sfidNumber);
 }
 
 DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
@@ -10856,7 +10856,7 @@ DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
   object.id = id;
   object.matchedAdminPubkeys = reader.readStringList(offsets[3]) ?? [];
   object.name = reader.readString(offsets[4]);
-  object.sfidId = reader.readString(offsets[5]);
+  object.sfidNumber = reader.readString(offsets[5]);
   return object;
 }
 
@@ -11870,13 +11870,13 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdEqualTo(
+      QAfterFilterCondition> sfidNumberEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11884,7 +11884,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdGreaterThan(
+      QAfterFilterCondition> sfidNumberGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11892,7 +11892,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11900,7 +11900,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdLessThan(
+      QAfterFilterCondition> sfidNumberLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -11908,7 +11908,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11916,7 +11916,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdBetween(
+      QAfterFilterCondition> sfidNumberBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -11925,7 +11925,7 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'sfidId',
+        property: r'sfidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -11936,13 +11936,13 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdStartsWith(
+      QAfterFilterCondition> sfidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11950,13 +11950,13 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdEndsWith(
+      QAfterFilterCondition> sfidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11965,10 +11965,10 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
           QAfterFilterCondition>
-      sfidIdContains(String value, {bool caseSensitive = true}) {
+      sfidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -11977,10 +11977,10 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
           QAfterFilterCondition>
-      sfidIdMatches(String pattern, {bool caseSensitive = true}) {
+      sfidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'sfidId',
+        property: r'sfidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -11988,20 +11988,20 @@ extension DuoqianInstitutionEntityQueryFilter on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdIsEmpty() {
+      QAfterFilterCondition> sfidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity,
-      QAfterFilterCondition> sfidIdIsNotEmpty() {
+      QAfterFilterCondition> sfidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'sfidId',
+        property: r'sfidNumber',
         value: '',
       ));
     });
@@ -12073,16 +12073,16 @@ extension DuoqianInstitutionEntityQuerySortBy on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      sortBySfidId() {
+      sortBySfidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidId', Sort.asc);
+      return query.addSortBy(r'sfidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      sortBySfidIdDesc() {
+      sortBySfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidId', Sort.desc);
+      return query.addSortBy(r'sfidNumber', Sort.desc);
     });
   }
 }
@@ -12160,16 +12160,16 @@ extension DuoqianInstitutionEntityQuerySortThenBy on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      thenBySfidId() {
+      thenBySfidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidId', Sort.asc);
+      return query.addSortBy(r'sfidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QAfterSortBy>
-      thenBySfidIdDesc() {
+      thenBySfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'sfidId', Sort.desc);
+      return query.addSortBy(r'sfidNumber', Sort.desc);
     });
   }
 }
@@ -12213,9 +12213,9 @@ extension DuoqianInstitutionEntityQueryWhereDistinct on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, DuoqianInstitutionEntity, QDistinct>
-      distinctBySfidId({bool caseSensitive = true}) {
+      distinctBySfidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'sfidId', caseSensitive: caseSensitive);
+      return query.addDistinctBy(r'sfidNumber', caseSensitive: caseSensitive);
     });
   }
 }
@@ -12264,9 +12264,9 @@ extension DuoqianInstitutionEntityQueryProperty on QueryBuilder<
   }
 
   QueryBuilder<DuoqianInstitutionEntity, String, QQueryOperations>
-      sfidIdProperty() {
+      sfidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'sfidId');
+      return query.addPropertyName(r'sfidNumber');
     });
   }
 }
@@ -12287,9 +12287,9 @@ const LocalTxEntitySchema = CollectionSchema(
       name: r'amountYuan',
       type: IsarType.double,
     ),
-    r'bankShenfenId': PropertySchema(
+    r'bankSfidNumber': PropertySchema(
       id: 1,
-      name: r'bankShenfenId',
+      name: r'bankSfidNumber',
       type: IsarType.string,
     ),
     r'blockNumber': PropertySchema(
@@ -12419,7 +12419,7 @@ int _localTxEntityEstimateSize(
 ) {
   var bytesCount = offsets.last;
   {
-    final value = object.bankShenfenId;
+    final value = object.bankSfidNumber;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
     }
@@ -12457,7 +12457,7 @@ void _localTxEntitySerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDouble(offsets[0], object.amountYuan);
-  writer.writeString(offsets[1], object.bankShenfenId);
+  writer.writeString(offsets[1], object.bankSfidNumber);
   writer.writeLong(offsets[2], object.blockNumber);
   writer.writeLong(offsets[3], object.confirmedAtMillis);
   writer.writeLong(offsets[4], object.createdAtMillis);
@@ -12481,7 +12481,7 @@ LocalTxEntity _localTxEntityDeserialize(
 ) {
   final object = LocalTxEntity();
   object.amountYuan = reader.readDouble(offsets[0]);
-  object.bankShenfenId = reader.readStringOrNull(offsets[1]);
+  object.bankSfidNumber = reader.readStringOrNull(offsets[1]);
   object.blockNumber = reader.readLongOrNull(offsets[2]);
   object.confirmedAtMillis = reader.readLongOrNull(offsets[3]);
   object.createdAtMillis = reader.readLong(offsets[4]);
@@ -12950,31 +12950,31 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdIsNull() {
+      bankSfidNumberIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
       ));
     });
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdIsNotNull() {
+      bankSfidNumberIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
       ));
     });
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdEqualTo(
+      bankSfidNumberEqualTo(
     String? value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -12982,7 +12982,7 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdGreaterThan(
+      bankSfidNumberGreaterThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -12990,7 +12990,7 @@ extension LocalTxEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         include: include,
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -12998,7 +12998,7 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdLessThan(
+      bankSfidNumberLessThan(
     String? value, {
     bool include = false,
     bool caseSensitive = true,
@@ -13006,7 +13006,7 @@ extension LocalTxEntityQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.lessThan(
         include: include,
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -13014,7 +13014,7 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdBetween(
+      bankSfidNumberBetween(
     String? lower,
     String? upper, {
     bool includeLower = true,
@@ -13023,7 +13023,7 @@ extension LocalTxEntityQueryFilter
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -13034,13 +13034,13 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdStartsWith(
+      bankSfidNumberStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -13048,13 +13048,13 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdEndsWith(
+      bankSfidNumberEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -13062,10 +13062,10 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdContains(String value, {bool caseSensitive = true}) {
+      bankSfidNumberContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: value,
         caseSensitive: caseSensitive,
       ));
@@ -13073,10 +13073,10 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdMatches(String pattern, {bool caseSensitive = true}) {
+      bankSfidNumberMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         wildcard: pattern,
         caseSensitive: caseSensitive,
       ));
@@ -13084,20 +13084,20 @@ extension LocalTxEntityQueryFilter
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdIsEmpty() {
+      bankSfidNumberIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: '',
       ));
     });
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterFilterCondition>
-      bankShenfenIdIsNotEmpty() {
+      bankSfidNumberIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'bankShenfenId',
+        property: r'bankSfidNumber',
         value: '',
       ));
     });
@@ -14683,16 +14683,16 @@ extension LocalTxEntityQuerySortBy
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy>
-      sortByBankShenfenId() {
+      sortByBankSfidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'bankShenfenId', Sort.asc);
+      return query.addSortBy(r'bankSfidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy>
-      sortByBankShenfenIdDesc() {
+      sortByBankSfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'bankShenfenId', Sort.desc);
+      return query.addSortBy(r'bankSfidNumber', Sort.desc);
     });
   }
 
@@ -14880,16 +14880,16 @@ extension LocalTxEntityQuerySortThenBy
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy>
-      thenByBankShenfenId() {
+      thenByBankSfidNumber() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'bankShenfenId', Sort.asc);
+      return query.addSortBy(r'bankSfidNumber', Sort.asc);
     });
   }
 
   QueryBuilder<LocalTxEntity, LocalTxEntity, QAfterSortBy>
-      thenByBankShenfenIdDesc() {
+      thenByBankSfidNumberDesc() {
     return QueryBuilder.apply(this, (query) {
-      return query.addSortBy(r'bankShenfenId', Sort.desc);
+      return query.addSortBy(r'bankSfidNumber', Sort.desc);
     });
   }
 
@@ -15081,10 +15081,10 @@ extension LocalTxEntityQueryWhereDistinct
     });
   }
 
-  QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct> distinctByBankShenfenId(
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct> distinctByBankSfidNumber(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'bankShenfenId',
+      return query.addDistinctBy(r'bankSfidNumber',
           caseSensitive: caseSensitive);
     });
   }
@@ -15195,9 +15195,9 @@ extension LocalTxEntityQueryProperty
   }
 
   QueryBuilder<LocalTxEntity, String?, QQueryOperations>
-      bankShenfenIdProperty() {
+      bankSfidNumberProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'bankShenfenId');
+      return query.addPropertyName(r'bankSfidNumber');
     });
   }
 

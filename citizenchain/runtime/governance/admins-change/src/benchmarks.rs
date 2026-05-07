@@ -7,7 +7,7 @@
 
 use crate::Pallet as AdminsChange;
 use crate::{
-    subject_id_from_shenfen_id, BlockNumberFor, Call, Config, SubjectId, Pallet,
+    subject_id_from_sfid_number, BlockNumberFor, Call, Config, SubjectId, Pallet,
     CHINA_CB, ORG_PRC,
 };
 use codec::Decode;
@@ -20,7 +20,7 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 fn prc_institution() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
+    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {

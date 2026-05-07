@@ -2,7 +2,7 @@
 //
 // 三类多签覆盖:
 // - PersonalDuoqian (kind=2):institution_id 末 16 字节全零
-// - SfidInstitution (kind=1):institution_id 含 sfid_id UTF-8 + 尾部零 padding
+// - SfidInstitution (kind=1):institution_id 含 sfid_number UTF-8 + 尾部零 padding
 // - BuiltinInstitution (kind=0):创世内置主体(NRC/PRC/PRB)
 
 import 'dart:typed_data';
@@ -154,15 +154,15 @@ void main() {
     });
   });
 
-  group('sfidIdFromInstitutionId', () {
-    test('D 协议: kind=0x02 + sfid_id + 右零填充 → 提取 sfid_id', () {
-      // D 协议: byte[0]=0x02 (SfidInstitution), byte[1..]=sfid_id 字节(右填零)
+  group('sfidNumberFromInstitutionId', () {
+    test('D 协议: kind=0x02 + sfid_number + 右零填充 → 提取 sfid_number', () {
+      // D 协议: byte[0]=0x02 (SfidInstitution), byte[1..]=sfid_number 字节(右填零)
       const sfidStr = 'SFR-LN001-CB0C-Z001-20260222';
       final sfidBytes = sfidStr.codeUnits;
       final id = Uint8List(48);
       id[0] = 0x02; // SubjectKind::SfidInstitution
       id.setAll(1, sfidBytes);
-      final extracted = AdminInstitutionCodec.sfidIdFromInstitutionId(id)!;
+      final extracted = AdminInstitutionCodec.sfidNumberFromInstitutionId(id)!;
       expect(extracted.length, sfidBytes.length);
       expect(String.fromCharCodes(extracted), sfidStr);
     });
@@ -172,21 +172,21 @@ void main() {
       id[0] = 0x03; // Personal,不是 sfid
       id[1] = 0x41;
       expect(
-        AdminInstitutionCodec.sfidIdFromInstitutionId(id),
+        AdminInstitutionCodec.sfidNumberFromInstitutionId(id),
         isNull,
       );
     });
 
     test('全零 institution_id → 返回 null', () {
       expect(
-        AdminInstitutionCodec.sfidIdFromInstitutionId(Uint8List(48)),
+        AdminInstitutionCodec.sfidNumberFromInstitutionId(Uint8List(48)),
         isNull,
       );
     });
 
     test('长度非 48 → 返回 null', () {
       expect(
-        AdminInstitutionCodec.sfidIdFromInstitutionId(Uint8List(32)),
+        AdminInstitutionCodec.sfidNumberFromInstitutionId(Uint8List(32)),
         isNull,
       );
     });

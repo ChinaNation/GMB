@@ -6,7 +6,7 @@
 //! 业务流程:
 //! 1. 校验地址是机构地址(否则返回 `NotInstitutionDuoqian`)
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
-//! 3. 校验发起人是该机构的活跃管理员(admins-change::Subjects[sfid_id])
+//! 3. 校验发起人是该机构的活跃管理员(admins-change::Subjects[sfid_number])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 全员投票阈值 = active_subject_admin_count
 //! 6. 写入 InstitutionPendingClose[address] = proposal_id 防并发
@@ -75,7 +75,7 @@ pub(crate) fn do_propose_institution_close<T: Config>(
 
     // 校验机构账户已 Active(InstitutionAccounts 状态)
     let account_info =
-        InstitutionAccounts::<T>::get(&registered.sfid_id, &registered.account_name)
+        InstitutionAccounts::<T>::get(&registered.sfid_number, &registered.account_name)
             .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
         matches!(account_info.status, InstitutionLifecycleStatus::Active),
@@ -202,7 +202,7 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
     }
 
     // 删 InstitutionAccounts entry(标记 Closed 状态后整体删除该 entry)。
-    InstitutionAccounts::<T>::remove(&registered.sfid_id, &registered.account_name);
+    InstitutionAccounts::<T>::remove(&registered.sfid_number, &registered.account_name);
     Pallet::<T>::close_admin_subject(proposal_id, subject_id)?;
     InstitutionPendingClose::<T>::remove(&action.duoqian_address);
 

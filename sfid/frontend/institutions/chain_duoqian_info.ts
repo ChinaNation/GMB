@@ -14,7 +14,7 @@ export type InstitutionChainStatus =
   | 'REVOKED_ON_CHAIN';
 
 export interface InstitutionInfoDetail {
-  sfid_id: string;
+  sfid_number: string;
   institution_name?: string | null;
   category: string;
   a3: string;
@@ -25,7 +25,7 @@ export interface InstitutionInfoDetail {
   city_code: string;
   institution_code: string;
   sub_type?: string | null;
-  parent_sfid_id?: string | null;
+  parent_sfid_number?: string | null;
   chain_status: InstitutionChainStatus;
 }
 
@@ -44,7 +44,7 @@ export interface InstitutionRegistrationCredential {
 
 export interface InstitutionRegistrationInfo {
   /** 中文注释:链端注册业务字段 1/3。 */
-  sfid_id: string;
+  sfid_number: string;
   /** 中文注释:链端注册业务字段 2/3。 */
   institution_name: string;
   /** 中文注释:链端注册业务字段 3/3,顺序必须原样交给链端验签。 */
@@ -76,15 +76,15 @@ async function publicAppRequest<T>(path: string): Promise<T> {
   return body.data;
 }
 
-export async function getInstitutionInfo(sfidId: string): Promise<InstitutionInfoDetail> {
-  const encoded = encodeURIComponent(sfidId);
+export async function getInstitutionInfo(sfidNumber: string): Promise<InstitutionInfoDetail> {
+  const encoded = encodeURIComponent(sfidNumber);
   return publicAppRequest<InstitutionInfoDetail>(`/api/v1/app/institutions/${encoded}`);
 }
 
 export async function getInstitutionRegistrationInfo(
-  sfidId: string,
+  sfidNumber: string,
 ): Promise<InstitutionRegistrationInfo> {
-  const encoded = encodeURIComponent(sfidId);
+  const encoded = encodeURIComponent(sfidNumber);
   return publicAppRequest<InstitutionRegistrationInfo>(
     `/api/v1/app/institutions/${encoded}/registration-info`,
   );

@@ -26,7 +26,7 @@ Step C 把 pallet 代码压缩到 434 行,但也把 20+ 个 pallet 测试(大多
 
 ## 2. Mock Runtime 结构
 
-`src/tests.rs`(562 行)用 `frame_support::construct_runtime!` 搭 Test 运行时:
+`src/tests/{mod.rs, cases.rs}`(2026-05-07 起从原 `src/tests.rs` 拆分,合计 774 行)用 `frame_support::construct_runtime!` 搭 Test 运行时:
 
 ```rust
 construct_runtime!(pub enum Test {
@@ -43,7 +43,7 @@ sr25519 公钥):
 
 | 账户 | 字节 | 角色 |
 |---|---|---|
-| `BANK_MAIN_BYTES = [0xAA; 32]` | 清算行主账户(SFR-GD-SZ01-CB01-N9-D8,`主账户`,Active) |
+| `BANK_MAIN_BYTES = [0xAA; 32]` | 清算行主账户(SFR-GD-SZ01-CB01-N9-D4,`主账户`,Active) |
 | `BANK_FEE_BYTES = [0xAB; 32]` | 清算行费用账户(同 SFID,`费用账户`,Active) |
 | `BANK_ADMIN_BYTES = [0xAC; 32]` | 唯一管理员 |
 | `OTHER_BANK_BYTES = [0xBA; 32]` | 故意不注册,用于负路径 |
@@ -141,3 +141,7 @@ test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured
 - 2026-04-20:Step D 落地,`src/tests.rs` 新建 562 行 8 个测试(其中 3 个
   是 submit_offchain_batch_v2 的端到端覆盖);`lib.rs` 追加 `#[cfg(test)] mod tests;`
   声明。pallet 测试从 10 ok → 20 ok。
+- 2026-05-07:runtime pallet 测试目录统一整改,`src/tests.rs` 拆分为
+  `src/tests/{mod.rs(174 行 mock+helper), cases.rs(600 行 11 用例)}`。
+  形态 D 的 `bank_check.rs` / `batch_item.rs` 就地单测保持原位不动。
+  pallet 测试从 20 ok → 23 ok(其中 2 个是 frame 自动生成)。

@@ -76,23 +76,23 @@ class ProposalContextResolver {
   /// 已缓存的钱包列表（同一次会话内复用）。
   List<WalletProfile>? _wallets;
 
-  /// 静态缓存：用户已确认为管理员的机构 shenfenId 集合。
+  /// 静态缓存：用户已确认为管理员的机构 sfidNumber 集合。
   ///
   /// 当用户浏览某个机构详情页后，如果匹配到管理员身份，
-  /// 该机构 shenfenId 会被加入此集合。机构列表页据此渲染绿色卡片和排序。
+  /// 该机构 sfidNumber 会被加入此集合。机构列表页据此渲染绿色卡片和排序。
   static final Set<String> _adminInstitutionIds = {};
 
   /// 记录某机构的管理员状态。
-  static void markAdminInstitution(String shenfenId) {
-    _adminInstitutionIds.add(shenfenId);
+  static void markAdminInstitution(String sfidNumber) {
+    _adminInstitutionIds.add(sfidNumber);
   }
 
   /// 查询某机构是否已确认为管理员。
-  static bool isAdminInstitution(String shenfenId) {
-    return _adminInstitutionIds.contains(shenfenId);
+  static bool isAdminInstitution(String sfidNumber) {
+    return _adminInstitutionIds.contains(sfidNumber);
   }
 
-  /// 获取所有已确认的管理员机构 shenfenId 集合。
+  /// 获取所有已确认的管理员机构 sfidNumber 集合。
   static Set<String> get adminInstitutionIds =>
       Set.unmodifiable(_adminInstitutionIds);
 
@@ -133,7 +133,7 @@ class ProposalContextResolver {
     try {
       if (institution.isRegisteredDuoqian) {
         final threshold = await _adminService.fetchThreshold(
-          institution.shenfenId,
+          institution.sfidNumber,
         );
         if (threshold != null) {
           institution = institution.copyWith(
@@ -147,7 +147,7 @@ class ProposalContextResolver {
 
     // 仅通过激活记录匹配管理员钱包
     final activatedAdmins = await _activationService
-        .getActivatedAdmins(institution!.shenfenId)
+        .getActivatedAdmins(institution!.sfidNumber)
         .catchError((_) => <ActivatedAdmin>[]);
 
     final matchedWallets = <WalletProfile>[];
@@ -206,7 +206,7 @@ class ProposalContextResolver {
       try {
         if (institution.isRegisteredDuoqian) {
           final threshold = await _adminService.fetchThreshold(
-            institution.shenfenId,
+            institution.sfidNumber,
           );
           if (threshold != null) {
             institution = institution.copyWith(
@@ -220,7 +220,7 @@ class ProposalContextResolver {
 
       // 仅通过激活记录匹配管理员钱包
       final activatedAdmins = await _activationService
-          .getActivatedAdmins(institution!.shenfenId)
+          .getActivatedAdmins(institution!.sfidNumber)
           .catchError((_) => <ActivatedAdmin>[]);
 
       final matchedWallets = <WalletProfile>[];
@@ -274,7 +274,7 @@ class ProposalContextResolver {
     for (final inst in allInstitutions) {
       List<String> admins;
       try {
-        admins = await _adminService.fetchAdmins(inst.shenfenId);
+        admins = await _adminService.fetchAdmins(inst.sfidNumber);
       } catch (_) {
         continue;
       }
@@ -352,7 +352,7 @@ class VoteChecker {
 
     Uint8List? institutionBytes;
     if (kind == 1 && institution != null) {
-      institutionBytes = _shenfenIdToFixed48(institution.shenfenId);
+      institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
     }
 
     for (final w in adminWallets) {
@@ -367,9 +367,9 @@ class VoteChecker {
     return false;
   }
 
-  /// 将 shenfen_id 编码为固定 48 字节。
-  static Uint8List _shenfenIdToFixed48(String shenfenId) {
-    final raw = utf8.encode(shenfenId);
+  /// 将 sfid_number 编码为固定 48 字节。
+  static Uint8List _sfidNumberToFixed48(String sfidNumber) {
+    final raw = utf8.encode(sfidNumber);
     final out = Uint8List(48);
     out.setAll(0, raw);
     return out;

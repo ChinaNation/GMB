@@ -22,7 +22,7 @@ class SfidPublicApi {
   ///
   /// [province] 省份名(如"广东省"),省略=全国。
   /// [city]     市名(配合 province 使用)。
-  /// [keyword]  子串匹配 sfid_id / institution_name。
+  /// [keyword]  子串匹配 sfid_number / institution_name。
   /// [page]     页码,从 1 起。
   /// [size]     每页条数,1~100。
   Future<ClearingBankSearchResult> searchClearingBanks({
@@ -73,11 +73,11 @@ class SfidPublicApi {
 /// 单条清算行展示数据(脱敏,无管理员/创建人)。
 class ClearingBankInfo {
   const ClearingBankInfo({
-    required this.sfidId,
+    required this.sfidNumber,
     required this.institutionName,
     required this.a3,
     required this.subType,
-    required this.parentSfidId,
+    required this.parentSfidNumber,
     required this.parentInstitutionName,
     required this.parentA3,
     required this.province,
@@ -87,7 +87,7 @@ class ClearingBankInfo {
   });
 
   /// SFID 编码,如 `SFR-GD-SZ01-CB01-N9-D8`。
-  final String sfidId;
+  final String sfidNumber;
 
   /// 机构中文名(两步式未命名时为空串)。
   final String institutionName;
@@ -99,7 +99,7 @@ class ClearingBankInfo {
   final String? subType;
 
   /// FFR 所属法人信息,用于手机端展示父子结构。
-  final String? parentSfidId;
+  final String? parentSfidNumber;
   final String? parentInstitutionName;
   final String? parentA3;
 
@@ -114,11 +114,11 @@ class ClearingBankInfo {
 
   factory ClearingBankInfo.fromJson(Map<String, dynamic> json) {
     return ClearingBankInfo(
-      sfidId: (json['sfid_id'] as String?) ?? '',
+      sfidNumber: (json['sfid_number'] as String?) ?? '',
       institutionName: (json['institution_name'] as String?) ?? '',
       a3: (json['a3'] as String?) ?? '',
       subType: json['sub_type'] as String?,
-      parentSfidId: json['parent_sfid_id'] as String?,
+      parentSfidNumber: json['parent_sfid_number'] as String?,
       parentInstitutionName: json['parent_institution_name'] as String?,
       parentA3: json['parent_a3'] as String?,
       province: (json['province'] as String?) ?? '',

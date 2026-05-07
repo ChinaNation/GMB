@@ -86,7 +86,7 @@
 [0x13]                              // pallet_index = 19
 [0x00]                              // call_index = 0
 [u8]                                // org: 0=NRC, 1=PRC, 2=PRB
-[48 bytes]                          // institution: shenfen_id 右补零到 48 字节
+[48 bytes]                          // institution: sfid_number 右补零到 48 字节
 [0x00 + 32 bytes]                   // beneficiary: MultiAddress::Id + AccountId32
 [Compact<u128>]                     // amount: 金额（分）
 [Compact<u32> + bytes]              // remark: SCALE Vec<u8> (Compact 长度 + 原始字节)
@@ -117,10 +117,10 @@
 ```dart
 class TransferProposalService {
   /// 查询机构 main_address 的可用余额（元）
-  Future<double> fetchInstitutionBalance(String shenfenId);
+  Future<double> fetchInstitutionBalance(String sfidNumber);
 
   /// 查询机构活跃的转账提案 ID（无活跃提案返回 null）
-  Future<int?> fetchActiveTransferProposal(String shenfenId);
+  Future<int?> fetchActiveTransferProposal(String sfidNumber);
 
   /// 查询提案详情（TransferAction）
   Future<TransferProposalInfo?> fetchProposalInfo(int proposalId);

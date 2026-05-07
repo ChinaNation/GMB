@@ -11,13 +11,13 @@ import { SweepProposalPage } from './SweepProposalPage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
 import type { AdminWalletMatch } from './types';
 
-// 国储会 shenfenId（全链唯一，直接进入详情）。
-const NRC_SHENFEN_ID = 'GFR-LN001-CB0C-617776487-20260222';
+// 国储会 sfidNumber（全链唯一，直接进入详情）。
+const NRC_SFID_NUMBER = 'GFR-LN001-CB0X-944805165-2026';
 
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string }
+  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string }
   | { page: 'create-proposal'; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-safety-fund'; adminWallets: AdminWalletMatch[] }
@@ -31,7 +31,7 @@ export function NrcSection() {
   if (view.page === 'admin-list') {
     return (
       <AdminListPage
-        shenfenId={NRC_SHENFEN_ID}
+        sfidNumber={NRC_SFID_NUMBER}
         onBack={backToDetail}
       />
     );
@@ -42,7 +42,7 @@ export function NrcSection() {
       <ProposalDetailPage
         proposalId={view.proposalId}
         adminWallets={view.adminWallets}
-        shenfenId={view.shenfenId}
+        sfidNumber={view.sfidNumber}
         onBack={backToDetail}
       />
     );
@@ -51,7 +51,7 @@ export function NrcSection() {
   if (view.page === 'create-proposal') {
     return (
       <CreateProposalPage
-        shenfenId={NRC_SHENFEN_ID}
+        sfidNumber={NRC_SFID_NUMBER}
         orgType={view.orgType}
         institutionName={view.institutionName}
         mainAddress={view.mainAddress}
@@ -85,7 +85,7 @@ export function NrcSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        shenfenId={NRC_SHENFEN_ID}
+        sfidNumber={NRC_SFID_NUMBER}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
@@ -97,12 +97,12 @@ export function NrcSection() {
   // 默认直接渲染国储会机构详情（hideBackButton 以保持 tab 语义）。
   return (
     <InstitutionDetailPage
-      shenfenId={NRC_SHENFEN_ID}
+      sfidNumber={NRC_SFID_NUMBER}
       onBack={backToDetail}
       hideBackButton
       onOpenAdminList={() => setView({ page: 'admin-list' })}
       onSelectProposal={(proposalId, adminWallets, sid) =>
-        setView({ page: 'proposal-detail', proposalId, adminWallets, shenfenId: sid })
+        setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid })
       }
       onCreateProposal={(_sid, orgType, name, mainAddress, aw) =>
         setView({ page: 'create-proposal', orgType, institutionName: name, mainAddress, adminWallets: aw })

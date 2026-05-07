@@ -1,7 +1,7 @@
 // 创建机构多签页:链上 propose_create_institution(pallet=17, call=5)。
 //
 // 流程:
-//   1. 加载时调 offchainApi.fetchInstitutionRegistrationInfo(sfidId) 拉注册专用信息
+//   1. 加载时调 offchainApi.fetchInstitutionRegistrationInfo(sfidNumber) 拉注册专用信息
 //      响应自带 register_nonce / signature / province / signer_admin_pubkey。
 //   2. 账户列表完全以 SFID 返回的 account_names 为准,前端只允许填写每个账户的初始资金。
 //   3. 管理员列表:创建人(选中的本机冷钱包)自动占第一位 + 扫码添加管理员
@@ -25,13 +25,13 @@ type AdminWalletProfile = {
 };
 
 type Props = {
-  sfidId: string;
+  sfidNumber: string;
   /** 节点桌面已激活的冷钱包列表(参考 governance/AdminListPage 同款机制)。
    *  由父级 section.tsx 在进入本页前预先加载。 */
   coldWallets: AdminWalletProfile[];
   onBack: () => void;
   /** 提案提交成功后,跳 wait-vote 视图。 */
-  onSubmitted: (sfidId: string, institutionName: string) => void;
+  onSubmitted: (sfidNumber: string, institutionName: string) => void;
 };
 
 type AccountForm = {
@@ -53,7 +53,7 @@ function yuanToFenString(yuan: string): string | null {
 }
 
 export function CreateMultisigInstitutionPage({
-  sfidId,
+  sfidNumber,
   coldWallets,
   onBack,
   onSubmitted,
@@ -73,7 +73,7 @@ export function CreateMultisigInstitutionPage({
   useEffect(() => {
     let cancelled = false;
     offchainApi
-      .fetchInstitutionRegistrationInfo(sfidId)
+      .fetchInstitutionRegistrationInfo(sfidNumber)
       .then((info) => {
         if (cancelled) return;
         setRegistrationInfo(info);
@@ -87,7 +87,7 @@ export function CreateMultisigInstitutionPage({
     return () => {
       cancelled = true;
     };
-  }, [sfidId]);
+  }, [sfidNumber]);
 
   // 创建人(选中的冷钱包公钥)自动占管理员第一位。
   useEffect(() => {
@@ -174,7 +174,7 @@ export function CreateMultisigInstitutionPage({
       // Step 1: 构 QR 签名请求
       const reqResult = await offchainApi.buildProposeCreateInstitutionRequest({
         pubkeyHex: selectedWallet.pubkeyHex,
-        sfidId,
+        sfidNumber,
         institutionName,
         accounts: accountInputs,
         adminPubkeys,
@@ -200,12 +200,12 @@ export function CreateMultisigInstitutionPage({
       //     ...全部 propose_create_institution 入参...
       //     signNonce, signBlockNumber, responseJson,
       //   });
-      // 成功后才入条目(链上 Institutions[sfid_id] = Pending,可被
+      // 成功后才入条目(链上 Institutions[sfid_number] = Pending,可被
       // wait-vote 与 institution-detail 复用)。F3 follow-up 接入冷钱包
       // 真实回签后,本 saveKnownSfid 调用应紧挨 submit 成功之后,而不是
       // 在 alert 占位之后(防止占位被点掉但实际 extrinsic 没提交)。
-      saveKnownSfid({ sfidId, institutionName });
-      onSubmitted(sfidId, institutionName);
+      saveKnownSfid({ sfidNumber, institutionName });
+      onSubmitted(sfidNumber, institutionName);
     } catch (e) {
       setSubmitError(sanitizeError(e));
     } finally {
@@ -237,7 +237,7 @@ export function CreateMultisigInstitutionPage({
       <button className="back-button" onClick={onBack}>← 返回</button>
       <div className="admin-list-header">
         <h2>创建机构多签</h2>
-        <code className="admin-card-address">{sfidId}</code>
+        <code className="admin-card-address">{sfidNumber}</code>
       </div>
 
       {/* 顶部:机构名(只读) */}

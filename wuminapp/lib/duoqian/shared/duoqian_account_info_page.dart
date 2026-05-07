@@ -73,7 +73,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     try {
       final results = await Future.wait([
         _manageService.fetchDuoqianAccount(widget.institution.duoqianAddress),
-        _adminService.fetchAdmins(widget.institution.shenfenId),
+        _adminService.fetchAdmins(widget.institution.sfidNumber),
       ]);
 
       final accountInfo = results[0] as DuoqianAccountInfo?;
@@ -193,7 +193,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     );
     if (closed == true && mounted) {
       // 关闭提案已提交,但**链上 close 还没真正执行**(要等其他管理员投票通过)。
-      // 此时 admins-change Institutions 仍存,反向索引下次扫还会拉回 → **不能立即删本地**。
+      // 此时 admins-change Subjects 仍存,反向索引下次扫还会拉回 → **不能立即删本地**。
       // 等链上 close execute 自动清掉 admins-change 后,反向索引下次扫不到再清孤立 entity。
       Navigator.pop(context);
     }
@@ -250,8 +250,8 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   /// 链上侧:个人多签 propose_create 的 threshold = 全员通过,任意一票反对都让
   /// `tally.yes + remaining < threshold` 立即满足,提案直接进入 STATUS_REJECTED。
   /// `cleanup_pending_personal_create` 自动执行:unreserve 创建者锁仓 + 删
-  /// `DuoqianAccounts` / `PersonalDuoqianInfo` / `PendingPersonalCreate` /
-  /// `admins-change::Subjects`。其他管理员设备的反向索引下次扫不到该
+  /// `PersonalManage::PersonalDuoqians` / `PersonalDuoqianInfo` /
+  /// `PendingPersonalCreate` / `admins-change::Subjects`。其他管理员设备的反向索引下次扫不到该
   /// institution_id,自动清理孤立 Isar entity。
   ///
   /// 仅个人 Pending 路径调用(机构 Pending 不展示此入口);Active 走 propose_close。
@@ -274,8 +274,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     );
     if (!hot.isHotWallet) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('当前管理员钱包均为冷钱包,请到"管理员列表"扫码投反对票')),
+        const SnackBar(content: Text('当前管理员钱包均为冷钱包,请到"管理员列表"扫码投反对票')),
       );
       return;
     }
@@ -324,8 +323,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         approve: false,
         fromAddress: hot.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
-        sign: (payload) =>
-            wm.signWithWalletNoAuth(hot.walletIndex, payload),
+        sign: (payload) => wm.signWithWalletNoAuth(hot.walletIndex, payload),
       );
       // 链上 reject 触发 cleanup 是异步的(下个出块周期),但 admins-change
       // 一旦清空,反向索引就扫不到 → 兜底机制完整。本地立即清,避免用户再看到。
@@ -401,8 +399,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
                 if (value == 'revoke_create') _confirmRevokeCreate();
               },
               itemBuilder: (_) {
-                final isActive =
-                    _accountInfo?.status == DuoqianStatus.active;
+                final isActive = _accountInfo?.status == DuoqianStatus.active;
                 return [
                   if (isActive)
                     PopupMenuItem(
@@ -485,7 +482,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.shenfenId);
+        _adminService.clearCache(widget.institution.sfidNumber);
         await _load();
       },
       child: ListView(
@@ -518,7 +515,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
                     const Divider(height: 20),
                     _buildInfoRow(
                       'SFID ID',
-                      _extractSfidId(widget.institution.shenfenId),
+                      _extractSfidNumber(widget.institution.sfidNumber),
                     ),
                   ],
                   const Divider(height: 20),
@@ -680,8 +677,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
           .findFirst();
       if (entity == null) return null;
       // creatorAddress 是 SS58,转 pubkey hex(小写,无 0x)。
-      final pair =
-          Keyring().decodeAddress(entity.creatorAddress);
+      final pair = Keyring().decodeAddress(entity.creatorAddress);
       return pair
           .map((b) => b.toRadixString(16).padLeft(2, '0'))
           .join()
@@ -697,9 +693,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     final canTransfer = _accountInfo?.status == DuoqianStatus.active;
     final accentColor =
         canTransfer ? AppTheme.primaryDark : AppTheme.textTertiary;
-    final subtitle = canTransfer
-        ? '从当前多签账户发起链上转账'
-        : '账户尚未激活,无法发起转账';
+    final subtitle = canTransfer ? '从当前多签账户发起链上转账' : '账户尚未激活,无法发起转账';
 
     // bug 2(2026-05-03):卡片高度对齐 institution_detail_page._buildAdminEntry,
     // 36×36 icon + Padding(14,12),与管理员卡片一致(原 38×38 + Padding(16,14) 偏高)。
@@ -857,14 +851,14 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
   // ──── 工具 ────
 
-  String _extractSfidId(String shenfenId) {
-    // shenfenId 格式："duoqian:hex..." → 返回原始 sfidId
-    // 但我们存储的 sfidId 是 UTF-8，shenfenId 是 "duoqian:" + hex address
-    // 这里直接显示 shenfenId 的地址部分
-    if (isRegisteredDuoqianIdentity(shenfenId)) {
-      return registeredDuoqianAddressFromIdentity(shenfenId) ?? shenfenId;
+  String _extractSfidNumber(String sfidNumber) {
+    // sfidNumber 格式："duoqian:hex..." → 返回原始 sfidNumber
+    // 但我们存储的 sfidNumber 是 UTF-8，sfidNumber 是 "duoqian:" + hex address
+    // 这里直接显示 sfidNumber 的地址部分
+    if (isRegisteredDuoqianIdentity(sfidNumber)) {
+      return registeredDuoqianAddressFromIdentity(sfidNumber) ?? sfidNumber;
     }
-    return shenfenId;
+    return sfidNumber;
   }
 
   String _hexToSs58(String hex) {

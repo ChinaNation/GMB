@@ -11,23 +11,23 @@ import type { AdminWalletMatch } from './types';
 
 type PrcView =
   | { page: 'list' }
-  | { page: 'detail'; shenfenId: string }
-  | { page: 'admin-list'; shenfenId: string }
-  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; shenfenId?: string; originShenfenId: string }
-  | { page: 'create-proposal'; shenfenId: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
-  | { page: 'propose-sweep'; shenfenId: string; institutionName: string; adminWallets: AdminWalletMatch[] };
+  | { page: 'detail'; sfidNumber: string }
+  | { page: 'admin-list'; sfidNumber: string }
+  | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
+  | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'propose-sweep'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] };
 
 export function PrcSection() {
   const [view, setView] = useState<PrcView>({ page: 'list' });
 
   const backToList = () => setView({ page: 'list' });
-  const backToDetail = (shenfenId: string) => setView({ page: 'detail', shenfenId });
+  const backToDetail = (sfidNumber: string) => setView({ page: 'detail', sfidNumber });
 
   if (view.page === 'admin-list') {
     return (
       <AdminListPage
-        shenfenId={view.shenfenId}
-        onBack={() => backToDetail(view.shenfenId)}
+        sfidNumber={view.sfidNumber}
+        onBack={() => backToDetail(view.sfidNumber)}
       />
     );
   }
@@ -37,8 +37,8 @@ export function PrcSection() {
       <ProposalDetailPage
         proposalId={view.proposalId}
         adminWallets={view.adminWallets}
-        shenfenId={view.shenfenId}
-        onBack={() => backToDetail(view.originShenfenId)}
+        sfidNumber={view.sfidNumber}
+        onBack={() => backToDetail(view.originSfidNumber)}
       />
     );
   }
@@ -46,13 +46,13 @@ export function PrcSection() {
   if (view.page === 'create-proposal') {
     return (
       <CreateProposalPage
-        shenfenId={view.shenfenId}
+        sfidNumber={view.sfidNumber}
         orgType={view.orgType}
         institutionName={view.institutionName}
         mainAddress={view.mainAddress}
         adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.shenfenId)}
-        onSuccess={() => backToDetail(view.shenfenId)}
+        onBack={() => backToDetail(view.sfidNumber)}
+        onSuccess={() => backToDetail(view.sfidNumber)}
       />
     );
   }
@@ -60,30 +60,30 @@ export function PrcSection() {
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
-        shenfenId={view.shenfenId}
+        sfidNumber={view.sfidNumber}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
-        onBack={() => backToDetail(view.shenfenId)}
-        onSuccess={() => backToDetail(view.shenfenId)}
+        onBack={() => backToDetail(view.sfidNumber)}
+        onSuccess={() => backToDetail(view.sfidNumber)}
       />
     );
   }
 
   if (view.page === 'detail') {
-    const shenfenId = view.shenfenId;
+    const sfidNumber = view.sfidNumber;
     return (
       <InstitutionDetailPage
-        shenfenId={shenfenId}
+        sfidNumber={sfidNumber}
         onBack={backToList}
-        onOpenAdminList={() => setView({ page: 'admin-list', shenfenId })}
+        onOpenAdminList={() => setView({ page: 'admin-list', sfidNumber })}
         onSelectProposal={(proposalId, adminWallets, sid) =>
-          setView({ page: 'proposal-detail', proposalId, adminWallets, shenfenId: sid, originShenfenId: shenfenId })
+          setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid, originSfidNumber: sfidNumber })
         }
         onCreateProposal={(sid, orgType, name, mainAddress, aw) =>
-          setView({ page: 'create-proposal', shenfenId: sid, orgType, institutionName: name, mainAddress, adminWallets: aw })
+          setView({ page: 'create-proposal', sfidNumber: sid, orgType, institutionName: name, mainAddress, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
-          setView({ page: 'propose-sweep', shenfenId: sid, institutionName: name, adminWallets: aw })
+          setView({ page: 'propose-sweep', sfidNumber: sid, institutionName: name, adminWallets: aw })
         }
       />
     );
@@ -93,7 +93,7 @@ export function PrcSection() {
   return (
     <InstitutionListView
       orgTypeFilter={1}
-      onSelect={(shenfenId) => setView({ page: 'detail', shenfenId })}
+      onSelect={(sfidNumber) => setView({ page: 'detail', sfidNumber })}
     />
   );
 }

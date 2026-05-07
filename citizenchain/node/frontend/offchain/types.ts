@@ -1,11 +1,11 @@
 // 清算行 tab 相关 DTO 与状态机类型,与 Tauri 后端 offchain/types.rs 对齐。
 
 export type EligibleClearingBankCandidate = {
-  sfidId: string;
+  sfidNumber: string;
   institutionName: string;
   a3: string;
   subType?: string | null;
-  parentSfidId?: string | null;
+  parentSfidNumber?: string | null;
   parentInstitutionName?: string | null;
   parentA3?: string | null;
   province: string;
@@ -16,7 +16,7 @@ export type EligibleClearingBankCandidate = {
   feeAccount?: string | null;
 };
 
-// ── 机构详情(链上 organization-manage::Institutions[sfid_id] 的对前端形态)──
+// ── 机构详情(链上 organization-manage::Institutions[sfid_number] 的对前端形态)──
 
 export type AccountWithBalance = {
   accountName: string;
@@ -30,7 +30,7 @@ export type AccountWithBalance = {
 };
 
 export type InstitutionDetail = {
-  sfidId: string;
+  sfidNumber: string;
   institutionName: string;
 
   mainAccount: AccountWithBalance;
@@ -64,7 +64,7 @@ export type InstitutionProposalPage = {
 
 /** SFID `/registration-info` 响应形态(snake_case 直传)。 */
 export type InstitutionRegistrationInfoResp = {
-  sfid_id: string;
+  sfid_number: string;
   institution_name: string;
   account_names: string[];
   credential: InstitutionRegistrationCredentialResp;
@@ -91,7 +91,7 @@ export type InitialAccountInputDto = {
 };
 
 export type ClearingBankNodeOnChainInfo = {
-  sfidId: string;
+  sfidNumber: string;
   peerId: string;
   rpcDomain: string;
   rpcPort: number;
@@ -113,7 +113,7 @@ export type ConnectivityTestReport = {
 
 export type DecryptedAdminInfo = {
   pubkeyHex: string;
-  sfidId: string;
+  sfidNumber: string;
   decryptedAtMs: number;
 };
 
@@ -128,8 +128,8 @@ export type DecryptAdminRequestResult = {
  * offchain/section.tsx 状态机(2026-05-01 重构)。
  *
  *   empty                        初始 — 顶部 ＋添加清算行 按钮
- *   add-input-sfid               输入 sfid_id 或机构名,debounce 自动搜 SFID 候选
- *   check-multisig               链上查 Institutions[sfid_id]
+ *   add-input-sfid               输入 sfid_number 或机构名,debounce 自动搜 SFID 候选
+ *   check-multisig               链上查 Institutions[sfid_number]
  *                                  ├─ 已存在 → institution-detail
  *                                  └─ 不存在 → create-multisig-institution
  *   institution-detail           机构详情卡片栅格 + 折叠子页入口 + 节点信息内联
@@ -142,10 +142,10 @@ export type DecryptAdminRequestResult = {
 export type ClearingBankView =
   | { kind: 'empty' }
   | { kind: 'add-input-sfid' }
-  | { kind: 'check-multisig'; sfidId: string; institutionName: string }
-  | { kind: 'institution-detail'; sfidId: string }
-  | { kind: 'create-multisig-institution'; sfidId: string }
-  | { kind: 'wait-vote'; sfidId: string; institutionName: string }
-  | { kind: 'declare-node'; sfidId: string; institutionName: string }
-  | { kind: 'other-accounts-list'; sfidId: string; otherAccounts: AccountWithBalance[] }
-  | { kind: 'admin-list'; sfidId: string; admins: string[]; threshold: number; adminCount: number };
+  | { kind: 'check-multisig'; sfidNumber: string; institutionName: string }
+  | { kind: 'institution-detail'; sfidNumber: string }
+  | { kind: 'create-multisig-institution'; sfidNumber: string }
+  | { kind: 'wait-vote'; sfidNumber: string; institutionName: string }
+  | { kind: 'declare-node'; sfidNumber: string; institutionName: string }
+  | { kind: 'other-accounts-list'; sfidNumber: string; otherAccounts: AccountWithBalance[] }
+  | { kind: 'admin-list'; sfidNumber: string; admins: string[]; threshold: number; adminCount: number };

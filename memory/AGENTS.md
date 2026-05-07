@@ -45,6 +45,12 @@
 
 ## 4. 首轮必须先读的文档
 
+统一入口：
+
+- `memory/07-ai/unified-required-reading.md`
+
+首轮必读清单由统一必读文件管理，当前必须至少包括：
+
 - `memory/00-vision/project-goal.md`
 - `memory/00-vision/trust-boundary.md`
 - `memory/01-architecture/repo-map.md`

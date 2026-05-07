@@ -35,7 +35,7 @@ sfid/backend/cpms/
 | 端点 | 代码 |
 |---|---|
 | `GET /api/v1/admin/cpms-keys` | `cpms::list_cpms_keys` |
-| `GET /api/v1/admin/cpms-keys/by-institution/:sfid_id` | `cpms::get_cpms_site_by_institution` |
+| `GET /api/v1/admin/cpms-keys/by-institution/:sfid_number` | `cpms::get_cpms_site_by_institution` |
 | `POST /api/v1/admin/cpms-keys/sfid/generate` | `cpms::generate_cpms_institution_sfid_qr` |
 | `POST /api/v1/admin/cpms/register` | `cpms::register_cpms` |
 | `POST /api/v1/admin/cpms/archive/import` | `cpms::archive_import` |

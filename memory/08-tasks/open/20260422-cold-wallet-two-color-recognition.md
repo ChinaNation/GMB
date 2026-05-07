@@ -171,7 +171,7 @@ make_transfer_sigs
   propose_safety_fund_transfer / propose_sweep_to_main /
   developer_direct_upgrade / propose_runtime_upgrade / transaction transfer)
 - ✅ `activation.rs:221-224` 删多余 `institution` 字段(Registry
-  activate_admin fields 严格只含 `shenfen_id`);机构名保留在 summary
+  activate_admin fields 严格只含 `sfid_number`);机构名保留在 summary
 - ✅ `format_amount` 与 wumin decoder `_fenToYuan` 双方都是"千分位+2 位
   小数+GMB 后缀",字面输出一致
 - ✅ `sha256_hash(&wasm_code)` 与 wumin decoder `sha256.convert(wasmBytes)`

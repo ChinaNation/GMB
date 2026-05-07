@@ -14,7 +14,7 @@
 
 同时**删除** `DuoqianAccounts` mirror 表（含 `DuoqianAccount` / `DuoqianStatus` 类型），`duoqian-transfer` 改通过 trait 接口查询多签 admin 配置。
 
-`account_to_institution_id` / `sfid_id_to_institution_id` 提到 `primitives::derive` 共用，避免 personal-manage → organization-manage 的反向依赖。
+`account_to_institution_id` / `sfid_number_to_institution_id` 提到 `primitives::derive` 共用，避免 personal-manage → organization-manage 的反向依赖。
 
 ## 2. 影响范围
 
@@ -32,7 +32,7 @@
 ### 2.2 primitives 提取
 - `citizenchain/runtime/primitives/src/derive.rs`（新建）：
   - `pub fn account_to_institution_id<AccountId: Encode>(account: &AccountId) -> InstitutionPalletId`（从 organization-manage::common.rs 迁来）
-  - `pub fn sfid_id_to_institution_id(sfid_id: &[u8]) -> Option<InstitutionPalletId>`（同上）
+  - `pub fn sfid_number_to_institution_id(sfid_number: &[u8]) -> Option<InstitutionPalletId>`（同上）
 - `citizenchain/runtime/primitives/src/lib.rs`：`pub mod derive`
 
 ### 2.3 共用类型 `MultisigConfig`
@@ -58,7 +58,7 @@
   - 删 `ACTION_CREATE_PERSONAL` 常量（仅保留 `ACTION_CLOSE=2 / ACTION_CREATE_INSTITUTION=3`）
 - `src/execute.rs`：删整个文件（`execute_create_with_finalizer` 是个人专属，迁 personal-manage；`execute_close_with_finalizer` 拆两份，机构侧迁 `institution/execute.rs` 新增 `execute_institution_close_with_finalizer`）
 - `src/close.rs`：删除当前共用入口；新建 `src/institution/close.rs::do_propose_institution_close`，入口仅查 `AddressRegisteredSfid → InstitutionAccounts → admins-change` 路径
-- `src/common.rs`：删 `account_to_institution_id` / `sfid_id_to_institution_id`（迁 primitives），改为 `pub use primitives::derive::*` 让下游引用兼容
+- `src/common.rs`：删 `account_to_institution_id` / `sfid_number_to_institution_id`（迁 primitives），改为 `pub use primitives::derive::*` 让下游引用兼容
 - `src/traits.rs`：新增 `pub trait InstitutionMultisigQuery<AccountId>` 暴露 `lookup_admin_config / is_active`
 - `src/institution/`：新建 `close.rs`（`do_propose_institution_close`）+ 改 `execute.rs`（增 `execute_institution_close_with_finalizer`）
 
@@ -228,7 +228,7 @@ grep -rn "PersonalDuoqianInfo\|PendingPersonalCreate" citizenchain/runtime/gover
 
 11 步全部按方案完成（2026-05-06）：
 
-1. **primitives 提取** — `primitives/src/derive.rs`(account_to_institution_id / sfid_id_to_institution_id) + `primitives/src/types.rs::MultisigConfigSnapshot` + `primitives/src/traits.rs`(3 个共用 trait:DuoqianAddressValidator / DuoqianReservedAddressChecker / ProtectedSourceChecker)。Cargo.toml 加 sp-std + frame-support dep。
+1. **primitives 提取** — `primitives/src/derive.rs`(account_to_institution_id / sfid_number_to_institution_id) + `primitives/src/types.rs::MultisigConfigSnapshot` + `primitives/src/traits.rs`(3 个共用 trait:DuoqianAddressValidator / DuoqianReservedAddressChecker / ProtectedSourceChecker)。Cargo.toml 加 sp-std + frame-support dep。
 2. **personal-manage crate 骨架** — `runtime/governance/personal-manage/Cargo.toml` + `lib.rs`(pallet 主体 ~600 行;Config / 4 storage / Event 7 变体 / Error 25 变体 / 3 extrinsic / InternalVoteExecutor)。pallet_index=7,MODULE_TAG=`b"per-mgmt"`,ACTION_CREATE=0/ACTION_CLOSE=1。
 3. **类型 + helper 迁移** — types.rs(5 类型:DuoqianAccount/DuoqianStatus/CreateDuoqianAction/CloseDuoqianAction/PersonalDuoqianMeta) + derive_personal_duoqian_address(在 lib.rs Pallet 块内)。
 4. **storage 迁移** — PersonalDuoqians(替代旧 DuoqianAccounts 个人部分) + PersonalDuoqianInfo + PendingPersonalCreate + PendingCloseProposal(独立)。
@@ -244,9 +244,9 @@ grep -rn "PersonalDuoqianInfo\|PendingPersonalCreate" citizenchain/runtime/gover
 11. **文档 + 残留 + 验证** — 任务卡 §5.3 4 条残留扫描全零;runtime --lib 37 测试全过;duoqian-transfer 20 测试全过;wumin 105 测试全过;wuminapp duoqian 28 测试全过;cargo check --workspace 含 node + sfid 全部通过。
 
 **已知 follow-up debt**(B 阶段不完成,记录在任务卡 §9 末尾):
-- organization-manage 单测模块清空,34 个 case 转 follow-up(机构 case 用机构 mock 重写)
-- personal-manage 自持单测尚未编写(后续从原 organization-manage 个人 case 迁移)
-- benchmarks.rs propose_close + propose_create_personal benchmark 重写
+- ~~organization-manage 单测模块清空,34 个 case 转 follow-up~~ → 2026-05-07 重写完成(22 用例,见 [20260507-runtime-pallet-tests-restructure.md §10](20260507-runtime-pallet-tests-restructure.md))
+- ~~personal-manage 自持单测尚未编写~~ → 2026-05-07 编写完成(14 用例,见同上 §10)
+- benchmarks.rs propose_close + propose_create_personal benchmark 重写(仍是 follow-up)
 
 ## 9. 验证结果
 

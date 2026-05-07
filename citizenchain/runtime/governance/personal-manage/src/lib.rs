@@ -31,6 +31,9 @@ pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarks;
 
+#[cfg(test)]
+mod tests;
+
 pub use traits::PersonalMultisigQuery;
 pub use types::{
     CloseDuoqianAction, CreateDuoqianAction, DuoqianAccount, DuoqianStatus, PersonalDuoqianMeta,

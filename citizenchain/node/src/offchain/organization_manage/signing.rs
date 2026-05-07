@@ -59,11 +59,11 @@ fn encode_u128_le(v: u128) -> [u8; 16] {
 
 /// 构造 `propose_create_institution`(pallet=17, call=5)的 call_data。
 ///
-/// 入参顺序与 [`citizenchain/runtime/transaction/organization-manage/src/lib.rs::propose_create_institution`]
+/// 入参顺序与 [`citizenchain/runtime/governance/organization-manage/src/lib.rs::propose_create_institution`]
 /// 严格一致(10 个字段)。任一字段顺序变更必须同步改本函数。
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_call_data(
-    sfid_id: &str,
+    sfid_number: &str,
     institution_name: &str,
     accounts: &[InitialAccountInput],
     admin_count: u32,
@@ -74,8 +74,8 @@ pub fn build_propose_create_institution_call_data(
     signing_province: &str,
     signer_admin_pubkey: &str,
 ) -> Result<Vec<u8>, String> {
-    if sfid_id.is_empty() || sfid_id.len() > 96 {
-        return Err("sfid_id 长度需在 1..=96".to_string());
+    if sfid_number.is_empty() || sfid_number.len() > 96 {
+        return Err("sfid_number 长度需在 1..=96".to_string());
     }
     if institution_name.is_empty() || institution_name.len() > 128 {
         return Err("institution_name 长度需在 1..=128".to_string());
@@ -115,8 +115,8 @@ pub fn build_propose_create_institution_call_data(
     call.push(DUOQIAN_PALLET_INDEX);
     call.push(CALL_PROPOSE_CREATE_INSTITUTION);
 
-    // 1. sfid_id: BoundedVec<u8>
-    call.extend_from_slice(&encode_bytes_with_len(sfid_id.as_bytes()));
+    // 1. sfid_number: BoundedVec<u8>
+    call.extend_from_slice(&encode_bytes_with_len(sfid_number.as_bytes()));
     // 2. institution_name: BoundedVec<u8>
     call.extend_from_slice(&encode_bytes_with_len(institution_name.as_bytes()));
     // 3. accounts: BoundedVec<InstitutionInitialAccount> = Compact(N) + N × (account_name + amount)
@@ -157,7 +157,7 @@ pub fn build_propose_create_institution_call_data(
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_sign_request(
     pubkey_hex: &str,
-    sfid_id: &str,
+    sfid_number: &str,
     institution_name: &str,
     accounts: &[InitialAccountInput],
     admin_count: u32,
@@ -170,7 +170,7 @@ pub fn build_propose_create_institution_sign_request(
 ) -> Result<VoteSignRequestResult, String> {
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_propose_create_institution_call_data(
-        sfid_id,
+        sfid_number,
         institution_name,
         accounts,
         admin_count,
@@ -182,9 +182,9 @@ pub fn build_propose_create_institution_sign_request(
         signer_admin_pubkey,
     )?;
     let total_amount_fen: u128 = accounts.iter().map(|a| a.amount_fen).sum();
-    let summary = format!("创建清算行机构多签 {institution_name}({sfid_id})");
+    let summary = format!("创建清算行机构多签 {institution_name}({sfid_number})");
     let mut fields = vec![
-        serde_json::json!({ "key": "sfid_id", "label": "机构身份码", "value": sfid_id }),
+        serde_json::json!({ "key": "sfid_number", "label": "机构身份号码", "value": sfid_number }),
         serde_json::json!({ "key": "institution_name", "label": "机构名称", "value": institution_name }),
         serde_json::json!({ "key": "admin_count", "label": "管理员数量", "value": admin_count.to_string() }),
         serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admin_count}") }),
@@ -205,6 +205,23 @@ pub fn build_propose_create_institution_sign_request(
             ),
         }));
     }
+    let signer_admin_pubkey_display = format!(
+        "0x{}",
+        signer_admin_pubkey
+            .strip_prefix("0x")
+            .unwrap_or(signer_admin_pubkey)
+            .to_ascii_lowercase()
+    );
+    fields.push(serde_json::json!({
+        "key": "province",
+        "label": "签发省份",
+        "value": signing_province,
+    }));
+    fields.push(serde_json::json!({
+        "key": "signer_admin_pubkey",
+        "label": "签发管理员",
+        "value": signer_admin_pubkey_display,
+    }));
     build_sign_request_from_call_data(
         &clean,
         &bytes,

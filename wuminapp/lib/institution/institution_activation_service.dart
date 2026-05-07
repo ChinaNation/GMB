@@ -12,28 +12,28 @@ import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
 class ActivatedAdmin {
   const ActivatedAdmin({
     required this.pubkeyHex,
-    required this.shenfenId,
+    required this.sfidNumber,
     required this.activatedAtMs,
   });
 
   /// 管理员公钥 hex（不含 0x，小写）。
   final String pubkeyHex;
 
-  /// 所属机构身份码。
-  final String shenfenId;
+  /// 所属机构身份号码。
+  final String sfidNumber;
 
   /// 激活时间（毫秒时间戳）。
   final int activatedAtMs;
 
   Map<String, dynamic> toJson() => {
         'pubkeyHex': pubkeyHex,
-        'shenfenId': shenfenId,
+        'sfidNumber': sfidNumber,
         'activatedAtMs': activatedAtMs,
       };
 
   factory ActivatedAdmin.fromJson(Map<String, dynamic> json) => ActivatedAdmin(
         pubkeyHex: json['pubkeyHex'] as String,
-        shenfenId: json['shenfenId'] as String,
+        sfidNumber: json['sfidNumber'] as String,
         activatedAtMs: json['activatedAtMs'] as int,
       );
 }
@@ -78,23 +78,23 @@ class ActivationService {
   }
 
   /// 获取指定机构的已激活管理员，并与链上管理员列表交叉校验。
-  Future<List<ActivatedAdmin>> getActivatedAdmins(String shenfenId) async {
+  Future<List<ActivatedAdmin>> getActivatedAdmins(String sfidNumber) async {
     var all = await loadAll();
-    final institution = all.where((a) => a.shenfenId == shenfenId).toList();
+    final institution = all.where((a) => a.sfidNumber == sfidNumber).toList();
     if (institution.isEmpty) return [];
 
     // 链上交叉校验
     try {
-      final chainAdmins = await _adminService.fetchAdmins(shenfenId);
+      final chainAdmins = await _adminService.fetchAdmins(sfidNumber);
       final validPubkeys = chainAdmins.toSet();
       final before = all.length;
       all.removeWhere(
-        (a) => a.shenfenId == shenfenId && !validPubkeys.contains(a.pubkeyHex),
+        (a) => a.sfidNumber == sfidNumber && !validPubkeys.contains(a.pubkeyHex),
       );
       if (all.length != before) {
         await _saveAll(all);
       }
-      return all.where((a) => a.shenfenId == shenfenId).toList();
+      return all.where((a) => a.sfidNumber == sfidNumber).toList();
     } catch (_) {
       // RPC 查询失败时不清除本地记录
       return institution;
@@ -102,10 +102,10 @@ class ActivationService {
   }
 
   /// 检查指定公钥是否已激活。
-  Future<bool> isActivated(String pubkeyHex, String shenfenId) async {
+  Future<bool> isActivated(String pubkeyHex, String sfidNumber) async {
     final pk = _normalize(pubkeyHex);
     final all = await loadAll();
-    return all.any((a) => a.pubkeyHex == pk && a.shenfenId == shenfenId);
+    return all.any((a) => a.pubkeyHex == pk && a.sfidNumber == sfidNumber);
   }
 
   // ---------------------------------------------------------------------------
@@ -117,14 +117,14 @@ class ActivationService {
   /// 返回 (SignRequestEnvelope, requestJson),直接传给 QrSignSessionPage。
   ({SignRequestEnvelope request, String json}) buildActivationRequest({
     required String pubkeyHex,
-    required String shenfenId,
+    required String sfidNumber,
   }) {
     final pk = _normalize(pubkeyHex);
 
     final pkBytes = _hexToBytes(pk);
     final account = Keyring().encodeAddress(pkBytes, 2027);
 
-    final payload = _buildActivatePayload(shenfenId);
+    final payload = _buildActivatePayload(sfidNumber);
     // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
     // wumin SignRequestBody.fromJson 严格要求 pubkey / payload_hex
     // 以 0x 开头,缺前缀会抛 "签名请求解析失败"(2026-04-22 修复)。
@@ -141,10 +141,10 @@ class ActivationService {
         action: 'activate_admin',
         summary: '激活机构管理员',
         fields: [
-          // activate_admin 链下签名 payload 只含 shenfen_id(48B 右补零),
-          // Registry 字段清单只有 shenfen_id。管理员公钥属辅助信息,不塞
+          // activate_admin 链下签名 payload 只含 sfid_number(48B 右补零),
+          // Registry 字段清单只有 sfid_number。管理员公钥属辅助信息,不塞
           // display.fields 避免对齐失败(2026-04-22 两色识别整改)。
-          SignDisplayField(key: 'shenfen_id', label: '身份码', value: shenfenId),
+          SignDisplayField(key: 'sfid_number', label: '身份号码', value: sfidNumber),
         ],
       ),
     );
@@ -156,11 +156,11 @@ class ActivationService {
   /// 通过 QR 签名回执完成激活。
   ///
   /// [pubkeyHex] 管理员公钥。
-  /// [shenfenId] 机构身份码。
+  /// [sfidNumber] 机构身份号码。
   /// [response] 从 QrSignSessionPage 获取的签名回执。
   Future<ActivatedAdmin> activateViaQr({
     required String pubkeyHex,
-    required String shenfenId,
+    required String sfidNumber,
     required SignResponseEnvelope response,
   }) async {
     final pk = _normalize(pubkeyHex);
@@ -172,7 +172,7 @@ class ActivationService {
     }
 
     // 验证是链上管理员
-    final admins = await _adminService.fetchAdmins(shenfenId);
+    final admins = await _adminService.fetchAdmins(sfidNumber);
     if (!admins.contains(pk)) {
       throw Exception('该公钥不在此机构的链上管理员列表中');
     }
@@ -181,13 +181,13 @@ class ActivationService {
     final now = DateTime.now().millisecondsSinceEpoch;
     final activation = ActivatedAdmin(
       pubkeyHex: pk,
-      shenfenId: shenfenId,
+      sfidNumber: sfidNumber,
       activatedAtMs: now,
     );
 
     var all = await loadAll();
     // 去重
-    all.removeWhere((a) => a.pubkeyHex == pk && a.shenfenId == shenfenId);
+    all.removeWhere((a) => a.pubkeyHex == pk && a.sfidNumber == sfidNumber);
     all.add(activation);
     await _saveAll(all);
 
@@ -199,10 +199,10 @@ class ActivationService {
   // ---------------------------------------------------------------------------
 
   /// 取消激活。
-  Future<void> deactivate(String pubkeyHex, String shenfenId) async {
+  Future<void> deactivate(String pubkeyHex, String sfidNumber) async {
     final pk = _normalize(pubkeyHex);
     var all = await loadAll();
-    all.removeWhere((a) => a.pubkeyHex == pk && a.shenfenId == shenfenId);
+    all.removeWhere((a) => a.pubkeyHex == pk && a.sfidNumber == sfidNumber);
     await _saveAll(all);
   }
 
@@ -210,12 +210,12 @@ class ActivationService {
   // 内部方法
   // ---------------------------------------------------------------------------
 
-  Uint8List _buildActivatePayload(String shenfenId) {
+  Uint8List _buildActivatePayload(String sfidNumber) {
     final payload = Uint8List(84);
     // 前缀
     payload.setAll(0, _activatePrefix);
-    // shenfen_id 固定 48 字节，右补零
-    final idBytes = Uint8List.fromList(shenfenId.codeUnits);
+    // sfid_number 固定 48 字节，右补零
+    final idBytes = Uint8List.fromList(sfidNumber.codeUnits);
     payload.setAll(12, idBytes.sublist(0, idBytes.length.clamp(0, 48)));
     // 时间戳 u64 LE
     final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;

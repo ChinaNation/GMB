@@ -124,11 +124,11 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        futures.add(_adminService.fetchAdmins(institution.shenfenId));
+        futures.add(_adminService.fetchAdmins(institution.sfidNumber));
         futures.add(_service.fetchJointVoteByInstitution(
-            widget.proposalId, _shenfenIdToFixed48(institution.shenfenId)));
+            widget.proposalId, _sfidNumberToFixed48(institution.sfidNumber)));
         futures.add(_service.fetchJointInstitutionTally(
-            widget.proposalId, _shenfenIdToFixed48(institution.shenfenId)));
+            widget.proposalId, _sfidNumberToFixed48(institution.sfidNumber)));
       }
 
       final results = await Future.wait(futures);
@@ -157,7 +157,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
-        final institutionBytes = _shenfenIdToFixed48(institution.shenfenId);
+        final institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
         final voteResults = await Future.wait(
           admins.map((pubkey) async => MapEntry(
                 pubkey,
@@ -226,9 +226,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         : hex.toLowerCase();
   }
 
-  Uint8List _shenfenIdToFixed48(String shenfenId) {
+  Uint8List _sfidNumberToFixed48(String sfidNumber) {
     final bytes = Uint8List(48);
-    final raw = shenfenId.codeUnits;
+    final raw = sfidNumber.codeUnits;
     for (var i = 0; i < raw.length && i < 48; i++) {
       bytes[i] = raw[i];
     }
@@ -310,7 +310,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     setState(() => _submitting = true);
 
     try {
-      final institutionBytes = _shenfenIdToFixed48(institution.shenfenId);
+      final institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
       final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
         institutionId48: institutionBytes,
@@ -364,7 +364,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         ),
       );
 
-      _adminService.clearCache(institution.shenfenId);
+      _adminService.clearCache(institution.sfidNumber);
       await _load();
     } on WalletAuthException catch (e) {
       if (!mounted) return;
@@ -483,7 +483,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       onRefresh: () async {
         final institution = widget.institution;
         if (institution != null) {
-          _adminService.clearCache(institution.shenfenId);
+          _adminService.clearCache(institution.sfidNumber);
         }
         await _load();
       },

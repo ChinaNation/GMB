@@ -49,7 +49,7 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
   const scope = useScope(auth);
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
-  const [selectedSfidId, setSelectedSfidId] = useState<string | null>(null);
+  const [selectedSfidNumber, setSelectedSfidNumber] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   // 市详情页的机构列表搜索:输入不自动触发,点搜索图标提交 → committedSearch
@@ -67,14 +67,14 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
   const isPublicSecurity = category === 'PUBLIC_SECURITY';
 
   // 机构详情页:InstitutionsView 本身不再渲染 Card,由 DetailPage 自己管
-  if (selectedSfidId) {
+  if (selectedSfidNumber) {
     return (
       <InstitutionDetailPage
         auth={auth}
-        sfidId={selectedSfidId}
+        sfidNumber={selectedSfidNumber}
         canWrite={scope.canWrite}
         onBack={() => {
-          setSelectedSfidId(null);
+          setSelectedSfidNumber(null);
           setRefreshKey((k) => k + 1);
         }}
       />
@@ -115,7 +115,7 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
         province={effectiveProvince}
         city=""
         refreshKey={refreshKey}
-        onSelectInstitution={(sfidId) => setSelectedSfidId(sfidId)}
+        onSelectInstitution={(sfidNumber) => setSelectedSfidNumber(sfidNumber)}
       />
     );
   } else if (!effectiveCity) {
@@ -185,7 +185,7 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
         city={effectiveCity}
         refreshKey={refreshKey}
         searchQuery={committedSearch}
-        onSelectInstitution={(sfidId) => setSelectedSfidId(sfidId)}
+        onSelectInstitution={(sfidNumber) => setSelectedSfidNumber(sfidNumber)}
       />
     );
   }
@@ -213,8 +213,8 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
           setCreateOpen(false);
           setRefreshKey((k) => k + 1);
           // 两步式:私权机构生成 SFID 后直接跳详情页,让管理员补填名称/企业类型等信息
-          if (category === 'PRIVATE_INSTITUTION' && result?.sfid_id) {
-            setSelectedSfidId(result.sfid_id);
+          if (category === 'PRIVATE_INSTITUTION' && result?.sfid_number) {
+            setSelectedSfidNumber(result.sfid_number);
           }
         }}
       />

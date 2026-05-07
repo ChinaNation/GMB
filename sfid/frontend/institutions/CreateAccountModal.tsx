@@ -7,7 +7,7 @@
 //     sfid 前端不做地址预览(避免和链端公式漂移)
 //
 // 约束:
-//   - 同一 sfid_id 下 account_name 唯一(后端硬校验,前端做一次即时预校验)
+//   - 同一 sfid_number 下 account_name 唯一(后端硬校验,前端做一次即时预校验)
 //   - "主账户" / "费用账户" 是默认账户(创建机构时已自动生成),这里手工建名不能重复
 
 import React, { useEffect, useState } from 'react';
@@ -17,7 +17,7 @@ import { createAccount, type MultisigAccount } from './api';
 
 interface Props {
   auth: AdminAuth;
-  sfidId: string;
+  sfidNumber: string;
   institutionName: string;
   /** 当前已有的账户列表(用于前端唯一性预校验) */
   existingAccounts: MultisigAccount[];
@@ -32,7 +32,7 @@ interface FormValues {
 
 export const CreateAccountModal: React.FC<Props> = ({
   auth,
-  sfidId,
+  sfidNumber,
   institutionName,
   existingAccounts,
   open,
@@ -65,7 +65,7 @@ export const CreateAccountModal: React.FC<Props> = ({
     }
     setSubmitting(true);
     try {
-      await createAccount(auth, sfidId, name);
+      await createAccount(auth, sfidNumber, name);
       message.success('账户名称已创建,链上注册后会自动同步状态');
       onCreated();
     } catch (err) {
@@ -95,7 +95,7 @@ export const CreateAccountModal: React.FC<Props> = ({
         <Typography.Text type="secondary">机构:{institutionName}</Typography.Text>
         <br />
         <Typography.Text type="secondary" code style={{ fontSize: 11 }}>
-          {sfidId}
+          {sfidNumber}
         </Typography.Text>
       </div>
       <Form form={form} layout="vertical" onFinish={onSubmit}>

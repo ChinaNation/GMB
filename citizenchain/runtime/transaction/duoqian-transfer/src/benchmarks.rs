@@ -16,7 +16,7 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
-    subject_pallet_address, subject_id_from_shenfen_id, BalanceOf, Call, Config,
+    subject_pallet_address, subject_id_from_sfid_number, BalanceOf, Call, Config,
     SubjectId, Pallet, CHINA_CB, ORG_PRC,
 };
 
@@ -25,7 +25,7 @@ fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
 }
 
 fn prc_institution() -> SubjectId {
-    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
+    subject_id_from_sfid_number(CHINA_CB[1].sfid_number).expect("PRC institution should be valid")
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {

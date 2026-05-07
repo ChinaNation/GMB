@@ -87,7 +87,10 @@ class ChainRpc {
     return SmoldotClientManager.instance.getStatusSnapshotRaw();
   }
 
-  /// 获取最新区块的哈希和块号（用于 mortal era 计算）。
+  /// 获取最新区块的哈希和块号。
+  ///
+  /// 仅用于 UI 展示、事件查询和诊断；signed extrinsic 构造按 P-SIGN-001
+  /// 固定使用 immortal era，不得用最新块参与 CheckEra。
   Future<({Uint8List blockHash, int blockNumber})> fetchLatestBlock() async {
     // 中文注释：轻节点模式直接复用原生状态快照，减少一次 `chain_getHeader` 往返。
     final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();

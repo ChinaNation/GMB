@@ -58,7 +58,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
           ListTile(
             title: const Text('SFID'),
-            subtitle: SelectableText(b.sfidId),
+            subtitle: SelectableText(b.sfidNumber),
           ),
           ListTile(
             title: const Text('主账户地址'),
@@ -151,7 +151,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
         await ClearingBankPrefs.saveSnapshot(
           wallet.walletIndex,
           ClearingBankBindingSnapshot(
-            sfidId: widget.bank.sfidId,
+            sfidNumber: widget.bank.sfidNumber,
             institutionName: widget.bank.institutionName,
             mainAccount: _normalizeHex(widget.bank.mainAccount ?? ''),
             feeAccount: widget.bank.feeAccount == null
@@ -165,7 +165,7 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
         );
       } else {
-        await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidId);
+        await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidNumber);
       }
 
       if (!mounted) return;

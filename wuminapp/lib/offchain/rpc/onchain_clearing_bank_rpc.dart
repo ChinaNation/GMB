@@ -1,11 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, SignatureType, SigningPayload;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 
 /// 扫码支付清算体系:**清算行(L2)** 体系的链上 extrinsic 构造(唯一路径)。
 ///
@@ -15,15 +13,12 @@ import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 ///   `bind_clearing_institution` (call_index 9) 已在 Step 2b-iv-b 随老 pallet
 ///   删除。
 /// - Extrinsic 编码沿用现有 `OnchainRpc` 的 polkadart + SCALE 模式,确保与链上
-///   验签格式一致(sr25519 签名,mortal era=64,带 nonce/tip)。
+///   验签格式一致(sr25519 签名,immortal era,带 nonce/tip)。
 /// - 所有金额参数以**分**为单位的整数进入 SCALE 编码,与链上 `u128` 对齐。
 class OnchainClearingBankRpc {
   OnchainClearingBankRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
-
-  /// Mortal era 周期(区块数),与 `OnchainRpc._eraPeriod` 对齐。
-  static const int _eraPeriod = 64;
 
   /// `OffchainTransaction` pallet index(citizenchain runtime 定义)。
   static const int _palletIndex = 21;
@@ -145,70 +140,25 @@ class OnchainClearingBankRpc {
     return output.toBytes();
   }
 
-  /// 通用 extrinsic 提交流程:获取 metadata + nonce + 当前块 → 构造 SigningPayload
-  /// → 签名 → 编码 ExtrinsicPayload → submitExtrinsic。
+  /// 通用 extrinsic 提交流程：统一走 P-SIGN-001 immortal era 构造器。
   ///
-  /// 复用 `OnchainRpc` 的 era/nonce/tip 风格(mortal era=64,失败时 nonce 回滚),
-  /// 与其他 extrinsic 行为一致。
+  /// 失败时由统一构造器回滚 nonce，与其他 extrinsic 行为一致。
   Future<({String txHash, int usedNonce})> _submitExtrinsic({
     required String fromAddress,
     required Uint8List signerPubkey,
     required Uint8List callData,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    final metadata = await _rpc.fetchMetadata();
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
-
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'OnchainClearingBank',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
     );
-    final payloadBytes = signingPayload.encode(registry);
-    final signature = await sign(payloadBytes);
-
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      rethrow;
-    }
   }
 
   // ──────────── 通用工具 ────────────
-
-  static String _hexEncode(Uint8List bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
 }

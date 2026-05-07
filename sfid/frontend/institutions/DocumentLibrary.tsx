@@ -1,5 +1,5 @@
 // 中文注释:机构资料库 — 自治模块,管理机构注册文件(公司章程/许可证等)。
-// 本组件独立管理数据加载、上传、下载、删除,外部只需传 auth + sfidId + canWrite。
+// 本组件独立管理数据加载、上传、下载、删除,外部只需传 auth + sfidNumber + canWrite。
 // 修改资料库功能只需改本文件,不影响其他模块。
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -18,7 +18,7 @@ import type { AdminAuth } from '../auth/types';
 
 interface Props {
   auth: AdminAuth;
-  sfidId: string;
+  sfidNumber: string;
   canWrite: boolean;
 }
 
@@ -36,7 +36,7 @@ const DOC_TYPE_COLORS: Record<string, string> = {
   '其他': 'default',
 };
 
-export const DocumentLibrary: React.FC<Props> = ({ auth, sfidId, canWrite }) => {
+export const DocumentLibrary: React.FC<Props> = ({ auth, sfidNumber, canWrite }) => {
   const [docs, setDocs] = useState<InstitutionDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -44,11 +44,11 @@ export const DocumentLibrary: React.FC<Props> = ({ auth, sfidId, canWrite }) => 
 
   const load = useCallback(() => {
     setLoading(true);
-    listDocuments(auth, sfidId)
+    listDocuments(auth, sfidNumber)
       .then(setDocs)
       .catch((err) => message.error(err instanceof Error ? err.message : '加载资料库失败'))
       .finally(() => setLoading(false));
-  }, [auth.access_token, sfidId]);
+  }, [auth.access_token, sfidNumber]);
 
   useEffect(() => {
     load();
@@ -59,7 +59,7 @@ export const DocumentLibrary: React.FC<Props> = ({ auth, sfidId, canWrite }) => 
     if (!rawFile || !rawFile.name) return false;
     setUploading(true);
     try {
-      await uploadDocument(auth, sfidId, rawFile, selectedDocType);
+      await uploadDocument(auth, sfidNumber, rawFile, selectedDocType);
       message.success('文件上传成功');
       load();
     } catch (err) {
@@ -72,7 +72,7 @@ export const DocumentLibrary: React.FC<Props> = ({ auth, sfidId, canWrite }) => 
 
   const onDownload = async (doc: InstitutionDocument) => {
     try {
-      await downloadDocument(auth, sfidId, doc.id, doc.file_name);
+      await downloadDocument(auth, sfidNumber, doc.id, doc.file_name);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '下载失败');
     }
@@ -80,7 +80,7 @@ export const DocumentLibrary: React.FC<Props> = ({ auth, sfidId, canWrite }) => 
 
   const onDelete = async (doc: InstitutionDocument) => {
     try {
-      await deleteDocument(auth, sfidId, doc.id);
+      await deleteDocument(auth, sfidNumber, doc.id);
       message.success('文件已删除');
       load();
     } catch (err) {

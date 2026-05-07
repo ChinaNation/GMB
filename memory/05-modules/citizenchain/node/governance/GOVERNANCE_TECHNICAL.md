@@ -50,7 +50,7 @@ governance/
 
 ```
 GMB_ACTIVATE (12 字节 ASCII)
-+ shenfen_id (48 字节，右补零)
++ sfid_number (48 字节，右补零)
 + timestamp (8 字节, u64 LE)
 + random_nonce (16 字节)
 = 总计 84 字节
@@ -70,7 +70,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 ### 存储
 
 - 文件：`{app_data}/activated-admins.json`
-- 格式：JSON 数组，每条记录包含 pubkey_hex、shenfen_id、activated_at_ms、signature_hex、payload_hash_hex
+- 格式：JSON 数组，每条记录包含 pubkey_hex、sfid_number、activated_at_ms、signature_hex、payload_hash_hex
 - 安全：文件权限限制（通过 security::write_text_atomic_restricted）
 - 失效：每次 get_activated_admins 调用时与链上管理员列表交叉校验
 
@@ -131,7 +131,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 - `twox_128`：Substrate pallet/storage 前缀哈希
 - `blake2b_128`：Blake2_128Concat hasher
-- `shenfen_id_to_fixed48`：身份 ID 编码（与 runtime primitives 一致）
+- `sfid_number_to_fixed48`：身份 ID 编码（与 runtime primitives 一致）
 - `storage_map_key` / `double_map_key`：完整存储 key 拼接
 
 ## 依赖关系

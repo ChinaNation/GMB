@@ -303,7 +303,7 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
     try {
       final service = TransferProposalService();
       final activeIds =
-          await service.fetchActiveProposalIds(widget.institution.shenfenId);
+          await service.fetchActiveProposalIds(widget.institution.sfidNumber);
       if (!context.mounted) return;
 
       if (activeIds.length >=

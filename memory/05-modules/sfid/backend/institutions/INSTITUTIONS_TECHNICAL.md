@@ -8,13 +8,13 @@
 
 SFID 系统只负责机构身份和账户名称:
 
-- `sfid_id`:创建后不可变。
+- `sfid_number`:创建后不可变。
 - `institution_name`:机构展示名称,创建后可设置和修改。
-- `account_name`:DUOQIAN_V1 协议定义的账户名称,与 `sfid_id` 一起派生链上地址。
+- `account_name`:DUOQIAN_V1 协议定义的账户名称,与 `sfid_number` 一起派生链上地址。
 
 SFID 系统不直接发起链上机构注册、链上注销、管理员阈值签名和账户激活。
 链端需要注册机构时,应通过 `institutions::chain_duoqian_info` 公开接口 pull
-`sfid_id / institution_name / account_names[]` 注册信息凭证。
+`sfid_number / institution_name / account_names[]` 注册信息凭证。
 
 开发期按彻底改造执行，当前文档只描述现行接口和状态机。
 
@@ -22,9 +22,9 @@ SFID 系统不直接发起链上机构注册、链上注销、管理员阈值签
 
 链端按 `account_name` 翻译账户角色:
 
-- `"主账户"` → `Role::Main` → `DUOQIAN_V1 || 0x00 || ss58 || sfid_id`
-- `"费用账户"` → `Role::Fee` → `DUOQIAN_V1 || 0x01 || ss58 || sfid_id`
-- 其他账户名称 → `Role::Named(account_name)` → `DUOQIAN_V1 || 0x05 || ss58 || sfid_id || account_name`
+- `"主账户"` → `Role::Main` → `DUOQIAN_V1 || 0x00 || ss58 || sfid_number`
+- `"费用账户"` → `Role::Fee` → `DUOQIAN_V1 || 0x01 || ss58 || sfid_number`
+- 其他账户名称 → `Role::Named(account_name)` → `DUOQIAN_V1 || 0x05 || ss58 || sfid_number || account_name`
 
 SFID 后端只传和保存 `account_name` 字符串,不拆字段、不改名。
 
@@ -81,25 +81,25 @@ SFID 不能单方面删除仍在链上的账户名称。
 |---|---|---|
 | POST | `/api/v1/institution/create` | 创建 SFID 机构,自动创建默认账户,不上链 |
 | GET | `/api/v1/institution/search-parents?q=xxx` | 法人机构模糊搜索 |
-| PATCH | `/api/v1/institution/:sfid_id` | 更新机构名称 / 企业类型 / 所属法人 |
-| POST | `/api/v1/institution/:sfid_id/account/create` | 新增账户名称,不上链 |
+| PATCH | `/api/v1/institution/:sfid_number` | 更新机构名称 / 企业类型 / 所属法人 |
+| POST | `/api/v1/institution/:sfid_number/account/create` | 新增账户名称,不上链 |
 | GET | `/api/v1/institution/list?category=...&province=...&city=...&q=...` | 按权限范围过滤机构列表 |
-| GET | `/api/v1/institution/:sfid_id` | 机构详情,含账户列表 |
-| GET | `/api/v1/institution/:sfid_id/accounts` | 机构账户列表 |
-| DELETE | `/api/v1/institution/:sfid_id/account/:account_name` | 删除允许删除的新增账户名称 |
+| GET | `/api/v1/institution/:sfid_number` | 机构详情,含账户列表 |
+| GET | `/api/v1/institution/:sfid_number/accounts` | 机构账户列表 |
+| DELETE | `/api/v1/institution/:sfid_number/account/:account_name` | 删除允许删除的新增账户名称 |
 
 区块链软件公开查询:
 
 | 方法 | 路径 | 功能 |
 |---|---|---|
 | GET | `/api/v1/app/institutions/search?q=xxx&limit=20` | 按 SFID 或机构名称搜索机构 |
-| GET | `/api/v1/app/institutions/:sfid_id` | 读取机构详情与最新机构名称,不带注册凭证 |
-| GET | `/api/v1/app/institutions/:sfid_id/registration-info` | 链端注册信息凭证,业务字段仅 `sfid_id/institution_name/account_names[]` |
-| GET | `/api/v1/app/institutions/:sfid_id/accounts` | 读取账户列表、地址、链上状态、删除许可 |
+| GET | `/api/v1/app/institutions/:sfid_number` | 读取机构详情与最新机构名称,不带注册凭证 |
+| GET | `/api/v1/app/institutions/:sfid_number/registration-info` | 链端注册信息凭证,业务字段仅 `sfid_number/institution_name/account_names[]` |
+| GET | `/api/v1/app/institutions/:sfid_number/accounts` | 读取账户列表、地址、链上状态、删除许可 |
 | GET | `/api/v1/app/clearing-banks/search` | wuminapp 搜索已上链且已加入清算网络的清算行 |
 | GET | `/api/v1/app/clearing-banks/eligible-search` | 桌面节点搜索具备清算行资格的 SFID 机构 |
 
-历史 `POST /api/v1/app/institutions/:sfid_id/chain-sync` 已下架,不得作为新功能入口。
+历史 `POST /api/v1/app/institutions/:sfid_number/chain-sync` 已下架,不得作为新功能入口。
 后续如需回写链上事实,必须另起任务设计可信同步边界。
 
 ## 前端规则

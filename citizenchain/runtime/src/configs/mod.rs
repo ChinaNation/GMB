@@ -24,7 +24,7 @@
 // For more information, please refer to <http://unlicense.org>
 
 // Substrate and Polkadot dependencies
-use primitives::derive::subject_id_from_shenfen_id;
+use primitives::derive::subject_id_from_sfid_number;
 use alloc::vec::Vec;
 use codec::Decode;
 use codec::Encode;
@@ -61,7 +61,7 @@ use super::{
     AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance,
     GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime,
     RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-    System, VotingEngine, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -720,7 +720,7 @@ impl
     > for RuntimeSfidInstitutionVerifier
 {
     fn verify_institution_registration(
-        sfid_id: &[u8],
+        sfid_number: &[u8],
         institution_name: &organization_manage::pallet::AccountNameOf<Runtime>,
         account_names: &[Vec<u8>],
         nonce: &organization_manage::pallet::RegisterNonceOf<Runtime>,
@@ -731,7 +731,7 @@ impl
         #[cfg(feature = "runtime-benchmarks")]
         {
             let _ = (province, signer_admin_pubkey);
-            return !sfid_id.is_empty()
+            return !sfid_number.is_empty()
                 && !institution_name.is_empty()
                 && !account_names.is_empty()
                 && !nonce.is_empty()
@@ -762,14 +762,14 @@ impl
             let signature = sr25519::Signature::from_raw(sig_raw);
 
             // 中文注释：这里必须和 SFID 端 `/registration-info` 的签名 payload 严格一致。
-            // payload：DUOQIAN_DOMAIN + OP_SIGN_INST + genesis_hash + sfid_id
+            // payload：DUOQIAN_DOMAIN + OP_SIGN_INST + genesis_hash + sfid_number
             // + institution_name + account_names[] + nonce + province + signer_admin_pubkey。
             // signer_admin_pubkey 必须进 payload,否则同 province 下任意 admin 的签名可互换。
             let payload = (
                 primitives::core_const::DUOQIAN_DOMAIN,
                 primitives::core_const::OP_SIGN_INST,
                 frame_system::Pallet::<Runtime>::block_hash(0),
-                sfid_id,
+                sfid_number,
                 institution_name.as_slice(),
                 account_names,
                 nonce.as_slice(),
@@ -794,7 +794,7 @@ impl organization_manage::Config for Runtime {
     type SfidInstitutionVerifier = RuntimeSfidInstitutionVerifier;
     type FeeRouter = TransferFeeRouter;
     type MaxAdmins = ConstU32<64>;
-    type MaxSfidIdLength = ConstU32<47>;
+    type MaxSfidNumberLength = ConstU32<47>;
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
@@ -1143,11 +1143,11 @@ pub struct DuoqianSfidAccountQuery;
 impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSfidAccountQuery {
     fn account_info(addr: &AccountId) -> Option<(Vec<u8>, Vec<u8>)> {
         organization_manage::AddressRegisteredSfid::<Runtime>::get(addr)
-            .map(|info| (info.sfid_id.to_vec(), info.account_name.to_vec()))
+            .map(|info| (info.sfid_number.to_vec(), info.account_name.to_vec()))
     }
 
-    fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId> {
-        let id: organization_manage::SfidIdOf<Runtime> = sfid_id.to_vec().try_into().ok()?;
+    fn find_address(sfid_number: &[u8], account_name: &[u8]) -> Option<AccountId> {
+        let id: organization_manage::SfidNumberOf<Runtime> = sfid_number.to_vec().try_into().ok()?;
         let an: organization_manage::AccountNameOf<Runtime> = account_name.to_vec().try_into().ok()?;
         organization_manage::SfidRegisteredAddress::<Runtime>::get(&id, &an)
     }
@@ -1156,7 +1156,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         if let Some(registered) = organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
             return matches!(
                 organization_manage::InstitutionAccounts::<Runtime>::get(
-                    &registered.sfid_id,
+                    &registered.sfid_number,
                     &registered.account_name,
                 )
                 .map(|a| a.status),
@@ -1188,7 +1188,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     }
 
     /// Step 2(2026-05-02):清算行资格由 SFID 系统的 eligible-search 负责筛选。
-    /// 链上不再保存 a3/sub_type/parent_sfid_id,这里只确认该地址属于已注册且 Active 的
+    /// 链上不再保存 a3/sub_type/parent_sfid_number,这里只确认该地址属于已注册且 Active 的
     /// SFID 机构账户,避免把 SFID 内部机构类型字段重复落到链上。
     fn is_clearing_bank_eligible(addr: &AccountId) -> bool {
         let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(addr) {
@@ -1197,7 +1197,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
         };
         matches!(
             organization_manage::InstitutionAccounts::<Runtime>::get(
-                &registered.sfid_id,
+                &registered.sfid_number,
                 &registered.account_name,
             )
             .map(|account| account.status),
@@ -1206,15 +1206,15 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
     }
 
     /// Step 2(2026-04-27, ADR-007)新增:判定 `bank` 主账户对应的机构是否
-    /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_id 记录)。
+    /// 已声明为清算行节点(链上 `ClearingBankNodes` 存在该 sfid_number 记录)。
     fn is_registered_clearing_node(bank: &AccountId) -> bool {
         let registered = match organization_manage::AddressRegisteredSfid::<Runtime>::get(bank) {
             Some(info) => info,
             None => return false,
         };
         // ClearingBankNodes 的 key 是 BoundedVec<u8, ConstU32<64>>,
-        // 把 SfidIdOf<Runtime>(BoundedVec<u8, MaxSfidIdLength=47>) 转换过去
-        let sfid_bytes: Vec<u8> = registered.sfid_id.to_vec();
+        // 把 SfidNumberOf<Runtime>(BoundedVec<u8, MaxSfidNumberLength=47>) 转换过去
+        let sfid_bytes: Vec<u8> = registered.sfid_number.to_vec();
         let key: BoundedVec<u8, ConstU32<64>> = match sfid_bytes.try_into() {
             Ok(b) => b,
             Err(_) => return false,
@@ -1254,11 +1254,11 @@ impl EnsureOrigin<RuntimeOrigin> for EnsureNrcAdmin {
     }
 }
 
-fn is_nrc_admin(who: &AccountId) -> bool {
+pub(crate) fn is_nrc_admin(who: &AccountId) -> bool {
     let nrc_institution = primitives::china::china_cb::CHINA_CB
         .first()
-        .and_then(|n| primitives::derive::subject_id_from_shenfen_id(n.shenfen_id))
-        .expect("NRC shenfen_id must be valid");
+        .and_then(|n| primitives::derive::subject_id_from_sfid_number(n.sfid_number))
+        .expect("NRC sfid_number must be valid");
 
     // 中文注释：创世后只信任链上管理员治理模块中的统一主体表。
     admins_change::Pallet::<Runtime>::is_active_subject_admin(
@@ -1295,9 +1295,9 @@ fn is_joint_proposer(who: &AccountId) -> bool {
     use primitives::china::china_cb::CHINA_CB;
     let nrc_institution = CHINA_CB
         .first()
-        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id));
+        .and_then(|n| subject_id_from_sfid_number(n.sfid_number));
     for entry in CHINA_CB.iter() {
-        if let Some(institution) = subject_id_from_shenfen_id(entry.shenfen_id) {
+        if let Some(institution) = subject_id_from_sfid_number(entry.sfid_number) {
             let org = if Some(institution) == nrc_institution {
                 votingengine::types::ORG_NRC
             } else {
@@ -1482,1075 +1482,6 @@ impl genesis_pallet::Config for Runtime {
     type MaxDeclarationLen = MaxDeclarationLen;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ResolutionDestro;
-    use organization_manage::DuoqianReservedAddressChecker;
-    use frame_support::assert_ok;
-    use frame_support::traits::Currency;
-    use primitives::china::china_cb::{
-        CHINA_CB,
-    };
-    use sfid_system::{SfidVerifier, SfidVoteVerifier};
-    use sp_core::Pair;
-    use sp_runtime::{traits::Hash as HashT, traits::IdentifyAccount, BuildStorage, MultiSigner};
-    use votingengine::{
-        InternalAdminProvider, JointVoteResultCallback, PopulationSnapshotVerifier, SfidEligibility,
-    };
-
-    fn new_test_ext() -> sp_io::TestExternalities {
-        let storage = crate::RuntimeGenesisConfig::default()
-            .build_storage()
-            .expect("runtime test storage should build");
-        let mut ext = sp_io::TestExternalities::new(storage);
-        ext.execute_with(|| {
-            System::set_block_number(1);
-        });
-        ext
-    }
-
-    #[test]
-    fn joint_vote_callback_routes_to_resolution_issuance_and_executes() {
-        use codec::Encode;
-        new_test_ext().execute_with(|| {
-            // 统一 ID：proposal_id 即投票引擎 ID，不再有双 ID 映射
-            let proposal_id = 99u64;
-            let per_recipient_amount = 123u128;
-            let allocations: Vec<
-                resolution_issuance::proposal::RecipientAmount<AccountId, Balance>,
-            > = CHINA_CB
-                .iter()
-                .skip(1)
-                .map(|node| resolution_issuance::proposal::RecipientAmount {
-                    recipient: AccountId::new(node.main_address),
-                    amount: per_recipient_amount,
-                })
-                .collect();
-            let recipient = allocations
-                .first()
-                .expect("CHINA_CB has province recipients")
-                .recipient
-                .clone();
-            let recipient_before = Balances::free_balance(&recipient);
-            let total_amount = allocations
-                .iter()
-                .fold(0u128, |sum, item| sum.saturating_add(item.amount));
-
-            // 测试中直接写入 ProposalData/Owner，生产路径必须走 create_*_with_data 原子入口。
-            let data = resolution_issuance::proposal::IssuanceProposalData {
-                proposer: recipient.clone(),
-                reason: b"runtime-integration".to_vec(),
-                total_amount,
-                allocations,
-            };
-            let mut encoded = Vec::from(resolution_issuance::MODULE_TAG);
-            encoded.extend_from_slice(&data.encode());
-            let bounded_data: frame_support::BoundedVec<
-                u8,
-                <Runtime as votingengine::Config>::MaxProposalDataLen,
-            > = encoded.try_into().expect("proposal data bound");
-            let owner: frame_support::BoundedVec<
-                u8,
-                <Runtime as votingengine::Config>::MaxModuleTagLen,
-            > = resolution_issuance::MODULE_TAG
-                .to_vec()
-                .try_into()
-                .expect("module tag bound");
-            votingengine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
-            votingengine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
-            votingengine::Proposals::<Runtime>::insert(
-                proposal_id,
-                votingengine::Proposal {
-                    kind: votingengine::PROPOSAL_KIND_JOINT,
-                    stage: votingengine::STAGE_JOINT,
-                    status: votingengine::STATUS_PASSED,
-                    internal_org: None,
-                    internal_institution: None,
-                    start: 0u32,
-                    end: 100u32,
-                    citizen_eligible_total: 10,
-                },
-            );
-
-            resolution_issuance::pallet::VotingProposalCount::<Runtime>::put(1u32);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-sfid");
-            let nonce_hash = <Runtime as frame_system::Config>::Hashing::hash(b"cleanup-nonce");
-            sfid_system::pallet::UsedVoteNonce::<Runtime>::insert(
-                proposal_id,
-                (binding_id, nonce_hash),
-                true,
-            );
-
-            votingengine::CallbackExecutionScopes::<Runtime>::insert(proposal_id, ());
-            assert_ok!(RuntimeJointVoteResultCallback::on_joint_vote_finalized(
-                proposal_id,
-                true
-            ));
-            votingengine::CallbackExecutionScopes::<Runtime>::remove(proposal_id);
-
-            // 验证 VotingProposalCount 已递减
-            assert_eq!(
-                resolution_issuance::pallet::VotingProposalCount::<Runtime>::get(),
-                0u32
-            );
-
-            // 中文注释：自动延迟清理由 votingengine 自身单测覆盖，
-            // 这里仅验证 runtime 包装层能正确透传到 SFID 投票凭证清理接口。
-            RuntimeSfidEligibility::cleanup_vote_credentials(proposal_id);
-
-            assert!(!sfid_system::pallet::UsedVoteNonce::<Runtime>::get(
-                proposal_id,
-                (binding_id, nonce_hash)
-            ));
-
-            assert!(resolution_issuance::pallet::Executed::<Runtime>::get(proposal_id).is_some());
-            assert_eq!(
-                resolution_issuance::pallet::TotalIssued::<Runtime>::get(),
-                total_amount
-            );
-            assert_eq!(
-                Balances::free_balance(&recipient),
-                recipient_before.saturating_add(per_recipient_amount)
-            );
-        });
-    }
-
-    #[test]
-    fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() {
-        new_test_ext().execute_with(|| {
-            let nrc_institution = subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id)
-                .expect("nrc institution id must be valid");
-            let nrc_account = AccountId::new(CHINA_CB[0].main_address);
-            let initial_balance: Balance = 1_000;
-            let destroy_amount: Balance = 100;
-
-            let _ = Balances::deposit_creating(&nrc_account, initial_balance);
-            let issuance_before = Balances::total_issuance();
-
-            assert_ok!(ResolutionDestro::propose_destroy(
-                RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[0])),
-                votingengine::types::ORG_NRC,
-                nrc_institution,
-                destroy_amount,
-            ));
-
-            let pid = VotingEngine::next_proposal_id().saturating_sub(1);
-
-            for i in 0..13 {
-                assert_ok!(InternalVote::cast(
-                    RuntimeOrigin::signed(AccountId::new(CHINA_CB[0].duoqian_admins[i])),
-                    pid,
-                    true,
-                ));
-            }
-
-            // 提案数据由 votingengine 延迟清理，执行后仍保留
-            assert!(VotingEngine::get_proposal_data(pid).is_some());
-
-            assert_eq!(
-                Balances::free_balance(&nrc_account),
-                initial_balance - destroy_amount
-            );
-            assert_eq!(Balances::total_issuance(), issuance_before - destroy_amount);
-        });
-    }
-
-    #[test]
-    fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
-        new_test_ext().execute_with(|| {
-            let who = AccountId::new([1u8; 32]);
-            let recipient = AccountId::new([2u8; 32]);
-
-            let system_call = RuntimeCall::System(frame_system::Call::remark {
-                remark: b"x".to_vec(),
-            });
-            let no_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &system_call);
-            assert!(matches!(
-                no_amount,
-                onchain_transaction::AmountExtractResult::NoAmount
-            ));
-
-            let transfer_call =
-                RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
-                    dest: sp_runtime::MultiAddress::Id(recipient),
-                    value: 123,
-                });
-            let amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &transfer_call);
-            match amount {
-                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
-                _ => panic!("expected amount path"),
-            }
-
-            let internal_vote_call =
-                RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
-                    proposal_id: 1,
-                    approve: true,
-                });
-            let vote_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &internal_vote_call);
-            match vote_amount {
-                // 中文注释：internal_vote 达阈值时会同步触发业务 executor,
-                // 因此投票 extrinsic 本身按治理用户操作固定 1 元计费 = VOTE_FLAT_FEE。
-                onchain_transaction::AmountExtractResult::Amount(v) => {
-                    assert_eq!(v, primitives::fee_policy::VOTE_FLAT_FEE)
-                }
-                _ => panic!("expected internal_vote amount"),
-            }
-        });
-    }
-
-    #[test]
-    fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
-        new_test_ext().execute_with(|| {
-            let (p1, _) = sr25519::Pair::generate();
-            let (p2, _) = sr25519::Pair::generate();
-            let signer1 = MultiSigner::from(p1.public());
-            let who: AccountId = signer1.into_account();
-            let admin2: AccountId = MultiSigner::from(p2.public()).into_account();
-
-            let duoqian_address = AccountId::new([77u8; 32]);
-            let beneficiary = AccountId::new([78u8; 32]);
-            let admins: personal_manage::pallet::DuoqianAdminsOf<Runtime> =
-                vec![who.clone(), admin2.clone()]
-                    .try_into()
-                    .expect("admins should fit");
-            // 中文注释:propose_create 单账户机构入口已于 2026-05-03 删除;
-            // propose_create_personal 已于 B 阶段拆分迁至 PersonalManage(2026-05-06)。
-            // 本测试改用 PersonalManage::propose_create 验证"按 amount 字段计费"规则。
-            let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
-                b"runtime-test-personal"
-                    .to_vec()
-                    .try_into()
-                    .expect("account_name should fit");
-
-            let create_call = RuntimeCall::PersonalManage(
-                personal_manage::pallet::Call::propose_create {
-                    account_name,
-                    admin_count: 2,
-                    duoqian_admins: admins.clone(),
-                    threshold: 2,
-                    amount: 1_000,
-                },
-            );
-            let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &create_call);
-            match create_amount {
-                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
-                _ => panic!("expected create amount"),
-            }
-
-            let _ = Balances::deposit_creating(&duoqian_address, 777);
-            let close_call =
-                RuntimeCall::OrganizationManage(organization_manage::pallet::Call::propose_close {
-                    duoqian_address,
-                    beneficiary,
-                });
-            let close_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
-                AccountId,
-                RuntimeCall,
-                Balance,
-            >>::amount(&who, &close_call);
-            match close_amount {
-                onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
-                _ => panic!("expected close amount"),
-            }
-        });
-    }
-
-    #[test]
-    fn duoqian_reserved_checker_rejects_stake_and_shenfen_fee_addresses() {
-        let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address);
-        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(&stake));
-
-        let fee_account = AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address);
-        assert!(RuntimeDuoqianReservedAddressChecker::is_reserved(
-            &fee_account
-        ));
-    }
-
-    #[test]
-    fn runtime_call_filter_blocks_force_transfer_from_stake() {
-        let stake = AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address);
-        let dst = AccountId::new([9u8; 32]);
-
-        let blocked_by_id = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Id(stake),
-            dest: sp_runtime::MultiAddress::Id(dst.clone()),
-            value: 1,
-        });
-        assert!(!RuntimeCallFilter::contains(&blocked_by_id));
-
-        let stake_raw = primitives::china::china_ch::CHINA_CH[0].stake_address;
-        let blocked_by_32 = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Address32(stake_raw),
-            dest: sp_runtime::MultiAddress::Id(dst.clone()),
-            value: 1,
-        });
-        assert!(!RuntimeCallFilter::contains(&blocked_by_32));
-
-        let blocked_by_raw = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Raw(stake_raw.to_vec()),
-            dest: sp_runtime::MultiAddress::Id(dst.clone()),
-            value: 1,
-        });
-        assert!(!RuntimeCallFilter::contains(&blocked_by_raw));
-
-        let allowed = RuntimeCall::Balances(pallet_balances::Call::force_transfer {
-            source: sp_runtime::MultiAddress::Id(AccountId::new([8u8; 32])),
-            dest: sp_runtime::MultiAddress::Id(dst),
-            value: 1,
-        });
-        assert!(RuntimeCallFilter::contains(&allowed));
-
-        let blocked_force_unreserve =
-            RuntimeCall::Balances(pallet_balances::Call::force_unreserve {
-                who: sp_runtime::MultiAddress::Id(AccountId::new(
-                    primitives::china::china_ch::CHINA_CH[0].stake_address,
-                )),
-                amount: 1,
-            });
-        assert!(!RuntimeCallFilter::contains(&blocked_force_unreserve));
-
-        let blocked_force_set_balance =
-            RuntimeCall::Balances(pallet_balances::Call::force_set_balance {
-                who: sp_runtime::MultiAddress::Id(AccountId::new(
-                    primitives::china::china_ch::CHINA_CH[0].stake_address,
-                )),
-                new_free: 1,
-            });
-        assert!(!RuntimeCallFilter::contains(&blocked_force_set_balance));
-    }
-
-    #[test]
-    fn pow_digest_author_finds_pow_engine_author() {
-        // 中文注释：pre_digest 现在存储 sr25519 公钥，PowDigestAuthor 解码后派生 AccountId。
-        let public = sp_core::sr25519::Public::from_raw([21u8; 32]);
-        let expected_account: AccountId = sp_runtime::MultiSigner::from(public).into_account();
-        let encoded = public.encode();
-        let digests: Vec<(sp_runtime::ConsensusEngineId, &[u8])> = vec![
-            (*b"TEST", b"ignored".as_ref()),
-            (sp_consensus_pow::POW_ENGINE_ID, encoded.as_slice()),
-        ];
-        let found = PowDigestAuthor::find_author(digests);
-        assert_eq!(found, Some(expected_account));
-    }
-
-    #[test]
-    fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
-        new_test_ext().execute_with(|| {
-            // 不存在的提案 ID 应返回错误
-            assert!(
-                RuntimeJointVoteResultCallback::on_joint_vote_finalized(999_999, true).is_err()
-            );
-
-            // 测试中直接写入 votingengine 存储；生产路径必须走 create_*_with_data 原子入口。
-            let proposal_id = 7u64;
-            let proposer = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
-            let reason: runtime_upgrade::pallet::ReasonOf<Runtime> =
-                b"upgrade".to_vec().try_into().expect("reason");
-            let code: runtime_upgrade::pallet::CodeOf<Runtime> =
-                vec![1u8, 2, 3].try_into().expect("code");
-            let code_hash = <Runtime as frame_system::Config>::Hashing::hash(code.as_slice());
-
-            let proposal = runtime_upgrade::pallet::Proposal::<Runtime> {
-                proposer,
-                reason,
-                code_hash,
-                status: runtime_upgrade::pallet::ProposalStatus::Voting,
-            };
-            let mut encoded = Vec::from(runtime_upgrade::MODULE_TAG);
-            encoded.extend_from_slice(&codec::Encode::encode(&proposal));
-            let bounded_data: frame_support::BoundedVec<
-                u8,
-                <Runtime as votingengine::Config>::MaxProposalDataLen,
-            > = encoded.try_into().expect("proposal data bound");
-            let owner: frame_support::BoundedVec<
-                u8,
-                <Runtime as votingengine::Config>::MaxModuleTagLen,
-            > = runtime_upgrade::MODULE_TAG
-                .to_vec()
-                .try_into()
-                .expect("module tag bound");
-            votingengine::ProposalData::<Runtime>::insert(proposal_id, bounded_data);
-            votingengine::ProposalOwner::<Runtime>::insert(proposal_id, owner);
-            let code_vec = code.into_inner();
-            let object_len = u32::try_from(code_vec.len()).expect("runtime code length fits u32");
-            let object_hash = <Runtime as frame_system::Config>::Hashing::hash(&code_vec);
-            let bounded_object: frame_support::BoundedVec<
-                u8,
-                <Runtime as votingengine::Config>::MaxProposalObjectLen,
-            > = code_vec.try_into().expect("runtime code object bound");
-            votingengine::ProposalObject::<Runtime>::insert(proposal_id, bounded_object);
-            votingengine::ProposalObjectMeta::<Runtime>::insert(
-                proposal_id,
-                votingengine::ProposalObjectMetadata {
-                    kind: runtime_upgrade::pallet::PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
-                    object_len,
-                    object_hash,
-                },
-            );
-
-            // 回调拒绝后，业务摘要保持创建时快照，终态由 votingengine 统一维护。
-            let outcome =
-                RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
-                    .expect("runtime-upgrade callback should succeed");
-            assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
-            let raw = votingengine::Pallet::<Runtime>::get_proposal_data(proposal_id)
-                .expect("proposal data should exist");
-            let tag = runtime_upgrade::MODULE_TAG;
-            assert!(
-                raw.len() >= tag.len() && &raw[..tag.len()] == tag,
-                "MODULE_TAG mismatch"
-            );
-            let updated =
-                runtime_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
-                    .expect("should decode");
-            assert!(matches!(
-                updated.status,
-                runtime_upgrade::pallet::ProposalStatus::Voting
-            ));
-        });
-    }
-
-    // ADR-008 step3:Bind / Vote / PopSnapshot 三个 Credential SCALE 已携带
-    // (province, signer_admin_pubkey) 字段。runtime verifier 走 ShengSigningPubkey 双映射
-    // 派生公钥真实验签。本测试覆盖 main admin 签发 / backup admin 签发 / 花名册外 admin
-    // 拒签 / 跨省 admin 拒签四个核心路径,以及 SfidEligibility wrap 的完整链路。
-    //
-    // 测试 helper:为 `liaoning` 省装入 main admin + backup1 admin,各自激活一把
-    // ShengSigningPubkey,然后构造对应 credential 走 verifier 真实验签。
-    fn setup_step3_test_admins() -> (sr25519::Pair, [u8; 32], sr25519::Pair, [u8; 32], Vec<u8>) {
-        let province: Vec<u8> = b"liaoning".to_vec();
-        let bounded: sfid_system::pallet::ProvinceBound =
-            province.clone().try_into().expect("province fits");
-
-        let main_pair = sr25519::Pair::from_string("//main-step3", None).expect("pair");
-        let main_signing_pair =
-            sr25519::Pair::from_string("//main-signing-step3", None).expect("pair");
-        let main_admin_pubkey = main_pair.public().0;
-        let main_signing_pubkey = main_signing_pair.public().0;
-
-        let backup_pair = sr25519::Pair::from_string("//backup1-step3", None).expect("pair");
-        let backup_signing_pair =
-            sr25519::Pair::from_string("//backup1-signing-step3", None).expect("pair");
-        let backup_admin_pubkey = backup_pair.public().0;
-        let backup_signing_pubkey = backup_signing_pair.public().0;
-
-        sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-            &bounded,
-            sfid_system::Slot::Main,
-            main_admin_pubkey,
-        );
-        sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-            &bounded,
-            sfid_system::Slot::Backup1,
-            backup_admin_pubkey,
-        );
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-            &bounded,
-            main_admin_pubkey,
-            main_signing_pubkey,
-        );
-        sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-            &bounded,
-            backup_admin_pubkey,
-            backup_signing_pubkey,
-        );
-
-        (
-            main_signing_pair,
-            main_admin_pubkey,
-            backup_signing_pair,
-            backup_admin_pubkey,
-            province,
-        )
-    }
-
-    fn build_bind_credential(
-        signing_pair: &sr25519::Pair,
-        signer_admin_pubkey: &[u8; 32],
-        province: &[u8],
-        account: &AccountId,
-        binding_id: Hash,
-        bind_nonce: &sfid_system::pallet::NonceOf<Runtime>,
-    ) -> sfid_system::pallet::CredentialOf<Runtime> {
-        let payload = (
-            primitives::core_const::DUOQIAN_DOMAIN,
-            primitives::core_const::OP_SIGN_BIND,
-            frame_system::Pallet::<Runtime>::block_hash(0),
-            account,
-            binding_id,
-            bind_nonce.as_slice(),
-            province,
-            signer_admin_pubkey,
-        );
-        let msg = blake2_256(&payload.encode());
-        let sig = signing_pair.sign(&msg);
-        let signature: sfid_system::pallet::SignatureOf<Runtime> =
-            sig.0.to_vec().try_into().expect("signature fits");
-        sfid_system::BindCredential {
-            binding_id,
-            bind_nonce: bind_nonce.clone(),
-            province: province.to_vec().try_into().expect("province fits"),
-            signer_admin_pubkey: *signer_admin_pubkey,
-            signature,
-        }
-    }
-
-    fn build_vote_signature(
-        signing_pair: &sr25519::Pair,
-        signer_admin_pubkey: &[u8; 32],
-        province: &[u8],
-        account: &AccountId,
-        binding_id: Hash,
-        proposal_id: u64,
-        vote_nonce: &sfid_system::pallet::NonceOf<Runtime>,
-    ) -> sfid_system::pallet::SignatureOf<Runtime> {
-        let payload = (
-            primitives::core_const::DUOQIAN_DOMAIN,
-            primitives::core_const::OP_SIGN_VOTE,
-            frame_system::Pallet::<Runtime>::block_hash(0),
-            account,
-            binding_id,
-            proposal_id,
-            vote_nonce.as_slice(),
-            province,
-            signer_admin_pubkey,
-        );
-        let msg = blake2_256(&payload.encode());
-        signing_pair
-            .sign(&msg)
-            .0
-            .to_vec()
-            .try_into()
-            .expect("signature fits")
-    }
-
-    fn build_pop_signature(
-        signing_pair: &sr25519::Pair,
-        signer_admin_pubkey: &[u8; 32],
-        province: &[u8],
-        who: &AccountId,
-        eligible_total: u64,
-        pop_nonce: &votingengine::pallet::VoteNonceOf<Runtime>,
-    ) -> votingengine::pallet::VoteSignatureOf<Runtime> {
-        let payload = (
-            primitives::core_const::DUOQIAN_DOMAIN,
-            primitives::core_const::OP_SIGN_POP,
-            frame_system::Pallet::<Runtime>::block_hash(0),
-            who,
-            eligible_total,
-            pop_nonce.as_slice(),
-            province,
-            signer_admin_pubkey,
-        );
-        let msg = blake2_256(&payload.encode());
-        signing_pair
-            .sign(&msg)
-            .0
-            .to_vec()
-            .try_into()
-            .expect("signature fits")
-    }
-
-    #[test]
-    fn runtime_sfid_verifiers_double_layer_verify_succeeds() {
-        new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
-            let account = AccountId::new([31u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-verify");
-
-            let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"bind-nonce".to_vec().try_into().expect("nonce should fit");
-            let bind_credential = build_bind_credential(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                &bind_nonce,
-            );
-            assert!(RuntimeSfidVerifier::verify(&account, &bind_credential));
-
-            let vote_nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"vote-nonce".to_vec().try_into().expect("nonce should fit");
-            let vote_signature = build_vote_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                9,
-                &vote_nonce,
-            );
-            assert!(RuntimeSfidVoteVerifier::verify_vote(
-                &account,
-                binding_id,
-                9,
-                &vote_nonce,
-                &vote_signature,
-                &province,
-                &main_admin_pubkey,
-            ));
-
-            let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
-                b"pop-nonce".to_vec().try_into().expect("nonce should fit");
-            let pop_signature = build_pop_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &account,
-                123,
-                &pop_nonce,
-            );
-            assert!(
-                RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                    &account,
-                    123,
-                    &pop_nonce,
-                    &pop_signature,
-                    &province,
-                    &main_admin_pubkey,
-                )
-            );
-        });
-    }
-
-    #[test]
-    fn bind_with_main_admin_signature_succeeds() {
-        new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
-            let account = AccountId::new([21u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-main");
-            let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"bind-main-nonce".to_vec().try_into().expect("nonce");
-            let credential = build_bind_credential(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                &bind_nonce,
-            );
-            assert!(RuntimeSfidVerifier::verify(&account, &credential));
-        });
-    }
-
-    #[test]
-    fn bind_with_backup_admin_signature_succeeds() {
-        new_test_ext().execute_with(|| {
-            let (_, _, backup_signing_pair, backup_admin_pubkey, province) =
-                setup_step3_test_admins();
-            let account = AccountId::new([22u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-backup");
-            let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"bind-backup-nonce".to_vec().try_into().expect("nonce");
-            let credential = build_bind_credential(
-                &backup_signing_pair,
-                &backup_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                &bind_nonce,
-            );
-            assert!(RuntimeSfidVerifier::verify(&account, &credential));
-        });
-    }
-
-    #[test]
-    fn bind_with_admin_not_in_roster_rejected() {
-        new_test_ext().execute_with(|| {
-            let (_, _, _, _, province) = setup_step3_test_admins();
-            // 花名册外的随机 admin pubkey:链上无 ShengSigningPubkey 项,verifier 必拒。
-            let outsider_pair = sr25519::Pair::from_string("//outsider", None).expect("pair");
-            let outsider_admin_pubkey = outsider_pair.public().0;
-            let account = AccountId::new([23u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-outsider");
-            let bind_nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"bind-out-nonce".to_vec().try_into().expect("nonce");
-            // 用 outsider 自己签,但花名册中没有他 → 链上查不到 signing pubkey。
-            let credential = build_bind_credential(
-                &outsider_pair,
-                &outsider_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                &bind_nonce,
-            );
-            assert!(!RuntimeSfidVerifier::verify(&account, &credential));
-        });
-    }
-
-    #[test]
-    fn vote_double_layer_verify_succeeds() {
-        new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
-            let account = AccountId::new([24u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"step3-vote");
-            let nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"vote-pass-nonce".to_vec().try_into().expect("nonce");
-            let signature = build_vote_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &account,
-                binding_id,
-                42,
-                &nonce,
-            );
-            assert!(RuntimeSfidVoteVerifier::verify_vote(
-                &account,
-                binding_id,
-                42,
-                &nonce,
-                &signature,
-                &province,
-                &main_admin_pubkey,
-            ));
-        });
-    }
-
-    #[test]
-    fn vote_cross_province_admin_rejected() {
-        new_test_ext().execute_with(|| {
-            // 装入 liaoning 省的 admin。
-            let (main_signing_pair, main_admin_pubkey, _, _, _province) = setup_step3_test_admins();
-            // 用 jilin 省查表(jilin 对应没有任何 ShengSigningPubkey 项)。
-            let jilin: Vec<u8> = b"jilin".to_vec();
-            let account = AccountId::new([25u8; 32]);
-            let binding_id =
-                <Runtime as frame_system::Config>::Hashing::hash(b"step3-cross-province");
-            let nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"vote-cross-nonce".to_vec().try_into().expect("nonce");
-            // 故意让 admin 在 jilin 域下被查 → verifier 必拒。
-            let signature = build_vote_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &jilin,
-                &account,
-                binding_id,
-                7,
-                &nonce,
-            );
-            assert!(!RuntimeSfidVoteVerifier::verify_vote(
-                &account,
-                binding_id,
-                7,
-                &nonce,
-                &signature,
-                &jilin,
-                &main_admin_pubkey,
-            ));
-        });
-    }
-
-    #[test]
-    fn population_snapshot_per_province_signature_verifies() {
-        new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
-            let who = AccountId::new([26u8; 32]);
-            let pop_nonce: votingengine::pallet::VoteNonceOf<Runtime> =
-                b"pop-pass-nonce".to_vec().try_into().expect("nonce");
-            let signature = build_pop_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &who,
-                500,
-                &pop_nonce,
-            );
-            assert!(
-                RuntimePopulationSnapshotVerifier::verify_population_snapshot(
-                    &who,
-                    500,
-                    &pop_nonce,
-                    &signature,
-                    &province,
-                    &main_admin_pubkey,
-                )
-            );
-        });
-    }
-
-    // ADR-008 step3:RuntimeSfidEligibility 的 is_eligible 走 BindingId↔Account 反查;
-    // verify_and_consume_vote_credential 走 RuntimeSfidVoteVerifier 真实双层验签。
-    #[test]
-    fn runtime_sfid_eligibility_binding_and_vote_full_path() {
-        new_test_ext().execute_with(|| {
-            let (main_signing_pair, main_admin_pubkey, _, _, province) = setup_step3_test_admins();
-            let who = AccountId::new([41u8; 32]);
-            let binding_id = <Runtime as frame_system::Config>::Hashing::hash(b"sfid-wrap");
-            sfid_system::pallet::BindingIdToAccount::<Runtime>::insert(binding_id, who.clone());
-            sfid_system::pallet::AccountToBindingId::<Runtime>::insert(who.clone(), binding_id);
-
-            assert!(RuntimeSfidEligibility::is_eligible(&binding_id, &who));
-            assert!(!RuntimeSfidEligibility::is_eligible(
-                &binding_id,
-                &AccountId::new([42u8; 32])
-            ));
-
-            // 完整链路:wrap 调 verify_and_consume,Bridge 走 sfid_system → RuntimeSfidVoteVerifier。
-            let nonce: sfid_system::pallet::NonceOf<Runtime> =
-                b"wrap-nonce".to_vec().try_into().expect("nonce");
-            let signature = build_vote_signature(
-                &main_signing_pair,
-                &main_admin_pubkey,
-                &province,
-                &who,
-                binding_id,
-                88,
-                &nonce,
-            );
-            assert!(RuntimeSfidEligibility::verify_and_consume_vote_credential(
-                &binding_id,
-                &who,
-                88,
-                nonce.as_slice(),
-                signature.as_slice(),
-                &province,
-                &main_admin_pubkey,
-            ));
-            // 二次同 nonce 必拒(防重放)。
-            assert!(!RuntimeSfidEligibility::verify_and_consume_vote_credential(
-                &binding_id,
-                &who,
-                88,
-                nonce.as_slice(),
-                signature.as_slice(),
-                &province,
-                &main_admin_pubkey,
-            ));
-        });
-    }
-
-    #[test]
-    fn ensure_nrc_admin_and_runtime_internal_admin_provider_paths() {
-        new_test_ext().execute_with(|| {
-            let nrc_id = subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("nrc id");
-            let nrc_admin = AccountId::new(CHINA_CB[0].duoqian_admins[0]);
-            let outsider = AccountId::new([99u8; 32]);
-
-            let ok_origin = RuntimeOrigin::signed(nrc_admin.clone());
-            assert!(<EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(ok_origin).is_ok());
-            let bad_origin = RuntimeOrigin::signed(outsider.clone());
-            assert!(
-                <EnsureNrcAdmin as EnsureOrigin<RuntimeOrigin>>::try_origin(bad_origin).is_err()
-            );
-
-            admins_change::pallet::Subjects::<Runtime>::remove(nrc_id);
-            assert!(!is_nrc_admin(&nrc_admin));
-            assert!(!is_nrc_admin(&outsider));
-            assert!(!RuntimeInternalAdminProvider::is_internal_admin(
-                votingengine::types::ORG_NRC,
-                nrc_id,
-                &nrc_admin
-            ));
-        });
-    }
-
-    // ADR-008 step2b：register_institution verifier 改造为按 (province, admin_pubkey) 验签后,
-    // 本测试覆盖 4 条核心路径(对应 step2b 任务卡 4 条新测试名,在 runtime 集成层验证):
-    // - main admin 派生签名公钥已 activate → 验签成功;
-    // - backup admin 派生签名公钥已 activate → 验签成功(同省共存);
-    // - admin 不在 ShengAdmins 花名册 → 验签 reject(SfidProvinceAdminSigningNotActivated 等价);
-    // - admin 在花名册但 ShengSigningPubkey 未 activate → 验签 reject。
-    #[test]
-    fn runtime_sfid_institution_verifier_double_layer_lookup() {
-        use sfid_system::pallet::ProvinceBound;
-        use sfid_system::Slot;
-
-        new_test_ext().execute_with(|| {
-            let province_bytes = b"AH".to_vec();
-            let bounded_province: ProvinceBound = province_bytes
-                .clone()
-                .try_into()
-                .expect("province should fit");
-
-            // 准备 main / backup_1 admin 各自的派生签名 keypair。
-            let (main_signing_pair, _) = sr25519::Pair::generate();
-            let main_admin_pubkey: [u8; 32] = [11u8; 32];
-            let main_signing_pubkey: [u8; 32] = main_signing_pair.public().0;
-
-            let (backup_signing_pair, _) = sr25519::Pair::generate();
-            let backup_admin_pubkey: [u8; 32] = [22u8; 32];
-            let backup_signing_pubkey: [u8; 32] = backup_signing_pair.public().0;
-
-            // 写入 ShengAdmins[province][Main/Backup1] + ShengSigningPubkey[(province, admin)]。
-            sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-                &bounded_province,
-                Slot::Main,
-                main_admin_pubkey,
-            );
-            sfid_system::pallet::ShengAdmins::<Runtime>::insert(
-                &bounded_province,
-                Slot::Backup1,
-                backup_admin_pubkey,
-            );
-            sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-                &bounded_province,
-                main_admin_pubkey,
-                main_signing_pubkey,
-            );
-            sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-                &bounded_province,
-                backup_admin_pubkey,
-                backup_signing_pubkey,
-            );
-
-            let sfid_id: &[u8] = b"GFR-AH001-CB0C-000000001-20260222";
-            let register_nonce: organization_manage::pallet::RegisterNonceOf<Runtime> =
-                b"register-nonce-ah-1"
-                    .to_vec()
-                    .try_into()
-                    .expect("nonce should fit");
-            let institution_name: organization_manage::pallet::AccountNameOf<Runtime> =
-                b"test-institution"
-                    .to_vec()
-                    .try_into()
-                    .expect("institution_name should fit");
-            let account_names: Vec<Vec<u8>> =
-                vec![b"main-account".to_vec(), b"fee-account".to_vec()];
-
-            let make_signature = |signing_pair: &sr25519::Pair, admin_pubkey: &[u8; 32]| {
-                let payload = (
-                    primitives::core_const::DUOQIAN_DOMAIN,
-                    primitives::core_const::OP_SIGN_INST,
-                    frame_system::Pallet::<Runtime>::block_hash(0),
-                    sfid_id,
-                    institution_name.as_slice(),
-                    &account_names,
-                    register_nonce.as_slice(),
-                    province_bytes.as_slice(),
-                    admin_pubkey,
-                );
-                let msg = blake2_256(&payload.encode());
-                let sig = signing_pair.sign(&msg);
-                let bounded: organization_manage::pallet::RegisterSignatureOf<Runtime> =
-                    sig.0.to_vec().try_into().expect("signature should fit");
-                bounded
-            };
-
-            // 1. main admin 派生签名 → ok
-            let main_signature = make_signature(&main_signing_pair, &main_admin_pubkey);
-            assert!(
-                <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                    organization_manage::pallet::AccountNameOf<Runtime>,
-                    organization_manage::pallet::RegisterNonceOf<Runtime>,
-                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
-                >>::verify_institution_registration(
-                    sfid_id,
-                    &institution_name,
-                    &account_names,
-                    &register_nonce,
-                    &main_signature,
-                    province_bytes.as_slice(),
-                    &main_admin_pubkey,
-                ),
-                "main admin signature should pass"
-            );
-
-            // 2. backup admin 派生签名 → ok
-            let backup_signature = make_signature(&backup_signing_pair, &backup_admin_pubkey);
-            assert!(
-                <RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                    organization_manage::pallet::AccountNameOf<Runtime>,
-                    organization_manage::pallet::RegisterNonceOf<Runtime>,
-                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
-                >>::verify_institution_registration(
-                    sfid_id,
-                    &institution_name,
-                    &account_names,
-                    &register_nonce,
-                    &backup_signature,
-                    province_bytes.as_slice(),
-                    &backup_admin_pubkey,
-                ),
-                "backup admin signature should pass"
-            );
-
-            // 3. 花名册之外 admin pubkey → reject(ShengSigningPubkey 查不到)
-            let outsider_pubkey: [u8; 32] = [99u8; 32];
-            assert!(
-                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                    organization_manage::pallet::AccountNameOf<Runtime>,
-                    organization_manage::pallet::RegisterNonceOf<Runtime>,
-                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
-                >>::verify_institution_registration(
-                    sfid_id,
-                    &institution_name,
-                    &account_names,
-                    &register_nonce,
-                    &main_signature,
-                    province_bytes.as_slice(),
-                    &outsider_pubkey,
-                ),
-                "outsider admin pubkey must reject"
-            );
-
-            // 4. 在花名册但尚未 activate signing pubkey → reject(从 storage 删 ShengSigningPubkey)
-            sfid_system::pallet::ShengSigningPubkey::<Runtime>::remove(
-                &bounded_province,
-                main_admin_pubkey,
-            );
-            assert!(
-                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                    organization_manage::pallet::AccountNameOf<Runtime>,
-                    organization_manage::pallet::RegisterNonceOf<Runtime>,
-                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
-                >>::verify_institution_registration(
-                    sfid_id,
-                    &institution_name,
-                    &account_names,
-                    &register_nonce,
-                    &main_signature,
-                    province_bytes.as_slice(),
-                    &main_admin_pubkey,
-                ),
-                "signing pubkey not activated must reject"
-            );
-
-            // 篡改签名(长度合法但内容不匹配)→ reject
-            sfid_system::pallet::ShengSigningPubkey::<Runtime>::insert(
-                &bounded_province,
-                main_admin_pubkey,
-                main_signing_pubkey,
-            );
-            let bad_signature: organization_manage::pallet::RegisterSignatureOf<Runtime> =
-                vec![9u8; 64].try_into().expect("signature should fit");
-            assert!(
-                !<RuntimeSfidInstitutionVerifier as organization_manage::SfidInstitutionVerifier<
-                    organization_manage::pallet::AccountNameOf<Runtime>,
-                    organization_manage::pallet::RegisterNonceOf<Runtime>,
-                    organization_manage::pallet::RegisterSignatureOf<Runtime>,
-                >>::verify_institution_registration(
-                    sfid_id,
-                    &institution_name,
-                    &account_names,
-                    &register_nonce,
-                    &bad_signature,
-                    province_bytes.as_slice(),
-                    &main_admin_pubkey,
-                ),
-                "tampered signature must reject"
-            );
-        });
-    }
-}
 
 pub struct RuntimeInternalAdminProvider;
 
@@ -2730,115 +1661,5 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
             loops: result.loops,
             has_remaining: result.maybe_cursor.is_some(),
         }
-    }
-}
-
-// ============================================================================
-// 机构资金白名单允许矩阵测试
-// ============================================================================
-
-#[cfg(test)]
-mod asset_tests {
-    use super::*;
-    use institution_asset::{InstitutionAsset, InstitutionAssetAction};
-
-    fn stake_account() -> AccountId {
-        AccountId::new(primitives::china::china_ch::CHINA_CH[0].stake_address)
-    }
-
-    fn reserved_main_account() -> AccountId {
-        AccountId::new(primitives::china::china_cb::CHINA_CB[1].main_address)
-    }
-
-    fn reserved_fee_account() -> AccountId {
-        AccountId::new(primitives::china::china_ch::CHINA_CH[0].fee_address)
-    }
-
-    fn ordinary_account() -> AccountId {
-        AccountId::new([99u8; 32])
-    }
-
-    #[test]
-    fn stake_account_is_completely_blocked() {
-        let account = stake_account();
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianTransferExecute
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianCloseExecute
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainBatchDebit
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainFeeSweepExecute
-        ));
-    }
-
-    #[test]
-    fn reserved_duoqian_only_allows_transfer_and_close() {
-        let account = reserved_main_account();
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianTransferExecute
-        ));
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianCloseExecute
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainBatchDebit
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainFeeSweepExecute
-        ));
-    }
-
-    #[test]
-    fn reserved_fee_account_only_allows_fee_sweep() {
-        let account = reserved_fee_account();
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianTransferExecute
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianCloseExecute
-        ));
-        assert!(!RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainBatchDebit
-        ));
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainFeeSweepExecute
-        ));
-    }
-
-    #[test]
-    fn ordinary_account_allows_all_actions() {
-        let account = ordinary_account();
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianTransferExecute
-        ));
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::DuoqianCloseExecute
-        ));
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainBatchDebit
-        ));
-        assert!(RuntimeInstitutionAsset::can_spend(
-            &account,
-            InstitutionAssetAction::OffchainFeeSweepExecute
-        ));
     }
 }

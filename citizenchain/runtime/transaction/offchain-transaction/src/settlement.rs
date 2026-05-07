@@ -173,7 +173,7 @@ fn execute_single_item<T: Config>(
     // 2. 消费 nonce
     nonce::consume_nonce::<T>(&item.payer, item.payer_nonce)?;
 
-    // 3. 防重放(t2 从付款方清算行 sfid_id 取前 2 字节作为 shard key;本步
+    // 3. 防重放(t2 从付款方清算行 sfid_number 取前 2 字节作为 shard key;本步
     //    为了兼容现有 ProcessedOffchainTx 双 map 结构,用固定 t2 或 0)
     //    Step 3 再细化清算行级别的防重放分桶。
     //

@@ -27,11 +27,11 @@
 
 ```rust
 struct InstitutionRegistrationCredential {
-    sfid_id: BoundedVec<u8, ConstU32<64>>,
+    sfid_number: BoundedVec<u8, ConstU32<64>>,
     institution_name: BoundedVec<u8, ConstU32<128>>,
     a3: BoundedVec<u8, ConstU32<8>>,
     sub_type: Option<BoundedVec<u8, ConstU32<32>>>,
-    parent_sfid_id: Option<BoundedVec<u8, ConstU32<64>>>,
+    parent_sfid_number: Option<BoundedVec<u8, ConstU32<64>>>,
     province: BoundedVec<u8, ConstU32<64>>,
     register_nonce: BoundedVec<u8, ConstU32<128>>,
     signer_admin_pubkey: [u8; 32],   // ★ 新字段
@@ -147,5 +147,5 @@ runtime 集成测试层 3 条原 ignored 重写后:
 ### 后续任务卡微调建议
 
 - **step2c**:仅余 sfid-system pallet 的 `pallet::GenesisConfig` 空 stub 一处垫片需清理(配套删 `genesis_config_presets.rs:159-167` 的 SFID 3 把硬编码地址 + `root.insert("sfidSystem", ...)` + 对应 deserialize 测试);spec_version 1→2 + on_runtime_upgrade migration。
-- **step2d**:wumin / wuminapp 扫码签名 decoder 必须同步加 `province` 必填 + `signer_admin_pubkey: [u8; 32]` 字段;签名 payload 哈希前缀重排为 `(DUOQIAN_DOMAIN, OP_SIGN_INST, block_hash(0), sfid_id, account_name, register_nonce, province, signer_admin_pubkey)`;extrinsic 调用参数列表 register/propose_create 各加 2 个新参(`province`、`signer_admin_pubkey`),其中 propose_create_institution 现 14 个参数(原 13)。
+- **step2d**:wumin / wuminapp 扫码签名 decoder 必须同步加 `province` 必填 + `signer_admin_pubkey: [u8; 32]` 字段;签名 payload 哈希前缀重排为 `(DUOQIAN_DOMAIN, OP_SIGN_INST, block_hash(0), sfid_number, account_name, register_nonce, province, signer_admin_pubkey)`;extrinsic 调用参数列表 register/propose_create 各加 2 个新参(`province`、`signer_admin_pubkey`),其中 propose_create_institution 现 14 个参数(原 13)。
 - **step3(可选,出 step2 范围)**:RuntimeSfidVerifier / RuntimeSfidVoteVerifier / RuntimePopulationSnapshotVerifier 三处 stub 接通真实验签;BindCredential / VoteCredential / PopSnapshotCredential 加 `(province, admin_pubkey)` 字段。step2b 期间这三处 SFID 公民绑定 / 投票 / 人口快照链路事实失效,与 register_sfid_institution 在 step2a 期间的状态一致(开发期未上线无影响)。

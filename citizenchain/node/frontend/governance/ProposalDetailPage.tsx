@@ -11,11 +11,11 @@ import { VoteSigningFlow } from './VoteSigningFlow';
 type Props = {
   proposalId: number;
   adminWallets: AdminWalletMatch[];
-  shenfenId?: string;
+  sfidNumber?: string;
   onBack: () => void;
 };
 
-function institutionHexToShenfenId(hex: string): string {
+function institutionHexToSfidNumber(hex: string): string {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   const bytes: number[] = [];
   for (let i = 0; i < clean.length; i += 2) {
@@ -26,7 +26,7 @@ function institutionHexToShenfenId(hex: string): string {
   return new TextDecoder().decode(new Uint8Array(bytes.slice(0, end)));
 }
 
-export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, shenfenId: externalShenfenId, onBack }: Props) {
+export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWallets, sfidNumber: externalSfidNumber, onBack }: Props) {
   const [info, setInfo] = useState<ProposalFullInfo | null>(null);
   const [institution, setInstitution] = useState<InstitutionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const [votingWallet, setVotingWallet] = useState<AdminWalletMatch | null>(null);
   const [voteStatuses, setVoteStatuses] = useState<Record<string, UserVoteStatus>>({});
   const [detectedAdminWallets, setDetectedAdminWallets] = useState<AdminWalletMatch[]>([]);
-  const [resolvedShenfenId, setResolvedShenfenId] = useState<string | undefined>(externalShenfenId);
+  const [resolvedSfidNumber, setResolvedSfidNumber] = useState<string | undefined>(externalSfidNumber);
   // 投票中（已提交但未确认上链）的钱包 pubkey → 提交时间
   const [pendingVotes, setPendingVotes] = useState<Map<string, number>>(new Map());
   // 双层 ID v1:展示号反查值,链上 ProposalDisplayId[id] 拉取
@@ -46,7 +46,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
   const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
 
   const adminWallets = externalAdminWallets.length > 0 ? externalAdminWallets : detectedAdminWallets;
-  const shenfenId = resolvedShenfenId;
+  const sfidNumber = resolvedSfidNumber;
 
   const fetchVoteStatuses = useCallback(async (
     pid: number, admins: string[], sid: string | undefined,
@@ -66,7 +66,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
 
   const refreshData = useCallback(async (inst?: InstitutionDetail | null, sid?: string) => {
     const curInst = inst ?? institution;
-    const curSid = sid ?? shenfenId;
+    const curSid = sid ?? sfidNumber;
     try {
       const d = await api.getProposalDetail(proposalId);
       setInfo(d);
@@ -86,7 +86,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         return next;
       });
     }
-  }, [proposalId, institution, shenfenId, fetchVoteStatuses]);
+  }, [proposalId, institution, sfidNumber, fetchVoteStatuses]);
 
   useEffect(() => {
     setLoading(true);
@@ -97,10 +97,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       ]);
       setInfo(d);
       setDisplayMeta(dm ?? null);
-      let sid = externalShenfenId;
+      let sid = externalSfidNumber;
       if (!sid && d.meta.institutionHex) {
-        sid = institutionHexToShenfenId(d.meta.institutionHex);
-        setResolvedShenfenId(sid);
+        sid = institutionHexToSfidNumber(d.meta.institutionHex);
+        setResolvedSfidNumber(sid);
       }
       let wallets = externalAdminWallets;
       if (externalAdminWallets.length === 0 && sid) {
@@ -173,7 +173,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
           proposalId={meta.proposalId}
           proposalKind={meta.kind}
           adminWallets={[votingWallet]}
-          shenfenId={shenfenId}
+          sfidNumber={sfidNumber}
           onClose={() => setVotingWallet(null)}
           onSuccess={handleVoteSuccess}
         />

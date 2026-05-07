@@ -1,13 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart'
-    show ExtrinsicPayload, Hasher, SignatureType, SigningPayload;
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// Runtime upgrade 提案链上交互服务。
@@ -31,9 +30,6 @@ class RuntimeUpgradeService {
 
   /// JointVote::cast_admin call_index=0。
   static const _jointVoteCallIndex = 0;
-
-  /// Mortal era 周期。
-  static const _eraPeriod = 64;
 
   // ──── Extrinsic 提交 ────
 
@@ -439,72 +435,19 @@ class RuntimeUpgradeService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    debugPrint('[RuntimeUpgrade] 步骤1: 获取 metadata...');
-    final metadata = await _rpc.fetchMetadata();
-    debugPrint('[RuntimeUpgrade] 步骤2: 获取 genesisHash...');
-    final genesisHash = await _rpc.fetchGenesisHash();
-    final registry = metadata.chainInfo.scaleCodec.registry;
-
-    debugPrint(
-        '[RuntimeUpgrade] 步骤3: 并行获取 runtimeVersion/nonce/latestBlock...');
-    final results = await Future.wait([
-      _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
-      _rpc.fetchLatestBlock(),
-    ]);
-    final runtimeVersion = results[0] as dynamic;
-    final nonce = results[1] as int;
-    final latestBlock = results[2] as ({Uint8List blockHash, int blockNumber});
-    debugPrint(
-        '[RuntimeUpgrade] nonce=$nonce, block=${latestBlock.blockNumber}');
-
-    debugPrint('[RuntimeUpgrade] 步骤4: 构造签名载荷...');
-    final signingPayload = SigningPayload(
-      method: callData,
-      specVersion: runtimeVersion.specVersion,
-      transactionVersion: runtimeVersion.transactionVersion,
-      genesisHash: '0x${_hexEncode(genesisHash)}',
-      blockHash: '0x${_hexEncode(latestBlock.blockHash)}',
-      blockNumber: latestBlock.blockNumber,
-      eraPeriod: _eraPeriod,
-      nonce: nonce,
-      tip: 0,
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'RuntimeUpgrade',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+      onTrace: (trace) {
+        debugPrint(
+            '[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
+      },
     );
-    final payloadBytes = signingPayload.encode(registry);
-
-    debugPrint('[RuntimeUpgrade] 步骤5: 签名 (${payloadBytes.length} bytes)...');
-    final signature = await sign(payloadBytes);
-    debugPrint('[RuntimeUpgrade] 签名完成 (${signature.length} bytes)');
-
-    debugPrint('[RuntimeUpgrade] 步骤6: 编码 extrinsic...');
-    final extrinsicPayload = ExtrinsicPayload(
-      signer: signerPubkey,
-      method: callData,
-      signature: signature,
-      eraPeriod: _eraPeriod,
-      blockNumber: latestBlock.blockNumber,
-      nonce: nonce,
-      tip: 0,
-    );
-    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
-    debugPrint('[RuntimeUpgrade] extrinsic 编码完成 (${encoded.length} bytes)');
-
-    debugPrint('[RuntimeUpgrade] 步骤7: 提交到链...');
-    debugPrint('[RuntimeUpgrade] call data hex: ${_hexEncode(callData)}');
-    debugPrint(
-        '[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(encoded)}');
-    try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
-      debugPrint('[RuntimeUpgrade] 提交成功: 0x${_hexEncode(txHash)}');
-      return (txHash: '0x${_hexEncode(txHash)}', usedNonce: nonce);
-    } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[RuntimeUpgrade] 提交失败，原始错误: $e');
-      rethrow;
-    }
   }
 
   // ──── 内部：storage key 构造 ────

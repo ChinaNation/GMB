@@ -8,7 +8,7 @@
 ## 背景
 
 `JointVote::cast_admin(proposal_id, institution_id_48, approve)`
-的 call payload 包含 48 字节 `institution_id`(shenfen_id),决定"以哪个
+的 call payload 包含 48 字节 `institution_id`(sfid_number),决定"以哪个
 机构身份投票"。
 
 > 2026-05-05 sub-pallet 拆分后入口迁出为 `JointVote::cast_admin(23.0)`,
@@ -35,7 +35,7 @@
 
 1. decoder `_decodeJointVote` 解出 48B institution bytes,trim 尾零后
    按 `institutions.dart` 的 `institutionName()` 查表转机构中文名
-   (找不到回退原 shenfen_id 字符串)
+   (找不到回退原 sfid_number 字符串)
 2. 返回 `decoded.fields` 增加 `institution_id` 项
 3. Registry `qr-action-registry.md` joint_vote fields 改回
    `(proposal_id, institution_id, approve)`,注释修改
@@ -44,7 +44,7 @@
    institution 查表,与 decoder 输出字面一致)
 5. wuminapp `runtime_upgrade_detail_page.dart:332` 的 SignDisplayField
    补 `key: 'institution_id'` 条目(value 取 `widget.institution.name`
-   或从 institution.shenfenId 查表)
+   或从 institution.sfidNumber 查表)
 6. wumin `payload_decoder_test.dart` joint_vote 测试增补 institution_id
    字段断言
 7. Grep 无 `institution_id` 残留不一致
