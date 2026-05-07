@@ -202,7 +202,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ],
           _buildAdminEntry(),
           const SizedBox(height: 12),
-          _buildVotingEvents(),
+          _buildProposalList(),
         ],
       ),
     );
@@ -383,14 +383,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
   }
 
-  // ──── 投票事件列表 ────
+  // ──── 提案列表 ────
 
-  Widget _buildVotingEvents() {
+  Widget _buildProposalList() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '投票事件',
+          '提案列表',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -413,12 +413,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     size: 40, color: AppTheme.textTertiary),
                 SizedBox(height: 8),
                 Text(
-                  '暂无投票事件',
+                  '暂无提案',
                   style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  '本机构提案和全局联合投票事件将在此显示',
+                  '本机构提案与全局联合投票将在此显示',
                   style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
                 ),
               ],

@@ -273,7 +273,7 @@ class _VoteViewState extends State<VoteView> {
         const Positioned.fill(
           child: IgnorePointer(
             child: Opacity(
-              opacity: 0.06,
+              opacity: 0.20,
               child: ConstitutionQuote(),
             ),
           ),
