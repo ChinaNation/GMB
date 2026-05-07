@@ -1,6 +1,6 @@
 // 多签反向索引发现服务(req 3 核心)。
 //
-// **完全 0 链端改动**:利用现有 `AdminsChange::Institutions` 统一存储
+// **完全 0 链端改动**:利用现有 `AdminsChange::Subjects` 统一存储
 // (个人/SFID 机构/内置治理三类多签共用)+ smoldot 标准 `state_getKeysPaged`
 // (verified [smoldot-pow/lib/src/json_rpc/methods.rs:432])。
 //

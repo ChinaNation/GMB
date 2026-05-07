@@ -119,14 +119,11 @@ pub struct VoteSubmitResult {
 
 /// 构建内部投票（`internal_vote`）签名请求。
 ///
-/// Phase 3(2026-04-22)「投票引擎统一入口整改」:
-/// 所有业务 pallet(admins_change / resolution_destro /
-/// grandpakey_change / organization_manage / duoqian_transfer)的 vote_X
-/// 已物理删除,管理员一人一票统一走 `InternalVote::cast`
-/// (pallet=9, call=0),由投票引擎按 ProposalData 前缀自动分派到对应
-/// `InternalVoteExecutor`。
+/// Phase 3(2026-04-22)「投票引擎统一入口整改」:业务 pallet 的 vote_X 已物理删除。
+/// 管理员一人一票统一走 `InternalVote::cast`(pallet=22, call=0,sub-pallet 拆分
+/// 2026-05-05),由投票引擎按 ProposalData 前缀自动分派到对应 `InternalVoteExecutor`。
 ///
-/// Call 编码: `[0x09][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
+/// Call 编码: `[0x16][0x00][proposal_id:u64_le][approve:bool]` 共 11 字节。
 ///
 /// 返回 QR 签名请求 JSON + 请求 ID + 预期 payload hash。
 pub fn build_vote_sign_request(
@@ -150,10 +147,10 @@ pub fn build_vote_sign_request(
     let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // 构建 call data: [pallet=9][call=0][proposal_id: u64_le][approve: bool]
+    // 构建 call data: [pallet=22][call=0][proposal_id: u64_le][approve: bool]
     let mut call_data = Vec::with_capacity(11);
-    call_data.push(9u8); // VotingEngine pallet index
-    call_data.push(0u8); // internal_vote call index
+    call_data.push(22u8); // InternalVote sub-pallet index (sub-pallet split 2026-05-05)
+    call_data.push(0u8); // cast call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.push(if approve { 1u8 } else { 0u8 });
 
@@ -216,10 +213,10 @@ pub fn build_vote_sign_request(
     })
 }
 
-/// 构建 joint_vote 签名请求（联合投票：pallet=9, call=1）。
+/// 构建 joint_vote 签名请求（联合投票内部投票阶段：pallet=23, call=0）。
 ///
-/// Phase 2 将投票引擎内部 call_index 重排为
-/// 0=internal_vote / 1=joint_vote / 2=citizen_vote / 3=finalize_proposal。
+/// sub-pallet 拆分(2026-05-05):JointVote 独立成 pallet,`cast_admin` 在 23.0,
+/// `cast_referendum` 在 23.1(联合公投阶段需 ADR-008 step3 双层凭证,本函数不覆盖)。
 ///
 /// shenfen_id 用于构造 institution_id 48 字节参数。
 pub fn build_joint_vote_sign_request(
@@ -244,10 +241,10 @@ pub fn build_joint_vote_sign_request(
     let (block_hash, block_number) = fetch_latest_block()?;
     let nonce = fetch_nonce(&pubkey_clean)?;
 
-    // call data: [pallet=9][call=1][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
+    // call data: [pallet=23][call=0][proposal_id: u64_le][institution_id: 48 bytes][approve: bool]
     let mut call_data = Vec::with_capacity(1 + 1 + 8 + 48 + 1);
-    call_data.push(9u8); // VotingEngine pallet index
-    call_data.push(1u8); // joint_vote call index (Phase 2 重排,原 3)
+    call_data.push(23u8); // JointVote sub-pallet index (sub-pallet split 2026-05-05)
+    call_data.push(0u8); // cast_admin call index
     call_data.extend_from_slice(&proposal_id.to_le_bytes());
     call_data.extend_from_slice(&institution_id);
     call_data.push(if approve { 1u8 } else { 0u8 });

@@ -7,7 +7,6 @@
 - `memory/08-tasks/open/20260321-152234-统一-sfid-与-cpms-的手机扫码登录协议为-challenge-sys-pubkey-sys-sig-版本.md`
 - `memory/08-tasks/open/20260322-141500-分析-duoqian-transfer-与-duoqian-manage-并记录.md`
 - `memory/08-tasks/open/20260322-公民投票完整实现.md`
-- `memory/08-tasks/open/20260325-133531-统一-duoqian-manage-命名.md`
 - `memory/08-tasks/open/20260325-141845-将-duoqian-manage-注册型多签地址接入-duoqian-transfer-转账功能.md`
 - `memory/08-tasks/open/20260331-step2-node-offchain-rpc-链下待结算账本.md`
 - `memory/08-tasks/open/20260331-step3-runtime-offchain-transaction-适配验证.md`
@@ -88,6 +87,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260325-133531-统一-duoqian-manage-命名-superseded.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`

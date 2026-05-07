@@ -1,3 +1,6 @@
+> **🔍 P3-2 审计标记(2026-05-07,PR-C)**
+> 此 task card 创建已超 1 个月仍 open。PR-C 仅做审计标记,不动状态。Blockchain Agent 后续应验证当前实现状态:已完成 → mv 到 done/;部分完成 → 更新进度;真正未启动 → 保留 open。
+
 # 链下清算打包器（OffchainPacker）接入 service worker
 
 - **日期**: 2026-04-04

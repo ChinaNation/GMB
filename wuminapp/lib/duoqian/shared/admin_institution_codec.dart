@@ -1,4 +1,4 @@
-// `AdminsChange::Institutions` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
+// `AdminsChange::Subjects` value 的最小 SCALE 解码器(req 3 反向索引依赖)。
 //
 // 链上 [AdminInstitution<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
 //   org: u8                                       (1B)

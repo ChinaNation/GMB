@@ -409,7 +409,7 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.3.1 活跃提案数量限制
 
-每个机构（`InstitutionPalletId`）同时最多允许 runtime 配置数量的活跃提案（当前生产值为 **10**），不区分提案类型（转账、销毁、换管理员等），由投票引擎（`votingengine::limit`，原 `active_proposal_limit`）统一管控。
+每个机构（`SubjectId`）同时最多允许 runtime 配置数量的活跃提案（当前生产值为 **10**），不区分提案类型（转账、销毁、换管理员等），由投票引擎（`votingengine::limit`，原 `active_proposal_limit`）统一管控。
 
 - 创建提案时：`try_add_active_proposal()` 检查并添加
 - 提案完成时：`remove_active_proposal()` 在 `set_status_and_emit` 中立即释放（提案通过/拒绝/过期时）
@@ -513,7 +513,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.6 机构标识编码
 
 shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitives/china/china_ch.rs`（PRB），
-编码为 48 字节固定长度（UTF-8 右补零），与链上 `InstitutionPalletId` 一致。
+编码为 48 字节固定长度（UTF-8 右补零），与链上 `SubjectId` 一致。
 
 ### 7.7 关键文件
 
@@ -557,14 +557,14 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 注册多签机构使用 `org = 3`（`ORG_DUOQIAN`），与治理机构 org 0/1/2 并列。
 
-`InstitutionPalletId`（48 字节）= `duoqian_address`（32 字节 AccountId）+ 16 字节零填充。
+`SubjectId`（48 字节）= `duoqian_address`（32 字节 AccountId）+ 16 字节零填充。
 
 ### 8.3 动态阈值与管理员
 
 | 项目 | 治理机构（NRC/PRC/PRB） | 注册多签机构（DUOQIAN） |
 | --- | --- | --- |
-| 管理员来源 | `admins_change::Institutions`（创世/治理替换） | `admins_change::Institutions`（注册时写入，治理替换后更新） |
-| 阈值来源 | `admins_change::Institutions.threshold`（创世写入 13/6/6） | `admins_change::Institutions.threshold`（注册时设定） |
+| 管理员来源 | `admins_change::Subjects`（创世/治理替换） | `admins_change::Subjects`（注册时写入，治理替换后更新） |
+| 阈值来源 | `admins_change::Subjects.threshold`（创世写入 13/6/6） | `admins_change::Subjects.threshold`（注册时设定） |
 | 管理员存储类型 | `AccountId` | `AccountId` |
 
 通过 `InternalThresholdProvider` trait 和 `InternalAdminProvider` trait，投票引擎动态查询阈值和管理员列表。
@@ -594,7 +594,7 @@ shenfen_id 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitive
 
 ### 8.7 转账接入
 
-- `wuminapp` 现已把注册型机构也编码为 `InstitutionPalletId(48)`：
+- `wuminapp` 现已把注册型机构也编码为 `SubjectId(48)`：
   - 治理机构：`shenfen_id` UTF-8 右补零到 48 字节
   - 注册型机构：`duoqian_address(32) + 16 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。

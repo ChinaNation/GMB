@@ -25,7 +25,7 @@
 核心存储：
 
 ```text
-Institutions<InstitutionPalletId, AdminInstitution>
+Subjects<SubjectId, AdminInstitution>
 ```
 
 `AdminInstitution` 字段：
@@ -57,7 +57,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 - `remove_pending_subject_for_proposal`
 - `close_subject_for_proposal`
 
-底层直接写 `Institutions` 的函数已收口为 `pub(crate) do_*`，不得作为跨 pallet 公共 API 暴露。
+底层直接写 `Subjects` 的函数已收口为 `pub(crate) do_*`，不得作为跨 pallet 公共 API 暴露。
 
 生命周期 trait 的上下文约束：
 
@@ -70,7 +70,7 @@ Institutions<InstitutionPalletId, AdminInstitution>
 
 - `close_subject` 只允许关闭动态主体：`SfidInstitution / PersonalDuoqian`。
 - `BuiltinInstitution` 代表国储会、省储会、省储行等制度内置治理主体，永远不能进入 `Closed` 状态。
-- 该规则由 `do_close_subject` 自身校验，不能只依赖调用方约束，避免未来 runtime caller 误传 NRC/PRC/PRB 的 `InstitutionPalletId`。
+- 该规则由 `do_close_subject` 自身校验，不能只依赖调用方约束，避免未来 runtime caller 误传 NRC/PRC/PRB 的 `SubjectId`。
 
 ## 4. 管理员读取 API
 
@@ -109,7 +109,7 @@ Pending 快照专用 API：
 - 只允许 `ORG_NRC / ORG_PRC / ORG_PRB`。
 - `ORG_DUOQIAN` 的 `SfidInstitution / PersonalDuoqian` 主体不能走本入口替换管理员；该类主体的创建、激活、关闭等生命周期由 `organization-manage` 维护，避免出现第二条多签治理入口。
 
-1. 读取 `Institutions[institution]`。
+1. 读取 `Subjects[institution]`。
 2. 校验 `org` 属于制度内置治理主体范围。
 3. 校验主体为 `Active` 且 `subject.org == org`。
 4. 校验发起人是当前管理员。
@@ -142,7 +142,7 @@ Pending 快照专用 API：
 - 只允许等长替换，不增删管理员人数。
 - 内置机构仍校验固定人数：国储会 19，省储会 9，省储行 9。
 - 动态多签主体校验人数在 `2..=MaxAdminsPerInstitution`。
-- 执行成功后写回 `Institutions[institution].admins` 并更新 `updated_at`。
+- 执行成功后写回 `Subjects[institution].admins` 并更新 `updated_at`。
 
 ## 5b. Runtime Integrity
 

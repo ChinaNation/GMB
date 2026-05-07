@@ -120,6 +120,7 @@
 - 上下文装载顺序：`memory/07-ai/context-loading-order.md`
 - 目录级 CI 路由：`memory/07-ai/ci-path-routing.md`
 - 启动协议验收：`memory/07-ai/startup-acceptance.md`
+- 审计任务铁律：`memory/07-ai/audit-recipe.md`(subagent 输出仅作 leads,正式报告每条必须回原文核验)
 - 需求分析入口：`bash memory/scripts/analyze-requirement.sh --requirement "..."`
 - 启动协议检查：`bash memory/scripts/check-startup-acceptance.sh`
 - 执行入口：`bash memory/scripts/architect-entry.sh --requirement "..." --execute`

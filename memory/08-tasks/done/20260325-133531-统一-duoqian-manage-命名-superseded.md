@@ -1,7 +1,10 @@
 # 任务卡：统一 duoqian-manage 命名
 
+> **🔒 SUPERSEDED(2026-05-07,PR-C 审计归档)**
+> 本卡完成的 duoqian-manage 统一命名已被 [20260505-215047 rename](20260505-215047-rename-org-manage-to-organization-manage.md) 进一步重命名为 `organization-manage`。本卡档的 destination 名 `duoqian-manage` 已不再是源码状态,议题完全被新卡覆盖,移到 done/ 归档。
+
 - 任务编号：20260325-133531
-- 状态：open
+- 状态：superseded(已归档,见上方说明)
 - 负责人：Codex
 
 ## 1. 任务目标
