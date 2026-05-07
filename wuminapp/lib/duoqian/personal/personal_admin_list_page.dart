@@ -19,9 +19,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';

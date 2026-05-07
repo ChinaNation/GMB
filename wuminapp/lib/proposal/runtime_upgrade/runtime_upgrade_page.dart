@@ -8,7 +8,7 @@ import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';

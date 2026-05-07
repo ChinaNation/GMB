@@ -12,8 +12,8 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/citizen/governance/all_proposals_view.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_list_page.dart';
-import 'package:wuminapp_mobile/citizen/vote/vote_page.dart';
+import 'package:wuminapp_mobile/governance/governance_list_page.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/public/public_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/vote/vote_view.dart';
 
 /// 底部“公民”Tab 的总入口。
 ///
-/// 这里仅负责公民域二级导航分发，具体业务分别下沉到 vote/governance/institution/proposal。
+/// 仅负责公民域二级导航分发；具体业务分别下沉到 public/vote/governance/institution/proposal。
 class CitizenTabPage extends StatefulWidget {
   const CitizenTabPage({super.key, this.onPendingVoteCountChanged});
 
@@ -20,7 +20,7 @@ class CitizenTabPage extends StatefulWidget {
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
   int _selectedTab = 1;
-  static const List<String> _tabs = ['投票', '治理', '机构'];
+  static const List<String> _tabs = ['公权', '投票', '治理'];
 
   @override
   Widget build(BuildContext context) {
@@ -49,13 +49,13 @@ class _CitizenTabPageState extends State<CitizenTabPage> {
 
     switch (_selectedTab) {
       case 0:
-        return const VotePage();
+        return const PublicPage();
       case 1:
-        return AllProposalsView(
+        return VoteView(
           onPendingVoteCountChanged: widget.onPendingVoteCountChanged,
         );
       case 2:
-        return const InstitutionListPage(
+        return const GovernanceListPage(
           nationalCouncil: kNationalCouncil,
           provincialCouncils: kProvincialCouncils,
           provincialBanks: kProvincialBanks,

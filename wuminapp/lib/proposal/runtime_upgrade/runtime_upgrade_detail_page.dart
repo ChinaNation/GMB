@@ -3,12 +3,12 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
-import 'package:wuminapp_mobile/citizen/institution/institution_admin_service.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/pending_vote_store.dart';
-import 'package:wuminapp_mobile/citizen/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
@@ -16,7 +16,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/citizen/proposal/shared/proposal_vote_widgets.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_vote_widgets.dart';
 
 /// Runtime 升级提案详情页。
 ///

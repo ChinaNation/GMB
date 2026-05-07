@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/citizen/institution/activation_service.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_admin_service.dart';
-import 'package:wuminapp_mobile/citizen/institution/institution_data.dart';
-import 'package:wuminapp_mobile/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/citizen/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/institution/institution_activation_service.dart';
+import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
+import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 
 /// 用户与某个提案的关系上下文。
 ///
