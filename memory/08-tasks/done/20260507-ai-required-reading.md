@@ -1,7 +1,7 @@
 # 任务卡：建立 AI 系统统一必读文件
 
 - 任务编号：20260507-ai-required-reading
-- 状态：open
+- 状态：completed
 - 所属模块：memory / AI 编程系统
 
 ## 任务需求

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';

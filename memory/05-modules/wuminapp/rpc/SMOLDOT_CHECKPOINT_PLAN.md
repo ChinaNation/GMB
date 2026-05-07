@@ -3,7 +3,7 @@
 > 状态：CP-1~5 全部完成  
 > 日期：2026-04-12  
 > 模块：wuminapp（Dart）+ scripts（Shell）+ memory（文档）+ citizenchain/node（前端文案）  
-> 前置依赖：无（与 smoldot-stability-plan 的 FIX-1~7 互补，该方案解决"peer 连接层"，本方案解决"同步起点层"）
+> 前置依赖：无（与 SMOLDOT_STABILITY_PLAN.md 的 FIX-1~7 互补，该方案解决"peer 连接层"，本方案解决"同步起点层"）
 
 ---
 
@@ -316,11 +316,11 @@ Future<void> _scheduleRetrySync() async {
 
 ---
 
-## 与 smoldot-stability-plan 的关系
+## 与 SMOLDOT_STABILITY_PLAN.md 的关系
 
 | 方案 | 解决层面 | 核心问题 |
 |------|----------|----------|
-| smoldot-stability-plan（FIX-1~7） | peer 连接层 | 连上 peer 后查询失败 |
+| SMOLDOT_STABILITY_PLAN.md（FIX-1~7） | peer 连接层 | 连上 peer 后查询失败 |
 | 本方案（CP-1~5） | 同步起点层 | 同步太慢导致超时 |
 
 两套方案互补：FIX-1~7 确保 peer 连接稳定，CP-1~5 确保有了 peer 之后能快速同步到最新块。单独实施任一套都不能完全解决"轻节点总是连不上链"的问题。

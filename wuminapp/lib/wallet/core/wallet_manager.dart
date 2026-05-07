@@ -8,7 +8,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:substrate_bip39/crypto_scheme.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_secure_keys.dart';
 
 class WalletProfile {

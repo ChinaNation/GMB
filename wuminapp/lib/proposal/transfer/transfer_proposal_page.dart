@@ -9,7 +9,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:isar/isar.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/duoqian/personal/personal_proposal_history_service.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';

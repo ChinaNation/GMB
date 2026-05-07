@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../Isar/wallet_isar.dart';
+import '../isar/wallet_isar.dart';
 
 /// 应用锁（6 位 PIN）服务。
 ///

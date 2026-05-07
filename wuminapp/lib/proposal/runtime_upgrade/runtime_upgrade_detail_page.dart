@@ -328,7 +328,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
               summary: '联合投票 提案 #${widget.proposalId}：$voteText',
               fields: [
                 // joint_vote 当前 decoder 输出 fields = (proposal_id, approve),
-                // institution_id 在 payload 里但 decoder 跳过不回填 display。
+                // subject_id 在 payload 里但 decoder 跳过不回填 display。
                 // _proposalInfo(提案人/理由/代码哈希)属辅助展示,
                 // 页面已独立显示,不塞 display.fields 避免对齐失败
                 // (2026-04-22 两色识别整改)。

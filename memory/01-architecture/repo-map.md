@@ -4,28 +4,55 @@
 
 GMB 使用唯一仓库模式，所有核心系统、文档、自动化流程和 AI 永久记忆统一放在同一个仓库中管理。
 
-仓库根目录固定如下：
+仓库根目录固定如下。这里登记的是 tracked 主目录和入口文件；本地工具私有目录、构建产物和缓存目录不属于固定结构。
 
 ```text
 GMB/
   .github/
+  .githooks/
+  .vscode/
   memory/
   citizenchain/
   sfid/
   cpms/
+  wumin/
   wuminapp/
   website/
+  docs/
+  tools/
+  scripts/
+  AGENTS.md
+  CODEX.md
+  CLAUDE.md
+  README.md
+  Cargo.toml
+  Dockerfile
 ```
 
 ## 2. 目录职责
 
 - `.github/`：GitHub Actions、PR 自动化、构建发布流程
+- `.githooks/`：仓库级 Git hook 脚本
+- `.vscode/`：共享编辑器设置
 - `memory/`：AI 编程系统、项目长期记忆、产品文档与模块文档真源
 - `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
 - `sfid/`：在线身份系统
 - `cpms/`：离线实名系统
+- `wumin/`：冷钱包，负责离线签名、扫码识别和冷钱包 UI
 - `wuminapp/`：手机 App
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点
+- `docs/`：静态发布文档和展示资产，不承载系统权威记忆
+- `tools/`：仓库级工具脚本和生成器
+- `scripts/`：仓库级自动化脚本
+
+根入口文件职责：
+
+- `AGENTS.md`：GMB AI 编程系统新线程最高优先级启动协议
+- `CODEX.md`：Codex 入口说明，必须与 `memory/CODEX.md` 同步
+- `CLAUDE.md`：Claude 入口说明，必须与 `memory/CLAUDE.md` 同步
+- `README.md`：仓库说明
+- `Cargo.toml` / `Cargo.lock`：Rust workspace 根配置
+- `Dockerfile` / `.dockerignore`：容器构建配置
 
 ## 3. 文档集中管理规则
 
@@ -33,9 +60,18 @@ GMB/
 
 - `memory/00-vision/`：白皮书、愿景、总目标
 - `memory/01-architecture/`：仓库级与产品级架构文档
+- `memory/03-security/`：安全规则、边界和风险要求
+- `memory/04-decisions/`：ADR 和重要设计决策
 - `memory/05-modules/`：模块级技术文档
+- `memory/06-quality/`：测试、缺陷、变更记录模板和跨端 fixture
 - `memory/07-ai/`：AI 编程系统规则
 - `memory/08-tasks/`：任务卡、执行记录与归档
+- `memory/scripts/`：memory 自检和入口验收脚本
+
+以下旧目录不再属于当前结构，不得新建或恢复：
+
+- `memory/05-architecture/`
+- `memory/tasks/`
 
 产品目录默认只保留：
 

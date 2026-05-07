@@ -36,18 +36,18 @@ class AdminInstitutionDecoded {
   final List<String> adminPubkeysHex;
 }
 
-/// AdminInstitution SCALE 解码工具集 + InstitutionPalletId 反推工具。
+/// AdminInstitution SCALE 解码工具集 + SubjectId 反推工具。
 class AdminInstitutionCodec {
   AdminInstitutionCodec._();
 
   /// 链端 `AdminSubjectKind` 枚举值(`admins-change::AdminSubjectKind`)。
-  /// 注意:与 institution_id 的 `SubjectKind` kind tag(0x01/0x02/0x03)不同字节空间。
+  /// 注意:与 SubjectId 的 `SubjectKind` kind tag(0x01/0x02/0x03)不同字节空间。
   static const int kindBuiltin = 0;
   static const int kindSfid = 1;
   static const int kindPersonal = 2;
 
   /// `primitives::derive::SubjectKind` 字节值(D 阶段协议统一,2026-05-06)。
-  /// institution_id byte[0] 即为本枚举值。
+  /// SubjectId byte[0] 即为本枚举值。
   static const int subjectKindBuiltin = 0x01;
   static const int subjectKindSfidInstitution = 0x02;
   static const int subjectKindPersonalDuoqian = 0x03;
@@ -81,8 +81,8 @@ class AdminInstitutionCodec {
     }
   }
 
-  /// 从完整 storage key(twox128 prefix(32B) + blake2_128_concat(institution_id)
-  /// = hash(16B) + key(48B))末 48 字节提取 institution_id。
+  /// 从完整 storage key(twox128 prefix(32B) + blake2_128_concat(subject_id)
+  /// = hash(16B) + key(48B))末 48 字节提取 SubjectId。
   static Uint8List? extractInstitutionIdFromKey(Uint8List storageKey) {
     if (storageKey.length < 48) return null;
     return Uint8List.fromList(
@@ -92,7 +92,7 @@ class AdminInstitutionCodec {
 
   /// 个人多签判别 + 提取 personal_address。
   ///
-  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 institution_id 协议:
+  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 SubjectId 协议:
   ///   byte[0]   = 0x03 (SubjectKind::PersonalDuoqian)
   ///   byte[1..33] = personal_address(32B AccountId)
   ///   byte[33..48] = 15B 零填充
@@ -108,7 +108,7 @@ class AdminInstitutionCodec {
 
   /// SFID 机构判别 + 提取 sfid_number(去除尾部 0x00 padding)。
   ///
-  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 institution_id 协议:
+  /// D 阶段(SubjectKind 协议统一,2026-05-06)起 SubjectId 协议:
   ///   byte[0]    = 0x02 (SubjectKind::SfidInstitution)
   ///   byte[1..48] = sfid_number_utf8(≤47B,右填零)
   /// kind tag 不为 0x02 或 payload 全零返回 null。

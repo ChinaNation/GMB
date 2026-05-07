@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 中文注释:验证 WalletManager.reorderWallets 是否正确写入 sortOrder,

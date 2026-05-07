@@ -5,7 +5,7 @@
 - **日期**: 2026-04-09
 - **工作量**: 4 天(Day1 结构 + Day2 PG 后端 + Day3 handler 改造 + Day4 文档收官)
 - **前置**: Phase 1 `sfid-sheng-admin-per-province-keyring` 已完成
-- **架构上下文**: `memory/05-architecture/20260409-sfid-50k-concurrent-framework.md`
+- **架构上下文**: `memory/01-architecture/sfid/SFID_50K_CONCURRENT_FRAMEWORK.md`
 - **状态**: **已完成** (2026-04-09)
 
 ---
@@ -1060,7 +1060,7 @@ systemctl start sfid-backend
 ## 十三、相关参考
 
 - Phase 1 任务卡(完成):`memory/08-tasks/done/20260409-sfid-sheng-admin-per-province-keyring-impl.md`
-- 架构框架:`memory/05-architecture/20260409-sfid-50k-concurrent-framework.md`
+- 架构框架:`memory/01-architecture/sfid/SFID_50K_CONCURRENT_FRAMEWORK.md`
 - 铁律:
   - `feedback_sfid_sheng_signing_keyring.md`(Phase 1 产出)
   - `feedback_scope_auto_filter.md`(省级 scope 过滤)

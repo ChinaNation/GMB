@@ -10,7 +10,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/Isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_discovery_service.dart';
 
 void main() {

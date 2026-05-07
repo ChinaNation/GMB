@@ -177,7 +177,7 @@ class TransferProposalService {
     );
   }
 
-  /// 反向索引:`ProposalsByInstitution[institution_pallet_id(48 bytes)]` 下的所有 proposal_id。
+  /// 反向索引:`ProposalsByInstitution[subject_id(48 bytes)]` 下的所有 proposal_id。
   Future<List<int>> fetchProposalIdsByInstitution(String sfidNumber) async {
     return _fetchProposalIdsByDoubleMap(
       'ProposalsByInstitution',
