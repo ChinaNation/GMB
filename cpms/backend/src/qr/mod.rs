@@ -1,7 +1,7 @@
 //! WUMIN_QR_V1 统一二维码协议 envelope。
 //!
-//! 唯一事实源: `memory/05-architecture/qr-protocol-spec.md`
-//! Golden fixtures: `memory/05-architecture/qr-protocol-fixtures/*.json`
+//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
+//! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
 //! 与 wuminapp/wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS
 //! envelope 字段逐字节一致。本模块仅定义 SFID 后端需要的 kind
@@ -21,7 +21,6 @@ pub enum QrKind {
     SignResponse,
     UserContact,
     UserTransfer,
-    UserDuoqian,
 }
 
 impl QrKind {
@@ -33,12 +32,11 @@ impl QrKind {
             Self::SignResponse => "sign_response",
             Self::UserContact => "user_contact",
             Self::UserTransfer => "user_transfer",
-            Self::UserDuoqian => "user_duoqian",
         }
     }
 
     pub fn is_fixed(&self) -> bool {
-        matches!(self, Self::UserContact | Self::UserDuoqian)
+        matches!(self, Self::UserContact)
     }
 }
 
@@ -81,12 +79,7 @@ pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
 pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 
 impl LoginChallengeEnvelope {
-    pub fn new(
-        id: String,
-        issued_at: i64,
-        expires_at: i64,
-        body: LoginChallengeBody,
-    ) -> Self {
+    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
         Self {
             proto: WUMIN_QR_V1.to_string(),
             kind: QrKind::LoginChallenge.wire().to_string(),
@@ -99,12 +92,7 @@ impl LoginChallengeEnvelope {
 }
 
 impl LoginReceiptEnvelope {
-    pub fn new(
-        id: String,
-        issued_at: i64,
-        expires_at: i64,
-        body: LoginReceiptBody,
-    ) -> Self {
+    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
         Self {
             proto: WUMIN_QR_V1.to_string(),
             kind: QrKind::LoginReceipt.wire().to_string(),
@@ -137,7 +125,15 @@ pub fn build_signature_message(
         .or_else(|| principal.strip_prefix("0X"))
         .unwrap_or(principal)
         .to_lowercase();
-    format!("{}|{}|{}|{}|{}|{}", WUMIN_QR_V1, kind.wire(), id, sys, exp, pp)
+    format!(
+        "{}|{}|{}|{}|{}|{}",
+        WUMIN_QR_V1,
+        kind.wire(),
+        id,
+        sys,
+        exp,
+        pp
+    )
 }
 
 // ---------- parse helpers ----------

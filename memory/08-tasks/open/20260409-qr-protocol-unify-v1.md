@@ -30,7 +30,7 @@
 1. **功能 0 增 0 减**:现在能做什么,改完还能做什么,UI 流程一分不差
 2. **0 兼容**:不搞 `a ?? b` 字段别名,不搞过渡期,不留旧常量
 3. **0 残留**:所有旧 proto 字符串、旧类型名、旧字段别名必须全仓库 grep 0 命中
-4. **单一事实源**:`memory/05-architecture/qr-protocol-spec.md` 是唯一规范,fixtures 是强制对齐手段
+4. **单一事实源**:`memory/01-architecture/qr/qr-protocol-spec.md` 是唯一规范,fixtures 是强制对齐手段
 
 ## 规范摘要(详见 qr-protocol-spec.md)
 
@@ -82,8 +82,8 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<address 或 pubkey>
 ## 执行步骤(9 步,一条路)
 
 ### Step 1:spec + fixtures 先行
-- [ ] 写 `memory/05-architecture/qr-protocol-spec.md`
-- [ ] 写 7 个 fixture:`memory/05-architecture/qr-protocol-fixtures/{login_challenge,login_receipt,sign_request,sign_response,user_contact,user_transfer,user_duoqian}.json`
+- [ ] 写 `memory/01-architecture/qr/qr-protocol-spec.md`
+- [ ] 写 7 个 fixture:`memory/01-architecture/qr/qr-protocol-fixtures/{login_challenge,login_receipt,sign_request,sign_response,user_contact,user_transfer,user_duoqian}.json`
 - [ ] 写 `memory/05-modules/wuminapp-vs-wumin.md`(角色边界说明)
 
 ### Step 2:Dart 新建统一类型(wuminapp + wumin 各一份,逐字节一致)
@@ -187,4 +187,4 @@ nickname      (作为字段名)
 1. Step 8 零命中 grep 全通过
 2. Step 9 十个场景全绿
 3. 所有测试(Dart/TS/Rust)全绿
-4. `memory/05-architecture/qr-protocol-spec.md` 与 fixture、与 7 份 body 实现三方对齐
+4. `memory/01-architecture/qr/qr-protocol-spec.md` 与 fixture、与 7 份 body 实现三方对齐

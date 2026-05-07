@@ -2,13 +2,13 @@
 
 - 版本:`WUMIN_QR_V1`
 - 创建日期:2026-04-09
-- 状态:唯一事实源(Single Source of Truth)
+- 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:全仓库所有二维码(CPMS 安装 4 码 QR1/QR2/QR3/QR4 除外)
 
 ## 1. 设计铁律
 
 1. **唯一协议字符串**:`WUMIN_QR_V1`。不存在任何其他 proto 字符串。
-2. **唯一 kind 枚举**:7 个值,见第 3 节。不存在任何 `type` / `purpose` / `msg_type` 字段。
+2. **唯一 kind 枚举**:6 个当前值,见第 3 节。不存在任何 `type` / `purpose` / `msg_type` 字段。
 3. **唯一字段命名**:见第 4 节字段字典。不存在任何别名、兼容读、`a ?? b`。
 4. **唯一签名原文拼接**:见第 5 节。所有需要 sr25519 签名的 kind 共用一个拼接函数。
 5. **固定码不出现时效字段**:`id` / `issued_at` / `expires_at` 三字段**直接不存在于 JSON**,不是 `null`,不是 `0`,不是 `""`。
@@ -19,7 +19,7 @@
 ```jsonc
 {
   "proto": "WUMIN_QR_V1",
-  "kind":  "<7 个 kind 之一>",
+  "kind":  "<6 个当前 kind 之一>",
   "id":    "<临时码必填,固定码省略>",
   "issued_at":  <临时码必填,固定码省略,unix 秒>,
   "expires_at": <临时码必填,固定码省略,unix 秒>,
@@ -29,7 +29,7 @@
 
 **字段规则**:
 - `proto`:恒为 `"WUMIN_QR_V1"`
-- `kind`:恒为第 3 节 7 个值之一,snake_case
+- `kind`:恒为第 3 节 6 个当前值之一,snake_case
 - `id`:临时码必填,字符长度 16-128,允许 `[a-zA-Z0-9_-]`;固定码**字段不出现**
 - `issued_at` / `expires_at`:临时码必填,unix 秒级整数;固定码**字段不出现**
 - `body`:必填,对象,字段集合由 kind 决定(第 4 节)
@@ -39,9 +39,9 @@
 - `body` 里**绝对不重复**顶层字段
 - 解析器遇到未知顶层字段:**报错**
 - 解析器遇到 `proto != "WUMIN_QR_V1"`:**报错**
-- 解析器遇到 `kind` 不在 7 值列表:**报错**
+- 解析器遇到 `kind` 不在 6 个当前值列表:**报错**
 
-## 3. 7 个 kind 清单
+## 3. 6 个当前 kind 清单
 
 | kind | 类型 | 生成者 | 扫描者 | 说明 |
 |---|---|---|---|---|
@@ -102,13 +102,12 @@
   "pubkey":       "0x<hex>",
   "sig_alg":      "sr25519",
   "payload_hex":  "0x<hex>",
-  "spec_version": 123,
   "display": {
     "action":  "transfer",
-    "summary": "转账 100 GMB 给 5Grw...",
+    "summary": "转账 100.00 GMB 给 5Grw...",
     "fields":  [
-      { "label": "收款方", "value": "5Grw..." },
-      { "label": "金额", "value": "100 GMB" }
+      { "key": "to", "label": "收款方", "value": "5Grw..." },
+      { "key": "amount_yuan", "label": "金额", "value": "100.00 GMB" }
     ]
   }
 }
@@ -120,11 +119,10 @@
 | `pubkey` | string | 是 | 签名者公钥,`0x` + hex |
 | `sig_alg` | string | 是 | 固定 `"sr25519"` |
 | `payload_hex` | string | 是 | 待签 payload 字节,`0x` + hex,≤32768 字符 |
-| `spec_version` | int | 是 | 链 runtime spec_version |
 | `display` | object | 是 | 人可读摘要,见下 |
-| `display.action` | string | 是 | 动作 key,`transfer` / `bind_clearing` / `duoqian_propose` 等 |
+| `display.action` | string | 是 | 动作 key,必须登记在 `qr-action-registry.md` |
 | `display.summary` | string | 是 | 一句话摘要,离线端必须显示 |
-| `display.fields` | array | 否 | 结构化字段列表,每项 `{label, value}` |
+| `display.fields` | array | 否 | 结构化字段列表,协议字段每项 `{key, label, value}`;纯辅助展示字段不得参与签名识别 |
 
 ### 4.4 `sign_response`(临时)
 
@@ -204,7 +202,7 @@
 - `lib/qr/qr_protocols.dart::QrKind.userDuoqian` — 枚举值删除
 - `lib/qr/envelope.dart::QrKind.userDuoqian` 解析分支 — 删除
 - `lib/qr/qr_router.dart::QrRouteType.userDuoqian` — 枚举值删除
-- `memory/05-architecture/qr-protocol-fixtures/user_duoqian.json` — 删除
+- `memory/01-architecture/qr/qr-protocol-fixtures/user_duoqian.json` — 删除
 
 ## 5. 签名原文拼接(统一函数)
 
@@ -242,13 +240,15 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
   - `login_receipt` / `sign_response`:跟随对应请求的 `expires_at`
   - `user_transfer`:默认 600 秒(10 分钟),可配
 
-## 8. 字段命名铁律(grep 0 命中清单)
+## 8. 字段命名铁律
 
-**绝对不允许在全仓库出现的字段名**(CPMS 安装 4 码目录除外):
+以下规则约束 QR envelope/body 的协议字段命名。`display.fields[*].key` 属于交易展示字段,以 `qr-action-registry.md` 为准。
+
+**绝对不允许在 QR envelope/body 中出现的字段名**(CPMS 安装 4 码目录除外):
 
 | 旧名 | 新名 |
 |---|---|
-| `to`(作为地址字段) | `address` |
+| `to`(作为 envelope/body 地址字段) | `address` |
 | `account`(作为地址字段) | `address` |
 | `account_pubkey` | `pubkey` |
 | `admin_pubkey` | `pubkey` |
@@ -262,13 +262,10 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 | `purpose` | `kind`(顶层) |
 | `msg_type` | `kind`(顶层) |
 
-**绝对不允许出现的旧协议字符串**:
-```
-WUMIN_QR_V1
-WUMIN_QR_V1
-WUMIN_QR_V1
-WUMINAPP_USER_CARD_V1
-```
+**协议字符串规则**:
+
+- 当前唯一合法协议字符串:`WUMIN_QR_V1`
+- 禁止新增或恢复第二套扫码协议字符串,包括 `WUMINAPP_USER_CARD_V1`
 
 **绝对不允许出现的旧类型名**:
 ```
@@ -282,7 +279,7 @@ QrSignResponse
 
 ## 9. 测试契约
 
-所有 wuminapp / wumin / citizenchain / sfid / cpms 的 QR 相关测试必须读取 `memory/05-architecture/qr-protocol-fixtures/*.json` 作为 golden 样本:
+所有 wuminapp / wumin / citizenchain / sfid / cpms 的 QR 相关测试必须读取 `memory/01-architecture/qr/qr-protocol-fixtures/*.json` 作为 golden 样本:
 
 - 序列化测试:`toJson(body) + envelope` 必须**逐字节**等于对应 fixture
 - 反序列化测试:`parse(fixture)` 必须解出预期字段,字段数量、类型、值全相等
@@ -290,19 +287,19 @@ QrSignResponse
 
 fixture 文件命名:
 ```
-memory/05-architecture/qr-protocol-fixtures/login_challenge.json
-memory/05-architecture/qr-protocol-fixtures/login_receipt.json
-memory/05-architecture/qr-protocol-fixtures/sign_request.json
-memory/05-architecture/qr-protocol-fixtures/sign_response.json
-memory/05-architecture/qr-protocol-fixtures/user_contact.json
-memory/05-architecture/qr-protocol-fixtures/user_transfer.json
+memory/01-architecture/qr/qr-protocol-fixtures/login_challenge.json
+memory/01-architecture/qr/qr-protocol-fixtures/login_receipt.json
+memory/01-architecture/qr/qr-protocol-fixtures/sign_request.json
+memory/01-architecture/qr/qr-protocol-fixtures/sign_response.json
+memory/01-architecture/qr/qr-protocol-fixtures/user_contact.json
+memory/01-architecture/qr/qr-protocol-fixtures/user_transfer.json
 ```
 
 > 注:`user_duoqian.json` 已于 2026-05-03 删除(协议下线,改走链上反向索引)。
 
 ## 10. 修改规范的流程
 
-本 spec 是唯一事实源。改规范前必须:
+本 spec 是当前详细事实源。改规范前必须:
 
 1. 先改本文件
 2. 同步改 fixtures(两者永远一致)

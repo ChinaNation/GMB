@@ -78,8 +78,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
     // 当前 runtime 采用统一模块命名：
-    // admins-change / votingengine / duoqian-manage / duoqian-transfer /
-    // offchain-transaction / onchain-transaction / institution-asset。
+    // admins-change / organization-manage / personal-manage / votingengine /
+    // duoqian-transfer / offchain-transaction / onchain-transaction / institution-asset。
     spec_version: 1,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,

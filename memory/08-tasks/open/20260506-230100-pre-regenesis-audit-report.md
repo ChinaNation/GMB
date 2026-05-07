@@ -52,11 +52,11 @@
 
 以下为执行前审计证据，保留用于追溯：
 
-Runtime 当前已经删除 `DuoqianAccounts mirror`，注册机构账户应走 `OrganizationManage::InstitutionAccounts`，个人多签应走 `PersonalManage::PersonalDuoqians`。但 `wuminapp` 活跃代码仍在读旧 storage：
+Runtime 已删除 `DuoqianAccounts mirror`，注册机构账户应走 `OrganizationManage::InstitutionAccounts`，个人多签应走 `PersonalManage::PersonalDuoqians`。执行前 `wuminapp` 活跃代码曾读旧 storage：
 
-- [duoqian_manage_service.dart:348](../../../wuminapp/lib/duoqian/shared/duoqian_manage_service.dart:348) 注释仍称“从 `DuoqianAccounts` 存储解码”
+- [duoqian_manage_service.dart:348](../../../wuminapp/lib/duoqian/shared/duoqian_manage_service.dart:348) 注释曾称“从 `DuoqianAccounts` 存储解码”
 - [duoqian_manage_service.dart:359](../../../wuminapp/lib/duoqian/shared/duoqian_manage_service.dart:359) 构造 `DuoqianAccounts` storage key
-- [institution_admin_service.dart:41](../../../wuminapp/lib/institution/institution_admin_service.dart:41) 注册型机构阈值来源仍写 `DuoqianAccounts.threshold`
+- [institution_admin_service.dart:41](../../../wuminapp/lib/institution/institution_admin_service.dart:41) 注册型机构阈值来源曾写 `DuoqianAccounts.threshold`
 - [institution_admin_service.dart:76](../../../wuminapp/lib/institution/institution_admin_service.dart:76) 注释称注册多签和个人多签都走 `DuoqianAccounts`
 - [institution_admin_service.dart:143](../../../wuminapp/lib/institution/institution_admin_service.dart:143) 构造 `OrganizationManage::DuoqianAccounts(duoqian_address)` storage key
 
@@ -120,20 +120,18 @@ Runtime 当前已经删除 `DuoqianAccounts mirror`，注册机构账户应走 `
 
 ## 2. 高优先级清理项（建议与 P0 同批或紧随其后）
 
-### P1-1：`organization-manage` 遗留 `finalize_create` 物理残留
+### P1-1：`organization-manage` 机构创建代投物理残留（已执行）
 
-当前仍有已删除流程的实体类型、事件、错误枚举或注释：
+原先仍有已删除流程的实体类型、事件、错误枚举或注释。
 
-- [organization-manage/src/lib.rs:175](../../../citizenchain/runtime/governance/organization-manage/src/lib.rs:175) `AdminSignaturesOf<T>` 标注为 legacy finalize_create 类型
-- [organization-manage/src/lib.rs:350](../../../citizenchain/runtime/governance/organization-manage/src/lib.rs:350) `CreateFinalized` 事件已无 emit 路径
-- [organization-manage/src/lib.rs:465](../../../citizenchain/runtime/governance/organization-manage/src/lib.rs:465) legacy 错误说明仍引用已删路径
-- [organization-manage/src/lib.rs:476](../../../citizenchain/runtime/governance/organization-manage/src/lib.rs:476) `MalformedSignature` 仍被 [organization-manage/src/lib.rs:727](../../../citizenchain/runtime/governance/organization-manage/src/lib.rs:727) 使用，不能整块误删
+执行结果（2026-05-07）：
 
-处理建议：
-
-- 只删除确无引用的 legacy 类型/事件/错误
-- 保留仍被活跃逻辑使用的 `MalformedSignature`
-- 删除前后跑 `cargo check` 和 runtime 相关测试
+- 已删除 `MaxAdminSignatureLength`、`AdminSignatureOf<T>`、`AdminSignaturesOf<T>`。
+- 已删除无 emit 路径的 `CreateFinalized` 事件。
+- 已删除无使用路径的 `UnauthorizedSignature`、`DuplicateSignature`、`InvalidSignature`、`InsufficientSignatures`。
+- 已保留仍被 `pubkey_from_accountid` 使用的 `MalformedSignature`。
+- `cargo check -p organization-manage`、`cargo test -p organization-manage --lib`、`cargo test -p duoqian-transfer --lib` 已通过。
+- `cargo check -p citizenchain --lib` 在设置 `WASM_FILE=target/wasm/citizenchain.compact.compressed.wasm` 后通过。
 
 ### P1-2：`wumin/scripts/wumin-run.sh` 仍修改已移除的 `supportedSpecVersions`（已执行）
 
@@ -145,48 +143,52 @@ Runtime 当前已经删除 `DuoqianAccounts mirror`，注册机构账户应走 `
 - 已删除 `.github/workflows/wumin-ci.yml` 中同类写源码逻辑
 - 两处仍保留 pallet/call index 同步，后续若要继续精简，应改成“校验不改源码”
 
-### P1-3：`organization-manage/src/institution/close.rs` 是空壳且注释边界已错
+### P1-3：`organization-manage/src/institution/close.rs` 是空壳且注释边界已错（已执行）
 
-[close.rs:1](../../../citizenchain/runtime/governance/organization-manage/src/institution/close.rs:1) 当前只是目录占位说明，且称“个人多签和机构多签共用同一条关闭逻辑”。现状已经不是这样：机构关闭在 `organization-manage`，个人关闭在 `personal-manage`。
+原 [close.rs](../../../citizenchain/runtime/governance/organization-manage/src/institution/close.rs) 只是目录占位说明，且称“个人多签和机构多签共用同一条关闭逻辑”。现状已经不是这样：机构关闭在 `organization-manage`，个人关闭在 `personal-manage`。
 
-处理建议：
+执行结果（2026-05-07）：
 
-- 若无实际引用，删除该占位模块和 `mod` 导出
-- 若保留目录边界，必须改成当前真实边界说明，避免误导后续模块拆分
+- 已删除该占位文件。
+- 已从 [institution/mod.rs](../../../citizenchain/runtime/governance/organization-manage/src/institution/mod.rs) 移除 `pub mod close;`。
 
-### P1-4：链端和 memory 文档仍有 `DuoqianAccounts` / 旧机构真源叙述
+### P1-4：链端和 memory 文档旧 storage / 旧模块名叙述（已执行）
 
-代表性残留：
+执行结果（2026-05-07）：
 
-- [fee_config.rs:37](../../../citizenchain/runtime/transaction/offchain-transaction/src/fee_config.rs:37) 仍称清算行管理员通过 `duoqian-manage` 的 `DuoqianAccounts` 校验
-- [ORGANIZATION_MANAGE_TECHNICAL.md:43](../../05-modules/citizenchain/runtime/governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md:43) 仍列 `DuoqianAccounts<main_address, DuoqianAccount>`
-- [DUOQIAN_TRANSFER_TECHNICAL.md:84](../../05-modules/citizenchain/runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md:84) 仍称资金账户从 `organization-manage::DuoqianAccounts` 校验
-- [GOVERNANCE_TECHNICAL.md:78](../../05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md:78) 仍称阈值读取 `DuoqianAccounts.threshold`
-- [GOVERNANCE_TECHNICAL.md:601](../../05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md:601) 仍同时使用 `AdminsChange.Institutions` 与 `DuoqianManage.DuoqianAccounts`
+- 活跃 runtime 注释中的旧 `duoqian-manage` 当前模块名已改为 `organization-manage` / `personal-manage`。
+- `offchain-transaction` 的清算行管理员校验说明已改为 `admins-change::Subjects`。
+- `organization-manage` / `duoqian-transfer` / `wuminapp` / `sfid backend chain` 当前技术文档已改为当前 storage 真源。
+- `tools/duoqian.py` 生成注释已同步，避免 `china_zb.rs` 重新生成后旧名回流。
 
-处理建议：
+保留说明：
 
-- 注册机构：统一写 `OrganizationManage::InstitutionAccounts`
-- 个人多签：统一写 `PersonalManage::PersonalDuoqians`
-- 管理员/阈值/治理主体：统一写 `AdminsChange::Subjects`
-- 旧 `DuoqianAccounts` 只允许出现在明确标注为 legacy/history 的文档段落
+- 明确标注为 legacy/history 的旧 storage 说明允许保留，例如“旧 mirror 已删除”“替代旧 `DuoqianAccounts`”和迁移清理字符串。
+
+### P1-6：QR 协议真源漂移与过期 action 登记（已执行）
+
+执行结果（2026-05-07）：
+
+- QR spec、签名识别方案、action registry、fixture 已迁入 `memory/01-architecture/qr/`。
+- `memory/07-ai/unified-protocols.md` 已指向新 QR 真源路径，`memory/07-ai/unified-naming.md` 已登记 `memory/01-architecture/qr/`。
+- `qr-action-registry.md` 已更新到当前 `InternalVote(22)` / `JointVote(23)` / `OrganizationManage(17)` / `PersonalManage(7)` / `VotingEngine(9)` 生命周期入口。
+- `qr-signing-recognition.md` 已删除当前识别规则中的 `supportedSpecVersions` 要求。
+- wumin、citizenchain node 前端、sfid、cpms 已删除已下线 `user_duoqian` kind 残留，并对齐 `propose_close_institution` / `propose_close_personal` 两个关闭 action。
 
 ---
 
 ## 3. 结构与编号统一项
 
-### P2-1：`memory/05-architecture/` 与正式文档编号体系不一致
+### P2-1：`memory/05-architecture/` 剩余非 QR 文档与正式文档编号体系不一致
 
-`memory/01-architecture/repo-map.md` 定义的正式文档目录没有 `memory/05-architecture/`，但当前该目录内有 QR 协议与并发框架文档，例如：
+`memory/01-architecture/repo-map.md` 定义的正式文档目录没有 `memory/05-architecture/`。QR 协议文档已在 P1-6 迁出,当前剩余需后续归位的是：
 
-- `memory/05-architecture/qr-protocol-spec.md`
-- `memory/05-architecture/qr-action-registry.md`
-- `memory/05-architecture/qr-signing-recognition.md`
 - `memory/05-architecture/20260409-sfid-50k-concurrent-framework.md`
 
 处理建议：
 
-- 架构级协议迁入 `memory/01-architecture/`
+- 判断该并发框架文档属于架构总览还是 SFID 模块实现细节
+- 架构级文档迁入 `memory/01-architecture/`
 - 模块实现细节迁入 `memory/05-modules/<module>/`
 - 迁移后更新引用，避免出现两个“05”语义
 
@@ -275,14 +277,14 @@ Runtime 当前已经删除 `DuoqianAccounts mirror`，注册机构账户应走 `
 |---|---|---|
 | PR-A：残留清仓 | P0-1 已完成：移除 tracked 本地链数据、网络密钥、dist、pyc、backup；补 `.gitignore`；标记密钥不可复用 | `git ls-files` 已不再出现本地状态/生成物；ignore 规则已命中 |
 | PR-B：协议真源统一 | P0-2 已完成 `propose_create_institution(17.5)` 三端统一；P0-3 已完成 `wuminapp` 旧 `DuoqianAccounts` 查询清理；P0-4 已完成热钱包 immortal era 统一；P0-5 已完成 Step2D fixture 真源统一；P0-6 已完成 `wumin` 旧 spec sed 与 CPMS 旧 SFID 路径清理 | P0-2/P0-3/P0-4/P0-5 相关 Flutter 测试、wumin decoder 测试和目标 analyze 已通过；P0-6 `cargo check` / `bash -n` / 旧残留 rg 扫描已通过，CPMS 仍有既有 warning 待后续清理；`cargo check -p node` 被 `WASM_FILE` 硬规则阻断 |
-| PR-C：runtime 清理 | 清 `organization-manage` legacy finalize_create 物理残留；修 close 模块边界；修链端旧 storage 注释 | `cargo check` 通过；无误删仍活跃的 error/event |
+| PR-C：runtime 与 QR 清理 | 已清 `organization-manage` 机构创建代投物理残留、修正 close 模块边界、清理当前代码/技术文档旧 storage 真源叙述；P1-6 已完成 QR 真源归位和过期 action 清理 | `organization-manage` check/test 通过；`duoqian-transfer` lib 测试通过；`citizenchain --lib` 设置 `WASM_FILE` 后通过；旧 storage 当前真源扫描仅剩 legacy/history 命中；QR 旧路径与旧 action 当前真源已清理 |
 | PR-D：memory 创世冻结 | 迁移 `memory/05-architecture`、`memory/tasks`；明确 `docs/` 定位；归档 90 个 open 任务；补齐 Claude/Codex 入口一致性 | repo-map 与实际目录一致；open 任务只剩真实未完成项 |
 
 ---
 
 ## 7. 下一步建议
 
-**PR-A / P0-1 残留清仓已执行；PR-B / P0-2 机构创建载荷统一、P0-3 旧 `DuoqianAccounts` 查询清理、P0-4 热钱包 immortal era 统一、P0-5 Step2D fixture 真源统一、P0-6 旧路径与 spec 脚本残留清理均已执行**。下一步进入 PR-C：清理 `organization-manage` legacy `finalize_create` 物理残留，并复核仍活跃的 `MalformedSignature` 不被误删。
+**PR-A / P0-1 残留清仓已执行；PR-B / P0-2 机构创建载荷统一、P0-3 旧 `DuoqianAccounts` 查询清理、P0-4 热钱包 immortal era 统一、P0-5 Step2D fixture 真源统一、P0-6 旧路径与 spec 脚本残留清理均已执行；PR-C 的 `organization-manage` 物理残留、close 空壳、旧 storage 真源叙述、P1-6 QR 真源归位均已执行**。下一步进入 PR-D：memory 创世冻结，优先处理 `memory/05-architecture/` 剩余非 QR 文档、`memory/tasks/` 旧目录和 open 任务卡归档。
 
 ---
 

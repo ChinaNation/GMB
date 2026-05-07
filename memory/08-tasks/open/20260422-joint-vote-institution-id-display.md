@@ -59,7 +59,7 @@
 ## 关联
 
 - 主任务卡:`20260422-cold-wallet-two-color-recognition.md`
-- Registry:`memory/05-architecture/qr-action-registry.md`
+- Registry:`memory/01-architecture/qr/qr-action-registry.md`
 - decoder:`wumin/lib/signer/payload_decoder.dart` `_decodeJointVote`
 - UI 入口:`wuminapp/lib/governance/runtime_upgrade_detail_page.dart` +
   `citizenchain/node/src/governance/signing.rs`

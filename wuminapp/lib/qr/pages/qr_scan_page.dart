@@ -135,7 +135,7 @@ class _QrScanPageState extends State<QrScanPage> {
       switch (widget.mode) {
         case QrScanMode.transfer:
           // 扫码支付:接受 user_transfer / user_contact / 裸地址
-          // (user_duoqian 协议已于 2026-05-03 下线 — 多签发现走反向索引)
+          // (多签分享码已于 2026-05-03 下线 — 多签发现走反向索引)
           if (result.type == QrRouteType.userTransfer) {
             _handleTransfer(result);
           } else if (result.type == QrRouteType.userContact) {
@@ -324,13 +324,17 @@ class _QrScanPageState extends State<QrScanPage> {
   // 未识别
   // ---------------------------------------------------------------------------
 
-  String get _hintText => widget.customTitle ?? switch (widget.mode) {
+  String get _hintText =>
+      widget.customTitle ??
+      switch (widget.mode) {
         QrScanMode.transfer => '扫描收款码',
         QrScanMode.contact => '扫描对方收款码',
         QrScanMode.raw => '扫描二维码',
       };
 
-  String get _titleText => widget.customTitle ?? switch (widget.mode) {
+  String get _titleText =>
+      widget.customTitle ??
+      switch (widget.mode) {
         QrScanMode.transfer => '扫码支付',
         QrScanMode.contact => '扫码添加好友',
         QrScanMode.raw => '扫描二维码',
@@ -556,4 +560,3 @@ class _ScanCornerPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-

@@ -5,7 +5,6 @@
 //! 本子模块包含机构级类型、登记、创建、关闭、账户表与投票回调分支。
 
 pub mod accounts;
-pub mod close;
 pub mod create;
 pub mod execute;
 pub mod register;

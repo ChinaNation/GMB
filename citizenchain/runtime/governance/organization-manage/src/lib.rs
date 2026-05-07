@@ -99,11 +99,6 @@ pub mod pallet {
         #[pallet::constant]
         type MaxRegisterSignatureLength: Get<u32>;
 
-        /// 管理员 sr25519 签名最大字节数(固定 64)。
-        /// `AdminSignatureOf` BoundedVec 容量上限,防止过大输入。
-        #[pallet::constant]
-        type MaxAdminSignatureLength: Get<u32>;
-
         /// 单个机构创建交易最多可携带的账户数量。
         ///
         /// SFID 默认包含主账户和费用账户，用户可新增其他账户；这里限制链上
@@ -168,16 +163,6 @@ pub mod pallet {
         BalanceOf<T>,
         DuoqianAdminsOf<T>,
         CreateInstitutionAccountsOf<T>,
-    >;
-
-    /// 管理员离线 sr25519 签名载体(固定 64 字节)。
-    pub type AdminSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxAdminSignatureLength>;
-    /// 历史聚合签名载荷:`Vec<(管理员地址, sr25519 签名)>`,容量上限 = 多签允许的最多管理员数。
-    /// finalize_create(Phase 3 unified voting,2026-04-22)已删,本类型当前无 lib 引用,
-    /// 待清链重启后做物理删除(后续 PR)。
-    pub type AdminSignaturesOf<T> = BoundedVec<
-        (<T as frame_system::Config>::AccountId, AdminSignatureOf<T>),
-        <T as Config>::MaxAdmins,
     >;
 
     #[pallet::pallet]
@@ -348,16 +333,6 @@ pub mod pallet {
             main_address: T::AccountId,
             reserve_total: BalanceOf<T>,
         },
-        /// 历史 `finalize_create` 代投完成事件,Phase 3 unified voting(2026-04-22)
-        /// 已删 finalize_create extrinsic,本变体当前无 emit 路径,待物理删除(后续 PR)。
-        CreateFinalized {
-            proposal_id: u64,
-            /// 接受并代投成功的签名数(历史含义)
-            signatures_accepted: u32,
-            /// 调用结束时投票引擎的提案状态
-            /// (STATUS_PASSED / STATUS_REJECTED / STATUS_VOTING / STATUS_EXECUTED / STATUS_EXECUTION_FAILED)
-            final_status: u8,
-        },
         /// SFID 机构登记
         SfidInstitutionRegistered {
             sfid_number: SfidNumberOf<T>,
@@ -464,17 +439,6 @@ pub mod pallet {
         /// 账户名占用保留角色名（"主账户"/"费用账户" 必须走 Role::Main/Fee，
         /// 禁止作为 Role::Named 的自定义命名参数）
         ReservedAccountName,
-        // 以下 5 个 Error 变体原服务于 finalize_create(Phase 3 unified voting,
-        // 2026-04-22 已删)。`MalformedSignature` 在 lib.rs:723 仍被 emit,其它 4 个
-        // 当前无 emit 路径,待物理删除(后续 PR)。
-        /// (legacy)签名对应的 admin 不在该多签的管理员列表
-        UnauthorizedSignature,
-        /// (legacy)同一 admin 在同一批签名里重复出现
-        DuplicateSignature,
-        /// (legacy)sr25519 签名验证失败
-        InvalidSignature,
-        /// (legacy)提交的签名数量少于阈值
-        InsufficientSignatures,
         /// sr25519 签名长度必须恰好为 64 字节
         MalformedSignature,
     }
@@ -1026,11 +990,3 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         Ok(())
     }
 }
-
-
-// 中文注释:测试模块已在 B 阶段(personal-manage 拆分)清空。
-// A 阶段 34 个 case 中:
-// - 个人多签 case 迁至 personal-manage 单测(待跟进 follow-up 任务)
-// - 机构 case (institution_create/register_sfid 等;finalize_create Phase 3 已删)
-//   将在后续 PR 重新挂回此处,使用机构 mock(纯 InstitutionAccounts 路径)。
-// 当前 organization-manage 不带单元测试;集成验证通过 runtime --lib + duoqian-transfer 单测覆盖。

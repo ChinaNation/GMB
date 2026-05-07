@@ -169,7 +169,7 @@ class OfflineSignService {
     // 两色识别模型(2026-04-22):
     //   matched  → 绿色放行
     //   mismatched / decodeFailed → 红色拒签,不再保留任何"白名单盲签"兜底。
-    //   见 memory/05-architecture/qr-signing-recognition.md § 四铁律。
+    //   见 memory/01-architecture/qr/qr-signing-recognition.md § 四铁律。
     switch (verification.displayMatch) {
       case DisplayMatchStatus.matched:
         break;

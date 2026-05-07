@@ -1,7 +1,7 @@
 /// WUMIN_QR_V1 统一二维码协议常量。
 ///
-/// 唯一事实源:`memory/05-architecture/qr-protocol-spec.md`
-/// Golden fixtures:`memory/05-architecture/qr-protocol-fixtures/*.json`
+/// 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
+/// Golden fixtures:`memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 ///
 /// 本文件只有一个协议字符串和一个 kind 枚举,禁止新增任何旧协议常量。
 class QrProtocols {

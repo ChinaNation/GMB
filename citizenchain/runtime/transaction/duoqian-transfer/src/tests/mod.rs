@@ -395,7 +395,6 @@ impl organization_manage::pallet::Config for Test {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
-    type MaxAdminSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<8>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;

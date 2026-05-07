@@ -40,9 +40,8 @@
 - `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
-- `DuoqianAccounts<main_address, DuoqianAccount>`：只保存多签账户生命周期和创建时阈值快照，不作为管理员长期真源。
 - `SfidRegisteredAddress` / `AddressRegisteredSfid`：继续作为链上账户索引。
-- `PersonalDuoqianInfo`：个人多签索引。
+- 个人多签账户不在本模块保存，当前真源为 `personal-manage::PersonalDuoqians`。
 
 管理员主体：
 

@@ -15,7 +15,7 @@
 | 依赖关系 | 不依赖 wumin | 不依赖 wuminapp |
 | 代码共享 | **无** —— 两个独立 Flutter app |
 
-**关键**:wuminapp 和 wumin **没有任何 Dart 包依赖关系**。两者通过二维码对扫交互,协议一致性**只能**通过 `memory/05-architecture/qr-protocol-spec.md` + `qr-protocol-fixtures/` 强制对齐。
+**关键**:wuminapp 和 wumin **没有任何 Dart 包依赖关系**。两者通过二维码对扫交互,协议一致性**只能**通过 `memory/01-architecture/qr/qr-protocol-spec.md` + `qr-protocol-fixtures/` 强制对齐。
 
 ## 职责划分(QR 协议角度)
 
@@ -40,7 +40,7 @@
 
 1. **wuminapp 禁止出现任何登录二维码生成代码**(`login_challenge` / `login_receipt`)。如果历史上有,按协议统一任务一并删除。
 2. **wumin 禁止出现任何用户码生成代码**(`user_*`)。如果历史上有,按协议统一任务一并删除。
-3. **两端的 `QrEnvelope` / `QrKind` / `bodies/*.dart` / `signature_message.dart` 必须逐字节一致**。通过 golden fixture 测试强制对齐:两端测试都从 `memory/05-architecture/qr-protocol-fixtures/` 读取同一批样本。
+3. **两端的 `QrEnvelope` / `QrKind` / `bodies/*.dart` / `signature_message.dart` 必须逐字节一致**。通过 golden fixture 测试强制对齐:两端测试都从 `memory/01-architecture/qr/qr-protocol-fixtures/` 读取同一批样本。
 4. 扫到自己不处理的 kind:显示明确错误("此二维码需用 XX 钱包扫描"),不能静默忽略。
 
 ## 后端角色(便于查阅)

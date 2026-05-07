@@ -106,7 +106,7 @@ export function CreateMultisigInstitutionPage({
     // 中文注释:节点桌面 wumin 扫码添加管理员路径。
     // 现有 governance 模块没有把通用扫码 helper 暴露到 offchain,
     // 本任务先用 prompt 输入 32 字节 pubkey hex 作为兜底(用户已强烈反对粘贴,
-    // 但 follow-up:节点桌面接入 wumin user_contact / user_duoqian QR 扫码)。
+    // 但 follow-up:节点桌面接入 wumin user_contact QR 扫码)。
     const raw = window.prompt('扫码功能 follow-up:暂用粘贴方式输入管理员公钥 (64 hex 字符)');
     if (!raw) return;
     const clean = raw.trim().toLowerCase().replace(/^0x/, '');

@@ -73,7 +73,7 @@ class InstitutionInfo {
   final int orgType;
 
   /// 机构多签名地址公钥（32 字节 hex，不含 0x 前缀）。
-  /// 来源于 primitives 中的 `main_address` 字段（治理机构）或 duoqian-manage 的 `duoqian_address`（注册多签）。
+  /// 来源于 primitives 中的 `main_address` 字段（治理机构）或 organization-manage 的机构主账户（注册多签）。
   final String duoqianAddress;
 
   /// 注册型机构的动态阈值覆盖。
