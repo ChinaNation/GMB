@@ -11,7 +11,6 @@ import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
@@ -340,13 +339,11 @@ class _InstitutionDuoqianCreatePageState
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'create-dq-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'propose_create_institution',
             summary: '发起创建机构多签账户提案',

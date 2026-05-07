@@ -3,22 +3,8 @@ import 'package:wumin/signer/pallet_registry.dart';
 
 void main() {
   group('PalletRegistry', () {
-    test('支持的 specVersion 返回 true', () {
-      for (final v in PalletRegistry.supportedSpecVersions) {
-        expect(PalletRegistry.isSupported(v), isTrue);
-      }
-    });
-
-    test('不支持的 specVersion 返回 false', () {
-      expect(PalletRegistry.isSupported(1), isFalse); // 重新创世后当前 spec 已归零
-      expect(PalletRegistry.isSupported(10), isFalse);
-      expect(PalletRegistry.isSupported(999), isFalse);
-      expect(PalletRegistry.isSupported(-1), isFalse);
-    });
-
-    test('null specVersion 返回 false', () {
-      expect(PalletRegistry.isSupported(null), isFalse);
-    });
+    // spec_version 门控测试已删:strict 两色模式独家把关,
+    // PalletRegistry.supportedSpecVersions / isSupported 也已物理移除。
 
     test('pallet 索引常量已定义且互不相同', () {
       final pallets = {
@@ -81,11 +67,6 @@ void main() {
       // 统一收口至 VotingEngine 的 4/5 两个 call_index。
       expect(PalletRegistry.retryPassedProposalCall, 4);
       expect(PalletRegistry.cancelPassedProposalCall, 5);
-    });
-
-    test('supportedSpecVersions 非空 + 当前为 spec=0', () {
-      expect(PalletRegistry.supportedSpecVersions, isNotEmpty);
-      expect(PalletRegistry.supportedSpecVersions, contains(0));
     });
 
     test('清算行 OffchainTransaction call_index 与 runtime 对齐', () {

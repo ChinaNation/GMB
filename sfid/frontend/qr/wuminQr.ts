@@ -65,7 +65,6 @@ export interface SignRequestBody {
   pubkey: string;
   sig_alg: 'sr25519';
   payload_hex: string;
-  spec_version: number;
   display: SignDisplay;
 }
 
@@ -214,7 +213,6 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
     pubkey: require0xHex(b, 'pubkey'),
     sig_alg: 'sr25519',
     payload_hex: require0xHex(b, 'payload_hex'),
-    spec_version: requireInt(b, 'spec_version'),
     display: parseSignDisplay(display as Record<string, unknown>),
   };
 }

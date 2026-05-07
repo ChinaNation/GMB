@@ -36,7 +36,6 @@ void main() {
         address: address,
         pubkey: pubkey,
         payloadHex: payload,
-        specVersion: 100,
         display: display,
       );
       final encoded = signer.encodeRequest(request);
@@ -74,7 +73,6 @@ void main() {
           'pubkey': pubkey,
           'sig_alg': 'sr25519',
           'payload_hex': payload,
-          'spec_version': 100,
         },
       });
 
@@ -92,7 +90,6 @@ void main() {
         address: address,
         pubkey: pubkey,
         payloadHex: payload,
-        specVersion: 100,
         display: const SignDisplay(action: 'login', summary: '登录'),
         nowEpochSeconds: now - 200,
       );

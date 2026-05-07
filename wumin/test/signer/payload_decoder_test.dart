@@ -4,12 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
-import 'package:wumin/signer/pallet_registry.dart';
 import 'package:wumin/signer/payload_decoder.dart';
 
 void main() {
-  final spec = PalletRegistry.supportedSpecVersions.first;
-
   String hexOf(List<int> payload) =>
       '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
@@ -36,7 +33,7 @@ void main() {
 
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'transfer');
@@ -57,7 +54,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'internal_vote');
@@ -82,7 +79,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
       expect(decoded!.action, 'internal_vote');
       expect(decoded.fields['approve'], 'false');
       expect(decoded.summary, contains('反对'));
@@ -106,7 +103,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'joint_vote');
@@ -133,7 +130,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum');
@@ -159,7 +156,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
       expect(decoded, isNull,
           reason: '旧凭证长度 45 < 78 必须被拒绝, 防止白盲签');
     });
@@ -179,30 +176,22 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
       expect(decoded!.action, 'finalize_proposal');
       expect(decoded.fields['proposal_id'], '15');
     });
 
     test('returns null for unknown pallet', () {
-      expect(PayloadDecoder.decode('0xff01', specVersion: spec), isNull);
+      expect(PayloadDecoder.decode('0xff01'), isNull);
     });
 
     test('returns null for too-short input', () {
-      expect(PayloadDecoder.decode('0x02', specVersion: spec), isNull);
+      expect(PayloadDecoder.decode('0x02'), isNull);
     });
 
-    test('returns null for unsupported specVersion (spec=1 旧版)', () {
-      expect(PayloadDecoder.decode('0x0900', specVersion: 1), isNull);
-    });
-
-    test('returns null for unsupported specVersion (未来版)', () {
-      expect(PayloadDecoder.decode('0x0900', specVersion: 999), isNull);
-    });
-
-    test('returns null for null specVersion', () {
-      expect(PayloadDecoder.decode('0x0900'), isNull);
-    });
+    // spec_version 门控测试已删:strict 两色模式独家把关,decoder 不再因 spec_version
+    // 拒绝解码;chain pallet 索引若变(如新 spec 重排),decoder 解析到错 action ↔
+    // display.action 不一致 → mismatched → 禁止签名,无需 spec_version 锁布局。
 
     test('decodes clearing bank register node call', () {
       const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
@@ -217,7 +206,7 @@ void main() {
         ...u16Le(9944),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+      final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'register_clearing_bank');
@@ -238,7 +227,7 @@ void main() {
         ...u16Le(443),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+      final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'update_clearing_bank_endpoint');
@@ -255,14 +244,14 @@ void main() {
         ...compactVec(sfidId),
       ]);
 
-      final decoded = PayloadDecoder.decode(hexOf(payload), specVersion: spec);
+      final decoded = PayloadDecoder.decode(hexOf(payload));
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'unregister_clearing_bank');
       expect(decoded.fields['sfid_id'], sfidId);
     });
 
-    test('decodes clearing bank decrypt challenge without specVersion', () {
+    test('decodes clearing bank decrypt challenge', () {
       const sfidId = 'SFR-AH001-ZG1Y-883241719-20260428';
       final idBytes = List<int>.filled(48, 0);
       final rawId = ascii.encode(sfidId);
@@ -314,7 +303,7 @@ void main() {
 
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_sweep_to_main');
@@ -340,7 +329,7 @@ void main() {
       ]);
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['institution'], '中枢省储备委员会');
@@ -360,7 +349,7 @@ void main() {
 
       final hex =
           '0x${payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['amount_yuan'], '2.34 GMB');
@@ -399,7 +388,7 @@ void main() {
       // 手动重试统一收口至 VotingEngine::retry_passed_proposal(9.4)。
       final payload = buildProposalIdPayload(0x09, 0x04, 100);
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'retry_passed_proposal');
       expect(decoded.fields['proposal_id'], '100');
@@ -416,7 +405,7 @@ void main() {
         ..add([0x00]); // Compact<u32> 0 (空 reason)
       final payload = builder.toBytes();
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '401');
@@ -436,7 +425,7 @@ void main() {
         ..add(reason);
       final payload = builder.toBytes();
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cancel_passed_proposal');
       expect(decoded.fields['proposal_id'], '402');
@@ -457,7 +446,7 @@ void main() {
       for (final c in cases) {
         final payload = buildProposalIdPayload(c[0], c[1], 999);
         final decoded =
-            PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+            PayloadDecoder.decode(encodeHex(payload));
         expect(decoded, isNull,
             reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
       }
@@ -466,7 +455,7 @@ void main() {
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {
       final payload = buildProposalIdPayload(0x11, 0x04, 500);
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cleanup_rejected_proposal');
       expect(decoded.fields['proposal_id'], '500');
@@ -554,7 +543,7 @@ void main() {
         0x00,
       ]);
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['sfid_id'], 'SFR-AH001-1234567890-20260501');
@@ -589,7 +578,7 @@ void main() {
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'cast_referendum');
       final hex = caseEntry['expected_call_data_hex'] as String;
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'cast_referendum');
       expect(decoded.fields['proposal_id'], '99');
@@ -609,7 +598,7 @@ void main() {
       final caseEntry = (fixture['cases'] as List)
           .firstWhere((e) => e['name'] == 'propose_resolution_issuance');
       final hex = caseEntry['expected_call_data_hex'] as String;
-      final decoded = PayloadDecoder.decode(hex, specVersion: spec);
+      final decoded = PayloadDecoder.decode(hex);
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['province'],
@@ -674,7 +663,7 @@ void main() {
         ...signerAdmin,
       ]);
       final decoded =
-          PayloadDecoder.decode(encodeHex(payload), specVersion: spec);
+          PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNotNull);
       expect(decoded!.action, 'propose_resolution_issuance');
       expect(decoded.fields['reason'], '紧急救灾');

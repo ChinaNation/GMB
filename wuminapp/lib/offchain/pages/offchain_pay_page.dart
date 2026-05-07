@@ -449,13 +449,11 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     // 冷钱包路径
     final qrSigner = QrSigner();
     final requestId = QrSigner.generateRequestId(prefix: 'offchain-pay-');
-    final rv = await ChainRpc().fetchRuntimeVersion();
     final request = qrSigner.buildRequest(
       requestId: requestId,
       address: wallet.address,
       pubkey: '0x${wallet.pubkeyHex}',
       payloadHex: bytesToHex(signingHash),
-      specVersion: rv.specVersion,
       display: SignDisplay(
         action: 'offchain_clearing_pay',
         summary: '清算行扫码付款 ${_fenToYuan(amountFen)} 元 → ${widget.toAddress}',

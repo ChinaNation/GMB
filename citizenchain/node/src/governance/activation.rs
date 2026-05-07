@@ -238,7 +238,6 @@ pub async fn build_activate_admin_request(
             pubkey: format!("0x{pubkey_clean}"),
             sig_alg: "sr25519".to_string(),
             payload_hex: payload_hex.clone(),
-            spec_version: 0,
             display,
         },
     };

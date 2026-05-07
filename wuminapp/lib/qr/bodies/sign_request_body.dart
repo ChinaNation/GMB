@@ -9,7 +9,6 @@ class SignRequestBody implements QrBody {
     required this.pubkey,
     required this.sigAlg,
     required this.payloadHex,
-    required this.specVersion,
     required this.display,
   });
 
@@ -17,7 +16,6 @@ class SignRequestBody implements QrBody {
   final String pubkey;
   final String sigAlg;
   final String payloadHex;
-  final int specVersion;
   final SignDisplay display;
 
   @override
@@ -26,16 +24,18 @@ class SignRequestBody implements QrBody {
         'pubkey': pubkey,
         'sig_alg': sigAlg,
         'payload_hex': payloadHex,
-        'spec_version': specVersion,
         'display': display.toJson(),
       };
 
+  /// 反序列化 sign_request body。
+  ///
+  /// 注:历史上有 `spec_version` 字段(用于 decoder 锁布局),已随 strict 两色模式
+  /// 独家把关而废弃。新 envelope 不再带此字段;旧 envelope 的字段在解析时被忽略。
   static SignRequestBody fromJson(Map<String, dynamic> data) {
     final address = data['address'];
     final pubkey = data['pubkey'];
     final sigAlg = data['sig_alg'];
     final payloadHex = data['payload_hex'];
-    final specVersion = data['spec_version'];
     final display = data['display'];
     if (address is! String || address.isEmpty) {
       throw const FormatException('sign_request.address 必填');
@@ -52,9 +52,6 @@ class SignRequestBody implements QrBody {
     if (payloadHex.length > 32768) {
       throw const FormatException('sign_request.payload_hex 超过 32768 字符');
     }
-    if (specVersion is! int) {
-      throw const FormatException('sign_request.spec_version 必填整数');
-    }
     if (display is! Map<String, dynamic>) {
       throw const FormatException('sign_request.display 必填对象');
     }
@@ -63,7 +60,6 @@ class SignRequestBody implements QrBody {
       pubkey: pubkey,
       sigAlg: sigAlg,
       payloadHex: payloadHex,
-      specVersion: specVersion,
       display: SignDisplay.fromJson(display),
     );
   }

@@ -52,13 +52,16 @@ class QrSigner {
   }
 
   /// 构造 sign_request envelope(wuminapp 热钱包调用)。
+  ///
+  /// 注:历史 `specVersion` 入参已移除。链端验签需要的 spec_version 是 SCALE
+  /// signing payload 的 additional_signed 字段(由 caller 在 payload_hex 内部
+  /// 编码),不需要再单独放进 envelope body。strict 两色模式独家把关错误布局。
   SignRequestEnvelope buildRequest({
     required String requestId,
     required String address,
     required String pubkey,
     required String payloadHex,
     required SignDisplay display,
-    required int specVersion,
     int? nowEpochSeconds,
     int ttlSeconds = defaultTtlSeconds,
   }) {
@@ -77,7 +80,6 @@ class QrSigner {
         pubkey: pubkey,
         sigAlg: 'sr25519',
         payloadHex: payloadHex,
-        specVersion: specVersion,
         display: display,
       ),
     );

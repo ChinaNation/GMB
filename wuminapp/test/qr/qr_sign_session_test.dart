@@ -26,7 +26,6 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        specVersion: 100,
         display: display,
       );
       requestJson = signer.encodeRequest(request);
@@ -92,7 +91,6 @@ void main() {
         pubkey:
             '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         payloadHex: '0x01020304',
-        specVersion: 100,
         display: display,
         nowEpochSeconds: DateTime.now().millisecondsSinceEpoch ~/ 1000 - 200,
       );

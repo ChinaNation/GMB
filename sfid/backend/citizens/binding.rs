@@ -48,7 +48,6 @@ pub(crate) async fn citizen_bind_challenge(
             "pubkey": "",
             "sig_alg": "sr25519",
             "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
-            "spec_version": 0,
             "display": {
                 "action": "citizen_bind",
                 "summary": "确认将您的公钥绑定到公民身份记录",

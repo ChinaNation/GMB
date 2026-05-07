@@ -16,7 +16,6 @@ import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart' show OnchainRpc;
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -220,13 +219,11 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
                 symbol: '')
             .trim();
         final remarkText = _remarkController.text;
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'propose-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'propose_transfer',
             summary: '提案转账 $amountFormatted GMB 给 $beneficiary',

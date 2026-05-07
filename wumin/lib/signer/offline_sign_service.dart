@@ -84,10 +84,7 @@ class OfflineSignService {
       );
     }
 
-    final decoded = PayloadDecoder.decode(
-      body.payloadHex,
-      specVersion: body.specVersion,
-    );
+    final decoded = PayloadDecoder.decode(body.payloadHex);
 
     if (decoded == null) {
       return const OfflineSignVerification(

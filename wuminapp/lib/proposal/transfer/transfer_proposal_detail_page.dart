@@ -10,7 +10,6 @@ import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
@@ -310,13 +309,11 @@ class _TransferProposalDetailPageState
         // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'vote-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: _signAction,
             summary: '$_kindLabel #${widget.proposalId} 投票：$voteText',

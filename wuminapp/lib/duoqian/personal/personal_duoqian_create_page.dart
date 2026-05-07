@@ -12,7 +12,6 @@ import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
@@ -239,13 +238,11 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         }
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
-        final rv = await ChainRpc().fetchRuntimeVersion();
         final request = qrSigner.buildRequest(
           requestId: QrSigner.generateRequestId(prefix: 'personal-dq-'),
           address: wallet.address,
           pubkey: '0x${wallet.pubkeyHex}',
           payloadHex: '0x${_toHex(payload)}',
-          specVersion: rv.specVersion,
           display: SignDisplay(
             action: 'propose_create_personal',
             summary: '发起创建个人多签账户提案',
