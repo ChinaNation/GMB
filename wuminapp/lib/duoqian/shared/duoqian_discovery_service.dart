@@ -114,7 +114,7 @@ class DuoqianDiscoveryService {
     if (myPubkeys.isEmpty) return DiscoveryStats.empty;
 
     // ── Step 1+2: prefix iter + 批量读 AdminInstitution ──
-    final prefixHex = _adminsChangeInstitutionsPrefixHex();
+    final prefixHex = _adminsChangeSubjectsPrefixHex();
     final allKeys = <String>[];
     String? startKey;
     var partialFailure = false;
@@ -433,10 +433,11 @@ class DuoqianDiscoveryService {
 
   // ──── 编码工具 ────
 
-  /// `AdminsChange::Institutions` 双 prefix(twox128 || twox128)的 hex 形式。
-  String _adminsChangeInstitutionsPrefixHex() {
+  /// `AdminsChange::Subjects` 双 prefix(twox128 || twox128)的 hex 形式。
+  /// C 阶段(命名修正,2026-05-06)起,storage 已从 Institutions 改名 Subjects。
+  String _adminsChangeSubjectsPrefixHex() {
     final palletHash = Hasher.twoxx128.hashString('AdminsChange');
-    final storageHash = Hasher.twoxx128.hashString('Institutions');
+    final storageHash = Hasher.twoxx128.hashString('Subjects');
     final prefix = Uint8List(palletHash.length + storageHash.length);
     prefix.setAll(0, palletHash);
     prefix.setAll(palletHash.length, storageHash);

@@ -6,7 +6,7 @@
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
 
-use crate::{InstitutionPalletId, ProposalCancelDecision, ProposalExecutionOutcome};
+use crate::{SubjectId, ProposalCancelDecision, ProposalExecutionOutcome};
 
 pub trait JointVoteEngine<AccountId> {
     fn create_joint_proposal(
@@ -84,13 +84,13 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_internal_proposal(
         who: AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError>;
 
     fn create_internal_proposal_with_data(
         who: AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
@@ -105,7 +105,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_internal_proposal_with_threshold_and_data(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _threshold: u32,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
@@ -118,7 +118,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_pending_subject_internal_proposal(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
             "PendingSubjectVoteEngineNotConfigured",
@@ -128,7 +128,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_pending_subject_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -140,7 +140,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_pending_subject_internal_proposal_with_snapshot_data(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _admins: sp_std::vec::Vec<AccountId>,
         _threshold: u32,
         _module_tag: &[u8],
@@ -154,7 +154,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_admin_set_mutation_internal_proposal(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
             "AdminSetMutationVoteEngineNotConfigured",
@@ -164,7 +164,7 @@ pub trait InternalVoteEngine<AccountId> {
     fn create_admin_set_mutation_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -178,7 +178,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     fn create_internal_proposal(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
     }
@@ -186,7 +186,7 @@ impl<AccountId> InternalVoteEngine<AccountId> for () {
     fn create_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -324,7 +324,7 @@ fn merge_cancel_decision(
 // `TransactionOutcome::Rollback(Err(...))` 协作确保整个状态转换事务回滚。
 //
 // 注:Phase 2 预计注册 5 个业务模块(duoqian_transfer /
-// org_manage / admins_change / resolution_destro /
+// organization_manage / admins_change / resolution_destro /
 // grandpakey_change),留 6 元组余量。如未来业务模块增加,补对应元组 impl。
 impl<A: InternalVoteResultCallback> InternalVoteResultCallback for (A,) {
     fn on_internal_vote_finalized(
@@ -588,12 +588,12 @@ impl<
 /// 投票引擎会在写入管理员快照后再次校验发起人属于快照；provider 实现若出现
 /// drift，会被视为权限错误并回滚提案创建。
 pub trait InternalAdminProvider<AccountId> {
-    fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId) -> bool;
+    fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId) -> bool;
 
     /// 获取机构当前管理员列表（用于提案创建时锁定快照）。
     fn get_admin_list(
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
@@ -601,7 +601,7 @@ pub trait InternalAdminProvider<AccountId> {
     /// 查询 Pending 主体管理员权限。仅供创建/激活该主体的投票入口使用。
     fn is_pending_internal_admin(
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _who: &AccountId,
     ) -> bool {
         false
@@ -610,14 +610,14 @@ pub trait InternalAdminProvider<AccountId> {
     /// 获取 Pending 主体管理员列表。仅供创建/激活该主体时锁定快照。
     fn get_pending_admin_list(
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
     ) -> Option<sp_std::vec::Vec<AccountId>> {
         None
     }
 }
 
 impl<AccountId> InternalAdminProvider<AccountId> for () {
-    fn is_internal_admin(_org: u8, _institution: InstitutionPalletId, _who: &AccountId) -> bool {
+    fn is_internal_admin(_org: u8, _institution: SubjectId, _who: &AccountId) -> bool {
         false
     }
 }
@@ -625,28 +625,26 @@ impl<AccountId> InternalAdminProvider<AccountId> for () {
 /// 内部管理员总人数提供器。
 /// 联合投票会根据“剩余管理员数是否还能让赞成票达到阈值”来自动判定机构反对。
 pub trait InternalAdminCountProvider {
-    fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32>;
+    fn admin_count(org: u8, institution: SubjectId) -> Option<u32>;
 }
 
 impl InternalAdminCountProvider for () {
-    fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+    fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
         match org {
             crate::types::ORG_NRC | crate::types::ORG_PRC => {
-                use primitives::china::china_cb::{
-                    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-                };
+                use primitives::china::china_cb::CHINA_CB;
+                use primitives::derive::subject_id_from_shenfen_id;
                 CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             crate::types::ORG_PRB => {
-                use primitives::china::china_ch::{
-                    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
-                };
+                use primitives::china::china_ch::CHINA_CH;
+                use primitives::derive::subject_id_from_shenfen_id;
                 CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok())
             }
             _ => None,
@@ -658,26 +656,26 @@ impl InternalAdminCountProvider for () {
 /// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接注册多签主体阈值。
 pub trait InternalThresholdProvider {
     /// 查询 Active 主体是否存在。用于机构合法性判断，不与阈值读取混用。
-    fn is_known_subject(_org: u8, _institution: InstitutionPalletId) -> bool {
+    fn is_known_subject(_org: u8, _institution: SubjectId) -> bool {
         false
     }
 
     /// 查询 Pending 主体是否存在。仅供创建/激活该主体的投票入口使用。
-    fn is_known_pending_subject(_org: u8, _institution: InstitutionPalletId) -> bool {
+    fn is_known_pending_subject(_org: u8, _institution: SubjectId) -> bool {
         false
     }
 
-    fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32>;
+    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32>;
 
     /// Pending 注册多签主体创建投票使用的阈值。普通业务不得通过此方法授权。
-    fn pending_pass_threshold(_org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+    fn pending_pass_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
         None
     }
 }
 
 /// 默认实现不提供任何阈值，强制 runtime / mock runtime 显式注入真实 Provider。
 impl InternalThresholdProvider for () {
-    fn pass_threshold(_org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+    fn pass_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
         None
     }
 }

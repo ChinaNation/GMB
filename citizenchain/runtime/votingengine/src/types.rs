@@ -6,17 +6,16 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-pub type InstitutionPalletId = [u8; 48];
+pub type SubjectId = [u8; 48];
 
-/// 国储会 InstitutionPalletId（从 CHINA_CB 第一条记录派生）。
+/// 国储会 SubjectId（从 CHINA_CB 第一条记录派生）。
 /// 公共函数，供 internal_vote、joint_vote 等子模块共用。
-pub fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
-    use primitives::china::china_cb::{
-        shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB,
-    };
+pub fn nrc_subject_id() -> Option<SubjectId> {
+    use primitives::china::china_cb::CHINA_CB;
+    use primitives::derive::subject_id_from_shenfen_id;
     CHINA_CB
         .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
 }
 
 pub const PROPOSAL_KIND_INTERNAL: u8 = 0;
@@ -133,7 +132,7 @@ impl InternalProposalMutexState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct InternalProposalMutexBinding {
     pub org: u8,
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     pub kind: InternalProposalMutexKind,
 }
 
@@ -164,7 +163,7 @@ pub struct Proposal<BlockNumber> {
     /// 仅内部投票使用：机构类型（国储会/省储会/省储行）
     pub internal_org: Option<u8>,
     /// 仅内部投票使用：机构 shenfen_id 标识（全链唯一）
-    pub internal_institution: Option<InstitutionPalletId>,
+    pub internal_institution: Option<SubjectId>,
     /// 本阶段起始区块
     pub start: BlockNumber,
     /// 本阶段截止区块（超过则超时）

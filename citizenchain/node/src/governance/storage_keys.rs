@@ -37,32 +37,41 @@ pub fn blake2b_128(data: &[u8]) -> [u8; 16] {
     out
 }
 
-/// 将 shenfen_id 字符串编码为固定 48 字节（UTF-8 右补零）。
-/// 与 Rust runtime primitives 的 `shenfen_id_to_fixed48` 一致。
-pub fn shenfen_id_to_fixed48(shenfen_id: &str) -> [u8; 48] {
+/// 将 shenfen_id 字符串编码为固定 48 字节(kind tag 0x01 Builtin + payload 47B 右补零)。
+///
+/// D 阶段(SubjectKind 协议统一,2026-05-06)起,内置主体 subject_id 协议:
+///   byte[0]   = 0x01 (SubjectKind::Builtin)
+///   byte[1..48] = shenfen_id 字节(≤47B,右填零)
+///
+/// 与 `primitives::derive::subject_id_from_shenfen_id` 算法一致。
+/// 节点 offline 计算 storage key 时直接复用此实现(node 不依赖 frame 类型,本地实现)。
+pub fn subject_id_from_shenfen_id(shenfen_id: &str) -> [u8; 48] {
     let raw = shenfen_id.as_bytes();
     assert!(
-        !raw.is_empty() && raw.len() <= 48,
-        "shenfenId 长度必须在 1..48 字节，实际: {}",
+        !raw.is_empty() && raw.len() <= 47,
+        "shenfenId 长度必须在 1..47 字节(D 协议预留 1B kind tag),实际: {}",
         raw.len()
     );
     let mut out = [0u8; 48];
-    out[..raw.len()].copy_from_slice(raw);
+    out[0] = 0x01; // SubjectKind::Builtin
+    out[1..1 + raw.len()].copy_from_slice(raw);
     out
 }
 
-/// 构造 `AdminsChange::Institutions(institution_id)` 的存储 key（hex 字符串含 0x 前缀）。
-pub fn admin_institutions_key(shenfen_id: &str) -> String {
-    let institution_id = shenfen_id_to_fixed48(shenfen_id);
+/// 构造 `AdminsChange::Subjects(subject_id)` 的存储 key(hex 字符串含 0x 前缀)。
+///
+/// C 阶段(命名修正,2026-05-06)起 storage 已改名 Institutions → Subjects。
+pub fn admin_subjects_key(shenfen_id: &str) -> String {
+    let subject_id = subject_id_from_shenfen_id(shenfen_id);
     let pallet_hash = twox_128(b"AdminsChange");
-    let storage_hash = twox_128(b"Institutions");
-    let blake2_hash = blake2b_128(&institution_id);
+    let storage_hash = twox_128(b"Subjects");
+    let blake2_hash = blake2b_128(&subject_id);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + 48);
     key.extend_from_slice(&pallet_hash);
     key.extend_from_slice(&storage_hash);
     key.extend_from_slice(&blake2_hash);
-    key.extend_from_slice(&institution_id);
+    key.extend_from_slice(&subject_id);
 
     format!("0x{}", hex::encode(&key))
 }
@@ -162,16 +171,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shenfen_id_to_fixed48_pads_correctly() {
+    fn institution_id_from_shenfen_id_with_kind_tag() {
         let id = "GFR-LN001-CB0C-617776487-20260222";
-        let fixed = shenfen_id_to_fixed48(id);
-        assert_eq!(&fixed[..id.len()], id.as_bytes());
-        assert!(fixed[id.len()..].iter().all(|&b| b == 0));
+        let fixed = subject_id_from_shenfen_id(id);
+        // D 阶段:byte[0]=0x01 Builtin,byte[1..1+len]=shenfen_id bytes,余下零填充
+        assert_eq!(fixed[0], 0x01);
+        assert_eq!(&fixed[1..1 + id.len()], id.as_bytes());
+        assert!(fixed[1 + id.len()..].iter().all(|&b| b == 0));
     }
 
     #[test]
-    fn admin_institutions_key_has_correct_length() {
-        let key = admin_institutions_key("GFR-LN001-CB0C-617776487-20260222");
+    fn admin_subjects_key_has_correct_length() {
+        let key = admin_subjects_key("GFR-LN001-CB0C-617776487-20260222");
         // 0x 前缀 + (16+16+16+48)*2 hex 字符 = 2 + 192 = 194
         assert_eq!(key.len(), 194);
         assert!(key.starts_with("0x"));

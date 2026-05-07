@@ -149,7 +149,7 @@ export const offchainApi = {
   lockDecryptedAdmin: (pubkeyHex: string) =>
     invoke<void>('lock_decrypted_admin', { pubkeyHex }),
 
-  // ── 机构详情(链上 duoqian-manage::Institutions[sfid_id]) ──
+  // ── 机构详情(链上 organization-manage::Institutions[sfid_id]) ──
 
   fetchInstitutionDetail: (sfidId: string) =>
     invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { sfidId }),

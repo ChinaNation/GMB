@@ -38,7 +38,10 @@ frame_benchmarking::define_benchmarks!(
     [admins_change, AdminsChange]
     [resolution_destro, ResolutionDestro]
     [grandpakey_change, GrandpaKeyChange]
-    [org_manage, DuoqianManage]
+    [organization_manage, OrganizationManage]
+    // personal_manage benchmark 用例待 follow-up;当前 benchmarks.rs 是空骨架,
+    // 不挂载到 list_benchmarks 避免 Benchmarking trait 缺失编译错误。
+    // [personal_manage, PersonalManage]
     [duoqian_transfer, DuoqianTransfer]
     [internal_vote, InternalVote]
     [joint_vote, JointVote]

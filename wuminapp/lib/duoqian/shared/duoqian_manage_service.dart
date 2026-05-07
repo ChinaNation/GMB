@@ -31,24 +31,35 @@ class DuoqianManageService {
 
   // ──── 常量 ────
 
-  /// OrganizationManage pallet index（runtime pallet_index=17）。
+  /// OrganizationManage pallet index（runtime pallet_index=17,机构多签管理）。
   static const _palletIndex = 17;
 
-  /// propose_create call_index=0。
+  /// PersonalManage pallet index(runtime pallet_index=7,B 阶段拆分 2026-05-06)。
+  static const _personalPalletIndex = 7;
+
+  /// propose_create call_index=0(legacy 单账户机构入口已废弃,call_index 留洞)。
   static const _proposeCreateCallIndex = 0;
 
-  /// propose_close call_index=1。
+  /// OrganizationManage::propose_close call_index=1(机构关闭)。
   static const _proposeCloseCallIndex = 1;
+
+  /// PersonalManage::propose_close call_index=1(个人关闭)。
+  static const _personalProposeCloseCallIndex = 1;
 
   /// Mortal era 周期。
   static const _eraPeriod = 64;
 
-  /// propose_create_personal call_index=3（Phase 2 重排,原 5）。
-  static const _proposeCreatePersonalCallIndex = 3;
+  /// PersonalManage::propose_create call_index=0(B 阶段拆分 2026-05-06,
+  /// 独立 pallet 后从 0 起编号)。
+  static const _proposeCreatePersonalCallIndex = 0;
 
   /// ProposalData 中的 action 类型前缀。
-  static const actionCreate = 1;
+  /// OrganizationManage(b"org-mgmt") 命名空间:ACTION_CLOSE=2 / ACTION_CREATE_INSTITUTION=3。
+  /// PersonalManage(b"per-mgmt") 命名空间:ACTION_CREATE=0 / ACTION_CLOSE=1(独立编号)。
+  static const actionCreate = 1; // 历史保留:个人多签解码 fallback,优先按 personal 命名空间识别
   static const actionClose = 2;
+  static const actionCreatePersonal = 0;
+  static const actionClosePersonal = 1;
 
   // ──── Extrinsic 提交 ────
 
@@ -105,9 +116,10 @@ class DuoqianManageService {
     );
   }
 
-  /// 提交 propose_create_personal extrinsic（个人多签，无需 SFID）。
+  /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 SFID）。
   ///
-  /// 参数编码：[0x11][0x05] + account_name(BoundedVec) + admin_count(u32 LE)
+  /// B 阶段拆分(2026-05-06)起,个人多签独立 pallet PersonalManage(7),call_index=0。
+  /// 参数编码：[0x07][0x00] + account_name(BoundedVec) + admin_count(u32 LE)
   ///   + duoqian_admins(BoundedVec<AccountId32>) + threshold(u32 LE) + amount(u128 LE)
   Future<({String txHash, int usedNonce})> submitProposeCreatePersonal({
     required Uint8List accountName,
@@ -120,7 +132,7 @@ class DuoqianManageService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final output = ByteOutput();
-    output.pushByte(_palletIndex);
+    output.pushByte(_personalPalletIndex);
     output.pushByte(_proposeCreatePersonalCallIndex);
 
     // account_name: BoundedVec<u8> = Compact<u32> length + bytes
@@ -173,6 +185,8 @@ class DuoqianManageService {
   }
 
   /// 提交个人多签关闭提案。
+  ///
+  /// B 阶段拆分(2026-05-06)起走 PersonalManage(7) call_index=1。
   Future<({String txHash, int usedNonce})> submitProposeClosePersonal({
     required String duoqianAddress,
     required String beneficiaryAddress,
@@ -180,9 +194,14 @@ class DuoqianManageService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
-    return _submitProposeClose(
-      duoqianAddress: duoqianAddress,
-      beneficiaryAddress: beneficiaryAddress,
+    final output = ByteOutput();
+    output.pushByte(_personalPalletIndex);
+    output.pushByte(_personalProposeCloseCallIndex);
+    output.write(_hexDecode(duoqianAddress));
+    final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
+    output.write(beneficiaryId);
+    return _signAndSubmit(
+      callData: output.toBytes(),
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,

@@ -10,6 +10,7 @@ mod benchmarks;
 pub mod configs;
 
 extern crate alloc;
+use primitives::derive::subject_id_from_shenfen_id;
 use alloc::vec::Vec;
 use codec::{Decode, DecodeWithMemTracking, Encode};
 use frame_support::weights::Weight;
@@ -349,9 +350,14 @@ mod runtime {
     #[runtime::pallet_index(16)]
     pub type GrandpaKeyChange = grandpakey_change;
 
-    // 多签交易模块：duoqian_address 创建/注销与半数签名校验（注册型多签，非宪法保留主账户）
+    // 机构管理模块：机构多签账户的注册/创建/关闭与半数签名校验（注册型多签，非宪法保留主账户）
     #[runtime::pallet_index(17)]
-    pub type DuoqianManage = org_manage;
+    pub type OrganizationManage = organization_manage;
+
+    // 个人多签管理模块:用户自定义多签账户的注册/创建/关闭(无 SFID 归属,creator+account_name 派生)。
+    // pallet_index=7 重用历史空位(B 阶段 personal-manage 拆分,2026-05-06)。
+    #[runtime::pallet_index(7)]
+    pub type PersonalManage = personal_manage;
 
     // PoW 动态难度调整模块：每 600 块根据实际出块速度自动调整挖矿难度
     #[runtime::pallet_index(18)]
@@ -388,10 +394,10 @@ mod tests {
         use configs::RuntimeFeePayerExtractor;
         use frame_support::BoundedVec;
         use onchain_transaction::CallFeePayer;
-        use primitives::china::china_cb::{shenfen_id_to_fixed48, CHINA_CB};
+        use primitives::china::china_cb::CHINA_CB;
 
         let institution =
-            shenfen_id_to_fixed48(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
+            subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("NRC shenfen_id must be valid");
         let beneficiary = AccountId::new([99u8; 32]);
         let call = RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
             org: 0,
@@ -419,13 +425,14 @@ mod tests {
     #[test]
     fn governance_module_tags_are_globally_unique() {
         use std::collections::HashSet;
-        let tags: [(&str, &[u8]); 7] = [
+        let tags: [(&str, &[u8]); 8] = [
             ("admins_change", admins_change::MODULE_TAG),
             ("grandpakey_change", grandpakey_change::MODULE_TAG),
             ("resolution_destro", resolution_destro::MODULE_TAG),
             ("resolution_issuance", resolution_issuance::MODULE_TAG),
             ("runtime_upgrade", runtime_upgrade::MODULE_TAG),
-            ("org_manage", org_manage::MODULE_TAG),
+            ("organization_manage", organization_manage::MODULE_TAG),
+            ("personal_manage", personal_manage::MODULE_TAG),
             ("duoqian_transfer", duoqian_transfer::MODULE_TAG),
         ];
         let unique: HashSet<&[u8]> = tags.iter().map(|(_, t)| *t).collect();

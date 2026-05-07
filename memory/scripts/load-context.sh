@@ -131,13 +131,13 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-transfer/DUOQIAN_TRANSFER_TECHNICAL.md"
     ;;
-  citizenchain/runtime/transaction/duoqian-manage|citizenchain/transaction/duoqian-manage|duoqian-manage)
+  citizenchain/runtime/governance/organization-manage|organization-manage)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"
     print_if_exists "citizenchain/CITIZENCHAIN_TECHNICAL.md"
     print_if_exists "citizenchain/runtime/README.md"
-    print_if_exists "memory/05-modules/citizenchain/runtime/transaction/duoqian-manage/DUOQIAN_TECHNICAL.md"
+    print_if_exists "memory/05-modules/citizenchain/runtime/governance/organization-manage/ORGANIZATION_MANAGE_TECHNICAL.md"
     ;;
   citizenchain/runtime/transaction/institution-asset|citizenchain/transaction/institution-asset|institution-asset)
     print_base_context

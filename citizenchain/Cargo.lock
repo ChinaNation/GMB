@@ -1586,13 +1586,14 @@ dependencies = [
  "joint-vote",
  "offchain-transaction",
  "onchain-transaction",
- "org-manage",
+ "organization-manage",
  "pallet-balances",
  "pallet-grandpa",
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "parity-scale-codec",
+ "personal-manage",
  "pow-difficulty",
  "primitives",
  "resolution-destro",
@@ -3062,9 +3063,10 @@ dependencies = [
  "institution-asset",
  "internal-vote",
  "onchain-transaction",
- "org-manage",
+ "organization-manage",
  "pallet-balances",
  "parity-scale-codec",
+ "personal-manage",
  "primitives",
  "scale-info",
  "sp-core",
@@ -7902,7 +7904,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "org-manage"
+name = "organization-manage"
 version = "1.0.0"
 dependencies = [
  "admins-change",
@@ -8394,6 +8396,28 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "personal-manage"
+version = "1.0.0"
+dependencies = [
+ "admins-change",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "institution-asset",
+ "internal-vote",
+ "onchain-transaction",
+ "pallet-balances",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+ "votingengine",
+]
 
 [[package]]
 name = "pest"
@@ -9311,11 +9335,13 @@ dependencies = [
 name = "primitives"
 version = "1.0.0"
 dependencies = [
+ "frame-support",
  "hex-literal",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
  "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]

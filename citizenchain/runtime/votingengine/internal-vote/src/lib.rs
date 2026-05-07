@@ -22,23 +22,24 @@ use frame_support::{
     pallet_prelude::{BoundedVec, DispatchResult},
     storage::{with_transaction, TransactionOutcome},
 };
+use primitives::derive::subject_id_from_shenfen_id;
 use sp_runtime::traits::{SaturatedConversion, Saturating};
 use sp_runtime::DispatchError;
 
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    CHINA_CH,
 };
 use primitives::count_const::VOTING_DURATION_BLOCKS;
 
 use votingengine::{
-    nrc_pallet_id_bytes,
+    nrc_subject_id,
     pallet::{AdminSnapshot, Proposals},
     types::{
         fixed_governance_pass_threshold, is_valid_org, ORG_NRC, ORG_PRB, ORG_PRC,
         ORG_REN,
     },
-    InstitutionPalletId, InternalAdminProvider, InternalProposalMutexKind,
+    SubjectId, InternalAdminProvider, InternalProposalMutexKind,
     InternalThresholdProvider, Proposal, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED,
     STATUS_REJECTED,
 };
@@ -140,13 +141,13 @@ pub mod pallet {
 
 fn is_valid_internal_institution<T: Config>(
     org: u8,
-    institution: InstitutionPalletId,
+    institution: SubjectId,
     pending_subject: bool,
 ) -> bool {
     match org {
         ORG_NRC => {
             !pending_subject
-                && nrc_pallet_id_bytes()
+                && nrc_subject_id()
                     .map(|nrc| institution == nrc)
                     .unwrap_or(false)
         }
@@ -155,14 +156,14 @@ fn is_valid_internal_institution<T: Config>(
                 && CHINA_CB
                     .iter()
                     .skip(1)
-                    .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                    .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
                     .any(|pid| pid == institution)
         }
         ORG_PRB => {
             !pending_subject
                 && CHINA_CH
                     .iter()
-                    .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+                    .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
                     .any(|pid| pid == institution)
         }
         ORG_REN if pending_subject => {
@@ -183,7 +184,7 @@ fn is_valid_internal_institution<T: Config>(
 
 fn is_internal_admin<T: Config>(
     org: u8,
-    institution: InstitutionPalletId,
+    institution: SubjectId,
     who: &T::AccountId,
     pending_subject: bool,
 ) -> bool {
@@ -199,7 +200,7 @@ fn is_internal_admin<T: Config>(
 
 fn internal_threshold<T: Config>(
     org: u8,
-    institution: InstitutionPalletId,
+    institution: SubjectId,
     pending_subject: bool,
 ) -> Option<u32> {
     match org {
@@ -229,7 +230,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_internal_proposal_with_subject_status(
             who,
@@ -243,7 +244,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_pending_subject_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_internal_proposal_with_subject_status(
             who,
@@ -257,7 +258,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_pending_subject_internal_proposal_with_snapshot(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         admins: sp_std::vec::Vec<T::AccountId>,
         threshold: u32,
     ) -> Result<u64, DispatchError> {
@@ -341,7 +342,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_admin_set_mutation_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_internal_proposal_with_subject_status(
             who,
@@ -356,7 +357,7 @@ impl<T: Config> Pallet<T> {
     pub fn do_create_internal_proposal_with_explicit_threshold(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         threshold: u32,
     ) -> Result<u64, DispatchError> {
         ensure!(is_valid_org(org), Error::<T>::InvalidInternalOrg);
@@ -441,7 +442,7 @@ impl<T: Config> Pallet<T> {
     fn do_create_internal_proposal_with_subject_status(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         pending_subject: bool,
         mutex_kind: InternalProposalMutexKind,
     ) -> Result<u64, DispatchError> {
@@ -612,7 +613,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_internal_proposal(who, org, institution)
     }
@@ -620,7 +621,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -645,7 +646,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_internal_proposal_with_threshold_and_data(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         threshold: u32,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
@@ -676,7 +677,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_pending_subject_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_pending_subject_internal_proposal(who, org, institution)
     }
@@ -684,7 +685,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_pending_subject_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
@@ -710,7 +711,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_pending_subject_internal_proposal_with_snapshot_data(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         admins: sp_std::vec::Vec<T::AccountId>,
         threshold: u32,
         module_tag: &[u8],
@@ -743,7 +744,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_admin_set_mutation_internal_proposal(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
     ) -> Result<u64, DispatchError> {
         Self::do_create_admin_set_mutation_internal_proposal(who, org, institution)
     }
@@ -751,7 +752,7 @@ impl<T: Config> votingengine::InternalVoteEngine<T::AccountId> for Pallet<T> {
     fn create_admin_set_mutation_internal_proposal_with_data(
         who: T::AccountId,
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {

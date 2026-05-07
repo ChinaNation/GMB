@@ -186,11 +186,9 @@ class PayloadDecoder {
       // ADR-008 step2b/step2d 凭证带 (province, signer_admin_pubkey) 双层匹配字段。
       if (palletIndex == PalletRegistry.organizationManagePallet) {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
+        // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
         if (callIndex == PalletRegistry.proposeCloseCall) {
           return _decodeProposeClose(bytes);
-        }
-        if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
-          return _decodeProposeCreatePersonal(bytes);
         }
         if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
           return _decodeProposeCreateInstitution(bytes);
@@ -199,7 +197,26 @@ class PayloadDecoder {
           return _decodeProposalIdOnly(
             bytes,
             action: 'cleanup_rejected_proposal',
-            summaryTemplate: '清理被拒提案 #{id} 残留',
+            summaryTemplate: '清理被拒机构提案 #{id} 残留',
+          );
+        }
+      }
+
+      // ── PersonalManage(7) ──
+      // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
+      // ACTION enum 独立(ACTION_CREATE=0/ACTION_CLOSE=1),与 organization-manage 互不干扰。
+      if (palletIndex == PalletRegistry.personalManagePallet) {
+        if (callIndex == PalletRegistry.proposeCreatePersonalCall) {
+          return _decodeProposeCreatePersonal(bytes);
+        }
+        if (callIndex == PalletRegistry.proposeClosePersonalCall) {
+          return _decodeProposeClose(bytes);
+        }
+        if (callIndex == PalletRegistry.cleanupRejectedPersonalProposalCall) {
+          return _decodeProposalIdOnly(
+            bytes,
+            action: 'cleanup_rejected_personal_proposal',
+            summaryTemplate: '清理被拒个人多签提案 #{id} 残留',
           );
         }
       }

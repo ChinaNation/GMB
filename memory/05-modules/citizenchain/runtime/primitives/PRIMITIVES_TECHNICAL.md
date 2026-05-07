@@ -84,9 +84,9 @@
 | ONCHAIN_FEE_SAFETY_FUND_PERCENT | 10% | 安全基金 NRC_ANQUAN_ADDRESS |
 
 **4 类链上 extrinsic 计费规则**(由 `runtime/src/configs/mod.rs::OnchainTxAmountExtractor` 强制):
-- 免费 Free:System / Timestamp / ShengBankInterest / CitizenIssuance / ResolutionIssuance / ResolutionDestro / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / DuoqianManage::register_sfid_institution
+- 免费 Free:System / Timestamp / ShengBankInterest / CitizenIssuance / ResolutionIssuance / ResolutionDestro / VotingEngine::finalize_proposal / OffchainTransaction::set_max_l2_fee_rate / OrganizationManage::register_sfid_institution
 - 投票 Vote(`VOTE_FLAT_FEE = 1 元`):VotingEngine 5 个投票入口 + 业务 pallet propose_X / cleanup_X + SfidSystem 全部 + FullnodeIssuance bind/rebind
-- 链上交易 OnchainTx(`max(amount × 0.1%, 0.1 元)`):Balances 全部转账 + DuoqianManage propose_create_personal/institution/close + DuoqianTransfer 3 个 propose_X + OffchainTransaction deposit/withdraw/submit_offchain_batch_v2
+- 链上交易 OnchainTx(`max(amount × 0.1%, 0.1 元)`):Balances 全部转账 + OrganizationManage propose_create_personal/institution/close + DuoqianTransfer 3 个 propose_X + OffchainTransaction deposit/withdraw/submit_offchain_batch_v2
 - 未识别 Unknown:拒绝交易,不入块
 
 ### 2.7 投票治理
@@ -104,7 +104,7 @@
 ## 3. china/ 目录规则
 - 每个机构文件必须在 `china/mod.rs` 中显式声明，避免目录中存在未编译的残留文件。
 - 多签管理员字段统一命名 `duoqian_admins`，不允许 `admins` 变体。
-- `china_zb.rs` 中的 277 个保留地址由 `duoqian-manage` 模块在转账时校验，防止抢注机构地址。
+- `china_zb.rs` 中的 277 个保留地址由 `organization-manage` 模块在转账时校验，防止抢注机构地址。
 
 ---
 

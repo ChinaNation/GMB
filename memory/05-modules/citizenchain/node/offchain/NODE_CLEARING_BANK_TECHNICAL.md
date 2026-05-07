@@ -12,7 +12,7 @@
 节点桌面"清算行"tab 提供 3 类核心能力:
 
 1. **添加清算行**:输入 SFID → 链上判定多签是否存在 → 已存在显示详情 / 不存在进创建流程
-2. **机构详情**:展示链上 `duoqian-manage::Institutions[sfid_id]` 全部信息 + 折叠卡片入口(其他账户/管理员)+ 节点声明状态 + 提案列表
+2. **机构详情**:展示链上 `organization-manage::Institutions[sfid_id]` 全部信息 + 折叠卡片入口(其他账户/管理员)+ 节点声明状态 + 提案列表
 3. **创建机构多签**:拉 SFID `registration-info` → 按 SFID 返回的账户名称配置初始资金 + 管理员 + 阈值 → 冷钱包签 `propose_create_institution` extrinsic → 等其他管理员投票通过 → 进节点声明流程
 
 ## 1. 状态机(`offchain/section.tsx`)
@@ -36,11 +36,11 @@ empty → add-input-sfid (debounce 自动搜,无"查询"按钮)
 | 文件 | 职责 |
 |---|---|
 | `section.tsx` | 状态机驱动;EmptyView / CheckMultisigView / WaitVoteView 子组件 |
-| `duoqian-manage/add-candidate.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
-| `duoqian-manage/institution-detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
-| `duoqian-manage/other-accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
+| `organization-manage/add-candidate.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
+| `organization-manage/institution-detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
+| `organization-manage/other-accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
 | `settlement/admin-unlock.tsx` | ClearingBankAdminListPage:管理员列表/解锁入口 |
-| `duoqian-manage/create-multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
+| `organization-manage/create-multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
 | `offchain-transaction/node-register.tsx` | ClearingBankDeclareNodePage(声明本机为清算行节点)|
 | `api.ts` / `types.ts` / `styles.css` | Tauri invoke / 类型 / 样式 |
 
@@ -57,11 +57,11 @@ Tauri 命令按业务拆分:
 
 | 目录 | 命令 | 用途 |
 |---|---|
-| `offchain/duoqian_manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
-| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_id]` + `InstitutionAccounts[sfid_id, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
-| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
-| `offchain/duoqian_manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_id/registration-info` 拉链上注册专用信息 |
-| `offchain/duoqian_manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
+| `offchain/organization_manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
+| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_id]` + `InstitutionAccounts[sfid_id, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
+| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
+| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_id/registration-info` 拉链上注册专用信息 |
+| `offchain/organization_manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
 | `offchain/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
 | `offchain/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` / `submit_unregister_*` | 清算行节点注册、端点更新、注销 |
 | `offchain/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
@@ -70,7 +70,7 @@ DTO 统一见 `offchain/common/types.rs`。
 
 ## 4. propose_create_institution(call_index 5)字节布局
 
-链端 [`duoqian-manage::propose_create_institution`](citizenchain/runtime/transaction/duoqian-manage/src/lib.rs) 10 入参:
+链端 [`organization-manage::propose_create_institution`](citizenchain/runtime/governance/organization-manage/src/lib.rs) 10 入参:
 
 ```
 [pallet_index=17][call_index=5]
@@ -88,7 +88,7 @@ province: Vec<u8>                   = Compact(len) || bytes
 signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 ```
 
-**任何字段顺序变更必须同步改 `offchain/duoqian_manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
+**任何字段顺序变更必须同步改 `offchain/organization_manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
 
 注册业务字段只允许来自 SFID `registration-info` 的 `sfid_id / institution_name / account_names[]`。
 `a3 / sub_type / parent_sfid_id` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。
@@ -150,7 +150,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 
 ## 7. 验收标准达成情况
 
-- ✅ `cargo check -p duoqian-manage --tests` 通过
+- ✅ `cargo check -p organization-manage --tests` 通过
 - ✅ `cargo check -p duoqian-transfer --tests` 通过
 - ✅ `cargo check -p offchain-transaction --tests` 通过
 - ✅ `cargo check -p node` 带 `WASM_FILE=target/ci-wasm/citizenchain.compact.compressed.wasm` 通过(仅既有 unsafe/dead_code 警告)

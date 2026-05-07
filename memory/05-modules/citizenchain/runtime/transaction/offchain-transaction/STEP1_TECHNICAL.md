@@ -27,7 +27,7 @@ src/
 
 清算行 = **SFR 私法人** 或 **FFR 非法人**(两者皆私权机构),对应 `sfid/backend/sfid/category.rs:65` 的 `InstitutionCategory::PrivateInstitution`。
 
-链上**不新增** SFID 枚举,而是直接对 `duoqian-manage::AddressRegisteredSfid` 存的 `sfid_id` 字符串做 A3 前缀匹配(前 3 字节)。
+链上**不新增** SFID 枚举,而是直接对 `organization-manage::AddressRegisteredSfid` 存的 `sfid_id` 字符串做 A3 前缀匹配(前 3 字节)。
 
 ```rust
 pub fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
@@ -45,7 +45,7 @@ pub fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 
 ## 4. 解耦抽象 `SfidAccountQuery`
 
-`bank_check` 不直接依赖 `duoqian-manage`,而是通过 trait 抽象:
+`bank_check` 不直接依赖 `organization-manage`,而是通过 trait 抽象:
 
 ```rust
 pub trait SfidAccountQuery<AccountId> {
@@ -60,7 +60,7 @@ pub trait SfidAccountQuery<AccountId> {
 // 默认 () 实现返回未登记,供测试用。
 ```
 
-**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `duoqian-manage` / `offchain-transaction` 的链上索引:
+**runtime 层实现**(`citizenchain/runtime/src/configs/mod.rs` 的 `DuoqianSfidAccountQuery`):委托给 `organization-manage` / `offchain-transaction` 的链上索引:
 - `AddressRegisteredSfid` → `account_info`
 - `SfidRegisteredAddress` → `find_address`
 - `InstitutionAccounts` → `is_active` / `is_clearing_bank_eligible`
@@ -68,8 +68,8 @@ pub trait SfidAccountQuery<AccountId> {
 - `ClearingBankNodes` → `is_registered_clearing_node`
 
 **好处**:
-- offchain-transaction 的 Cargo.toml 不新增 duoqian-manage 依赖
-- pallet 的 `Config` trait 不强制 `T: duoqian_manage::Config`
+- offchain-transaction 的 Cargo.toml 不新增 organization-manage 依赖
+- pallet 的 `Config` trait 不强制 `T: organization_manage::Config`
 - 现有 tests 可直接用 `type SfidAccountQuery = ();`,不破坏已有测试
 
 ## 5. L3 PaymentIntent 签名格式
@@ -154,7 +154,7 @@ L2FeeCollect     # Step 2:扫码清算时向 fee_account 收费
 
 | 模块 | 动向 |
 |---|---|
-| `duoqian-manage` | **不动**(清算行注册复用现有机制) |
+| `organization-manage` | **不动**(清算行注册复用现有机制) |
 | `duoqian-transfer` | **不动** |
 | `onchain-transaction` | **不动** |
 | `sfid-system` | **不动** |

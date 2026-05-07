@@ -8,6 +8,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use primitives::derive::subject_id_from_shenfen_id;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency, BoundedVec};
 use frame_system::pallet_prelude::*;
@@ -20,14 +21,14 @@ use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 extern crate alloc;
 
 use primitives::china::china_cb::{
-    shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB, NRC_ANQUAN_ADDRESS,
+    CHINA_CB, NRC_ANQUAN_ADDRESS,
 };
 use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    CHINA_CH,
 };
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
-    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -40,7 +41,7 @@ const SWEEP_OWNER_DATA: &[u8] = b"dq-xfer:sweep";
 mod benchmarks;
 pub mod weights;
 
-type BalanceOf<T> = <<T as org_manage::Config>::Currency as Currency<
+type BalanceOf<T> = <<T as organization_manage::Config>::Currency as Currency<
     <T as frame_system::Config>::AccountId,
 >>::Balance;
 
@@ -49,7 +50,7 @@ type BalanceOf<T> = <<T as org_manage::Config>::Currency as Currency<
 #[scale_info(skip_type_params(MaxRemarkLen))]
 pub struct TransferAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
     /// 转出机构
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     /// 收款地址
     pub beneficiary: AccountId,
     /// 转账金额
@@ -81,7 +82,7 @@ pub struct SafetyFundAction<AccountId, Balance, MaxRemarkLen: Get<u32>> {
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct SweepAction<AccountId, Balance> {
     /// 机构标识
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     /// 划转金额
     pub amount: Balance,
     /// 发起管理员(Tx 1 中锁定)
@@ -95,10 +96,10 @@ const FEE_ADDRESS_MIN_RESERVE_FEN: u128 = 111_111;
 const FEE_SWEEP_MAX_PERCENT: u128 = 80;
 
 /// 中文注释：判断机构属于 NRC/PRC/PRB（不含注册多签，注册多签由链上存储判断）。
-fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
+fn subject_org(institution: SubjectId) -> Option<u8> {
     if CHINA_CB
         .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
         == Some(institution)
     {
         return Some(ORG_NRC);
@@ -107,7 +108,7 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -115,7 +116,7 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 
     if CHINA_CH
         .iter()
-        .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
@@ -125,30 +126,36 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 }
 
 /// 中文注释：从 CHINA_CB/CHINA_CH 中查找机构的多签账户地址（main_address）。
-fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
+fn subject_pallet_address(institution: SubjectId) -> Option<[u8; 32]> {
     if let Some(node) = CHINA_CB
         .iter()
-        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
     {
         return Some(node.main_address);
     }
 
     CHINA_CH
         .iter()
-        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
         .map(|n| n.main_address)
 }
 
-/// 中文注释：检查机构 ID 后 16 字节是否全零（注册多签机构的 ID 格式要求）。
-fn institution_id_has_zero_suffix(institution: InstitutionPalletId) -> bool {
-    institution[32..].iter().all(|b| *b == 0)
+/// 中文注释:检查注册多签机构的 institution_id 是 PersonalDuoqian 协议(SubjectKind=0x03)。
+///
+/// D 阶段(SubjectKind 协议统一,2026-05-06)起:
+///   byte[0]   = 0x03 (PersonalDuoqian)
+///   byte[1..33] = 32B AccountId
+///   byte[33..48] = 15B 零填充
+fn subject_id_has_zero_suffix(institution: SubjectId) -> bool {
+    institution[0] == 0x03 /* SubjectKind::PersonalDuoqian */
+        && institution[33..].iter().all(|b| *b == 0)
 }
 
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    use org_manage::ProtectedSourceChecker;
+    use organization_manage::ProtectedSourceChecker;
     use frame_support::traits::ExistenceRequirement;
     use frame_support::traits::OnUnbalanced;
     use institution_asset::{InstitutionAsset, InstitutionAssetAction};
@@ -157,7 +164,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config:
-        frame_system::Config + votingengine::Config + org_manage::Config
+        frame_system::Config + votingengine::Config + organization_manage::Config
     {
         #[allow(deprecated)]
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
@@ -168,9 +175,17 @@ pub mod pallet {
 
         /// 手续费分账路由（复用 OnchainFeeRouter）
         type FeeRouter: frame_support::traits::OnUnbalanced<
-            <<Self as org_manage::Config>::Currency as Currency<
+            <<Self as organization_manage::Config>::Currency as Currency<
                 Self::AccountId,
             >>::NegativeImbalance,
+        >;
+
+        /// 个人多签账户管理员配置查询(B 阶段拆分后由 personal-manage 实现)。
+        type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
+
+        /// 机构多签账户管理员配置查询(B 阶段拆分后由 organization-manage 实现)。
+        type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<
+            Self::AccountId,
         >;
 
         /// Weight 配置
@@ -205,7 +220,7 @@ pub mod pallet {
         TransferProposed {
             proposal_id: u64,
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             proposer: T::AccountId,
             /// 资金源(= 机构主账户)。
             from: T::AccountId,
@@ -219,12 +234,12 @@ pub mod pallet {
         /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 execute_transfer 手动重试）
         TransferExecutionFailed {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         },
         /// 转账已执行（投票通过后自动触发，含手续费分账）
         TransferExecuted {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
@@ -253,7 +268,7 @@ pub mod pallet {
         /// 手续费划转提案已创建。
         SweepToMainProposed {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             proposer: T::AccountId,
             /// 资金源(= 机构费用账户)
             from: T::AccountId,
@@ -265,7 +280,7 @@ pub mod pallet {
         /// 手续费划转已执行
         SweepToMainExecuted {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
             reserve_left: BalanceOf<T>,
@@ -328,7 +343,7 @@ pub mod pallet {
         pub fn propose_transfer(
             origin: OriginFor<T>,
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             beneficiary: T::AccountId,
             amount: BalanceOf<T>,
             remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -343,7 +358,7 @@ pub mod pallet {
                 Error::<T>::UnauthorizedAdmin
             );
             ensure!(
-                <T as org_manage::Config>::InstitutionAsset::can_spend(
+                <T as organization_manage::Config>::InstitutionAsset::can_spend(
                     &institution_account,
                     InstitutionAssetAction::DuoqianTransferExecute,
                 ),
@@ -351,7 +366,7 @@ pub mod pallet {
             );
 
             // 转账金额必须 >= ED，防止收款地址不存在时创建失败
-            let ed = <T as org_manage::Config>::Currency::minimum_balance();
+            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
             ensure!(amount >= ed, Error::<T>::AmountBelowExistentialDeposit);
 
             // 不允许自转账
@@ -362,7 +377,7 @@ pub mod pallet {
 
             // 不允许转到受保护地址（质押地址）
             ensure!(
-                !<T as org_manage::Config>::ProtectedSourceChecker::is_protected(&beneficiary,),
+                !<T as organization_manage::Config>::ProtectedSourceChecker::is_protected(&beneficiary,),
                 Error::<T>::BeneficiaryIsProtectedAddress
             );
 
@@ -375,7 +390,7 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::InsufficientBalance)?;
-            let free = <T as org_manage::Config>::Currency::free_balance(&institution_account);
+            let free = <T as organization_manage::Config>::Currency::free_balance(&institution_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -392,7 +407,7 @@ pub mod pallet {
             encoded.extend_from_slice(&action.encode());
             // 中文注释：创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
             let proposal_id =
-                <T as org_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
                     who.clone(),
                     org,
                     institution,
@@ -435,7 +450,7 @@ pub mod pallet {
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
 
             // 验证国储会管理员
-            let nrc_institution = reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id)
+            let nrc_institution = subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
@@ -450,7 +465,7 @@ pub mod pallet {
             let safety_fund_account = T::AccountId::decode(&mut &NRC_ANQUAN_ADDRESS[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
             ensure!(
-                <T as org_manage::Config>::InstitutionAsset::can_spend(
+                <T as organization_manage::Config>::InstitutionAsset::can_spend(
                     &safety_fund_account,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
@@ -464,15 +479,15 @@ pub mod pallet {
             let total = amount
                 .checked_add(&fee)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
-            let ed: BalanceOf<T> = <T as org_manage::Config>::Currency::minimum_balance();
-            let free = <T as org_manage::Config>::Currency::free_balance(&safety_fund_account);
+            let ed: BalanceOf<T> = <T as organization_manage::Config>::Currency::minimum_balance();
+            let free = <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             let proposal_id =
-                <T as org_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
                     who.clone(),
                     ORG_NRC,
                     nrc_institution,
@@ -511,7 +526,7 @@ pub mod pallet {
         #[pallet::weight(T::DbWeight::get().reads_writes(4, 2))]
         pub fn propose_sweep_to_main(
             origin: OriginFor<T>,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -530,7 +545,7 @@ pub mod pallet {
             );
 
             let proposal_id =
-                <T as org_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
                     who.clone(),
                     org,
                     institution,
@@ -572,28 +587,34 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         fn registered_duoqian_account(
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Result<T::AccountId, Error<T>> {
             ensure!(
-                institution_id_has_zero_suffix(institution),
+                subject_id_has_zero_suffix(institution),
                 Error::<T>::InvalidInstitution
             );
-            let account = T::AccountId::decode(&mut &institution[..32])
+            // D 阶段:跳过第 0 字节 kind tag (SubjectKind::PersonalDuoqian = 0x03),取 byte[1..33] 作为 AccountId。
+            let account = T::AccountId::decode(&mut &institution[1..33])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
-            let duoqian = org_manage::DuoqianAccounts::<T>::get(&account)
-                .ok_or(Error::<T>::InvalidInstitution)?;
-            ensure!(
-                duoqian.status == org_manage::DuoqianStatus::Active,
-                Error::<T>::InvalidInstitution
-            );
-            Ok(account)
+            // B 阶段:DuoqianAccounts mirror 已删,union 查 personal-manage / organization-manage 两侧。
+            // 任意机构账户(主/费用/自创)经 organization-manage 反查机构 admin 配置;
+            // 个人多签经 personal-manage 直接查。
+            use personal_manage::traits::PersonalMultisigQuery;
+            use organization_manage::traits::InstitutionMultisigQuery;
+            if <T as Config>::PersonalQuery::is_active(&account) {
+                return Ok(account);
+            }
+            if <T as Config>::InstitutionQuery::is_active(&account) {
+                return Ok(account);
+            }
+            Err(Error::<T>::InvalidInstitution)
         }
 
         fn resolve_institution_account(
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Result<(u8, T::AccountId), Error<T>> {
-            if let Some(actual_org) = institution_org(institution) {
-                let raw_account = institution_pallet_address(institution)
+            if let Some(actual_org) = subject_org(institution) {
+                let raw_account = subject_pallet_address(institution)
                     .ok_or(Error::<T>::InvalidInstitution)?;
                 let institution_account = T::AccountId::decode(&mut &raw_account[..])
                     .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
@@ -606,7 +627,7 @@ pub mod pallet {
 
         fn is_internal_admin(
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             who: &T::AccountId,
         ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
@@ -617,11 +638,11 @@ pub mod pallet {
         }
 
         /// 判断机构的 org 类型用于 sweep 提案。
-        fn resolve_sweep_org(institution: InstitutionPalletId) -> Result<u8, Error<T>> {
+        fn resolve_sweep_org(institution: SubjectId) -> Result<u8, Error<T>> {
             // 国储会
             if CHINA_CB
                 .first()
-                .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
                 == Some(institution)
             {
                 return Ok(ORG_NRC);
@@ -629,7 +650,7 @@ pub mod pallet {
             // 省储行
             if CHINA_CH
                 .iter()
-                .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+                .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
                 .any(|pid| pid == institution)
             {
                 return Ok(ORG_PRB);
@@ -639,12 +660,12 @@ pub mod pallet {
 
         /// 解析机构手续费账户。
         fn resolve_fee_account(
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Result<T::AccountId, DispatchError> {
             // 国储会：使用常量地址
             if CHINA_CB
                 .first()
-                .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+                .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
                 == Some(institution)
             {
                 return T::AccountId::decode(&mut &CHINA_CB[0].fee_address[..])
@@ -653,7 +674,7 @@ pub mod pallet {
             // 省储行：使用 fee_address（BLAKE2-256 派生）
             let node = CHINA_CH
                 .iter()
-                .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                 .ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &node.fee_address[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
@@ -661,10 +682,10 @@ pub mod pallet {
 
         /// 解析机构主账户。
         fn resolve_main_account(
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Result<T::AccountId, DispatchError> {
             let raw =
-                institution_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
+                subject_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
             T::AccountId::decode(&mut &raw[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed.into())
         }
@@ -687,7 +708,7 @@ pub mod pallet {
             let main_account = Self::resolve_main_account(action.institution)?;
 
             ensure!(
-                <T as org_manage::Config>::InstitutionAsset::can_spend(
+                <T as organization_manage::Config>::InstitutionAsset::can_spend(
                     &fee_account,
                     InstitutionAssetAction::OffchainFeeSweepExecute,
                 ),
@@ -700,7 +721,7 @@ pub mod pallet {
             let tx_fee: BalanceOf<T> = tx_fee_u128.saturated_into();
 
             let fee_balance_u128: u128 =
-                <T as org_manage::Config>::Currency::free_balance(&fee_account)
+                <T as organization_manage::Config>::Currency::free_balance(&fee_account)
                     .saturated_into();
             let reserve_u128 = FEE_ADDRESS_MIN_RESERVE_FEN;
 
@@ -719,7 +740,7 @@ pub mod pallet {
             ensure!(amount_u128 <= cap_u128, Error::<T>::SweepAmountExceedsCap);
 
             // ── 执行划转 ──
-            <T as org_manage::Config>::Currency::transfer(
+            <T as organization_manage::Config>::Currency::transfer(
                 &fee_account,
                 &main_account,
                 action.amount,
@@ -727,7 +748,7 @@ pub mod pallet {
             )?;
 
             // ── 手续费：从费用账户扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as org_manage::Config>::Currency::withdraw(
+            let fee_imbalance = <T as organization_manage::Config>::Currency::withdraw(
                 &fee_account,
                 tx_fee,
                 frame_support::traits::WithdrawReasons::FEE,
@@ -736,7 +757,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::InsufficientFeeReserve)?;
             <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
-            let reserve_left = <T as org_manage::Config>::Currency::free_balance(&fee_account);
+            let reserve_left = <T as organization_manage::Config>::Currency::free_balance(&fee_account);
 
             Self::deposit_event(Event::SweepToMainExecuted {
                 proposal_id,
@@ -766,7 +787,7 @@ pub mod pallet {
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
 
             ensure!(
-                <T as org_manage::Config>::InstitutionAsset::can_spend(
+                <T as organization_manage::Config>::InstitutionAsset::can_spend(
                     &safety_fund_account,
                     InstitutionAssetAction::NrcSafetyFundTransfer,
                 ),
@@ -783,15 +804,15 @@ pub mod pallet {
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 余额检查：amount + fee + ED ──
-            let free = <T as org_manage::Config>::Currency::free_balance(&safety_fund_account);
-            let ed = <T as org_manage::Config>::Currency::minimum_balance();
+            let free = <T as organization_manage::Config>::Currency::free_balance(&safety_fund_account);
+            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::SafetyFundInsufficientBalance)?;
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             // ── 执行转账 ──
-            <T as org_manage::Config>::Currency::transfer(
+            <T as organization_manage::Config>::Currency::transfer(
                 &safety_fund_account,
                 &action.beneficiary,
                 action.amount,
@@ -800,7 +821,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::SafetyFundInsufficientBalance)?;
 
             // ── 手续费：从安全基金扣取，通过 FeeRouter 按 80/10/10 分账 ──
-            let fee_imbalance = <T as org_manage::Config>::Currency::withdraw(
+            let fee_imbalance = <T as organization_manage::Config>::Currency::withdraw(
                 &safety_fund_account,
                 fee,
                 frame_support::traits::WithdrawReasons::FEE,
@@ -843,7 +864,7 @@ pub mod pallet {
             .map_err(|_| Error::<T>::ProposalActionNotFound)?;
             let (_, institution_account) = Self::resolve_institution_account(action.institution)?;
             ensure!(
-                <T as org_manage::Config>::InstitutionAsset::can_spend(
+                <T as organization_manage::Config>::InstitutionAsset::can_spend(
                     &institution_account,
                     InstitutionAssetAction::DuoqianTransferExecute,
                 ),
@@ -860,8 +881,8 @@ pub mod pallet {
                 .ok_or(Error::<T>::InsufficientBalance)?;
 
             // ── 余额检查：需要 total + ED ──
-            let free = <T as org_manage::Config>::Currency::free_balance(&institution_account);
-            let ed = <T as org_manage::Config>::Currency::minimum_balance();
+            let free = <T as organization_manage::Config>::Currency::free_balance(&institution_account);
+            let ed = <T as organization_manage::Config>::Currency::minimum_balance();
             let required = total
                 .checked_add(&ed)
                 .ok_or(Error::<T>::InsufficientBalance)?;
@@ -870,7 +891,7 @@ pub mod pallet {
             // ── 原子执行：手续费扣取 + 转账，任一失败整体回滚 ──
             let exec_result = frame_support::storage::with_transaction(|| {
                 // 先扣手续费
-                let fee_imbalance = match <T as org_manage::Config>::Currency::withdraw(
+                let fee_imbalance = match <T as organization_manage::Config>::Currency::withdraw(
                     &institution_account,
                     fee,
                     frame_support::traits::WithdrawReasons::FEE,
@@ -886,7 +907,7 @@ pub mod pallet {
                 <T as pallet::Config>::FeeRouter::on_unbalanced(fee_imbalance);
 
                 // 再转账
-                match <T as org_manage::Config>::Currency::transfer(
+                match <T as organization_manage::Config>::Currency::transfer(
                     &institution_account,
                     &action.beneficiary,
                     action.amount,
@@ -1037,13 +1058,16 @@ mod tests {
         pub type InternalVote = internal_vote;
 
         #[runtime::pallet_index(3)]
-        pub type DuoqianManage = org_manage;
+        pub type OrganizationManage = organization_manage;
 
         #[runtime::pallet_index(4)]
         pub type DuoqianTransfer = super;
 
         #[runtime::pallet_index(5)]
         pub type AdminsChange = admins_change;
+
+        #[runtime::pallet_index(6)]
+        pub type PersonalManage = personal_manage;
     }
 
     #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
@@ -1072,14 +1096,14 @@ mod tests {
     }
 
     pub struct TestAddressValidator;
-    impl org_manage::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
+    impl organization_manage::DuoqianAddressValidator<AccountId32> for TestAddressValidator {
         fn is_valid(address: &AccountId32) -> bool {
             address != &AccountId32::new([0u8; 32])
         }
     }
 
     pub struct TestReservedAddressChecker;
-    impl org_manage::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
+    impl organization_manage::DuoqianReservedAddressChecker<AccountId32> for TestReservedAddressChecker {
         fn is_reserved(address: &AccountId32) -> bool {
             *address == AccountId32::new([0xAA; 32])
         }
@@ -1087,18 +1111,18 @@ mod tests {
 
     pub struct TestSfidInstitutionVerifier;
     impl
-        org_manage::SfidInstitutionVerifier<
-            org_manage::pallet::AccountNameOf<Test>,
-            org_manage::pallet::RegisterNonceOf<Test>,
-            org_manage::pallet::RegisterSignatureOf<Test>,
+        organization_manage::SfidInstitutionVerifier<
+            organization_manage::pallet::AccountNameOf<Test>,
+            organization_manage::pallet::RegisterNonceOf<Test>,
+            organization_manage::pallet::RegisterSignatureOf<Test>,
         > for TestSfidInstitutionVerifier
     {
         fn verify_institution_registration(
             _sfid_id: &[u8],
-            institution_name: &org_manage::pallet::AccountNameOf<Test>,
+            institution_name: &organization_manage::pallet::AccountNameOf<Test>,
             account_names: &[alloc::vec::Vec<u8>],
-            nonce: &org_manage::pallet::RegisterNonceOf<Test>,
-            signature: &org_manage::pallet::RegisterSignatureOf<Test>,
+            nonce: &organization_manage::pallet::RegisterNonceOf<Test>,
+            signature: &organization_manage::pallet::RegisterSignatureOf<Test>,
             province: &[u8],
             signer_admin_pubkey: &[u8; 32],
         ) -> bool {
@@ -1163,23 +1187,23 @@ mod tests {
     // 若某 (org, institution) 在 thread_local 有注入,优先用;否则 fallback 到原硬编码逻辑。
     thread_local! {
         static EXTRA_ADMINS: core::cell::RefCell<
-            alloc::collections::BTreeMap<(u8, InstitutionPalletId), alloc::vec::Vec<AccountId32>>,
+            alloc::collections::BTreeMap<(u8, SubjectId), alloc::vec::Vec<AccountId32>>,
         > = core::cell::RefCell::new(alloc::collections::BTreeMap::new());
     }
 
-    fn set_extra_admins(org: u8, institution: InstitutionPalletId, admins: Vec<AccountId32>) {
+    fn set_extra_admins(org: u8, institution: SubjectId, admins: Vec<AccountId32>) {
         EXTRA_ADMINS.with(|m| {
             m.borrow_mut().insert((org, institution), admins);
         });
     }
 
-    fn get_extra_admins(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
+    fn get_extra_admins(org: u8, institution: SubjectId) -> Option<Vec<AccountId32>> {
         EXTRA_ADMINS.with(|m| m.borrow().get(&(org, institution)).cloned())
     }
 
     pub struct TestInternalAdminProvider;
     impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-        fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
             // 优先:测试注入的 sr25519 派生 admin
             if let Some(admins) = get_extra_admins(org, institution) {
                 return admins.iter().any(|a| a == who);
@@ -1194,19 +1218,19 @@ mod tests {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 ORG_REN => {
-                    let Ok(account) = AccountId32::decode(&mut &institution[..32]) else {
+                    let Ok(account) = AccountId32::decode(&mut &institution[1..33]) else {
                         return false;
                     };
-                    if let Some(duoqian) = org_manage::DuoqianAccounts::<Test>::get(&account) {
+                    if let Some(duoqian) = personal_manage::PersonalDuoqians::<Test>::get(&account) {
                         duoqian.duoqian_admins.iter().any(|admin| admin == who)
                     } else {
                         false
@@ -1216,14 +1240,14 @@ mod tests {
             }
         }
 
-        fn get_admin_list(org: u8, institution: InstitutionPalletId) -> Option<Vec<AccountId32>> {
+        fn get_admin_list(org: u8, institution: SubjectId) -> Option<Vec<AccountId32>> {
             if let Some(admins) = get_extra_admins(org, institution) {
                 return Some(admins);
             }
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| {
                         n.duoqian_admins
                             .iter()
@@ -1233,7 +1257,7 @@ mod tests {
                     }),
                 ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| {
                         n.duoqian_admins
                             .iter()
@@ -1242,8 +1266,8 @@ mod tests {
                             .collect()
                     }),
                 ORG_REN => {
-                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-                    let duoqian = org_manage::DuoqianAccounts::<Test>::get(&account)?;
+                    let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
+                    let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
                     Some(duoqian.duoqian_admins.into_inner())
                 }
                 _ => None,
@@ -1253,19 +1277,19 @@ mod tests {
 
     pub struct TestInternalAdminCountProvider;
     impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
-        fn admin_count(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+        fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
                 ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
                 ORG_REN => {
-                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-                    let duoqian = org_manage::DuoqianAccounts::<Test>::get(&account)?;
+                    let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
+                    let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
                     u32::try_from(duoqian.duoqian_admins.len()).ok()
                 }
                 _ => None,
@@ -1275,24 +1299,24 @@ mod tests {
 
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-        fn is_known_subject(org: u8, institution: InstitutionPalletId) -> bool {
+        fn is_known_subject(org: u8, institution: SubjectId) -> bool {
             match org {
-                ORG_REN => AccountId32::decode(&mut &institution[..32])
+                ORG_REN => AccountId32::decode(&mut &institution[1..33])
                     .ok()
-                    .and_then(|account| org_manage::DuoqianAccounts::<Test>::get(&account))
+                    .and_then(|account| personal_manage::PersonalDuoqians::<Test>::get(&account))
                     .is_some(),
                 _ => false,
             }
         }
 
-        fn pass_threshold(org: u8, institution: InstitutionPalletId) -> Option<u32> {
+        fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
             match org {
                 ORG_NRC | ORG_PRC | ORG_PRB => {
                     votingengine::types::fixed_governance_pass_threshold(org)
                 }
                 ORG_REN => {
-                    let account = AccountId32::decode(&mut &institution[..32]).ok()?;
-                    let duoqian = org_manage::DuoqianAccounts::<Test>::get(&account)?;
+                    let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
+                    let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
                     Some(duoqian.threshold)
                 }
                 _ => None,
@@ -1306,7 +1330,7 @@ mod tests {
     }
 
     pub struct TestProtectedSourceChecker;
-    impl org_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
+    impl organization_manage::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
         fn is_protected(address: &AccountId32) -> bool {
             PROTECTED_ADDRESS.with(|pa| pa.borrow().as_ref() == Some(address))
         }
@@ -1370,7 +1394,7 @@ mod tests {
         type WeightInfo = ();
     }
 
-    impl org_manage::pallet::Config for Test {
+    impl organization_manage::pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type Currency = Balances;
         type InternalVoteEngine = internal_vote::Pallet<Test>;
@@ -1381,7 +1405,7 @@ mod tests {
         type SfidInstitutionVerifier = TestSfidInstitutionVerifier;
         type FeeRouter = ();
         type MaxAdmins = ConstU32<10>;
-        type MaxSfidIdLength = ConstU32<96>;
+        type MaxSfidIdLength = ConstU32<47>;
         type MaxAccountNameLength = ConstU32<128>;
         type MaxRegisterNonceLength = ConstU32<64>;
         type MaxRegisterSignatureLength = ConstU32<64>;
@@ -1399,10 +1423,31 @@ mod tests {
         type WeightInfo = ();
     }
 
+    impl personal_manage::pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Currency = Balances;
+        type InternalVoteEngine = internal_vote::Pallet<Test>;
+        type AddressValidator = TestAddressValidator;
+        type ReservedAddressChecker = TestReservedAddressChecker;
+        type ProtectedSourceChecker = TestProtectedSourceChecker;
+        type InstitutionAsset = TestInstitutionAsset;
+        type FeeRouter = ();
+        type MaxAdmins = ConstU32<10>;
+        type MaxAccountNameLength = ConstU32<128>;
+        type MinCreateAmount = ConstU128<111>;
+        type MinCloseBalance = ConstU128<111>;
+        type WeightInfo = ();
+    }
+
     impl pallet::Config for Test {
         type RuntimeEvent = RuntimeEvent;
         type MaxRemarkLen = ConstU32<256>;
         type FeeRouter = ();
+        // 中文注释:测试 mock 把所有"已注册"多签都灌进 personal-manage::PersonalDuoqians 表,
+        // 因此 PersonalQuery 走 personal_manage::Pallet<Test> 命中;
+        // InstitutionQuery 走单元桩 ()(测试 fixture 不构造 SFID 注册路径)。
+        type PersonalQuery = personal_manage::Pallet<Test>;
+        type InstitutionQuery = ();
         type WeightInfo = ();
     }
 
@@ -1412,7 +1457,7 @@ mod tests {
     /// 公钥的 32 字节直接作为 AccountId32,满足 `pubkey_from_accountid` 的铁律。
     fn derive_admin_pair(
         org: u8,
-        institution: &InstitutionPalletId,
+        institution: &SubjectId,
         index: u8,
     ) -> (AccountId32, sr25519::Pair) {
         let mut seed_bytes = [0u8; 32];
@@ -1440,21 +1485,21 @@ mod tests {
     // 统一状态机整改:业务模块不再持有独立 vote/finalize call,投票统一走
     // `InternalVote::cast`;`cast_transfer_votes_n` 直接用 admin 账户逐个投票。
 
-    fn nrc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
+    fn nrc_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
     }
 
-    fn prc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("prc id should be valid")
+    fn prc_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("prc id should be valid")
     }
 
-    fn prb_pallet_id() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(CHINA_CH[0].shenfen_id).expect("prb id should be valid")
+    fn prb_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CH[0].shenfen_id).expect("prb id should be valid")
     }
 
-    fn institution_account(institution: InstitutionPalletId) -> AccountId32 {
+    fn institution_account(institution: SubjectId) -> AccountId32 {
         let raw =
-            institution_pallet_address(institution).expect("institution pallet address must exist");
+            subject_pallet_address(institution).expect("institution pallet address must exist");
         AccountId32::new(raw)
     }
 
@@ -1462,8 +1507,8 @@ mod tests {
         AccountId32::new([0x55; 32])
     }
 
-    fn registered_duoqian_institution() -> InstitutionPalletId {
-        org_manage::account_to_institution_id(&registered_duoqian_account())
+    fn registered_duoqian_institution() -> SubjectId {
+        primitives::derive::subject_id_from_account(&registered_duoqian_account())
     }
 
     fn registered_duoqian_admin(index: usize) -> AccountId32 {
@@ -1495,7 +1540,7 @@ mod tests {
     /// 返回 (org, institution) 对应的前 `count` 个 sr25519 admin keypair。
     fn admin_pairs(
         org: u8,
-        institution: InstitutionPalletId,
+        institution: SubjectId,
         count: u8,
     ) -> Vec<(AccountId32, sr25519::Pair)> {
         (0..count)
@@ -1551,7 +1596,7 @@ mod tests {
         n: usize,
         pid: u64,
         _org: u8,
-        _institution: InstitutionPalletId,
+        _institution: SubjectId,
         _from: AccountId32,
         _to: AccountId32,
         _amount: Balance,
@@ -1609,8 +1654,9 @@ mod tests {
             set_extra_admins(ORG_NRC, nrc, nrc_accts);
             set_extra_admins(ORG_PRC, prc, prc_accts);
             set_extra_admins(ORG_PRB, prb, prb_accts);
-            // ORG_REN 的 admin / threshold 直接从 DuoqianAccounts 读,测试需要时
-            // 显式写入 DuoqianAccounts(见 `registered_duoqian_admin` 路径)。
+            // ORG_REN 的 admin / threshold 直接从 personal_manage::PersonalDuoqians 读
+            // (B 阶段拆分后 mirror 表删除,改走 PersonalMultisigQuery trait)。
+            // 测试需要时显式写入 PersonalDuoqians(见 `registered_duoqian_admin` 路径)。
             let _ = dq;
         });
         ext
@@ -1739,15 +1785,15 @@ mod tests {
             ])
             .expect("admins should fit");
 
-            org_manage::DuoqianAccounts::<Test>::insert(
+            personal_manage::PersonalDuoqians::<Test>::insert(
                 &inst_account,
-                org_manage::DuoqianAccount {
+                personal_manage::DuoqianAccount {
                     admin_count: 3,
                     threshold: 2,
                     duoqian_admins: admins,
                     creator: registered_duoqian_admin(0),
                     created_at: 1,
-                    status: org_manage::DuoqianStatus::Active,
+                    status: personal_manage::DuoqianStatus::Active,
                 },
             );
             let _ = Balances::deposit_creating(&inst_account, 10_000);

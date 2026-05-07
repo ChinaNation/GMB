@@ -15,7 +15,7 @@ const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
 const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
 /// 多签管理提案 TAG — 不属于治理提案，在治理列表中过滤掉。
-const TAG_DUOQIAN_MANAGE: &[u8] = b"dq-mgmt";
+const TAG_ORGANIZATION_MANAGE: &[u8] = b"org-mgmt";
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
@@ -256,7 +256,7 @@ pub fn fetch_next_proposal_id() -> Result<u64, String> {
 }
 
 /// 检查提案是否为多签管理提案（创建/关闭多签账户），这类提案不在治理列表中显示。
-fn is_duoqian_manage_proposal(proposal_id: u64) -> bool {
+fn is_organization_manage_proposal(proposal_id: u64) -> bool {
     let Ok(Some(raw)) = fetch_proposal_data_raw(proposal_id) else {
         return false;
     };
@@ -268,7 +268,7 @@ fn is_duoqian_manage_proposal(proposal_id: u64) -> bool {
         return false;
     };
     let offset = len_bytes;
-    let tag = TAG_DUOQIAN_MANAGE;
+    let tag = TAG_ORGANIZATION_MANAGE;
     offset + tag.len() <= raw.len()
         && (vec_len as usize) >= tag.len()
         && raw[offset..offset + tag.len()] == *tag
@@ -289,7 +289,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
         match fetch_proposal_meta(id) {
             Ok(Some(meta)) => {
                 // 中文注释:多签管理提案(创建/关闭多签账户)不在治理列表中显示。
-                if is_duoqian_manage_proposal(id) {
+                if is_organization_manage_proposal(id) {
                     if id == 0 {
                         break;
                     }
@@ -465,7 +465,7 @@ pub fn fetch_institution_proposal_page(
     let next_idx = from_idx + take_ids.len();
 
     for id in take_ids {
-        if is_duoqian_manage_proposal(id) {
+        if is_organization_manage_proposal(id) {
             // 防御性过滤:多签管理提案不该出现在 ProposalsByInstitution(它们的
             // institution 是 ORG_REN 多签账户,不是治理机构)。如果出现就跳过。
             continue;
@@ -518,7 +518,7 @@ pub fn fetch_institution_proposal_page(
 
 /// 查询机构的活跃提案 ID 列表。
 pub fn fetch_active_proposal_ids(shenfen_id: &str) -> Result<Vec<u64>, String> {
-    let institution_id = storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let institution_id = storage_keys::subject_id_from_shenfen_id(shenfen_id);
     let key = storage_keys::map_key(
         "VotingEngine",
         "ActiveProposalsByInstitution",
@@ -1064,7 +1064,7 @@ pub fn fetch_proposals_by_org(org: u8) -> Result<Vec<u64>, String> {
 
 /// 反向索引:`ProposalsByInstitution[institution]` → 本机构所有 proposal_id。
 pub fn fetch_proposals_by_institution(shenfen_id: &str) -> Result<Vec<u64>, String> {
-    let inst = storage_keys::shenfen_id_to_fixed48(shenfen_id);
+    let inst = storage_keys::subject_id_from_shenfen_id(shenfen_id);
     fetch_proposal_ids_by_index("ProposalsByInstitution", &inst)
 }
 
@@ -1310,7 +1310,7 @@ pub fn fetch_user_vote_status(
     let joint_vote = if meta.kind == 1 && shenfen_id.is_some() {
         // shenfen_id.is_some() 已在上方 if 条件中守卫，此处 expect 不会 panic。
         let institution_id =
-            storage_keys::shenfen_id_to_fixed48(shenfen_id.expect("guarded by is_some()"));
+            storage_keys::subject_id_from_shenfen_id(shenfen_id.expect("guarded by is_some()"));
         let mut composite_key = Vec::with_capacity(48 + 32);
         composite_key.extend_from_slice(&institution_id);
         composite_key.extend_from_slice(&pubkey_bytes);

@@ -9,7 +9,7 @@
 //! **解耦设计**:bank_check 不直接依赖 `duoqian-manage`,而是通过
 //! `SfidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
 //! 给 `duoqian-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
-//! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `org_manage::Config`。
+//! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `organization_manage::Config`。
 
 use frame_support::ensure;
 use sp_std::vec::Vec;
@@ -43,7 +43,7 @@ pub trait SfidAccountQuery<AccountId> {
     fn find_address(sfid_id: &[u8], account_name: &[u8]) -> Option<AccountId>;
     /// 该地址对应的多签账户是否处于 Active 状态。
     fn is_active(addr: &AccountId) -> bool;
-    /// `who` 是否是 `bank` 对应 DuoqianAccount 的多签管理员之一。
+    /// `who` 是否是 `bank` 对应机构多签的管理员之一(经 InstitutionMultisigQuery 反查)。
     /// Step 2 新增:清算行费率提案 / 关闭等治理动作需校验管理员身份。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool;
     /// Step 2(2026-05-02)调整:清算行资格白名单判定。
@@ -107,7 +107,7 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// 1. 在链上 `AddressRegisteredSfid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
 /// 3. A3 ∈ {SFR, FFR}(字节级前缀判定)
-/// 4. 对应 `DuoqianAccount.status == Active`
+/// 4. 对应 `InstitutionAccounts.status == Active`(B 阶段已删 DuoqianAccounts mirror)
 /// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
 ///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
 /// 6. **节点已声明**:`sfid_id ∈ ClearingBankNodes`,确保该机构已加入清算网络

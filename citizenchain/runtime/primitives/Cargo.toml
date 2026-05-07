@@ -15,6 +15,8 @@ hex-literal = "0.4"
 # Substrate primitives —— 你现在就用到了
  sp-core = { workspace = true }
 sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+frame-support = { workspace = true }
 
 [features]
 default = ["std"]
@@ -24,4 +26,6 @@ std = [
     "scale-info/std",
     "sp-core/std",
     "sp-runtime/std",
+    "sp-std/std",
+    "frame-support/std",
 ]

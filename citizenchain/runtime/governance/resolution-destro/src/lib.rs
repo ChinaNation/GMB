@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use primitives::derive::subject_id_from_shenfen_id;
 use alloc::vec::Vec;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency};
@@ -9,13 +10,13 @@ use frame_system::pallet_prelude::*;
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, Zero};
 
-use primitives::china::china_cb::{shenfen_id_to_fixed48 as reserve_pallet_id_to_bytes, CHINA_CB};
+use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::{
-    shenfen_id_to_fixed48 as shengbank_pallet_id_to_bytes, CHINA_CH,
+    CHINA_CH,
 };
 use votingengine::{
     types::{ORG_NRC, ORG_PRB, ORG_PRC},
-    InstitutionPalletId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
+    SubjectId, InternalVoteResultCallback, ProposalExecutionOutcome, STATUS_PASSED,
 };
 
 pub use pallet::*;
@@ -32,26 +33,26 @@ type BalanceOf<T> =
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct DestroyAction<Balance> {
     /// 目标机构（机构标识 pallet_id）
-    pub institution: InstitutionPalletId,
+    pub institution: SubjectId,
     /// 销毁数量
     pub amount: Balance,
 }
 
-fn nrc_pallet_id_bytes() -> Option<InstitutionPalletId> {
+fn nrc_subject_id() -> Option<SubjectId> {
     CHINA_CB
         .first()
-        .and_then(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .and_then(|n| subject_id_from_shenfen_id(n.shenfen_id))
 }
 
-fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
-    if Some(institution) == nrc_pallet_id_bytes() {
+fn subject_org(institution: SubjectId) -> Option<u8> {
+    if Some(institution) == nrc_subject_id() {
         return Some(ORG_NRC);
     }
 
     if CHINA_CB
         .iter()
         .skip(1)
-        .filter_map(|n| reserve_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRC);
@@ -59,7 +60,7 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
 
     if CHINA_CH
         .iter()
-        .filter_map(|n| shengbank_pallet_id_to_bytes(n.shenfen_id))
+        .filter_map(|n| subject_id_from_shenfen_id(n.shenfen_id))
         .any(|pid| pid == institution)
     {
         return Some(ORG_PRB);
@@ -68,17 +69,17 @@ fn institution_org(institution: InstitutionPalletId) -> Option<u8> {
     None
 }
 
-fn institution_pallet_address(institution: InstitutionPalletId) -> Option<[u8; 32]> {
+fn subject_pallet_address(institution: SubjectId) -> Option<[u8; 32]> {
     if let Some(node) = CHINA_CB
         .iter()
-        .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
     {
         return Some(node.main_address);
     }
 
     CHINA_CH
         .iter()
-        .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+        .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
         .map(|n| n.main_address)
 }
 
@@ -115,7 +116,7 @@ pub mod pallet {
         DestroyProposed {
             proposal_id: u64,
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             proposer: T::AccountId,
             amount: BalanceOf<T>,
         },
@@ -130,7 +131,7 @@ pub mod pallet {
         /// 销毁执行完成
         DestroyExecuted {
             proposal_id: u64,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             amount: BalanceOf<T>,
         },
     }
@@ -155,13 +156,13 @@ pub mod pallet {
         pub fn propose_destroy(
             origin: OriginFor<T>,
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
             ensure!(amount > Zero::zero(), Error::<T>::ZeroAmount);
-            let actual_org = institution_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let actual_org = subject_org(institution).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(actual_org == org, Error::<T>::InstitutionOrgMismatch);
             // 活跃提案数由 votingengine 在 create_internal_proposal 中统一检查
             ensure!(
@@ -200,7 +201,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         fn is_internal_admin(
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
             who: &T::AccountId,
         ) -> bool {
             <T as votingengine::Config>::InternalAdminProvider::is_internal_admin(
@@ -222,7 +223,7 @@ pub mod pallet {
                 Error::<T>::ProposalNotPassed
             );
 
-            let raw_account = institution_pallet_address(action.institution)
+            let raw_account = subject_pallet_address(action.institution)
                 .ok_or(Error::<T>::InvalidInstitution)?;
             let institution_account = T::AccountId::decode(&mut &raw_account[..])
                 .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
@@ -404,7 +405,7 @@ mod tests {
 
     pub struct TestInternalAdminProvider;
     impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
-        fn is_internal_admin(org: u8, institution: InstitutionPalletId, who: &AccountId32) -> bool {
+        fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
             let who_bytes = who.encode();
             if who_bytes.len() != 32 {
                 return false;
@@ -414,12 +415,12 @@ mod tests {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                     .unwrap_or(false),
                 _ => false,
@@ -428,12 +429,12 @@ mod tests {
 
         fn get_admin_list(
             org: u8,
-            institution: InstitutionPalletId,
+            institution: SubjectId,
         ) -> Option<sp_std::vec::Vec<AccountId32>> {
             match org {
                 ORG_NRC | ORG_PRC => CHINA_CB
                     .iter()
-                    .find(|n| reserve_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| {
                         n.duoqian_admins
                             .iter()
@@ -443,7 +444,7 @@ mod tests {
                     }),
                 ORG_PRB => CHINA_CH
                     .iter()
-                    .find(|n| shengbank_pallet_id_to_bytes(n.shenfen_id) == Some(institution))
+                    .find(|n| subject_id_from_shenfen_id(n.shenfen_id) == Some(institution))
                     .map(|n| {
                         n.duoqian_admins
                             .iter()
@@ -459,7 +460,7 @@ mod tests {
     pub struct TestTimeProvider;
     pub struct TestInternalThresholdProvider;
     impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-        fn pass_threshold(org: u8, _institution: InstitutionPalletId) -> Option<u32> {
+        fn pass_threshold(org: u8, _institution: SubjectId) -> Option<u32> {
             votingengine::types::fixed_governance_pass_threshold(org)
         }
     }
@@ -530,21 +531,21 @@ mod tests {
         AccountId32::new(CHINA_CH[0].duoqian_admins[index])
     }
 
-    fn nrc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
+    fn nrc_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CB[0].shenfen_id).expect("nrc id should be valid")
     }
 
-    fn prc_pallet_id() -> InstitutionPalletId {
-        reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("prc id should be valid")
+    fn prc_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("prc id should be valid")
     }
 
-    fn prb_pallet_id() -> InstitutionPalletId {
-        shengbank_pallet_id_to_bytes(CHINA_CH[0].shenfen_id).expect("prb id should be valid")
+    fn prb_pallet_id() -> SubjectId {
+        subject_id_from_shenfen_id(CHINA_CH[0].shenfen_id).expect("prb id should be valid")
     }
 
-    fn institution_account(institution: InstitutionPalletId) -> AccountId32 {
+    fn institution_account(institution: SubjectId) -> AccountId32 {
         let raw =
-            institution_pallet_address(institution).expect("institution pallet address must exist");
+            subject_pallet_address(institution).expect("institution pallet address must exist");
         AccountId32::new(raw)
     }
 
@@ -924,7 +925,7 @@ mod tests {
     #[test]
     fn institution_org_returns_none_for_invalid_institution() {
         new_test_ext().execute_with(|| {
-            assert_eq!(institution_org([0u8; 48]), None);
+            assert_eq!(subject_org([0u8; 48]), None);
         });
     }
 }

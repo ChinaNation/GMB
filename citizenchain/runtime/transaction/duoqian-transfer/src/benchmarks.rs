@@ -16,24 +16,24 @@ use frame_system::RawOrigin;
 use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
-    institution_pallet_address, reserve_pallet_id_to_bytes, BalanceOf, Call, Config,
-    InstitutionPalletId, Pallet, CHINA_CB, ORG_PRC,
+    subject_pallet_address, subject_id_from_shenfen_id, BalanceOf, Call, Config,
+    SubjectId, Pallet, CHINA_CB, ORG_PRC,
 };
 
 fn decode_account<T: Config>(raw: [u8; 32]) -> T::AccountId {
     T::AccountId::decode(&mut &raw[..]).expect("benchmark account must decode")
 }
 
-fn prc_institution() -> InstitutionPalletId {
-    reserve_pallet_id_to_bytes(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
+fn prc_institution() -> SubjectId {
+    subject_id_from_shenfen_id(CHINA_CB[1].shenfen_id).expect("PRC institution should be valid")
 }
 
 fn prc_admin<T: Config>(index: usize) -> T::AccountId {
     decode_account::<T>(CHINA_CB[1].duoqian_admins[index])
 }
 
-fn institution_account<T: Config>(institution: InstitutionPalletId) -> T::AccountId {
-    let raw = institution_pallet_address(institution).expect("institution account should exist");
+fn institution_account<T: Config>(institution: SubjectId) -> T::AccountId {
+    let raw = subject_pallet_address(institution).expect("institution account should exist");
     decode_account::<T>(raw)
 }
 

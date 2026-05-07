@@ -84,7 +84,7 @@ pub fn run_desktop() {
             home::transaction::submit_transfer,
             home::transaction::submit_miner_transfer,
             // ─── 清算行 offchain tab(ADR-007 Step 2 阶段 B) ───
-            crate::offchain::duoqian_manage::commands::search_eligible_clearing_banks,
+            crate::offchain::organization_manage::commands::search_eligible_clearing_banks,
             crate::offchain::offchain_transaction::commands::query_clearing_bank_node_info,
             crate::offchain::offchain_transaction::commands::query_local_peer_id,
             crate::offchain::offchain_transaction::commands::test_clearing_bank_endpoint_connectivity,
@@ -98,11 +98,11 @@ pub fn run_desktop() {
             crate::offchain::settlement::commands::verify_and_decrypt_admin,
             crate::offchain::settlement::commands::list_decrypted_admins,
             crate::offchain::settlement::commands::lock_decrypted_admin,
-            crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_detail,
-            crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_proposals,
-            crate::offchain::duoqian_manage::commands::fetch_clearing_bank_institution_registration_info,
-            crate::offchain::duoqian_manage::commands::build_propose_create_institution_request,
-            crate::offchain::duoqian_manage::commands::submit_propose_create_institution
+            crate::offchain::organization_manage::commands::fetch_clearing_bank_institution_detail,
+            crate::offchain::organization_manage::commands::fetch_clearing_bank_institution_proposals,
+            crate::offchain::organization_manage::commands::fetch_clearing_bank_institution_registration_info,
+            crate::offchain::organization_manage::commands::build_propose_create_institution_request,
+            crate::offchain::organization_manage::commands::submit_propose_create_institution
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
