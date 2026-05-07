@@ -75,7 +75,6 @@ void main() {
           'pubkey': '0xaabb',
           'sig_alg': 'sr25519',
           'payload_hex': '0xccdd',
-          'spec_version': 100,
           'display': {
             'action': 'transfer',
             'summary': '转账',

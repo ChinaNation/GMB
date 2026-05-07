@@ -65,6 +65,6 @@ PR-C 合并后,`offchain_clearing_pay_page.dart` 的 SignDisplayField 仍是
 ## 关联
 
 - 主任务卡:`20260422-cold-wallet-two-color-recognition.md`
-- 方案文档:`memory/05-architecture/qr-signing-recognition.md`
-- Registry:`memory/05-architecture/qr-action-registry.md`
-- 协议:`memory/05-architecture/qr-protocol-spec.md`
+- 方案文档:`memory/01-architecture/qr/qr-signing-recognition.md`
+- Registry:`memory/01-architecture/qr/qr-action-registry.md`
+- 协议:`memory/01-architecture/qr/qr-protocol-spec.md`

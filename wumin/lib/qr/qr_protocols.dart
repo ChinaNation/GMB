@@ -1,7 +1,7 @@
 /// WUMIN_QR_V1 统一二维码协议常量。
 ///
-/// 唯一事实源:`memory/05-architecture/qr-protocol-spec.md`
-/// Golden fixtures:`memory/05-architecture/qr-protocol-fixtures/*.json`
+/// 唯一事实源:`memory/01-architecture/qr/qr-protocol-spec.md`
+/// Golden fixtures:`memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 ///
 /// 与 wuminapp/lib/qr/qr_protocols.dart 逐字节一致(两个独立 Flutter app,
 /// 无代码依赖,靠 fixture 对齐)。
@@ -19,8 +19,7 @@ enum QrKind {
   signRequest('sign_request', temporary: true),
   signResponse('sign_response', temporary: true),
   userContact('user_contact', temporary: false),
-  userTransfer('user_transfer', temporary: true),
-  userDuoqian('user_duoqian', temporary: false);
+  userTransfer('user_transfer', temporary: true);
 
   const QrKind(this.wire, {required this.temporary});
 

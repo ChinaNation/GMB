@@ -13,9 +13,9 @@
 
 ## 方案文档
 
-- `memory/05-architecture/qr-signing-recognition.md` — 两色识别方案
-- `memory/05-architecture/qr-action-registry.md` — action / fields 唯一事实源
-- `memory/05-architecture/qr-protocol-spec.md` — WUMIN_QR_V1 协议(已有)
+- `memory/01-architecture/qr/qr-signing-recognition.md` — 两色识别方案
+- `memory/01-architecture/qr/qr-action-registry.md` — action / fields 唯一事实源
+- `memory/01-architecture/qr/qr-protocol-spec.md` — WUMIN_QR_V1 协议(已有)
 
 ## 必删清单
 
@@ -87,8 +87,8 @@ make_transfer_sigs
 ## 拆分 4 个 PR
 
 ### PR-A ✅ 架构落地(2026-04-22 完成)
-- `memory/05-architecture/qr-signing-recognition.md`
-- `memory/05-architecture/qr-action-registry.md`
+- `memory/01-architecture/qr/qr-signing-recognition.md`
+- `memory/01-architecture/qr/qr-action-registry.md`
 - 本任务卡
 - **不动代码**
 

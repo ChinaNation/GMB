@@ -1,7 +1,7 @@
 //! WUMIN_QR_V1 统一二维码协议 envelope。
 //!
-//! 唯一事实源: `memory/05-architecture/qr-protocol-spec.md`
-//! Golden fixtures: `memory/05-architecture/qr-protocol-fixtures/*.json`
+//! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
+//! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
 //! 与 wuminapp/wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS
 //! envelope 字段逐字节一致。本模块仅定义 SFID 后端需要的 kind
@@ -21,7 +21,6 @@ pub enum QrKind {
     SignResponse,
     UserContact,
     UserTransfer,
-    UserDuoqian,
 }
 
 impl QrKind {
@@ -33,12 +32,11 @@ impl QrKind {
             Self::SignResponse => "sign_response",
             Self::UserContact => "user_contact",
             Self::UserTransfer => "user_transfer",
-            Self::UserDuoqian => "user_duoqian",
         }
     }
 
     pub fn is_fixed(&self) -> bool {
-        matches!(self, Self::UserContact | Self::UserDuoqian)
+        matches!(self, Self::UserContact)
     }
 }
 

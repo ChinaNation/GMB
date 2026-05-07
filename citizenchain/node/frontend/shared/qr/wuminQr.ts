@@ -1,7 +1,7 @@
 // WUMIN_QR_V1 统一协议 TS 类型与解析器。
 //
-// 唯一事实源:memory/05-architecture/qr-protocol-spec.md
-// Golden fixtures:memory/05-architecture/qr-protocol-fixtures/*.json
+// 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
+// Golden fixtures:memory/01-architecture/qr/qr-protocol-fixtures/*.json
 //
 // 与 wuminapp/wumin 的 Dart envelope 字段逐字节一致。
 
@@ -13,8 +13,7 @@ export type QrKind =
   | 'sign_request'
   | 'sign_response'
   | 'user_contact'
-  | 'user_transfer'
-  | 'user_duoqian';
+  | 'user_transfer';
 
 export const QR_KINDS: readonly QrKind[] = [
   'login_challenge',
@@ -23,10 +22,9 @@ export const QR_KINDS: readonly QrKind[] = [
   'sign_response',
   'user_contact',
   'user_transfer',
-  'user_duoqian',
 ];
 
-export const FIXED_KINDS: readonly QrKind[] = ['user_contact', 'user_duoqian'];
+export const FIXED_KINDS: readonly QrKind[] = ['user_contact'];
 
 export function isFixedKind(kind: QrKind): boolean {
   return FIXED_KINDS.includes(kind);
@@ -50,6 +48,7 @@ export interface LoginReceiptBody {
 }
 
 export interface SignDisplayField {
+  key?: string;
   label: string;
   value: string;
 }
@@ -65,7 +64,6 @@ export interface SignRequestBody {
   pubkey: string;
   sig_alg: 'sr25519';
   payload_hex: string;
-  spec_version: number;
   display: SignDisplay;
 }
 
@@ -91,12 +89,6 @@ export interface UserTransferBody {
   bank: string;
 }
 
-export interface UserDuoqianBody {
-  address: string;
-  name: string;
-  proposal_id: number;
-}
-
 export type QrBodyByKind = {
   login_challenge: LoginChallengeBody;
   login_receipt: LoginReceiptBody;
@@ -104,7 +96,6 @@ export type QrBodyByKind = {
   sign_response: SignResponseBody;
   user_contact: UserContactBody;
   user_transfer: UserTransferBody;
-  user_duoqian: UserDuoqianBody;
 };
 
 export interface QrEnvelope<K extends QrKind = QrKind> {
@@ -192,7 +183,12 @@ function parseSignDisplay(d: Record<string, unknown>): SignDisplay {
         const label = (f as Record<string, unknown>)['label'];
         const value = (f as Record<string, unknown>)['value'];
         if (typeof label === 'string' && typeof value === 'string') {
-          fields.push({ label, value });
+          const key = (f as Record<string, unknown>)['key'];
+          fields.push({
+            ...(typeof key === 'string' ? { key } : {}),
+            label,
+            value,
+          });
         }
       }
     }
@@ -214,7 +210,6 @@ function parseSignRequestBody(b: Record<string, unknown>): SignRequestBody {
     pubkey: require0xHex(b, 'pubkey'),
     sig_alg: 'sr25519',
     payload_hex: require0xHex(b, 'payload_hex'),
-    spec_version: requireInt(b, 'spec_version'),
     display: parseSignDisplay(display as Record<string, unknown>),
   };
 }
@@ -259,14 +254,6 @@ function parseUserTransferBody(b: Record<string, unknown>): UserTransferBody {
     );
   }
   return { address, name, amount, symbol, memo, bank };
-}
-
-function parseUserDuoqianBody(b: Record<string, unknown>): UserDuoqianBody {
-  return {
-    address: requireString(b, 'address'),
-    name: requireString(b, 'name'),
-    proposal_id: requireInt(b, 'proposal_id'),
-  };
 }
 
 /**
@@ -336,9 +323,6 @@ export function parseQrEnvelope(raw: string | Record<string, unknown>): QrEnvelo
       break;
     case 'user_transfer':
       body = parseUserTransferBody(b);
-      break;
-    case 'user_duoqian':
-      body = parseUserDuoqianBody(b);
       break;
   }
 

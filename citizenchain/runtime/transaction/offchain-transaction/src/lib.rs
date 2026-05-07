@@ -104,7 +104,7 @@ pub mod pallet {
         /// 资金白名单 / 制度保留地址保护,由 runtime 接入 `institution-asset`。
         type InstitutionAsset: institution_asset::InstitutionAsset<Self::AccountId>;
 
-        /// SFID 机构登记表查询抽象。runtime 层应委托给 `duoqian-manage`;
+        /// SFID 机构登记表查询抽象。runtime 层应委托给 `organization-manage`;
         /// 测试可用 `()` 的默认空实现(一律返回未登记)。
         type SfidAccountQuery: crate::bank_check::SfidAccountQuery<Self::AccountId>;
 
@@ -351,7 +351,7 @@ pub mod pallet {
         UserBankMismatch,
 
         // ========== L3 账户相关 ==========
-        /// 目标地址未在链上 `duoqian-manage` 注册为清算行机构。
+        /// 目标地址未在链上 `organization-manage` 注册为清算行机构。
         NotRegisteredClearingBank,
         /// 目标地址的 `name` 不是 "主账户"(只能绑定主账户,不能绑费用账户)。
         NotMainAccount,

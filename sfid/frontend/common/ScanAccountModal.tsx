@@ -40,7 +40,7 @@ export function ScanAccountModal(props: {
       (raw) => {
         try {
           const env = parseQrEnvelope(raw);
-          if (env.kind !== 'user_contact' && env.kind !== 'user_transfer' && env.kind !== 'user_duoqian') {
+          if (env.kind !== 'user_contact' && env.kind !== 'user_transfer') {
             setError('不是用户码二维码');
             return;
           }

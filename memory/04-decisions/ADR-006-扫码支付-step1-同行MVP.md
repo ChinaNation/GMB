@@ -51,7 +51,7 @@
   - 付款方 L3 必须已绑定清算行
   - 收款方 L3 必须已绑定清算行
   - 收款方清算行 DuoqianAccount Active
-- 二维码遵循 `memory/05-architecture/qr-protocol-spec.md` 的 `WUMIN_QR_V1 + user_transfer`,`body.bank` 填**收款方绑定的清算行主账户 SS58**
+- 二维码遵循 `memory/01-architecture/qr/qr-protocol-spec.md` 的 `WUMIN_QR_V1 + user_transfer`,`body.bank` 填**收款方绑定的清算行主账户 SS58**
 - 每笔 L3 私钥 sr25519 签名 `PaymentIntent`,防重放通过 `L3PaymentNonce` 单调 + `ProcessedOffchainTx`
 - 费率 Step 1 **全局硬编码 5 bp(0.05%)**,最低 1 分;Step 2 改为 `L2FeeRateBp` Storage + 延迟生效
 - 手续费**全部归收款方清算行费用账户**,无省储行分成

@@ -260,7 +260,7 @@ pub mod pallet {
 
     /// 中文注释:按 (省, admin 公钥) 二维存储的省级签名公钥。
     /// ADR-008:每省 3 把独立签名密钥(Main / Backup1 / Backup2 各一把),互不共享。
-    /// runtime verifier(`duoqian-manage` 等)按 (province, signer_admin_pubkey) 二元组查表验签。
+    /// runtime verifier(`organization-manage` 等)按 (province, signer_admin_pubkey) 二元组查表验签。
     #[pallet::storage]
     #[pallet::getter(fn sheng_signing_pubkey_storage)]
     pub type ShengSigningPubkey<T: Config> = StorageDoubleMap<
@@ -697,7 +697,7 @@ pub mod pallet {
         }
 
         /// 中文注释:按 (province, admin_pubkey) 二元组读省级签名公钥。
-        /// runtime verifier(`duoqian-manage` 等)按本入口验签。
+        /// runtime verifier(`organization-manage` 等)按本入口验签。
         pub fn sheng_signing_pubkey_for_admin(
             province: &[u8],
             admin_pubkey: &[u8; 32],

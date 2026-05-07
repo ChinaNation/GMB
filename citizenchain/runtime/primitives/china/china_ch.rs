@@ -2,7 +2,6 @@
 //! 费用账户地址（DUOQIAN_DOMAIN + OP_FEE + SS58前缀 + sfid_number → BLAKE2-256）。
 //! 质押账户地址（DUOQIAN_DOMAIN + OP_STAKE + SS58前缀 + citizens_number_u64_le → BLAKE2-256）。
 
-// (D 阶段自动 import 工具误加,本文件无需此 import - sfid_number_to_fixed48 已删,内置主体的 institution_id 由调用方走 primitives::derive 派生)
 use hex_literal::hex;
 
 /// 单个省储行常量结构。
@@ -17,7 +16,6 @@ pub struct ChinaCh {
     pub duoqian_admins: &'static [[u8; 32]],
 }
 
-// D 阶段(SubjectKind 协议统一,2026-05-06)起,本地 sfid_number_to_fixed48 已删除。
 // 内置主体派生统一走 `primitives::derive::subject_id_from_sfid_number`,
 // kind tag 0x01 + payload 47B 右填零。
 

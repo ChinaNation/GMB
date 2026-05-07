@@ -61,6 +61,7 @@
 | `memory/` | AI 系统永久记忆 | memory | 仓库文档、规则、任务卡和 AI 系统主目录 |
 | `memory/00-vision/` | 愿景 | vision | 项目目标、信任边界和长期方向 |
 | `memory/01-architecture/` | 架构 | architecture | 仓库级和产品级架构文档 |
+| `memory/01-architecture/qr/` | QR 扫码协议 | qr-protocol | WUMIN_QR_V1 协议、签名识别、action registry 和 golden fixture 当前详细真源 |
 | `memory/03-security/` | 安全 | security | 安全规则、边界和风险要求 |
 | `memory/04-decisions/` | 架构决策 | decisions | ADR 和重要设计决策 |
 | `memory/05-modules/` | 模块文档 | modules | 各产品、各模块技术文档 |

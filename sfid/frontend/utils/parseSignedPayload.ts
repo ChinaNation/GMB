@@ -1,5 +1,5 @@
 // 统一的签名二维码 payload 解析工具。
-// 唯一事实源:memory/05-architecture/qr-protocol-spec.md
+// 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // 使用 WUMIN_QR_V1 envelope,不再有任何字段别名兼容。
 
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';

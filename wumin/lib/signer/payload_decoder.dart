@@ -182,7 +182,11 @@ class PayloadDecoder {
         // call_index=0 留洞不复用(机构多签最少 2 账户,统一走 call_index=5)。
         // call_index=3 留洞不复用(propose_create_personal 已迁至 PersonalManage(7),B 阶段拆分 2026-05-06)。
         if (callIndex == PalletRegistry.proposeCloseCall) {
-          return _decodeProposeClose(bytes);
+          return _decodeProposeClose(
+            bytes,
+            action: 'propose_close_institution',
+            summaryLabel: '机构多签',
+          );
         }
         if (callIndex == PalletRegistry.proposeCreateInstitutionCall) {
           return _decodeProposeCreateInstitution(bytes);
@@ -204,7 +208,11 @@ class PayloadDecoder {
           return _decodeProposeCreatePersonal(bytes);
         }
         if (callIndex == PalletRegistry.proposeClosePersonalCall) {
-          return _decodeProposeClose(bytes);
+          return _decodeProposeClose(
+            bytes,
+            action: 'propose_close_personal',
+            summaryLabel: '个人多签',
+          );
         }
         if (callIndex == PalletRegistry.cleanupRejectedPersonalProposalCall) {
           return _decodeProposalIdOnly(
@@ -912,9 +920,14 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // OrganizationManage(17) / propose_close(1)
+  // PersonalManage(7) / propose_close(1)
   // 格式：[17][1][duoqian_address:32][beneficiary:32]
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeClose(Uint8List bytes) {
+  static DecodedPayload? _decodeProposeClose(
+    Uint8List bytes, {
+    required String action,
+    required String summaryLabel,
+  }) {
     if (bytes.length < 66) return null;
     final duoqianId = bytes.sublist(2, 34);
     final beneficiaryId = bytes.sublist(34, 66);
@@ -922,8 +935,8 @@ class PayloadDecoder {
     final beneficiary =
         Keyring().encodeAddress(beneficiaryId.toList(), _ss58Prefix);
     return DecodedPayload(
-      action: 'propose_close',
-      summary: '提案关闭多签 ${_truncateAddress(duoqian)}',
+      action: action,
+      summary: '提案关闭$summaryLabel ${_truncateAddress(duoqian)}',
       fields: {
         'duoqian_address': duoqian,
         'beneficiary': beneficiary,
@@ -932,8 +945,8 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransfer(19) / propose_safety_fund(3)
-  // 格式：[19][3][beneficiary:32][amount:u128][BoundedVec remark]
+  // DuoqianTransfer(19) / propose_safety_fund(1)
+  // 格式：[19][1][beneficiary:32][amount:u128][BoundedVec remark]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSafetyFund(Uint8List bytes) {
     if (bytes.length < 50) return null;
@@ -964,8 +977,8 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // DuoqianTransfer(19) / propose_sweep(5)
-  // 格式：[19][5][institution:48][amount:u128]
+  // DuoqianTransfer(19) / propose_sweep(2)
+  // 格式：[19][2][institution:48][amount:u128]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeSweep(Uint8List bytes) {
     if (bytes.length < 66) return null;

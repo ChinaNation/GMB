@@ -455,6 +455,30 @@ void main() {
       expect(decoded.fields['proposal_id'], '500');
     });
 
+    test('decodes organization close action as propose_close_institution', () {
+      final payload = Uint8List.fromList([
+        0x11, 0x01, // OrganizationManage.propose_close
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+      ]);
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_close_institution');
+      expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
+    });
+
+    test('decodes personal close action as propose_close_personal', () {
+      final payload = Uint8List.fromList([
+        0x07, 0x01, // PersonalManage.propose_close
+        ...List<int>.filled(32, 0x33),
+        ...List<int>.filled(32, 0x44),
+      ]);
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_close_personal');
+      expect(decoded.fields.keys.toList(), ['duoqian_address', 'beneficiary']);
+    });
+
     // -----------------------------------------------------------------------
     // propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
     // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2

@@ -72,6 +72,12 @@
 
 2026-05-07 P0-6 执行：已修正 CPMS 编译脚本默认读取的 SFID 目录为 `sfid/backend/sfid/`，同步省市码注释和统一命名文件；已删除 Wumin 本地脚本与 CI 中已失效的 `supportedSpecVersions` 写源码残留。
 
+2026-05-07 PR-C 执行：已清理 `organization-manage` 机构创建代投物理残留，删除错误的 `institution/close.rs` 空壳并保留仍活跃的 `MalformedSignature`；`organization-manage` 与 `duoqian-transfer` lib 测试通过，`citizenchain --lib` 设置 `WASM_FILE` 后通过。
+
+2026-05-07 PR-C 第二段执行：已清理活跃 runtime 注释、wuminapp 活跃注释和当前技术文档里的旧 `duoqian-manage` / `DuoqianAccounts` / `AdminsChange.Institutions` 当前真源叙述；保留明确 legacy/history 的迁移说明。
+
+2026-05-07 P1-6 执行：已将 QR 协议真源迁入 `memory/01-architecture/qr/`，同步统一协议/命名入口；更新 action registry 到当前 pallet/call，删除当前识别规则中的 `supportedSpecVersions` 要求，删除 wumin / node / sfid / cpms 的 `user_duoqian` 残留，并对齐 `propose_close_institution` / `propose_close_personal` 两个关闭 action。
+
 ## 4. 验收
 
 - 所有 [RENAME] / [DEAD] / [STORAGE] 类发现修完

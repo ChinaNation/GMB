@@ -231,8 +231,8 @@ pub mod pallet {
 
     /// 统一管理员主体表：subject_id → 管理员、阈值和生命周期。
     ///
-    /// 创世时写入国储会、省储会、省储行；SFID 机构多签和个人多签由
-    /// `duoqian-manage` 在创建提案阶段写入 Pending，投票通过后激活。
+    /// 创世时写入国储会、省储会、省储行；SFID 机构多签由 `organization-manage`
+    /// 写入，个人多签由 `personal-manage` 写入，投票通过后激活。
     #[pallet::storage]
     #[pallet::getter(fn subject_of)]
     pub type Subjects<T: Config> =
@@ -439,7 +439,7 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
 
             // 中文注释：本入口只治理制度内置主体(NRC/PRC/PRB)的管理员替换。
-            // ORG_REN 的个人/机构多签主体由 duoqian-manage 维护生命周期,
+            // ORG_REN 的个人/机构多签主体由 organization-manage / personal-manage 维护生命周期,
             // 不能从通用管理员替换入口绕出第二条治理路径。
             ensure!(
                 matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),

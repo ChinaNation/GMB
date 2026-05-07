@@ -90,7 +90,7 @@
 - memory/07-ai/chat-protocol.md
 - memory/07-ai/agent-rules.md
 - memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md
-- memory/05-architecture/qr-protocol-spec.md
+- memory/01-architecture/qr/qr-protocol-spec.md
 - 参照源文件:
   - wuminapp/lib/wallet/ui/wallet_page.dart(目标页)
   - wumin/lib/ui/wallet_detail_page.dart:277-342(第 1 卡片参照样式)

@@ -34,7 +34,7 @@ pub const RATE_CHANGE_DELAY_BLOCKS: u64 = 20_160;
 /// 提案新费率:清算行管理员发起,延迟 `RATE_CHANGE_DELAY_BLOCKS` 后生效。
 ///
 /// 约束:
-/// - `who` 必须是该清算行多签管理员之一(通过 `duoqian-manage` 的 DuoqianAccounts 校验)
+/// - `who` 必须是该清算行多签管理员之一(通过 `admins-change::Subjects` 校验)
 /// - 目标必须是合法清算行主账户(SFR/FFR + Active)
 /// - 新费率在 `[L2_FEE_RATE_BP_MIN, MaxL2FeeRateBp]` 区间
 /// - 同一清算行不允许并行提案(新提案覆盖旧提案)

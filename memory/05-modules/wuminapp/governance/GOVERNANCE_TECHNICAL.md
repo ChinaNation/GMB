@@ -75,7 +75,7 @@ lib/citizen/
   - NRC：`13`（硬编码）
   - PRC：`6`（硬编码）
   - PRB：`6`（硬编码）
-  - DUOQIAN：`用户注册时设定的 threshold`（链上 `DuoqianAccounts.threshold` 动态读取）
+  - DUOQIAN：`用户注册时设定的 threshold`（链上 `admins-change::Subjects.threshold` 动态读取）
 - 联合投票权重：
   - NRC：`19`
   - 每个 PRC：`1`
@@ -244,7 +244,7 @@ message = blake2_256(SCALE.encode(payload))
 - `RuntimeUpgradeDetailPage` 从机构页进入时必须带上：
   - `institution`
   - `adminWallets`
-- 页面会先按链上 `AdminsChange.Institutions` 过滤当前仍有效的管理员钱包。
+- 页面会先按链上 `AdminsChange.Subjects` 过滤当前仍有效的管理员钱包。
 - 联合投票按钮只在以下条件全部满足时启用：
   - 提案仍处于 `joint` 阶段且状态为 `voting`
   - 当前机构尚未投票
@@ -342,7 +342,7 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1 管理员身份检测流程
 
 1. 用户打开机构详情页，App 并行加载管理员列表和当前钱包信息。
-2. 通过 `state_getStorage` 查询链上 `AdminsChange.Institutions(institution_id)` 存储。
+2. 通过 `state_getStorage` 查询链上 `AdminsChange.Subjects(subject_id)` 存储。
 3. Storage key 格式：`twox_128("AdminsChange") + twox_128("Institutions") + blake2_128(institution_48bytes) + institution_48bytes`。
 4. 返回 SCALE 编码的 `BoundedVec<AccountId32, MaxAdminsPerInstitution>`（Compact 长度前缀 + N×32 字节公钥）。
 5. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在列表中，确定管理员身份。
@@ -499,7 +499,7 @@ message = blake2_256(SCALE.encode(payload))
 
 #### 7.5.5 机构主账户地址（duoqianAddress 字段）
 
-每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于注册多签机构，来源于 `duoqian-manage::DuoqianAccounts` 的 `duoqian_address`。
+每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于注册多签机构，来源于 `OrganizationManage::InstitutionAccounts` 中的机构主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
 ### 7.6 管理员列表页面
@@ -547,11 +547,11 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | App 壳、应用锁与底部导航；不再内联公民 Tab 业务页面 |
 
-## 8. 注册多签机构（duoqian-manage）
+## 8. 注册多签机构（organization-manage / personal-manage）
 
 ### 8.1 概述
 
-`duoqian-manage` 模块为非治理机构提供多人管理的公共支出账户。创建、关闭和转账都复用投票引擎的内部投票机制，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
+`organization-manage` 负责 SFID 注册机构多签，`personal-manage` 负责个人多签。两者都复用投票引擎的内部投票机制，与治理机构（NRC/PRC/PRB）使用同一套投票、存储、清理基础设施。
 
 ### 8.2 机构类型
 
@@ -581,16 +581,16 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 
 ### 8.5 创建流程（Pending → Active）
 
-1. 管理员调用 `propose_create` → 写入 `DuoqianAccounts`（status=Pending）+ 投票引擎创建提案
+1. 管理员调用对应创建入口 → 写入机构或个人 pending storage + 投票引擎创建提案
 2. 其他管理员调用 `InternalVote::cast` → 投票引擎记票
-3. 达到 threshold → 自动执行：`Currency::transfer` 转入资金 + `DuoqianAccounts.status` 改为 Active
-4. 投票超时/否决 → 删除 Pending 状态的 `DuoqianAccounts`
+3. 达到 threshold → 自动执行：`Currency::transfer` 转入资金 + 对应账户状态改为 Active
+4. 投票超时/否决 → 清理 pending storage
 
 ### 8.6 关闭流程
 
 1. 管理员调用 `propose_close` → 投票引擎创建提案
 2. 其他管理员调用 `InternalVote::cast` → 投票引擎记票
-3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 删除 `DuoqianAccounts`
+3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
 
 ### 8.7 转账接入
 
@@ -598,7 +598,7 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
   - 治理机构：`sfid_number` UTF-8 右补零到 48 字节
   - 注册型机构：`duoqian_address(32) + 16 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `InstitutionAdminService` 对内置治理机构和注册型机构都读取 `AdminsChange.Institutions`，`DuoqianManage.DuoqianAccounts` 只作为账户、资金和生命周期信息来源。
+- `InstitutionAdminService` 对内置治理机构和注册型机构都读取 `AdminsChange.Subjects`；账户和生命周期分别读取 `OrganizationManage::InstitutionAccounts` / `PersonalManage::PersonalDuoqians`。
 - 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
 
 ### 8.8 手机端入口分流
@@ -640,7 +640,8 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 | `lib/duoqian/personal/personal_duoqian_list_page.dart` | 个人多签入口页 |
 | `lib/duoqian/personal/personal_duoqian_create_page.dart` | 个人多签创建表单 |
 | `lib/duoqian/personal/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
-| `duoqian-manage/src/lib.rs` | 注册、创建、关闭业务逻辑 |
+| `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
+| `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
 | `votingengine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
 | `votingengine/src/lib.rs` | InternalThresholdProvider trait |
@@ -670,7 +671,8 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 - `lib/duoqian/personal/personal_duoqian_close_page.dart`
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
-- `citizenchain/runtime/transaction/duoqian-manage/src/lib.rs`
+- `citizenchain/runtime/governance/organization-manage/src/lib.rs`
+- `citizenchain/runtime/governance/personal-manage/src/lib.rs`
 - `citizenchain/runtime/votingengine/src/lib.rs`
 - `citizenchain/runtime/votingengine/src/internal_vote.rs`
 - `citizenchain/runtime/votingengine/src/joint_vote.rs`

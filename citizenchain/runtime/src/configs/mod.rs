@@ -798,8 +798,6 @@ impl organization_manage::Config for Runtime {
     type MaxAccountNameLength = ConstU32<128>;
     type MaxRegisterNonceLength = ConstU32<64>;
     type MaxRegisterSignatureLength = ConstU32<64>;
-    // sr25519 签名固定 64 字节;`AdminSignatureOf` 的容量配置,供链下审计签名附件等场景。
-    type MaxAdminSignatureLength = ConstU32<64>;
     type MaxInstitutionAccounts = ConstU32<16>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;
@@ -975,7 +973,7 @@ impl sfid_system::Config for Runtime {
     type SfidVoteVerifier = RuntimeSfidVoteVerifier;
     type OnSfidBound = CitizenIssuance;
     // ADR-008 step2a：unbind_sfid 不再依赖已删除的 SfidMainAccount，临时由 Root 治理 origin 鉴权。
-    // step2b 起结合 duoqian-manage 凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
+    // step2b 起结合 organization-manage 凭证体系决定最终 origin 模型（治理多签 / 省级 admin 直签）。
     type UnbindOrigin = frame_system::EnsureRoot<AccountId>;
     type WeightInfo = sfid_system::weights::SubstrateWeight<Runtime>;
 }
@@ -1136,7 +1134,7 @@ impl duoqian_transfer::Config for Runtime {
 
 /// 扫码支付 Step 1 新增:SFID 机构登记表查询实现。
 ///
-/// 委托给 `duoqian-manage` 的 SFID 地址索引和机构账户表；
+/// 委托给 `organization-manage` 的 SFID 地址索引和机构账户表；
 /// 管理员校验再统一转给 `admins-change::Subjects`。
 pub struct DuoqianSfidAccountQuery;
 
@@ -1164,7 +1162,7 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
             );
         }
 
-        // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
+        // B 阶段(personal-manage 拆分)起,旧多钱账户 mirror 已删除;
         // 个人多签状态查询走 personal-manage::PersonalDuoqians。
         matches!(
             personal_manage::PersonalDuoqians::<Runtime>::get(addr).map(|a| a.status),

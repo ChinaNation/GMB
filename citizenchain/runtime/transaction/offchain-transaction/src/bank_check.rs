@@ -2,13 +2,13 @@
 //!
 //! 中文注释:
 //! - 清算行(L2)= SFR 私法人 或 FFR 非法人(两者都是"私权机构")。
-//! - 清算行在 SFID 系统注册时生成 sfid_number,并在链上 `duoqian-manage` 注册
+//! - 清算行在 SFID 系统注册时生成 sfid_number,并在链上 `organization-manage` 注册
 //!   主账户 + 费用账户两个多签账户。
 //! - 本模块判定:某个地址能否作为"可被 L3 绑定的清算行主账户"。
 //!
-//! **解耦设计**:bank_check 不直接依赖 `duoqian-manage`,而是通过
+//! **解耦设计**:bank_check 不直接依赖 `organization-manage`,而是通过
 //! `SfidAccountQuery` trait 抽象机构登记表。runtime 层实现该 trait(内部委托
-//! 给 `duoqian-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
+//! 给 `organization-manage` 的 Storage),测试层可用 `()` 空实现或 mock,从
 //! 而避免 pallet 之间形成强耦合、tests 需要完整 impl `organization_manage::Config`。
 
 use frame_support::ensure;
@@ -34,7 +34,7 @@ pub const ACCOUNT_NAME_FEE: &[u8] = "费用账户".as_bytes();
 
 /// 机构登记表查询抽象。
 ///
-/// 运行时由 `duoqian-manage` 的 `AddressRegisteredSfid` / `SfidRegisteredAddress` /
+/// 运行时由 `organization-manage` 的 `AddressRegisteredSfid` / `SfidRegisteredAddress` /
 /// `InstitutionAccounts` / `ClearingBankNodes` 等链上索引组合实现。测试可用 `()` 或 mock。
 pub trait SfidAccountQuery<AccountId> {
     /// 地址 → (sfid_number 字节, account_name 字节)。未登记返回 None。
@@ -107,7 +107,7 @@ fn a3_is_private_institution(sfid_bytes: &[u8]) -> bool {
 /// 1. 在链上 `AddressRegisteredSfid` 有机构登记
 /// 2. `account_name` 段等于 "主账户"
 /// 3. A3 ∈ {SFR, FFR}(字节级前缀判定)
-/// 4. 对应 `InstitutionAccounts.status == Active`(B 阶段已删 DuoqianAccounts mirror)
+/// 4. 对应 `InstitutionAccounts.status == Active`
 /// 5. **资格白名单**:由 SFID 系统在候选/注册信息接口筛选;链上通过
 ///    `SfidAccountQuery::is_clearing_bank_eligible` 只确认该 SFID 机构账户已 Active
 /// 6. **节点已声明**:`sfid_number ∈ ClearingBankNodes`,确保该机构已加入清算网络

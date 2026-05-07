@@ -157,7 +157,8 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
             action: 'propose_close_personal',
             summary: '发起关闭个人多签账户提案',
             fields: [
-              // propose_close_personal 当前链端仍复用 propose_close 的 Registry =
+              // 链端 call 名仍为 propose_close,QR action 为
+              // propose_close_personal,fields 按 Registry =
               // (duoqian_address, beneficiary)。"当前余额" 属辅助展示,
               // 页面已独立显示,不塞 display.fields 避免对齐失败
               // (2026-04-22 两色识别整改)。
