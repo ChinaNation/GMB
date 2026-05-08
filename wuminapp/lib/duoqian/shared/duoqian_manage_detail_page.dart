@@ -530,6 +530,11 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         '初始资金',
         '${AmountFormat.format(info.amountYuan, symbol: '')} 元',
       ),
+      const Divider(height: 20),
+      _buildInfoRow(
+        '创建手续费',
+        '${AmountFormat.format(info.feeYuan, symbol: '')} 元',
+      ),
     ];
   }
 

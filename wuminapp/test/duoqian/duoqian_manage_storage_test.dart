@@ -44,29 +44,10 @@ void main() {
     return out;
   }
 
-  Uint8List institutionInfoBytes({
-    required List<int> admin1,
-    required List<int> admin2,
-  }) {
-    return Uint8List.fromList([
-      ...compactVec('安徽省储行'),
-      ...List<int>.filled(32, 0xa1),
-      ...List<int>.filled(32, 0xa2),
-      ...u32Le(2),
-      ...u32Le(2),
-      (2 << 2) & 0xff,
-      ...admin1,
-      ...admin2,
-      ...List<int>.filled(32, 0xc1),
-      ...u32Le(100),
-      0,
-      ...u32Le(2),
-    ]);
-  }
-
   Uint8List personalAccountBytes() {
     return Uint8List.fromList([
       ...List<int>.filled(32, 0xc2),
+      ...compactVec('家庭基金'),
       ...u32Le(100),
       1,
     ]);
@@ -96,17 +77,18 @@ void main() {
 
     final refKey =
         '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
-    final institutionKey =
-        '0x${hexOf(DuoqianStorageCodec.institutionKey(sfidNumber))}';
     final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
       sfidNumber,
       accountName,
+    ))}';
+    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
+      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
     ))}';
     rpc.responses[refKey] = Uint8List.fromList([
       ...compactVec('SFR-AH001-20260507'),
       ...compactVec('主账户'),
     ]);
-    rpc.responses[institutionKey] = institutionInfoBytes(
+    rpc.responses[adminKey] = adminSubjectBytes(
       admin1: List<int>.filled(32, 0xaa),
       admin2: List<int>.filled(32, 0xbb),
     );
@@ -125,7 +107,7 @@ void main() {
     expect(info.threshold, 2);
     expect(info.adminPubkeys, ['aa' * 32, 'bb' * 32]);
     expect(info.status, DuoqianStatus.active);
-    expect(rpc.requestedKeys, [refKey, institutionKey, accountKey]);
+    expect(rpc.requestedKeys, [refKey, accountKey, adminKey]);
   });
 
   test('fetchDuoqianAccount falls back to PersonalManage current storage',

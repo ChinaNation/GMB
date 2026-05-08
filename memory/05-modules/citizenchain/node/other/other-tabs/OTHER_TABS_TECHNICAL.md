@@ -28,11 +28,16 @@
 
 ## 4. 当前内容来源
 
-- 白皮书：`https://chinanation.github.io/GMB/GMB_README.html`
-- 公民治理宪法：`https://chinanation.github.io/GMB/FRC_README.html?v=20260310-1`
+- 白皮书：`/GMB_README.html`
+- 公民治理宪法：`/FRC_README.html`
 - 公民党：占位文本（待接入）
+
+`citizenchain/node/frontend/vite.config.ts` 将仓库根目录 `docs/` 作为 Vite
+静态资源入口。开发服务器和正式构建都会从 `docs/GMB_README.html` 与
+`docs/FRC_README.html` 提供页面，避免仓库私有化后 GitHub Pages 外链返回 404。
 
 ## 5. 安全策略
 
 - 前端渲染 iframe 时应用 `sandbox="allow-scripts allow-same-origin"` 属性，限制嵌入页面的能力。
 - 设置 `referrerPolicy="no-referrer"` 避免向外部页面泄漏来源信息。
+- Tauri CSP 的 `frame-src` 只允许 `self`，白皮书和公民宪法不再依赖外部 iframe 来源。

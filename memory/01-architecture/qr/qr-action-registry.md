@@ -1,6 +1,6 @@
 # QR Action Registry
 
-- 版本:2026-05-07
+- 版本:2026-05-08
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
 - 范围:`kind = sign_request` 的 `body.display.action` 与 `body.display.fields`
 - 依赖:
@@ -89,7 +89,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_transfer` | 0 | `propose_transfer` | `org`, `beneficiary`, `amount_yuan`, `remark` | node_ui, wuminapp |
+| `propose_transfer` | 0 | `propose_transfer` | `institution`, `beneficiary`, `amount_yuan`, `remark` | node_ui, wuminapp |
 | `propose_safety_fund_transfer` | 1 | `propose_safety_fund` | `beneficiary`, `amount_yuan`, `remark` | node_ui, wuminapp |
 | `propose_sweep_to_main` | 2 | `propose_sweep` | `institution`, `amount_yuan` | node_ui, wuminapp |
 

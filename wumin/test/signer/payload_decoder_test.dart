@@ -15,6 +15,25 @@ void main() {
     return [bytes.length << 2, ...bytes];
   }
 
+  List<int> subjectIdFromText(int kind, String text) {
+    final out = List<int>.filled(48, 0);
+    out[0] = kind;
+    final bytes = utf8.encode(text);
+    for (var i = 0; i < bytes.length && i < 47; i++) {
+      out[i + 1] = bytes[i];
+    }
+    return out;
+  }
+
+  List<int> subjectIdFromAccount(int kind, List<int> account) {
+    final out = List<int>.filled(48, 0);
+    out[0] = kind;
+    for (var i = 0; i < account.length && i < 32; i++) {
+      out[i + 1] = account[i];
+    }
+    return out;
+  }
+
   List<int> u128LeForTest(BigInt value) {
     final out = List<int>.filled(16, 0);
     var tmp = value;
@@ -293,11 +312,7 @@ void main() {
     test('decodes propose_sweep_to_main 国储会 (pallet=19 call=2)', () {
       // Phase 2 重排：propose_sweep_to_main 由原 call=5 迁到 call=2。
       const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
-      final idBytes = List<int>.filled(48, 0);
-      final idChars = sfidNumber.codeUnits;
-      for (var i = 0; i < idChars.length; i++) {
-        idBytes[i] = idChars[i];
-      }
+      final idBytes = subjectIdFromText(0x01, sfidNumber);
       const amount = 10000;
       final amountBytes = List<int>.filled(16, 0);
       amountBytes[0] = amount & 0xff;
@@ -322,11 +337,7 @@ void main() {
 
     test('decodes propose_sweep_to_main 省储会 (pallet=19 call=2)', () {
       const sfidNumber = 'GFR-ZS001-CB0Y-016974075-2026';
-      final idBytes = List<int>.filled(48, 0);
-      final idChars = sfidNumber.codeUnits;
-      for (var i = 0; i < idChars.length; i++) {
-        idBytes[i] = idChars[i];
-      }
+      final idBytes = subjectIdFromText(0x01, sfidNumber);
       final amountBytes = List<int>.filled(16, 0);
       amountBytes[0] = 0x10;
 
@@ -342,6 +353,63 @@ void main() {
 
       expect(decoded, isNotNull);
       expect(decoded!.fields['institution'], '中枢省储备委员会');
+    });
+
+    test('rejects legacy naked subject for propose_sweep_to_main', () {
+      const sfidNumber = 'GFR-LN001-CB0X-944805165-2026';
+      final idBytes = List<int>.filled(48, 0);
+      final idChars = sfidNumber.codeUnits;
+      for (var i = 0; i < idChars.length; i++) {
+        idBytes[i] = idChars[i];
+      }
+
+      final payload = Uint8List.fromList([
+        0x13,
+        0x02,
+        ...idBytes,
+        ...List<int>.filled(16, 0),
+      ]);
+
+      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+          reason: 'D/ADR-015 后内置机构必须带 0x01 主体类型,不兼容裸 sfid');
+    });
+
+    test('decodes propose_transfer for institution account subject', () {
+      final institutionAccount = List<int>.filled(32, 0x66);
+      final beneficiary = List<int>.filled(32, 0x44);
+      final payload = Uint8List.fromList([
+        0x13,
+        0x00,
+        0x02,
+        ...subjectIdFromAccount(0x05, institutionAccount),
+        ...beneficiary,
+        ...u128LeForTest(BigInt.from(12345)),
+        0x10,
+        ...utf8.encode('test'),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_transfer');
+      expect(decoded.fields['institution'], startsWith('机构账户 66666666'));
+      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields['remark'], 'test');
+    });
+
+    test('rejects SfidInstitution subject for propose_transfer', () {
+      final payload = Uint8List.fromList([
+        0x13,
+        0x00,
+        0x02,
+        ...subjectIdFromText(0x02, 'GFR-LN001-CB0X-944805165-2026'),
+        ...List<int>.filled(32, 0x44),
+        ...u128LeForTest(BigInt.one),
+        0x00,
+      ]);
+
+      expect(PayloadDecoder.decode(hexOf(payload)), isNull,
+          reason: '0x02 只保留机构归属/检索语义,不能作为多签转账支出账户');
     });
 
     test('Compact encoding mode 1 (two-byte)', () {

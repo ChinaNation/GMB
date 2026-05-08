@@ -1,7 +1,8 @@
 use super::*;
+use codec::Encode;
 use frame_support::{assert_noop, assert_ok, traits::Currency, BoundedVec};
 use sp_runtime::DispatchError;
-use votingengine::{STATUS_EXECUTED, STATUS_REJECTED, STATUS_VOTING};
+use votingengine::{STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_REJECTED, STATUS_VOTING};
 
 const CREATE_AMOUNT: Balance = 1_000;
 const CREATE_FEE: Balance = 10; // calculate_onchain_fee(1000) = max(1000*0.001, 10) = 10
@@ -15,6 +16,62 @@ fn setup_creator_balance() -> AccountId32 {
 
 fn proposed_duoqian_address(creator: &AccountId32, name: &[u8]) -> AccountId32 {
     PersonalManage::derive_personal_duoqian_address(creator, name).expect("derive should succeed")
+}
+
+fn create_rejected_event_count(pid: u64) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::PersonalManage(pallet::Event::DuoqianCreateRejected {
+                    proposal_id,
+                    ..
+                }) if *proposal_id == pid
+            )
+        })
+        .count()
+}
+
+fn create_failed_event_count(pid: u64) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::PersonalManage(pallet::Event::CreateExecutionFailed {
+                    proposal_id,
+                    ..
+                }) if *proposal_id == pid
+            )
+        })
+        .count()
+}
+
+fn close_failed_event_count(pid: u64) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::PersonalManage(pallet::Event::CloseExecutionFailed {
+                    proposal_id,
+                    ..
+                }) if *proposal_id == pid
+            )
+        })
+        .count()
+}
+
+fn overwrite_create_proposal_fee(pid: u64, fee: Balance) {
+    let mut action = pallet::PendingPersonalCreate::<Test>::get(pid).expect("pending action");
+    action.fee = fee;
+    let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
+    data.push(crate::ACTION_CREATE);
+    data.extend_from_slice(&action.encode());
+    let bounded: BoundedVec<u8, <Test as votingengine::Config>::MaxProposalDataLen> =
+        BoundedVec::try_from(data).expect("proposal data fits");
+    votingengine::ProposalData::<Test>::insert(pid, bounded);
 }
 
 // ─── 1. propose_create:写 Pending + reserve fee + 发事件 ─────────────
@@ -38,11 +95,11 @@ fn propose_create_writes_pending_and_reserves_fee() {
 
         assert!(pallet::PendingPersonalCreate::<Test>::contains_key(pid));
         assert!(pallet::PersonalDuoqians::<Test>::contains_key(&dq));
-        assert!(pallet::PersonalDuoqianInfo::<Test>::contains_key(&dq));
-        assert_eq!(
-            pallet::PersonalDuoqians::<Test>::get(&dq).unwrap().status,
-            types::DuoqianStatus::Pending
-        );
+        let pending_action = pallet::PendingPersonalCreate::<Test>::get(pid).unwrap();
+        assert_eq!(pending_action.fee, CREATE_FEE);
+        let pending_account = pallet::PersonalDuoqians::<Test>::get(&dq).unwrap();
+        assert_eq!(pending_account.status, types::DuoqianStatus::Pending);
+        assert_eq!(pending_account.account_name, name);
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
             admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
@@ -134,6 +191,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
         assert_eq!(Balances::reserved_balance(&c), 0);
         assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
         assert!(!pallet::PendingPersonalCreate::<Test>::contains_key(pid));
+        assert_eq!(create_rejected_event_count(pid), 1);
     });
 }
 
@@ -281,6 +339,36 @@ fn propose_create_rejects_below_minimum_amount() {
     });
 }
 
+#[test]
+fn propose_create_rejects_reserved_and_protected_addresses() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let protected = proposed_duoqian_address(&c, b"protected-target");
+        set_protected_address(Some(protected));
+
+        assert_noop!(
+            PersonalManage::propose_create(
+                RuntimeOrigin::signed(c.clone()),
+                account_name(b"protected-target"),
+                admins_vec(3),
+                CREATE_AMOUNT,
+            ),
+            pallet::Error::<Test>::ProtectedSource
+        );
+
+        set_protected_address(Some(c.clone()));
+        assert_noop!(
+            PersonalManage::propose_create(
+                RuntimeOrigin::signed(c),
+                account_name(b"protected-creator"),
+                admins_vec(3),
+                CREATE_AMOUNT,
+            ),
+            pallet::Error::<Test>::ProtectedSource
+        );
+    });
+}
+
 // ─── 8. propose_close 写 Pending + 阻止并发 ───────────────────────────
 
 #[test]
@@ -337,7 +425,6 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         // amount 1000 → fee = max(1, 10) = 10,beneficiary 收 990
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
         assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
-        assert!(!pallet::PersonalDuoqianInfo::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
     });
 }
@@ -356,6 +443,32 @@ fn propose_close_rejects_when_balance_below_minimum() {
         assert_noop!(
             PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
             pallet::Error::<Test>::CloseBalanceBelowMinimum
+        );
+    });
+}
+
+#[test]
+fn propose_close_rejects_reserved_and_protected_beneficiary() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let dq = proposed_duoqian_address(&c, b"close-protected");
+        let admins_acc = vec![admin(0), admin(1), admin(2)];
+        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+
+        assert_noop!(
+            PersonalManage::propose_close(
+                RuntimeOrigin::signed(admin(0)),
+                dq.clone(),
+                AccountId32::new([0xAA; 32]),
+            ),
+            pallet::Error::<Test>::InvalidBeneficiary
+        );
+
+        let protected = beneficiary();
+        set_protected_address(Some(protected.clone()));
+        assert_noop!(
+            PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, protected,),
+            pallet::Error::<Test>::InvalidBeneficiary
         );
     });
 }
@@ -385,17 +498,81 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
 
         // 一票否决进入 REJECTED + Executor 自己已经 cleanup 过
         assert_ok!(cast_no_votes(&admin_accounts, 1, pid));
+        assert_eq!(create_rejected_event_count(pid), 1);
 
-        // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok
-        // (cleanup_pending_create 的 storage::remove 是幂等的)
+        // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok,
+        // 但不能重复发 DuoqianCreateRejected。
         assert_ok!(PersonalManage::cleanup_rejected_proposal(
             RuntimeOrigin::signed(admin(0)),
             pid,
         ));
+        assert_eq!(create_rejected_event_count(pid), 1);
     });
 }
 
-// ─── 12. propose_close 拒绝非个人多签地址 ─────────────────────────────
+// ─── 12. 创建执行失败 → 终态清理 reserve + pending + 失败事件 ───────────
+
+#[test]
+fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let admins = admins_vec(3);
+        let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(admin).collect();
+        let dq = proposed_duoqian_address(&c, b"exec-fail-create");
+
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c.clone()),
+            account_name(b"exec-fail-create"),
+            admins,
+            CREATE_AMOUNT,
+        ));
+        let pid = last_proposal_id();
+
+        // 中文注释:模拟 fee_policy 在投票期变更后 ProposalData 中记录的快照费更高。
+        // execute_create 只能按快照释放 reserve,因此会进入执行失败终态;
+        // 终态回调随后必须按同一快照清理 Pending 和 reserve。
+        overwrite_create_proposal_fee(pid, CREATE_FEE + 1);
+
+        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+
+        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
+        assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
+        assert_eq!(Balances::reserved_balance(&c), 0);
+        assert!(!pallet::PendingPersonalCreate::<Test>::contains_key(pid));
+        assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert_eq!(create_failed_event_count(pid), 1);
+    });
+}
+
+// ─── 13. 关闭执行失败 → 只清 PendingCloseProposal + 失败事件 ───────────
+
+#[test]
+fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let dq = proposed_duoqian_address(&c, b"exec-fail-close");
+        let admins_acc = vec![admin(0), admin(1), admin(2)];
+        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
+
+        assert_ok!(PersonalManage::propose_close(
+            RuntimeOrigin::signed(admin(0)),
+            dq.clone(),
+            beneficiary(),
+        ));
+        let pid = last_proposal_id();
+        set_institution_can_spend(false);
+
+        assert_ok!(cast_yes_votes(&admins_acc, 3, pid));
+
+        let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
+        assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
+        assert!(pallet::PersonalDuoqians::<Test>::contains_key(&dq));
+        assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
+        assert_eq!(close_failed_event_count(pid), 1);
+    });
+}
+
+// ─── 14. propose_close 拒绝非个人多签地址 ─────────────────────────────
 
 #[test]
 fn propose_close_rejects_when_not_personal_duoqian() {
@@ -414,7 +591,7 @@ fn propose_close_rejects_when_not_personal_duoqian() {
     });
 }
 
-// ─── 13. 非 admin 不能投票 ────────────────────────────────────────────
+// ─── 15. 非 admin 不能投票 ────────────────────────────────────────────
 
 #[test]
 fn non_admin_cannot_propose_or_vote() {
@@ -451,7 +628,7 @@ fn non_admin_cannot_propose_or_vote() {
     });
 }
 
-// ─── 14. 关闭后链不死账(Existential Deposit 保留) ────────────────────
+// ─── 16. 关闭后链不死账(Existential Deposit 保留) ────────────────────
 
 #[test]
 fn existential_deposit_is_preserved_after_close() {

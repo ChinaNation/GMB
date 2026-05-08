@@ -1,6 +1,6 @@
 # ADMINS_CHANGE Technical Notes
 
-最新更新：2026-05-08，第 1 步已落地：`admins-change` 从旧“等长替换管理员”改为统一“管理员集合变更”模型，并新增账户级 `InstitutionAccount` 主体协议；第 2 步已由 `internal-vote` 强制创建/注销全员阈值与普通阈值快照校验。
+最新更新：2026-05-08，生命周期清理和事件协议已收口：Pending 主体不存在时不再静默成功，生命周期事件统一携带 `org`。
 
 ## 1. 模块定位
 
@@ -127,6 +127,7 @@ validate_admin_set_for_subject(kind, org, admins)
 - `create_pending_subject_for_proposal` 要求提案为 `PROPOSAL_KIND_INTERNAL / STAGE_INTERNAL / STATUS_VOTING`。
 - `activate_subject_for_proposal` 与 `close_subject_for_proposal` 要求提案为 `STATUS_PASSED`，且处于 votingengine callback 执行作用域。
 - `remove_pending_subject_for_proposal` 仅接受 `STATUS_REJECTED / STATUS_EXECUTION_FAILED`。
+- `do_remove_pending_subject` 要求主体必须存在且处于 `Pending`；不存在返回 `InvalidInstitution`，非 Pending 返回 `SubjectNotPending`。
 - `BuiltinInstitution` 永远不能关闭。
 
 ## 7. 读取 API
@@ -208,9 +209,11 @@ propose_admin_set_change(org, subject, new_admins)
 - `AdminSetChangeExecutionFailed`
 - `AdminSetChanged`
 - `AdminSubjectPendingCreated`
-- `AdminSubjectActivated`
-- `AdminSubjectPendingRemoved`
-- `AdminSubjectClosed`
+- `AdminSubjectActivated { subject, org }`
+- `AdminSubjectPendingRemoved { subject, org }`
+- `AdminSubjectClosed { subject, org }`
+
+生命周期事件必须携带 `org`，用于客户端和索引器按组织分桶，避免只拿 `subject` 后再反查 storage。
 
 ## 11. 测试
 
@@ -223,7 +226,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 当前结果：
 
-- `admins-change`：39 passed(新增 5 条 `InstitutionAccount` kind 边界测试,2026-05-08)。
+- `admins-change`：41 passed(新增 L-1/L-2 生命周期清理与事件 org 字段测试,2026-05-08)。
 - `primitives`：24 passed。
 
 覆盖重点：
@@ -234,6 +237,8 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 动态主体通过统一管理员集合变更提案增加、删除、更换管理员，并自动重算阈值。
 - 管理员集合未变化、重复管理员、无效主体等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
+- Pending 主体清理不存在时返回 `InvalidInstitution`，非 Pending 状态返回 `SubjectNotPending`。
+- 激活、移除 Pending、关闭主体 3 类生命周期事件都包含 `org`。
 - 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。

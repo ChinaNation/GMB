@@ -2,7 +2,7 @@
 //!
 //! 本模块为治理机构（NRC/PRC/PRB）和注册多签机构提供链上转账治理流程：
 //! - 管理员发起转账提案，经内部投票通过后自动执行转账并扣取手续费。
-//! - 自动执行失败时保留提案状态，可通过 `execute_transfer` 手动重试。
+//! - 自动执行失败时保留提案状态，可通过 `VotingEngine::retry_passed_proposal` 手动重试。
 //! - 余额在提案创建和执行两个时点双重检查，含手续费和 ED 保留。
 //! - 收款地址不能是机构自身，也不能是受保护地址（质押地址）。
 
@@ -11,7 +11,7 @@
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::{ensure, pallet_prelude::*, traits::Currency, BoundedVec};
 use frame_system::pallet_prelude::*;
-use primitives::derive::subject_id_from_sfid_number;
+use primitives::derive::{subject_id_from_sfid_number, SubjectKind};
 use scale_info::TypeInfo;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
@@ -136,15 +136,19 @@ fn subject_pallet_address(institution: SubjectId) -> Option<[u8; 32]> {
         .map(|n| n.main_address)
 }
 
-/// 中文注释:检查注册多签机构的 SubjectId 是 PersonalDuoqian 协议(SubjectKind=0x03)。
+/// 中文注释:从账户级 SubjectId 中取出 AccountId。
 ///
-/// D 阶段(SubjectKind 协议统一,2026-05-06)起:
-///   byte[0]   = 0x03 (PersonalDuoqian)
-///   byte[1..33] = 32B AccountId
-///   byte[33..48] = 15B 零填充
-fn subject_id_has_zero_suffix(institution: SubjectId) -> bool {
-    institution[0] == 0x03 /* SubjectKind::PersonalDuoqian */
-        && institution[33..].iter().all(|b| *b == 0)
+/// D/ADR-015 协议:
+/// - `0x03 PersonalDuoqian`:个人多签账户；
+/// - `0x05 InstitutionAccount`:SFID 机构下面的某个具体可操作账户；
+/// - `0x02 SfidInstitution` 只表示机构归属/检索,不能作为资金账户发起转账。
+fn account_bytes_from_subject_id(institution: SubjectId, kind: SubjectKind) -> Option<[u8; 32]> {
+    if institution[0] != kind as u8 || !institution[33..].iter().all(|b| *b == 0) {
+        return None;
+    }
+    let mut account = [0u8; 32];
+    account.copy_from_slice(&institution[1..33]);
+    Some(account)
 }
 
 #[frame_support::pallet]
@@ -176,10 +180,10 @@ pub mod pallet {
             >>::NegativeImbalance,
         >;
 
-        /// 个人多签账户管理员配置查询(B 阶段拆分后由 personal-manage 实现)。
+        /// 个人多签账户状态查询,由 personal-manage 实现。
         type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
 
-        /// 机构多签账户管理员配置查询(B 阶段拆分后由 organization-manage 实现)。
+        /// 注册机构账户状态查询,由 organization-manage 实现。
         type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<
             Self::AccountId,
         >;
@@ -227,7 +231,7 @@ pub mod pallet {
             /// 投票引擎分配的超时区块,供 wuminapp 倒计时
             expires_at: BlockNumberFor<T>,
         },
-        /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 execute_transfer 手动重试）
+        /// 投票通过但执行失败（投票已记录，提案数据保留，可通过 VotingEngine 统一入口手动重试）
         TransferExecutionFailed {
             proposal_id: u64,
             institution: SubjectId,
@@ -333,7 +337,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// 发起机构多签名地址转账提案。
+        /// 发起多签资金账户转账提案。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_transfer())]
         pub fn propose_transfer(
@@ -587,24 +591,33 @@ pub mod pallet {
 
     impl<T: Config> Pallet<T> {
         fn registered_duoqian_account(institution: SubjectId) -> Result<T::AccountId, Error<T>> {
-            ensure!(
-                subject_id_has_zero_suffix(institution),
-                Error::<T>::InvalidInstitution
-            );
-            // D 阶段:跳过第 0 字节 kind tag (SubjectKind::PersonalDuoqian = 0x03),取 byte[1..33] 作为 AccountId。
-            let account = T::AccountId::decode(&mut &institution[1..33])
-                .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
-            // B 阶段:DuoqianAccounts mirror 已删,union 查 personal-manage / organization-manage 两侧。
-            // 任意机构账户(主/费用/自创)经 organization-manage 反查机构 admin 配置;
-            // 个人多签经 personal-manage 直接查。
             use organization_manage::traits::InstitutionMultisigQuery;
             use personal_manage::traits::PersonalMultisigQuery;
-            if <T as Config>::PersonalQuery::is_active(&account) {
+
+            if let Some(raw) =
+                account_bytes_from_subject_id(institution, SubjectKind::PersonalDuoqian)
+            {
+                let account = T::AccountId::decode(&mut &raw[..])
+                    .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+                ensure!(
+                    <T as Config>::PersonalQuery::is_active(&account),
+                    Error::<T>::InvalidInstitution
+                );
                 return Ok(account);
             }
-            if <T as Config>::InstitutionQuery::is_active(&account) {
+
+            if let Some(raw) =
+                account_bytes_from_subject_id(institution, SubjectKind::InstitutionAccount)
+            {
+                let account = T::AccountId::decode(&mut &raw[..])
+                    .map_err(|_| Error::<T>::InstitutionAccountDecodeFailed)?;
+                ensure!(
+                    <T as Config>::InstitutionQuery::is_active(&account),
+                    Error::<T>::InvalidInstitution
+                );
                 return Ok(account);
             }
+
             Err(Error::<T>::InvalidInstitution)
         }
 
@@ -933,7 +946,7 @@ pub mod pallet {
 // - `SweepProposalActions[id]` 存在 → sweep
 //
 // 失败语义:执行失败发 ExecutionFailed 事件,提案保留 PASSED 状态,快照管理员
-// 可通过 execute_X 手动重试(call_index 3/4/5),实际权限由 votingengine 统一校验。
+// 可通过 VotingEngine::retry_passed_proposal 手动重试,实际权限由 votingengine 统一校验。
 pub struct InternalVoteExecutor<T>(core::marker::PhantomData<T>);
 
 impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
@@ -960,7 +973,7 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
                 pallet::Pallet::<T>::try_execute_sweep_from_callback(proposal_id, true)
             };
             if let Err(_e) = exec_result {
-                // 执行失败:发事件,提案保留 PASSED,供 execute_X 重试。
+                // 执行失败:发事件,提案保留 PASSED,供 VotingEngine 统一重试入口处理。
                 if is_transfer {
                     if let Some(raw) = votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
                         if let Ok(action) =

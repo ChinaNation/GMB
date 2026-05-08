@@ -14,7 +14,8 @@ import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 ///   业务 pallet 不再提供独立投票入口,管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
 /// - 业务 service(TransferProposalService / DuoqianManageService 等)
-///   只负责发起提案(propose_X)与提案执行重试(execute_X),投票动作统一
+///   只负责发起提案(propose_X)；执行重试统一走 VotingEngine.retry_passed_proposal,
+///   投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
 ///
 /// Runtime 位置: `pallet_index=22, call_index=0`(InternalVote sub-pallet)。

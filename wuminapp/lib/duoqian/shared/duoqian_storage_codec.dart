@@ -36,14 +36,17 @@ class DuoqianAdminSnapshot {
 ///
 /// 第 3 步破坏式改造后，`PersonalManage::PersonalDuoqians` 不再镜像
 /// admins / threshold；管理员真源统一在 `AdminsChange::Subjects`。
+/// 重新创世前总审计后，creator/account_name/created_at/status 统一存放在本表。
 class PersonalDuoqianSnapshot {
   const PersonalDuoqianSnapshot({
     required this.creatorHex,
+    required this.accountName,
     required this.createdAt,
     required this.statusByte,
   });
 
   final String creatorHex;
+  final Uint8List accountName;
   final int createdAt;
   final int statusByte;
 }
@@ -66,6 +69,7 @@ class DuoqianStorageCodec {
   static const int subjectKindBuiltin = 0x01;
   static const int subjectKindSfidInstitution = 0x02;
   static const int subjectKindPersonalDuoqian = 0x03;
+  static const int subjectKindInstitutionAccount = 0x05;
 
   static Uint8List subjectIdFromBuiltin(String sfidNumber) {
     final raw = Uint8List.fromList(utf8.encode(sfidNumber));
@@ -82,6 +86,14 @@ class DuoqianStorageCodec {
       throw ArgumentError('account hex 必须为 32 字节');
     }
     return _buildSubjectId(subjectKindPersonalDuoqian, account);
+  }
+
+  static Uint8List subjectIdFromInstitutionAccountHex(String accountHex) {
+    final account = hexDecode(accountHex);
+    if (account.length != 32) {
+      throw ArgumentError('account hex 必须为 32 字节');
+    }
+    return _buildSubjectId(subjectKindInstitutionAccount, account);
   }
 
   static Uint8List adminSubjectKey(Uint8List subjectId) {
@@ -116,14 +128,6 @@ class DuoqianStorageCodec {
     return storageMapKey(
       'PersonalManage',
       'PersonalDuoqians',
-      hexDecode(personalAddressHex),
-    );
-  }
-
-  static Uint8List personalDuoqianInfoKey(String personalAddressHex) {
-    return storageMapKey(
-      'PersonalManage',
-      'PersonalDuoqianInfo',
       hexDecode(personalAddressHex),
     );
   }
@@ -257,28 +261,23 @@ class DuoqianStorageCodec {
   }
 
   static PersonalDuoqianSnapshot? decodePersonalDuoqian(Uint8List data) {
-    if (data.length < 32 + 4 + 1) return null;
+    if (data.length < 32 + 1 + 4 + 1) return null;
     var offset = 0;
     final creatorHex = hexEncode(data.sublist(offset, offset + 32));
     offset += 32;
+    final accountName = readBoundedBytes(data, offset);
+    if (accountName == null) return null;
+    offset = accountName.nextOffset;
+    if (offset + 4 + 1 > data.length) return null;
     final createdAt = readU32Le(data, offset);
     offset += 4;
     final statusByte = data[offset];
     return PersonalDuoqianSnapshot(
       creatorHex: creatorHex,
+      accountName: accountName.value,
       createdAt: createdAt,
       statusByte: statusByte,
     );
-  }
-
-  static ({Uint8List creator, Uint8List accountName})? decodePersonalMeta(
-    Uint8List data,
-  ) {
-    if (data.length < 33) return null;
-    final creator = Uint8List.fromList(data.sublist(0, 32));
-    final name = readBoundedBytes(data, 32);
-    if (name == null) return null;
-    return (creator: creator, accountName: name.value);
   }
 
   static Uint8List blake2128Concat(Uint8List data) {

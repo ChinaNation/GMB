@@ -27,9 +27,8 @@ class TransferProposalService {
 
   /// DuoqianTransfer pallet index（runtime pallet_index=19）。
   ///
-  /// Phase 3(2026-04-22): 本 pallet 的所有 vote_X / finalize_X 已删除,
-  /// 只保留 propose_X(0/1/2) 与 execute_X(3/4/5) 两组路径;
-  /// 管理员投票一律走 InternalVote(22).cast(0)。
+  /// 本 pallet 只保留 propose_X(0/1/2)；管理员投票一律走
+  /// InternalVote(22).cast(0)，手动重试走 VotingEngine(9).retry_passed_proposal(4)。
   static const _palletIndex = 19;
 
   /// propose_transfer call_index=0。
@@ -913,7 +912,7 @@ class TransferProposalService {
 
   /// 构造 propose_transfer call data。
   ///
-  /// 格式：[0x13][0x00][org:u8][institution:48bytes][0x00+beneficiary:32bytes][Compact amount][Vec remark]
+  /// 格式：[0x13][0x00][org:u8][institution:48bytes][beneficiary:32bytes][amount:u128][Vec remark]
   Uint8List _buildProposeTransferCall({
     required int org,
     required String institutionIdentity,

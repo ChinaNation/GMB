@@ -249,6 +249,7 @@ fn match_event(
             let duoqian = fields.at("duoqian_address").and_then(extract_account_id)?;
             let creator = fields.at("creator").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
+            let fee = fields.at("fee").and_then(extract_balance);
             Some(TxRecordInsert {
                 block_number,
                 extrinsic_index,
@@ -257,7 +258,7 @@ fn match_event(
                 from_address: Some(account_to_ss58(&creator)),
                 to_address: Some(account_to_ss58(&duoqian)),
                 amount_fen: balance_to_i64(amount),
-                fee_fen: None,
+                fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
             })
         }
@@ -265,6 +266,7 @@ fn match_event(
             let duoqian = fields.at("duoqian_address").and_then(extract_account_id)?;
             let beneficiary = fields.at("beneficiary").and_then(extract_account_id)?;
             let amount = fields.at("amount").and_then(extract_balance)?;
+            let fee = fields.at("fee").and_then(extract_balance);
             Some(TxRecordInsert {
                 block_number,
                 extrinsic_index,
@@ -273,7 +275,7 @@ fn match_event(
                 from_address: Some(account_to_ss58(&duoqian)),
                 to_address: Some(account_to_ss58(&beneficiary)),
                 amount_fen: balance_to_i64(amount),
-                fee_fen: None,
+                fee_fen: fee.map(balance_to_i64),
                 block_timestamp: block_ts,
             })
         }

@@ -2,9 +2,9 @@
 //!
 //! Phase 3(2026-04-22)「投票引擎统一入口整改」:
 //! 本 pallet 的 `vote_X` / `finalize_X` 已物理删除,所有管理员投票一律通过
-//! `InternalVote::cast`(22.0)。本文件只保留 `propose_transfer`
-//! 和 `execute_transfer` 两个业务动作的 benchmark;投票 weight 全部归入
-//! votingengine pallet 自身的 benchmark,业务端无需重复覆盖。
+//! `InternalVote::cast`(22.0)。本文件只保留 `propose_transfer` benchmark;
+//! 手动重试统一走 `VotingEngine::retry_passed_proposal`,投票与重试 weight
+//! 全部归入 votingengine pallet 自身的 benchmark,业务端无需重复覆盖。
 
 #![cfg(feature = "runtime-benchmarks")]
 

@@ -19,7 +19,7 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use primitives::derive::subject_id_from_sfid_number;
 use scale_info::TypeInfo;
-use sp_runtime::{traits::Zero, RuntimeDebug};
+use sp_runtime::{traits::Zero, DispatchError, RuntimeDebug};
 use sp_std::collections::btree_set::BTreeSet;
 
 use primitives::china::china_cb::CHINA_CB;
@@ -411,11 +411,11 @@ pub mod pallet {
             threshold: u32,
         },
         /// 多签主体管理员配置已激活。
-        AdminSubjectActivated { subject: SubjectId },
+        AdminSubjectActivated { subject: SubjectId, org: u8 },
         /// Pending 多签主体管理员配置已清理。
-        AdminSubjectPendingRemoved { subject: SubjectId },
+        AdminSubjectPendingRemoved { subject: SubjectId, org: u8 },
         /// 多签主体管理员配置已关闭。
-        AdminSubjectClosed { subject: SubjectId },
+        AdminSubjectClosed { subject: SubjectId, org: u8 },
     }
 
     #[pallet::error]
@@ -701,56 +701,62 @@ pub mod pallet {
 
         /// 将 Pending 管理员主体激活。
         pub(crate) fn do_activate_subject(institution: SubjectId) -> DispatchResult {
-            Subjects::<T>::try_mutate(institution, |maybe| -> DispatchResult {
-                let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
-                ensure!(
-                    subject.status == AdminSubjectStatus::Pending,
-                    Error::<T>::SubjectNotPending
-                );
-                subject.status = AdminSubjectStatus::Active;
-                subject.updated_at = frame_system::Pallet::<T>::block_number();
-                Ok(())
-            })?;
+            let org =
+                Subjects::<T>::try_mutate(institution, |maybe| -> Result<u8, DispatchError> {
+                    let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
+                    ensure!(
+                        subject.status == AdminSubjectStatus::Pending,
+                        Error::<T>::SubjectNotPending
+                    );
+                    subject.status = AdminSubjectStatus::Active;
+                    subject.updated_at = frame_system::Pallet::<T>::block_number();
+                    Ok(subject.org)
+                })?;
             Self::deposit_event(Event::<T>::AdminSubjectActivated {
                 subject: institution,
+                org,
             });
             Ok(())
         }
 
         /// 清理尚未激活的 Pending 管理员主体。
         pub(crate) fn do_remove_pending_subject(institution: SubjectId) -> DispatchResult {
-            if let Some(subject) = Subjects::<T>::get(institution) {
-                ensure!(
-                    subject.status == AdminSubjectStatus::Pending,
-                    Error::<T>::SubjectNotPending
-                );
-                Subjects::<T>::remove(institution);
-                Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved {
-                    subject: institution,
-                });
-            }
+            // 中文注释：Pending 清理必须命中真实主体，避免不存在主体被静默当作清理成功。
+            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                subject.status == AdminSubjectStatus::Pending,
+                Error::<T>::SubjectNotPending
+            );
+            let org = subject.org;
+            Subjects::<T>::remove(institution);
+            Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved {
+                subject: institution,
+                org,
+            });
             Ok(())
         }
 
         /// 关闭已激活管理员主体。
         pub(crate) fn do_close_subject(institution: SubjectId) -> DispatchResult {
-            Subjects::<T>::try_mutate(institution, |maybe| -> DispatchResult {
-                let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
-                ensure!(
-                    subject.status == AdminSubjectStatus::Active,
-                    Error::<T>::SubjectNotActive
-                );
-                // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能进入 Closed。
-                ensure!(
-                    !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
-                    Error::<T>::BuiltinSubjectCannotClose
-                );
-                subject.status = AdminSubjectStatus::Closed;
-                subject.updated_at = frame_system::Pallet::<T>::block_number();
-                Ok(())
-            })?;
+            let org =
+                Subjects::<T>::try_mutate(institution, |maybe| -> Result<u8, DispatchError> {
+                    let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
+                    ensure!(
+                        subject.status == AdminSubjectStatus::Active,
+                        Error::<T>::SubjectNotActive
+                    );
+                    // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能进入 Closed。
+                    ensure!(
+                        !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
+                        Error::<T>::BuiltinSubjectCannotClose
+                    );
+                    subject.status = AdminSubjectStatus::Closed;
+                    subject.updated_at = frame_system::Pallet::<T>::block_number();
+                    Ok(subject.org)
+                })?;
             Self::deposit_event(Event::<T>::AdminSubjectClosed {
                 subject: institution,
+                org,
             });
             Ok(())
         }

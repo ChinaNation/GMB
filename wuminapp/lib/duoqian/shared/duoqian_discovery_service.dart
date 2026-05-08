@@ -1,17 +1,17 @@
 // 多签反向索引发现服务(req 3 核心)。
 //
 // **完全 0 链端改动**:利用现有 `AdminsChange::Subjects` 统一存储
-// (个人/SFID 机构/内置治理三类多签共用)+ smoldot 标准 `state_getKeysPaged`
+// (个人/机构账户/内置治理三类多签共用)+ smoldot 标准 `state_getKeysPaged`
 // (verified [smoldot-pow/lib/src/json_rpc/methods.rs:432])。
 //
 // 数据流:
 // 1. state_getKeysPaged 翻页拿全部 institution_id keys
 // 2. fetchStorageBatch 批量取 AdminInstitution SCALE bytes
 // 3. AdminInstitutionCodec.tryDecode 拿 (org, kind, admins)
-// 4. kind ∈ {1=Sfid, 2=Personal} 且 admins ∩ myPubkeys ≠ ∅ 则命中
+// 4. kind ∈ {2=Personal, 3=InstitutionAccount} 且 admins ∩ myPubkeys ≠ ∅ 则命中
 // 5. 按 kind 反查详情:
-//    - Personal:institution_id 前 32B = personal_address;查 PersonalDuoqianInfo
-//    - Sfid:institution_id = sfid_number padded;翻页查 SfidRegisteredAddress 拿全部 account
+//    - Personal:SubjectId(0x03) 提取 personal_address;查 PersonalDuoqians
+//    - InstitutionAccount:SubjectId(0x05) 提取账户地址;查 AddressRegisteredSfid
 // 6. upsert Isar(标 discoveredViaAdmin=true + matchedAdminPubkeys)
 // 7. 反向校验:Isar 中 discoveredViaAdmin=true 但本次未命中的 entity 全部删除
 
@@ -30,6 +30,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'admin_institution_codec.dart';
 import 'duoqian_manage_service.dart';
+import 'duoqian_storage_codec.dart';
 
 /// 反向索引扫描统计。
 class DiscoveryStats {
@@ -103,8 +104,7 @@ class DuoqianDiscoveryService {
     // 节流检查
     if (!force) {
       final last = await _readLastDiscoveryAt();
-      if (last != null &&
-          DateTime.now().difference(last) < _throttleWindow) {
+      if (last != null && DateTime.now().difference(last) < _throttleWindow) {
         return DiscoveryStats.empty;
       }
     }
@@ -140,11 +140,15 @@ class DuoqianDiscoveryService {
     }
 
     // ── Step 3: 批量取 value + 解码 + 过滤命中 ──
-    final matchedPersonalAddrs = <String, List<String>>{};   // address → matched admin pubkeys
-    final matchedSfidNumbers = <String, List<String>>{};         // sfid_number_hex → matched admin pubkeys
+    final matchedPersonalAddrs =
+        <String, List<String>>{}; // address → matched admin pubkeys
+    final matchedInstitutionAddrs =
+        <String, List<String>>{}; // address → matched admin pubkeys
     var matchedCount = 0;
 
-    for (var batchStart = 0; batchStart < allKeys.length; batchStart += _batchSize) {
+    for (var batchStart = 0;
+        batchStart < allKeys.length;
+        batchStart += _batchSize) {
       final batchEnd = (batchStart + _batchSize).clamp(0, allKeys.length);
       final batchKeys = allKeys.sublist(batchStart, batchEnd);
 
@@ -163,9 +167,9 @@ class DuoqianDiscoveryService {
         final decoded = AdminInstitutionCodec.tryDecode(value);
         if (decoded == null) continue;
 
-        // 过滤:仅 Personal / Sfid;Builtin 排除
+        // 过滤:仅 Personal / InstitutionAccount;Builtin/SfidInstitution 只作归属,不进账户发现。
         if (decoded.kind != AdminInstitutionCodec.kindPersonal &&
-            decoded.kind != AdminInstitutionCodec.kindSfid) {
+            decoded.kind != AdminInstitutionCodec.kindInstitutionAccount) {
           continue;
         }
 
@@ -188,11 +192,12 @@ class DuoqianDiscoveryService {
             matchedPersonalAddrs[addr] = hits;
             matchedCount++;
           }
-        } else {
-          // SFID 机构
-          final sfidNumber = AdminInstitutionCodec.sfidNumberFromInstitutionId(instId);
-          if (sfidNumber != null) {
-            matchedSfidNumbers[_hexEncode(sfidNumber)] = hits;
+        } else if (decoded.kind ==
+            AdminInstitutionCodec.kindInstitutionAccount) {
+          final addr =
+              AdminInstitutionCodec.institutionAccountFromSubjectId(instId);
+          if (addr != null) {
+            matchedInstitutionAddrs[addr] = hits;
             matchedCount++;
           }
         }
@@ -225,33 +230,32 @@ class DuoqianDiscoveryService {
       if (added) newlyAdded++;
     }
 
-    // SFID 机构反查
-    for (final entry in matchedSfidNumbers.entries) {
-      final sfidNumberHex = entry.key;
+    // 机构账户反查
+    for (final entry in matchedInstitutionAddrs.entries) {
+      final duoqianAddrHex = entry.key;
       final hits = entry.value;
-      final sfidNumber = _hexDecode(sfidNumberHex);
 
-      List<({String accountName, String duoqianAddressHex})> accounts;
+      RegisteredInstitutionRef? ref;
       try {
-        accounts = await _manage.listSfidAccounts(Uint8List.fromList(sfidNumber));
+        ref = await _manage.fetchRegisteredInstitutionRef(duoqianAddrHex);
       } catch (e) {
-        debugPrint('[DuoqianDiscovery] listSfidAccounts $sfidNumberHex 失败: $e');
+        debugPrint(
+            '[DuoqianDiscovery] fetchRegisteredInstitutionRef $duoqianAddrHex 失败: $e');
         partialFailure = true;
         continue;
       }
+      if (ref == null) continue;
 
-      for (final acc in accounts) {
-        scannedDuoqianAddrs.add(acc.duoqianAddressHex);
-        final added = await _upsertInstitution(
-          isar: isar,
-          duoqianAddrHex: acc.duoqianAddressHex,
-          name: acc.accountName,
-          sfidNumberUtf8: _utf8FromBytes(Uint8List.fromList(sfidNumber)),
-          matchedAdmins: hits,
-        );
-        if (added) newlyAdded++;
-        matchedSfidAccountsCount++;
-      }
+      scannedDuoqianAddrs.add(duoqianAddrHex);
+      final added = await _upsertInstitution(
+        isar: isar,
+        duoqianAddrHex: duoqianAddrHex,
+        name: ref.accountNameText,
+        sfidNumberUtf8: ref.sfidNumberText,
+        matchedAdmins: hits,
+      );
+      if (added) newlyAdded++;
+      matchedSfidAccountsCount++;
     }
 
     // ── Step 6: 反向校验删除孤立 entity ──
@@ -314,8 +318,8 @@ class DuoqianDiscoveryService {
     // 反向索引发现新 entity
     String creatorSs58;
     try {
-      creatorSs58 =
-          Keyring().encodeAddress(Uint8List.fromList(_hexDecode(creatorAddrHex)), 2027);
+      creatorSs58 = Keyring()
+          .encodeAddress(Uint8List.fromList(_hexDecode(creatorAddrHex)), 2027);
     } catch (_) {
       creatorSs58 = '';
     }
@@ -455,12 +459,4 @@ class DuoqianDiscoveryService {
 
   String _hexEncode(Uint8List bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-
-  String _utf8FromBytes(Uint8List bytes) {
-    try {
-      return String.fromCharCodes(bytes);
-    } catch (_) {
-      return '';
-    }
-  }
 }

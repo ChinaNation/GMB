@@ -3,11 +3,11 @@
 ## open
 
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
+- `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
 
 ## done
 
-- `memory/08-tasks/done/20260507-h1-node-admin-subject-storage-key.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -229,12 +229,16 @@
 - `memory/08-tasks/done/20260507-185958-第1步改造-admins-change-新增-institutionaccount-账户级主体-保留-sfidinstitution-仅作机构归属-实现统一动态阈值工.md`
 - `memory/08-tasks/done/20260507-192407-第2步改造-internal-vote-账户级快照与全员生命周期阈值.md`
 - `memory/08-tasks/done/20260507-194843-第3步破坏式改造-personal-manage-删除个人创建阈值入参与管理员镜像.md`
+- `memory/08-tasks/done/20260507-202521-第5步改造-duoqian-transfer-wuminapp-wumin-接入机构账户级主体.md`
+- `memory/08-tasks/done/20260507-203644-修复-gmb-仓库私有化后-公民链桌面节点-ui-的白皮书与公民宪法-tab-因依赖-github-pages-外链而显示-404-的问题.md`
 - `memory/08-tasks/done/20260507-ai-required-reading.md`
 - `memory/08-tasks/done/20260507-ai-unified-naming.md`
 - `memory/08-tasks/done/20260507-ai-unified-protocols.md`
 - `memory/08-tasks/done/20260507-cargo-pubspec-todo-cleanup.md`
 - `memory/08-tasks/done/20260507-clean-old-path-text.md`
 - `memory/08-tasks/done/20260507-clear-open-task-cards.md`
+- `memory/08-tasks/done/20260507-h1-node-admin-subject-storage-key.md`
+- `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`
 - `memory/08-tasks/done/20260507-p0-2-propose-create-institution.md`
 - `memory/08-tasks/done/20260507-p0-3-duoqian-storage-truth.md`
 - `memory/08-tasks/done/20260507-p0-4-immortal-era.md`
@@ -242,6 +246,7 @@
 - `memory/08-tasks/done/20260507-p0-6-cpms-sfid-path.md`
 - `memory/08-tasks/done/20260507-p1-6-qr-protocol-source.md`
 - `memory/08-tasks/done/20260507-p2-5-wuminapp-isar-dir.md`
+- `memory/08-tasks/done/20260507-personal-manage-risk-cleanup.md`
 - `memory/08-tasks/done/20260507-pr-c-organization-cleanup.md`
 - `memory/08-tasks/done/20260507-pr-c-storage-naming-cleanup.md`
 - `memory/08-tasks/done/20260507-pr-d-memory-freeze.md`

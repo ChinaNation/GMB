@@ -127,6 +127,7 @@ void main() {
         ...List<int>.filled(32, 0x33),
         ...List<int>.filled(32, 0x44),
         ...u128Le(BigInt.from(111)),
+        ...u128Le(BigInt.from(10)),
       ];
       final raw = Uint8List.fromList([
         ...compactU32(inner.length),
@@ -140,6 +141,7 @@ void main() {
       expect(info.proposalId, 7);
       expect(info.duoqianAddress, '33' * 32);
       expect(info.amountFen, BigInt.from(111));
+      expect(info.feeFen, BigInt.from(10));
     });
   });
 }

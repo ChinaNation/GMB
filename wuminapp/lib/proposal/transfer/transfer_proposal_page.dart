@@ -213,6 +213,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final beneficiary = _beneficiaryController.text.trim();
+        final institutionLabel = _coldWalletInstitutionLabel();
         // 千分位格式化，与 PayloadDecoder._fenToYuan 对齐
         final amountFormatted = AmountFormat.format(
                 AmountFormat.tryParse(_amountController.text) ?? 0,
@@ -226,13 +227,13 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
           payloadHex: '0x${_toHex(payload)}',
           display: SignDisplay(
             action: 'propose_transfer',
-            summary: '提案转账 $amountFormatted GMB 给 $beneficiary',
+            summary:
+                '$institutionLabel 提案转账 $amountFormatted GMB 给 $beneficiary',
             fields: [
-              // propose_transfer 链端 fields 按 Registry = (beneficiary,
-              // amount_yuan, remark)。原 `org` 字段已删除(2026-05-03):
-              // 个人多签和机构多签 orgType 都是 OrgType.duoqian,
-              // OrgType.label 输出"注册多签机构"对个人多签是误导,直接删字段。
-              // wumin 冷钱包 decoder 也同步移除 org 字段读取。
+              // propose_transfer 冷钱包按账户级 SubjectId 展示真实支出主体;
+              // org 只是链端路由,不进入 display.fields,避免个人多签被显示成机构。
+              SignDisplayField(
+                  key: 'institution', label: '转出账户', value: institutionLabel),
               SignDisplayField(
                   key: 'beneficiary', label: '收款账户', value: beneficiary),
               SignDisplayField(
@@ -304,6 +305,25 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
         setState(() => _submitting = false);
       }
     }
+  }
+
+  String _coldWalletInstitutionLabel() {
+    final identity = widget.institution.sfidNumber;
+    final registered = registeredDuoqianAddressFromIdentity(identity);
+    if (registered != null) {
+      return '机构账户 ${_shortHex(registered)}';
+    }
+    final personal = personalDuoqianAddressFromIdentity(identity);
+    if (personal != null) {
+      return '个人多签 ${_shortHex(personal)}';
+    }
+    return widget.institution.name;
+  }
+
+  String _shortHex(String hex) {
+    final value = hex.startsWith('0x') ? hex.substring(2) : hex;
+    if (value.length <= 14) return value;
+    return '${value.substring(0, 8)}...${value.substring(value.length - 6)}';
   }
 
   /// 仅当 [widget.institution] 是个人多签时,把转账提案写入 Isar 历史

@@ -2,7 +2,7 @@
 //
 // 链上 [AdminInstitution<AdminList, AccountId, BlockNumber>] SCALE 字节布局:
 //   org: u8                                       (1B)
-//   kind: AdminSubjectKind                         (1B,Enum 0/1/2)
+//   kind: AdminSubjectKind                         (1B,Enum 0/1/2/3)
 //   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B))
 //   threshold: u32                                 (4B)
 //   creator: AccountId                             (32B)
@@ -14,7 +14,7 @@
 //
 // 链端定义参考:
 // - [admins-change/src/lib.rs::AdminInstitution]
-// - [admins-change/src/lib.rs::AdminSubjectKind] (Builtin=0 / Sfid=1 / Personal=2)
+// - [admins-change/src/lib.rs::AdminSubjectKind] (Builtin=0 / Sfid=1 / Personal=2 / InstitutionAccount=3)
 
 import 'dart:typed_data';
 
@@ -29,7 +29,7 @@ class AdminInstitutionDecoded {
   /// 治理 org 标识(0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN 等)。
   final int org;
 
-  /// 主体类型:0=BuiltinInstitution / 1=SfidInstitution / 2=PersonalDuoqian。
+  /// 主体类型:0=BuiltinInstitution / 1=SfidInstitution / 2=PersonalDuoqian / 3=InstitutionAccount。
   final int kind;
 
   /// 管理员公钥 hex 列表(小写,无 0x 前缀,32 字节 = 64 hex 字符)。
@@ -45,12 +45,14 @@ class AdminInstitutionCodec {
   static const int kindBuiltin = 0;
   static const int kindSfid = 1;
   static const int kindPersonal = 2;
+  static const int kindInstitutionAccount = 3;
 
   /// `primitives::derive::SubjectKind` 字节值(D 阶段协议统一,2026-05-06)。
   /// SubjectId byte[0] 即为本枚举值。
   static const int subjectKindBuiltin = 0x01;
   static const int subjectKindSfidInstitution = 0x02;
   static const int subjectKindPersonalDuoqian = 0x03;
+  static const int subjectKindInstitutionAccount = 0x05;
 
   /// 解码 AdminInstitution SCALE bytes;格式不符返回 null(容错,不抛异常)。
   static AdminInstitutionDecoded? tryDecode(Uint8List bytes) {
@@ -100,6 +102,21 @@ class AdminInstitutionCodec {
   static String? personalAddressFromInstitutionId(Uint8List institutionId) {
     if (institutionId.length != 48) return null;
     if (institutionId[0] != subjectKindPersonalDuoqian) return null;
+    for (var i = 33; i < 48; i++) {
+      if (institutionId[i] != 0) return null;
+    }
+    return _hexEncode(institutionId.sublist(1, 33));
+  }
+
+  /// 机构账户判别 + 提取账户地址。
+  ///
+  /// ADR-015 起机构账户管理员主体必须是:
+  ///   byte[0]    = 0x05 (SubjectKind::InstitutionAccount)
+  ///   byte[1..33] = institution account(32B AccountId)
+  ///   byte[33..48] = 15B 零填充
+  static String? institutionAccountFromSubjectId(Uint8List institutionId) {
+    if (institutionId.length != 48) return null;
+    if (institutionId[0] != subjectKindInstitutionAccount) return null;
     for (var i = 33; i < 48; i++) {
       if (institutionId[i] != 0) return null;
     }

@@ -373,19 +373,19 @@ class DuoqianManageService {
 
   /// 查询个人多签 meta(creator + account_name)。
   ///
-  /// 链上 SCALE 布局(`PersonalDuoqianMeta`):
-  ///   creator: AccountId32(32B) + account_name: BoundedVec<u8>(Compact len + bytes)
+  /// 链上 SCALE 布局(`PersonalManage::PersonalDuoqians`):
+  ///   creator + account_name + created_at + status。
   ///
-  /// 返回 null 表示该 personal_address 不存在 PersonalDuoqianInfo entry。
+  /// 返回 null 表示该 personal_address 不存在 PersonalDuoqians entry。
   Future<({String creatorAddressHex, String accountName})?> fetchPersonalMeta(
     String personalAddressHex,
   ) async {
-    final key = DuoqianStorageCodec.personalDuoqianInfoKey(personalAddressHex);
+    final key = DuoqianStorageCodec.personalDuoqiansKey(personalAddressHex);
     final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
     if (data == null) return null;
-    final meta = DuoqianStorageCodec.decodePersonalMeta(data);
+    final meta = DuoqianStorageCodec.decodePersonalDuoqian(data);
     if (meta == null) return null;
-    final creator = _hexEncode(meta.creator);
+    final creator = meta.creatorHex;
     final name = _utf8Decode(meta.accountName);
     return (creatorAddressHex: creator, accountName: name);
   }
@@ -468,6 +468,18 @@ class DuoqianManageService {
     return _hexEncode(Uint8List.fromList(data.sublist(0, 32)));
   }
 
+  /// 通过机构账户地址反查其 SFID 归属和账户名。
+  Future<RegisteredInstitutionRef?> fetchRegisteredInstitutionRef(
+    String duoqianAddressHex,
+  ) async {
+    final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
+      duoqianAddressHex,
+    );
+    final refData = await _rpc.fetchStorage('0x${_hexEncode(refKey)}');
+    if (refData == null) return null;
+    return DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+  }
+
   /// 查询多签账户信息。
   ///
   /// 注册机构账户走 `AddressRegisteredSfid -> Institutions + InstitutionAccounts`；
@@ -492,28 +504,27 @@ class DuoqianManageService {
     final ref = DuoqianStorageCodec.decodeRegisteredInstitution(refData);
     if (ref == null) return null;
 
-    final institutionKey = DuoqianStorageCodec.institutionKey(ref.sfidNumber);
-    final institutionData =
-        await _rpc.fetchStorage('0x${_hexEncode(institutionKey)}');
-    if (institutionData == null) return null;
-    final institution =
-        DuoqianStorageCodec.decodeInstitutionInfo(institutionData);
-    if (institution == null) return null;
-
     final accountKey = DuoqianStorageCodec.institutionAccountKey(
       ref.sfidNumber,
       ref.accountName,
     );
     final accountData = await _rpc.fetchStorage('0x${_hexEncode(accountKey)}');
-    final account = accountData == null
-        ? null
-        : DuoqianStorageCodec.decodeInstitutionAccount(accountData);
-    final statusByte = account?.statusByte ?? institution.statusByte;
+    if (accountData == null) return null;
+    final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
+    if (account == null) return null;
+    final subjectId = DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+      duoqianAddressHex,
+    );
+    final adminKey = DuoqianStorageCodec.adminSubjectKey(subjectId);
+    final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
+    if (adminData == null) return null;
+    final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
+    if (admin == null) return null;
     return DuoqianAccountInfo(
-      adminCount: institution.adminCount,
-      threshold: institution.threshold,
-      adminPubkeys: institution.adminPubkeys,
-      status: _statusFromByte(statusByte),
+      adminCount: admin.adminCount,
+      threshold: admin.threshold,
+      adminPubkeys: admin.adminPubkeys,
+      status: _statusFromByte(account.statusByte),
     );
   }
 
@@ -544,7 +555,7 @@ class DuoqianManageService {
   /// 从 ProposalData 解码多签管理提案（创建或关闭）。
   ///
   /// ProposalData 存储为 BoundedVec<u8>，SCALE：Compact<len> + [ACTION_TYPE(1B)] + action.encode()
-  /// Personal ACTION_CREATE(0): duoqian_address(32B) + proposer(32B) + amount(u128)
+  /// Personal ACTION_CREATE(0): duoqian_address(32B) + proposer(32B) + amount(u128) + fee(u128)
   /// ACTION_CLOSE(org=2,personal=1): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CreateDuoqianProposalInfo 或 CloseDuoqianProposalInfo，解码失败返回 null。
@@ -607,8 +618,8 @@ class DuoqianManageService {
   CreateDuoqianProposalInfo? _decodeCreateAction(
       int proposalId, Uint8List data) {
     // PersonalManage::CreateDuoqianAction:
-    // duoqian_address(32) + proposer(32) + amount(u128)
-    if (data.length != 32 + 32 + 16) return null;
+    // duoqian_address(32) + proposer(32) + amount(u128) + fee(u128)
+    if (data.length != 32 + 32 + 16 + 16) return null;
     var offset = 0;
 
     final duoqianAddress =
@@ -625,12 +636,20 @@ class DuoqianManageService {
     for (var i = 15; i >= 0; i--) {
       amountBig = (amountBig << 8) | BigInt.from(amountBytes[i]);
     }
+    offset += 16;
+
+    final feeBytes = data.sublist(offset, offset + 16);
+    var feeBig = BigInt.zero;
+    for (var i = 15; i >= 0; i--) {
+      feeBig = (feeBig << 8) | BigInt.from(feeBytes[i]);
+    }
 
     return CreateDuoqianProposalInfo(
       proposalId: proposalId,
       duoqianAddress: duoqianAddress,
       proposer: proposerSs58,
       amountFen: amountBig,
+      feeFen: feeBig,
     );
   }
 

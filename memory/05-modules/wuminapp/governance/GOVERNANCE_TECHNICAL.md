@@ -445,14 +445,14 @@ message = blake2_256(SCALE.encode(payload))
 | `propose_transfer(org, institution, beneficiary, amount, remark)` | 19.0 | 管理员发起转账提案 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 管理员投票,达到阈值自动执行(统一入口) |
 
-投票通过后自动执行 `Currency::transfer(机构主账户 → beneficiary)`（治理机构为 `main_address`，注册多签为 `duoqian_address`）。
-执行失败不回滚投票，发出 `TransferExecutionFailed` 事件，清理提案，管理员需重新发起。
+投票通过后自动执行 `Currency::transfer(转出资金账户 → beneficiary)`（治理机构为 `main_address`，个人多签为 `0x03` 账户，注册机构账户为 `0x05` 账户）。
+执行失败不回滚投票，提案保持 `PASSED`，管理员可通过 `VotingEngine::retry_passed_proposal(9.4)` 统一重试。
 
 #### 7.5.1.1 手续费模型
 
 **提案提交和投票均免费**（`CallAmount` 返回 `NoAmount`），管理员个人账户零消耗，0 余额管理员也能操作。
 
-**手续费仅在投票通过后执行转账时扣取**，从机构主账户一次性扣除 `转账金额 + 手续费`。
+**手续费仅在投票通过后执行转账时扣取**，从转出资金账户一次性扣除 `转账金额 + 手续费`。
 
 手续费计算公式（与链上交易费一致）：
 - 费率：`amount × 0.1%`
@@ -497,9 +497,9 @@ message = blake2_256(SCALE.encode(payload))
 **propose_transfer**: `[0x13][0x00][org:u8][institution:48B][beneficiary:32B][amount:u128_le_16B][Vec remark]`
 **InternalVote::cast** (统一投票入口): `[0x16][0x00][proposal_id:u64_le][approve:bool]`
 
-#### 7.5.5 机构主账户地址（duoqianAddress 字段）
+#### 7.5.5 转出资金账户（duoqianAddress 字段）
 
-每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于注册多签机构，来源于 `OrganizationManage::InstitutionAccounts` 中的机构主账户。
+每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于个人多签，来源于 `PersonalManage::PersonalDuoqians`；对于注册机构账户，来源于 `OrganizationManage::InstitutionAccounts` 中该账户自己的地址。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
 ### 7.6 管理员列表页面
@@ -512,8 +512,7 @@ message = blake2_256(SCALE.encode(payload))
 
 ### 7.6 机构标识编码
 
-sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitives/china/china_ch.rs`（PRB），
-编码为 48 字节固定长度（UTF-8 右补零），与链上 `SubjectId` 一致。
+`institution_data.dart` 统一输出 D/ADR-015 `SubjectId(48)`：内置治理机构为 `0x01 + sfid_number UTF-8 + 右零填充`；个人多签为 `0x03 + AccountId32 + 15B 零填充`；注册机构账户为 `0x05 + AccountId32 + 15B 零填充`。`0x02 SfidInstitution` 只保留给同一 SFID 机构下多账户归属/检索，不作为转账支出主体。
 
 ### 7.7 关键文件
 
@@ -594,22 +593,21 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 
 ### 8.7 转账接入
 
-- `wuminapp` 现已把注册型机构也编码为 `SubjectId(48)`：
-  - 治理机构：`sfid_number` UTF-8 右补零到 48 字节
-  - 注册型机构：`duoqian_address(32) + 16 字节 0`
+- `wuminapp` 现已把三类可转账账户都编码为 `SubjectId(48)`：
+  - 治理机构：`0x01 + sfid_number UTF-8 + 右零填充`
+  - 个人多签：`0x03 + duoqian_address(32) + 15 字节 0`
+  - 注册机构账户：`0x05 + duoqian_address(32) + 15 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `InstitutionAdminService` 对内置治理机构和注册型机构都读取 `AdminsChange.Subjects`；账户和生命周期分别读取 `OrganizationManage::InstitutionAccounts` / `PersonalManage::PersonalDuoqians`。
-- 冷钱包二维码协议未变，只是 `org = 3` 的摘要显示改为“注册多签机构”。
+- `InstitutionAdminService` 对注册机构账户读取 `AddressRegisteredSfid` 确认归属，再读取 `AdminsChange::Subjects[0x05 InstitutionAccount]`；个人多签直接读取 `0x03 PersonalDuoqian`；内置治理机构读取 `0x01 BuiltinInstitution`。
+- 冷钱包 `propose_transfer` 展示字段为 `institution / beneficiary / amount_yuan / remark`，其中 `institution` 从 SubjectId 解码为内置机构名、`个人多签 <short>` 或 `机构账户 <short>`；`org` 仅用于链端路由，不进入展示字段。
 
 ### 8.8 手机端入口分流
 
 2026-04-30 起，`wuminapp` 将多签账户入口从“我的”页迁入交易页，并拆成
 两个单类型入口：
 
-- `机构多签`：只读取 `DuoqianInstitutionEntity`，右上角只提供“创建机构多签账户”
-  和“扫码加入多签账户”。
-- `个人多签`：只读取 `PersonalDuoqianEntity`，右上角只提供“创建个人多签账户”
-  和“扫码加入多签账户”。
+- `机构多签`：只读取 `DuoqianInstitutionEntity`，右上角提供“创建机构多签账户”和链上自动发现/刷新入口。
+- `个人多签`：只读取 `PersonalDuoqianEntity`，右上角提供“创建个人多签账户”和链上自动发现/刷新入口。
 
 旧的 `lib/trade/duoqian/duoqian_trade_page.dart` 聚合页已删除。发起转账提案不删除，
 入口改为放在每个多签账户详情页，进入后仍使用

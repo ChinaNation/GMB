@@ -41,6 +41,9 @@ class DecodedPayload {
 class PayloadDecoder {
   /// SS58 地址前缀。
   static const int _ss58Prefix = ChainConstants.ss58Prefix;
+  static const int _subjectKindBuiltin = 0x01;
+  static const int _subjectKindPersonalDuoqian = 0x03;
+  static const int _subjectKindInstitutionAccount = 0x05;
 
   /// 尝试从 payload_hex 中解码交易信息。
   ///
@@ -443,13 +446,14 @@ class PayloadDecoder {
 
     var offset = 2;
 
-    // org: u8
-    final org = bytes[offset];
+    // org: u8 仅用于链端路由,冷钱包展示以 SubjectId 解出的具体账户为准。
     offset += 1;
-    final orgName = _orgName(org);
 
-    // institution: [u8; 48]
+    // institution: [u8; 48]，必须是 D/ADR-015 SubjectId。
+    final institutionBytes = bytes.sublist(offset, offset + 48);
     offset += 48;
+    final subject = _decodeSpendSubjectId(institutionBytes);
+    if (subject == null) return null;
 
     // beneficiary: 32 bytes（无 MultiAddress 前缀）
     final beneficiaryId = bytes.sublist(offset, offset + 32);
@@ -474,9 +478,9 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_transfer',
       summary:
-          '$orgName 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
+          '${subject.label} 提案转账 $amountYuan GMB 给 ${_truncateAddress(beneficiary)}',
       fields: {
-        'org': orgName,
+        'institution': subject.label,
         'beneficiary': beneficiary,
         'amount_yuan': '$amountYuan GMB',
         'remark': remark,
@@ -1068,14 +1072,8 @@ class PayloadDecoder {
     var offset = 2;
     final institutionBytes = bytes.sublist(offset, offset + 48);
     offset += 48;
-    var endIndex = 48;
-    while (endIndex > 0 && institutionBytes[endIndex - 1] == 0) {
-      endIndex--;
-    }
-    final sfidNumber = endIndex > 0
-        ? String.fromCharCodes(institutionBytes.sublist(0, endIndex))
-        : '';
-    final bankName = institutionName(sfidNumber) ?? sfidNumber;
+    final bankName = _decodeBuiltinSubjectLabel(institutionBytes);
+    if (bankName == null) return null;
     final amountFen = _readU128Le(bytes, offset);
     final amountYuan = _fenToYuan(amountFen);
     return DecodedPayload(
@@ -1316,6 +1314,62 @@ class PayloadDecoder {
   /// 0x 小写 hex(feedback_pubkey_format_rule.md 铁律)。
   static String _bytesToLowerHex(Uint8List bytes) {
     return '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  static ({int kind, String label})? _decodeSpendSubjectId(Uint8List bytes) {
+    if (bytes.length != 48) return null;
+    switch (bytes[0]) {
+      case _subjectKindBuiltin:
+        final label = _decodeBuiltinSubjectLabel(bytes);
+        return label == null ? null : (kind: _subjectKindBuiltin, label: label);
+      case _subjectKindPersonalDuoqian:
+        final account =
+            _accountHexFromSubject(bytes, _subjectKindPersonalDuoqian);
+        return account == null
+            ? null
+            : (
+                kind: _subjectKindPersonalDuoqian,
+                label: '个人多签 ${_shortHex(account)}'
+              );
+      case _subjectKindInstitutionAccount:
+        final account =
+            _accountHexFromSubject(bytes, _subjectKindInstitutionAccount);
+        return account == null
+            ? null
+            : (
+                kind: _subjectKindInstitutionAccount,
+                label: '机构账户 ${_shortHex(account)}'
+              );
+      default:
+        return null;
+    }
+  }
+
+  static String? _decodeBuiltinSubjectLabel(Uint8List bytes) {
+    if (bytes.length != 48 || bytes[0] != _subjectKindBuiltin) return null;
+    var end = 48;
+    while (end > 1 && bytes[end - 1] == 0) {
+      end--;
+    }
+    if (end <= 1) return null;
+    final sfidNumber = utf8.decode(bytes.sublist(1, end), allowMalformed: true);
+    return institutionName(sfidNumber) ?? sfidNumber;
+  }
+
+  static String? _accountHexFromSubject(Uint8List bytes, int expectedKind) {
+    if (bytes.length != 48 || bytes[0] != expectedKind) return null;
+    for (var i = 33; i < 48; i++) {
+      if (bytes[i] != 0) return null;
+    }
+    return bytes
+        .sublist(1, 33)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  static String _shortHex(String hex) {
+    if (hex.length <= 14) return hex;
+    return '${hex.substring(0, 8)}...${hex.substring(hex.length - 6)}';
   }
 
   static Uint8List _hexToBytes(String input) {

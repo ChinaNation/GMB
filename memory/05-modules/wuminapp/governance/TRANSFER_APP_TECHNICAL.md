@@ -1,8 +1,8 @@
-# 机构转账提案 App 侧技术方案
+# 多签账户转账提案 App 侧技术说明
 
 ## 1. 功能概述
 
-管理员在机构详情页点击"转账"提案类型后,进入转账表单页面,填写收款地址、金额、备注,提交后构造 `propose_transfer` extrinsic 签名上链。其他管理员可查看提案详情并投票(`InternalVote::cast`)。
+管理员在治理机构、个人多签或注册机构账户详情页点击"转账"后,进入转账表单页面,填写收款地址、金额、备注,提交后构造 `DuoqianTransfer::propose_transfer` extrinsic 签名上链。其他管理员可查看提案详情并投票(`InternalVote::cast`)。
 
 ## 2. 页面流程
 
@@ -23,19 +23,19 @@
 | 元素 | 类型 | 说明 |
 |---|---|---|
 | 机构名称 | 文本（只读） | 自动填充，不可编辑 |
-| 机构类型 | 标签（只读） | NRC/PRC/PRB |
-| 转出地址 | 文本（只读） | 机构 main_address 的 SS58 地址 |
+| 账户类型 | 标签（只读） | NRC/PRC/PRB/个人多签/机构账户 |
+| 转出地址 | 文本（只读） | `duoqianAddress` 对应的 SS58 地址 |
 | 收款地址 | 输入框 | SS58 格式，支持扫码输入 |
 | 转账金额 | 输入框 | 单位：元，最低 1.11 元（111分 = ED） |
 | 预估手续费 | 文本（实时计算） | `max(金额 × 0.1%, 0.10元)` |
 | 备注 | 输入框 | 可选，最长 256 字节 |
-| 可用余额 | 文本（链上查询） | 机构 main_address 的 free_balance |
+| 可用余额 | 文本（链上查询） | 转出资金账户的 free_balance |
 | 提交按钮 | 按钮 | 校验通过后签名提交 |
 
 **本地校验**：
 
 1. 收款地址必须是合法 SS58 地址（format 2027）
-2. 收款地址不能是本机构的 main_address（自转账）
+2. 收款地址不能是本账户的 `duoqianAddress`（自转账）
 3. 金额 >= 1.11 元（111 分，ED）
 4. 金额 + 手续费 + ED <= 可用余额
 5. 备注 UTF-8 编码后 <= 256 字节
@@ -67,11 +67,11 @@
 
 | 数据 | Storage 路径 | 说明 |
 |---|---|---|
-| 提案动作 | `DuoqianTransfer::ProposalActions(proposal_id)` | 机构、收款地址、金额、备注、发起人 |
+| 提案动作 | `VotingEngine::ProposalData(proposal_id)` | `MODULE_TAG + TransferAction`，包含转出 SubjectId、收款地址、金额、备注、发起人 |
 | 提案状态 | `VotingEngine::Proposals(proposal_id)` | status(0=投票中/1=通过/2=拒绝)、start、end |
 | 投票计数 | `VotingEngine::InternalTallies(proposal_id)` | yes_count、no_count |
 | 投票记录 | `VotingEngine::InternalVotesByAccount(proposal_id, admin_pubkey)` | bool(赞成/反对) |
-| 活跃提案ID | `DuoqianTransfer::ActiveProposalByInstitution(institution_id)` | u64 proposal_id |
+| 活跃提案ID | `VotingEngine::ActiveProposalsByInstitution(subject_id)` | 同一 SubjectId 下的活跃提案 |
 
 ## 4. 链上 Extrinsic 编码
 
@@ -85,10 +85,10 @@
 ```
 [0x13]                              // pallet_index = 19
 [0x00]                              // call_index = 0
-[u8]                                // org: 0=NRC, 1=PRC, 2=PRB
-[48 bytes]                          // institution: sfid_number 右补零到 48 字节
-[0x00 + 32 bytes]                   // beneficiary: MultiAddress::Id + AccountId32
-[Compact<u128>]                     // amount: 金额（分）
+[u8]                                // org: 0=NRC, 1=PRC, 2=PRB, 3=ORG_REN
+[48 bytes]                          // institution: D/ADR-015 SubjectId
+[32 bytes]                          // beneficiary: AccountId32（无 MultiAddress 前缀）
+[16 bytes little-endian]            // amount: u128 金额（分）
 [Compact<u32> + bytes]              // remark: SCALE Vec<u8> (Compact 长度 + 原始字节)
 ```
 
@@ -116,7 +116,7 @@
 
 ```dart
 class TransferProposalService {
-  /// 查询机构 main_address 的可用余额（元）
+  /// 查询转出资金账户的可用余额（元）
   Future<double> fetchInstitutionBalance(String sfidNumber);
 
   /// 查询机构活跃的转账提案 ID（无活跃提案返回 null）
@@ -166,13 +166,14 @@ class TransferProposalService {
 
 注：`blake2_128_concat` = `blake2_128(data) + data`。
 
-## 7. main_address 查询
+## 7. SubjectId 与转出账户查询
 
-机构的 main_address 预置在 `primitives` 中，App 侧需要：
+App 侧统一通过 `institutionIdentityToPalletId` 生成链上 `SubjectId(48)`：
 
-1. 在 `institution_data.dart` 中为每个 `InstitutionInfo` 增加 `duoqianAddress` 字段（32 字节公钥 hex）
-2. 从 `primitives/china/china_cb.rs` 和 `primitives/china/china_ch.rs` 中提取 87 个机构的 `main_address`
-3. 通过 `Keyring().encodeAddress(bytes, 2027)` 转换为 SS58 地址展示
+1. 治理机构：`0x01 + sfid_number UTF-8 + 右零填充`，`duoqianAddress` 来源于 primitives 预置 `main_address`
+2. 个人多签：`0x03 + AccountId32 + 15B 零填充`，状态读取 `PersonalManage::PersonalDuoqians`
+3. 注册机构账户：`0x05 + AccountId32 + 15B 零填充`，状态读取 `OrganizationManage::InstitutionAccounts`
+4. `0x02 SfidInstitution` 只用于 SFID 机构归属/检索，不作为转账支出主体
 
 ## 8. 手续费显示
 
@@ -180,7 +181,7 @@ class TransferProposalService {
 
 - 费率：0.1%
 - 最低：0.10 元
-- 支付方：机构 main_address（非管理员个人）
+- 支付方：转出资金账户（非管理员个人）
 
 ## 9. 签名适配
 

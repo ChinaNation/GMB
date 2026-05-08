@@ -5,7 +5,7 @@
 - crate 路径:`citizenchain/runtime/governance/personal-manage/`
 - MODULE_TAG:`b"per-mgmt"`(8 字节)
 - 创建日期:2026-05-06(任务卡 B 拆分)
-- 最新更新:2026-05-08(ADR-015 第 3 步破坏式改造)
+- 最新更新:2026-05-08(重新创世前总审计修复)
 - 关联 ADR:ADR-009(personal-manage 拆分)、ADR-010(SubjectId 协议)、ADR-015(账户级内部投票管理员模型)
 
 ## 模块定位
@@ -37,13 +37,13 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 
 | 名 | key/value | 用途 |
 |---|---|---|
-| `PersonalDuoqians` | `StorageMap<address, DuoqianAccount>` | 个人多签账户生命周期状态,仅保存 `creator / created_at / status` |
-| `PersonalDuoqianInfo` | `StorageMap<address, PersonalDuoqianMeta>` | 反向索引(creator + account_name) |
-| `PendingPersonalCreate` | `StorageMap<proposal_id, CreateDuoqianAction>` | 创建提案投票期 reserve 资金记录 |
+| `PersonalDuoqians` | `StorageMap<address, DuoqianAccount>` | 个人多签账户生命周期状态,保存 `creator / account_name / created_at / status` |
+| `PendingPersonalCreate` | `StorageMap<proposal_id, CreateDuoqianAction>` | 创建提案投票期 reserve 资金与 fee 快照 |
 | `PendingCloseProposal` | `StorageMap<address, proposal_id>` | 防并发关闭提案 |
 
 管理员、管理员数量和普通阈值不再存储或镜像在 `PersonalDuoqians`。
 唯一真源为 `admins-change::Subjects[subject_id_from_account(personal_address)]`。
+旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalDuoqians`。
 
 ## extrinsic
 
@@ -68,10 +68,9 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 ## 类型(`src/types.rs`)
 
 - `DuoqianStatus { Pending, Active }`
-- `DuoqianAccount<AccountId, BlockNumber>`：只保存 `creator / created_at / status`
+- `DuoqianAccount<AccountId, AccountName, BlockNumber>`：保存 `creator / account_name / created_at / status`
 - `CreateDuoqianAction<AccountId, Balance>`
 - `CloseDuoqianAction<AccountId>`
-- `PersonalDuoqianMeta<AccountId, AccountName>`
 
 `CreateDuoqianAction` 当前字段：
 
@@ -79,7 +78,10 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 duoqian_address: AccountId
 proposer: AccountId
 amount: Balance
+fee: Balance
 ```
+
+`fee` 是创建提案发起时的手续费快照。执行、否决 cleanup、执行失败终态 cleanup 都必须按该快照处理 reserve,不得用当前 runtime 的 fee 公式重新计算。
 
 ## trait(对外暴露)
 
@@ -113,7 +115,7 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 | 账户表 | `PersonalDuoqians`(单地址) | `Institutions`(SfidNumber-keyed) + `InstitutionAccounts`(机构下多账户) |
 | MODULE_TAG | `b"per-mgmt"` | `b"org-mgmt"` |
 | pallet_index | 7 | 17 |
-| 客户端 dispatch | `PersonalDuoqianInfo.has(addr)` 命中走此 pallet | `AddressRegisteredSfid.has(addr)` 命中走 organization-manage |
+| 客户端 dispatch | `PersonalDuoqians.has(addr)` 命中走此 pallet | `AddressRegisteredSfid.has(addr)` 命中走 organization-manage |
 
 ## 客户端协议
 
@@ -121,20 +123,21 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 - wuminapp `DuoqianManageService.submitProposeCreatePersonal` 编码：
   `0x07 0x00 + account_name + duoqian_admins + amount`。
 - wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
-  管理员和阈值读 `AdminsChange::Subjects`。
+  `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员和阈值读 `AdminsChange::Subjects`。
+- wuminapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
 - wumin `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
 - wumin `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
   `admin_count + threshold` 交易载荷。
 
 ## 测试
 
-当前 personal-manage 自持单测 19 case：
+当前 personal-manage 自持单测 23 case：
 
 ```bash
 cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib
 ```
 
-第 3 步破坏式改造后已回归通过：19 passed。
+重新创世前总审计修复后已回归通过：23 passed。
 
 联动回归：
 
@@ -149,17 +152,18 @@ flutter test test/signer/payload_decoder_test.dart
 
 当前结果：
 
-- `personal-manage`:19 passed。
+- `personal-manage`:23 passed。
 - `admins-change`:39 passed。
 - `internal-vote`:86 passed。
-- `duoqian-transfer`:20 passed。
+- `duoqian-transfer`:22 passed。
 - `organization-manage`:24 passed。
 - `wuminapp` 多签相关测试:10 passed。
 - `wumin` 冷钱包 payload decoder:30 passed。
+- `sfid/backend`:cargo check 通过。
 
 ## benchmarks
 
-`src/benchmarks.rs` 当前为空骨架(D 阶段补);weights.rs 走零权重占位。完整 benchmark 用例补齐留 follow-up 任务卡。
+`src/benchmarks.rs` 当前为空骨架(D 阶段补);weights.rs 已使用保守非零权重。完整 benchmark 用例补齐留 follow-up 任务卡。
 
 ## follow-up debt
 
@@ -167,7 +171,7 @@ flutter test test/signer/payload_decoder_test.dart
 
 ## 已清的 follow-up(2026-05-07)
 
-- ~~personal-manage 自持单测~~ → 初始 16 用例已补；第 3 步扩展后为 19 passed
+- ~~personal-manage 自持单测~~ → 初始 16 用例已补；重新创世前总审计修复后为 23 passed
 - ~~organization-manage 单测重写~~ → 22 用例已补(`src/tests/{mod.rs(441 行), cases.rs(716 行)}`,24 passed)
 
 ## 第 3 步执行结果(2026-05-08)
@@ -183,3 +187,18 @@ flutter test test/signer/payload_decoder_test.dart
 - wuminapp 创建页移除手填阈值，只展示派生日常阈值与创建全员阈值。
 - wumin 冷钱包拒绝旧个人创建交易载荷。
 - 本次未修改 `spec_version`。
+
+## 重新创世前总审计修复结果(2026-05-08)
+
+- `CreateDuoqianAction` 新增 `fee` 快照字段,执行/清理不再按当前 fee policy 重算创建手续费。
+- `cleanup_pending_create` 先检查 `PendingPersonalCreate` 是否存在,重复手动 cleanup 不再重复发 `DuoqianCreateRejected`。
+- 旧反向索引 storage 和 meta 类型已删除,`account_name` 合并进 `PersonalDuoqians`。
+- `remove_pending_admin_subject` 不再吞掉 `admins-change` 错误,清理路径会向上返回失败。
+- `execute_create_with_finalizer` / `execute_close_with_finalizer` 已删除死参数。
+- `InternalVoteExecutor` 统一使用 `decode_module_action` 解码 `MODULE_TAG + ACTION + payload`。
+- 创建/关闭执行失败事件改由 `on_execution_failed_terminal` 在终态清理后发出。
+- `DuoqianClosed` 事件补充 `admin_count / threshold`。
+- `PersonalDuoqianProposed` 事件补充 `fee`。
+- `weights.rs` 从 0 权重改为保守非零权重。
+- wuminapp storage codec 和 ProposalData 解码同步新 SCALE 布局。
+- SFID indexer 已读取 `DuoqianCreated / DuoqianClosed` 事件中的 `fee` 字段。
