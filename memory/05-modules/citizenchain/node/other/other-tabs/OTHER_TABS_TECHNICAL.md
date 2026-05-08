@@ -36,6 +36,11 @@
 静态资源入口。开发服务器和正式构建都会从 `docs/GMB_README.html` 与
 `docs/FRC_README.html` 提供页面，避免仓库私有化后 GitHub Pages 外链返回 404。
 
+白皮书 HTML 内部加载的 Markdown 路径是 `/GMB_WHITEPAPER.md`。该文件不在
+`docs/` 中维护第二份副本，而是由 Vite 的 `citizenchain-local-whitepaper`
+插件在开发模式从 `memory/00-vision/GMB_WHITEPAPER.md` 读取，在正式构建时发射到
+`frontend/dist/GMB_WHITEPAPER.md`，保持 `memory/00-vision/` 仍是白皮书正文真源。
+
 ## 5. 安全策略
 
 - 前端渲染 iframe 时应用 `sandbox="allow-scripts allow-same-origin"` 属性，限制嵌入页面的能力。
