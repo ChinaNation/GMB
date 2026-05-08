@@ -311,9 +311,7 @@ fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
         let create_call =
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 account_name,
-                admin_count: 2,
                 duoqian_admins: admins.clone(),
-                threshold: 2,
                 amount: 1_000,
             });
         let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<

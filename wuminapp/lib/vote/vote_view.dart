@@ -449,7 +449,7 @@ class _VoteViewState extends State<VoteView> {
                             : upgradeDetail != null
                                 ? 'Runtime 升级'
                                 : createDqDetail != null
-                                    ? '创建多签 · ${createDqDetail.adminCount} 管理员'
+                                    ? '创建个人多签'
                                     : closeDqDetail != null
                                         ? '关闭多签'
                                         : resIssuance != null

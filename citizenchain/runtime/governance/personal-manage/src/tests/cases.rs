@@ -30,9 +30,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name.clone(),
-            3,
             admins.clone(),
-            2,
             CREATE_AMOUNT,
         ));
 
@@ -44,6 +42,15 @@ fn propose_create_writes_pending_and_reserves_fee() {
         assert_eq!(
             pallet::PersonalDuoqians::<Test>::get(&dq).unwrap().status,
             types::DuoqianStatus::Pending
+        );
+        let subject = primitives::derive::subject_id_from_account(&dq);
+        assert_eq!(
+            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            Some(2)
+        );
+        assert_eq!(
+            internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
+            Some(3)
         );
         // creator 已被 reserve(amount + fee)
         assert_eq!(Balances::reserved_balance(&c), CREATE_AMOUNT + CREATE_FEE);
@@ -72,9 +79,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name,
-            3,
             admins,
-            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -89,6 +94,11 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         // 多签账户激活,资金到位,Pending 已清
         let dq_state = pallet::PersonalDuoqians::<Test>::get(&dq).expect("active duoqian");
         assert_eq!(dq_state.status, types::DuoqianStatus::Active);
+        let subject = primitives::derive::subject_id_from_account(&dq);
+        assert_eq!(
+            admins_change::Pallet::<Test>::active_subject_threshold(ORG_REN, subject),
+            Some(2)
+        );
         assert_eq!(Balances::free_balance(&dq), CREATE_AMOUNT);
         assert_eq!(Balances::reserved_balance(&c), 0);
         assert!(!pallet::PendingPersonalCreate::<Test>::contains_key(pid));
@@ -109,9 +119,7 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             name,
-            3,
             admins,
-            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -137,15 +145,13 @@ fn propose_create_rejects_duplicate_personal_address() {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"alice-personal");
         // 直接把目标地址灌成 Active,模拟"地址已存在"
-        seed_active_duoqian(&dq, &c, &[admin(0), admin(1), admin(2)], 2, 500);
+        seed_active_duoqian(&dq, &c, &[admin(0), admin(1), admin(2)], 500);
 
         assert_noop!(
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"alice-personal"),
-                3,
                 admins_vec(3),
-                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::PersonalDuoqianAlreadyExists
@@ -153,36 +159,85 @@ fn propose_create_rejects_duplicate_personal_address() {
     });
 }
 
-// ─── 5. 阈值非法 ─────────────────────────────────────────────────────
+// ─── 5. 普通业务阈值由链端派生 ───────────────────────────────────────
 
 #[test]
-fn propose_create_rejects_invalid_threshold() {
+fn propose_create_derives_regular_threshold_and_uses_all_admin_create_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
-        // 3 个 admin,合法 threshold 范围 [2, 3];threshold=1 应拒
-        assert_noop!(
-            PersonalManage::propose_create(
-                RuntimeOrigin::signed(c.clone()),
-                account_name(b"low-threshold"),
-                3,
-                admins_vec(3),
-                1,
-                CREATE_AMOUNT,
-            ),
-            pallet::Error::<Test>::InvalidThreshold
+        let dq = proposed_duoqian_address(&c, b"derived-threshold");
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c.clone()),
+            account_name(b"derived-threshold"),
+            admins_vec(3),
+            CREATE_AMOUNT,
+        ));
+        let pid = last_proposal_id();
+        let subject = primitives::derive::subject_id_from_account(&dq);
+        assert_eq!(
+            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            Some(2)
         );
-        // threshold > admin_count 应拒
-        assert_noop!(
-            PersonalManage::propose_create(
-                RuntimeOrigin::signed(c),
-                account_name(b"high-threshold"),
-                3,
-                admins_vec(3),
-                4,
-                CREATE_AMOUNT,
-            ),
-            pallet::Error::<Test>::InvalidThreshold
+        assert_eq!(
+            internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
+            Some(3)
         );
+    });
+}
+
+#[test]
+fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let dq = proposed_duoqian_address(&c, b"two-admin");
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c),
+            account_name(b"two-admin"),
+            admins_vec(2),
+            CREATE_AMOUNT,
+        ));
+        let pid = last_proposal_id();
+        let subject = primitives::derive::subject_id_from_account(&dq);
+        assert_eq!(
+            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            Some(2)
+        );
+        assert_eq!(
+            internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
+            Some(2)
+        );
+    });
+}
+
+#[test]
+fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() {
+    new_test_ext().execute_with(|| {
+        let c = setup_creator_balance();
+        let dq = proposed_duoqian_address(&c, b"sixty-four-admins");
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c),
+            account_name(b"sixty-four-admins"),
+            admins_vec(64),
+            CREATE_AMOUNT,
+        ));
+        let pid = last_proposal_id();
+        let subject = primitives::derive::subject_id_from_account(&dq);
+        assert_eq!(
+            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            Some(32)
+        );
+        assert_eq!(
+            internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
+            Some(64)
+        );
+    });
+}
+
+#[test]
+fn sixty_five_admin_personal_create_cannot_be_encoded() {
+    new_test_ext().execute_with(|| {
+        let admins: alloc::vec::Vec<AccountId32> = (0..65u8).map(admin).collect();
+        assert!(pallet::DuoqianAdminsOf::<Test>::try_from(admins).is_err());
     });
 }
 
@@ -199,9 +254,7 @@ fn propose_create_rejects_duplicate_admins() {
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"dup"),
-                3,
                 dup_admins,
-                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::DuplicateAdmin
@@ -220,9 +273,7 @@ fn propose_create_rejects_below_minimum_amount() {
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"too-small"),
-                3,
                 admins_vec(3),
-                2,
                 100, // 100 < 111
             ),
             pallet::Error::<Test>::CreateAmountBelowMinimum
@@ -238,7 +289,7 @@ fn propose_close_writes_pending_and_blocks_concurrent() {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"close-pending");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 2, 1_000);
+        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
 
         let beneficiary_acc = beneficiary();
 
@@ -267,7 +318,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"close-active");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 2, 1_000);
+        seed_active_duoqian(&dq, &c, &admins_acc, 1_000);
         let beneficiary_acc = beneficiary();
 
         assert_ok!(PersonalManage::propose_close(
@@ -300,7 +351,7 @@ fn propose_close_rejects_when_balance_below_minimum() {
         let dq = proposed_duoqian_address(&c, b"low-balance");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
         // MinCloseBalance = 111,这里灌 50 → 应拒
-        seed_active_duoqian(&dq, &c, &admins_acc, 2, 50);
+        seed_active_duoqian(&dq, &c, &admins_acc, 50);
 
         assert_noop!(
             PersonalManage::propose_close(RuntimeOrigin::signed(admin(0)), dq, beneficiary(),),
@@ -321,9 +372,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"cleanup-test"),
-            3,
             admins,
-            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -377,9 +426,7 @@ fn non_admin_cannot_propose_or_vote() {
             PersonalManage::propose_create(
                 RuntimeOrigin::signed(c),
                 account_name(b"x"),
-                3,
                 BoundedVec::try_from(vec![admin(1), admin(2), admin(3)]).expect("fits"),
-                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::PermissionDenied
@@ -392,9 +439,7 @@ fn non_admin_cannot_propose_or_vote() {
         assert_ok!(PersonalManage::propose_create(
             RuntimeOrigin::signed(admin(0)),
             account_name(b"y"),
-            3,
             admins,
-            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -414,7 +459,7 @@ fn existential_deposit_is_preserved_after_close() {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"ed-check");
         let admins_acc = vec![admin(0), admin(1), admin(2)];
-        seed_active_duoqian(&dq, &c, &admins_acc, 2, 500);
+        seed_active_duoqian(&dq, &c, &admins_acc, 500);
         let beneficiary_acc = beneficiary();
 
         assert_ok!(PersonalManage::propose_close(

@@ -115,23 +115,15 @@ void main() {
     });
 
     test('decodes personal account state', () {
-      final admin1 = List<int>.filled(32, 0x44);
-      final admin2 = List<int>.filled(32, 0x55);
       final data = Uint8List.fromList([
-        ...u32Le(2),
-        ...u32Le(2),
-        (2 << 2) & 0xff,
-        ...admin1,
-        ...admin2,
         ...List<int>.filled(32, 0x66),
         ...u32Le(101),
         1,
       ]);
 
       final decoded = DuoqianStorageCodec.decodePersonalDuoqian(data)!;
-      expect(decoded.adminCount, 2);
-      expect(decoded.threshold, 2);
-      expect(decoded.adminPubkeys, ['44' * 32, '55' * 32]);
+      expect(decoded.creatorHex, '66' * 32);
+      expect(decoded.createdAt, 101);
       expect(decoded.statusByte, 1);
     });
   });

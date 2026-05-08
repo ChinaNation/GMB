@@ -1,7 +1,7 @@
 # DUOQIAN_TECHNICAL
 
 模块：`organization-manage`  
-最新更新：2026-05-02
+最新更新：2026-05-08，第 2 步内部投票全员生命周期阈值回归通过。
 
 ## 1. 当前边界
 
@@ -140,7 +140,7 @@ runtime 适配：
 
 ## 8. 测试覆盖
 
-`cargo test -p organization-manage --lib` 已覆盖：
+`cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib` 已覆盖：
 
 - 机构级创建通过后激活所有账户，并把 reserve 资金划入对应账户。
 - 机构级创建被拒绝后释放 reserve 并清理索引。
@@ -153,9 +153,9 @@ runtime 适配：
 
 关联验证：
 
-- `cargo test -p admins-change --lib`
-- `cargo test -p duoqian-transfer --lib`
-- `cargo test -p offchain-transaction --lib`
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：34 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：24 passed。
 
 ## 9. 变更记录
 

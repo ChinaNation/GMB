@@ -37,6 +37,9 @@ use super::pallet::{
 };
 use super::{institution_info, is_joint_unanimous};
 
+#[cfg(test)]
+use codec::Encode;
+
 // ──────────────────────────────────────────────────────────────────
 // 私有 helper:发起人机构解析 + (org, weight) profile
 // ──────────────────────────────────────────────────────────────────

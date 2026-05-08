@@ -30,6 +30,18 @@ impl<T: pallet::Config> pallet::Pallet<T> {
         AdminSnapshot::<T>::get(proposal_id, institution).map(|admins| admins.len() as u32)
     }
 
+    fn ensure_valid_admin_snapshot(admins: &[T::AccountId]) -> DispatchResult {
+        // 中文注释：内部投票一旦创建就只认快照；空快照会导致提案无人可投，
+        // 重复管理员会破坏“一管理员一票”的票权语义，所以必须在写快照前拒绝。
+        frame_support::ensure!(!admins.is_empty(), Error::<T>::MissingAdminSnapshot);
+        for i in 0..admins.len() {
+            for j in i.saturating_add(1)..admins.len() {
+                frame_support::ensure!(admins[i] != admins[j], Error::<T>::InvalidInstitution);
+            }
+        }
+        Ok(())
+    }
+
     /// 将当前管理员列表写入快照存储。
     /// 如果管理员数量超过 MaxAdminsPerInstitution,触发 defensive 告警。
     pub fn snapshot_institution_admins(
@@ -44,6 +56,8 @@ impl<T: pallet::Config> pallet::Pallet<T> {
             T::InternalAdminProvider::get_admin_list(org, institution)
         }
         .ok_or(Error::<T>::InvalidInstitution)?;
+
+        Self::ensure_valid_admin_snapshot(admins.as_slice())?;
 
         match BoundedVec::<T::AccountId, T::MaxAdminsPerInstitution>::try_from(admins) {
             Ok(bounded) => {

@@ -1,8 +1,8 @@
 //! 个人多签类型定义。
 //!
 //! 第一类是"账户基本信息"——`DuoqianStatus` / `DuoqianAccount`,
-//! 由 `PersonalDuoqians` storage map 引用,描述个人多签的账户状态、
-//! 管理员列表、阈值、创建者、创建区块。
+//! 由 `PersonalDuoqians` storage map 引用,只描述个人多签的账户状态、
+//! 创建者、创建区块。管理员列表和普通阈值的唯一真源是 `admins-change`。
 //!
 //! 第二类是"提案业务数据"——`CreateDuoqianAction` / `CloseDuoqianAction`,
 //! 在投票引擎 `ProposalData` 里 SCALE 编码存放,投票通过后由
@@ -47,11 +47,7 @@ pub enum DuoqianStatus {
     PartialEq,
     Eq,
 )]
-#[scale_info(skip_type_params(AdminList))]
-pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
-    pub admin_count: u32,
-    pub threshold: u32,
-    pub duoqian_admins: AdminList,
+pub struct DuoqianAccount<AccountId, BlockNumber> {
     pub creator: AccountId,
     pub created_at: BlockNumber,
     pub status: DuoqianStatus,
@@ -62,8 +58,6 @@ pub struct DuoqianAccount<AdminList, AccountId, BlockNumber> {
 pub struct CreateDuoqianAction<AccountId, Balance> {
     pub duoqian_address: AccountId,
     pub proposer: AccountId,
-    pub admin_count: u32,
-    pub threshold: u32,
     pub amount: Balance,
 }
 

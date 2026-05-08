@@ -15,6 +15,16 @@ void main() {
     return [bytes.length << 2, ...bytes];
   }
 
+  List<int> u128LeForTest(BigInt value) {
+    final out = List<int>.filled(16, 0);
+    var tmp = value;
+    for (var i = 0; i < 16; i++) {
+      out[i] = (tmp & BigInt.from(0xFF)).toInt();
+      tmp = tmp >> 8;
+    }
+    return out;
+  }
+
   List<int> u16Le(int value) => [value & 0xff, (value >> 8) & 0xff];
 
   group('PayloadDecoder', () {
@@ -601,6 +611,66 @@ void main() {
       final decoded = PayloadDecoder.decode(encodeHex(payload));
       expect(decoded, isNull,
           reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 旧尾字段');
+    });
+
+    test('decodes current propose_create_personal without threshold field', () {
+      final name = utf8.encode('家庭基金');
+      final admins = [
+        List<int>.filled(32, 0x11),
+        List<int>.filled(32, 0x22),
+        List<int>.filled(32, 0x33),
+      ];
+      final payload = Uint8List.fromList([
+        0x07,
+        0x00,
+        (name.length << 2) & 0xff,
+        ...name,
+        (admins.length << 2) & 0xff,
+        ...admins.expand((admin) => admin),
+        ...u128LeForTest(BigInt.from(12345)),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_create_personal');
+      expect(decoded.fields['account_name'], '家庭基金');
+      expect(decoded.fields['admin_count'], '3');
+      expect(decoded.fields['regular_threshold'], '2/3');
+      expect(decoded.fields['create_threshold'], '3/3');
+      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields.containsKey('threshold'), isFalse);
+    });
+
+    test(
+        'rejects legacy propose_create_personal with admin_count and threshold',
+        () {
+      final name = utf8.encode('家庭基金');
+      final admins = [
+        List<int>.filled(32, 0x11),
+        List<int>.filled(32, 0x22),
+      ];
+      final payload = Uint8List.fromList([
+        0x07,
+        0x00,
+        (name.length << 2) & 0xff,
+        ...name,
+        2,
+        0,
+        0,
+        0,
+        (admins.length << 2) & 0xff,
+        ...admins.expand((admin) => admin),
+        2,
+        0,
+        0,
+        0,
+        ...u128LeForTest(BigInt.from(111)),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNull);
     });
 
     // -----------------------------------------------------------------------

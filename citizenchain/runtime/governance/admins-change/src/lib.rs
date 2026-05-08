@@ -140,7 +140,6 @@ pub trait SubjectLifecycle<AccountId> {
         org: u8,
         kind: AdminSubjectKind,
         admins: Vec<AccountId>,
-        threshold: u32,
         creator: AccountId,
     ) -> DispatchResult;
 
@@ -164,15 +163,7 @@ pub trait SubjectLifecycle<AccountId> {
 }
 
 /// admins-change pallet on-chain storage 版本。
-///
-/// - v0:历史值,本仓库未保留 v0 代码痕迹。
-/// - v1:命名为 `Institutions` 的 StorageMap。
-/// - v2:storage 改名 `Institutions` → `Subjects`(2026-05-06 C 阶段命名修正)。
-///
-/// 升级路径:`migrations::v1::MigrateV1ToV2` 物理 move_prefix,门控走 on_chain_storage_version。
 const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
-
-pub mod migrations;
 
 fn nrc_subject_id() -> Option<SubjectId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
@@ -531,10 +522,6 @@ pub mod pallet {
                 TransactionOutcome::Commit(Ok(()))
             })
         }
-
-        // call_index = 1 已废弃: execute_admin_set_change 已统一到
-        // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎
-        // 的 retry/cancel 入口,业务 pallet 不再保留任何 wrapper extrinsic。
     }
 
     impl<T: Config> Pallet<T> {
@@ -671,7 +658,6 @@ pub mod pallet {
             org: u8,
             kind: AdminSubjectKind,
             admins: Vec<T::AccountId>,
-            _threshold: u32,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
@@ -679,8 +665,8 @@ pub mod pallet {
                 Error::<T>::InstitutionAlreadyExists
             );
             Self::validate_admin_set_for_subject(kind, org, &admins)?;
-            // 中文注释：兼容 trait 旧签名仍接收 threshold，但链上写入一律由
-            // admins-change 统一推导；创建/注销提案的“全员通过”阈值由投票引擎快照单独保存。
+            // 中文注释：普通业务阈值一律由 admins-change 统一推导；
+            // 创建/注销提案的“全员通过”阈值由投票引擎快照单独保存。
             let threshold = derived_threshold(kind, org, admins.len() as u32)
                 .ok_or(Error::<T>::InvalidThreshold)?;
 
@@ -945,7 +931,6 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
         org: u8,
         kind: AdminSubjectKind,
         admins: Vec<T::AccountId>,
-        threshold: u32,
         creator: T::AccountId,
     ) -> DispatchResult {
         Self::ensure_lifecycle_proposal(
@@ -956,7 +941,7 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
             STATUS_VOTING,
             false,
         )?;
-        Self::do_create_pending_subject(institution, org, kind, admins, threshold, creator)
+        Self::do_create_pending_subject(institution, org, kind, admins, creator)
     }
 
     fn activate_subject_for_proposal(

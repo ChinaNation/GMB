@@ -500,7 +500,7 @@ class TransferProposalService {
         }
 
         // 内部投票提案：先尝试解码为多签管理提案，失败再尝试转账提案。
-        // 管理提案的 ProposalData 首字节（BoundedVec 内容）为 ACTION_CREATE(1) 或 ACTION_CLOSE(2)。
+        // 管理提案按 MODULE_TAG 区分 org-mgmt / per-mgmt，再解析各自 action。
         final manageDetail = manageService.decodeManageProposalData(id, raw);
         if (manageDetail is CreateDuoqianProposalInfo) {
           cachedCreateDuoqianDetails[id] = manageDetail;

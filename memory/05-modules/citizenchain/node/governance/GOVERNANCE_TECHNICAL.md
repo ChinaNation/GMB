@@ -124,6 +124,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 ## institution.rs — 机构查询
 
 - 读取 `AdminsChange::Subjects` 存储
+- 内置机构管理员 subject_id 使用 `0x01` Builtin kind tag，与 `primitives::derive::subject_id_from_sfid_number` 字节级一致
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
 
@@ -131,8 +132,9 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 - `twox_128`：Substrate pallet/storage 前缀哈希
 - `blake2b_128`：Blake2_128Concat hasher
-- `sfid_number_to_fixed48`：身份 ID 编码（与 runtime primitives 一致）
-- `storage_map_key` / `double_map_key`：完整存储 key 拼接
+- `subject_id_from_sfid_number`：内置机构 SubjectId 编码（与 runtime primitives 一致）
+- `map_key` / `double_map_key`：完整存储 key 拼接
+- `admin_subjects_key`：固定读取 `AdminsChange::Subjects`，不得回退旧 `Institutions` 路径
 
 ## 依赖关系
 

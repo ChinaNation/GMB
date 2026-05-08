@@ -1,6 +1,6 @@
 # ADMINS_CHANGE Technical Notes
 
-最新更新：2026-05-08，第 1 步已落地：`admins-change` 从旧“等长替换管理员”改为统一“管理员集合变更”模型，并新增账户级 `InstitutionAccount` 主体协议。
+最新更新：2026-05-08，第 1 步已落地：`admins-change` 从旧“等长替换管理员”改为统一“管理员集合变更”模型，并新增账户级 `InstitutionAccount` 主体协议；第 2 步已由 `internal-vote` 强制创建/注销全员阈值与普通阈值快照校验。
 
 ## 1. 模块定位
 
@@ -48,7 +48,8 @@
 
 ## 3. 存储模型
 
-`STORAGE_VERSION = 2`。
+`STORAGE_VERSION = 2`(链未启动+即将重新创世,旧 v1→v2 `Institutions`→`Subjects`
+move_prefix migration 已于 2026-05-08 删除,fresh genesis 直接写 `Subjects`)。
 
 核心存储：
 
@@ -88,9 +89,11 @@ Subjects<SubjectId, AdminSubject>
 
 写入规则：
 
-- `do_create_pending_subject` 仍保留 trait 参数中的 `threshold` 以兼容调用签名，但链上写入时忽略该外部值，统一调用 `derived_threshold`。
+- `do_create_pending_subject` 不接收外部阈值，链上写入时统一调用 `derived_threshold`。
+- `SubjectLifecycle::create_pending_subject_for_proposal` 不接收外部阈值，调用方只能传入管理员集合。
 - 管理员集合变更执行成功后，按新管理员数量重新推导并写回 `threshold`。
 - 创建/注销的全员阈值是投票提案快照语义，由业务模块调用投票引擎时显式传入，不写成长期普通阈值。
+- 第 2 步后，投票引擎会拒绝与管理员快照人数不匹配的全员生命周期阈值，避免业务模块误传普通动态阈值完成注册创建或注销关闭。
 
 ## 5. 管理员集合校验
 
@@ -220,7 +223,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 当前结果：
 
-- `admins-change`：34 passed。
+- `admins-change`：39 passed(新增 5 条 `InstitutionAccount` kind 边界测试,2026-05-08)。
 - `primitives`：24 passed。
 
 覆盖重点：
@@ -234,3 +237,5 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。
+- `InstitutionAccount` kind 5 条独立单测:最小 2 人、ceil(n/2) 阈值阶梯、< 2 拒绝、
+  非 ORG_REN 拒绝、`MaxAdminsPerInstitution` 上界。

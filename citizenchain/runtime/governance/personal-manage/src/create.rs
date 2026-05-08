@@ -2,7 +2,7 @@
 //!
 //! `do_propose_create` 由 lib.rs 内 call_index=0 入口 delegate 调用。
 //! 业务流程：
-//! 1. 校验发起人未被保护、账户名非空、admin/threshold 合法、余额充足
+//! 1. 校验发起人未被保护、账户名非空、管理员集合合法、余额充足
 //! 2. 派生 `derive_personal_duoqian_address(creator, account_name)` —— 地址只依赖
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
@@ -38,9 +38,7 @@ use votingengine::InternalVoteEngine;
 pub(crate) fn do_propose_create<T: Config>(
     who: T::AccountId,
     account_name: AccountNameOf<T>,
-    admin_count: u32,
     duoqian_admins: DuoqianAdminsOf<T>,
-    threshold: u32,
     amount: BalanceOf<T>,
 ) -> DispatchResult {
     ensure!(
@@ -52,7 +50,8 @@ pub(crate) fn do_propose_create<T: Config>(
         amount >= T::MinCreateAmount::get(),
         Error::<T>::CreateAmountBelowMinimum
     );
-    Pallet::<T>::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
+    let regular_threshold = Pallet::<T>::ensure_admin_config(&who, &duoqian_admins)?;
+    let admin_count = duoqian_admins.len() as u32;
 
     let (reserve_total, _fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
@@ -81,8 +80,6 @@ pub(crate) fn do_propose_create<T: Config>(
     let action = CreateDuoqianAction {
         duoqian_address: duoqian_address.clone(),
         proposer: who.clone(),
-        admin_count,
-        threshold,
         amount,
     };
     let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
@@ -96,9 +93,6 @@ pub(crate) fn do_propose_create<T: Config>(
         PersonalDuoqians::<T>::insert(
             &duoqian_address,
             DuoqianAccount {
-                admin_count,
-                threshold,
-                duoqian_admins: duoqian_admins.clone(),
                 creator: who.clone(),
                 created_at: now,
                 status: DuoqianStatus::Pending,
@@ -111,9 +105,8 @@ pub(crate) fn do_propose_create<T: Config>(
                 account_name: account_name.clone(),
             },
         );
-        // 创建提案需全员管理员通过(2026-05-03 整改);此处投票阈值 = admins.len()。
-        // admins-change 主体里 threshold 字段保存用户自定义 m-of-n,
-        // 用于激活后日常治理(转账等),不影响此处投票阈值。
+        // 中文注释：创建提案需全员管理员通过；普通业务阈值由 admins-change 派生，
+        // 不再接收用户输入，也不在 personal-manage 里保存管理员镜像。
         let create_threshold = duoqian_admins.len() as u32;
         let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
             who.clone(),
@@ -133,7 +126,6 @@ pub(crate) fn do_propose_create<T: Config>(
             institution,
             admins_change::AdminSubjectKind::PersonalDuoqian,
             &duoqian_admins,
-            threshold,
             &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));
@@ -152,7 +144,7 @@ pub(crate) fn do_propose_create<T: Config>(
         account_name,
         admins: duoqian_admins,
         admin_count,
-        threshold,
+        threshold: regular_threshold,
         amount,
         expires_at,
     });

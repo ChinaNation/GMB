@@ -456,10 +456,7 @@ pub mod pallet {
         /// 关闭代币提案(发行方主动)。
         #[pallet::call_index(3)]
         #[pallet::weight(<T as Config>::WeightInfo::close())]
-        pub fn propose_close(
-            origin: OriginFor<T>,
-            asset_id: OnchainAssetId,
-        ) -> DispatchResult {
+        pub fn propose_close(origin: OriginFor<T>, asset_id: OnchainAssetId) -> DispatchResult {
             let _who = ensure_signed(origin)?;
             let _ = asset_id;
             // TODO: implement business logic (任务卡 A)

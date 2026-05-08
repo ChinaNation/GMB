@@ -21,9 +21,7 @@ use frame_support::{
     traits::{Currency, ExistenceRequirement, ReservableCurrency},
 };
 
-use crate::pallet::{
-    BalanceOf, Config, Error, Event, IssueDeposit, NrcFeeAccountProvider, Pallet,
-};
+use crate::pallet::{BalanceOf, Config, Error, Event, IssueDeposit, NrcFeeAccountProvider, Pallet};
 
 /// 链上发行代币创建费(单一权威源转译)。
 pub fn issue_creation_fee<T: Config>() -> BalanceOf<T>
@@ -67,11 +65,16 @@ where
 {
     let (proposer, amount) =
         IssueDeposit::<T>::take(proposal_id).ok_or(Error::<T>::AssetNotFound)?;
-    let nrc_fee = T::NrcFeeAccountProvider::nrc_fee_account()
-        .ok_or(Error::<T>::NrcFeeAccountMissing)?;
+    let nrc_fee =
+        T::NrcFeeAccountProvider::nrc_fee_account().ok_or(Error::<T>::NrcFeeAccountMissing)?;
     let _ = T::Currency::unreserve(&proposer, amount);
-    T::Currency::transfer(&proposer, &nrc_fee, amount, ExistenceRequirement::AllowDeath)
-        .map_err(|_| Error::<T>::AssetsInternal)?;
+    T::Currency::transfer(
+        &proposer,
+        &nrc_fee,
+        amount,
+        ExistenceRequirement::AllowDeath,
+    )
+    .map_err(|_| Error::<T>::AssetsInternal)?;
     Pallet::<T>::deposit_event(Event::IssueDepositCharged {
         proposal_id,
         who: proposer,

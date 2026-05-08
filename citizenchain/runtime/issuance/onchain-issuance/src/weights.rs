@@ -25,14 +25,34 @@ pub trait WeightInfo {
 pub struct ZeroWeight;
 
 impl WeightInfo for ZeroWeight {
-    fn issue() -> Weight { Weight::zero() }
-    fn mint() -> Weight { Weight::zero() }
-    fn burn() -> Weight { Weight::zero() }
-    fn transfer() -> Weight { Weight::zero() }
-    fn close() -> Weight { Weight::zero() }
-    fn monitor_freeze() -> Weight { Weight::zero() }
-    fn monitor_unfreeze() -> Weight { Weight::zero() }
-    fn monitor_confiscate() -> Weight { Weight::zero() }
-    fn monitor_force_transfer() -> Weight { Weight::zero() }
-    fn monitor_force_close() -> Weight { Weight::zero() }
+    fn issue() -> Weight {
+        Weight::zero()
+    }
+    fn mint() -> Weight {
+        Weight::zero()
+    }
+    fn burn() -> Weight {
+        Weight::zero()
+    }
+    fn transfer() -> Weight {
+        Weight::zero()
+    }
+    fn close() -> Weight {
+        Weight::zero()
+    }
+    fn monitor_freeze() -> Weight {
+        Weight::zero()
+    }
+    fn monitor_unfreeze() -> Weight {
+        Weight::zero()
+    }
+    fn monitor_confiscate() -> Weight {
+        Weight::zero()
+    }
+    fn monitor_force_transfer() -> Weight {
+        Weight::zero()
+    }
+    fn monitor_force_close() -> Weight {
+        Weight::zero()
+    }
 }
