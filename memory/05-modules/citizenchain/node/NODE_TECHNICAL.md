@@ -81,6 +81,14 @@
 
 后续 runtime 升级一律走链上 `setCode`(governance/runtime-upgrade),**绝不**重新 `export-chain-spec` 覆盖这份 JSON。
 
+本机重新创世脚本例外：
+
+- [clean-run.sh](../../../../citizenchain/scripts/clean-run.sh) 会下载最新成功的 `citizenchain-wasm` CI artifact。
+- 脚本用 `citizenchain-fresh` 入口生成 `citizenchain/target/fresh-genesis/citizenchain.fresh.raw.json`。
+- fresh raw chainspec 的 `bootNodes` 必须为空，避免清链后重新接回旧网络。
+- fresh raw chainspec 的 genesis `:code` 必须与下载的 CI WASM 字节一致。
+- 脚本通过 `CITIZENCHAIN_CHAIN_SPEC` 让桌面内嵌节点使用该 fresh raw chainspec 启动；仓库冻结主网 JSON 不被覆盖。
+
 历史:2026-05-06 首次冻结,源 nrcgch.crcfrcn.com,sha256 `2b9f46e4aefb66f892d5dc170b2c2bfc33b6b12a88192617b06c18e8ea38a2db`。
 
 ## 5. CLI 参数

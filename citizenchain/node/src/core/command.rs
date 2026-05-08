@@ -40,6 +40,8 @@ impl SubstrateCli for Cli {
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
             "" | "citizenchain" => Box::new(chain_spec::chain_config()?),
+            // 中文注释：仅供本机 clean-run 重新创世时导出 fresh raw chainspec 使用。
+            "citizenchain-fresh" => Box::new(chain_spec::fresh_genesis_config()?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),
             )?),
