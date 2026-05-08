@@ -16,6 +16,7 @@ members = [
 
     "runtime/issuance/citizen-issuance", # 发行-公民发行模块 pallet
     "runtime/issuance/fullnode-issuance",        # 发行-全节点发行模块 pallet
+    "runtime/issuance/onchain-issuance",         # 发行-链上发行代币(Plain FT, ADR-011) pallet
     "runtime/issuance/resolution-issuance",        # 发行-决议发行完整流程模块 pallet
     "runtime/issuance/shengbank-interest",   # 发行-省储行利息模块 pallet
     "runtime/otherpallet/sfid-system",          # 其他-SFID 绑定与资格校验模块 pallet
@@ -142,6 +143,7 @@ frame-system-rpc-runtime-api = { git = "https://github.com/ChinaNation/polkadot-
 pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-wuminapp-grandpa", default-features = false }
 
 # Pallets
+pallet-assets = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-wuminapp-grandpa", default-features = false }
 pallet-balances = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-wuminapp-grandpa", default-features = false }
 pallet-grandpa = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-wuminapp-grandpa", default-features = false }
 pallet-timestamp = { git = "https://github.com/ChinaNation/polkadot-sdk.git", branch = "ss58-2027-fix-wuminapp-grandpa", default-features = false }

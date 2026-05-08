@@ -114,6 +114,24 @@ class PalletRegistry {
   static const int resolutionIssuancePallet = 8;
   static const int proposeResolutionIssuanceCall = 0;
 
+  // ---- OnchainIssuance (25) · 链上发行代币(Plain FT, ADR-011 v3) ----
+  // call_index 5..=9 / 15+ 留洞不复用(永久 ABI)。
+  // 业务调用走 propose_X(InternalVote),监管调用走 propose_monitor_X(JointVote)。
+  // 投票/重试/取消统一走 InternalVote(22)/JointVote(23)/VotingEngine(9.4/9.5)。
+  static const int onchainIssuancePallet = 25;
+  // 业务 propose
+  static const int proposeIssueCall = 0;
+  static const int proposeMintCall = 1;
+  static const int proposeBurnCall = 2;
+  static const int proposeCloseAssetCall = 3;
+  static const int proposeAssetTransferCall = 4;
+  // 监管 propose(NRC,JointVote)
+  static const int proposeMonitorFreezeCall = 10;
+  static const int proposeMonitorUnfreezeCall = 11;
+  static const int proposeMonitorConfiscateCall = 12;
+  static const int proposeMonitorForceTransferCall = 13;
+  static const int proposeMonitorForceCloseCall = 14;
+
   // ---- OffchainTransaction (21) · 清算行 L2 体系 ----
   static const int offchainTransactionPallet = 21;
   static const int bindClearingBankCall = 30;

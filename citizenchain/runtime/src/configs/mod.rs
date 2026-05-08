@@ -58,10 +58,10 @@ use sp_version::RuntimeVersion;
 #[cfg(not(feature = "runtime-benchmarks"))]
 use super::RuntimeUpgrade;
 use super::{
-    AccountId, Address, Balance, Balances, Block, BlockNumber, CitizenIssuance, GenesisPallet,
-    Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime, RuntimeCall,
-    RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask, System,
-    BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+    AccountId, Address, Assets, Balance, Balances, Block, BlockNumber, CitizenIssuance,
+    GenesisPallet, Hash, InternalVote, JointVote, Nonce, PalletInfo, ResolutionIssuance, Runtime,
+    RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
+    System, BLOCK_HASH_COUNT, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill =
@@ -159,6 +159,11 @@ impl Contains<RuntimeCall> for RuntimeCallFilter {
             RuntimeCall::Balances(pallet_balances::Call::force_adjust_total_issuance {
                 ..
             }) => false,
+            // ADR-011 铁律:pallet_assets 内核所有原生 extrinsic 一律 reject。
+            // 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
+            // 中文注释:任何外部 extrinsic 直接打到 pallet_assets 全部不入块,
+            // 这是用户代币治理唯一入口铁律的链端兜底。
+            RuntimeCall::Assets(_) => false,
             _ => true,
         }
     }
@@ -491,6 +496,16 @@ impl onchain_transaction::CallAmount<AccountId, RuntimeCall, Balance> for Onchai
             RuntimeCall::JointVote(_) => onchain_transaction::AmountExtractResult::Amount(
                 primitives::fee_policy::VOTE_FLAT_FEE,
             ),
+            // ADR-011 v3:OnchainIssuance 暴露 10 个 propose_X extrinsic(call_index 0..=4 业务 / 10..=14 监管)。
+            // 全部按 VOTE_FLAT_FEE = 1 元/次,与 GMB 其他业务 pallet 的 propose_X 一致。
+            // 1000 GMB 创建费走 onchain_issuance::fee::reserve_creation_deposit 内部 reserve(propose_issue 内部完成),
+            // 与 OnchainTxAmountExtractor 计费正交。
+            RuntimeCall::OnchainIssuance(_) => onchain_transaction::AmountExtractResult::Amount(
+                primitives::fee_policy::VOTE_FLAT_FEE,
+            ),
+            // pallet_assets 内核所有原生 extrinsic 已被 RuntimeCallFilter 拦在入口,
+            // 永远到不了本路径;此分支仅供编译期 exhaustive 检查。
+            RuntimeCall::Assets(_) => onchain_transaction::AmountExtractResult::NoAmount,
             // CitizenVote 当前是空骨架(无 extrinsic / 无 RuntimeCall 变体),Phase 3 业务接入后再补。
             // 中文注释：对 Balances 未覆盖分支按 Unknown 拒绝,避免"有金额但漏提取"。
             //
@@ -1654,4 +1669,117 @@ impl votingengine::SfidEligibility<AccountId, Hash> for RuntimeSfidEligibility {
             has_remaining: result.maybe_cursor.is_some(),
         }
     }
+}
+
+// =====================================================================
+// pallet_assets 内核接入(ADR-011 第八节)+ OnchainIssuance 外壳配置
+// =====================================================================
+//
+// 中文注释:pallet_assets 是用户代币的内核 storage / 资产记账实现,
+// **所有原生 extrinsic 在 RuntimeCallFilter 中 reject**。
+// 业务调用必须经由 OnchainIssuance::propose_* → InternalVote/JointVote callback →
+// onchain_issuance 内部以 Root 调用 pallet_assets 的内核 API。
+//
+// 第一期 deposit 系列常量统一为 0(框架阶段),业务实装时再据 ADR-011 调整。
+// 押金语义与 GMB 1000 元创建费正交,后者通过 onchain_issuance::fee::charge_creation_fee 直接走 GMB 转账,
+// 不复用 pallet_assets 自身的 deposit 机制。
+
+parameter_types! {
+    /// 资产 metadata 字符串字段长度上限(name / symbol / description),
+    /// 与 onchain_issuance::Config::MaxAssetNameLen 等参数对齐。
+    pub const AssetsStringLimit: u32 = 64;
+    /// 单批 destroy 时一次清理的账户/审批上限。
+    pub const AssetsRemoveItemsLimit: u32 = 1000;
+    /// pallet_assets 自身 deposit 系列常量(均设 0,真实计费走 onchain_issuance::fee)。
+    pub const AssetsDepositZero: Balance = 0;
+}
+
+impl pallet_assets::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Balance = Balance;
+    type RemoveItemsLimit = AssetsRemoveItemsLimit;
+    type AssetId = u32;
+    type AssetIdParameter = codec::Compact<u32>;
+    type Currency = Balances;
+    /// 中文注释:外部 extrinsic 全部被 RuntimeCallFilter reject,这里 origin 设啥不影响实际入口。
+    /// CreateOrigin 接 EnsureSigned 仅为满足 trait Success=AccountId 约束;
+    /// ForceOrigin 接 EnsureRoot(Success=())。OnchainIssuance 内部经 fungibles trait
+    /// (Create / Mutate)直接调内核 API,不走 extrinsic origin 路径。
+    type CreateOrigin =
+        frame_support::traits::AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type AssetDeposit = AssetsDepositZero;
+    type AssetAccountDeposit = AssetsDepositZero;
+    type MetadataDepositBase = AssetsDepositZero;
+    type MetadataDepositPerByte = AssetsDepositZero;
+    type ApprovalDeposit = AssetsDepositZero;
+    type StringLimit = AssetsStringLimit;
+    type Freezer = ();
+    type Holder = ();
+    type Extra = ();
+    type CallbackHandle = ();
+    type ReserveData = ();
+    type WeightInfo = pallet_assets::weights::SubstrateWeight<Runtime>;
+    #[cfg(feature = "runtime-benchmarks")]
+    type BenchmarkHelper = ();
+}
+
+/// OnchainIssuance pallet 配置(ADR-011 v2 修订项 #1:NRC 主体 / 费用账户语义分离)。
+///
+/// 中文注释:onchain-issuance 拆为两个独立 trait:
+/// - `NrcMainAccountProvider` → 返回 NRC 治理多签账户 main_address(monitor 调用方校验用)
+/// - `NrcFeeAccountProvider`  → 返回 NRC 费用账户 fee_address(创建费收款用)
+/// v1 错误地复用 onchain_transaction::NrcAccountProvider(它返回 fee_address),
+/// 导致 monitor 主体身份语义错。
+
+/// NRC 治理多签账户(main_address)— monitor / 监管动作发起方校验用。
+pub struct RuntimeNrcMainAccountProvider;
+
+impl onchain_issuance::pallet::NrcMainAccountProvider<AccountId> for RuntimeNrcMainAccountProvider {
+    fn nrc_main_account() -> Option<AccountId> {
+        // 中文注释:china_cb[0].main_address 是 NRC 治理多签地址,与 fee_address 不同。
+        primitives::china::china_cb::CHINA_CB
+            .first()
+            .and_then(|n| AccountId::decode(&mut &n.main_address[..]).ok())
+    }
+}
+
+/// NRC 费用账户(fee_address)— 创建费 1000 GMB 收款用。
+///
+/// 中文注释:复用既有 `RuntimeNrcAccountProvider`(它实现 onchain_transaction::NrcAccountProvider,
+/// 也返回 fee_address),通过为同 struct 再实现 onchain_issuance 自己的 trait 完成桥接,语义一致。
+impl onchain_issuance::pallet::NrcFeeAccountProvider<AccountId> for RuntimeNrcAccountProvider {
+    fn nrc_fee_account() -> Option<AccountId> {
+        <RuntimeNrcAccountProvider as onchain_transaction::NrcAccountProvider<AccountId>>::nrc_account()
+    }
+}
+
+parameter_types! {
+    pub const OnchainAssetMaxNameLen: u32 = 64;
+    pub const OnchainAssetMaxSymbolLen: u32 = 16;
+    pub const OnchainAssetMaxDescriptionLen: u32 = 256;
+    pub const OnchainAssetMaxBlacklistWordLen: u32 = 32;
+    pub const OnchainAssetMaxBlacklistEntries: u32 = 256;
+    pub const OnchainAssetReasonHashLen: u32 = 32;
+    pub const OnchainAssetMaxScheduledPerBlock: u32 = 64;
+}
+
+impl onchain_issuance::pallet::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    /// 中文注释:Currency 必须实现 ReservableCurrency(ADR-011 v2 第六节押金机制),
+    /// pallet_balances 默认实现该 trait,直接接 Balances 即可。
+    type Currency = Balances;
+    /// pallet_assets 内核类型绑定。onchain_issuance 通过该类型调内核 create / mint_into 等内部 API,
+    /// 不走原生 extrinsic(已被 RuntimeCallFilter 拦截)。
+    type Assets = Assets;
+    type NrcMainAccountProvider = RuntimeNrcMainAccountProvider;
+    type NrcFeeAccountProvider = RuntimeNrcAccountProvider;
+    type MaxAssetNameLen = OnchainAssetMaxNameLen;
+    type MaxAssetSymbolLen = OnchainAssetMaxSymbolLen;
+    type MaxAssetDescriptionLen = OnchainAssetMaxDescriptionLen;
+    type MaxBlacklistWordLen = OnchainAssetMaxBlacklistWordLen;
+    type MaxBlacklistEntries = OnchainAssetMaxBlacklistEntries;
+    type ReasonHashLen = OnchainAssetReasonHashLen;
+    type MaxScheduledPerBlock = OnchainAssetMaxScheduledPerBlock;
+    type WeightInfo = onchain_issuance::weights::ZeroWeight;
 }

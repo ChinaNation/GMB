@@ -2,20 +2,11 @@
 
 ## open
 
-- 当前无 open 任务卡。
+- `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
+- `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
 
 ## done
 
-- `memory/08-tasks/done/20260507-rust-warning-and-marker-cleanup.md`
-- `memory/08-tasks/done/20260507-cargo-pubspec-todo-cleanup.md`
-- `memory/08-tasks/done/20260507-root-cargo-member-cleanup.md`
-- `memory/08-tasks/done/20260507-clean-old-path-text.md`
-- `memory/08-tasks/done/20260507-pr-e-registry-freeze.md`
-- `memory/08-tasks/done/20260507-clear-open-task-cards.md`
-- `memory/08-tasks/done/20260507-p2-5-wuminapp-isar-dir.md`
-- `memory/08-tasks/done/20260507-pr-d-memory-freeze.md`
-- `memory/08-tasks/done/20260405-offchain-deposit-model-redesign.md`
-- `memory/08-tasks/done/20260325-133531-统一-duoqian-manage-命名-superseded.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -46,6 +37,7 @@
 - `memory/08-tasks/done/20260324-skip-empty-blocks.md`
 - `memory/08-tasks/done/20260325-125830-runtime-wuminapp-wumin-双端联动强制规则.md`
 - `memory/08-tasks/done/20260325-130439-新增-institution-asset-公共模块-并接入机构账户资金操作白名单边界.md`
+- `memory/08-tasks/done/20260325-133531-统一-duoqian-manage-命名-superseded.md`
 - `memory/08-tasks/done/20260325-150802-为-sfid-机构生成流程新增独立机构名称字段并用于-wuminapp-与-wumin-显示.md`
 - `memory/08-tasks/done/20260325-232827-排查出块记录中区块高度-时间-手续费到账收益-铸块奖励-区块作者不显示的原因.md`
 - `memory/08-tasks/done/20260325-genesis-bootstrap.md`
@@ -87,6 +79,7 @@
 - `memory/08-tasks/done/20260401-runtime-noamount-fee-无金额交易收取最低手续费.md`
 - `memory/08-tasks/done/20260402-125842-wuminapp-light-node-connect-fix.md`
 - `memory/08-tasks/done/20260402-governance-admin-activation.md`
+- `memory/08-tasks/done/20260405-offchain-deposit-model-redesign.md`
 - `memory/08-tasks/done/20260407-sfid-runtime-meta-清理-与-pow-推链修复.md`
 - `memory/08-tasks/done/20260408-sfid-frontend-app-tsx-split-plan.md`
 - `memory/08-tasks/done/20260408-sfid-frontend-app-tsx-split.md`
@@ -225,3 +218,33 @@
 - `memory/08-tasks/done/20260504-100000-citizenchain-votingengine-提级与目录拆分.md`
 - `memory/08-tasks/done/20260504-160000-客户端接入双层ID与反向索引.md`
 - `memory/08-tasks/done/20260505-100000-投票引擎与机构管理模块重构.md`
+- `memory/08-tasks/done/20260505-184900-votingengine-3-sub-pallet-拆分.md`
+- `memory/08-tasks/done/20260505-215047-rename-org-manage-to-organization-manage.md`
+- `memory/08-tasks/done/20260506-admins-change-institutions-subjects-migration.md`
+- `memory/08-tasks/done/20260506-rename-institution-id-to-subject-id.md`
+- `memory/08-tasks/done/20260506-split-personal-manage-from-organization-manage.md`
+- `memory/08-tasks/done/20260506-unified-subject-id-protocol.md`
+- `memory/08-tasks/done/20260506-wuminapp-公民三tab扁平化重构.md`
+- `memory/08-tasks/done/20260507-ai-required-reading.md`
+- `memory/08-tasks/done/20260507-ai-unified-naming.md`
+- `memory/08-tasks/done/20260507-ai-unified-protocols.md`
+- `memory/08-tasks/done/20260507-cargo-pubspec-todo-cleanup.md`
+- `memory/08-tasks/done/20260507-clean-old-path-text.md`
+- `memory/08-tasks/done/20260507-clear-open-task-cards.md`
+- `memory/08-tasks/done/20260507-p0-2-propose-create-institution.md`
+- `memory/08-tasks/done/20260507-p0-3-duoqian-storage-truth.md`
+- `memory/08-tasks/done/20260507-p0-4-immortal-era.md`
+- `memory/08-tasks/done/20260507-p0-5-step2d-fixture.md`
+- `memory/08-tasks/done/20260507-p0-6-cpms-sfid-path.md`
+- `memory/08-tasks/done/20260507-p1-6-qr-protocol-source.md`
+- `memory/08-tasks/done/20260507-p2-5-wuminapp-isar-dir.md`
+- `memory/08-tasks/done/20260507-pr-c-organization-cleanup.md`
+- `memory/08-tasks/done/20260507-pr-c-storage-naming-cleanup.md`
+- `memory/08-tasks/done/20260507-pr-d-memory-freeze.md`
+- `memory/08-tasks/done/20260507-pr-e-registry-freeze.md`
+- `memory/08-tasks/done/20260507-root-cargo-member-cleanup.md`
+- `memory/08-tasks/done/20260507-runtime-pallet-tests-restructure.md`
+- `memory/08-tasks/done/20260507-rust-warning-and-marker-cleanup.md`
+- `memory/08-tasks/done/20260507-sfid-format-d8-to-d4-and-1000-retry.md`
+- `memory/08-tasks/done/20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`
+- `memory/08-tasks/done/20260507-sfid-step2-regenerate-derived-addresses.md`

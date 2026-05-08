@@ -29,13 +29,28 @@ SubjectId = [u8; 48]
     0x01       Builtin            (内置主体:NRC/PRC/PRB)
     0x02       SfidInstitution    (SFID 注册机构)
     0x03       PersonalDuoqian    (个人多签)
-    0x04..0xFE 保留(未来主体类型扩展)
+    0x04       OnchainAsset       (链上发行代币 — ADR-011 / 2026-05-07 新增)
+    0x05..0xFE 保留(未来主体类型扩展)
     0xFF       Reserved 哨兵      (协议升级时启用)
   byte[1..48]: payload (47 字节,kind 决定语义)
     Builtin:           sfid_number ASCII 字节(≤47B)右填零
     SfidInstitution:   sfid_number 字节(≤47B)右填零
     PersonalDuoqian:   32B AccountId + 15B 零填充
+    OnchainAsset:      4B asset_id(u32 LE) + 43B 零填充
 ```
+
+### 增量条款(0x04 OnchainAsset / 2026-05-07,ADR-011 v2 落地)
+
+- 用于代表"链上发行代币"治理主体,**仅作 storage key 派生**(不是发行人主体身份)
+- `asset_id` 为 `pallet_assets::AssetId`(u32 LE 编码),链端通过该字节段反查内核资产
+- payload 仅 4B,因 NextAssetId 自增已结构性互斥,SubjectId 不会撞 key
+- 详细业务语义、监管六条铁律见 ADR-011
+
+> v2 修订记录(2026-05-07):**v1 曾设计 8B issuer_subject_short(blake2_128 摘要) + 4B asset_id**,review 时识别为冗余:
+> 1. 8B 摘要不可逆,无法反查发行人完整身份,反查走 `OnchainIssuance::Assets[SubjectId].issuer_subject_id`(48B 完整);
+> 2. asset_id 自增已全局唯一;
+> 3. 引入哈希依赖增加 primitives 复杂度。
+> 协议位 0x04 还未上线,简化零迁移成本。
 
 ### 全局唯一性保证
 

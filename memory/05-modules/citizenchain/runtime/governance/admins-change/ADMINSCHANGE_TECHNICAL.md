@@ -4,7 +4,18 @@
 
 ## 1. 模块定位
 
-`admins-change` 是链上管理员主体的统一真源，同时负责管理员等长替换治理。
+`admins-change` 是链上账户管理员主体的统一真源，同时负责账户管理员集合变更治理。
+
+2026-05-07 第 0 步设计口径见 `memory/04-decisions/ADR-015-account-admin-internal-vote.md`。
+后续实现必须从“机构级管理员”收敛为“账户级管理员”：
+
+- 省储行质押账户永远不可操作，不进入内部投票主体。
+- 治理机构全部可操作账户共享固定管理员集合和固定阈值，只允许等长更换。
+- 注册个人账户独立持有管理员集合，管理员数量范围为 `2..=64`。
+- 注册机构账户独立持有管理员集合，管理员数量范围为 `2..=1989`。
+- 动态账户阈值不再由用户输入，按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
+- 注册创建和注销关闭使用全员阈值，即 `threshold = admin_count`。
+- 动态账户只保留一个“管理员集合变更提案”，输入目标管理员集合，链端自动识别增加、删除、更换或组合变更。
 
 统一纳入的主体：
 
@@ -28,12 +39,12 @@
 Subjects<SubjectId, AdminInstitution>
 ```
 
-`AdminInstitution` 字段：
+`AdminInstitution` 字段当前仍是实现态命名；账户级改造后语义应理解为“账户管理员主体”：
 
 - `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_DUOQIAN`。
 - `kind`：`BuiltinInstitution / SfidInstitution / PersonalDuoqian`。
 - `admins`：当前管理员列表。
-- `threshold`：内部投票通过阈值。
+- `threshold`：内部投票通过阈值。动态账户执行阶段必须由管理员数量派生，不得作为用户可自由输入字段。
 - `creator`：主体创建者。
 - `created_at / updated_at`：生命周期时间。
 - `status`：`Pending / Active / Closed`。
@@ -100,7 +111,20 @@ Pending 快照专用 API：
 - `BuiltinInstitution` 只允许 `ORG_NRC / ORG_PRC / ORG_PRB`。
 - `SfidInstitution / PersonalDuoqian` 只允许 `ORG_DUOQIAN`。
 
-## 5. 管理员替换流程
+## 5. 管理员集合变更流程
+
+ADR-015 后的新目标：
+
+- 治理机构账户只允许等长更换管理员，管理员数量和阈值固定。
+- 注册个人账户和注册机构账户使用统一的管理员集合变更提案。
+- 统一提案输入目标管理员集合，链端对比旧集合和新集合，不再拆分增加/删除/更换/改阈值四类提案。
+- 动态账户变更执行后按新管理员数量自动派生阈值。
+- 注册个人账户最多 64 个管理员。
+- 注册机构账户最多 1989 个管理员。
+- 2 个管理员时阈值固定为 2，且禁止继续删除。
+- 3 个及以上管理员时阈值为 `ceil(admin_count / 2)`。
+
+当前实现态的等长替换流程如下，后续第 1 步实现时需要按上述目标替换。
 
 `propose_admin_replacement(org, institution, old_admin, new_admin)`：
 

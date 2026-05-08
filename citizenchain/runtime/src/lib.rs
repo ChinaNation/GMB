@@ -379,6 +379,16 @@ mod runtime {
     // 链下交易清算模块：省储行即时清算、批量上链、绑定清算行、费率治理
     #[runtime::pallet_index(21)]
     pub type OffchainTransaction = offchain_transaction::pallet;
+
+    // 链上发行代币(Plain FT, ADR-011):用户(SFID 机构 + personal-manage 多签)发行 GMB 之外的代币。
+    // 唯一外壳入口,内核挂 pallet_assets;原生 extrinsic 全部由 BaseCallFilter 屏蔽。
+    #[runtime::pallet_index(25)]
+    pub type OnchainIssuance = onchain_issuance;
+
+    // pallet_assets 内核:多资产基础设施,所有原生 extrinsic 在 RuntimeCallFilter 中 reject。
+    // 业务调用一律经由 OnchainIssuance::propose_* → InternalVote/JointVote callback → 内部 root 调用。
+    #[runtime::pallet_index(26)]
+    pub type Assets = pallet_assets;
 }
 
 #[cfg(test)]
