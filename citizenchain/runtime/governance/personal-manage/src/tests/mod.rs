@@ -269,6 +269,7 @@ impl internal_vote::Config for Test {
 impl admins_change::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<64>;
+    type MaxPersonalAccountAdmins = ConstU32<64>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type WeightInfo = ();
 }

@@ -97,7 +97,7 @@ lib/citizen/
 | --- | --- | --- | --- | --- |
 | 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
-| 管理员更换 | `propose_admin_replacement` | `org, institution, old_admin, new_admin` | 目标省级管理员 | 内部 |
+| 管理员集合变更 | `propose_admin_set_change` | `org, subject, new_admins[]` | 目标账户当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标省级管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 省级管理员 | 内部 |
 | 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
@@ -555,9 +555,9 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 
 ### 8.2 机构类型
 
-注册多签机构使用 `org = 3`（`ORG_DUOQIAN`），与治理机构 org 0/1/2 并列。
+注册个人账户和注册机构账户使用 `org = 3`（`ORG_REN`），与治理机构 org 0/1/2 并列。
 
-`SubjectId`（48 字节）= `duoqian_address`（32 字节 AccountId）+ 16 字节零填充。
+`SubjectId`（48 字节）使用 SubjectKind 协议：个人账户为 `0x03 PersonalDuoqian`，机构账户为 `0x05 InstitutionAccount`，payload 均为账户 `AccountId` 前 32 字节并右填零。
 
 ### 8.3 动态阈值与管理员
 
@@ -643,7 +643,7 @@ sfid_number 来源于 `primitives/china/china_cb.rs`（NRC + PRC）和 `primitiv
 | `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
-| `votingengine/src/internal_vote.rs` | 投票引擎（含 ORG_DUOQIAN 支持） |
+| `votingengine/src/internal_vote.rs` | 投票引擎（含 ORG_REN 支持） |
 | `votingengine/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
 

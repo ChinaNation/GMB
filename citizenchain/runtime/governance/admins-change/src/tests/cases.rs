@@ -3,6 +3,16 @@
 use super::*;
 
 #[test]
+fn dynamic_threshold_is_derived_from_admin_count() {
+    assert_eq!(dynamic_threshold(0), None);
+    assert_eq!(dynamic_threshold(1), None);
+    assert_eq!(dynamic_threshold(2), Some(2));
+    assert_eq!(dynamic_threshold(3), Some(2));
+    assert_eq!(dynamic_threshold(4), Some(2));
+    assert_eq!(dynamic_threshold(5), Some(3));
+}
+
+#[test]
 fn pending_subject_is_not_exposed_to_active_business_api() {
     new_test_ext().execute_with(|| {
         let institution = pending_subject_id();
@@ -162,7 +172,7 @@ fn dynamic_subjects_can_be_closed() {
 }
 
 #[test]
-fn duoqian_subjects_cannot_use_admin_replacement_entry() {
+fn dynamic_subjects_can_use_admin_set_change_entry() {
     new_test_ext().execute_with(|| {
         for (offset, kind) in [
             (0u8, AdminSubjectKind::PersonalDuoqian),
@@ -184,28 +194,85 @@ fn duoqian_subjects_cannot_use_admin_replacement_entry() {
             ));
             assert_ok!(AdminsChange::do_activate_subject(institution));
 
-            assert_noop!(
-                AdminsChange::propose_admin_replacement(
-                    RuntimeOrigin::signed(admin_a.clone()),
-                    ORG_REN,
-                    institution,
-                    admin_b,
-                    new_admin
-                ),
-                Error::<Test>::InvalidSubjectKind
-            );
+            assert_ok!(propose_admin_set_replacement(
+                RuntimeOrigin::signed(admin_a.clone()),
+                ORG_REN,
+                institution,
+                admin_b,
+                new_admin
+            ));
         }
     });
 }
 
 #[test]
-fn nrc_replacement_executes_when_yes_votes_reach_threshold() {
+fn dynamic_subject_set_change_can_add_delete_and_recalculate_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([71u8; 32]);
+        let admin_b = AccountId32::new([72u8; 32]);
+        let admin_c = AccountId32::new([73u8; 32]);
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::InstitutionAccount,
+            vec![admin_a.clone(), admin_b.clone()],
+            99,
+            admin_a.clone()
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_eq!(
+            AdminsChange::active_subject_threshold(ORG_REN, institution),
+            Some(2)
+        );
+
+        assert_ok!(AdminsChange::propose_admin_set_change(
+            RuntimeOrigin::signed(admin_a.clone()),
+            ORG_REN,
+            institution,
+            bounded_admins(vec![admin_a.clone(), admin_b.clone(), admin_c.clone()])
+        ));
+        let add_pid = last_proposal_id();
+        assert_ok!(cast_vote(admin_a.clone(), add_pid, true));
+        assert_ok!(cast_vote(admin_b.clone(), add_pid, true));
+        assert_eq!(
+            AdminsChange::active_subject_admin_count(ORG_REN, institution),
+            Some(3)
+        );
+        assert_eq!(
+            AdminsChange::active_subject_threshold(ORG_REN, institution),
+            Some(2)
+        );
+
+        assert_ok!(AdminsChange::propose_admin_set_change(
+            RuntimeOrigin::signed(admin_c.clone()),
+            ORG_REN,
+            institution,
+            bounded_admins(vec![admin_a.clone(), admin_c.clone()])
+        ));
+        let delete_pid = last_proposal_id();
+        assert_ok!(cast_vote(admin_a.clone(), delete_pid, true));
+        assert_ok!(cast_vote(admin_c.clone(), delete_pid, true));
+        assert_eq!(
+            AdminsChange::active_subject_admins(ORG_REN, institution).unwrap(),
+            vec![admin_a, admin_c]
+        );
+        assert_eq!(
+            AdminsChange::active_subject_threshold(ORG_REN, institution),
+            Some(2)
+        );
+    });
+}
+
+#[test]
+fn nrc_set_change_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([99u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -232,11 +299,11 @@ fn nrc_replacement_executes_when_yes_votes_reach_threshold() {
 }
 
 #[test]
-fn non_nrc_admin_cannot_propose_nrc_replacement() {
+fn non_nrc_admin_cannot_propose_nrc_set_change() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(prc_admin(0)),
                 ORG_NRC,
                 institution,
@@ -249,10 +316,10 @@ fn non_nrc_admin_cannot_propose_nrc_replacement() {
 }
 
 #[test]
-fn non_nrc_admin_cannot_vote_nrc_replacement() {
+fn non_nrc_admin_cannot_vote_nrc_set_change() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -269,13 +336,13 @@ fn non_nrc_admin_cannot_vote_nrc_replacement() {
 }
 
 #[test]
-fn replaced_new_admin_can_propose_next_replacement() {
+fn replaced_new_admin_can_propose_next_set_change() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([66u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -287,7 +354,7 @@ fn replaced_new_admin_can_propose_next_replacement() {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(new_admin),
             ORG_NRC,
             institution,
@@ -298,13 +365,13 @@ fn replaced_new_admin_can_propose_next_replacement() {
 }
 
 #[test]
-fn prc_replacement_executes_when_yes_votes_reach_threshold() {
+fn prc_set_change_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
         let old_admin = prc_admin(1);
         let new_admin = AccountId32::new([55u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
             ORG_PRC,
             institution,
@@ -325,13 +392,13 @@ fn prc_replacement_executes_when_yes_votes_reach_threshold() {
 }
 
 #[test]
-fn prb_replacement_executes_when_yes_votes_reach_threshold() {
+fn prb_set_change_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = prb_pallet_id();
         let old_admin = prb_admin(1);
         let new_admin = AccountId32::new([56u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prb_admin(0)),
             ORG_PRB,
             institution,
@@ -352,12 +419,12 @@ fn prb_replacement_executes_when_yes_votes_reach_threshold() {
 }
 
 #[test]
-fn non_prc_admin_cannot_propose_or_vote_prc_replacement() {
+fn non_prc_admin_cannot_propose_or_vote_prc_set_change() {
     new_test_ext().execute_with(|| {
         let institution = prc_pallet_id();
 
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(prb_admin(0)),
                 ORG_PRC,
                 institution,
@@ -367,7 +434,7 @@ fn non_prc_admin_cannot_propose_or_vote_prc_replacement() {
             Error::<Test>::UnauthorizedAdmin
         );
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
             ORG_PRC,
             institution,
@@ -384,12 +451,12 @@ fn non_prc_admin_cannot_propose_or_vote_prc_replacement() {
 }
 
 #[test]
-fn non_prb_admin_cannot_propose_or_vote_prb_replacement() {
+fn non_prb_admin_cannot_propose_or_vote_prb_set_change() {
     new_test_ext().execute_with(|| {
         let institution = prb_pallet_id();
 
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(prc_admin(0)),
                 ORG_PRB,
                 institution,
@@ -399,7 +466,7 @@ fn non_prb_admin_cannot_propose_or_vote_prb_replacement() {
             Error::<Test>::UnauthorizedAdmin
         );
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prb_admin(0)),
             ORG_PRB,
             institution,
@@ -416,7 +483,7 @@ fn non_prb_admin_cannot_propose_or_vote_prb_replacement() {
 }
 
 #[test]
-fn regular_internal_proposal_blocks_admin_replacement() {
+fn regular_internal_proposal_blocks_admin_set_change() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         assert_ok!(<internal_vote::Pallet<Test> as InternalVoteEngine<
@@ -426,7 +493,7 @@ fn regular_internal_proposal_blocks_admin_replacement() {
         ));
 
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(1)),
                 ORG_NRC,
                 institution,
@@ -445,7 +512,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([61u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -456,12 +523,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
 
         Subjects::<Test>::mutate(institution, |maybe| {
             let subject = maybe.as_mut().expect("institution should exist");
-            let admins = &mut subject.admins;
-            let pos = admins
-                .iter()
-                .position(|a| a == &old_admin)
-                .expect("old_admin should be in admins");
-            admins[pos] = nrc_admin(18);
+            subject.status = AdminSubjectStatus::Closed;
         });
 
         for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
@@ -480,7 +542,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
             pid, MODULE_TAG
         ));
         let _action =
-            AdminReplacementAction::<AccountId32>::decode(&mut &data[..]).expect("should decode");
+            AdminSetChangeAction::<AdminsOf<Test>>::decode(&mut &data[..]).expect("should decode");
         assert_noop!(
             VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
             votingengine::pallet::Error::<Test>::ProposalNotRetryable
@@ -492,7 +554,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
 fn org_mismatch_is_rejected() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_PRC,
                 nrc_pallet_id(),
@@ -511,7 +573,7 @@ fn reject_vote_does_not_trigger_execution() {
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([75u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -533,33 +595,52 @@ fn reject_vote_does_not_trigger_execution() {
 }
 
 #[test]
-fn propose_fails_when_old_admin_missing() {
+fn propose_fails_when_admin_set_unchanged() {
     new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            AdminsChange::propose_admin_set_change(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
-                nrc_pallet_id(),
-                AccountId32::new([201u8; 32]),
-                AccountId32::new([202u8; 32])
+                institution,
+                bounded_admins(current_admins(institution))
             ),
-            Error::<Test>::OldAdminNotFound
+            Error::<Test>::AdminSetUnchanged
         );
     });
 }
 
 #[test]
-fn propose_fails_when_new_admin_already_exists() {
+fn propose_fails_when_admin_set_only_reordered() {
+    new_test_ext().execute_with(|| {
+        let institution = nrc_pallet_id();
+        let mut admins = current_admins(institution);
+        admins.swap(0, 1);
+
+        assert_noop!(
+            AdminsChange::propose_admin_set_change(
+                RuntimeOrigin::signed(nrc_admin(0)),
+                ORG_NRC,
+                institution,
+                bounded_admins(admins)
+            ),
+            Error::<Test>::AdminSetUnchanged
+        );
+    });
+}
+
+#[test]
+fn propose_fails_when_admin_set_has_duplicate_admin() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 nrc_pallet_id(),
                 nrc_admin(1),
                 nrc_admin(2)
             ),
-            Error::<Test>::NewAdminAlreadyExists
+            Error::<Test>::DuplicateAdmin
         );
     });
 }
@@ -569,7 +650,7 @@ fn executed_proposal_cannot_be_executed_again() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -593,7 +674,7 @@ fn executed_proposal_cannot_be_executed_again() {
 fn rejected_proposal_does_not_block_new_proposal() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -618,7 +699,7 @@ fn rejected_proposal_does_not_block_new_proposal() {
         );
 
         // 中文注释：投票引擎全局限额管控后，被拒绝的提案不再阻塞同机构新提案。
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -635,7 +716,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([208u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -646,12 +727,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
 
         Subjects::<Test>::mutate(institution, |maybe| {
             let subject = maybe.as_mut().expect("institution should exist");
-            let admins = &mut subject.admins;
-            let old_pos = admins
-                .iter()
-                .position(|a| a == &old_admin)
-                .expect("old_admin should be in admins");
-            admins[old_pos] = nrc_admin(18);
+            subject.status = AdminSubjectStatus::Closed;
         });
 
         for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
@@ -671,12 +747,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
 
         Subjects::<Test>::mutate(institution, |maybe| {
             let subject = maybe.as_mut().expect("institution should exist");
-            let admins = &mut subject.admins;
-            let restore_pos = admins
-                .iter()
-                .position(|a| a == &nrc_admin(18))
-                .expect("temporary admin marker should exist");
-            admins[restore_pos] = old_admin.clone();
+            subject.status = AdminSubjectStatus::Active;
         });
 
         assert_noop!(
@@ -690,11 +761,11 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
 }
 
 #[test]
-fn execute_admin_replacement_rejects_wrong_proposal_kind_or_stage() {
+fn execute_admin_set_change_rejects_wrong_proposal_kind_or_stage() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -732,11 +803,11 @@ fn execute_admin_replacement_rejects_wrong_proposal_kind_or_stage() {
 }
 
 #[test]
-fn execute_admin_replacement_rejects_proposal_metadata_mismatch() {
+fn execute_admin_set_change_rejects_proposal_metadata_mismatch() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -780,7 +851,7 @@ fn vote_below_threshold_does_not_trigger_execution() {
         let old_admin = nrc_admin(1);
         let new_admin = AccountId32::new([204u8; 32]);
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -805,12 +876,11 @@ fn vote_below_threshold_does_not_trigger_execution() {
 fn invalid_institution_is_rejected() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            AdminsChange::propose_admin_set_change(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 [0u8; 48],
-                nrc_admin(1),
-                AccountId32::new([205u8; 32])
+                bounded_admins(vec![nrc_admin(0), AccountId32::new([205u8; 32])])
             ),
             Error::<Test>::InvalidInstitution
         );
@@ -821,7 +891,7 @@ fn invalid_institution_is_rejected() {
 /// 前 13 位作为投票者。验证 admin 数量恒为 NRC_ADMIN_COUNT、
 /// 新人入名单、旧人出名单、互斥锁每轮正确释放。
 #[test]
-fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
+fn nrc_full_cycle_set_change_keeps_admin_count_stable() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         assert_eq!(current_admins(institution).len() as u32, NRC_ADMIN_COUNT);
@@ -830,7 +900,7 @@ fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
             let old_admin = nrc_admin(i);
             let new_admin = AccountId32::new([180u8 + i as u8; 32]);
 
-            assert_ok!(AdminsChange::propose_admin_replacement(
+            assert_ok!(propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
@@ -865,14 +935,14 @@ fn nrc_full_cycle_replacement_keeps_admin_count_stable() {
     });
 }
 
-/// 互斥锁回归：同机构、同 org 在第一个 admin-replacement 提案
+/// 互斥锁回归：同机构、同 org 在第一个 admin-set_change 提案
 /// 进行中时,第二个 propose 必须被 AdminSetMutationProposalActive 拦下。
 #[test]
-fn concurrent_nrc_admin_replacements_blocked_by_mutex() {
+fn concurrent_nrc_admin_set_changes_blocked_by_mutex() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
 
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
             institution,
@@ -881,7 +951,7 @@ fn concurrent_nrc_admin_replacements_blocked_by_mutex() {
         ));
 
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
@@ -892,7 +962,7 @@ fn concurrent_nrc_admin_replacements_blocked_by_mutex() {
         );
 
         assert_noop!(
-            AdminsChange::propose_admin_replacement(
+            propose_admin_set_replacement(
                 RuntimeOrigin::signed(nrc_admin(1)),
                 ORG_NRC,
                 institution,
@@ -906,7 +976,7 @@ fn concurrent_nrc_admin_replacements_blocked_by_mutex() {
 
 /// 跨省隔离：PRC 一个省的管理员替换不得影响另一个省的管理员名单。
 #[test]
-fn prc_replacement_isolates_provinces() {
+fn prc_set_change_isolates_provinces() {
     new_test_ext().execute_with(|| {
         let prc_a = prc_pallet_id();
         // CHINA_CB[0]=NRC, [1]=辽宁(prc_pallet_id), 取另一省作为对照。
@@ -916,7 +986,7 @@ fn prc_replacement_isolates_provinces() {
 
         let old_admin = prc_admin(1);
         let new_admin = AccountId32::new([240u8; 32]);
-        assert_ok!(AdminsChange::propose_admin_replacement(
+        assert_ok!(propose_admin_set_replacement(
             RuntimeOrigin::signed(prc_admin(0)),
             ORG_PRC,
             prc_a,

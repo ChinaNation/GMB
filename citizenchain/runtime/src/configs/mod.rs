@@ -1071,10 +1071,13 @@ parameter_types! {
     pub const RuntimeUpgradeMaxReasonLen: u32 = 1024;
     /// Runtime wasm 最大长度（字节）。
     pub const RuntimeUpgradeMaxCodeSize: u32 = 5 * 1024 * 1024;
-    /// 管理员治理：单机构管理员列表上限（覆盖国储会 19 人规模）。
-    // 必须 >= admins_change::MaxAdminsPerInstitution (32)
-    // 且 >= organization_manage::MaxAdmins (64)，否则快照写入会静默失败。
-    pub const MaxAdminsPerInstitution: u32 = 64;
+    /// 管理员治理：单个注册机构账户管理员上限。
+    ///
+    /// 中文注释：物理 BoundedVec 上限必须覆盖机构账户 1989 人场景；个人账户
+    /// 另由 MaxPersonalAccountAdmins 限制为 64。
+    pub const MaxAdminsPerInstitution: u32 = 1989;
+    /// 管理员治理：单个个人账户管理员上限。
+    pub const MaxPersonalAccountAdmins: u32 = 64;
     /// GRANDPA authority set 变更生效延迟（单位：区块）。
     /// 取非 0，给运维注入新 gran 私钥预留窗口，避免立即切换导致短时失票。
     pub const GrandpaAuthoritySetChangeDelay: u32 = 30;
@@ -1083,6 +1086,7 @@ parameter_types! {
 impl admins_change::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = MaxAdminsPerInstitution;
+    type MaxPersonalAccountAdmins = MaxPersonalAccountAdmins;
     type InternalVoteEngine = InternalVote;
     type WeightInfo = admins_change::weights::SubstrateWeight<Runtime>;
 }

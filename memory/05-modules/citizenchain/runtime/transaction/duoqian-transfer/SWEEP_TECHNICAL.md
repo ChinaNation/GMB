@@ -27,7 +27,7 @@ pub struct SweepAction<Balance> {
 
 - **发起者**：NRC 或 PRB 管理员（通过 `InternalAdminProvider::is_internal_admin` 校验）
 - **org 判断**：`resolve_sweep_org` 仅识别 NRC（CHINA_CB 首项）和 PRB（CHINA_CH 全部），返回对应 org 常量
-- 注册多签机构 (ORG_DUOQIAN) 不在 sweep 范围内
+- 注册账户 (ORG_REN) 不在 sweep 范围内
 
 ## 账户解析
 

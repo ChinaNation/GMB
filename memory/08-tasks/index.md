@@ -225,6 +225,7 @@
 - `memory/08-tasks/done/20260506-split-personal-manage-from-organization-manage.md`
 - `memory/08-tasks/done/20260506-unified-subject-id-protocol.md`
 - `memory/08-tasks/done/20260506-wuminapp-公民三tab扁平化重构.md`
+- `memory/08-tasks/done/20260507-185958-第1步改造-admins-change-新增-institutionaccount-账户级主体-保留-sfidinstitution-仅作机构归属-实现统一动态阈值工.md`
 - `memory/08-tasks/done/20260507-ai-required-reading.md`
 - `memory/08-tasks/done/20260507-ai-unified-naming.md`
 - `memory/08-tasks/done/20260507-ai-unified-protocols.md`

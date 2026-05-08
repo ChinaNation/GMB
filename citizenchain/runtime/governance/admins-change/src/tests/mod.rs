@@ -94,24 +94,33 @@ impl
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
-        if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
-            return false;
-        }
         pallet::Pallet::<Test>::is_active_subject_admin(org, institution, who)
     }
 
     fn get_admin_list(org: u8, institution: SubjectId) -> Option<Vec<AccountId32>> {
-        if !matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
-            return None;
-        }
         pallet::Pallet::<Test>::active_subject_admins(org, institution)
     }
 }
 
 pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: SubjectId) -> Option<u32> {
-        votingengine::types::fixed_governance_pass_threshold(org)
+    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
+        match org {
+            ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN => {
+                pallet::Pallet::<Test>::active_subject_exists(org, institution)
+            }
+            _ => false,
+        }
+    }
+
+    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
+        match org {
+            ORG_NRC | ORG_PRC | ORG_PRB => {
+                votingengine::types::fixed_governance_pass_threshold(org)
+            }
+            ORG_REN => pallet::Pallet::<Test>::active_subject_threshold(org, institution),
+            _ => None,
+        }
     }
 }
 
@@ -134,7 +143,7 @@ impl votingengine::Config for Test {
     type MaxCleanupQueueBucketLimit = ConstU32<50>;
     type MaxCleanupScheduleOffset = ConstU32<100>;
     type CleanupKeysPerStep = ConstU32<64>;
-    type MaxProposalDataLen = ConstU32<256>;
+    type MaxProposalDataLen = ConstU32<{ 8 * 1024 }>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
     type MaxModuleTagLen = ConstU32<32>;
     type MaxManualExecutionAttempts = ConstU32<3>;
@@ -167,6 +176,7 @@ impl internal_vote::Config for Test {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxAdminsPerInstitution = ConstU32<32>;
+    type MaxPersonalAccountAdmins = ConstU32<16>;
     type InternalVoteEngine = internal_vote::Pallet<Test>;
     type WeightInfo = ();
 }
@@ -224,6 +234,28 @@ fn current_admins(institution: SubjectId) -> Vec<AccountId32> {
         .expect("admin subject should be stored")
         .admins
         .into_inner()
+}
+
+fn bounded_admins(admins: Vec<AccountId32>) -> AdminsOf<Test> {
+    admins
+        .try_into()
+        .expect("test admin list should fit MaxAdminsPerInstitution")
+}
+
+fn propose_admin_set_replacement(
+    origin: RuntimeOrigin,
+    org: u8,
+    subject: SubjectId,
+    old_admin: AccountId32,
+    new_admin: AccountId32,
+) -> DispatchResult {
+    let mut admins = current_admins(subject);
+    let old_pos = admins
+        .iter()
+        .position(|admin| admin == &old_admin)
+        .expect("old admin must exist in test subject");
+    admins[old_pos] = new_admin;
+    AdminsChange::propose_admin_set_change(origin, org, subject, bounded_admins(admins))
 }
 
 fn mark_proposal_passed_without_callback(proposal_id: u64) {

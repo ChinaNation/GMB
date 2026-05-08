@@ -152,7 +152,7 @@ any → unknown
 2. 创建多签主体的业务通过 `do_create_pending_subject_internal_proposal` 创建提案，只接受 Pending 管理员主体，并登记 `Regular` 锁。
 3. `organization-manage` 创建 Pending 主体时可调用 `do_create_pending_subject_internal_proposal_with_snapshot`，先用显式管理员列表固化快照，再由 `admins-change::SubjectLifecycle` 写 Pending 主体，避免“先写 Pending 再创建提案”的半成功窗口。
 4. 管理员集合变更通过 `do_create_admin_set_mutation_internal_proposal` 创建提案，并登记 `AdminSetMutationExclusive` 锁。
-5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。NRC/PRC/PRB 的快照值来自固定治理常量；ORG_DUOQIAN 的快照值来自 Active/Pending 注册多签主体或显式 Pending 快照。
+5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。NRC/PRC/PRB 的快照值来自固定治理常量；ORG_REN 的快照值来自 Active/Pending 注册账户主体或显式 Pending 快照。
 6. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过；缺少阈值快照返回 `MissingThresholdSnapshot`，缺少管理员快照返回 `MissingAdminSnapshot`，不再混用 `InvalidInternalOrg`。
 7. 达阈值时立即 `Passed`（`set_status_and_emit`）。
 8. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
@@ -166,7 +166,7 @@ any → unknown
 3. 链上同步维护 `JointInstitutionTallies`：
    - `yes >= fixed_governance_threshold` 时，自动把该机构结果记为 `approved`
    - `yes + remaining_admins < fixed_governance_threshold` 时，自动把该机构结果记为 `rejected`
-   - 联合投票永远只覆盖国储会、省储会、省储行，不读取 ORG_DUOQIAN 注册多签主体阈值，也不新增联合阈值快照。
+   - 联合投票永远只覆盖国储会、省储会、省储行，不读取 ORG_REN 注册账户主体阈值，也不新增联合阈值快照。
 4. 机构结果形成后写入 `JointVotesByInstitution`，并按机构权重累计到 `JointTallies`。
 5. 联合全票通过则立即 `Passed`。
 6. 任一机构一旦自动形成 `rejected`，由于联合阶段要求全票通过，会立即进入 `STAGE_CITIZEN`，并释放管理员阶段互斥锁。
@@ -329,8 +329,8 @@ any → unknown
 - 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
 - 联合投票不调用 `InternalThresholdProvider::pass_threshold`，避免把注册多签主体阈值误用于治理联合投票。
 - NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
-- ORG_DUOQIAN 注册个人多签/机构多签主体合法性通过 `is_known_subject` / `is_known_pending_subject` 显式判断，不再把 `pass_threshold(...).is_some()` 当作存在性判断。
-- ORG_DUOQIAN 注册个人多签/机构多签的阈值由注册主体配置提供；创建 Active/Pending 内部提案时写入 `InternalThresholdSnapshot`，投票期间只读快照。
+- ORG_REN 注册个人账户/机构账户主体合法性通过 `is_known_subject` / `is_known_pending_subject` 显式判断，不再把 `pass_threshold(...).is_some()` 当作存在性判断。
+- ORG_REN 注册个人账户/机构账户的阈值由 `admins-change` 按管理员数量派生；创建 Active/Pending 内部提案时写入 `InternalThresholdSnapshot`，投票期间只读快照。
 - `InternalThresholdProvider for ()` 不提供任何默认阈值，runtime 与 mock runtime 必须显式注入 provider，避免漏配置时仍误走固定阈值。
 - 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 

@@ -1,8 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 //! 管理员权限治理模块（admins-change）
-//! - 本模块只负责“更换管理员”这一类业务事项
+//! - 本模块只负责“管理员集合变更”这一类业务事项
 //! - 投票流程本身由 votingengine 提供（内部投票）
-//! - 约束：仅替换，不增删；且仅能在本机构范围内更换
+//! - 约束：治理机构固定人数/固定阈值，仅允许等长更换；动态账户允许增删改，
+//!   阈值由本模块统一按管理员数量推导
 
 extern crate alloc;
 
@@ -39,19 +40,18 @@ mod benchmarks;
 pub mod weights;
 
 /// 模块标识前缀，用于在 ProposalData 中区分不同业务模块，防止跨模块误解码。
-/// 中文注释：tag 带 schema 版本号；开发期不兼容旧 `adm-rep` 提案数据。
-pub const MODULE_TAG: &[u8] = b"adm-rep-v1";
+/// 中文注释：tag 带 schema 版本号；开发期不兼容旧管理员替换提案数据。
+pub const MODULE_TAG: &[u8] = b"adm-set-v1";
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen,
 )]
-pub struct AdminReplacementAction<AccountId> {
-    /// 目标机构（机构标识 pallet_id）
-    pub institution: SubjectId,
-    /// 被替换的管理员
-    pub old_admin: AccountId,
-    /// 新管理员
-    pub new_admin: AccountId,
+#[scale_info(skip_type_params(AdminList))]
+pub struct AdminSetChangeAction<AdminList> {
+    /// 目标管理员主体（内置治理机构/个人账户/机构账户）。
+    pub subject: SubjectId,
+    /// 提案通过后写入的完整管理员集合。
+    pub new_admins: AdminList,
 }
 
 /// 管理员主体类型。所有需要内部投票的多签主体都在本模块统一登记。
@@ -71,9 +71,14 @@ pub enum AdminSubjectKind {
     /// 国储会、省储会、省储行等创世内置机构。
     BuiltinInstitution,
     /// SFID 系统登记后在链上注册的机构多签。
+    ///
+    /// 中文注释：保留给旧链上机构级主体和 SFID 机构归属索引过渡；新账户级
+    /// 内部投票主体应使用 `InstitutionAccount`。
     SfidInstitution,
     /// 用户自建的个人多签。
     PersonalDuoqian,
+    /// SFID 机构下面的某个具体账户。
+    InstitutionAccount,
 }
 
 /// 管理员主体生命周期。
@@ -194,6 +199,40 @@ fn default_threshold(org: u8) -> Option<u32> {
     }
 }
 
+/// 动态账户管理员阈值统一推导规则。
+///
+/// 中文注释：个人账户、机构账户的阈值都不再由业务模块自由写入；所有创建、
+/// 增加、删除、更换后的阈值都走这里，保证链上查询和写入结果一致。
+/// - 2 个管理员时阈值必须是 2；
+/// - 3 个及以上管理员时阈值为 `ceil(admin_count / 2)`；
+/// - 0/1 个管理员不是合法内部投票账户，返回 None。
+pub fn dynamic_threshold(admin_count: u32) -> Option<u32> {
+    match admin_count {
+        0 | 1 => None,
+        2 => Some(2),
+        n => Some(n.saturating_add(1) / 2),
+    }
+}
+
+/// 按主体类型推导最终写入链上的阈值。
+///
+/// 治理机构走固定常量；动态账户走 [`dynamic_threshold`]。
+pub fn derived_threshold(kind: AdminSubjectKind, org: u8, admin_count: u32) -> Option<u32> {
+    match kind {
+        AdminSubjectKind::BuiltinInstitution => {
+            let expected = expected_admin_count(org)?;
+            if admin_count == expected {
+                default_threshold(org)
+            } else {
+                None
+            }
+        }
+        AdminSubjectKind::PersonalDuoqian
+        | AdminSubjectKind::InstitutionAccount
+        | AdminSubjectKind::SfidInstitution => dynamic_threshold(admin_count),
+    }
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
@@ -206,8 +245,12 @@ pub mod pallet {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         #[pallet::constant]
-        /// 单个机构管理员最大数量上限（用于 BoundedVec）
+        /// 单个机构账户管理员最大数量上限（用于 BoundedVec，运行时目标值 1989）
         type MaxAdminsPerInstitution: Get<u32>;
+
+        #[pallet::constant]
+        /// 单个个人账户管理员最大数量上限（运行时目标值 64）
+        type MaxPersonalAccountAdmins: Get<u32>;
 
         /// 中文注释：内部投票引擎（返回真实 proposal_id，避免外部猜测 next_proposal_id）。
         type InternalVoteEngine: votingengine::InternalVoteEngine<Self::AccountId>;
@@ -228,8 +271,8 @@ pub mod pallet {
 
     /// 统一管理员主体表：subject_id → 管理员、阈值和生命周期。
     ///
-    /// 创世时写入国储会、省储会、省储行；SFID 机构多签由 `organization-manage`
-    /// 写入，个人多签由 `personal-manage` 写入，投票通过后激活。
+    /// 创世时写入国储会、省储会、省储行；个人账户由 `personal-manage` 写入；
+    /// 机构账户由 `organization-manage` 在后续账户级改造中写入，投票通过后激活。
     #[pallet::storage]
     #[pallet::getter(fn subject_of)]
     pub type Subjects<T: Config> =
@@ -303,6 +346,15 @@ pub mod pallet {
                 <T as Config>::MaxAdminsPerInstitution::get() >= required,
                 "MaxAdminsPerInstitution must be >= largest expected admin count"
             );
+            assert!(
+                <T as Config>::MaxPersonalAccountAdmins::get() >= 2,
+                "MaxPersonalAccountAdmins must be >= 2"
+            );
+            assert!(
+                <T as Config>::MaxAdminsPerInstitution::get()
+                    >= <T as Config>::MaxPersonalAccountAdmins::get(),
+                "MaxAdminsPerInstitution must cover the physical BoundedVec maximum"
+            );
         }
     }
 
@@ -339,27 +391,28 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// 已发起管理员更换提案（并已在投票引擎创建内部提案）
-        AdminReplacementProposed {
+        /// 已发起管理员集合变更提案（并已在投票引擎创建内部提案）
+        AdminSetChangeProposed {
             proposal_id: u64,
             org: u8,
-            institution: SubjectId,
+            subject: SubjectId,
             proposer: T::AccountId,
-            old_admin: T::AccountId,
-            new_admin: T::AccountId,
+            old_admin_count: u32,
+            new_admin_count: u32,
+            new_threshold: u32,
         },
         /// 提案达到通过状态但自动执行失败（投票不回滚）
-        AdminReplacementExecutionFailed { proposal_id: u64 },
-        /// 管理员列表已完成替换执行
-        AdminReplaced {
+        AdminSetChangeExecutionFailed { proposal_id: u64 },
+        /// 管理员集合已完成执行
+        AdminSetChanged {
             proposal_id: u64,
-            institution: SubjectId,
-            old_admin: T::AccountId,
-            new_admin: T::AccountId,
+            subject: SubjectId,
+            admin_count: u32,
+            threshold: u32,
         },
         /// 多签主体管理员配置已写入 Pending。
         AdminSubjectPendingCreated {
-            institution: SubjectId,
+            subject: SubjectId,
             org: u8,
             kind: AdminSubjectKind,
             creator: T::AccountId,
@@ -367,11 +420,11 @@ pub mod pallet {
             threshold: u32,
         },
         /// 多签主体管理员配置已激活。
-        AdminSubjectActivated { institution: SubjectId },
+        AdminSubjectActivated { subject: SubjectId },
         /// Pending 多签主体管理员配置已清理。
-        AdminSubjectPendingRemoved { institution: SubjectId },
+        AdminSubjectPendingRemoved { subject: SubjectId },
         /// 多签主体管理员配置已关闭。
-        AdminSubjectClosed { institution: SubjectId },
+        AdminSubjectClosed { subject: SubjectId },
     }
 
     #[pallet::error]
@@ -384,11 +437,9 @@ pub mod pallet {
         InvalidAdminCount,
         /// 非该机构管理员，无权限
         UnauthorizedAdmin,
-        /// 旧管理员不在当前名单中
-        OldAdminNotFound,
-        /// 新管理员已经在当前名单中
-        NewAdminAlreadyExists,
-        /// 找不到与投票提案绑定的管理员更换动作
+        /// 管理员集合没有发生变化
+        AdminSetUnchanged,
+        /// 找不到与投票提案绑定的管理员集合变更动作
         ProposalActionNotFound,
         /// 投票尚未通过，不能执行替换
         ProposalNotPassed,
@@ -421,53 +472,46 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
-        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_replacement())]
-        pub fn propose_admin_replacement(
+        #[pallet::weight(<T as pallet::Config>::WeightInfo::propose_admin_set_change())]
+        pub fn propose_admin_set_change(
             origin: OriginFor<T>,
             org: u8,
-            institution: SubjectId,
-            old_admin: T::AccountId,
-            new_admin: T::AccountId,
+            subject_id: SubjectId,
+            new_admins: AdminsOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            // 中文注释：本入口只治理制度内置主体(NRC/PRC/PRB)的管理员替换。
-            // ORG_REN 的个人/机构多签主体由 organization-manage / personal-manage 维护生命周期,
-            // 不能从通用管理员替换入口绕出第二条治理路径。
-            ensure!(
-                matches!(org, ORG_NRC | ORG_PRC | ORG_PRB),
-                Error::<T>::InvalidSubjectKind
-            );
-
             // 1) 校验管理员主体已激活且 org 匹配。
-            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            let subject = Subjects::<T>::get(subject_id).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 subject.status == AdminSubjectStatus::Active,
                 Error::<T>::SubjectNotActive
             );
             ensure!(subject.org == org, Error::<T>::InstitutionOrgMismatch);
 
-            // 2) 校验发起人与替换参数合法性
-            let admins = Self::admins_for_institution(institution)?;
-            ensure!(admins.contains(&who), Error::<T>::UnauthorizedAdmin);
-            ensure!(admins.contains(&old_admin), Error::<T>::OldAdminNotFound);
+            // 2) 校验发起人与目标管理员集合合法性。
+            let current_admins = subject.admins.clone().into_inner();
+            ensure!(current_admins.contains(&who), Error::<T>::UnauthorizedAdmin);
+            Self::validate_admin_set_for_subject(subject.kind, subject.org, new_admins.as_slice())?;
             ensure!(
-                !admins.contains(&new_admin),
-                Error::<T>::NewAdminAlreadyExists
+                !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
+                Error::<T>::AdminSetUnchanged
             );
+            let new_threshold =
+                derived_threshold(subject.kind, subject.org, new_admins.len() as u32)
+                    .ok_or(Error::<T>::InvalidThreshold)?;
 
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
-                let action = AdminReplacementAction {
-                    institution,
-                    old_admin: old_admin.clone(),
-                    new_admin: new_admin.clone(),
+                let action = AdminSetChangeAction {
+                    subject: subject_id,
+                    new_admins: new_admins.clone(),
                 };
                 let encoded = action.encode();
                 let proposal_id = match T::InternalVoteEngine::create_admin_set_mutation_internal_proposal_with_data(
                     who.clone(),
                     org,
-                    institution,
+                    subject_id,
                     crate::MODULE_TAG,
                     encoded,
                 ) {
@@ -475,51 +519,70 @@ pub mod pallet {
                     Err(err) => return TransactionOutcome::Rollback(Err(err)),
                 };
 
-                Self::deposit_event(Event::<T>::AdminReplacementProposed {
+                Self::deposit_event(Event::<T>::AdminSetChangeProposed {
                     proposal_id,
                     org,
-                    institution,
+                    subject: subject_id,
                     proposer: who,
-                    old_admin,
-                    new_admin,
+                    old_admin_count: current_admins.len() as u32,
+                    new_admin_count: new_admins.len() as u32,
+                    new_threshold,
                 });
                 TransactionOutcome::Commit(Ok(()))
             })
         }
 
-        // call_index = 1 已废弃: execute_admin_replacement 已统一到
+        // call_index = 1 已废弃: execute_admin_set_change 已统一到
         // VotingEngine::retry_passed_proposal —— 前端必须直接调用投票引擎
         // 的 retry/cancel 入口,业务 pallet 不再保留任何 wrapper extrinsic。
     }
 
     impl<T: Config> Pallet<T> {
-        fn admins_for_institution(
-            institution: SubjectId,
-        ) -> Result<Vec<T::AccountId>, DispatchError> {
-            // 中文注释：创世后只信任链上管理员状态，不再回退常量管理员。
-            let stored = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
-            Ok(stored.admins.into_inner())
-        }
-
         fn validate_admin_count_for_subject(
             kind: AdminSubjectKind,
             org: u8,
             admins_len: usize,
         ) -> DispatchResult {
-            if matches!(kind, AdminSubjectKind::BuiltinInstitution) {
-                // 固定人数约束：国储会19，省储会9，省储行9
-                let expected = expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
-                ensure!(
-                    admins_len == expected as usize,
-                    Error::<T>::InvalidAdminCount
-                );
-            } else {
-                ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
-                ensure!(
-                    admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
-                    Error::<T>::InvalidAdminCount
-                );
+            match kind {
+                AdminSubjectKind::BuiltinInstitution => {
+                    // 固定人数约束：国储会19，省储会9，省储行9。
+                    let expected =
+                        expected_admin_count(org).ok_or(Error::<T>::InvalidInstitution)?;
+                    ensure!(
+                        admins_len == expected as usize,
+                        Error::<T>::InvalidAdminCount
+                    );
+                }
+                AdminSubjectKind::PersonalDuoqian => {
+                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+                    ensure!(
+                        admins_len <= <T as Config>::MaxPersonalAccountAdmins::get() as usize,
+                        Error::<T>::InvalidAdminCount
+                    );
+                }
+                AdminSubjectKind::InstitutionAccount | AdminSubjectKind::SfidInstitution => {
+                    ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
+                    ensure!(
+                        admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
+                        Error::<T>::InvalidAdminCount
+                    );
+                }
             }
+            Ok(())
+        }
+
+        fn validate_admin_set_for_subject(
+            kind: AdminSubjectKind,
+            org: u8,
+            admins: &[T::AccountId],
+        ) -> DispatchResult {
+            Self::ensure_subject_kind_matches_org(kind, org)?;
+            Self::validate_admin_count_for_subject(kind, org, admins.len())?;
+            Self::ensure_unique_admins(admins)?;
+            ensure!(
+                derived_threshold(kind, org, admins.len() as u32).is_some(),
+                Error::<T>::InvalidThreshold
+            );
             Ok(())
         }
 
@@ -531,6 +594,15 @@ pub mod pallet {
             Ok(())
         }
 
+        fn same_admin_set(left: &[T::AccountId], right: &[T::AccountId]) -> bool {
+            if left.len() != right.len() {
+                return false;
+            }
+            let left_set: BTreeSet<T::AccountId> = left.iter().cloned().collect();
+            let right_set: BTreeSet<T::AccountId> = right.iter().cloned().collect();
+            left_set == right_set
+        }
+
         fn ensure_subject_kind_matches_org(kind: AdminSubjectKind, org: u8) -> DispatchResult {
             match kind {
                 AdminSubjectKind::BuiltinInstitution => {
@@ -539,19 +611,12 @@ pub mod pallet {
                         Error::<T>::InvalidSubjectKind
                     );
                 }
-                AdminSubjectKind::SfidInstitution | AdminSubjectKind::PersonalDuoqian => {
+                AdminSubjectKind::SfidInstitution
+                | AdminSubjectKind::PersonalDuoqian
+                | AdminSubjectKind::InstitutionAccount => {
                     ensure!(org == ORG_REN, Error::<T>::InvalidSubjectKind);
                 }
             }
-            Ok(())
-        }
-
-        fn validate_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
-            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
-            ensure!(
-                threshold >= min_threshold && threshold <= admin_count,
-                Error::<T>::InvalidThreshold
-            );
             Ok(())
         }
 
@@ -606,17 +671,18 @@ pub mod pallet {
             org: u8,
             kind: AdminSubjectKind,
             admins: Vec<T::AccountId>,
-            threshold: u32,
+            _threshold: u32,
             creator: T::AccountId,
         ) -> DispatchResult {
             ensure!(
                 !Subjects::<T>::contains_key(institution),
                 Error::<T>::InstitutionAlreadyExists
             );
-            Self::ensure_subject_kind_matches_org(kind, org)?;
-            Self::validate_admin_count_for_subject(kind, org, admins.len())?;
-            Self::ensure_unique_admins(&admins)?;
-            Self::validate_threshold(admins.len() as u32, threshold)?;
+            Self::validate_admin_set_for_subject(kind, org, &admins)?;
+            // 中文注释：兼容 trait 旧签名仍接收 threshold，但链上写入一律由
+            // admins-change 统一推导；创建/注销提案的“全员通过”阈值由投票引擎快照单独保存。
+            let threshold = derived_threshold(kind, org, admins.len() as u32)
+                .ok_or(Error::<T>::InvalidThreshold)?;
 
             let bounded: AdminsOf<T> = admins
                 .try_into()
@@ -637,7 +703,7 @@ pub mod pallet {
                 },
             );
             Self::deposit_event(Event::<T>::AdminSubjectPendingCreated {
-                institution,
+                subject: institution,
                 org,
                 kind,
                 creator,
@@ -659,7 +725,9 @@ pub mod pallet {
                 subject.updated_at = frame_system::Pallet::<T>::block_number();
                 Ok(())
             })?;
-            Self::deposit_event(Event::<T>::AdminSubjectActivated { institution });
+            Self::deposit_event(Event::<T>::AdminSubjectActivated {
+                subject: institution,
+            });
             Ok(())
         }
 
@@ -671,7 +739,9 @@ pub mod pallet {
                     Error::<T>::SubjectNotPending
                 );
                 Subjects::<T>::remove(institution);
-                Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved { institution });
+                Self::deposit_event(Event::<T>::AdminSubjectPendingRemoved {
+                    subject: institution,
+                });
             }
             Ok(())
         }
@@ -693,7 +763,9 @@ pub mod pallet {
                 subject.updated_at = frame_system::Pallet::<T>::block_number();
                 Ok(())
             })?;
-            Self::deposit_event(Event::<T>::AdminSubjectClosed { institution });
+            Self::deposit_event(Event::<T>::AdminSubjectClosed {
+                subject: institution,
+            });
             Ok(())
         }
 
@@ -792,9 +864,9 @@ pub mod pallet {
             Some(subject.admins.len() as u32)
         }
 
-        pub(crate) fn try_execute_replacement_from_action(
+        pub(crate) fn try_execute_set_change_from_action(
             proposal_id: u64,
-            action: AdminReplacementAction<T::AccountId>,
+            action: AdminSetChangeAction<AdminsOf<T>>,
         ) -> DispatchResult {
             // 中文注释：执行前同时校验投票引擎元数据与业务 action，避免跨模块误消费。
             let proposal = votingengine::Pallet::<T>::proposals(proposal_id)
@@ -813,13 +885,13 @@ pub mod pallet {
             );
 
             let subject =
-                Subjects::<T>::get(action.institution).ok_or(Error::<T>::InvalidInstitution)?;
+                Subjects::<T>::get(action.subject).ok_or(Error::<T>::InvalidInstitution)?;
             ensure!(
                 subject.status == AdminSubjectStatus::Active,
                 Error::<T>::SubjectNotActive
             );
             ensure!(
-                proposal.internal_institution == Some(action.institution),
+                proposal.internal_institution == Some(action.subject),
                 Error::<T>::ProposalInstitutionMismatch
             );
             ensure!(
@@ -828,39 +900,36 @@ pub mod pallet {
             );
             votingengine::Pallet::<T>::ensure_admin_set_mutation_lock_owner(
                 subject.org,
-                action.institution,
+                action.subject,
                 proposal_id,
             )?;
-            let mut admins = Self::admins_for_institution(action.institution)?;
-            Self::validate_admin_count_for_subject(subject.kind, subject.org, admins.len())?;
-
-            let old_pos = admins
-                .iter()
-                .position(|a| a == &action.old_admin)
-                .ok_or(Error::<T>::OldAdminNotFound)?;
+            let current_admins = subject.admins.clone().into_inner();
+            Self::validate_admin_set_for_subject(
+                subject.kind,
+                subject.org,
+                action.new_admins.as_slice(),
+            )?;
             ensure!(
-                !admins.iter().any(|a| a == &action.new_admin),
-                Error::<T>::NewAdminAlreadyExists
+                !Self::same_admin_set(current_admins.as_slice(), action.new_admins.as_slice()),
+                Error::<T>::AdminSetUnchanged
             );
+            let new_threshold =
+                derived_threshold(subject.kind, subject.org, action.new_admins.len() as u32)
+                    .ok_or(Error::<T>::InvalidThreshold)?;
 
-            // 只替换，不增删：列表长度保持不变
-            admins[old_pos] = action.new_admin.clone();
-
-            let bounded: BoundedVec<T::AccountId, <T as Config>::MaxAdminsPerInstitution> = admins
-                .try_into()
-                .map_err(|_| Error::<T>::InvalidAdminCount)?;
-            Subjects::<T>::mutate(action.institution, |maybe| {
+            Subjects::<T>::mutate(action.subject, |maybe| {
                 if let Some(subject) = maybe {
-                    subject.admins = bounded;
+                    subject.admins = action.new_admins.clone();
+                    subject.threshold = new_threshold;
                     subject.updated_at = frame_system::Pallet::<T>::block_number();
                 }
             });
 
-            Self::deposit_event(Event::<T>::AdminReplaced {
+            Self::deposit_event(Event::<T>::AdminSetChanged {
                 proposal_id,
-                institution: action.institution,
-                old_admin: action.old_admin,
-                new_admin: action.new_admin,
+                subject: action.subject,
+                admin_count: action.new_admins.len() as u32,
+                threshold: new_threshold,
             });
 
             Ok(())
@@ -951,14 +1020,14 @@ impl<T: pallet::Config> SubjectLifecycle<T::AccountId> for pallet::Pallet<T> {
     }
 }
 
-// ──── 投票终态回调:把已通过的管理员替换提案落地到链上 ────
+// ──── 投票终态回调:把已通过的管理员集合变更提案落地到链上 ────
 //
 // 投票统一由投票引擎承担,提案通过(或否决)经
 // [`votingengine::InternalVoteResultCallback`] 广播回来。
 // 本 Executor 按 `ProposalOwner` 认领本模块提案，`ProposalData` 只保存裸业务 action。
 //
 // 设计要点:
-// - `approved = true` 时执行 `try_execute_replacement`,失败发 `AdminReplacementExecutionFailed`
+// - `approved = true` 时执行 `try_execute_set_change`,失败发 `AdminSetChangeExecutionFailed`
 //   事件但不返回 Err(否则投票引擎会回滚状态,票数白投);
 // - `approved = false` 下本模块没有独立存储需要清理,直接 Ok(()) 返回;
 // - 数据层异常(ProposalOwner 匹配但 data 缺失/解码失败)返回 Err,触发 set_status_and_emit 回滚,
@@ -983,15 +1052,15 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
         }
 
         // Step 2:解码 action。异常视为数据层问题,回滚投票状态。
-        let action = AdminReplacementAction::<T::AccountId>::decode(&mut &raw[..])
+        let action = AdminSetChangeAction::<AdminsOf<T>>::decode(&mut &raw[..])
             .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
 
         // Step 3:执行替换。管理员集合变更失败属于数据/状态已不匹配，直接交给投票引擎失败终态。
-        match pallet::Pallet::<T>::try_execute_replacement_from_action(proposal_id, action) {
+        match pallet::Pallet::<T>::try_execute_set_change_from_action(proposal_id, action) {
             Ok(()) => Ok(ProposalExecutionOutcome::Executed),
             Err(_) => {
                 pallet::Pallet::<T>::deposit_event(
-                    pallet::Event::<T>::AdminReplacementExecutionFailed { proposal_id },
+                    pallet::Event::<T>::AdminSetChangeExecutionFailed { proposal_id },
                 );
                 Ok(ProposalExecutionOutcome::FatalFailed)
             }

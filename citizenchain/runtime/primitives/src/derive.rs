@@ -9,16 +9,18 @@
 //!     0x02 = SfidInstitution   (SFID 注册机构,任意账户经 sfid_number 派生)
 //!     0x03 = PersonalDuoqian   (个人多签,creator+account_name 派生地址)
 //!     0x04 = OnchainAsset      (链上发行代币 storage key,ADR-011 v2 / 2026-05-07)
+//!     0x05 = InstitutionAccount (机构账户,AccountId 派生,账户级内部投票主体)
 //!     0xFF = Reserved          (协议升级哨兵)
 //!     其他  = 非法,parse 返回 None
 //!   byte[1..48]: payload (47B)
 //!     Builtin:           sfid_number 字节(≤47B)右填零
-//!     SfidInstitution:   sfid_number 字节(≤47B)右填零
+//!     SfidInstitution:   sfid_number 字节(≤47B)右填零,仅表示同一机构归属/检索
 //!     PersonalDuoqian:   32B AccountId + 15B 零填充
 //!     OnchainAsset:      4B asset_id(u32 LE) + 43B 零填充
+//!     InstitutionAccount:32B AccountId + 15B 零填充
 //! ```
 //!
-//! 三类主体永远不会撞 key(kind tag 不同),取代 A 阶段"全部右填零、ASCII 撞 key"
+//! 各类主体永远不会撞 key(kind tag 不同),取代 A 阶段"全部右填零、ASCII 撞 key"
 //! 的弱协议。链未上线时(2026-05-06)做协议统一,fresh genesis 即生效。
 //!
 //! ## 调用层
@@ -29,6 +31,7 @@
 //!   - `subject_id_from_account(account)` → PersonalDuoqian
 //!   - `subject_id_from_registered_sfid_number(sfid_number)` → SfidInstitution(运行时注册)
 //!   - `subject_id_from_sfid_number(sfid_number)` → Builtin(创世硬编码)
+//!   - `subject_id_from_institution_account(account)` → InstitutionAccount(机构账户级治理)
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::DecodeWithMemTracking;
@@ -63,6 +66,12 @@ pub enum SubjectKind {
     /// 反查发行人走 OnchainIssuance::Assets[SubjectId].issuer_subject_id 字段。
     /// 详见 ADR-011 第二节。
     OnchainAsset = 0x04,
+    /// 机构账户级内部投票主体。
+    ///
+    /// 中文注释：0x02 SfidInstitution 只表示同一 SFID 机构归属/检索；真正参与
+    /// 内部投票的机构账户管理员主体必须用 0x05 + AccountId，保证每个账户可拥有
+    /// 独立管理员集合与动态阈值。
+    InstitutionAccount = 0x05,
 }
 
 /// 通用构造 SubjectId(`[u8; 48]`)。
@@ -87,6 +96,7 @@ pub fn parse_subject_id(id: &[u8; 48]) -> Option<(SubjectKind, &[u8])> {
         0x02 => SubjectKind::SfidInstitution,
         0x03 => SubjectKind::PersonalDuoqian,
         0x04 => SubjectKind::OnchainAsset,
+        0x05 => SubjectKind::InstitutionAccount,
         _ => return None,
     };
     // 找 payload 实际有效长度(去掉尾部零填充)
@@ -106,6 +116,18 @@ pub fn subject_id_from_account<AccountId: Encode>(account: &AccountId) -> [u8; 4
     let encoded = account.encode();
     let copy_len = core::cmp::min(encoded.len(), 32);
     build_subject_id(SubjectKind::PersonalDuoqian, &encoded[..copy_len])
+        .expect("32B AccountId ≤ 47B payload, infallible")
+}
+
+/// 机构账户级治理主体派生:`InstitutionAccount` kind + 32B AccountId + 15B 零。
+///
+/// 中文注释：机构归属仍可用 [`subject_id_from_registered_sfid_number`] 检索同一 SFID
+/// 机构下的多个账户；但内部投票和管理员集合必须落到账户本身，避免主账户替其他
+/// 账户行使管理员权限。
+pub fn subject_id_from_institution_account<AccountId: Encode>(account: &AccountId) -> [u8; 48] {
+    let encoded = account.encode();
+    let copy_len = core::cmp::min(encoded.len(), 32);
+    build_subject_id(SubjectKind::InstitutionAccount, &encoded[..copy_len])
         .expect("32B AccountId ≤ 47B payload, infallible")
 }
 
@@ -137,8 +159,7 @@ pub fn subject_id_from_sfid_number(sfid_number: &str) -> Option<[u8; 48]> {
 /// 4B payload 远小于 47B 上限,build_subject_id 永远成功。
 pub fn subject_id_from_onchain_asset(asset_id: u32) -> [u8; 48] {
     let payload = asset_id.to_le_bytes();
-    build_subject_id(SubjectKind::OnchainAsset, &payload)
-        .expect("4B payload ≤ 47B max, infallible")
+    build_subject_id(SubjectKind::OnchainAsset, &payload).expect("4B payload ≤ 47B max, infallible")
 }
 
 /// 反向解析 OnchainAsset SubjectId,返回 asset_id。
@@ -191,18 +212,20 @@ mod tests {
     }
 
     #[test]
-    fn four_kinds_never_collide() {
-        // 四类主体即使 payload 字节内容相同(4B 全 1),subject_id 也因 kind 互斥。
+    fn five_kinds_never_collide() {
+        // 五类主体即使 payload 字节内容相同,subject_id 也因 kind 互斥。
         let same_payload_4 = [0x11u8; 4];
         let same_payload_32 = [0x11u8; 32];
         let a = build_subject_id(SubjectKind::Builtin, &same_payload_32).unwrap();
         let b = build_subject_id(SubjectKind::SfidInstitution, &same_payload_32).unwrap();
         let c = subject_id_from_account(&same_payload_32);
         let d = build_subject_id(SubjectKind::OnchainAsset, &same_payload_4).unwrap();
+        let e = subject_id_from_institution_account(&same_payload_32);
         assert_eq!(a[0], 0x01);
         assert_eq!(b[0], 0x02);
         assert_eq!(c[0], 0x03);
         assert_eq!(d[0], 0x04);
+        assert_eq!(e[0], 0x05);
     }
 
     #[test]
@@ -233,11 +256,11 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_kind() {
-        // 非法 kind 字节(0x00 / 0x05+ / 0xFF 等保留位)拒绝
+        // 非法 kind 字节(0x00 / 0x06+ / 0xFF 等保留位)拒绝
         let id_zero = [0u8; 48];
         assert!(parse_subject_id(&id_zero).is_none());
         let mut id_invalid = [0u8; 48];
-        id_invalid[0] = 0x05;
+        id_invalid[0] = 0x06;
         assert!(parse_subject_id(&id_invalid).is_none());
         // 0xFF 是协议升级哨兵,当前未启用,parse 拒绝
         let mut id_reserved = [0u8; 48];
@@ -272,6 +295,19 @@ mod tests {
         let account: [u8; 32] = [0xCC; 32];
         let id = subject_id_from_account(&account);
         assert!(parse_onchain_asset_subject(&id).is_none());
+    }
+
+    #[test]
+    fn institution_account_id_starts_with_0x05() {
+        let account_bytes: [u8; 32] = [0x5Au8; 32];
+        let id = subject_id_from_institution_account(&account_bytes);
+        assert_eq!(id[0], 0x05);
+        assert_eq!(&id[1..33], &account_bytes);
+        assert!(id[33..].iter().all(|&b| b == 0));
+
+        let (kind, payload) = parse_subject_id(&id).unwrap();
+        assert_eq!(kind, SubjectKind::InstitutionAccount);
+        assert_eq!(payload, account_bytes.as_slice());
     }
 
     #[test]

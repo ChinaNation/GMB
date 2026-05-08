@@ -46,7 +46,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_admin_replacement` | 0 | `propose_admin_replacement` | `org`, `old_admin`, `new_admin` | node_ui, wuminapp |
+| `propose_admin_set_change` | 0 | `propose_admin_set_change` | `org`, `subject`, `new_admins[]` | node_ui, wuminapp |
 
 `call_index = 1` 已留洞不复用。手动重试统一走 `VotingEngine.retry_passed_proposal(9.4)`。
 

@@ -35,13 +35,13 @@
 - 管理员个人账户不承担任何费用。
 - 覆盖两类来源：
   - 创世预置的治理机构 `main_address`（NRC / PRC / PRB）
-  - `organization-manage` 注册并激活的 `ORG_DUOQIAN` 多签地址（`action.duoqian_address`）
+  - `organization-manage` 注册并激活的 `ORG_REN` 账户地址（`action.duoqian_address`）
 
 ### 0.2 功能边界
 
 - 本模块处理两类机构转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `organization-manage` 注册并处于 Active 状态的多签机构（`ORG_DUOQIAN`）
+  - `organization-manage` 注册并处于 Active 状态的账户（`ORG_REN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
@@ -54,7 +54,7 @@
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构 | `sfid` 主签名登记 + `ORG_DUOQIAN` 内部投票 |
+| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `sfid` 主签名登记 + `ORG_REN` 内部投票 |
 | `duoqian-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
@@ -81,7 +81,7 @@
 机构主账户地址有两种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构：`SubjectId(48)` 采用主账户地址 `AccountId(32) + 16 字节 0` 编码，资金账户从 `OrganizationManage::InstitutionAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Subjects` 读取。
+- 注册型机构账户：`SubjectId(48)` 使用 `SubjectKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；资金账户从 `OrganizationManage::InstitutionAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Subjects` 读取。
 
 ### 1.3 institution-asset 边界
 
@@ -110,7 +110,7 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. `institution` 必须是有效机构：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 注册型机构：能解码出主账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active。
+   - 注册型机构账户：能从 `0x05 InstitutionAccount` 解码出账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
