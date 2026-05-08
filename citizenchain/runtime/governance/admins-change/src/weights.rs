@@ -16,12 +16,12 @@ use frame_support::{
 };
 
 pub trait WeightInfo {
-	fn propose_admin_replacement() -> Weight;
+	fn propose_admin_set_change() -> Weight;
 }
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
-	fn propose_admin_replacement() -> Weight {
+	fn propose_admin_set_change() -> Weight {
 		Weight::from_parts(87_473_000, 19_871)
 			.saturating_add(T::DbWeight::get().reads(6))
 			.saturating_add(T::DbWeight::get().writes(12))
@@ -29,7 +29,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
-	fn propose_admin_replacement() -> Weight {
+	fn propose_admin_set_change() -> Weight {
 		Weight::from_parts(87_473_000, 19_871)
 			.saturating_add(RocksDbWeight::get().reads(6))
 			.saturating_add(RocksDbWeight::get().writes(12))

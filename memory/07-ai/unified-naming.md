@@ -109,7 +109,7 @@
 | 个人多签 | `PersonalDuoqians` | storage | 个人多签 storage |
 | 治理主体 | `Subjects` | storage | 管理员主体 storage |
 | 账户级内部投票管理员模型 | `account-admin-internal-vote` | ADR / 文档 | ADR-015 记录的账户级管理员、动态阈值和内部投票治理模型 |
-| 机构账户主体 | `InstitutionAccount` | SubjectKind / 类型候选 | 注册机构账户级内部投票主体，推荐使用 `SubjectKind = 0x05`，执行阶段需同步 ADR-010 |
+| 机构账户主体 | `InstitutionAccount` | SubjectKind / 类型 | 注册机构账户级内部投票主体，已使用 `SubjectKind = 0x05`，payload 为账户 `AccountId` 前 32 字节并右填零 |
 | 机构身份号码 | `sfid_number` | API / call data / storage key | SFID 机构 ID |
 | 机构名称 | `institution_name` | API / call data | 机构显示名称 |
 | 账户名称 | `account_name` | API / call data | 机构账户名 |

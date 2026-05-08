@@ -35,20 +35,24 @@ mod benchmarks {
     use super::*;
 
     #[benchmark]
-    fn propose_admin_replacement() {
+    fn propose_admin_set_change() {
         let institution = prc_institution();
         let proposer = prc_admin::<T>(0);
-        let old_admin = prc_admin::<T>(1);
         let new_admin: T::AccountId = frame_benchmarking::account("new_admin", 0, 0);
         let stale_new_admin: T::AccountId = frame_benchmarking::account("stale_new_admin", 0, 0);
+        let subject =
+            crate::Subjects::<T>::get(institution).expect("benchmark genesis subject should exist");
+        let mut stale_admins = subject.admins.clone();
+        stale_admins[1] = stale_new_admin;
+        let mut new_admins = subject.admins;
+        new_admins[1] = new_admin;
 
         // 先发一个"陈旧"提案,让它自然超时被终结,验证新提案不会冲突。
-        assert!(AdminsChange::<T>::propose_admin_replacement(
+        assert!(AdminsChange::<T>::propose_admin_set_change(
             RawOrigin::Signed(proposer.clone()).into(),
             ORG_PRC,
             institution,
-            old_admin.clone(),
-            stale_new_admin,
+            stale_admins,
         )
         .is_ok());
 
@@ -65,18 +69,17 @@ mod benchmarks {
         .is_ok());
 
         #[extrinsic_call]
-        propose_admin_replacement(
+        propose_admin_set_change(
             RawOrigin::Signed(proposer),
             ORG_PRC,
             institution,
-            old_admin,
-            new_admin,
+            new_admins,
         );
 
         let proposal_id = last_proposal_id::<T>();
         assert!(votingengine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
 
-    // execute_admin_replacement benchmark 已废弃: 该 wrapper extrinsic 已统一到
+    // execute_admin_set_change benchmark 已废弃: 该 wrapper extrinsic 已统一到
     // VotingEngine::retry_passed_proposal,benchmark 由 votingengine 自身覆盖。
 }

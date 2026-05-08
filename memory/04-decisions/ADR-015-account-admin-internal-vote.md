@@ -158,8 +158,25 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 
 ## 后续动作
 
-1. 第 1 步改造 `admins-change`:账户级主体、动态阈值、管理员集合变更提案。
+1. 第 1 步改造 `admins-change`:账户级主体、动态阈值、管理员集合变更提案。已于 2026-05-08 完成。
 2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。
 3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。
 4. 第 4 步改造 `organization-manage`:注册机构账户管理员上限 1989,每账户独立主体。
 5. 第 5 步改造 `duoqian-transfer`、`wuminapp`、`wumin`。
+
+## 第 1 步执行结果
+
+2026-05-08 已完成：
+
+- `primitives::derive::SubjectKind` 新增 `InstitutionAccount = 0x05`。
+- `subject_id_from_institution_account(account)` 已落地，payload 为账户 `AccountId` 前 32 字节并右填零。
+- `admins-change` 新增统一动态阈值工具：`dynamic_threshold` / `derived_threshold`。
+- `admins-change` 增加 `MaxPersonalAccountAdmins` 配置项，runtime 设置为 64。
+- `admins-change::MaxAdminsPerInstitution` runtime 设置为 1989，用作注册机构账户管理员上限和物理 `BoundedVec` 上限。
+- 旧 `propose_admin_replacement` 已替换为 `propose_admin_set_change`。
+- 提案数据从 `AdminReplacementAction` 改为 `AdminSetChangeAction<AdminsOf<T>>`。
+- `MODULE_TAG` 从 `b"adm-rep-v1"` 改为 `b"adm-set-v1"`。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib`：24 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：34 passed。
+
+说明：`SfidInstitution = 0x02` 继续保留，用于机构归属和检索；后续第 4 步需要把 `organization-manage` 的新增机构账户管理员主体切到 `InstitutionAccount = 0x05`。

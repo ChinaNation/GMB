@@ -5,7 +5,7 @@
 
 ## 1. 当前边界
 
-`organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎 `ORG_DUOQIAN` 的对接。
+`organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎 `ORG_REN` 的对接。
 
 管理员、阈值和管理员人数的长期真源是 `admins-change::Subjects`；本模块只负责机构归属、机构账户、资金和生命周期。
 
