@@ -1,16 +1,14 @@
-//! 冻结 chainspec 加载入口。
+//! Chain spec 加载入口。
 //!
-//! 铁律(memory/feedback_chainspec_frozen.md):
-//! - chainspec 在主网创世后**永久冻结**,JSON 字节作为版本库内的固定资产
-//! - 二进制启动一律 `from_json_bytes` 加载这份字节,不再 `with_genesis_config_patch`
-//!   现编创世,确保任何平台、任何 commit 编出来的 binary genesis_hash 全网一致
-//! - runtime 升级走链上 `setCode`(governance/runtime-upgrade),**绝不动这份 JSON**
-//! - 不要再加 dev / staging / 多套 chainspec —— 只有 `citizenchain.raw.json` 一份
+//! 默认入口加载冻结主网 chainspec；`citizenchain-fresh` 仅供本机清链重新创世脚本
+//! 用最新 CI WASM 生成一次性 fresh raw chainspec,不会覆盖仓库中的冻结 JSON。
 //!
 //! 该 JSON 由主网在线权威节点 `export-chain-spec --raw` 一次性导出
 //! (导出时间 2026-05-06,源:nrcgch.crcfrcn.com)。
 
-use sc_chain_spec::NoExtension;
+use sc_chain_spec::{ChainType, NoExtension, Properties};
+use sc_network::config::MultiaddrWithPeerId;
+use std::str::FromStr;
 
 pub type ChainSpec = sc_service::GenericChainSpec<NoExtension>;
 
@@ -21,4 +19,48 @@ const CHAIN_SPEC_RAW: &[u8] = include_bytes!("../../chainspecs/citizenchain.raw.
 pub fn chain_config() -> Result<ChainSpec, String> {
     ChainSpec::from_json_bytes(CHAIN_SPEC_RAW.to_vec())
         .map_err(|e| format!("加载冻结 chainspec 失败: {e}"))
+}
+
+/// 使用当前编译进 node 的 `WASM_BINARY` 生成 fresh genesis chain spec。
+///
+/// 中文注释：该入口只给 `clean-run.sh` 生成本机重新创世 raw spec 使用。默认启动
+/// 仍走 `chain_config()` 的冻结主网 JSON,避免误改线上 genesis。
+pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
+    let wasm = citizenchain::WASM_BINARY.ok_or_else(|| {
+        "fresh genesis 需要 WASM_BINARY；请通过 WASM_FILE 指向最新 CI WASM 后再构建".to_string()
+    })?;
+    let mut properties = Properties::new();
+    properties.insert("ss58Format".into(), serde_json::json!(2027));
+    properties.insert("tokenDecimals".into(), serde_json::json!(2));
+    properties.insert("tokenSymbol".into(), serde_json::json!("GMB"));
+
+    // 中文注释:从冻结主网 chainspec 复用 44 个 bootnode 地址,
+    // 让所有清链后的节点继续通过同一组 DNS/PeerId 互联组网,避免变成孤岛。
+    let frozen: serde_json::Value = serde_json::from_slice(CHAIN_SPEC_RAW)
+        .map_err(|e| format!("解析冻结 chainspec 失败: {e}"))?;
+    let boot_nodes = frozen
+        .get("bootNodes")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "冻结 chainspec 缺少 bootNodes 数组".to_string())?
+        .iter()
+        .map(|v| {
+            let s = v.as_str().ok_or_else(|| "bootNodes 元素非字符串".to_string())?;
+            MultiaddrWithPeerId::from_str(s).map_err(|e| format!("解析 bootnode {s} 失败: {e}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // 中文注释:WASM runtime 在 no_std 下 `get_preset` 永远返回 None,
+    // 不能走 `with_genesis_config_preset_name`。直接调用 runtime crate 的 std 版
+    // `genesis_config()` 在 host 端构出完整 JSON,再 `with_genesis_config_patch` 注入。
+    let genesis_patch = citizenchain::genesis_config_presets::genesis_config();
+
+    Ok(ChainSpec::builder(wasm, None)
+        .with_name("CitizenChain")
+        .with_id("citizenchain")
+        .with_chain_type(ChainType::Live)
+        .with_protocol_id("citizenchain")
+        .with_properties(properties)
+        .with_boot_nodes(boot_nodes)
+        .with_genesis_config_patch(genesis_patch)
+        .build())
 }

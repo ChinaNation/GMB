@@ -101,6 +101,10 @@ fn start_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 
         // 准备启动参数。
         let base_path = node_data_dir(&app)?;
+        // 中文注释：clean-run 本机重新创世时注入 fresh raw chainspec；普通启动仍用冻结主网 spec。
+        let chain_spec = std::env::var("CITIZENCHAIN_CHAIN_SPEC")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
         let rpc_port = rpc::current_rpc_port();
         let enable_grandpa_validator = grandpa_address::prepare_grandpa_for_start(&app)?;
         let mining_threads = std::thread::available_parallelism()
@@ -110,6 +114,7 @@ fn start_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
         // 在进程内启动 Substrate 节点。
         let handle = node_runner::start_node_in_process(
             base_path,
+            chain_spec,
             rpc_port,
             None, // 节点名称已移除，不再使用
             enable_grandpa_validator,

@@ -35,6 +35,7 @@ impl Drop for NodeHandle {
 /// 在进程内启动 Substrate 节点。
 pub fn start_node_in_process(
     base_path: PathBuf,
+    chain_spec: Option<String>,
     rpc_port: u16,
     node_name: Option<String>,
     validator: bool,
@@ -46,7 +47,7 @@ pub fn start_node_in_process(
         "--base-path".into(),
         base_path.display().to_string(),
         "--chain".into(),
-        "citizenchain".into(),
+        chain_spec.unwrap_or_else(|| "citizenchain".into()),
         "--listen-addr".into(),
         "/ip4/0.0.0.0/tcp/30333/wss".into(),
         "--listen-addr".into(),
