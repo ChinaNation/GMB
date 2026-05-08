@@ -7,7 +7,6 @@
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalDuoqians 占位
-//!    - 写 PersonalDuoqianInfo 反向索引
 //!    - 调投票引擎 create_pending_subject_internal_proposal_with_snapshot_data
 //!    - 调 admins-change 写 Pending 主体
 //! 4. 从投票引擎回读 expires_at,发射 PersonalDuoqianProposed 事件
@@ -24,9 +23,9 @@ use sp_runtime::DispatchResult;
 
 use crate::pallet::{
     AccountNameOf, Config, DuoqianAdminsOf, Error, Event, Pallet, PendingPersonalCreate,
-    PersonalDuoqianInfo, PersonalDuoqians,
+    PersonalDuoqians,
 };
-use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus, PersonalDuoqianMeta};
+use crate::types::{CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
 use crate::BalanceOf;
 use crate::ACTION_CREATE;
 use primitives::derive::subject_id_from_account;
@@ -53,7 +52,7 @@ pub(crate) fn do_propose_create<T: Config>(
     let regular_threshold = Pallet::<T>::ensure_admin_config(&who, &duoqian_admins)?;
     let admin_count = duoqian_admins.len() as u32;
 
-    let (reserve_total, _fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
+    let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
 
     let duoqian_address =
         Pallet::<T>::derive_personal_duoqian_address(&who, account_name.as_slice())?;
@@ -81,6 +80,7 @@ pub(crate) fn do_propose_create<T: Config>(
         duoqian_address: duoqian_address.clone(),
         proposer: who.clone(),
         amount,
+        fee,
     };
     let mut data = alloc::vec::Vec::from(crate::MODULE_TAG);
     data.push(ACTION_CREATE);
@@ -94,15 +94,9 @@ pub(crate) fn do_propose_create<T: Config>(
             &duoqian_address,
             DuoqianAccount {
                 creator: who.clone(),
+                account_name: account_name.clone(),
                 created_at: now,
                 status: DuoqianStatus::Pending,
-            },
-        );
-        PersonalDuoqianInfo::<T>::insert(
-            &duoqian_address,
-            PersonalDuoqianMeta {
-                creator: who.clone(),
-                account_name: account_name.clone(),
             },
         );
         // 中文注释：创建提案需全员管理员通过；普通业务阈值由 admins-change 派生，
@@ -146,6 +140,7 @@ pub(crate) fn do_propose_create<T: Config>(
         admin_count,
         threshold: regular_threshold,
         amount,
+        fee,
         expires_at,
     });
 

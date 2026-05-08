@@ -326,7 +326,7 @@ impl votingengine::Config for Test {
     type SfidEligibility = TestSfidEligibility;
     type PopulationSnapshotVerifier = TestPopulationSnapshotVerifier;
     type JointVoteResultCallback = ();
-    // Phase 2:挂上本模块 Executor,3 组业务提案通过后自动 try_execute_X。
+    // Phase 2:挂上本模块 Executor,3 组业务提案通过后自动走 callback 执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminCountProvider = TestInternalAdminCountProvider;
@@ -404,9 +404,9 @@ impl pallet::Config for Test {
     type FeeRouter = ();
     // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
     // 管理员和阈值灌进 admins-change；PersonalQuery 负责合并读取;
-    // InstitutionQuery 走单元桩 ()(测试 fixture 不构造 SFID 注册路径)。
+    // InstitutionQuery 走 organization-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
     type PersonalQuery = personal_manage::Pallet<Test>;
-    type InstitutionQuery = ();
+    type InstitutionQuery = organization_manage::Pallet<Test>;
     type WeightInfo = ();
 }
 
@@ -479,6 +479,83 @@ fn registered_duoqian_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
     (0..count)
         .map(|i| registered_duoqian_pair(i as usize))
         .collect()
+}
+
+fn registered_institution_account() -> AccountId32 {
+    AccountId32::new([0x66; 32])
+}
+
+fn registered_institution_subject() -> SubjectId {
+    primitives::derive::subject_id_from_institution_account(&registered_institution_account())
+}
+
+fn registered_institution_admin(index: usize) -> AccountId32 {
+    registered_institution_pair(index).0
+}
+
+/// 机构账户(ORG_REN / 0x05)的 admin sr25519 keypair helper。
+fn registered_institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
+    derive_admin_pair(ORG_REN, &registered_institution_subject(), index as u8)
+}
+
+fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
+    (0..count)
+        .map(|i| registered_institution_pair(i as usize))
+        .collect()
+}
+
+fn test_sfid_number() -> organization_manage::SfidNumberOf<Test> {
+    b"SFR-TEST-INST-20260507"
+        .to_vec()
+        .try_into()
+        .expect("sfid number should fit")
+}
+
+fn test_account_name() -> organization_manage::AccountNameOf<Test> {
+    b"main"
+        .to_vec()
+        .try_into()
+        .expect("account name should fit")
+}
+
+fn insert_active_registered_institution_account(
+    account: &AccountId32,
+    subject: SubjectId,
+    admins: admins_change::pallet::AdminsOf<Test>,
+) {
+    let sfid_number = test_sfid_number();
+    let account_name = test_account_name();
+    organization_manage::AddressRegisteredSfid::<Test>::insert(
+        account,
+        organization_manage::RegisteredInstitution {
+            sfid_number: sfid_number.clone(),
+            account_name: account_name.clone(),
+        },
+    );
+    organization_manage::InstitutionAccounts::<Test>::insert(
+        &sfid_number,
+        &account_name,
+        organization_manage::InstitutionAccountInfo {
+            address: account.clone(),
+            initial_balance: 0,
+            status: organization_manage::InstitutionLifecycleStatus::Active,
+            is_default: true,
+            created_at: 1,
+        },
+    );
+    admins_change::Subjects::<Test>::insert(
+        subject,
+        admins_change::AdminSubject {
+            org: ORG_REN,
+            kind: admins_change::AdminSubjectKind::InstitutionAccount,
+            admins,
+            threshold: 2,
+            creator: registered_institution_admin(0),
+            created_at: 1,
+            updated_at: 1,
+            status: admins_change::AdminSubjectStatus::Active,
+        },
+    );
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址

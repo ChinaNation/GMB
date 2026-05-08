@@ -1,15 +1,13 @@
 //! 个人多签类型定义。
 //!
 //! 第一类是"账户基本信息"——`DuoqianStatus` / `DuoqianAccount`,
-//! 由 `PersonalDuoqians` storage map 引用,只描述个人多签的账户状态、
-//! 创建者、创建区块。管理员列表和普通阈值的唯一真源是 `admins-change`。
+//! 由 `PersonalDuoqians` storage map 引用,只描述个人多签的创建者、
+//! 账户名、创建区块和账户状态。管理员列表和普通阈值的唯一真源是
+//! `admins-change`。
 //!
 //! 第二类是"提案业务数据"——`CreateDuoqianAction` / `CloseDuoqianAction`,
 //! 在投票引擎 `ProposalData` 里 SCALE 编码存放,投票通过后由
 //! `InternalVoteExecutor` 解码后执行业务。
-//!
-//! 第三类是"创建快照"——`PersonalDuoqianMeta`,投票通过后写入
-//! `PersonalDuoqianInfo` 反向索引,记录 creator 与 account_name(地址派生原料)。
 
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
@@ -47,18 +45,23 @@ pub enum DuoqianStatus {
     PartialEq,
     Eq,
 )]
-pub struct DuoqianAccount<AccountId, BlockNumber> {
+pub struct DuoqianAccount<AccountId, AccountName, BlockNumber> {
     pub creator: AccountId,
+    pub account_name: AccountName,
     pub created_at: BlockNumber,
     pub status: DuoqianStatus,
 }
 
-/// 创建多签账户提案的业务数据(存入投票引擎 ProposalData)
+/// 创建多签账户提案的业务数据(存入投票引擎 ProposalData)。
+///
+/// `fee` 是提案创建当下的手续费快照,执行或清理时必须读取该字段,
+/// 不能用当前 runtime 的 fee 公式重新计算。
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct CreateDuoqianAction<AccountId, Balance> {
     pub duoqian_address: AccountId,
     pub proposer: AccountId,
     pub amount: Balance,
+    pub fee: Balance,
 }
 
 /// 关闭多签账户提案的业务数据
@@ -67,24 +70,4 @@ pub struct CloseDuoqianAction<AccountId> {
     pub duoqian_address: AccountId,
     pub beneficiary: AccountId,
     pub proposer: AccountId,
-}
-
-/// 个人多签账户元数据(存储在 `PersonalDuoqianInfo` 中)。
-///
-/// `creator + account_name` 是地址派生公式 `derive_personal_duoqian_address`
-/// 的全部业务字段;本结构作为反向索引,用于从地址查回 creator/name。
-#[derive(
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Clone,
-    RuntimeDebug,
-    TypeInfo,
-    MaxEncodedLen,
-    PartialEq,
-    Eq,
-)]
-pub struct PersonalDuoqianMeta<AccountId, AccountName> {
-    pub creator: AccountId,
-    pub account_name: AccountName,
 }

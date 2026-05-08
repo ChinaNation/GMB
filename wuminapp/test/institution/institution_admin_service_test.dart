@@ -57,7 +57,7 @@ void main() {
     final refKey =
         '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
     final subjectKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
-      DuoqianStorageCodec.subjectIdFromSfidBytes(sfidNumber),
+      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
     ))}';
     rpc.responses[refKey] = Uint8List.fromList([
       ...compactVec('SFR-AH001-20260507'),

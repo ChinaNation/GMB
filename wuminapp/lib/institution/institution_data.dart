@@ -72,8 +72,8 @@ class InstitutionInfo {
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
   final int orgType;
 
-  /// 机构多签名地址公钥（32 字节 hex，不含 0x 前缀）。
-  /// 来源于 primitives 中的 `main_address` 字段（治理机构）或 organization-manage 的机构主账户（注册多签）。
+  /// 多签资金账户公钥（32 字节 hex，不含 0x 前缀）。
+  /// 治理机构来源于 primitives 的 `main_address`;个人多签和注册机构账户来源于各自链上账户地址。
   final String duoqianAddress;
 
   /// 注册型机构的动态阈值覆盖。
@@ -139,6 +139,10 @@ int get jointVoteTotal =>
 const int jointVotePassThreshold = 105;
 
 const String _registeredDuoqianPrefix = 'duoqian:';
+const String _personalDuoqianPrefix = 'personal:';
+const int _subjectKindBuiltin = 0x01;
+const int _subjectKindPersonalDuoqian = 0x03;
+const int _subjectKindInstitutionAccount = 0x05;
 
 bool isRegisteredDuoqianIdentity(String institutionIdentity) {
   return institutionIdentity.startsWith(_registeredDuoqianPrefix);
@@ -157,13 +161,29 @@ String? registeredDuoqianAddressFromIdentity(String institutionIdentity) {
   return hex;
 }
 
+bool isPersonalDuoqianIdentity(String institutionIdentity) {
+  return institutionIdentity.startsWith(_personalDuoqianPrefix);
+}
+
+String? personalDuoqianAddressFromIdentity(String institutionIdentity) {
+  if (!isPersonalDuoqianIdentity(institutionIdentity)) return null;
+  final hex = _normalizeHex(
+    institutionIdentity.substring(_personalDuoqianPrefix.length),
+  );
+  if (hex.length != 64) return null;
+  return hex;
+}
+
 List<int> institutionIdentityToPalletId(String institutionIdentity) {
   final duoqianAddress =
       registeredDuoqianAddressFromIdentity(institutionIdentity);
   if (duoqianAddress != null) {
-    final result = List<int>.filled(48, 0);
-    result.setAll(0, _hexDecode(duoqianAddress));
-    return result;
+    return _accountToSubjectId(_subjectKindInstitutionAccount, duoqianAddress);
+  }
+  final personalAddress =
+      personalDuoqianAddressFromIdentity(institutionIdentity);
+  if (personalAddress != null) {
+    return _accountToSubjectId(_subjectKindPersonalDuoqian, personalAddress);
   }
   return _sfidNumberToFixed48(institutionIdentity);
 }
@@ -182,10 +202,20 @@ InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
   }
 
   if (_looksLikeRegisteredInstitutionId(palletIdBytes)) {
-    final duoqianAddress = _hexEncode(palletIdBytes.sublist(0, 32));
+    final duoqianAddress = _hexEncode(palletIdBytes.sublist(1, 33));
     return InstitutionInfo(
       name: '注册多签机构 ${duoqianAddress.substring(0, 8)}',
       sfidNumber: registeredDuoqianIdentity(duoqianAddress),
+      orgType: OrgType.duoqian,
+      duoqianAddress: duoqianAddress,
+    );
+  }
+
+  if (_looksLikePersonalDuoqianId(palletIdBytes)) {
+    final duoqianAddress = _hexEncode(palletIdBytes.sublist(1, 33));
+    return InstitutionInfo(
+      name: '个人多签 ${duoqianAddress.substring(0, 8)}',
+      sfidNumber: '$_personalDuoqianPrefix$duoqianAddress',
       orgType: OrgType.duoqian,
       duoqianAddress: duoqianAddress,
     );
@@ -197,8 +227,9 @@ InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
 List<int> _sfidNumberToFixed48(String sfidNumber) {
   final utf8Bytes = sfidNumber.codeUnits;
   final result = List<int>.filled(48, 0);
-  for (var i = 0; i < utf8Bytes.length && i < 48; i++) {
-    result[i] = utf8Bytes[i];
+  result[0] = _subjectKindBuiltin;
+  for (var i = 0; i < utf8Bytes.length && i < 47; i++) {
+    result[i + 1] = utf8Bytes[i];
   }
   return result;
 }
@@ -212,11 +243,32 @@ bool _bytesEqual(List<int> a, List<int> b) {
 }
 
 bool _looksLikeRegisteredInstitutionId(List<int> palletIdBytes) {
+  return _looksLikeAccountSubjectId(
+      palletIdBytes, _subjectKindInstitutionAccount);
+}
+
+bool _looksLikePersonalDuoqianId(List<int> palletIdBytes) {
+  return _looksLikeAccountSubjectId(palletIdBytes, _subjectKindPersonalDuoqian);
+}
+
+bool _looksLikeAccountSubjectId(List<int> palletIdBytes, int kind) {
   if (palletIdBytes.length != 48) return false;
-  for (var i = 32; i < 48; i++) {
+  if (palletIdBytes[0] != kind) return false;
+  for (var i = 33; i < 48; i++) {
     if (palletIdBytes[i] != 0) return false;
   }
   return true;
+}
+
+List<int> _accountToSubjectId(int kind, String accountHex) {
+  final account = _hexDecode(accountHex);
+  if (account.length != 32) {
+    throw ArgumentError('account hex 必须为 32 字节');
+  }
+  final result = List<int>.filled(48, 0);
+  result[0] = kind;
+  result.setAll(1, account);
+  return result;
 }
 
 List<int> _hexDecode(String hex) {

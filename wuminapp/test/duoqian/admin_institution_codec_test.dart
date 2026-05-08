@@ -1,7 +1,8 @@
 // AdminInstitutionCodec golden test:固定字节 → 固定解码结果。
 //
-// 三类多签覆盖:
+// 四类主体覆盖:
 // - PersonalDuoqian (kind=2):institution_id 末 16 字节全零
+// - InstitutionAccount (kind=3):SubjectId(0x05) 绑定具体机构账户
 // - SfidInstitution (kind=1):institution_id 含 sfid_number UTF-8 + 尾部零 padding
 // - BuiltinInstitution (kind=0):创世内置主体(NRC/PRC/PRB)
 
@@ -26,9 +27,9 @@ void main() {
       final admin2 = List.filled(32, 0xBB);
       // org=3, kind=1, admins=Compact(2)=0x08 + 32+32 字节
       final bytes = Uint8List.fromList([
-        3,                        // org = ORG_REN
+        3, // org = ORG_REN
         AdminInstitutionCodec.kindSfid,
-        0x08,                     // Compact(2): (2<<2) | 0 = 8
+        0x08, // Compact(2): (2<<2) | 0 = 8
         ...admin1,
         ...admin2,
         // 后续字段(threshold u32 + creator 32B + ...)解码器跳过,可省略
@@ -47,7 +48,7 @@ void main() {
       final bytes = Uint8List.fromList([
         3,
         AdminInstitutionCodec.kindPersonal,
-        0x0C,                     // Compact(3): (3<<2) | 0 = 12
+        0x0C, // Compact(3): (3<<2) | 0 = 12
         ...a1,
         ...a2,
         ...a3,
@@ -55,6 +56,21 @@ void main() {
       final r = AdminInstitutionCodec.tryDecode(bytes)!;
       expect(r.kind, AdminInstitutionCodec.kindPersonal);
       expect(r.adminPubkeysHex.length, 3);
+    });
+
+    test('成功解码 InstitutionAccount 含 2 个 admin', () {
+      final a1 = List.filled(32, 0x44);
+      final a2 = List.filled(32, 0x55);
+      final bytes = Uint8List.fromList([
+        3,
+        AdminInstitutionCodec.kindInstitutionAccount,
+        0x08,
+        ...a1,
+        ...a2,
+      ]);
+      final r = AdminInstitutionCodec.tryDecode(bytes)!;
+      expect(r.kind, AdminInstitutionCodec.kindInstitutionAccount);
+      expect(r.adminPubkeysHex, ['44' * 32, '55' * 32]);
     });
 
     test('字节不足返回 null,不抛异常', () {
@@ -65,7 +81,7 @@ void main() {
     test('admins 数量超过实际字节返回 null', () {
       final bytes = Uint8List.fromList([
         0, 0,
-        0x08,         // 声明 2 个 admin 但只给 1 个的字节
+        0x08, // 声明 2 个 admin 但只给 1 个的字节
         ...List.filled(32, 0xCC),
       ]);
       expect(AdminInstitutionCodec.tryDecode(bytes), isNull);
@@ -81,7 +97,8 @@ void main() {
       final bytes = <int>[
         0,
         AdminInstitutionCodec.kindPersonal,
-        0x01, 0x01,
+        0x01,
+        0x01,
       ];
       for (final a in admins) {
         bytes.addAll(a);
@@ -93,9 +110,9 @@ void main() {
 
   group('extractInstitutionIdFromKey', () {
     test('完整 storage key 末 48 字节 = institution_id', () {
-      final key = Uint8List(32 + 16 + 48);   // prefix + hash + id
+      final key = Uint8List(32 + 16 + 48); // prefix + hash + id
       for (var i = 32 + 16; i < key.length; i++) {
-        key[i] = i - (32 + 16);            // id 内容 0..47
+        key[i] = i - (32 + 16); // id 内容 0..47
       }
       final id = AdminInstitutionCodec.extractInstitutionIdFromKey(key)!;
       expect(id.length, 48);
@@ -151,6 +168,31 @@ void main() {
         AdminInstitutionCodec.personalAddressFromInstitutionId(Uint8List(32)),
         isNull,
       );
+    });
+  });
+
+  group('institutionAccountFromSubjectId', () {
+    test('ADR-015: kind=0x05 + 32B account + 15B 零 → 返回 32B hex', () {
+      final id = Uint8List(48);
+      id[0] = 0x05;
+      for (var i = 1; i < 33; i++) {
+        id[i] = 0xCD;
+      }
+      final addr = AdminInstitutionCodec.institutionAccountFromSubjectId(id);
+      expect(addr, 'cd' * 32);
+    });
+
+    test('kind tag 不为 0x05 → 返回 null', () {
+      final id = Uint8List(48);
+      id[0] = 0x02;
+      expect(AdminInstitutionCodec.institutionAccountFromSubjectId(id), isNull);
+    });
+
+    test('末 15 字节非全零 → 返回 null', () {
+      final id = Uint8List(48);
+      id[0] = 0x05;
+      id[47] = 1;
+      expect(AdminInstitutionCodec.institutionAccountFromSubjectId(id), isNull);
     });
   });
 

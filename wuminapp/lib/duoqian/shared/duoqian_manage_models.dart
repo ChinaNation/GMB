@@ -4,13 +4,14 @@ import 'dart:typed_data';
 ///
 /// 链上 SCALE 布局（PersonalManage ACTION_CREATE = 0 前缀之后）：
 ///   duoqian_address: AccountId32(32) + proposer: AccountId32(32)
-///   + amount: u128(16)
+///   + amount: u128(16) + fee: u128(16)
 class CreateDuoqianProposalInfo {
   const CreateDuoqianProposalInfo({
     required this.proposalId,
     required this.duoqianAddress,
     required this.proposer,
     required this.amountFen,
+    required this.feeFen,
     this.status,
   });
 
@@ -25,10 +26,14 @@ class CreateDuoqianProposalInfo {
   /// 初始资金（分）。
   final BigInt amountFen;
 
+  /// 创建手续费快照（分）。
+  final BigInt feeFen;
+
   /// 0=voting, 1=passed, 2=rejected, null=unknown。
   final int? status;
 
   double get amountYuan => amountFen.toDouble() / 100;
+  double get feeYuan => feeFen.toDouble() / 100;
 
   /// 48 字节 SubjectId。
   ///
@@ -48,6 +53,7 @@ class CreateDuoqianProposalInfo {
       duoqianAddress: duoqianAddress,
       proposer: proposer,
       amountFen: amountFen,
+      feeFen: feeFen,
       status: newStatus,
     );
   }

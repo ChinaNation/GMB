@@ -72,7 +72,7 @@ class InstitutionAdminService {
     InstitutionAdminState state;
     final duoqianAddress = registeredDuoqianAddressFromIdentity(sfidNumber);
     if (duoqianAddress != null) {
-      state = await _fetchSfidDuoqianAdmins(duoqianAddress);
+      state = await _fetchInstitutionAccountAdmins(duoqianAddress);
     } else if (sfidNumber.startsWith(_personalPrefix)) {
       final hex = sfidNumber.substring(_personalPrefix.length);
       final normalized = hex.startsWith('0x') ? hex.substring(2) : hex;
@@ -89,9 +89,11 @@ class InstitutionAdminService {
     return state;
   }
 
-  Future<InstitutionAdminState> _fetchSfidDuoqianAdmins(
+  Future<InstitutionAdminState> _fetchInstitutionAccountAdmins(
     String duoqianAddress,
   ) async {
+    // 中文注释：注册机构账户的管理员主体是 0x05 InstitutionAccount；
+    // AddressRegisteredSfid 只用于确认该地址确实属于 SFID 机构账户。
     final refKey = DuoqianStorageCodec.addressRegisteredSfidKey(
       duoqianAddress,
     );
@@ -104,7 +106,7 @@ class InstitutionAdminService {
       return const InstitutionAdminState(admins: []);
     }
     return _fetchAdminSubject(
-      DuoqianStorageCodec.subjectIdFromSfidBytes(ref.sfidNumber),
+      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(duoqianAddress),
     );
   }
 

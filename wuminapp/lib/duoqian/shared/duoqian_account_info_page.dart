@@ -250,7 +250,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   /// 链上侧:个人多签 propose_create 的 threshold = 全员通过,任意一票反对都让
   /// `tally.yes + remaining < threshold` 立即满足,提案直接进入 STATUS_REJECTED。
   /// `cleanup_pending_personal_create` 自动执行:unreserve 创建者锁仓 + 删
-  /// `PersonalManage::PersonalDuoqians` / `PersonalDuoqianInfo` /
+  /// `PersonalManage::PersonalDuoqians` /
   /// `PendingPersonalCreate` / `admins-change::Subjects`。其他管理员设备的反向索引下次扫不到该
   /// institution_id,自动清理孤立 Isar entity。
   ///

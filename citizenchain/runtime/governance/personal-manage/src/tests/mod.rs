@@ -11,6 +11,7 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
+use std::cell::RefCell;
 use votingengine::types::ORG_REN;
 
 type Balance = u128;
@@ -94,9 +95,14 @@ impl primitives::traits::DuoqianReservedAddressChecker<AccountId32> for TestRese
 }
 
 pub struct TestProtectedSourceChecker;
+thread_local! {
+    static PROTECTED_ADDRESS: RefCell<Option<AccountId32>> = const { RefCell::new(None) };
+    static INSTITUTION_CAN_SPEND: RefCell<bool> = const { RefCell::new(true) };
+}
+
 impl primitives::traits::ProtectedSourceChecker<AccountId32> for TestProtectedSourceChecker {
-    fn is_protected(_address: &AccountId32) -> bool {
-        false
+    fn is_protected(address: &AccountId32) -> bool {
+        PROTECTED_ADDRESS.with(|value| value.borrow().as_ref() == Some(address))
     }
 }
 
@@ -106,7 +112,7 @@ impl institution_asset::InstitutionAsset<AccountId32> for TestInstitutionAsset {
         _source: &AccountId32,
         _action: institution_asset::InstitutionAssetAction,
     ) -> bool {
-        true
+        INSTITUTION_CAN_SPEND.with(|value| *value.borrow())
     }
 }
 
@@ -333,6 +339,18 @@ pub fn account_name(s: &[u8]) -> pallet::AccountNameOf<Test> {
     BoundedVec::try_from(s.to_vec()).expect("account name fits")
 }
 
+pub fn set_protected_address(address: Option<AccountId32>) {
+    PROTECTED_ADDRESS.with(|value| {
+        *value.borrow_mut() = address;
+    });
+}
+
+pub fn set_institution_can_spend(can_spend: bool) {
+    INSTITUTION_CAN_SPEND.with(|value| {
+        *value.borrow_mut() = can_spend;
+    });
+}
+
 pub fn admins_vec(count: u8) -> pallet::DuoqianAdminsOf<Test> {
     let v: alloc::vec::Vec<AccountId32> = (0..count).map(|i| admin(i)).collect();
     BoundedVec::try_from(v).expect("admins fit")
@@ -384,15 +402,9 @@ pub fn seed_active_duoqian(
         duoqian_address,
         types::DuoqianAccount {
             creator: creator.clone(),
+            account_name: account_name(b"seeded"),
             created_at: 1,
             status: types::DuoqianStatus::Active,
-        },
-    );
-    pallet::PersonalDuoqianInfo::<Test>::insert(
-        duoqian_address,
-        types::PersonalDuoqianMeta {
-            creator: creator.clone(),
-            account_name: account_name(b"seeded"),
         },
     );
     // admins-change 写 Active 主体,让 propose_close 的 is_active_subject_admin 通过
@@ -430,6 +442,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut ext: sp_io::TestExternalities = storage.into();
     ext.execute_with(|| {
         System::set_block_number(1);
+        set_protected_address(None);
+        set_institution_can_spend(true);
     });
     ext
 }

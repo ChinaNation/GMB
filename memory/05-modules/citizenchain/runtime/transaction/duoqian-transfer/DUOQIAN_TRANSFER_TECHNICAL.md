@@ -22,26 +22,36 @@
 投票走统一入口 `InternalVote::cast`(pallet 22.0),手动重试/取消走
 `VotingEngine::retry_passed_proposal`(9.4)/`cancel_passed_proposal`(9.5)。
 
+## 2026-05-08 · 第5步账户级主体接入
+
+- `propose_transfer` 的 `institution: SubjectId` 不再把 `0x02 SfidInstitution` 当作可支出主体；`0x02` 只保留给机构归属与检索。
+- 治理机构仍使用 `0x01 BuiltinInstitution`，由静态预置表解析到治理机构 `main_address`。
+- 个人多签使用 `0x03 PersonalDuoqian + AccountId32 + 15B 零填充`，账户状态由 `personal-manage::PersonalMultisigQuery` 校验。
+- 注册机构具体账户使用 `0x05 InstitutionAccount + AccountId32 + 15B 零填充`，账户状态由 `organization-manage::InstitutionMultisigQuery` 校验。
+- 两类注册账户的管理员、阈值和人数都以 `admins-change::Subjects[SubjectId]` 为真源，内部投票仍是一人一票一笔链上交易。
+
 ## 0. 功能需求
 
 ### 0.1 核心职责
 
-`duoqian-transfer` 负责机构多签名地址通过内部投票引擎发起转账：
+`duoqian-transfer` 负责多签资金账户通过内部投票引擎发起转账：
 
 - 机构管理员发起转账提案，指定收款地址、金额和备注。
 - 机构管理员通过内部投票引擎逐票投票。
-- 投票通过后执行转账：从机构主账户地址向收款地址划转资金。
-- 手续费在投票通过后由 pallet 内部从机构主账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
+- 投票通过后执行转账：从提案绑定的资金账户向收款地址划转资金。
+- 手续费在投票通过后由 pallet 内部从同一个资金账户扣取，通过 `onchain-transaction::calculate_onchain_fee()` 计算。
 - 管理员个人账户不承担任何费用。
-- 覆盖两类来源：
+- 覆盖三类来源：
   - 创世预置的治理机构 `main_address`（NRC / PRC / PRB）
-  - `organization-manage` 注册并激活的 `ORG_REN` 账户地址（`action.duoqian_address`）
+  - `personal-manage` 注册并激活的个人多签账户（`0x03 PersonalDuoqian`）
+  - `organization-manage` 注册并激活的机构具体账户（`0x05 InstitutionAccount`）
 
 ### 0.2 功能边界
 
-- 本模块处理两类机构转账：
+- 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
-  - `organization-manage` 注册并处于 Active 状态的账户（`ORG_REN`）
+  - `personal-manage` 注册并处于 Active 状态的个人多签账户（`ORG_REN`）
+  - `organization-manage` 注册并处于 Active 状态的机构账户（`ORG_REN`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
@@ -74,20 +84,21 @@
 | 地址 | 类型 | 说明 |
 | --- | --- | --- |
 | `stake_address` | 质押地址 | **不允许支出**，仅用于质押 |
-| `main_address`（治理机构）/ `duoqian_address`（注册多签） | 机构主账户/注册多签主账户 | 机构资金账户，转账和手续费均从此扣取 |
+| `main_address`（治理机构）/ `duoqian_address`（注册多签） | 多签资金账户 | 转账和手续费均从此扣取 |
 
-### 1.2 机构主账户地址来源
+### 1.2 资金账户地址来源
 
-机构主账户地址有两种来源：
+资金账户地址有三种来源：
 
 - 治理机构：`main_address` 预置于 `runtime/primitives/china/china_cb.rs`（NRC + PRC）和 `runtime/primitives/china/china_ch.rs`（PRB）中，通过 `institution_pallet_address(institution_id)` 查找。
-- 注册型机构账户：`SubjectId(48)` 使用 `SubjectKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；资金账户从 `OrganizationManage::InstitutionAccounts` 校验 Active，管理员、阈值和人数统一从 `admins-change::Subjects` 读取。
+- 个人多签账户：`SubjectId(48)` 使用 `SubjectKind::PersonalDuoqian = 0x03` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `PersonalManage::PersonalDuoqians` 校验 Active。
+- 注册型机构账户：`SubjectId(48)` 使用 `SubjectKind::InstitutionAccount = 0x05` + 账户 `AccountId` 前 32 字节 + 15 字节零填充；账户状态从 `OrganizationManage::InstitutionAccounts` 校验 Active。
 
 ### 1.3 institution-asset 边界
 
 - 本模块在 `propose_transfer` 和 `try_execute_transfer_from_callback` 两个阶段都会调用 `institution-asset`。
 - 当前 runtime 规则下，制度保留 `main_address` 只允许本模块这类治理执行动作内部扣款。
-- 这样可以防止其他交易模块绕开治理流程直接动用机构主账户余额。
+- 这样可以防止其他交易模块绕开治理流程直接动用受治理资金账户余额。
 
 ## 2. Extrinsic 接口
 
@@ -110,13 +121,15 @@ pub fn propose_transfer(
 2. `amount > 0`。
 3. `institution` 必须是有效机构：
    - 治理机构：在 CHINA_CB / CHINA_CH 中存在；
-   - 注册型机构账户：能从 `0x05 InstitutionAccount` 解码出账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active。
+   - 个人多签账户：能从 `0x03 PersonalDuoqian` 解码出账户地址，且对应 `PersonalManage::PersonalDuoqians` 处于 Active；
+   - 注册型机构账户：能从 `0x05 InstitutionAccount` 解码出账户地址，且对应 `OrganizationManage::InstitutionAccounts` 处于 Active；
+   - `0x02 SfidInstitution` 只用于机构归属/检索，不能作为转账支出主体。
 4. `org` 必须与 `institution` 的实际机构类型匹配。
 5. `proposer` 必须是该机构的当前管理员（通过 `InternalAdminProvider::is_internal_admin` 校验，生产 runtime 最终读取 `admins-change::Subjects`）。
 6. `amount >= ED`（转账金额不能低于存在性保证金，防止收款地址创建失败）。
 7. `beneficiary` 不能是机构自身的主账户地址（不允许自转账）。
 8. `beneficiary` 不能是受保护地址（如 `stake_address`、安全基金账户、费用账户等保留地址）。
-9. 机构主账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
+9. 转出资金账户的可用余额 >= `amount + fee + ED`（预检含手续费，防止创建必定无法执行的提案）。
 10. 活跃提案数由 `votingengine` 在 `create_internal_proposal_with_data` 中统一检查（全局限额）。
 
 **执行逻辑：**
@@ -182,7 +195,7 @@ pub enum Event<T: Config> {
         org: u8,
         institution: SubjectId,
         proposer: T::AccountId,
-        from: T::AccountId,                             // 机构主账户
+        from: T::AccountId,                             // 转出资金账户
         beneficiary: T::AccountId,
         amount: BalanceOf<T>,
         remark: BoundedVec<u8, T::MaxRemarkLen>,
@@ -382,7 +395,7 @@ App 可通过 `state_getStorage` 查询上述存储项，展示：
 ```rust
 #[pallet::config]
 pub trait Config:
-    frame_system::Config + votingengine::Config + organization_manage::Config
+        frame_system::Config + votingengine::Config + organization_manage::Config
 {
     type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
@@ -395,12 +408,18 @@ pub trait Config:
         <<Self as organization_manage::Config>::Currency as Currency<Self::AccountId>>::NegativeImbalance,
     >;
 
+    /// 个人多签账户状态查询，由 personal-manage 实现。
+    type PersonalQuery: personal_manage::traits::PersonalMultisigQuery<Self::AccountId>;
+
+    /// 注册机构账户状态查询，由 organization-manage 实现。
+    type InstitutionQuery: organization_manage::traits::InstitutionMultisigQuery<Self::AccountId>;
+
     /// Weight 配置
     type WeightInfo: crate::weights::WeightInfo;
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供，本模块不再单独声明。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。
 
 ## 11. Weight 估算
 
@@ -436,11 +455,10 @@ pub type DuoqianTransfer = duoqian_transfer;
 ```rust
 impl duoqian_transfer::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
-    type Currency = Balances;
     type MaxRemarkLen = ConstU32<256>;
-    type InternalVoteEngine = VotingEngine;
-    type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type FeeRouter = TransferFeeRouter;
+    type PersonalQuery = PersonalManage;
+    type InstitutionQuery = OrganizationManage;
     type WeightInfo = duoqian_transfer::weights::SubstrateWeight<Runtime>;
 }
 ```

@@ -46,6 +46,13 @@ void main() {
       expect(personal[0], 0x03);
       expect(personal.sublist(1, 33), List<int>.filled(32, 0x11));
       expect(personal.sublist(33), List<int>.filled(15, 0));
+
+      final institutionAccount =
+          DuoqianStorageCodec.subjectIdFromInstitutionAccountHex('22' * 32);
+      expect(institutionAccount.length, 48);
+      expect(institutionAccount[0], 0x05);
+      expect(institutionAccount.sublist(1, 33), List<int>.filled(32, 0x22));
+      expect(institutionAccount.sublist(33), List<int>.filled(15, 0));
     });
 
     test('decodes registered institution ref', () {
@@ -117,12 +124,14 @@ void main() {
     test('decodes personal account state', () {
       final data = Uint8List.fromList([
         ...List<int>.filled(32, 0x66),
+        ...compactVec('家庭基金'),
         ...u32Le(101),
         1,
       ]);
 
       final decoded = DuoqianStorageCodec.decodePersonalDuoqian(data)!;
       expect(decoded.creatorHex, '66' * 32);
+      expect(utf8.decode(decoded.accountName), '家庭基金');
       expect(decoded.createdAt, 101);
       expect(decoded.statusByte, 1);
     });

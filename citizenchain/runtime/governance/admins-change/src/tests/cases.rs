@@ -2,6 +2,52 @@
 
 use super::*;
 
+// 中文注释：生命周期事件按 subject + org 精确计数，确保索引器可直接按组织分桶。
+fn activated_event_count(subject: SubjectId, org: u8) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::AdminsChange(Event::AdminSubjectActivated {
+                    subject: event_subject,
+                    org: event_org,
+                }) if *event_subject == subject && *event_org == org
+            )
+        })
+        .count()
+}
+
+fn pending_removed_event_count(subject: SubjectId, org: u8) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::AdminsChange(Event::AdminSubjectPendingRemoved {
+                    subject: event_subject,
+                    org: event_org,
+                }) if *event_subject == subject && *event_org == org
+            )
+        })
+        .count()
+}
+
+fn closed_event_count(subject: SubjectId, org: u8) -> usize {
+    System::events()
+        .iter()
+        .filter(|record| {
+            matches!(
+                &record.event,
+                RuntimeEvent::AdminsChange(Event::AdminSubjectClosed {
+                    subject: event_subject,
+                    org: event_org,
+                }) if *event_subject == subject && *event_org == org
+            )
+        })
+        .count()
+}
+
 #[test]
 fn dynamic_threshold_is_derived_from_admin_count() {
     assert_eq!(dynamic_threshold(0), None);
@@ -130,6 +176,65 @@ fn institution_account_at_max_admins_works() {
             AdminsChange::active_subject_threshold(ORG_REN, institution),
             Some(max.saturating_add(1) / 2)
         );
+    });
+}
+
+#[test]
+fn remove_pending_subject_requires_existing_pending_subject() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([151u8; 32]);
+        let admin_b = AccountId32::new([152u8; 32]);
+
+        assert_noop!(
+            AdminsChange::do_remove_pending_subject(institution),
+            Error::<Test>::InvalidInstitution
+        );
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::PersonalDuoqian,
+            vec![admin_a.clone(), admin_b],
+            admin_a,
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_noop!(
+            AdminsChange::do_remove_pending_subject(institution),
+            Error::<Test>::SubjectNotPending
+        );
+    });
+}
+
+#[test]
+fn subject_lifecycle_events_include_org() {
+    new_test_ext().execute_with(|| {
+        let mut institution = pending_subject_id();
+        let admin_a = AccountId32::new([161u8; 32]);
+        let admin_b = AccountId32::new([162u8; 32]);
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::PersonalDuoqian,
+            vec![admin_a.clone(), admin_b.clone()],
+            admin_a.clone(),
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_ok!(AdminsChange::do_close_subject(institution));
+        assert_eq!(activated_event_count(institution, ORG_REN), 1);
+        assert_eq!(closed_event_count(institution, ORG_REN), 1);
+
+        institution[1] = institution[1].saturating_add(1);
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::PersonalDuoqian,
+            vec![admin_a.clone(), admin_b],
+            admin_a,
+        ));
+        assert_ok!(AdminsChange::do_remove_pending_subject(institution));
+        assert_eq!(pending_removed_event_count(institution, ORG_REN), 1);
     });
 }
 

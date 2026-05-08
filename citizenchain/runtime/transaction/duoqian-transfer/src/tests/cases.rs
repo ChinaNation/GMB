@@ -129,6 +129,10 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
             &inst_account,
             personal_manage::DuoqianAccount {
                 creator: registered_duoqian_admin(0),
+                account_name: b"personal"
+                    .to_vec()
+                    .try_into()
+                    .expect("account name should fit"),
                 created_at: 1,
                 status: personal_manage::DuoqianStatus::Active,
             },
@@ -178,6 +182,77 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
                 .expect("proposal should exist")
                 .status,
             STATUS_EXECUTED
+        );
+    });
+}
+
+#[test]
+fn institution_account_subject_transfer_executes_when_internal_vote_reaches_threshold() {
+    new_test_ext().execute_with(|| {
+        let institution = registered_institution_subject();
+        let inst_account = registered_institution_account();
+        let dest = beneficiary();
+        let admins = BoundedVec::try_from(vec![
+            registered_institution_admin(0),
+            registered_institution_admin(1),
+            registered_institution_admin(2),
+        ])
+        .expect("admins should fit");
+
+        insert_active_registered_institution_account(&inst_account, institution, admins);
+        let _ = Balances::deposit_creating(&inst_account, 10_000);
+
+        assert_ok!(DuoqianTransfer::propose_transfer(
+            RuntimeOrigin::signed(registered_institution_admin(0)),
+            ORG_REN,
+            institution,
+            dest.clone(),
+            2_000,
+            BoundedVec::default(),
+        ));
+        let pid = last_proposal_id();
+
+        assert_ok!(cast_transfer_votes_n(
+            &registered_institution_pairs(2),
+            2,
+            pid,
+            ORG_REN,
+            institution,
+            inst_account.clone(),
+            dest.clone(),
+            2_000,
+            &[],
+            registered_institution_admin(0),
+        ));
+
+        assert_eq!(Balances::free_balance(&inst_account), 7_990);
+        assert_eq!(Balances::free_balance(&dest), 2_000);
+        assert_eq!(
+            votingengine::Pallet::<Test>::proposals(pid)
+                .expect("proposal should exist")
+                .status,
+            STATUS_EXECUTED
+        );
+    });
+}
+
+#[test]
+fn sfid_institution_subject_cannot_be_used_as_transfer_source() {
+    new_test_ext().execute_with(|| {
+        let institution =
+            primitives::derive::subject_id_from_registered_sfid_number(b"SFR-TEST-INST-20260507")
+                .expect("sfid subject should be valid");
+
+        assert_noop!(
+            DuoqianTransfer::propose_transfer(
+                RuntimeOrigin::signed(registered_institution_admin(0)),
+                ORG_REN,
+                institution,
+                beneficiary(),
+                1_000,
+                BoundedVec::default(),
+            ),
+            Error::<Test>::InvalidInstitution
         );
     });
 }
@@ -404,14 +479,14 @@ fn existential_deposit_is_preserved() {
 }
 
 #[test]
-fn execute_transfer_succeeds_after_failed_auto_execution() {
+fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let inst_account = institution_account(institution);
         let dest = beneficiary();
 
         // 余额 10_000,提案 9_000(预检通过),然后在投票通过前转走 9_000。
-        // 使余额仅 1_000,自动执行因余额不足失败,但提案保留,可 execute_transfer 重试。
+        // 使余额仅 1_000,自动执行因余额不足失败,但提案保留,可统一手动重试。
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(nrc_admin(0)),
             ORG_NRC,
@@ -456,7 +531,7 @@ fn execute_transfer_succeeds_after_failed_auto_execution() {
         assert_eq!(Balances::free_balance(&dest), 0);
         assert!(votingengine::Pallet::<Test>::get_proposal_data(pid).is_some());
 
-        // 补充余额后手动执行
+        // 补充余额后通过投票引擎统一入口手动重试。
         let _ = Balances::deposit_creating(&inst_account, 9_000);
         assert_eq!(Balances::free_balance(&inst_account), 10_000);
         assert_ok!(VotingEngine::retry_passed_proposal(
@@ -470,7 +545,7 @@ fn execute_transfer_succeeds_after_failed_auto_execution() {
 }
 
 #[test]
-fn execute_transfer_rejects_non_passed_proposal() {
+fn retry_passed_transfer_rejects_non_passed_proposal() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let dest = beneficiary();
@@ -485,7 +560,7 @@ fn execute_transfer_rejects_non_passed_proposal() {
         ));
         let pid = last_proposal_id();
 
-        // 提案仍在投票中，不能手动执行
+        // 提案仍在投票中，不能手动重试。
         assert_noop!(
             VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
             votingengine::Error::<Test>::ProposalNotRetryable
@@ -494,7 +569,7 @@ fn execute_transfer_rejects_non_passed_proposal() {
 }
 
 #[test]
-fn execute_transfer_rejects_non_admin_retry() {
+fn retry_passed_transfer_rejects_non_admin() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
         let inst_account = institution_account(institution);
@@ -586,7 +661,7 @@ fn executed_transfer_cannot_be_executed_again() {
             STATUS_EXECUTED
         );
 
-        // 再次调用 execute_transfer 应被拒绝
+        // 已执行提案再次走统一重试入口应被拒绝。
         assert_noop!(
             VotingEngine::retry_passed_proposal(RuntimeOrigin::signed(nrc_admin(0)), pid),
             votingengine::Error::<Test>::ProposalNotRetryable

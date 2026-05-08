@@ -35,9 +35,7 @@ mod benchmarks;
 mod tests;
 
 pub use traits::PersonalMultisigQuery;
-pub use types::{
-    CloseDuoqianAction, CreateDuoqianAction, DuoqianAccount, DuoqianStatus, PersonalDuoqianMeta,
-};
+pub use types::{CloseDuoqianAction, CreateDuoqianAction, DuoqianAccount, DuoqianStatus};
 
 use admins_change::SubjectLifecycle;
 use codec::{Decode, Encode};
@@ -59,7 +57,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(0);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config + admins_change::Config {
@@ -104,7 +102,7 @@ pub mod pallet {
     >;
 
     pub type DuoqianAccountOf<T> =
-        DuoqianAccount<<T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
+        DuoqianAccount<<T as frame_system::Config>::AccountId, AccountNameOf<T>, BlockNumberFor<T>>;
 
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
 
@@ -113,24 +111,18 @@ pub mod pallet {
 
     pub type CloseDuoqianActionOf<T> = CloseDuoqianAction<<T as frame_system::Config>::AccountId>;
 
-    pub type PersonalDuoqianMetaOf<T> =
-        PersonalDuoqianMeta<<T as frame_system::Config>::AccountId, AccountNameOf<T>>;
-
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
     pub struct Pallet<T>(_);
 
     /// 个人多签账户配置。key 为 personal_duoqian_address。
+    ///
+    /// 中文注释:本表统一保存 creator/account_name/created_at/status。
+    /// 管理员集合、管理员数量和普通阈值只允许从 admins-change 读取。
     #[pallet::storage]
     #[pallet::getter(fn personal_duoqians)]
     pub type PersonalDuoqians<T: Config> =
         StorageMap<_, Blake2_128Concat, T::AccountId, DuoqianAccountOf<T>, OptionQuery>;
-
-    /// 个人多签反向索引：duoqian_address -> { creator, account_name }
-    #[pallet::storage]
-    #[pallet::getter(fn personal_duoqian_info)]
-    pub type PersonalDuoqianInfo<T: Config> =
-        StorageMap<_, Blake2_128Concat, T::AccountId, PersonalDuoqianMetaOf<T>, OptionQuery>;
 
     /// 正在投票中的个人多签创建提案,用于通过/拒绝时处理 reserve 资金。
     ///
@@ -193,6 +185,7 @@ pub mod pallet {
             admin_count: u32,
             threshold: u32,
             amount: BalanceOf<T>,
+            fee: BalanceOf<T>,
             expires_at: BlockNumberFor<T>,
         },
         /// 个人多签账户创建成功(投票通过,入金完成,状态变为 Active)。
@@ -227,6 +220,8 @@ pub mod pallet {
             proposal_id: u64,
             duoqian_address: T::AccountId,
             beneficiary: T::AccountId,
+            admin_count: u32,
+            threshold: u32,
             amount: BalanceOf<T>,
             fee: BalanceOf<T>,
         },
@@ -256,7 +251,6 @@ pub mod pallet {
         ProtectedSource,
         DerivedAddressDecodeFailed,
         ReservedBalanceRemaining,
-        InvalidRuntimeConfig,
         VoteEngineError,
         ProposalActionNotFound,
         TransferFailed,
@@ -348,10 +342,6 @@ pub mod pallet {
             duoqian_admins: &DuoqianAdminsOf<T>,
         ) -> Result<u32, DispatchError> {
             let admin_count = duoqian_admins.len() as u32;
-            ensure!(
-                <T as admins_change::Config>::MaxPersonalAccountAdmins::get() >= 2,
-                Error::<T>::InvalidRuntimeConfig
-            );
             ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
             ensure!(
                 admin_count <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
@@ -433,12 +423,15 @@ pub mod pallet {
             )
         }
 
-        pub(crate) fn remove_pending_admin_subject(proposal_id: u64, institution_id: SubjectId) {
-            let _ = admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
+        pub(crate) fn remove_pending_admin_subject(
+            proposal_id: u64,
+            institution_id: SubjectId,
+        ) -> DispatchResult {
+            admins_change::Pallet::<T>::remove_pending_subject_for_proposal(
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-            );
+            )
         }
 
         pub(crate) fn close_admin_subject(
@@ -450,6 +443,16 @@ pub mod pallet {
                 crate::MODULE_TAG,
                 institution_id,
             )
+        }
+
+        /// 统一解码本 pallet 的 ProposalData 前缀,避免回调和手动 cleanup 各写一套边界判断。
+        pub(crate) fn decode_module_action(raw: &[u8]) -> Result<(u8, &[u8]), DispatchError> {
+            let tag = crate::MODULE_TAG;
+            ensure!(
+                raw.len() > tag.len() && &raw[..tag.len()] == tag,
+                Error::<T>::ProposalActionNotFound
+            );
+            Ok((raw[tag.len()], &raw[tag.len() + 1..]))
         }
     }
 }
@@ -502,65 +505,41 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
             _ => return Ok(ProposalExecutionOutcome::Ignored),
         };
-        let tag = crate::MODULE_TAG;
-        if raw.len() <= tag.len() {
-            return Ok(ProposalExecutionOutcome::Ignored);
-        }
-        let action_byte = raw[tag.len()];
+        let (action_byte, payload) = pallet::Pallet::<T>::decode_module_action(&raw)?;
 
         if approved {
             match action_byte {
                 ACTION_CREATE => {
-                    let action =
-                        pallet::CreateDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action = pallet::CreateDuoqianActionOf::<T>::decode(&mut &payload[..])
+                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let outcome = with_transaction(
                         || -> TransactionOutcome<Result<ProposalExecutionOutcome, sp_runtime::DispatchError>> {
                             match crate::execute::execute_create_with_finalizer::<T>(
                                 proposal_id,
                                 &action,
-                                approved,
                             ) {
                                 Ok(()) => TransactionOutcome::Commit(Ok(ProposalExecutionOutcome::Executed)),
-                                Err(_) => {
-                                    pallet::Pallet::<T>::deposit_event(
-                                        pallet::Event::<T>::CreateExecutionFailed {
-                                            proposal_id,
-                                            duoqian_address: action.duoqian_address.clone(),
-                                        },
-                                    );
-                                    TransactionOutcome::Rollback(Ok(
-                                        ProposalExecutionOutcome::FatalFailed,
-                                    ))
-                                }
+                                Err(_) => TransactionOutcome::Rollback(Ok(
+                                    ProposalExecutionOutcome::FatalFailed,
+                                )),
                             }
                         },
                     )?;
                     Ok(outcome)
                 }
                 ACTION_CLOSE => {
-                    let action =
-                        pallet::CloseDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action = pallet::CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
+                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     let outcome = with_transaction(
                         || -> TransactionOutcome<Result<ProposalExecutionOutcome, sp_runtime::DispatchError>> {
                             match crate::execute::execute_close_with_finalizer::<T>(
                                 proposal_id,
                                 &action,
-                                approved,
                             ) {
                                 Ok(()) => TransactionOutcome::Commit(Ok(ProposalExecutionOutcome::Executed)),
-                                Err(_) => {
-                                    pallet::Pallet::<T>::deposit_event(
-                                        pallet::Event::<T>::CloseExecutionFailed {
-                                            proposal_id,
-                                            duoqian_address: action.duoqian_address.clone(),
-                                        },
-                                    );
-                                    TransactionOutcome::Rollback(Ok(
-                                        ProposalExecutionOutcome::FatalFailed,
-                                    ))
-                                }
+                                Err(_) => TransactionOutcome::Rollback(Ok(
+                                    ProposalExecutionOutcome::FatalFailed,
+                                )),
                             }
                         },
                     )?;
@@ -572,21 +551,51 @@ impl<T: pallet::Config> InternalVoteResultCallback for InternalVoteExecutor<T> {
             // 否决路径:清理 Pending 存储 + unreserve 资金。
             match action_byte {
                 ACTION_CREATE => {
-                    let action =
-                        pallet::CreateDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
-                    crate::execute::cleanup_pending_create::<T>(proposal_id, &action, true);
+                    let action = pallet::CreateDuoqianActionOf::<T>::decode(&mut &payload[..])
+                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    crate::execute::cleanup_pending_create::<T>(proposal_id, &action, true)?;
                     Ok(ProposalExecutionOutcome::Executed)
                 }
                 ACTION_CLOSE => {
-                    let action =
-                        pallet::CloseDuoqianActionOf::<T>::decode(&mut &raw[tag.len() + 1..])
-                            .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                    let action = pallet::CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
+                        .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
                     pallet::PendingCloseProposal::<T>::remove(&action.duoqian_address);
                     Ok(ProposalExecutionOutcome::Executed)
                 }
                 _ => Ok(ProposalExecutionOutcome::Ignored),
             }
         }
+    }
+
+    fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        let raw = match votingengine::Pallet::<T>::get_proposal_data(proposal_id) {
+            Some(raw) if raw.starts_with(crate::MODULE_TAG) => raw,
+            _ => return Ok(()),
+        };
+        let (action_byte, payload) = pallet::Pallet::<T>::decode_module_action(&raw)?;
+        match action_byte {
+            ACTION_CREATE => {
+                let action = pallet::CreateDuoqianActionOf::<T>::decode(&mut &payload[..])
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                if crate::execute::cleanup_pending_create::<T>(proposal_id, &action, false)? {
+                    pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CreateExecutionFailed {
+                        proposal_id,
+                        duoqian_address: action.duoqian_address,
+                    });
+                }
+            }
+            ACTION_CLOSE => {
+                let action = pallet::CloseDuoqianActionOf::<T>::decode(&mut &payload[..])
+                    .map_err(|_| pallet::Error::<T>::ProposalActionNotFound)?;
+                if pallet::PendingCloseProposal::<T>::take(&action.duoqian_address).is_some() {
+                    pallet::Pallet::<T>::deposit_event(pallet::Event::<T>::CloseExecutionFailed {
+                        proposal_id,
+                        duoqian_address: action.duoqian_address,
+                    });
+                }
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }

@@ -162,7 +162,7 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。已于 2026-05-08 完成。
 3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。已于 2026-05-08 完成。
 4. 第 4 步改造 `organization-manage`:注册机构账户管理员上限 1989,每账户独立主体。
-5. 第 5 步改造 `duoqian-transfer`、`wuminapp`、`wumin`。
+5. 第 5 步改造 `duoqian-transfer`、`wuminapp`、`wumin`。已于 2026-05-08 先行完成转账链路接入；第 4 步仍需随后补齐机构管理创建/注销全流程。
 
 ## 第 1 步执行结果
 
@@ -177,9 +177,9 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 - 提案数据从 `AdminReplacementAction` 改为 `AdminSetChangeAction<AdminsOf<T>>`。
 - `MODULE_TAG` 从 `b"adm-rep-v1"` 改为 `b"adm-set-v1"`。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib`：24 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：41 passed。
 
-说明：`SfidInstitution = 0x02` 继续保留，用于机构归属和检索；后续第 4 步需要把 `organization-manage` 的新增机构账户管理员主体切到 `InstitutionAccount = 0x05`。
+说明：`SfidInstitution = 0x02` 继续保留，用于机构归属和检索；转账和端侧发现已切到 `InstitutionAccount = 0x05`，后续第 4 步需要把 `organization-manage` 的新增/注销机构账户全流程也统一到 `0x05`。
 
 ## 第 2 步执行结果
 
@@ -194,8 +194,8 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p votingengine --lib`：0 tests passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p joint-vote --lib`：5 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：19 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：41 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：23 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：24 passed。
 
 ## 第 3 步执行结果
@@ -206,8 +206,8 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 - 个人账户管理员数量由 `duoqian_admins.len()` 派生，链端限制 `2..=64`。
 - 普通阈值统一调用 `admins-change::derived_threshold(PersonalDuoqian, ORG_REN, admin_count)` 派生。
 - 创建提案内部投票阈值为拟定管理员全员数量；关闭提案仍为当前管理员全员数量。
-- `PersonalManage::PersonalDuoqians` 不再镜像管理员列表、管理员数量和阈值，只保存生命周期状态。
-- `CreateDuoqianAction` 不再保存管理员数量和阈值。
+- `PersonalManage::PersonalDuoqians` 不再镜像管理员列表、管理员数量和阈值，只保存 `creator / account_name / created_at / status`。
+- `CreateDuoqianAction` 不再保存管理员数量和阈值，但保存创建时 `fee` 快照。
 - 提案通过后，同一执行事务内完成入金、激活 `admins-change` 主体、激活个人账户。
 - `duoqian-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
 - wuminapp 创建页、提案解码、账户查询和本地快照已切到新格式。
@@ -216,9 +216,27 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 
 回归结果：
 
-- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：19 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：23 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：41 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：20 passed。
 - `flutter test test/duoqian/duoqian_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart`：10 passed。
 - `flutter test test/signer/payload_decoder_test.dart`：30 passed。
+
+## 第 5 步执行结果
+
+2026-05-08 已完成：
+
+- `duoqian-transfer::registered_duoqian_account` 拆成 `0x03 PersonalDuoqian` 与 `0x05 InstitutionAccount` 两条账户级路径；`0x02 SfidInstitution` 明确拒绝作为转账支出主体。
+- 个人多签账户状态由 `PersonalQuery::is_active` 校验，机构账户状态由 `InstitutionQuery::is_active` 校验；管理员和阈值仍由投票引擎快照读取 `admins-change::Subjects`。
+- wuminapp `institution_data.dart`、`duoqian_storage_codec.dart`、`admin_institution_codec.dart` 已支持 `0x05 InstitutionAccount` 编码/解码。
+- wuminapp 多签自动发现只把 `0x03 PersonalDuoqian` 与 `0x05 InstitutionAccount` 落为本地账户；`0x02 SfidInstitution` 只作归属/检索。
+- wuminapp 注册机构账户详情查询改为 `AddressRegisteredSfid -> InstitutionAccounts -> AdminsChange::Subjects[0x05]`，不再从 `0x02` 读取账户管理员。
+- wumin 冷钱包 `propose_transfer` 只接受 `0x01 / 0x03 / 0x05` 可支出主体，拒绝旧裸 sfid 与 `0x02`；QR 展示字段新增 `institution`，显示内置机构名、个人多签短地址或机构账户短地址。
+- 本步骤未修改 `spec_version`。
+
+回归结果：
+
+- `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：22 passed。
+- `flutter test test/duoqian test/institution`：49 passed。
+- `flutter test test/signer`：61 passed。
