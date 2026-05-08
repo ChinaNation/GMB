@@ -2,16 +2,14 @@ import 'dart:typed_data';
 
 /// 创建多签账户提案详情（从链上 ProposalData 解码）。
 ///
-/// 链上 SCALE 布局（ACTION_CREATE = 1 前缀之后）：
+/// 链上 SCALE 布局（PersonalManage ACTION_CREATE = 0 前缀之后）：
 ///   duoqian_address: AccountId32(32) + proposer: AccountId32(32)
-///   + admin_count: u32(4) + threshold: u32(4) + amount: u128(16)
+///   + amount: u128(16)
 class CreateDuoqianProposalInfo {
   const CreateDuoqianProposalInfo({
     required this.proposalId,
     required this.duoqianAddress,
     required this.proposer,
-    required this.adminCount,
-    required this.threshold,
     required this.amountFen,
     this.status,
   });
@@ -23,9 +21,6 @@ class CreateDuoqianProposalInfo {
 
   /// 发起人 SS58 地址。
   final String proposer;
-
-  final int adminCount;
-  final int threshold;
 
   /// 初始资金（分）。
   final BigInt amountFen;
@@ -52,8 +47,6 @@ class CreateDuoqianProposalInfo {
       proposalId: proposalId,
       duoqianAddress: duoqianAddress,
       proposer: proposer,
-      adminCount: adminCount,
-      threshold: threshold,
       amountFen: amountFen,
       status: newStatus,
     );
@@ -123,7 +116,8 @@ enum DuoqianStatus {
 /// 多签账户链上信息。
 ///
 /// 注册机构来自 `OrganizationManage::Institutions / InstitutionAccounts`，
-/// 个人多签来自 `PersonalManage::PersonalDuoqians`。
+/// 个人多签状态来自 `PersonalManage::PersonalDuoqians`，
+/// 管理员和阈值来自 `AdminsChange::Subjects`。
 class DuoqianAccountInfo {
   const DuoqianAccountInfo({
     required this.adminCount,

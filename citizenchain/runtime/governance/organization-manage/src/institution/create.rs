@@ -162,8 +162,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         // duoqian-transfer 通过 InstitutionMultisigQuery trait 查询。
 
         // 中文注释:创建提案需全员管理员通过(2026-05-03 整改)。
-        // admins-change 主体里 threshold 字段保存用户自定义 m-of-n,
-        // 用于激活后日常治理(转账等),不影响此处投票阈值。
+        // admins-change 主体里的普通阈值由链端动态派生，不影响此处投票阈值。
         let create_threshold = duoqian_admins.len() as u32;
         let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
             who.clone(),
@@ -184,7 +183,6 @@ pub(crate) fn do_propose_create_institution<T: Config>(
             institution,
             admins_change::AdminSubjectKind::SfidInstitution,
             &duoqian_admins,
-            threshold,
             &who,
         ) {
             return TransactionOutcome::Rollback(Err(err));

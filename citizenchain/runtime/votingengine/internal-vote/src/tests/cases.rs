@@ -182,6 +182,127 @@ fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
 }
 
 #[test]
+fn pending_subject_provider_threshold_requires_all_admins() {
+    new_test_ext().execute_with(|| {
+        set_pending_duoqian_threshold(1);
+
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal(
+                pending_subject_admin(0),
+                ORG_REN,
+                pending_subject_institution(),
+            ),
+            Error::<Test>::InvalidThresholdSnapshot
+        );
+    });
+}
+
+#[test]
+fn pending_subject_snapshot_data_requires_all_admins() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal_with_snapshot_data(
+                pending_subject_admin(0),
+                ORG_REN,
+                pending_subject_institution(),
+                sp_std::vec![pending_subject_admin(0), pending_subject_admin(1)],
+                1,
+                b"test",
+                b"payload".to_vec(),
+            ),
+            Error::<Test>::InvalidThresholdSnapshot
+        );
+    });
+}
+
+#[test]
+fn explicit_threshold_proposal_requires_all_snapshot_admins() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal_with_threshold_and_data(
+                registered_subject_admin(0),
+                ORG_REN,
+                registered_subject_institution(),
+                2,
+                b"close",
+                b"payload".to_vec(),
+            ),
+            Error::<Test>::InvalidThresholdSnapshot
+        );
+    });
+}
+
+#[test]
+fn registered_duoqian_threshold_must_not_exceed_snapshot_size() {
+    new_test_ext().execute_with(|| {
+        set_registered_duoqian_threshold(4);
+
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+                registered_subject_admin(0),
+                ORG_REN,
+                registered_subject_institution(),
+            ),
+            Error::<Test>::InvalidThresholdSnapshot
+        );
+    });
+}
+
+#[test]
+fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
+    new_test_ext().execute_with(|| {
+        set_registered_duoqian_threshold(4);
+
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+                registered_subject_admin(0),
+                ORG_REN,
+                registered_subject_institution(),
+            ),
+            Error::<Test>::InvalidThresholdSnapshot
+        );
+    });
+}
+
+#[test]
+fn snapshot_rejects_empty_admin_list() {
+    new_test_ext().execute_with(|| {
+        set_registered_admin_list_override(Vec::new());
+
+        assert_noop!(
+            VotingEngine::snapshot_institution_admins(
+                0,
+                ORG_REN,
+                registered_subject_institution(),
+                false,
+            ),
+            votingengine::Error::<Test>::MissingAdminSnapshot
+        );
+    });
+}
+
+#[test]
+fn snapshot_rejects_duplicate_admin_list() {
+    new_test_ext().execute_with(|| {
+        set_registered_admin_list_override(sp_std::vec![
+            registered_subject_admin(0),
+            registered_subject_admin(0),
+            registered_subject_admin(1),
+        ]);
+
+        assert_noop!(
+            VotingEngine::snapshot_institution_admins(
+                0,
+                ORG_REN,
+                registered_subject_institution(),
+                false,
+            ),
+            votingengine::Error::<Test>::InvalidInstitution
+        );
+    });
+}
+
+#[test]
 fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
     new_test_ext().execute_with(|| {
         set_registered_duoqian_threshold(3);

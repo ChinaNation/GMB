@@ -8,27 +8,9 @@
 
 use frame_benchmarking::v2::*;
 use frame_support::traits::OnRuntimeUpgrade;
-use sp_io::hashing::twox_128;
-use sp_std::vec::Vec;
 
-use crate::migrations::v1::MigrateV0ToV1;
+use crate::migrations::v1::{build_prefix, MigrateV0ToV1, NEW_PALLET, OLD_PALLET, STORAGES};
 use crate::{Config, Pallet};
-
-/// 旧 pallet 名(sub-pallet 拆分前 storage 所在前缀)。
-const OLD_PALLET: &[u8] = b"VotingEngine";
-const NEW_PALLET: &[u8] = b"InternalVote";
-const STORAGES: &[&[u8]] = &[
-    b"InternalVotesByAccount",
-    b"InternalTallies",
-    b"InternalThresholdSnapshot",
-];
-
-fn build_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
-    let mut p = Vec::with_capacity(32);
-    p.extend_from_slice(&twox_128(pallet));
-    p.extend_from_slice(&twox_128(storage));
-    p
-}
 
 #[benchmarks]
 mod benchmarks {

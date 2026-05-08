@@ -58,23 +58,15 @@ pub fn subject_id_from_sfid_number(sfid_number: &str) -> [u8; 48] {
     out
 }
 
-/// 构造 `AdminsChange` 管理员主体表存储 key(hex 字符串含 0x 前缀)。
+/// 构造 `AdminsChange::Subjects` 管理员主体表存储 key(hex 字符串含 0x 前缀)。
 ///
-/// 链上 runtime 升级后 spec=1,但 admins-change migration v1 因门控 bug 没搬数据:
-/// genesis 时 `STORAGE_VERSION = 2` 已生效,migration 见 on_chain >= 2 直接 noop。
-/// 92 条管理员仍在 OLD 名 `Institutions` 路径下,subject_id 也是 48B 直接 raw padded
-/// (没有 D 阶段加的 0x01 kind tag)。
-///
-/// 客户端按 OLD 路径读,可直接覆盖 国储会 + 省储会 + 省储行的全部管理员显示。
-/// 不修 migration 的话,这一段就是该客户端读链的最终形态(数据不会自己搬走)。
+/// 中文注释：节点端读取重新创世后的 Subjects 真源；内置机构 subject_id 必须
+/// 使用 `0x01` Builtin kind tag，与 runtime primitives 派生协议保持一致。
 pub fn admin_subjects_key(sfid_number: &str) -> String {
-    let mut subject_id = [0u8; 48];
-    let raw = sfid_number.as_bytes();
-    let len = raw.len().min(48);
-    subject_id[..len].copy_from_slice(&raw[..len]);
+    let subject_id = subject_id_from_sfid_number(sfid_number);
 
     let pallet_hash = twox_128(b"AdminsChange");
-    let storage_hash = twox_128(b"Institutions");
+    let storage_hash = twox_128(b"Subjects");
     let blake2_hash = blake2b_128(&subject_id);
 
     let mut key = Vec::with_capacity(16 + 16 + 16 + 48);
@@ -184,18 +176,26 @@ mod tests {
     fn institution_id_from_sfid_number_with_kind_tag() {
         let id = "GFR-LN001-CB0X-944805165-2026";
         let fixed = subject_id_from_sfid_number(id);
+        let runtime_fixed =
+            primitives::derive::subject_id_from_sfid_number(id).expect("测试 sfid_number 长度合法");
         // D 阶段:byte[0]=0x01 Builtin,byte[1..1+len]=sfid_number bytes,余下零填充
+        assert_eq!(fixed, runtime_fixed);
         assert_eq!(fixed[0], 0x01);
         assert_eq!(&fixed[1..1 + id.len()], id.as_bytes());
         assert!(fixed[1 + id.len()..].iter().all(|&b| b == 0));
     }
 
     #[test]
-    fn admin_subjects_key_has_correct_length() {
-        let key = admin_subjects_key("GFR-LN001-CB0X-944805165-2026");
+    fn admin_subjects_key_matches_runtime_subject_id_and_subjects_storage() {
+        let sfid_number = "GFR-LN001-CB0X-944805165-2026";
+        let subject_id = primitives::derive::subject_id_from_sfid_number(sfid_number)
+            .expect("测试 sfid_number 长度合法");
+        let key = admin_subjects_key(sfid_number);
+        let expected = map_key("AdminsChange", "Subjects", &subject_id);
         // 0x 前缀 + (16+16+16+48)*2 hex 字符 = 2 + 192 = 194
         assert_eq!(key.len(), 194);
         assert!(key.starts_with("0x"));
+        assert_eq!(key, expected);
     }
 
     #[test]

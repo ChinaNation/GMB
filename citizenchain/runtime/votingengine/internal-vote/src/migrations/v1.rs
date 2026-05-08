@@ -18,17 +18,19 @@ use frame_support::traits::{Get, GetStorageVersion, OnRuntimeUpgrade, StorageVer
 use sp_io::hashing::twox_128;
 use sp_std::vec::Vec;
 
-const OLD_PALLET: &[u8] = b"VotingEngine";
-const NEW_PALLET: &[u8] = b"InternalVote";
+// 中文注释:OLD/NEW pallet 名 + STORAGES + build_prefix 同时被 benchmarks.rs 引用,
+// pub(crate) 共享避免两处定义漂移。
+pub(crate) const OLD_PALLET: &[u8] = b"VotingEngine";
+pub(crate) const NEW_PALLET: &[u8] = b"InternalVote";
 
 /// 受影响的 storage 前缀名(本 sub-pallet 自有的全部 storage)。
-const STORAGES: &[&[u8]] = &[
+pub(crate) const STORAGES: &[&[u8]] = &[
     b"InternalVotesByAccount",
     b"InternalTallies",
     b"InternalThresholdSnapshot",
 ];
 
-fn build_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
+pub(crate) fn build_prefix(pallet: &[u8], storage: &[u8]) -> Vec<u8> {
     let mut p = Vec::with_capacity(32);
     p.extend_from_slice(&twox_128(pallet));
     p.extend_from_slice(&twox_128(storage));

@@ -3,7 +3,6 @@
 extern crate alloc;
 
 use super::*;
-use codec::Decode;
 use frame_support::{
     derive_impl,
     traits::{ConstU128, ConstU32},
@@ -155,7 +154,7 @@ impl
 // ── Provider:仅支持 ORG_REN(个人多签),其他 org 返回 None/false ──
 //
 // personal-manage 测试只走个人多签业务,固定治理 (NRC/PRC/PRB) 不参与;
-// 因此 Provider 只需要从 PersonalDuoqians 表读 admins / threshold / count。
+// 因此 Provider 只需要从 admins-change 读 admins / threshold / count。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -163,23 +162,33 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
         if org != ORG_REN {
             return false;
         }
-        let Ok(account) = AccountId32::decode(&mut &institution[1..33]) else {
-            return false;
-        };
-        if let Some(duoqian) = pallet::PersonalDuoqians::<Test>::get(&account) {
-            duoqian.duoqian_admins.iter().any(|admin| admin == who)
-        } else {
-            false
-        }
+        admins_change::Pallet::<Test>::is_active_subject_admin(org, institution, who)
     }
 
     fn get_admin_list(org: u8, institution: SubjectId) -> Option<alloc::vec::Vec<AccountId32>> {
         if org != ORG_REN {
             return None;
         }
-        let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-        let duoqian = pallet::PersonalDuoqians::<Test>::get(&account)?;
-        Some(duoqian.duoqian_admins.into_inner())
+        admins_change::Pallet::<Test>::active_subject_admins(org, institution)
+    }
+
+    fn is_pending_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
+        org == ORG_REN
+            && admins_change::Pallet::<Test>::is_pending_subject_admin_for_snapshot(
+                org,
+                institution,
+                who,
+            )
+    }
+
+    fn get_pending_admin_list(
+        org: u8,
+        institution: SubjectId,
+    ) -> Option<alloc::vec::Vec<AccountId32>> {
+        if org != ORG_REN {
+            return None;
+        }
+        admins_change::Pallet::<Test>::pending_subject_admins_for_snapshot(org, institution)
     }
 }
 
@@ -189,9 +198,7 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
         if org != ORG_REN {
             return None;
         }
-        let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-        let duoqian = pallet::PersonalDuoqians::<Test>::get(&account)?;
-        u32::try_from(duoqian.duoqian_admins.len()).ok()
+        admins_change::Pallet::<Test>::active_subject_admin_count(org, institution)
     }
 }
 
@@ -201,19 +208,26 @@ impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
         if org != ORG_REN {
             return false;
         }
-        AccountId32::decode(&mut &institution[1..33])
-            .ok()
-            .and_then(|account| pallet::PersonalDuoqians::<Test>::get(&account))
-            .is_some()
+        admins_change::Pallet::<Test>::active_subject_exists(org, institution)
     }
 
     fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
         if org != ORG_REN {
             return None;
         }
-        let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-        let duoqian = pallet::PersonalDuoqians::<Test>::get(&account)?;
-        Some(duoqian.threshold)
+        admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
+    }
+
+    fn is_known_pending_subject(org: u8, institution: SubjectId) -> bool {
+        org == ORG_REN
+            && admins_change::Pallet::<Test>::pending_subject_exists_for_snapshot(org, institution)
+    }
+
+    fn pending_pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
+        if org != ORG_REN {
+            return None;
+        }
+        admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(org, institution)
     }
 }
 
@@ -283,7 +297,6 @@ impl pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type FeeRouter = ();
-    type MaxAdmins = ConstU32<10>;
     type MaxAccountNameLength = ConstU32<128>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
@@ -365,17 +378,11 @@ pub fn seed_active_duoqian(
     duoqian_address: &AccountId32,
     creator: &AccountId32,
     admins: &[AccountId32],
-    threshold: u32,
     initial_balance: Balance,
 ) {
-    let admins_bv: pallet::DuoqianAdminsOf<Test> =
-        BoundedVec::try_from(admins.to_vec()).expect("admins fit");
     pallet::PersonalDuoqians::<Test>::insert(
         duoqian_address,
         types::DuoqianAccount {
-            admin_count: admins.len() as u32,
-            threshold,
-            duoqian_admins: admins_bv.clone(),
             creator: creator.clone(),
             created_at: 1,
             status: types::DuoqianStatus::Active,
@@ -392,6 +399,12 @@ pub fn seed_active_duoqian(
     let subject = primitives::derive::subject_id_from_account(duoqian_address);
     let admins_ac: admins_change::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
+    let threshold = admins_change::derived_threshold(
+        admins_change::AdminSubjectKind::PersonalDuoqian,
+        ORG_REN,
+        admins.len() as u32,
+    )
+    .expect("derived threshold");
     admins_change::Subjects::<Test>::insert(
         subject,
         admins_change::AdminSubject {

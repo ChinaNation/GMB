@@ -32,6 +32,22 @@ class DuoqianAdminSnapshot {
   final int statusByte;
 }
 
+/// 个人多签账户生命周期快照。
+///
+/// 第 3 步破坏式改造后，`PersonalManage::PersonalDuoqians` 不再镜像
+/// admins / threshold；管理员真源统一在 `AdminsChange::Subjects`。
+class PersonalDuoqianSnapshot {
+  const PersonalDuoqianSnapshot({
+    required this.creatorHex,
+    required this.createdAt,
+    required this.statusByte,
+  });
+
+  final String creatorHex;
+  final int createdAt;
+  final int statusByte;
+}
+
 /// 机构账户快照。
 class InstitutionAccountSnapshot {
   const InstitutionAccountSnapshot({
@@ -240,36 +256,17 @@ class DuoqianStorageCodec {
     );
   }
 
-  static DuoqianAdminSnapshot? decodePersonalDuoqian(Uint8List data) {
-    if (data.length < 8) return null;
+  static PersonalDuoqianSnapshot? decodePersonalDuoqian(Uint8List data) {
+    if (data.length < 32 + 4 + 1) return null;
     var offset = 0;
-    final adminCount = readU32Le(data, offset);
+    final creatorHex = hexEncode(data.sublist(offset, offset + 32));
+    offset += 32;
+    final createdAt = readU32Le(data, offset);
     offset += 4;
-    final threshold = readU32Le(data, offset);
-    offset += 4;
-    final (adminLen, lenSize) = readCompactU32(data, offset);
-    offset += lenSize;
-    final admins = <String>[];
-    for (var i = 0; i < adminLen; i++) {
-      if (offset + 32 > data.length) return null;
-      admins.add(hexEncode(data.sublist(offset, offset + 32)));
-      offset += 32;
-    }
-    if (offset + 32 + 4 + 1 > data.length) {
-      return DuoqianAdminSnapshot(
-        adminCount: adminCount,
-        threshold: threshold,
-        adminPubkeys: admins,
-        statusByte: 0,
-      );
-    }
-    offset += 32; // creator
-    offset += 4; // created_at: BlockNumber(u32)
     final statusByte = data[offset];
-    return DuoqianAdminSnapshot(
-      adminCount: adminCount,
-      threshold: threshold,
-      adminPubkeys: admins,
+    return PersonalDuoqianSnapshot(
+      creatorHex: creatorHex,
+      createdAt: createdAt,
       statusByte: statusByte,
     );
   }

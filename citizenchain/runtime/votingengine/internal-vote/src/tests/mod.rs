@@ -151,6 +151,12 @@ thread_local! {
 thread_local! {
     static REGISTERED_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(3) };
 }
+thread_local! {
+    static PENDING_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(2) };
+}
+thread_local! {
+    static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
+}
 
 pub struct TestSfidEligibility;
 pub struct TestPopulationSnapshotVerifier;
@@ -185,6 +191,14 @@ fn registered_subject_admin(index: usize) -> AccountId32 {
 
 fn set_registered_duoqian_threshold(threshold: u32) {
     REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = threshold);
+}
+
+fn set_pending_duoqian_threshold(threshold: u32) {
+    PENDING_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = threshold);
+}
+
+fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
+    REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = Some(admins));
 }
 
 impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -243,11 +257,17 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .map(AccountId32::new)
                         .collect()
                 }),
-            ORG_REN if institution == registered_subject_institution() => Some(sp_std::vec![
-                registered_subject_admin(0),
-                registered_subject_admin(1),
-                registered_subject_admin(2),
-            ]),
+            ORG_REN if institution == registered_subject_institution() => {
+                let override_admins =
+                    REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
+                Some(override_admins.unwrap_or_else(|| {
+                    sp_std::vec![
+                        registered_subject_admin(0),
+                        registered_subject_admin(1),
+                        registered_subject_admin(2),
+                    ]
+                }))
+            }
             _ => None,
         }
     }
@@ -298,7 +318,7 @@ impl InternalThresholdProvider for TestInternalThresholdProvider {
         if org != ORG_REN || institution != pending_subject_institution() {
             return None;
         }
-        Some(2)
+        PENDING_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()))
     }
 }
 
@@ -475,6 +495,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
         REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 3);
+        PENDING_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 2);
+        REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
         System::set_block_number(1);
     });
     ext

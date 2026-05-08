@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_service.dart';
 
 void main() {
@@ -11,6 +12,12 @@ void main() {
   List<int> compactVec(String text) {
     final bytes = utf8.encode(text);
     return [(bytes.length << 2) & 0xff, ...bytes];
+  }
+
+  List<int> compactU32(int value) {
+    if (value < 64) return [(value << 2) & 0xff];
+    final encoded = (value << 2) | 0x01;
+    return [encoded & 0xff, (encoded >> 8) & 0xff];
   }
 
   List<int> u32Le(int value) => [
@@ -85,6 +92,54 @@ void main() {
       ];
 
       expect(hexOf(callData), hexOf(expected));
+    });
+
+    test('builds propose_create_personal call_data without threshold fields',
+        () {
+      final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
+      final admin2 = Uint8List.fromList(List<int>.filled(32, 0x22));
+      final accountName = Uint8List.fromList(utf8.encode('家庭基金'));
+
+      final callData = DuoqianManageService.buildProposeCreatePersonalCallData(
+        accountName: accountName,
+        adminPubkeys: [admin1, admin2],
+        amountFen: BigInt.from(111),
+      );
+
+      final expected = <int>[
+        0x07,
+        0x00,
+        ...compactVec('家庭基金'),
+        (2 << 2) & 0xff,
+        ...admin1,
+        ...admin2,
+        ...u128Le(BigInt.from(111)),
+      ];
+
+      expect(hexOf(callData), hexOf(expected));
+    });
+
+    test('decodes current PersonalManage create ProposalData', () {
+      final service = DuoqianManageService();
+      final inner = <int>[
+        ...utf8.encode('per-mgmt'),
+        0x00,
+        ...List<int>.filled(32, 0x33),
+        ...List<int>.filled(32, 0x44),
+        ...u128Le(BigInt.from(111)),
+      ];
+      final raw = Uint8List.fromList([
+        ...compactU32(inner.length),
+        ...inner,
+      ]);
+
+      final decoded = service.decodeManageProposalData(7, raw);
+
+      expect(decoded, isA<CreateDuoqianProposalInfo>());
+      final info = decoded as CreateDuoqianProposalInfo;
+      expect(info.proposalId, 7);
+      expect(info.duoqianAddress, '33' * 32);
+      expect(info.amountFen, BigInt.from(111));
     });
   });
 }

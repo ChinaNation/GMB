@@ -8,7 +8,7 @@
 //! 本 pallet 自有:
 //! - storage:`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`
 //! - event:`InternalVoteCast`
-//! - error:`InvalidInternalOrg` / `MissingThresholdSnapshot`
+//! - error:`InvalidInternalOrg` / `MissingThresholdSnapshot` / `InvalidThresholdSnapshot`
 //! - extrinsic:`cast(proposal_id, approve)`
 //! - 业务函数:`do_create_internal_proposal*` / `do_internal_vote` / `do_finalize_internal_timeout`
 //! - trait impl:`InternalVoteEngine`(供业务 pallet 创建提案)
@@ -109,6 +109,8 @@ pub mod pallet {
         InvalidInternalOrg,
         /// 内部投票阈值快照缺失。
         MissingThresholdSnapshot,
+        /// 内部投票阈值与管理员快照人数不匹配。
+        InvalidThresholdSnapshot,
     }
 
     use crate::weights::WeightInfo;
@@ -215,6 +217,32 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
+    fn ensure_threshold_within_snapshot(admin_count: u32, threshold: u32) -> DispatchResult {
+        // 中文注释：普通内部提案仍按账户当前阈值投票，但阈值必须能被本次管理员快照实际达成。
+        ensure!(
+            threshold > 0 && threshold <= admin_count,
+            Error::<T>::InvalidThresholdSnapshot
+        );
+        Ok(())
+    }
+
+    fn ensure_all_admin_threshold(admin_count: u32, threshold: u32) -> DispatchResult {
+        // 中文注释：账户链上注册与注销会改变主体生命周期，必须由该账户快照内全体管理员通过。
+        ensure!(
+            admin_count > 0 && threshold == admin_count,
+            Error::<T>::InvalidThresholdSnapshot
+        );
+        Ok(())
+    }
+
+    fn snapshot_admin_count_or_missing(
+        proposal_id: u64,
+        institution: SubjectId,
+    ) -> Result<u32, DispatchError> {
+        <votingengine::Pallet<T>>::snapshot_admin_count(proposal_id, institution)
+            .ok_or(votingengine::Error::<T>::MissingAdminSnapshot.into())
+    }
+
     pub fn do_create_internal_proposal(
         who: T::AccountId,
         org: u8,
@@ -268,10 +296,7 @@ impl<T: Config> Pallet<T> {
             }
         }
         let admin_count = admins.len() as u32;
-        ensure!(
-            threshold > 0 && threshold <= admin_count,
-            Error::<T>::InvalidInternalOrg
-        );
+        Self::ensure_all_admin_threshold(admin_count, threshold)?;
         let bounded_admins: BoundedVec<
             T::AccountId,
             <T as votingengine::Config>::MaxAdminsPerInstitution,
@@ -355,7 +380,6 @@ impl<T: Config> Pallet<T> {
             is_internal_admin::<T>(org, institution, &who, false),
             votingengine::Error::<T>::NoPermission
         );
-        ensure!(threshold > 0, Error::<T>::InvalidInternalOrg);
 
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::internal_stage_duration());
@@ -402,14 +426,12 @@ impl<T: Config> Pallet<T> {
                     votingengine::Error::<T>::NoPermission.into()
                 ));
             }
-            let snapshot_size =
-                AdminSnapshot::<T>::get(id, institution).map(|admins| admins.len() as u32);
-            if let Some(size) = snapshot_size {
-                if threshold > size {
-                    return TransactionOutcome::Rollback(
-                        Err(Error::<T>::InvalidInternalOrg.into()),
-                    );
-                }
+            let snapshot_size = match Self::snapshot_admin_count_or_missing(id, institution) {
+                Ok(size) => size,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            if let Err(err) = Self::ensure_all_admin_threshold(snapshot_size, threshold) {
+                return TransactionOutcome::Rollback(Err(err));
             }
             InternalThresholdSnapshot::<T>::insert(id, threshold);
 
@@ -494,6 +516,18 @@ impl<T: Config> Pallet<T> {
                     votingengine::Error::<T>::NoPermission.into()
                 ));
             }
+            let snapshot_size = match Self::snapshot_admin_count_or_missing(id, institution) {
+                Ok(size) => size,
+                Err(err) => return TransactionOutcome::Rollback(Err(err)),
+            };
+            let threshold_check = if pending_subject {
+                Self::ensure_all_admin_threshold(snapshot_size, threshold)
+            } else {
+                Self::ensure_threshold_within_snapshot(snapshot_size, threshold)
+            };
+            if let Err(err) = threshold_check {
+                return TransactionOutcome::Rollback(Err(err));
+            }
             InternalThresholdSnapshot::<T>::insert(id, threshold);
 
             Proposals::<T>::insert(id, proposal);
@@ -525,9 +559,6 @@ impl<T: Config> Pallet<T> {
             !InternalVotesByAccount::<T>::contains_key(proposal_id, &who),
             votingengine::Error::<T>::AlreadyVoted
         );
-        let _org = proposal
-            .internal_org
-            .ok_or(Error::<T>::InvalidInternalOrg)?;
         let institution = proposal
             .internal_institution
             .ok_or(votingengine::Error::<T>::InvalidInstitution)?;

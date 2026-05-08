@@ -83,10 +83,6 @@ pub mod pallet {
             <Self::Currency as Currency<Self::AccountId>>::NegativeImbalance,
         >;
 
-        /// 单个多签账户管理员数量上限
-        #[pallet::constant]
-        type MaxAdmins: Get<u32>;
-
         /// 个人多签账户名称最大字节数
         #[pallet::constant]
         type MaxAccountNameLength: Get<u32>;
@@ -102,14 +98,13 @@ pub mod pallet {
         type WeightInfo: crate::weights::WeightInfo;
     }
 
-    pub type DuoqianAdminsOf<T> =
-        BoundedVec<<T as frame_system::Config>::AccountId, <T as Config>::MaxAdmins>;
-
-    pub type DuoqianAccountOf<T> = DuoqianAccount<
-        DuoqianAdminsOf<T>,
+    pub type DuoqianAdminsOf<T> = BoundedVec<
         <T as frame_system::Config>::AccountId,
-        BlockNumberFor<T>,
+        <T as admins_change::Config>::MaxPersonalAccountAdmins,
     >;
+
+    pub type DuoqianAccountOf<T> =
+        DuoqianAccount<<T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
     pub type AccountNameOf<T> = BoundedVec<u8, <T as Config>::MaxAccountNameLength>;
 
@@ -290,20 +285,11 @@ pub mod pallet {
         pub fn propose_create(
             origin: OriginFor<T>,
             account_name: AccountNameOf<T>,
-            admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
-            threshold: u32,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::create::do_propose_create::<T>(
-                who,
-                account_name,
-                admin_count,
-                duoqian_admins,
-                threshold,
-                amount,
-            )
+            crate::create::do_propose_create::<T>(who, account_name, duoqian_admins, amount)
         }
 
         /// 发起"关闭个人多签账户"提案。
@@ -356,30 +342,32 @@ pub mod pallet {
             <T as frame_system::Config>::SS58Prefix::get().to_le_bytes()
         }
 
-        /// 校验 admin/threshold/排重/发起人是管理员等参数。
+        /// 校验管理员集合并返回链端派生的普通业务阈值。
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
-            admin_count: u32,
             duoqian_admins: &DuoqianAdminsOf<T>,
-            threshold: u32,
-        ) -> DispatchResult {
-            ensure!(T::MaxAdmins::get() >= 2, Error::<T>::InvalidRuntimeConfig);
+        ) -> Result<u32, DispatchError> {
+            let admin_count = duoqian_admins.len() as u32;
+            ensure!(
+                <T as admins_change::Config>::MaxPersonalAccountAdmins::get() >= 2,
+                Error::<T>::InvalidRuntimeConfig
+            );
             ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
             ensure!(
-                duoqian_admins.len() as u32 == admin_count,
-                Error::<T>::AdminCountMismatch
-            );
-            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
-            ensure!(
-                threshold >= min_threshold && threshold <= admin_count,
-                Error::<T>::InvalidThreshold
+                admin_count <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
+                Error::<T>::InvalidAdminCount
             );
             Self::ensure_unique_admins(duoqian_admins)?;
             ensure!(
                 duoqian_admins.iter().any(|admin| admin == who),
                 Error::<T>::PermissionDenied
             );
-            Ok(())
+            admins_change::derived_threshold(
+                admins_change::AdminSubjectKind::PersonalDuoqian,
+                votingengine::types::ORG_REN,
+                admin_count,
+            )
+            .ok_or(Error::<T>::InvalidThreshold.into())
         }
 
         pub(crate) fn ensure_unique_admins(
@@ -421,7 +409,6 @@ pub mod pallet {
             institution_id: SubjectId,
             kind: admins_change::AdminSubjectKind,
             admins: &DuoqianAdminsOf<T>,
-            threshold: u32,
             creator: &T::AccountId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::create_pending_subject_for_proposal(
@@ -431,7 +418,6 @@ pub mod pallet {
                 votingengine::types::ORG_REN,
                 kind,
                 admins.iter().cloned().collect(),
-                threshold,
                 creator.clone(),
             )
         }
@@ -481,10 +467,18 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
         addr: &T::AccountId,
     ) -> Option<primitives::types::MultisigConfigSnapshot<T::AccountId>> {
         let account = pallet::PersonalDuoqians::<T>::get(addr)?;
+        if account.status != types::DuoqianStatus::Active {
+            return None;
+        }
+        let subject = primitives::derive::subject_id_from_account(addr);
+        let org = votingengine::types::ORG_REN;
+        let admins = admins_change::Pallet::<T>::active_subject_admins(org, subject)?;
+        let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject)?;
+        let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, subject)?;
         Some(primitives::types::MultisigConfigSnapshot {
-            admins: account.duoqian_admins.iter().cloned().collect(),
-            admin_count: account.admin_count,
-            threshold: account.threshold,
+            admins,
+            admin_count,
+            threshold,
         })
     }
 

@@ -128,12 +128,22 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         personal_manage::PersonalDuoqians::<Test>::insert(
             &inst_account,
             personal_manage::DuoqianAccount {
-                admin_count: 3,
-                threshold: 2,
-                duoqian_admins: admins,
                 creator: registered_duoqian_admin(0),
                 created_at: 1,
                 status: personal_manage::DuoqianStatus::Active,
+            },
+        );
+        admins_change::Subjects::<Test>::insert(
+            institution,
+            admins_change::AdminSubject {
+                org: ORG_REN,
+                kind: admins_change::AdminSubjectKind::PersonalDuoqian,
+                admins,
+                threshold: 2,
+                creator: registered_duoqian_admin(0),
+                created_at: 1,
+                updated_at: 1,
+                status: admins_change::AdminSubjectStatus::Active,
             },
         );
         let _ = Balances::deposit_creating(&inst_account, 10_000);

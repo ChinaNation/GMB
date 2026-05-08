@@ -954,12 +954,12 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // PersonalManage(7) / propose_create(0)
-  // 格式：[7][0][BoundedVec account_name][u32 admin_count][BoundedVec<AccountId32> admins][u32 threshold][u128 amount]
+  // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u128 amount]
   // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
   // 历史 OrganizationManage(17) call=3 已废除(留洞不复用)。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreatePersonal(Uint8List bytes) {
-    if (bytes.length < 10) return null;
+    if (bytes.length < 2 + 1 + 1 + 32 * 2 + 16) return null;
     var offset = 2;
 
     // account_name: BoundedVec<u8>
@@ -972,26 +972,16 @@ class PayloadDecoder {
         allowMalformed: true);
     offset += accountNameLen;
 
-    // admin_count: u32
-    if (offset + 4 > bytes.length) return null;
-    final adminCount = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
-
-    // admins: BoundedVec<AccountId32> — 跳过
+    // admins: BoundedVec<AccountId32>。admin_count 由向量长度派生。
     final (adminsLen, adminsLenSize) = _decodeCompactU32(bytes, offset);
     offset += adminsLenSize;
+    if (adminsLen < 2 || adminsLen > 64) return null;
+    if (offset + adminsLen * 32 > bytes.length) return null;
     offset += adminsLen * 32;
-    if (offset + 4 + 16 > bytes.length) return null;
+    if (offset + 16 != bytes.length) return null;
 
-    // threshold: u32
-    final threshold = bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24);
-    offset += 4;
+    final regularThreshold = _dynamicThreshold(adminsLen);
+    if (regularThreshold == null) return null;
 
     // amount: u128
     final amountFen = _readU128Le(bytes, offset);
@@ -1000,11 +990,12 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_create_personal',
       summary:
-          '创建个人多签「$accountName」（$adminCount 管理员，阈值 $threshold，入金 $amountYuan 元）',
+          '创建个人多签「$accountName」（$adminsLen 管理员，日常阈值 $regularThreshold，创建全员通过，入金 $amountYuan 元）',
       fields: {
         'account_name': accountName,
-        'admin_count': adminCount.toString(),
-        'threshold': '$threshold/$adminCount',
+        'admin_count': adminsLen.toString(),
+        'regular_threshold': '$regularThreshold/$adminsLen',
+        'create_threshold': '$adminsLen/$adminsLen',
         'amount_yuan': '$amountYuan GMB',
       },
     );
@@ -1355,6 +1346,12 @@ class PayloadDecoder {
       value = (value << 8) | BigInt.from(bytes[offset + i]);
     }
     return value;
+  }
+
+  static int? _dynamicThreshold(int adminCount) {
+    if (adminCount < 2) return null;
+    if (adminCount == 2) return 2;
+    return (adminCount + 1) ~/ 2;
   }
 
   /// 解码 SCALE Compact<BigInt>，返回 (值, 消耗字节数)。

@@ -79,7 +79,4 @@ mod benchmarks {
         let proposal_id = last_proposal_id::<T>();
         assert!(votingengine::Pallet::<T>::get_proposal_data(proposal_id).is_some());
     }
-
-    // execute_admin_set_change benchmark 已废弃: 该 wrapper extrinsic 已统一到
-    // VotingEngine::retry_passed_proposal,benchmark 由 votingengine 自身覆盖。
 }

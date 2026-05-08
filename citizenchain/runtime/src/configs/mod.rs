@@ -828,7 +828,6 @@ impl personal_manage::Config for Runtime {
     type ProtectedSourceChecker = RuntimeProtectedSourceChecker;
     type InstitutionAsset = RuntimeInstitutionAsset;
     type FeeRouter = TransferFeeRouter;
-    type MaxAdmins = ConstU32<64>;
     type MaxAccountNameLength = ConstU32<128>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<121>;

@@ -13,6 +13,127 @@ fn dynamic_threshold_is_derived_from_admin_count() {
 }
 
 #[test]
+fn institution_account_min_admins_two_works() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([110u8; 32]);
+        let admin_b = AccountId32::new([111u8; 32]);
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::InstitutionAccount,
+            vec![admin_a.clone(), admin_b],
+            admin_a,
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_eq!(
+            AdminsChange::active_subject_threshold(ORG_REN, institution),
+            Some(2)
+        );
+    });
+}
+
+#[test]
+fn institution_account_threshold_follows_ceil_half() {
+    new_test_ext().execute_with(|| {
+        for (count, expected_threshold) in [(2u32, 2u32), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4)] {
+            let mut institution = pending_subject_id();
+            institution[1] = count as u8;
+            let admins: Vec<AccountId32> = (0..count)
+                .map(|i| AccountId32::new([100u8 + i as u8; 32]))
+                .collect();
+            let creator = admins[0].clone();
+
+            assert_ok!(AdminsChange::do_create_pending_subject(
+                institution,
+                ORG_REN,
+                AdminSubjectKind::InstitutionAccount,
+                admins,
+                creator,
+            ));
+            assert_ok!(AdminsChange::do_activate_subject(institution));
+            assert_eq!(
+                AdminsChange::active_subject_threshold(ORG_REN, institution),
+                Some(expected_threshold),
+                "admin_count={count} expected ceil(n/2)={expected_threshold}"
+            );
+        }
+    });
+}
+
+#[test]
+fn institution_account_below_two_admins_rejected() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([130u8; 32]);
+
+        assert_noop!(
+            AdminsChange::do_create_pending_subject(
+                institution,
+                ORG_REN,
+                AdminSubjectKind::InstitutionAccount,
+                vec![admin_a.clone()],
+                admin_a,
+            ),
+            Error::<Test>::InvalidAdminCount
+        );
+    });
+}
+
+#[test]
+fn institution_account_requires_org_ren() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([140u8; 32]);
+        let admin_b = AccountId32::new([141u8; 32]);
+
+        for wrong_org in [ORG_NRC, ORG_PRC, ORG_PRB] {
+            assert_noop!(
+                AdminsChange::do_create_pending_subject(
+                    institution,
+                    wrong_org,
+                    AdminSubjectKind::InstitutionAccount,
+                    vec![admin_a.clone(), admin_b.clone()],
+                    admin_a.clone(),
+                ),
+                Error::<Test>::InvalidSubjectKind
+            );
+        }
+    });
+}
+
+#[test]
+fn institution_account_at_max_admins_works() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let max =
+            <<Test as Config>::MaxAdminsPerInstitution as frame_support::traits::Get<u32>>::get();
+        let admins: Vec<AccountId32> = (0..max)
+            .map(|i| AccountId32::new([(i & 0xff) as u8; 32]))
+            .collect();
+        let creator = admins[0].clone();
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_REN,
+            AdminSubjectKind::InstitutionAccount,
+            admins,
+            creator,
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_eq!(
+            AdminsChange::active_subject_admin_count(ORG_REN, institution),
+            Some(max)
+        );
+        assert_eq!(
+            AdminsChange::active_subject_threshold(ORG_REN, institution),
+            Some(max.saturating_add(1) / 2)
+        );
+    });
+}
+
+#[test]
 fn pending_subject_is_not_exposed_to_active_business_api() {
     new_test_ext().execute_with(|| {
         let institution = pending_subject_id();
@@ -24,7 +145,6 @@ fn pending_subject_is_not_exposed_to_active_business_api() {
             ORG_REN,
             AdminSubjectKind::PersonalDuoqian,
             vec![admin_a.clone(), admin_b.clone()],
-            2,
             admin_a.clone()
         ));
 
@@ -80,7 +200,6 @@ fn subject_lifecycle_trait_requires_votingengine_scope_for_activation() {
             ORG_REN,
             AdminSubjectKind::PersonalDuoqian,
             vec![admin_a.clone(), admin_b],
-            2,
             admin_a.clone()
         ));
 
@@ -151,7 +270,6 @@ fn dynamic_subjects_can_be_closed() {
                 ORG_REN,
                 kind,
                 vec![admin_a.clone(), admin_b],
-                2,
                 admin_a.clone()
             ));
             assert_ok!(AdminsChange::do_activate_subject(institution));
@@ -189,7 +307,6 @@ fn dynamic_subjects_can_use_admin_set_change_entry() {
                 ORG_REN,
                 kind,
                 vec![admin_a.clone(), admin_b.clone()],
-                2,
                 admin_a.clone()
             ));
             assert_ok!(AdminsChange::do_activate_subject(institution));
@@ -218,7 +335,6 @@ fn dynamic_subject_set_change_can_add_delete_and_recalculate_threshold() {
             ORG_REN,
             AdminSubjectKind::InstitutionAccount,
             vec![admin_a.clone(), admin_b.clone()],
-            99,
             admin_a.clone()
         ));
         assert_ok!(AdminsChange::do_activate_subject(institution));

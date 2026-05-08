@@ -14,9 +14,7 @@
 //! 当前框架阶段只搭函数签名 + doc 占位,实装在后续任务卡 A 完成。
 
 use crate::pallet::{Config, OnchainAssetId};
-use crate::proposal::{
-    BurnProposal, CloseProposal, IssueProposal, MintProposal, TransferProposal,
-};
+use crate::proposal::{BurnProposal, CloseProposal, IssueProposal, MintProposal, TransferProposal};
 use frame_support::pallet_prelude::*;
 
 use crate::pallet::BalanceOf;
@@ -41,13 +39,17 @@ where
 }
 
 /// 增发(调 pallet_assets::mint_into + emit Minted)。
-pub fn execute_mint<T: Config>(_proposal: MintProposal<T::AccountId, BalanceOf<T>>) -> DispatchResult {
+pub fn execute_mint<T: Config>(
+    _proposal: MintProposal<T::AccountId, BalanceOf<T>>,
+) -> DispatchResult {
     // TODO: implement business logic
     Ok(())
 }
 
 /// 销毁(调 pallet_assets::burn_from + emit Burned)。
-pub fn execute_burn<T: Config>(_proposal: BurnProposal<T::AccountId, BalanceOf<T>>) -> DispatchResult {
+pub fn execute_burn<T: Config>(
+    _proposal: BurnProposal<T::AccountId, BalanceOf<T>>,
+) -> DispatchResult {
     // TODO: implement business logic
     Ok(())
 }
@@ -86,7 +88,9 @@ pub fn dispatch_internal_callback<T: Config>(
 pub fn allocate_asset_id<T: Config>() -> Result<OnchainAssetId, crate::pallet::Error<T>> {
     let next = crate::pallet::NextAssetId::<T>::get();
     let allocated = next;
-    let new_next = next.checked_add(1).ok_or(crate::pallet::Error::<T>::AssetIdOverflow)?;
+    let new_next = next
+        .checked_add(1)
+        .ok_or(crate::pallet::Error::<T>::AssetIdOverflow)?;
     crate::pallet::NextAssetId::<T>::put(new_next);
     Ok(allocated)
 }

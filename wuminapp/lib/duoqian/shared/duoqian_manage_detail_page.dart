@@ -92,8 +92,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       final rpc = ChainRpc();
 
       // step1:并行加载管理员列表、提案状态、投票计数
-      debugPrint(
-          '[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally...');
+      debugPrint('[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally...');
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.sfidNumber),
         _proposalService.fetchProposalStatus(widget.proposalId),
@@ -110,8 +109,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       debugPrint('[VoteDetail._load] step2: fetchProposalData');
       final key = _buildProposalDataStorageKey(widget.proposalId);
       final raw = await rpc.fetchStorage('0x${_hexEncode(key)}');
-      debugPrint(
-          '[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
+      debugPrint('[VoteDetail._load] step2 完成 raw.len=${raw?.length ?? 0}');
       CreateDuoqianProposalInfo? createInfo;
       CloseDuoqianProposalInfo? closeInfo;
       if (raw != null && raw.isNotEmpty) {
@@ -125,8 +123,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       }
 
       // step3:逐个查询每位管理员的投票记录
-      debugPrint(
-          '[VoteDetail._load] step3: 逐 admin 查投票 (${admins.length} 个)');
+      debugPrint('[VoteDetail._load] step3: 逐 admin 查投票 (${admins.length} 个)');
       final votes = <String, bool?>{};
       final voteFutures = admins.map((pubkey) async {
         final vote =
@@ -528,10 +525,6 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       }),
       const Divider(height: 20),
       _buildInfoRow('发起人', _truncateAddress(info.proposer)),
-      const Divider(height: 20),
-      _buildInfoRow('管理员数量', '${info.adminCount}'),
-      const Divider(height: 20),
-      _buildInfoRow('通过阈值', '${info.threshold} / ${info.adminCount}'),
       const Divider(height: 20),
       _buildInfoRow(
         '初始资金',

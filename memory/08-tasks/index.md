@@ -7,6 +7,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260507-h1-node-admin-subject-storage-key.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -226,6 +227,8 @@
 - `memory/08-tasks/done/20260506-unified-subject-id-protocol.md`
 - `memory/08-tasks/done/20260506-wuminapp-公民三tab扁平化重构.md`
 - `memory/08-tasks/done/20260507-185958-第1步改造-admins-change-新增-institutionaccount-账户级主体-保留-sfidinstitution-仅作机构归属-实现统一动态阈值工.md`
+- `memory/08-tasks/done/20260507-192407-第2步改造-internal-vote-账户级快照与全员生命周期阈值.md`
+- `memory/08-tasks/done/20260507-194843-第3步破坏式改造-personal-manage-删除个人创建阈值入参与管理员镜像.md`
 - `memory/08-tasks/done/20260507-ai-required-reading.md`
 - `memory/08-tasks/done/20260507-ai-unified-naming.md`
 - `memory/08-tasks/done/20260507-ai-unified-protocols.md`

@@ -67,7 +67,6 @@ class DuoqianManageService {
   /// ProposalData 中的 action 类型前缀。
   /// OrganizationManage(b"org-mgmt") 命名空间:ACTION_CLOSE=2 / ACTION_CREATE_INSTITUTION=3。
   /// PersonalManage(b"per-mgmt") 命名空间:ACTION_CREATE=0 / ACTION_CLOSE=1(独立编号)。
-  static const actionCreate = 1; // 历史保留:个人多签解码 fallback,优先按 personal 命名空间识别
   static const actionClose = 2;
   static const actionCreatePersonal = 0;
   static const actionClosePersonal = 1;
@@ -220,18 +219,59 @@ class DuoqianManageService {
   /// 提交 PersonalManage::propose_create extrinsic（个人多签，无需 SFID）。
   ///
   /// B 阶段拆分(2026-05-06)起,个人多签独立 pallet PersonalManage(7),call_index=0。
-  /// 参数编码：[0x07][0x00] + account_name(BoundedVec) + admin_count(u32 LE)
-  ///   + duoqian_admins(BoundedVec<AccountId32>) + threshold(u32 LE) + amount(u128 LE)
+  /// 参数编码：[0x07][0x00] + account_name(BoundedVec)
+  ///   + duoqian_admins(BoundedVec<AccountId32>) + amount(u128 LE)。
+  ///
+  /// 第 3 步破坏式改造后，admin_count 来自 admins 向量长度，
+  /// 日常阈值由链端 admins-change 动态派生，创建提案投票阈值为全员通过。
   Future<({String txHash, int usedNonce})> submitProposeCreatePersonal({
     required Uint8List accountName,
-    required int adminCount,
     required List<Uint8List> adminPubkeys,
-    required int threshold,
     required BigInt amountFen,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
+    final callData = buildProposeCreatePersonalCallData(
+      accountName: accountName,
+      adminPubkeys: adminPubkeys,
+      amountFen: amountFen,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 构造个人多签创建 call_data。仅用于生产提交与测试逐字节对齐。
+  @visibleForTesting
+  static Uint8List buildProposeCreatePersonalCallData({
+    required Uint8List accountName,
+    required List<Uint8List> adminPubkeys,
+    required BigInt amountFen,
+  }) {
+    if (accountName.isEmpty || accountName.length > 128) {
+      throw ArgumentError('account_name 长度需在 1..=128 字节');
+    }
+    if (adminPubkeys.length < 2 || adminPubkeys.length > 64) {
+      throw ArgumentError('个人多签管理员数量需在 2..=64');
+    }
+    final seen = <String>{};
+    for (final pubkey in adminPubkeys) {
+      if (pubkey.length != 32) {
+        throw ArgumentError('duoqian_admins 每项必须为 32 字节');
+      }
+      final hex = _hexEncode(pubkey);
+      if (!seen.add(hex)) {
+        throw ArgumentError('duoqian_admins 不允许重复');
+      }
+    }
+    if (amountFen <= BigInt.zero) {
+      throw ArgumentError('amount 必须大于 0');
+    }
+
     final output = ByteOutput();
     output.pushByte(_personalPalletIndex);
     output.pushByte(_proposeCreatePersonalCallIndex);
@@ -241,9 +281,6 @@ class DuoqianManageService {
         CompactBigIntCodec.codec.encode(BigInt.from(accountName.length)));
     output.write(accountName);
 
-    // admin_count: u32 little-endian
-    output.write(_u32ToLeBytes(adminCount));
-
     // duoqian_admins: BoundedVec<AccountId32>
     output.write(
         CompactBigIntCodec.codec.encode(BigInt.from(adminPubkeys.length)));
@@ -251,18 +288,10 @@ class DuoqianManageService {
       output.write(pubkey);
     }
 
-    // threshold: u32 little-endian
-    output.write(_u32ToLeBytes(threshold));
-
     // amount: u128 little-endian
-    output.write(_u128ToLeBytes(amountFen));
+    output.write(_u128ToLeBytesStatic(amountFen));
 
-    return _signAndSubmit(
-      callData: output.toBytes(),
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
+    return output.toBytes();
   }
 
   /// 提交机构多签关闭提案。
@@ -442,7 +471,8 @@ class DuoqianManageService {
   /// 查询多签账户信息。
   ///
   /// 注册机构账户走 `AddressRegisteredSfid -> Institutions + InstitutionAccounts`；
-  /// 个人多签账户走 `PersonalManage::PersonalDuoqians`。
+  /// 个人多签账户走 `PersonalManage::PersonalDuoqians`
+  /// + `AdminsChange::Subjects`。
   Future<DuoqianAccountInfo?> fetchDuoqianAccount(
       String duoqianAddressHex) async {
     final institution =
@@ -495,10 +525,18 @@ class DuoqianManageService {
     if (data == null) return null;
     final personal = DuoqianStorageCodec.decodePersonalDuoqian(data);
     if (personal == null) return null;
+    final subjectId = DuoqianStorageCodec.subjectIdFromAccountHex(
+      duoqianAddressHex,
+    );
+    final adminKey = DuoqianStorageCodec.adminSubjectKey(subjectId);
+    final adminData = await _rpc.fetchStorage('0x${_hexEncode(adminKey)}');
+    if (adminData == null) return null;
+    final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
+    if (admin == null) return null;
     return DuoqianAccountInfo(
-      adminCount: personal.adminCount,
-      threshold: personal.threshold,
-      adminPubkeys: personal.adminPubkeys,
+      adminCount: admin.adminCount,
+      threshold: admin.threshold,
+      adminPubkeys: admin.adminPubkeys,
       status: _statusFromByte(personal.statusByte),
     );
   }
@@ -506,12 +544,12 @@ class DuoqianManageService {
   /// 从 ProposalData 解码多签管理提案（创建或关闭）。
   ///
   /// ProposalData 存储为 BoundedVec<u8>，SCALE：Compact<len> + [ACTION_TYPE(1B)] + action.encode()
-  /// ACTION_CREATE(1): duoqian_address(32B) + proposer(32B) + admin_count(u32) + threshold(u32) + amount(u128)
-  /// ACTION_CLOSE(2): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
+  /// Personal ACTION_CREATE(0): duoqian_address(32B) + proposer(32B) + amount(u128)
+  /// ACTION_CLOSE(org=2,personal=1): duoqian_address(32B) + beneficiary(32B) + proposer(32B)
   ///
   /// 返回 CreateDuoqianProposalInfo 或 CloseDuoqianProposalInfo，解码失败返回 null。
-  /// MODULE_TAG 前缀（与链上 organization-manage 的 MODULE_TAG 一致，长度 8 字节）。
-  static const _moduleTag = [
+  /// MODULE_TAG 前缀与链上 organization-manage / personal-manage 保持一致。
+  static const _orgModuleTag = [
     0x6f,
     0x72,
     0x67,
@@ -521,6 +559,16 @@ class DuoqianManageService {
     0x6d,
     0x74
   ]; // "org-mgmt"
+  static const _personalModuleTag = [
+    0x70,
+    0x65,
+    0x72,
+    0x2d,
+    0x6d,
+    0x67,
+    0x6d,
+    0x74
+  ]; // "per-mgmt"
 
   Object? decodeManageProposalData(int proposalId, Uint8List raw) {
     try {
@@ -532,17 +580,22 @@ class DuoqianManageService {
       if (offset + vecLen > raw.length) return null;
       final data = raw.sublist(offset, offset + vecLen);
 
-      // 跳过 MODULE_TAG 前缀（"org-mgmt", 8 bytes）
-      if (data.length < _moduleTag.length + 1) return null;
-      for (var i = 0; i < _moduleTag.length; i++) {
-        if (data[i] != _moduleTag[i]) return null;
+      if (_startsWith(data, _personalModuleTag)) {
+        final actionType = data[_personalModuleTag.length];
+        final payload = data.sublist(_personalModuleTag.length + 1);
+        if (actionType == actionCreatePersonal) {
+          return _decodeCreateAction(proposalId, payload);
+        }
+        if (actionType == actionClosePersonal) {
+          return _decodeCloseAction(proposalId, payload);
+        }
+        return null;
       }
-      final actionType = data[_moduleTag.length];
-      final payload = data.sublist(_moduleTag.length + 1);
 
-      if (actionType == actionCreate) {
-        return _decodeCreateAction(proposalId, payload);
-      } else if (actionType == actionClose) {
+      if (!_startsWith(data, _orgModuleTag)) return null;
+      final actionType = data[_orgModuleTag.length];
+      final payload = data.sublist(_orgModuleTag.length + 1);
+      if (actionType == actionClose) {
         return _decodeCloseAction(proposalId, payload);
       }
       return null;
@@ -553,8 +606,9 @@ class DuoqianManageService {
 
   CreateDuoqianProposalInfo? _decodeCreateAction(
       int proposalId, Uint8List data) {
-    // duoqian_address(32) + proposer(32) + admin_count(u32) + threshold(u32) + amount(u128)
-    if (data.length < 32 + 32 + 4 + 4 + 16) return null;
+    // PersonalManage::CreateDuoqianAction:
+    // duoqian_address(32) + proposer(32) + amount(u128)
+    if (data.length != 32 + 32 + 16) return null;
     var offset = 0;
 
     final duoqianAddress =
@@ -566,12 +620,6 @@ class DuoqianManageService {
         Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
     offset += 32;
 
-    final adminCount = _decodeU32(data, offset);
-    offset += 4;
-
-    final threshold = _decodeU32(data, offset);
-    offset += 4;
-
     final amountBytes = data.sublist(offset, offset + 16);
     var amountBig = BigInt.zero;
     for (var i = 15; i >= 0; i--) {
@@ -582,15 +630,13 @@ class DuoqianManageService {
       proposalId: proposalId,
       duoqianAddress: duoqianAddress,
       proposer: proposerSs58,
-      adminCount: adminCount,
-      threshold: threshold,
       amountFen: amountBig,
     );
   }
 
   CloseDuoqianProposalInfo? _decodeCloseAction(int proposalId, Uint8List data) {
     // duoqian_address(32) + beneficiary(32) + proposer(32)
-    if (data.length < 32 + 32 + 32) return null;
+    if (data.length != 32 + 32 + 32) return null;
     var offset = 0;
 
     final duoqianAddress =
@@ -716,26 +762,12 @@ class DuoqianManageService {
     return result;
   }
 
-  Uint8List _u32ToLeBytes(int value) {
-    final bytes = Uint8List(4);
-    final bd = ByteData.sublistView(bytes);
-    bd.setUint32(0, value, Endian.little);
-    return bytes;
-  }
-
-  Uint8List _u128ToLeBytes(BigInt value) {
-    final bytes = Uint8List(16);
-    var v = value;
-    for (var i = 0; i < 16; i++) {
-      bytes[i] = (v & BigInt.from(0xFF)).toInt();
-      v >>= 8;
+  bool _startsWith(Uint8List data, List<int> prefix) {
+    if (data.length < prefix.length + 1) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (data[i] != prefix[i]) return false;
     }
-    return bytes;
-  }
-
-  int _decodeU32(Uint8List data, int offset) {
-    final bd = ByteData.sublistView(data);
-    return bd.getUint32(offset, Endian.little);
+    return true;
   }
 
   String _utf8Decode(Uint8List bytes) =>

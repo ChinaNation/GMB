@@ -247,12 +247,10 @@ pub type SignedPayload = generic::SignedPayload<RuntimeCall, TxExtension>;
 pub type Migrations = (
     // 中文注释:跑顺序很关键。先 sub-pallet move_prefix(把 InternalVote/JointVote 的
     // storage 从 VotingEngine 前缀搬走),再跑 votingengine v1(扫主 pallet 现存
-    // Proposals 给反向索引 backfill);最后 admins-change v1→v2 把 Institutions
-    // → Subjects 一起搬到位。三组 migration 互不依赖,但保持声明顺序便于追踪。
+    // Proposals 给反向索引 backfill)。三组 migration 互不依赖,但保持声明顺序便于追踪。
     internal_vote::migrations::v1::MigrateV0ToV1<Runtime>,
     joint_vote::migrations::v1::MigrateV0ToV1<Runtime>,
     votingengine::migrations::v1::MigrateToV1<Runtime>,
-    admins_change::migrations::v1::MigrateV1ToV2<Runtime>,
 );
 
 /// Executive: handles dispatch to the various modules.

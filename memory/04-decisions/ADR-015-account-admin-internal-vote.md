@@ -159,8 +159,8 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 ## 后续动作
 
 1. 第 1 步改造 `admins-change`:账户级主体、动态阈值、管理员集合变更提案。已于 2026-05-08 完成。
-2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。
-3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。
+2. 第 2 步改造 `internal-vote`:账户级快照、全员生命周期阈值、动态普通阈值。已于 2026-05-08 完成。
+3. 第 3 步改造 `personal-manage`:注册个人账户管理员上限 64,阈值链端派生。已于 2026-05-08 完成。
 4. 第 4 步改造 `organization-manage`:注册机构账户管理员上限 1989,每账户独立主体。
 5. 第 5 步改造 `duoqian-transfer`、`wuminapp`、`wumin`。
 
@@ -177,6 +177,48 @@ admin_count >= 3: threshold = ceil(admin_count / 2)
 - 提案数据从 `AdminReplacementAction` 改为 `AdminSetChangeAction<AdminsOf<T>>`。
 - `MODULE_TAG` 从 `b"adm-rep-v1"` 改为 `b"adm-set-v1"`。
 - `cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib`：24 passed。
-- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：34 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
 
 说明：`SfidInstitution = 0x02` 继续保留，用于机构归属和检索；后续第 4 步需要把 `organization-manage` 的新增机构账户管理员主体切到 `InstitutionAccount = 0x05`。
+
+## 第 2 步执行结果
+
+2026-05-08 已完成：
+
+- `votingengine::snapshot_institution_admins` 写入 `AdminSnapshot` 前拒绝空管理员列表和重复管理员。
+- `internal-vote` 新增 `InvalidThresholdSnapshot`，统一表达阈值与管理员快照人数不匹配。
+- Pending 注册创建提案强制全员阈值：`threshold == AdminSnapshot.len()`。
+- 显式阈值内部提案强制全员阈值，用于注册账户注销关闭等生命周期操作。
+- 普通内部提案和管理员集合变更提案仍使用普通动态阈值，但创建时必须满足 `0 < threshold <= AdminSnapshot.len()`。
+- `joint-vote` 单测构建残留已清理：test-only 发起人机构解析补入 `codec::Encode` 导入。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p votingengine --lib`：0 tests passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p joint-vote --lib`：5 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：19 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：24 passed。
+
+## 第 3 步执行结果
+
+2026-05-08 已完成：
+
+- `personal-manage::propose_create` 已删除 `admin_count / threshold` 入参，创建 call 编码改为 `account_name + duoqian_admins + amount`。
+- 个人账户管理员数量由 `duoqian_admins.len()` 派生，链端限制 `2..=64`。
+- 普通阈值统一调用 `admins-change::derived_threshold(PersonalDuoqian, ORG_REN, admin_count)` 派生。
+- 创建提案内部投票阈值为拟定管理员全员数量；关闭提案仍为当前管理员全员数量。
+- `PersonalManage::PersonalDuoqians` 不再镜像管理员列表、管理员数量和阈值，只保存生命周期状态。
+- `CreateDuoqianAction` 不再保存管理员数量和阈值。
+- 提案通过后，同一执行事务内完成入金、激活 `admins-change` 主体、激活个人账户。
+- `duoqian-transfer` 的个人多签管理员查询已从 `admins-change` 读取。
+- wuminapp 创建页、提案解码、账户查询和本地快照已切到新格式。
+- wumin 冷钱包 payload decoder 已按新格式展示派生日常阈值与创建全员阈值，并拒绝旧 `admin_count + threshold` 载荷。
+- 本步骤未修改 `spec_version`。
+
+回归结果：
+
+- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：19 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：39 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib`：86 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：20 passed。
+- `flutter test test/duoqian/duoqian_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart`：10 passed。
+- `flutter test test/signer/payload_decoder_test.dart`：30 passed。

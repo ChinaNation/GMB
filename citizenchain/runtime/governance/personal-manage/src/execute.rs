@@ -61,23 +61,26 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     )
     .map_err(|_| Error::<T>::TransferFailed)?;
 
+    let subject = subject_id_from_account(&action.duoqian_address);
+    Pallet::<T>::activate_admin_subject(proposal_id, subject)?;
     PersonalDuoqians::<T>::mutate(&action.duoqian_address, |maybe_account| {
         if let Some(account) = maybe_account {
             account.status = DuoqianStatus::Active;
         }
     });
-    Pallet::<T>::activate_admin_subject(
-        proposal_id,
-        subject_id_from_account(&action.duoqian_address),
-    )?;
+    let org = votingengine::types::ORG_REN;
+    let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject)
+        .ok_or(Error::<T>::DuoqianNotFound)?;
+    let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, subject)
+        .ok_or(Error::<T>::DuoqianNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
     Pallet::<T>::deposit_event(Event::<T>::DuoqianCreated {
         proposal_id,
         duoqian_address: action.duoqian_address.clone(),
         creator: action.proposer.clone(),
-        admin_count: action.admin_count,
-        threshold: action.threshold,
+        admin_count,
+        threshold,
         amount: action.amount,
         fee,
     });

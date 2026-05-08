@@ -212,14 +212,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
             ORG_REN => {
-                let Ok(account) = AccountId32::decode(&mut &institution[1..33]) else {
-                    return false;
-                };
-                if let Some(duoqian) = personal_manage::PersonalDuoqians::<Test>::get(&account) {
-                    duoqian.duoqian_admins.iter().any(|admin| admin == who)
-                } else {
-                    false
-                }
+                admins_change::Pallet::<Test>::is_active_subject_admin(org, institution, who)
             }
             _ => false,
         }
@@ -250,11 +243,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                         .map(AccountId32::new)
                         .collect()
                 }),
-            ORG_REN => {
-                let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-                let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
-                Some(duoqian.duoqian_admins.into_inner())
-            }
+            ORG_REN => admins_change::Pallet::<Test>::active_subject_admins(org, institution),
             _ => None,
         }
     }
@@ -272,11 +261,7 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
                 .iter()
                 .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
-            ORG_REN => {
-                let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-                let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
-                u32::try_from(duoqian.duoqian_admins.len()).ok()
-            }
+            ORG_REN => admins_change::Pallet::<Test>::active_subject_admin_count(org, institution),
             _ => None,
         }
     }
@@ -286,10 +271,7 @@ pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: SubjectId) -> bool {
         match org {
-            ORG_REN => AccountId32::decode(&mut &institution[1..33])
-                .ok()
-                .and_then(|account| personal_manage::PersonalDuoqians::<Test>::get(&account))
-                .is_some(),
+            ORG_REN => admins_change::Pallet::<Test>::active_subject_exists(org, institution),
             _ => false,
         }
     }
@@ -299,11 +281,7 @@ impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
             ORG_NRC | ORG_PRC | ORG_PRB => {
                 votingengine::types::fixed_governance_pass_threshold(org)
             }
-            ORG_REN => {
-                let account = AccountId32::decode(&mut &institution[1..33]).ok()?;
-                let duoqian = personal_manage::PersonalDuoqians::<Test>::get(&account)?;
-                Some(duoqian.threshold)
-            }
+            ORG_REN => admins_change::Pallet::<Test>::active_subject_threshold(org, institution),
             _ => None,
         }
     }
@@ -414,7 +392,6 @@ impl personal_manage::pallet::Config for Test {
     type ProtectedSourceChecker = TestProtectedSourceChecker;
     type InstitutionAsset = TestInstitutionAsset;
     type FeeRouter = ();
-    type MaxAdmins = ConstU32<10>;
     type MaxAccountNameLength = ConstU32<128>;
     type MinCreateAmount = ConstU128<111>;
     type MinCloseBalance = ConstU128<111>;
@@ -425,8 +402,8 @@ impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
-    // 中文注释:测试 mock 把所有"已注册"多签都灌进 personal-manage::PersonalDuoqians 表,
-    // 因此 PersonalQuery 走 personal_manage::Pallet<Test> 命中;
+    // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
+    // 管理员和阈值灌进 admins-change；PersonalQuery 负责合并读取;
     // InstitutionQuery 走单元桩 ()(测试 fixture 不构造 SFID 注册路径)。
     type PersonalQuery = personal_manage::Pallet<Test>;
     type InstitutionQuery = ();
@@ -624,9 +601,9 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(ORG_NRC, nrc, nrc_accts);
         set_extra_admins(ORG_PRC, prc, prc_accts);
         set_extra_admins(ORG_PRB, prb, prb_accts);
-        // ORG_REN 的 admin / threshold 直接从 personal_manage::PersonalDuoqians 读
-        // (B 阶段拆分后 mirror 表删除,改走 PersonalMultisigQuery trait)。
-        // 测试需要时显式写入 PersonalDuoqians(见 `registered_duoqian_admin` 路径)。
+        // ORG_REN 的 admin / threshold 直接从 admins-change 读；
+        // personal-manage 只保存个人账户生命周期状态。
+        // 测试需要时显式写入 PersonalDuoqians + admins-change Subjects。
         let _ = dq;
     });
     ext

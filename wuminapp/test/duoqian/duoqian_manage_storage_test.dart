@@ -64,19 +64,25 @@ void main() {
     ]);
   }
 
-  Uint8List personalAccountBytes({
+  Uint8List personalAccountBytes() {
+    return Uint8List.fromList([
+      ...List<int>.filled(32, 0xc2),
+      ...u32Le(100),
+      1,
+    ]);
+  }
+
+  Uint8List adminSubjectBytes({
     required List<int> admin1,
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
-      ...u32Le(2),
-      ...u32Le(2),
+      3,
+      DuoqianStorageCodec.subjectKindPersonalDuoqian,
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
-      ...List<int>.filled(32, 0xc2),
-      ...u32Le(100),
-      1,
+      ...u32Le(2),
     ]);
   }
 
@@ -131,7 +137,11 @@ void main() {
         '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
     final personalKey =
         '0x${hexOf(DuoqianStorageCodec.personalDuoqiansKey(address))}';
-    rpc.responses[personalKey] = personalAccountBytes(
+    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
+      DuoqianStorageCodec.subjectIdFromAccountHex(address),
+    ))}';
+    rpc.responses[personalKey] = personalAccountBytes();
+    rpc.responses[adminKey] = adminSubjectBytes(
       admin1: List<int>.filled(32, 0xcc),
       admin2: List<int>.filled(32, 0xdd),
     );
@@ -141,6 +151,6 @@ void main() {
     expect(info, isNotNull);
     expect(info!.adminPubkeys, ['cc' * 32, 'dd' * 32]);
     expect(info.status, DuoqianStatus.active);
-    expect(rpc.requestedKeys, [refKey, personalKey]);
+    expect(rpc.requestedKeys, [refKey, personalKey, adminKey]);
   });
 }

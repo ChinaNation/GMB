@@ -484,7 +484,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
     final createDetail = proposal.createDuoqianDetail;
     if (createDetail != null) {
-      return '${createDetail.adminCount} 管理员 · 阈值 ${createDetail.threshold} · $status';
+      return '创建个人多签账户 · $status';
     }
     if (proposal.closeDuoqianDetail != null) {
       return '关闭多签账户 · $status';

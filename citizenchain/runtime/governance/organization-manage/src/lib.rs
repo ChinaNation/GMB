@@ -730,7 +730,6 @@ pub mod pallet {
             institution_id: votingengine::SubjectId,
             kind: admins_change::AdminSubjectKind,
             admins: &DuoqianAdminsOf<T>,
-            threshold: u32,
             creator: &T::AccountId,
         ) -> DispatchResult {
             admins_change::Pallet::<T>::create_pending_subject_for_proposal(
@@ -740,7 +739,6 @@ pub mod pallet {
                 votingengine::types::ORG_REN,
                 kind,
                 admins.iter().cloned().collect(),
-                threshold,
                 creator.clone(),
             )
         }
