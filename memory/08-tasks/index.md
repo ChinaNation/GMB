@@ -4,6 +4,7 @@
 
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
+- `memory/08-tasks/open/20260508-clean-run-fresh-genesis.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
 
 ## done
@@ -231,6 +232,7 @@
 - `memory/08-tasks/done/20260507-194843-第3步破坏式改造-personal-manage-删除个人创建阈值入参与管理员镜像.md`
 - `memory/08-tasks/done/20260507-202521-第5步改造-duoqian-transfer-wuminapp-wumin-接入机构账户级主体.md`
 - `memory/08-tasks/done/20260507-203644-修复-gmb-仓库私有化后-公民链桌面节点-ui-的白皮书与公民宪法-tab-因依赖-github-pages-外链而显示-404-的问题.md`
+- `memory/08-tasks/done/20260507-205335-修复公民链桌面节点白皮书-tab-外层-html-已本地加载但内部仍-fetch-私有-gmb-raw-markdown-导致-http-404-的问题-改.md`
 - `memory/08-tasks/done/20260507-ai-required-reading.md`
 - `memory/08-tasks/done/20260507-ai-unified-naming.md`
 - `memory/08-tasks/done/20260507-ai-unified-protocols.md`
@@ -238,7 +240,6 @@
 - `memory/08-tasks/done/20260507-clean-old-path-text.md`
 - `memory/08-tasks/done/20260507-clear-open-task-cards.md`
 - `memory/08-tasks/done/20260507-h1-node-admin-subject-storage-key.md`
-- `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`
 - `memory/08-tasks/done/20260507-p0-2-propose-create-institution.md`
 - `memory/08-tasks/done/20260507-p0-3-duoqian-storage-truth.md`
 - `memory/08-tasks/done/20260507-p0-4-immortal-era.md`
@@ -257,3 +258,4 @@
 - `memory/08-tasks/done/20260507-sfid-format-d8-to-d4-and-1000-retry.md`
 - `memory/08-tasks/done/20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`
 - `memory/08-tasks/done/20260507-sfid-step2-regenerate-derived-addresses.md`
+- `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`
