@@ -5,9 +5,19 @@
 
 ## 1. 当前边界
 
-`organization-manage` 负责链上多签机构和个人多签的创建、激活、关闭提案，以及与内部投票引擎 `ORG_DUOQIAN` 的对接。
+`organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎 `ORG_DUOQIAN` 的对接。
 
-管理员、阈值和管理员人数的长期真源是 `admins-change::Subjects`；本模块只负责多签账户、机构账户、资金和生命周期。
+管理员、阈值和管理员人数的长期真源是 `admins-change::Subjects`；本模块只负责机构归属、机构账户、资金和生命周期。
+
+ADR-015 后，机构管理按账户级治理：
+
+- 机构只是账户归属分组，不是管理员集合真源。
+- 一个机构可以下挂多个账户，每个可操作账户独立持有管理员集合。
+- 主账户不管理其他账户，每个账户只由自己的管理员管理。
+- 省储行质押账户永远不可操作，不得进入本模块账户治理。
+- 注册机构账户管理员数量范围为 `2..=1989`。
+- 注册机构账户创建和关闭必须由该账户管理员全员投票通过。
+- 动态账户阈值不再由用户自由输入，链端按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
 
 ## 2. 目录结构
 
@@ -36,7 +46,7 @@
 
 核心 storage：
 
-- `Institutions<sfid_number, InstitutionInfo>`：机构级管理员、阈值、主账户、费用账户、机构状态。
+- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、机构状态。ADR-015 后不得作为机构级管理员和阈值真源。
 - `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
@@ -76,7 +86,7 @@ propose_create_institution(
 - `accounts` 必须包含 `"主账户"` 和 `"费用账户"`。
 - 每个账户初始余额都必须 `>= MinCreateAmount`，当前配置语义为最低 1.11 元。
 - 账户名不得重复。
-- 管理员数量必须 `>= 2`，阈值必须满足 `ceil(admin_count / 2) <= threshold <= admin_count` 且最小为 2。
+- 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；阈值由链端派生，不再由用户输入。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
 - `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。

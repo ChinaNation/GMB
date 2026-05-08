@@ -8,14 +8,19 @@
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后把执行结果以 `ProposalExecutionOutcome` 回传给投票引擎
 
 ### 0.2 内部投票功能需求
+- 2026-05-07 ADR-015 起，内部投票治理对象按“账户治理主体”理解。机构只是账户归属分组，业务提案必须绑定具体可操作账户。
+- 省储行质押账户永远不可操作，不能创建内部投票提案，不能作为资金源，不能注销，不能变更管理员。
 - 内部提案只能由业务治理模块通过 `InternalVoteEngine` trait 创建，不能直接通过外部 extrinsic 创建。
-- 仅允许合法机构管理员为本机构创建内部提案。
-- 仅允许同机构管理员参与内部投票，禁止跨机构投票。
+- 仅允许合法账户管理员为本账户创建内部提案。
+- 仅允许同账户管理员参与内部投票，禁止跨账户投票。
 - 普通内部提案只能读取 Active 管理员主体。
 - Pending 主体只能通过 `create_pending_subject_internal_proposal` 创建自身激活投票。
 - 管理员集合变更只能通过 `create_admin_set_mutation_internal_proposal` 创建，并与同一治理主体下的普通活跃提案互斥。
 - 创建提案时必须锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
-- 国储会、省储会、省储行使用永久固定治理阈值；注册个人多签/机构多签使用主体配置阈值，并在创建提案时写入快照。
+- 国储会、省储会、省储行使用永久固定治理阈值；注册个人账户和注册机构账户使用按管理员数量派生的动态阈值，并在创建提案时写入快照。
+- 注册个人账户管理员数量范围为 `2..=64`；注册机构账户管理员数量范围为 `2..=1989`。
+- 动态账户普通提案阈值规则：`admin_count == 2` 时阈值为 2，`admin_count >= 3` 时阈值为 `ceil(admin_count / 2)`。
+- 动态账户注册创建和注销关闭是生命周期操作，必须全员投票通过，即快照阈值为管理员数量。
 - 达阈值时立即通过；到期未达阈值时自动否决。
 
 ### 0.3 联合投票功能需求
@@ -58,7 +63,7 @@
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后回调目标治理模块，返回统一执行结果
 
 `InternalAdminProvider` 强一致规则：
-- `is_internal_admin(...) == true` 时，同一链上状态读取到的 `get_admin_list(...)` 必须包含该管理员。
+- `is_internal_admin(...) == true` 时，同一链上状态读取到的 `get_admin_list(...)` 必须包含该管理员。ADR-015 后这里的 subject 必须是账户治理主体。
 - Pending 主体的 `is_pending_internal_admin` 与 `get_pending_admin_list` 必须满足同样关系。
 - 投票引擎在创建内部/联合提案写入管理员快照后，会再次校验发起人属于对应快照；provider drift 时回滚创建。
 
@@ -106,7 +111,7 @@ any → unknown
 - `ProposalsByExpiry`：按阶段截止区块索引提案（用于自动超时结算）
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
-- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人多签/机构多签写入主体配置阈值。
+- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人账户/注册机构账户写入链端按管理员数量派生的阈值。注册创建和注销关闭写入全员阈值。
 - `JointVotesByAdmin` / `JointInstitutionTallies`
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesByBindingId` / `CitizenTallies`

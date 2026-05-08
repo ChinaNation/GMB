@@ -31,6 +31,7 @@ frame-system = { workspace = true }
 frame-try-runtime = { optional = true, workspace = true }
 
 # frame pallets
+pallet-assets = { workspace = true }
 pallet-balances = { workspace = true }
 pallet-grandpa = { workspace = true }
 pallet-timestamp = { workspace = true }
@@ -63,6 +64,7 @@ frame-system-benchmarking = { optional = true, workspace = true }
 shengbank-interest = { path = "issuance/shengbank-interest", default-features = false }
 fullnode-issuance = { path = "issuance/fullnode-issuance", default-features = false }
 citizen-issuance = { path = "issuance/citizen-issuance", default-features = false }
+onchain-issuance = { path = "issuance/onchain-issuance", default-features = false }
 sfid-system = { path = "otherpallet/sfid-system", default-features = false }
 pow-difficulty = { path = "otherpallet/pow-difficulty", default-features = false }
 onchain-transaction = { path = "transaction/onchain-transaction", default-features = false }
@@ -97,11 +99,13 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 	"frame-system/std",
 	"frame-try-runtime?/std",
+	"pallet-assets/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
 	"shengbank-interest/std",
 	"fullnode-issuance/std",
 	"citizen-issuance/std",
+	"onchain-issuance/std",
 	"sfid-system/std",
 	"pow-difficulty/std",
 	"onchain-transaction/std",
@@ -147,6 +151,7 @@ runtime-benchmarks = [
 	"frame-support/runtime-benchmarks",
 	"frame-system-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-assets/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
@@ -154,6 +159,7 @@ runtime-benchmarks = [
 	"shengbank-interest/runtime-benchmarks",
 	"fullnode-issuance/runtime-benchmarks",
 	"citizen-issuance/runtime-benchmarks",
+	"onchain-issuance/runtime-benchmarks",
 	"sfid-system/runtime-benchmarks",
 	"pow-difficulty/runtime-benchmarks",
 	"onchain-transaction/runtime-benchmarks",
@@ -179,6 +185,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
+	"pallet-assets/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",
 	"pallet-timestamp/try-runtime",
@@ -186,6 +193,7 @@ try-runtime = [
 	"shengbank-interest/try-runtime",
 	"fullnode-issuance/try-runtime",
 	"citizen-issuance/try-runtime",
+	"onchain-issuance/try-runtime",
 	"sfid-system/try-runtime",
 	"pow-difficulty/try-runtime",
 	"onchain-transaction/try-runtime",

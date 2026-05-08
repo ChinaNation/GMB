@@ -13,6 +13,15 @@
 
 与 `organization-manage`(机构多签)完全独立 — storage / event / error / extrinsic 命名空间完全隔离。
 
+ADR-015 后，个人多签按“注册个人账户”治理：
+
+- 个人多签只有一个账户，该账户独立持有管理员集合。
+- 管理员数量范围为 `2..=64`。
+- 创建和关闭必须全员投票通过。
+- 普通业务提案按动态阈值通过。
+- 管理员集合变更使用统一管理员集合变更提案，不拆分增加/删除/更换/改阈值。
+- 阈值不再由用户自由输入，而是由链端按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
+
 ## 协议参数
 
 | 项 | 值 |
@@ -36,7 +45,7 @@
 
 | call_index | 名 | 入参 | 业务 |
 |---|---|---|---|
-| 0 | `propose_create` | `account_name, admin_count, duoqian_admins, threshold, amount` | 发起创建提案,reserve 资金 |
+| 0 | `propose_create` | `account_name, admin_count, duoqian_admins, threshold, amount` | 当前实现态。ADR-015 后 `threshold` 应移除或忽略，创建阈值为全员 |
 | 1 | `propose_close` | `personal_address, beneficiary` | 发起关闭提案(仅个人地址) |
 | 2 | `cleanup_rejected_proposal` | `proposal_id` | 清理被否决/超时的 Pending 残留 |
 

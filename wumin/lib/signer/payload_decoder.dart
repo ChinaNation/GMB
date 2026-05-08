@@ -299,10 +299,102 @@ class PayloadDecoder {
         }
       }
 
+      // ── OnchainIssuance(25) · 链上发行代币(Plain FT, ADR-011 v3) ──
+      // 框架阶段:10 个 propose_X 解码暂用 _decodeOnchainAssetPlaceholder 兜底,
+      // 后续任务卡 D 实装具体 SCALE 解码(参考 _decodeProposeTransfer 等同款)。
+      if (palletIndex == PalletRegistry.onchainIssuancePallet) {
+        if (callIndex == PalletRegistry.proposeIssueCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_onchain_asset_issue',
+            summary: '发起 创建用户代币 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMintCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_onchain_asset_mint',
+            summary: '发起 增发用户代币 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeBurnCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_onchain_asset_burn',
+            summary: '发起 销毁用户代币 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeCloseAssetCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_onchain_asset_close',
+            summary: '发起 关闭用户代币 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeAssetTransferCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_onchain_asset_transfer',
+            summary: '发起 用户代币转账 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMonitorFreezeCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_monitor_freeze',
+            summary: '发起 NRC 监管 冻结持仓 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMonitorUnfreezeCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_monitor_unfreeze',
+            summary: '发起 NRC 监管 解冻持仓 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMonitorConfiscateCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_monitor_confiscate',
+            summary: '发起 NRC 监管 强制 burn 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMonitorForceTransferCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_monitor_force_transfer',
+            summary: '发起 NRC 监管 强制划转 提案(待解码业务字段)',
+          );
+        }
+        if (callIndex == PalletRegistry.proposeMonitorForceCloseCall) {
+          return _decodeOnchainAssetPlaceholder(
+            bytes,
+            action: 'propose_monitor_force_close',
+            summary: '发起 NRC 监管 整币封禁 提案(待解码业务字段)',
+          );
+        }
+      }
+
       return null;
     } catch (_) {
       return null;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // OnchainIssuance 框架阶段占位解码:仅返回 action / summary,业务字段待后续任务卡 D 落地
+  // (参考 _decodeProposeTransfer 等同款,把 SCALE 字段映射到 SignDisplayField list)
+  // ---------------------------------------------------------------------------
+  static DecodedPayload _decodeOnchainAssetPlaceholder(
+    Uint8List bytes, {
+    required String action,
+    required String summary,
+  }) {
+    return DecodedPayload(
+      action: action,
+      summary: summary,
+      fields: const <String, String>{},
+    );
   }
 
   // ---------------------------------------------------------------------------

@@ -1,0 +1,92 @@
+//! 业务路径执行入口(issue/mint/burn/close/transfer)— 框架占位。
+//!
+//! 与 ADR-011 v2 第 5.4 节(业务审批 — 多签内部执行)对齐:
+//! 本 pallet **不暴露 wrapper extrinsic**,业务由 VotingEngine InternalVote 通过后,
+//! 通过 callback 回调本模块入口函数,内部以 root 调用 `pallet_assets`。
+//!
+//! ADR-011 v2 修订要点:
+//! - propose origin 校验:proposer ∈ issuer admins(防 spam)
+//! - 创建费 1000 GMB 三态机制(reserve / release / refund)走 `fee.rs`
+//! - SubjectId 派生用 `subject_id_from_onchain_asset(asset_id)`(只接 asset_id)
+//! - OnchainAssetMeta 不再含 asset_id 字段(SubjectId byte[1..5] 即 asset_id)
+//! - OnchainAssetMeta 不再含 monitor_subject_id 字段(NRC 走全局 trait)
+//!
+//! 当前框架阶段只搭函数签名 + doc 占位,实装在后续任务卡 A 完成。
+
+use crate::pallet::{Config, OnchainAssetId};
+use crate::proposal::{
+    BurnProposal, CloseProposal, IssueProposal, MintProposal, TransferProposal,
+};
+use frame_support::pallet_prelude::*;
+
+use crate::pallet::BalanceOf;
+
+/// 创建用户代币(扣 1000 GMB 押金 + 写入 storage + 调 pallet_assets::create)。
+///
+/// 中文注释:框架阶段占位,业务实装时步骤(callback 通过分支):
+/// 1. `validation::ensure_issuer_allowed` / `ensure_decimals_in_range` / `ensure_class_supported`
+/// 2. 字段过黑名单(`validation::contains_blacklisted_word`)
+/// 3. `fee::release_creation_deposit_to_nrc(proposal_id)` 把 reserve 的押金 transfer 给 NRC fee_address
+/// 4. 分配 AssetId(NextAssetId),建 SubjectId(`subject_id_from_onchain_asset(asset_id)`)
+/// 5. 调 `T::Assets::create(asset_id, owner, ...)` + `mint_into` 注入 initial_supply
+/// 6. 写 Assets / AssetIdIndex storage,emit AssetIssued 事件
+///
+/// ADR-011 v2:propose 阶段已 reserve 押金,callback 通过则 release(本函数);否决则 refund(fee::refund_*)。
+pub fn execute_issue<T: Config>(_proposal: IssueProposal<BalanceOf<T>>) -> DispatchResult
+where
+    BalanceOf<T>: From<u128>,
+{
+    // TODO: implement business logic
+    Ok(())
+}
+
+/// 增发(调 pallet_assets::mint_into + emit Minted)。
+pub fn execute_mint<T: Config>(_proposal: MintProposal<T::AccountId, BalanceOf<T>>) -> DispatchResult {
+    // TODO: implement business logic
+    Ok(())
+}
+
+/// 销毁(调 pallet_assets::burn_from + emit Burned)。
+pub fn execute_burn<T: Config>(_proposal: BurnProposal<T::AccountId, BalanceOf<T>>) -> DispatchResult {
+    // TODO: implement business logic
+    Ok(())
+}
+
+/// 转账(调 pallet_assets::transfer + emit Transferred)。
+pub fn execute_transfer<T: Config>(
+    _proposal: TransferProposal<T::AccountId, BalanceOf<T>>,
+) -> DispatchResult {
+    // TODO: implement business logic
+    Ok(())
+}
+
+/// 关闭资产(调 pallet_assets::start_destroy + 销毁余额 + emit AssetClosed)。
+///
+/// 中文注释:不退还创建费 1000 GMB(押金已在 issue 通过时 transfer 给 NRC,不属发行方押金性质)。
+/// ADR-011 v2 8.1 节:必须 with_transaction 包裹,保证 OnchainIssuance::Assets.state 与
+/// pallet_assets::Asset.status 原子同步。
+pub fn execute_close<T: Config>(_proposal: CloseProposal) -> DispatchResult {
+    // TODO: implement business logic
+    Ok(())
+}
+
+/// 业务 callback 入口:VotingEngine InternalVote 通过后路由到对应 execute_*。
+///
+/// 中文注释:实装时按 proposal_data[0..7] = MODULE_TAG, [7..11] = ACTION 解码。
+/// propose origin 校验在 propose 阶段(`validate_proposer_origin`)已完成,callback 此处不再校验。
+pub fn dispatch_internal_callback<T: Config>(
+    _action: [u8; 4],
+    _proposal_data: &[u8],
+) -> DispatchResult {
+    // TODO: route by ACTION constant to execute_issue / execute_mint / ...
+    Ok(())
+}
+
+/// AssetId 自增辅助(NextAssetId 单调递增,从 1 开始)。
+pub fn allocate_asset_id<T: Config>() -> Result<OnchainAssetId, crate::pallet::Error<T>> {
+    let next = crate::pallet::NextAssetId::<T>::get();
+    let allocated = next;
+    let new_next = next.checked_add(1).ok_or(crate::pallet::Error::<T>::AssetIdOverflow)?;
+    crate::pallet::NextAssetId::<T>::put(new_next);
+    Ok(allocated)
+}
