@@ -1,4 +1,4 @@
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
+import 'package:wuminapp_mobile/personal-manage/personal_manage_models.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 
 /// 提案内存缓存。

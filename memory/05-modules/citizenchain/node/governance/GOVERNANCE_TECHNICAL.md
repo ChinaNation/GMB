@@ -6,6 +6,7 @@
 governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
 ├── admins_change/      # 管理员管理：激活、主体读取、管理员集合变更、签名提交
+├── organization-manage/# 机构多签管理：SFID 凭证、机构详情、创建机构多签签名请求
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
 ├── institution.rs      # 机构信息查询：管理员列表、机构名称
@@ -25,6 +26,7 @@ governance/
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
 - `node/frontend/governance/admins_change/`：管理员列表与管理员更换页面
+- `node/frontend/governance/organization-manage/`：机构多签管理页面、API 和 DTO
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 WUMIN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化

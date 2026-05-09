@@ -15,7 +15,8 @@
 - `lib/trade/pending_tx_reconciler.dart`：pending 交易共用对账
 - `lib/wallet/`：钱包档案、密钥读取、生物识别守卫
 - `lib/signer/` 与 `lib/qr/`：热钱包/冷钱包签名协议与扫码会话
-- `lib/duoqian/`：机构多签 / 个人多签
+- `lib/organization-manage/`：机构多签与多签聚合入口
+- `lib/personal-manage/`：个人多签
 - `lib/offchain/`：链下扫码支付与清算行能力
 
 ## 2. 当前文件结构

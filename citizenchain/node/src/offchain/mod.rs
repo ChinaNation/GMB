@@ -3,7 +3,8 @@
 //! 中文注释:
 //! - 本目录统一承载 node 层清算行功能,包括清算行管理命令、本地账本、
 //!   对 wuminapp 的 RPC、批次打包器、链上事件监听同步、主账对账。
-//! - `organization_manage`:清算行注册机构的多签创建、SFID 查询、链上机构详情。
+//! - 清算行注册机构的多签创建、SFID 查询、链上机构详情已经归位到
+//!   `governance/organization-manage`。
 //! - `offchain_transaction`:扫码支付收单、本地交易账本、清算行节点声明。
 //! - `settlement`:清算行批次打包、管理员解锁、签名、提交与链上监听。
 //! - `service::new_full` 检测到 `--clearing-bank` CLI flag 时,调
@@ -14,13 +15,11 @@
 //!   不加 `--clearing-bank` 的节点仅跑 PoW + GRANDPA,跳过本目录所有启动。
 //!
 //! 模块边界(对照上层 ADR-006/ADR-007):
-//! - `organization_manage`:只管清算行注册机构的多签管理。
 //! - `offchain_transaction`:只管扫码支付收单与清算行节点声明。
 //! - `settlement`:只管本清算行交易打包上链与结算 worker。
 
 pub mod common;
 pub mod offchain_transaction;
-pub mod organization_manage;
 pub mod settlement;
 
 use codec::{Decode, Encode};

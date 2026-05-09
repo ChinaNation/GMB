@@ -261,7 +261,8 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `wuminapp/lib/duoqian/` | 多签钱包 | duoqian | 机构和个人多签钱包业务 |
+| `wuminapp/lib/organization-manage/` | 机构多签管理 | organization-manage | wuminapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
+| `wuminapp/lib/personal-manage/` | 个人多签管理 | personal-manage | wuminapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
 | `wuminapp/lib/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
 | `wuminapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
 | `wuminapp/lib/institution/` | 机构 | institution | 机构相关移动端业务 |
@@ -280,6 +281,13 @@
 | `wuminapp/lib/util/` | 工具 | util | 通用工具函数 |
 | `wuminapp/lib/vote/` | 投票 | vote | 投票业务 |
 | `wuminapp/lib/wallet/` | 钱包 | wallet | 钱包账户和资产 |
+
+## 12b. citizenchain node 治理功能目录命名登记
+
+| 路径 | 中文名称 | English name | 简介 |
+|---|---|---|---|
+| `citizenchain/node/src/governance/organization-manage/` | 机构多签管理后端 | organization-manage | node Tauri 后端机构多签管理命令、SFID 凭证、链上机构详情与创建签名请求 |
+| `citizenchain/node/frontend/governance/organization-manage/` | 机构多签管理前端 | organization-manage | node 前端机构多签管理页面、Tauri API 和 DTO |
 
 ## 13. citizenchain runtime 目录命名登记
 

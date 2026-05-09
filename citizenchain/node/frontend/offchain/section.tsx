@@ -24,19 +24,20 @@ import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { AdminSetChangePage } from '../governance/admins_change';
 import { adminsChangeApi } from '../governance/admins_change/api';
-import { hexToSs58 } from '../shared/ss58';
-import { offchainApi } from './api';
+import { organizationManageApi } from '../governance/organization-manage/api';
+import { ClearingBankAddPage } from '../governance/organization-manage/add-candidate';
+import { ClearingBankInstitutionDetailPage } from '../governance/organization-manage/institution-detail';
+import { CreateMultisigInstitutionPage } from '../governance/organization-manage/create-multisig';
+import { OtherAccountsListPage } from '../governance/organization-manage/other-accounts';
 import type {
   AccountWithBalance,
-  ClearingBankView,
   EligibleClearingBankCandidate,
   InstitutionDetail,
-} from './types';
-import { ClearingBankAddPage } from './organization-manage/add-candidate';
+} from '../governance/organization-manage/types';
+import { hexToSs58 } from '../shared/ss58';
+import { offchainApi } from './api';
+import type { ClearingBankView } from './types';
 import { ClearingBankDeclareNodePage } from './offchain-transaction/node-register';
-import { ClearingBankInstitutionDetailPage } from './organization-manage/institution-detail';
-import { CreateMultisigInstitutionPage } from './organization-manage/create-multisig';
-import { OtherAccountsListPage } from './organization-manage/other-accounts';
 import { ClearingBankAdminListPage } from './settlement/admin-unlock';
 import './styles.css';
 
@@ -261,7 +262,7 @@ function EmptyView({
       const next: KnownSfidEntry[] = [];
       for (const entry of initialKnown) {
         try {
-          const detail = await offchainApi.fetchInstitutionDetail(entry.sfidNumber);
+          const detail = await organizationManageApi.fetchInstitutionDetail(entry.sfidNumber);
           if (detail !== null) {
             next.push(entry); // 链上有(Pending / Active 都保留)
           } else {
@@ -330,7 +331,7 @@ function CheckMultisigView({
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    offchainApi
+    organizationManageApi
       .fetchInstitutionDetail(sfidNumber)
       .then((detail) => {
         if (cancelled) return;
@@ -376,7 +377,7 @@ function WaitVoteView({
     const id = setInterval(async () => {
       if (cancelled) return;
       try {
-        const detail = await offchainApi.fetchInstitutionDetail(sfidNumber);
+        const detail = await organizationManageApi.fetchInstitutionDetail(sfidNumber);
         if (detail && detail.status === 'Active') {
           onActivated();
         }

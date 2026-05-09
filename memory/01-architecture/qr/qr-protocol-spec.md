@@ -198,7 +198,7 @@
 
 相关代码下线清单:
 - `lib/qr/bodies/user_duoqian_body.dart` — 删除整文件
-- `lib/duoqian/shared/duoqian_qr_sheet.dart` — 删除整文件
+- 旧多签二维码弹窗文件 — 删除整文件
 - `lib/qr/qr_protocols.dart::QrKind.userDuoqian` — 枚举值删除
 - `lib/qr/envelope.dart::QrKind.userDuoqian` 解析分支 — 删除
 - `lib/qr/qr_router.dart::QrRouteType.userDuoqian` — 枚举值删除

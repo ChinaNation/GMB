@@ -7,7 +7,7 @@ import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.
 import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/proposal/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';

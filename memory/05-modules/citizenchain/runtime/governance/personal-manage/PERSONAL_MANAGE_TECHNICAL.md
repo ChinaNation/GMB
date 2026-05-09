@@ -119,8 +119,8 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 
 ## 客户端协议
 
-- wuminapp `lib/duoqian/personal/*` 直接调 pallet=7 的 propose_create/propose_close。
-- wuminapp `DuoqianManageService.submitProposeCreatePersonal` 编码：
+- wuminapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
+- wuminapp `PersonalManageService.submitProposeCreatePersonal` 编码：
   `0x07 0x00 + account_name + duoqian_admins + amount`。
 - wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
   `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员和阈值读 `AdminsChange::Subjects`。
@@ -146,7 +146,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib
 cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib
-flutter test test/duoqian/duoqian_manage_service_test.dart test/duoqian/duoqian_storage_codec_test.dart test/duoqian/duoqian_manage_storage_test.dart
+flutter test test/organization-manage/duoqian_manage_service_test.dart test/organization-manage/duoqian_storage_codec_test.dart test/organization-manage/duoqian_manage_storage_test.dart
 flutter test test/signer/payload_decoder_test.dart
 ```
 

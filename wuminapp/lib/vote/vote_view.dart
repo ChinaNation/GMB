@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/proposal/shared/duoqian_manage_detail_page.dart';
 
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';
