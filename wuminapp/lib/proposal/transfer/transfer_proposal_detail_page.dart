@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
-import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';

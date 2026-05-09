@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { formatBalance } from '../shared/format';
 import { hexToSs58 } from '../shared/ss58';
+import { adminsChangeApi } from './admins_change/api';
 import { governanceApi as api } from './api';
 import type {
   ActivatedAdmin,
@@ -22,11 +23,12 @@ type Props = {
   onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSweep?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateAdminSetChange?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, hideBackButton }: Props) {
+export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -52,7 +54,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
     // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
     Promise.all([
       api.getInstitutionDetail(sfidNumber),
-      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
+      adminsChangeApi.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
     ])
       .then(async ([d, aa]) => {
         setDetail(d);
@@ -261,7 +263,11 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
               sfidNumber, detail.orgType, detail.name, detail.mainAddress, adminWallets
             )}
           >转账</button>
-          <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
+          <button
+            className="proposal-type-button"
+            disabled={!isAdmin}
+            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(sfidNumber, detail.name, adminWallets)}
+          >换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (
             <button

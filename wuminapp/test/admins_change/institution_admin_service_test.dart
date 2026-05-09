@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_storage_codec.dart';
-import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/admins_change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
@@ -22,16 +21,22 @@ void main() {
   String hexOf(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-  List<int> compactVec(String text) {
-    final bytes = utf8.encode(text);
-    return [(bytes.length << 2) & 0xff, ...bytes];
-  }
-
   List<int> u32Le(int value) => [
         value & 0xff,
         (value >> 8) & 0xff,
         (value >> 16) & 0xff,
         (value >> 24) & 0xff,
+      ];
+
+  List<int> u64Le(int value) => [
+        value & 0xff,
+        (value >> 8) & 0xff,
+        (value >> 16) & 0xff,
+        (value >> 24) & 0xff,
+        (value >> 32) & 0xff,
+        (value >> 40) & 0xff,
+        (value >> 48) & 0xff,
+        (value >> 56) & 0xff,
       ];
 
   Uint8List adminSubjectBytes({
@@ -44,24 +49,24 @@ void main() {
       (1 << 2) & 0xff,
       ...admin,
       ...u32Le(threshold),
+      ...List<int>.filled(32, 0xcc),
+      ...u64Le(1),
+      ...u64Le(2),
+      1,
     ]);
   }
 
-  test(
-      'registered institution routes through AddressRegisteredSfid then subject',
+  test('registered institution account routes to institution-account subject',
       () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '11' * 32;
-    final refKey =
-        '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
-    final subjectKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
-      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
+    final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
+      AdminSubjectIdCodec.fromAccountHex(
+        AdminSubjectIdCodec.institutionAccount,
+        address,
+      ),
     ))}';
-    rpc.responses[refKey] = Uint8List.fromList([
-      ...compactVec('SFR-AH001-20260507'),
-      ...compactVec('主账户'),
-    ]);
     rpc.responses[subjectKey] = adminSubjectBytes(
       threshold: 1,
       admin: List<int>.filled(32, 0xaa),
@@ -74,15 +79,18 @@ void main() {
 
     expect(admins, ['aa' * 32]);
     expect(threshold, 1);
-    expect(rpc.requestedKeys, [refKey, subjectKey]);
+    expect(rpc.requestedKeys, [subjectKey]);
   });
 
   test('personal institution routes directly to personal subject', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '22' * 32;
-    final subjectKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
-      DuoqianStorageCodec.subjectIdFromAccountHex(address),
+    final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
+      AdminSubjectIdCodec.fromAccountHex(
+        AdminSubjectIdCodec.personalDuoqian,
+        address,
+      ),
     ))}';
     rpc.responses[subjectKey] = adminSubjectBytes(
       threshold: 1,

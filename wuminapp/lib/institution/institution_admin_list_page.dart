@@ -3,12 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 
+import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.dart';
+import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/institution/institution_activation_service.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
 
 /// 管理员列表页面。
 ///

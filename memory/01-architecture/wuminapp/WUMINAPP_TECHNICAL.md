@@ -34,6 +34,7 @@ wuminapp/
 │   ├── trade/              ← 本地交易记录与 pending 对账共用能力（非功能入口）
 │   ├── offchain/           ← 扫码支付 / 清算行能力
 │   ├── duoqian/            ← 机构多签 / 个人多签能力
+│   ├── admins_change/      ← 管理员更换一级业务模块
 │   ├── citizen/            ← 公民 Tab：投票 / 治理 / 机构 / 提案
 │   ├── qr/                 ← 二维码统一模块（登录/收款/用户码）
 │   ├── signer/
@@ -77,13 +78,12 @@ proposal/
   shared/           ← 多种提案共用模型、内部投票、待确认投票、投票组件
   transfer/         ← 转账 / 安全基金转账 / 手续费划转提案
   runtime_upgrade/  ← Runtime 升级提案
-  admin_change/
   resolution_issuance/
   resolution_destroy/
   grandpakey_change/
 ```
 
-多钱账户注册/关闭与多钱管理提案详情归属 `lib/duoqian/`，不在公民提案三级目录下预留。
+管理员更换和管理员激活归属 `lib/admins_change/`，不放在 `lib/proposal/` 或 `lib/institution/` 下；`proposal` 与机构页只保留入口跳转或调用。多钱账户注册/关闭与多钱管理提案详情归属 `lib/duoqian/`，不在公民提案三级目录下预留。
 
 ### 4.2.1 机构页
 

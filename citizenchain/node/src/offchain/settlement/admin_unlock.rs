@@ -1,6 +1,6 @@
 // 清算行管理员密钥解密(unlock)流程。
 //
-// 与 governance/activation.rs 中的"激活"语义一致——wumin 冷钱包扫码签 challenge,
+// 与 governance/admins_change/activation.rs 中的"激活"语义一致——wumin 冷钱包扫码签 challenge,
 // 节点本地验签——但本流程**仅在清算行 tab 用**,术语为"解密"以区别于 NRC/PRC/PRB
 // 的"激活"。区别:
 // - 激活(activation):写入 activated-admins.json 长期持久化

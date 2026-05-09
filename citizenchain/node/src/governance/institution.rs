@@ -4,7 +4,7 @@ use crate::shared::rpc;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::storage_keys;
+use super::{admins_change, storage_keys};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 use crate::shared::constants::RPC_RESPONSE_LIMIT_SMALL;
@@ -21,20 +21,7 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
 /// 查询指定机构的管理员公钥列表。
 /// 返回不含 0x 前缀的小写 hex 公钥列表。
 pub fn fetch_admins(sfid_number: &str) -> Result<Vec<String>, String> {
-    let storage_key = storage_keys::admin_subjects_key(sfid_number);
-    let result = rpc_post(
-        "state_getStorage",
-        Value::Array(vec![Value::String(storage_key)]),
-    )?;
-
-    match result {
-        Value::Null => Ok(Vec::new()),
-        Value::String(hex_data) => {
-            let data = decode_hex_storage(&hex_data)?;
-            decode_admin_institution_admins(&data)
-        }
-        _ => Err("state_getStorage 返回格式无效".to_string()),
-    }
+    admins_change::storage::fetch_admins_by_sfid_number(sfid_number)
 }
 
 /// 查询账户余额（返回 free 余额，单位为最小精度）。
@@ -79,26 +66,6 @@ fn decode_hex_storage(hex_str: &str) -> Result<Vec<u8>, String> {
     hex::decode(clean).map_err(|e| format!("hex 解码失败: {e}"))
 }
 
-/// 解码 `AdminsChange::Subjects` 中的管理员列表(C 阶段命名修正,2026-05-06)。
-///
-/// `AdminSubject` 布局前缀为 org:u8 + kind:enum(u8) + admins:BoundedVec<AccountId32>。
-fn decode_admin_institution_admins(data: &[u8]) -> Result<Vec<String>, String> {
-    if data.len() < 2 {
-        return Ok(Vec::new());
-    }
-    let (count, bytes_read) = read_compact_u32(data, 2)?;
-    let mut offset = 2 + bytes_read;
-    let mut admins = Vec::with_capacity(count as usize);
-    for _ in 0..count {
-        if offset + 32 > data.len() {
-            break;
-        }
-        admins.push(hex::encode(&data[offset..offset + 32]));
-        offset += 32;
-    }
-    Ok(admins)
-}
-
 /// 解码 AccountInfo 中的 free 余额。
 /// AccountInfo 布局（SCALE）：
 ///   nonce: u32 (4 bytes)
@@ -119,54 +86,9 @@ fn decode_account_balance(data: &[u8]) -> Result<Option<u128>, String> {
     Ok(Some(u128::from_le_bytes(buf)))
 }
 
-/// 读取 SCALE Compact<u32>，返回 (值, 消耗字节数)。
-fn read_compact_u32(data: &[u8], offset: usize) -> Result<(u32, usize), String> {
-    if offset >= data.len() {
-        return Err("Compact<u32> 数据不足".to_string());
-    }
-    let first = data[offset];
-    let mode = first & 0x03;
-    match mode {
-        0 => Ok(((first >> 2) as u32, 1)),
-        1 => {
-            if offset + 2 > data.len() {
-                return Err("Compact<u32> two-byte 数据不足".to_string());
-            }
-            let value = (((data[offset + 1] as u32) << 8) | first as u32) >> 2;
-            Ok((value, 2))
-        }
-        2 => {
-            if offset + 4 > data.len() {
-                return Err("Compact<u32> four-byte 数据不足".to_string());
-            }
-            let value = ((data[offset + 3] as u32) << 24)
-                | ((data[offset + 2] as u32) << 16)
-                | ((data[offset + 1] as u32) << 8)
-                | (data[offset] as u32);
-            Ok((value >> 2, 4))
-        }
-        _ => Err("Compact<u32> big-integer 模式暂不支持".to_string()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn decode_admin_institution_admins_empty() {
-        assert!(decode_admin_institution_admins(&[]).unwrap().is_empty());
-    }
-
-    #[test]
-    fn decode_admin_institution_admins_single() {
-        // org=0, kind=0, Compact<u32> 1 = 0x04, 后跟 32 字节管理员公钥。
-        let mut data = vec![0x00, 0x00, 0x04];
-        data.extend_from_slice(&[0xAA; 32]);
-        let admins = decode_admin_institution_admins(&data).unwrap();
-        assert_eq!(admins.len(), 1);
-        assert_eq!(admins[0], "aa".repeat(32));
-    }
 
     #[test]
     fn decode_account_balance_basic() {
@@ -177,14 +99,5 @@ mod tests {
         data.extend_from_slice(&[0u8; 32]); // reserved + frozen
         let result = decode_account_balance(&data).unwrap();
         assert_eq!(result, Some(1_000_000));
-    }
-
-    #[test]
-    fn read_compact_u32_single_byte() {
-        // 值 13: (13 << 2) | 0 = 52 = 0x34
-        let data = [0x34];
-        let (val, len) = read_compact_u32(&data, 0).unwrap();
-        assert_eq!(val, 13);
-        assert_eq!(len, 1);
     }
 }

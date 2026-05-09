@@ -1,0 +1,41 @@
+.admin-set-change-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.admin-set-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-set-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-set-row,
+.admin-set-add-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-set-row code,
+.admin-set-diff code {
+  overflow-wrap: anywhere;
+}
+
+.admin-set-diff {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.admin-set-diff > div {
+  display: grid;
+  gap: 6px;
+}
+

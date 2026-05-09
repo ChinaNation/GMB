@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
+import { adminsChangeApi } from '../../governance/admins_change/api';
 import { governanceApi as api } from '../../governance/api';
 import { hexToSs58 } from '../../shared/ss58';
 import { QrScanner } from '../../shared/qr/QrScanner';
@@ -53,7 +54,9 @@ export function DeveloperUpgradePage() {
         ];
         const adminGroups = await Promise.all(
           institutions.map(async (institution) => {
-            const list = await api.getActivatedAdmins(institution.sfidNumber).catch(() => [] as ActivatedAdmin[]);
+            const list = await adminsChangeApi
+              .getActivatedAdmins(institution.sfidNumber)
+              .catch(() => [] as ActivatedAdmin[]);
             return list.map((admin) => ({
               ...admin,
               institutionName: institution.name,

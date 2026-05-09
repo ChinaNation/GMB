@@ -5,7 +5,7 @@
 ```
 governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
-├── activation.rs       # 管理员激活：生成激活签名请求、验证签名、本地加密存储
+├── admins_change/      # 管理员管理：激活、主体读取、管理员集合变更、签名提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
 ├── institution.rs      # 机构信息查询：管理员列表、机构名称
@@ -24,11 +24,12 @@ governance/
 
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
+- `node/frontend/governance/admins_change/`：管理员列表与管理员更换页面
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 WUMIN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
 - `node/frontend/shared/ss58.ts` / `node/frontend/shared/format.ts`：SS58 地址展示与金额格式化
 
-## activation.rs — 管理员激活
+## admins_change/activation.rs — 管理员激活
 
 ### 设计原则
 
@@ -123,7 +124,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 ## institution.rs — 机构查询
 
-- 读取 `AdminsChange::Subjects` 存储
+- 管理员列表读取委托到 `admins_change/storage.rs`
 - 内置机构管理员 subject_id 使用 `0x01` Builtin kind tag，与 `primitives::derive::subject_id_from_sfid_number` 字节级一致
 - 解码管理员 AccountId 列表
 - 提供机构名称查询（从 CHINA_CB / CHINA_CH 常量表）
@@ -134,7 +135,8 @@ GMB_ACTIVATE (12 字节 ASCII)
 - `blake2b_128`：Blake2_128Concat hasher
 - `subject_id_from_sfid_number`：内置机构 SubjectId 编码（与 runtime primitives 一致）
 - `map_key` / `double_map_key`：完整存储 key 拼接
-- `admin_subjects_key`：固定读取 `AdminsChange::Subjects`，不得回退旧 `Institutions` 路径
+
+`AdminsChange::Subjects` 专用 storage key 已收口到 `governance/admins_change/storage.rs`，不得再在通用 `storage_keys.rs` 中新增管理员更换专用读取函数。
 
 ## 依赖关系
 

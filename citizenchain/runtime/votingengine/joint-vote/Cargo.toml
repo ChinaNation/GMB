@@ -1,5 +1,5 @@
 [package]
-name = "joint-vote"  # 联合投票 pallet(管理员多签 + 全民兜底)
+name = "joint-vote"  # 联合投票 pallet(内部投票阶段 + 全民公投阶段)
 edition.workspace = true
 version.workspace = true
 authors.workspace = true

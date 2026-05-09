@@ -265,3 +265,4 @@
 - `memory/08-tasks/done/20260508-175514-只读排查-wuminapp-交易-多签交易中创建个人多签提案时-发起人可投票并出块-但其他管理员投票后前端显示.md`
 - `memory/08-tasks/done/20260508-181814-修复-wuminapp-个人多签投票确认状态和进度条阈值.md`
 - `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`
+- `memory/08-tasks/done/20260509-093707-检查一遍-admins-change-管理员更换模块的完成度-输出完成度-缺口-风险和建议修复顺序-本轮先不修改业务代.md`

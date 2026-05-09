@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
-import { governanceApi as api } from '../../governance/api';
+import { adminsChangeApi } from '../../governance/admins_change/api';
 import { hexToSs58 } from '../../shared/ss58';
 import { QrScanner } from '../../shared/qr/QrScanner';
 import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';
@@ -55,7 +55,7 @@ export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBac
     let cancelled = false;
     Promise.all([
       offchainApi.queryLocalPeerId().catch(() => ''),
-      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
+      adminsChangeApi.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
     ]).then(([pid, aa]) => {
       if (cancelled) return;
       setPeerId(pid);

@@ -2,11 +2,11 @@
 // 从机构详情页点击"管理员列表"入口卡片进入。
 import { useEffect, useState, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { sanitizeError } from '../core/tauri';
-import { formatBalance } from '../shared/format';
-import { hexToSs58 } from '../shared/ss58';
-import { QrScanner } from '../shared/qr/QrScanner';
-import { governanceApi as api } from './api';
+import { sanitizeError } from '../../core/tauri';
+import { formatBalance } from '../../shared/format';
+import { hexToSs58 } from '../../shared/ss58';
+import { QrScanner } from '../../shared/qr/QrScanner';
+import { adminsChangeApi as api } from './api';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,

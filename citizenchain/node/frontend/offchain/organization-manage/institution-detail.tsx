@@ -22,6 +22,7 @@ type Props = {
   onOpenOtherAccounts: (detail: InstitutionDetail) => void;
   onOpenAdminList: (detail: InstitutionDetail) => void;
   onDeclareNode: (sfidNumber: string, institutionName: string) => void;
+  onCreateAdminSetChange: (detail: InstitutionDetail) => void;
 };
 
 const PROPOSAL_PAGE_SIZE = 10;
@@ -32,6 +33,7 @@ export function ClearingBankInstitutionDetailPage({
   onOpenOtherAccounts,
   onOpenAdminList,
   onDeclareNode,
+  onCreateAdminSetChange,
 }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [nodeInfo, setNodeInfo] = useState<ClearingBankNodeOnChainInfo | null>(null);
@@ -202,16 +204,23 @@ export function ClearingBankInstitutionDetailPage({
         </div>
       </div>
 
-      {/* 发起提案按钮组(占位:organization-manage 各类提案 follow-up) */}
+      {/* 发起提案按钮组：管理员更换转入 admins_change，其它提案仍按后续模块接入。 */}
       <div className="institution-info-section">
         <h3>发起提案</h3>
         <div className="proposal-type-grid">
           <button className="proposal-type-button" disabled title="即将上线">转账</button>
-          <button className="proposal-type-button" disabled title="即将上线">换管理员</button>
+          <button
+            className="proposal-type-button"
+            disabled={detail.status !== 'Active'}
+            title={detail.status === 'Active' ? '进入管理员更换' : '机构生效后可更换管理员'}
+            onClick={() => onCreateAdminSetChange(detail)}
+          >
+            换管理员
+          </button>
           <button className="proposal-type-button" disabled title="即将上线">关闭多签</button>
           <button className="proposal-type-button" disabled title="即将上线">手续费划转</button>
         </div>
-        <p className="no-data">机构内提案类型即将上线(本任务先做创建机构主流程)</p>
+        <p className="no-data">转账、关闭多签、手续费划转后续接入。</p>
       </div>
 
       {/* 提案列表(分页占位,full scan 留 follow-up) */}

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { formatBalance } from '../shared/format';
 import { hexToSs58 } from '../shared/ss58';
+import { adminsChangeApi } from './admins_change/api';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
 import { VoteSigningFlow } from './VoteSigningFlow';
@@ -105,7 +106,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
       let wallets = externalAdminWallets;
       if (externalAdminWallets.length === 0 && sid) {
         try {
-          const activated = await api.getActivatedAdmins(sid);
+          const activated = await adminsChangeApi.getActivatedAdmins(sid);
           wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
           setDetectedAdminWallets(wallets);
         } catch (_) {}

@@ -543,7 +543,7 @@ message = blake2_256(SCALE.encode(payload))
 | `lib/citizen/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
 | `lib/citizen/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
 | `lib/citizen/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
-| `lib/citizen/institution/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
+| `lib/admins_change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminSubjectService` 读取 `AdminsChange::Subjects`） |
 | `lib/citizen/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
 | `lib/citizen/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
 | `lib/citizen/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
@@ -616,7 +616,7 @@ message = blake2_256(SCALE.encode(payload))
   - 个人多签：`0x03 + duoqian_address(32) + 15 字节 0`
   - 注册机构账户：`0x05 + duoqian_address(32) + 15 字节 0`
 - `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `InstitutionAdminService` 对注册机构账户读取 `AddressRegisteredSfid` 确认归属，再读取 `AdminsChange::Subjects[0x05 InstitutionAccount]`；个人多签直接读取 `0x03 PersonalDuoqian`；内置治理机构读取 `0x01 BuiltinInstitution`。
+- `InstitutionAdminService` 对注册机构账户按 `registeredDuoqianIdentity` 内的账户地址读取 `AdminsChange::Subjects[0x05 InstitutionAccount]`；个人多签直接读取 `0x03 PersonalDuoqian`；内置治理机构读取 `0x01 BuiltinInstitution`。
 - 冷钱包 `propose_transfer` 展示字段为 `institution / beneficiary / amount_yuan / remark`，其中 `institution` 从 SubjectId 解码为内置机构名、`个人多签 <short>` 或 `机构账户 <short>`；`org` 仅用于链端路由，不进入展示字段。
 
 ### 8.8 手机端入口分流
@@ -666,7 +666,7 @@ message = blake2_256(SCALE.encode(payload))
 ## 9. 源码对齐基线
 
 - `lib/citizen/institution/institution_data.dart`
-- `lib/citizen/institution/institution_admin_service.dart`
+- `lib/admins_change/services/institution_admin_service.dart`
 - `lib/citizen/institution/institution_detail_page.dart`
 - `lib/citizen/proposal/proposal_types_page.dart`
 - `lib/citizen/institution/admin_list_page.dart`
