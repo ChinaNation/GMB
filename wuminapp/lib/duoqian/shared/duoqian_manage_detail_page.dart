@@ -15,6 +15,7 @@ import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
+import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
@@ -66,6 +67,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   // 投票计数
   int _yesCount = 0;
   int _noCount = 0;
+  int _threshold = 0;
 
   // 管理员列表与投票记录
   List<String> _admins = const [];
@@ -74,6 +76,9 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   List<WalletProfile> _votableWallets = const [];
   WalletProfile? _selectedVoteWallet;
   Set<String> _pendingPubkeys = const {};
+  String? _voteNotice;
+  bool _voteNoticeIsError = false;
+  Timer? _pendingPollTimer;
 
   @override
   void initState() {
@@ -81,29 +86,52 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _pendingPollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool showSpinner = true}) async {
     debugPrint('[VoteDetail._load] 开始 proposalId=${widget.proposalId}');
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (mounted) {
+      setState(() => _error = null);
+    }
 
     try {
       final rpc = ChainRpc();
 
-      // step1:并行加载管理员列表、提案状态、投票计数
-      debugPrint('[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally...');
+      // step1:并行加载管理员快照、提案状态、投票计数、阈值快照。
+      debugPrint(
+          '[VoteDetail._load] step1: 并行 fetchAdmins/Status/Tally/Threshold...');
+      final thresholdFuture = _proposalService
+          .fetchInternalThresholdSnapshot(widget.proposalId)
+          .catchError((_) => null);
+      final adminSnapshotFuture = _proposalService
+          .fetchAdminSnapshot(widget.proposalId, widget.institution.sfidNumber)
+          .catchError((_) => const <String>[]);
       final results = await Future.wait([
         _adminService.fetchAdmins(widget.institution.sfidNumber),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
+        thresholdFuture,
+        adminSnapshotFuture,
       ]);
 
-      final admins = results[0] as List<String>;
+      final activeAdmins = results[0] as List<String>;
       final status = results[1] as int?;
       final tally = results[2] as ({int yes, int no});
+      final thresholdSnapshot = results[3] as int?;
+      final snapshotAdmins = results[4] as List<String>;
+      final admins = snapshotAdmins.isNotEmpty ? snapshotAdmins : activeAdmins;
+      final threshold = _resolveVoteThreshold(thresholdSnapshot, admins.length);
       debugPrint(
-          '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no}');
+          '[VoteDetail._load] step1 完成 admins.len=${admins.length} status=$status yes=${tally.yes} no=${tally.no} threshold=$threshold');
 
       // step2:加载提案业务数据（从 ProposalData 解码）
       debugPrint('[VoteDetail._load] step2: fetchProposalData');
@@ -122,8 +150,25 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         }
       }
 
-      // step3:逐个查询每位管理员的投票记录
-      debugPrint('[VoteDetail._load] step3: 逐 admin 查投票 (${admins.length} 个)');
+      // step3:检查待确认投票，已丢失的记录需要清掉并重置本地 nonce。
+      debugPrint(
+          '[VoteDetail._load] step3: PendingVoteStore.confirmAllDetailed');
+      final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
+        'duoqian_manage',
+        widget.proposalId,
+        OnchainRpc(),
+      );
+      for (final lost in pendingSummary.lost) {
+        _resetNonceForPubkey(lost.walletPubkey);
+      }
+      final pendingPks =
+          pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
+      final pendingNotice = _pendingSummaryNotice(pendingSummary);
+      debugPrint(
+          '[VoteDetail._load] step3 完成 stillPending.len=${pendingSummary.stillPending.length}');
+
+      // step4:逐个查询每位管理员的投票记录
+      debugPrint('[VoteDetail._load] step4: 逐 admin 查投票 (${admins.length} 个)');
       final votes = <String, bool?>{};
       final voteFutures = admins.map((pubkey) async {
         final vote =
@@ -134,18 +179,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       for (final entry in voteResults) {
         votes[entry.key] = entry.value;
       }
-      debugPrint('[VoteDetail._load] step3 完成');
-
-      // step4:检查待确认投票
-      debugPrint('[VoteDetail._load] step4: PendingVoteStore.confirmAll');
-      final pendingRecords = await PendingVoteStore.instance.confirmAll(
-        'duoqian_manage',
-        widget.proposalId,
-        OnchainRpc(),
-      );
-      final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
-      debugPrint(
-          '[VoteDetail._load] step4 完成 stillPending.len=${pendingRecords.length}');
+      debugPrint('[VoteDetail._load] step4 完成');
 
       // 筛选可投票钱包
       final votable = <WalletProfile>[];
@@ -169,14 +203,20 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         _status = status;
         _yesCount = tally.yes;
         _noCount = tally.no;
+        _threshold = threshold;
         _adminVotes = votes;
         _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
         _createInfo = createInfo;
         _closeInfo = closeInfo;
+        if (pendingNotice != null) {
+          _voteNotice = pendingNotice.$1;
+          _voteNoticeIsError = pendingNotice.$2;
+        }
         _loading = false;
       });
+      _syncPendingPoll(pendingPks.isNotEmpty && status == _statusVoting);
       debugPrint('[VoteDetail._load] 结束');
     } catch (e, st) {
       debugPrint('[VoteDetail._load] catch 异常: $e\n$st');
@@ -209,6 +249,50 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   String _truncateAddress(String address) {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  int _resolveVoteThreshold(int? snapshotThreshold, int adminCount) {
+    if (snapshotThreshold != null && snapshotThreshold > 0) {
+      return snapshotThreshold;
+    }
+    final institutionThreshold = widget.institution.internalThreshold;
+    if (institutionThreshold > 0) return institutionThreshold;
+    return adminCount;
+  }
+
+  (String, bool)? _pendingSummaryNotice(PendingVoteConfirmSummary summary) {
+    if (summary.lost.isNotEmpty) {
+      return ('${summary.lost.length} 笔投票交易未出块，已清除等待状态，可重新提交。', true);
+    }
+    if (summary.confirmed.isNotEmpty) {
+      return ('${summary.confirmed.length} 笔投票交易已出块，正在同步链上投票结果。', false);
+    }
+    return null;
+  }
+
+  void _syncPendingPoll(bool enabled) {
+    if (!enabled) {
+      _pendingPollTimer?.cancel();
+      _pendingPollTimer = null;
+      return;
+    }
+    if (_pendingPollTimer != null) return;
+    _pendingPollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted || _loading) return;
+      unawaited(_load(showSpinner: false));
+    });
+  }
+
+  void _resetNonceForPubkey(String pubkeyHex) {
+    try {
+      final address = Keyring().encodeAddress(
+        Uint8List.fromList(_hexDecode(pubkeyHex)),
+        2027,
+      );
+      NonceManager.instance.reset(address);
+    } catch (_) {
+      // 中文注释：nonce 重置是兜底清理，地址解析失败不阻断页面刷新。
+    }
   }
 
   // ──── 投票提交 ────
@@ -248,6 +332,20 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+      final pubkey = _normalizePubkey(wallet.pubkeyHex);
+      if (!_admins.contains(pubkey)) {
+        throw StateError('当前钱包不在该提案的管理员快照中，不能投票');
+      }
+      if (_adminVotes[pubkey] != null) {
+        throw StateError('当前管理员已经投过票');
+      }
+      if (_pendingPubkeys.contains(pubkey)) {
+        throw StateError('当前管理员已有投票等待出块，请稍后刷新');
+      }
+      final balance = await ChainRpc().fetchBalance(pubkey);
+      if (balance <= 0) {
+        throw StateError('当前管理员钱包余额不足，无法支付链上投票手续费');
+      }
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
       WalletManager? hotWalletManager;
@@ -306,19 +404,36 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       // Phase 3: 创建/关闭多签的投票都走 InternalVote::cast(22.0),
       // 由 runtime 的 InternalVoteExecutor 按 MODULE_TAG+ACTION 分派。
       debugPrint('[VoteDetail] 调 InternalVoteService.submit');
+      var pendingSaved = false;
+      var poolFailureHandled = false;
+      TxPoolWatchEvent? earlyPoolFailure;
+      Future<void> handlePoolFailure(TxPoolWatchEvent event) async {
+        if (poolFailureHandled) return;
+        poolFailureHandled = true;
+        await _handleVotePoolFailure(wallet, event);
+      }
+
       final result = await InternalVoteService().submit(
         proposalId: widget.proposalId,
         approve: approve,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
+        onWatchEvent: (event) {
+          if (event.isIncluded) {
+            unawaited(_load(showSpinner: false));
+          }
+          if (!event.isFailure) return;
+          earlyPoolFailure = event;
+          if (pendingSaved) {
+            unawaited(handlePoolFailure(event));
+          }
+        },
       );
       debugPrint(
           '[VoteDetail] submit 返回 txHash=${result.txHash} nonce=${result.usedNonce}');
 
       // 持久化待确认投票记录
-      var pubkey = wallet.pubkeyHex.toLowerCase();
-      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
       debugPrint('[VoteDetail] 写 PendingVoteStore...');
       await PendingVoteStore.instance.save(PendingVoteRecord(
         proposalType: 'duoqian_manage',
@@ -330,14 +445,18 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         createdAt: DateTime.now(),
       ));
       debugPrint('[VoteDetail] PendingVoteStore.save 完成');
+      pendingSaved = true;
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
+          content: Text('投票已提交，等待出块：${_truncateAddress(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
+      if (earlyPoolFailure != null) {
+        await handlePoolFailure(earlyPoolFailure!);
+      }
 
       _adminService.clearCache(widget.institution.sfidNumber);
       // 中文注释:不再 await _load(),让 finally 立即把 _submitting 改回 false,
@@ -359,6 +478,50 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       debugPrint('[VoteDetail] finally setState(_submitting=false)');
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _handleVotePoolFailure(
+    WalletProfile wallet,
+    TxPoolWatchEvent event,
+  ) async {
+    final pubkey = _normalizePubkey(wallet.pubkeyHex);
+    await PendingVoteStore.instance.remove(
+      'duoqian_manage',
+      widget.proposalId,
+      pubkey,
+    );
+    NonceManager.instance.reset(wallet.address);
+    final message = _poolFailureMessage(event);
+    if (!mounted) return;
+    setState(() {
+      _voteNotice = message;
+      _voteNoticeIsError = true;
+      _pendingPubkeys = _pendingPubkeys.difference({pubkey});
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
+    );
+    unawaited(_load(showSpinner: false));
+  }
+
+  String _poolFailureMessage(TxPoolWatchEvent event) {
+    return switch (event.kind) {
+      TxPoolWatchKind.future => '投票交易未出块：nonce 偏大，可能前一笔交易尚未确认。',
+      TxPoolWatchKind.invalid => '投票交易无效：可能余额不足、签名错误、nonce 错误或无投票权限。',
+      TxPoolWatchKind.dropped => '投票交易被交易池丢弃，请刷新后重新提交。',
+      TxPoolWatchKind.usurped => '投票交易被同 nonce 的另一笔交易替代，请刷新后确认状态。',
+      TxPoolWatchKind.retracted => '投票交易所在区块被回滚，请刷新后重新确认。',
+      TxPoolWatchKind.finalityTimeout => '投票交易最终化超时，请刷新后确认是否已投票。',
+      TxPoolWatchKind.timeout => '投票交易长时间没有交易池状态，可能未广播成功。',
+      TxPoolWatchKind.error => event.description,
+      _ => '投票交易未能进入区块：${event.description}',
+    };
+  }
+
+  String _normalizePubkey(String pubkeyHex) {
+    var pubkey = pubkeyHex.toLowerCase();
+    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+    return pubkey;
   }
 
   void _confirmVote(bool approve) {
@@ -462,19 +625,56 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           ProposalStatusBadge(status: _status, proposalId: widget.proposalId),
+          if (_voteNotice != null) ...[
+            const SizedBox(height: 12),
+            _buildVoteNotice(),
+          ],
           const SizedBox(height: 16),
           _buildProposalInfoCard(),
           const SizedBox(height: 16),
           ProposalVoteProgress(
             yesCount: _yesCount,
             noCount: _noCount,
-            threshold: widget.institution.internalThreshold,
+            threshold: _threshold,
           ),
           const SizedBox(height: 16),
           ProposalAdminVoteList(
             admins: _admins,
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoteNotice() {
+    final color = _voteNoticeIsError ? AppTheme.danger : AppTheme.info;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            _voteNoticeIsError ? Icons.error_outline : Icons.info_outline,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _voteNotice!,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

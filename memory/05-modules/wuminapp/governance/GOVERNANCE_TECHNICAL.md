@@ -497,10 +497,27 @@ message = blake2_256(SCALE.encode(payload))
 **propose_transfer**: `[0x13][0x00][org:u8][institution:48B][beneficiary:32B][amount:u128_le_16B][Vec remark]`
 **InternalVote::cast** (统一投票入口): `[0x16][0x00][proposal_id:u64_le][approve:bool]`
 
-#### 7.5.5 转出资金账户（duoqianAddress 字段）
+#### 7.5.5 转出资金账户（mainAddress / accounts）
 
-每个 `InstitutionInfo` 包含 `duoqianAddress` 字段（32 字节 hex）。对于治理机构，来源于 `primitives` 中的 `main_address`；对于个人多签，来源于 `PersonalManage::PersonalDuoqians`；对于注册机构账户，来源于 `OrganizationManage::InstitutionAccounts` 中该账户自己的地址。
+`InstitutionInfo` 对治理机构使用 `InstitutionAccounts` 表达制度账户：
+- `mainAddress`：主账户，转账提案的默认转出账户
+- `feeAddress`：费用账户
+- `safetyFundAddress`：安全基金账户，仅国储会显示
+- `stakeAddress`：质押账户，仅省储行显示
+
+个人多签和注册机构账户仍可通过旧构造入口传入账户地址，但业务侧统一读取
+`InstitutionInfo.mainAddress`。治理机构不得再使用 `duoqianAddress` 表达主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
+
+治理机构名称、身份 ID 和制度账户地址由
+`tools/generate_wuminapp_governance_registry.mjs` 从 runtime primitives 生成到
+`lib/institution/governance_institution_registry.generated.dart`。管理员列表与阈值不写入
+静态注册表，必须动态读取链上 `AdminsChange::Subjects`。
+
+治理机构详情页的账户信息区直接展示身份 ID、主账户和主账户余额；更多制度账户不再
+进入二级页面，而是在当前账户信息卡内点击箭头展开。展开项按机构实际存在的
+`feeAddress / safetyFundAddress / stakeAddress` 懒加载链上余额，分别显示费用账户、
+安全基金账户和质押账户。
 
 ### 7.6 管理员列表页面
 
@@ -524,9 +541,10 @@ message = blake2_256(SCALE.encode(payload))
 | `lib/citizen/vote/vote_page.dart` | 投票二级页，当前保留公民投票扩展占位 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
 | `lib/citizen/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
+| `lib/citizen/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
 | `lib/citizen/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
 | `lib/citizen/institution/institution_admin_service.dart` | 链上管理员查询服务（RPC + SCALE 解码 + 缓存） |
-| `lib/citizen/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 条件 UI + 投票事件列表） |
+| `lib/citizen/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
 | `lib/citizen/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
 | `lib/citizen/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
 | `lib/citizen/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |

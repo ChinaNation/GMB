@@ -53,7 +53,6 @@ void main() {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '11' * 32;
-    final sfidNumber = Uint8List.fromList(utf8.encode('SFR-AH001-20260507'));
     final refKey =
         '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
     final subjectKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(

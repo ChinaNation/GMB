@@ -113,9 +113,12 @@ class TransferProposalService {
 
   // ──── 链上查询 ────
 
-  /// 查询机构 duoqian_address 的可用余额（元）。
+  /// 查询转出主账户的可用余额（元）。
+  ///
+  /// 中文注释：治理机构按主账户、费用账户、安全基金账户、质押账户分别建模，转账提案固定从主账户支出；
+  /// 个人/注册多签账户通过 InstitutionInfo.mainAddress 继续映射到账户地址。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
-    return _rpc.fetchBalance(institution.duoqianAddress);
+    return _rpc.fetchBalance(institution.mainAddress);
   }
 
   // ──── 双层 ID 与反向索引(spec_version v1)────
@@ -281,6 +284,49 @@ class TransferProposalService {
     final yes = _decodeU32(data, 0);
     final no = _decodeU32(data, 4);
     return (yes: yes, no: no);
+  }
+
+  /// 查询内部投票阈值快照。
+  ///
+  /// 中文注释：个人多签创建提案的创建阈值是提案级快照，
+  /// 不能使用 InstitutionInfo.internalThreshold 的多签默认值。
+  Future<int?> fetchInternalThresholdSnapshot(int proposalId) async {
+    final key = _buildStorageKey(
+      'InternalVote',
+      'InternalThresholdSnapshot',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 4) return null;
+    return _decodeU32(data, 0);
+  }
+
+  /// 查询提案创建时锁定的管理员快照。
+  ///
+  /// 中文注释：投票资格由 VotingEngine::AdminSnapshot 判定，详情页展示和
+  /// 可投钱包筛选也应优先使用同一份快照，避免当前管理员列表变化影响旧提案。
+  Future<List<String>> fetchAdminSnapshot(
+    int proposalId,
+    String institutionIdentity,
+  ) async {
+    final key = _buildDoubleStorageKey(
+      'VotingEngine',
+      'AdminSnapshot',
+      _u64ToLeBytes(proposalId),
+      _institutionIdentityToFixed48(institutionIdentity),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.isEmpty) return const [];
+
+    final (count, lenSize) = _decodeCompact(data, 0);
+    final admins = <String>[];
+    var offset = lenSize;
+    for (var i = 0; i < count && offset + 32 <= data.length; i++) {
+      admins.add(
+          _hexEncode(Uint8List.fromList(data.sublist(offset, offset + 32))));
+      offset += 32;
+    }
+    return admins;
   }
 
   /// 查询提案状态。返回 status（0=voting, 1=passed, 2=rejected），null 表示不存在。
@@ -1189,6 +1235,35 @@ class TransferProposalService {
     result.setAll(offset, storageHash);
     offset += storageHash.length;
     result.setAll(offset, keyHash);
+    return result;
+  }
+
+  /// 构造 StorageDoubleMap key。
+  Uint8List _buildDoubleStorageKey(
+    String palletName,
+    String storageName,
+    Uint8List key1Data,
+    Uint8List key2Data,
+  ) {
+    final palletHash = _twoxx128String(palletName);
+    final storageHash = _twoxx128String(storageName);
+    final key1Hash = _blake2128Concat(key1Data);
+    final key2Hash = _blake2128Concat(key2Data);
+
+    final result = Uint8List(
+      palletHash.length +
+          storageHash.length +
+          key1Hash.length +
+          key2Hash.length,
+    );
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, key1Hash);
+    offset += key1Hash.length;
+    result.setAll(offset, key2Hash);
     return result;
   }
 

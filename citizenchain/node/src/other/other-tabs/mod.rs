@@ -1,14 +1,9 @@
 use serde::Serialize;
 
-// 中文注释：白皮书和公民宪法随桌面前端静态资源一起打包，避免仓库私有化后
-// GitHub Pages 外链返回 404 导致桌面 tab 不可用。
-const WHITEPAPER_URL: &str = "/GMB_README.html";
-const CONSTITUTION_URL: &str = "/FRC_README.html";
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase", tag = "contentType")]
 pub enum TabContent {
-    Iframe { url: String },
+    Document,
     Text { text: String },
 }
 
@@ -34,16 +29,12 @@ pub fn get_other_tabs_content() -> Result<OtherTabsPayload, String> {
             OtherTabItem {
                 key: "whitepaper".to_string(),
                 title: "白皮书".to_string(),
-                content: TabContent::Iframe {
-                    url: WHITEPAPER_URL.to_string(),
-                },
+                content: TabContent::Document,
             },
             OtherTabItem {
                 key: "constitution".to_string(),
                 title: "公民治理宪法".to_string(),
-                content: TabContent::Iframe {
-                    url: CONSTITUTION_URL.to_string(),
-                },
+                content: TabContent::Document,
             },
             OtherTabItem {
                 key: "party".to_string(),

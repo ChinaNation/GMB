@@ -1,10 +1,9 @@
 // 其他 tab 内容类型，对齐后端 src/other/other-tabs。
 
-type OtherIframeTabItem = {
-  key: string;
+type OtherDocumentTabItem = {
+  key: 'whitepaper' | 'constitution';
   title: string;
-  contentType: 'iframe';
-  url: string;
+  contentType: 'document';
 };
 
 type OtherTextTabItem = {
@@ -14,7 +13,7 @@ type OtherTextTabItem = {
   text: string;
 };
 
-export type OtherTabItem = OtherIframeTabItem | OtherTextTabItem;
+export type OtherTabItem = OtherDocumentTabItem | OtherTextTabItem;
 
 export type OtherTabsPayload = {
   tabs: OtherTabItem[];

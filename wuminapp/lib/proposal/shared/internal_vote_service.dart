@@ -46,6 +46,7 @@ class InternalVoteService {
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
   }) async {
     final callData = buildCallData(proposalId: proposalId, approve: approve);
     return _signAndSubmit(
@@ -53,6 +54,7 @@ class InternalVoteService {
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+      onWatchEvent: onWatchEvent,
     );
   }
 
@@ -78,6 +80,7 @@ class InternalVoteService {
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
   }) async {
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
@@ -87,6 +90,7 @@ class InternalVoteService {
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+      onWatchEvent: onWatchEvent,
     );
   }
 

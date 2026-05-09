@@ -24,7 +24,7 @@
 |---|---|---|
 | 机构名称 | 文本（只读） | 自动填充，不可编辑 |
 | 账户类型 | 标签（只读） | NRC/PRC/PRB/个人多签/机构账户 |
-| 转出地址 | 文本（只读） | `duoqianAddress` 对应的 SS58 地址 |
+| 转出地址 | 文本（只读） | `InstitutionInfo.mainAddress` 对应的 SS58 地址 |
 | 收款地址 | 输入框 | SS58 格式，支持扫码输入 |
 | 转账金额 | 输入框 | 单位：元，最低 1.11 元（111分 = ED） |
 | 预估手续费 | 文本（实时计算） | `max(金额 × 0.1%, 0.10元)` |
@@ -35,7 +35,7 @@
 **本地校验**：
 
 1. 收款地址必须是合法 SS58 地址（format 2027）
-2. 收款地址不能是本账户的 `duoqianAddress`（自转账）
+2. 收款地址不能是本账户的 `mainAddress`（自转账）
 3. 金额 >= 1.11 元（111 分，ED）
 4. 金额 + 手续费 + ED <= 可用余额
 5. 备注 UTF-8 编码后 <= 256 字节
@@ -69,8 +69,10 @@
 |---|---|---|
 | 提案动作 | `VotingEngine::ProposalData(proposal_id)` | `MODULE_TAG + TransferAction`，包含转出 SubjectId、收款地址、金额、备注、发起人 |
 | 提案状态 | `VotingEngine::Proposals(proposal_id)` | status(0=投票中/1=通过/2=拒绝)、start、end |
-| 投票计数 | `VotingEngine::InternalTallies(proposal_id)` | yes_count、no_count |
-| 投票记录 | `VotingEngine::InternalVotesByAccount(proposal_id, admin_pubkey)` | bool(赞成/反对) |
+| 投票计数 | `InternalVote::InternalTallies(proposal_id)` | yes_count、no_count |
+| 投票记录 | `InternalVote::InternalVotesByAccount(proposal_id, admin_pubkey)` | bool(赞成/反对) |
+| 内部阈值快照 | `InternalVote::InternalThresholdSnapshot(proposal_id)` | 提案创建时锁定的通过阈值，进度条必须使用此值 |
+| 管理员快照 | `VotingEngine::AdminSnapshot(proposal_id, subject_id)` | 提案创建时锁定的管理员列表，投票资格和明细展示优先使用此值 |
 | 活跃提案ID | `VotingEngine::ActiveProposalsByInstitution(subject_id)` | 同一 SubjectId 下的活跃提案 |
 
 ## 4. 链上 Extrinsic 编码
@@ -112,12 +114,12 @@
 
 ## 5. 核心服务：TransferProposalService
 
-新建 `lib/governance/transfer_proposal_service.dart`，封装链上交互：
+`lib/proposal/transfer/transfer_proposal_service.dart` 封装链上交互：
 
 ```dart
 class TransferProposalService {
   /// 查询转出资金账户的可用余额（元）
-  Future<double> fetchInstitutionBalance(String sfidNumber);
+  Future<double> fetchInstitutionBalance(InstitutionInfo institution);
 
   /// 查询机构活跃的转账提案 ID（无活跃提案返回 null）
   Future<int?> fetchActiveTransferProposal(String sfidNumber);
@@ -127,6 +129,12 @@ class TransferProposalService {
 
   /// 查询投票状态（赞成数、反对数）
   Future<({int yes, int no})> fetchVoteTally(int proposalId);
+
+  /// 查询内部投票阈值快照
+  Future<int?> fetchInternalThresholdSnapshot(int proposalId);
+
+  /// 查询提案管理员快照
+  Future<List<String>> fetchAdminSnapshot(int proposalId, String institutionIdentity);
 
   /// 查询某管理员对某提案的投票记录（null=未投票）
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex);
@@ -161,8 +169,10 @@ class TransferProposalService {
 | 存储项 | Key 格式 |
 |---|---|
 | `Proposals` | `twox128("VotingEngine") + twox128("Proposals") + blake2_128_concat(u64_le)` |
-| `InternalTallies` | `twox128("VotingEngine") + twox128("InternalTallies") + blake2_128_concat(u64_le)` |
-| `InternalVotesByAccount` | `twox128("VotingEngine") + twox128("InternalVotesByAccount") + blake2_128_concat(u64_le) + blake2_128_concat(account_32bytes)` |
+| `AdminSnapshot` | `twox128("VotingEngine") + twox128("AdminSnapshot") + blake2_128_concat(u64_le) + blake2_128_concat(subject_id_48bytes)` |
+| `InternalTallies` | `twox128("InternalVote") + twox128("InternalTallies") + blake2_128_concat(u64_le)` |
+| `InternalThresholdSnapshot` | `twox128("InternalVote") + twox128("InternalThresholdSnapshot") + blake2_128_concat(u64_le)` |
+| `InternalVotesByAccount` | `twox128("InternalVote") + twox128("InternalVotesByAccount") + blake2_128_concat(u64_le) + blake2_128_concat(account_32bytes)` |
 
 注：`blake2_128_concat` = `blake2_128(data) + data`。
 
@@ -170,7 +180,7 @@ class TransferProposalService {
 
 App 侧统一通过 `institutionIdentityToPalletId` 生成链上 `SubjectId(48)`：
 
-1. 治理机构：`0x01 + sfid_number UTF-8 + 右零填充`，`duoqianAddress` 来源于 primitives 预置 `main_address`
+1. 治理机构：`0x01 + sfid_number UTF-8 + 右零填充`，`mainAddress` 来源于 primitives 预置 `main_address`
 2. 个人多签：`0x03 + AccountId32 + 15B 零填充`，状态读取 `PersonalManage::PersonalDuoqians`
 3. 注册机构账户：`0x05 + AccountId32 + 15B 零填充`，状态读取 `OrganizationManage::InstitutionAccounts`
 4. `0x02 SfidInstitution` 只用于 SFID 机构归属/检索，不作为转账支出主体
@@ -198,18 +208,18 @@ App 侧统一通过 `institutionIdentityToPalletId` 生成链上 `SubjectId(48)`
 
 | 文件 | 说明 | 状态 |
 |---|---|---|
-| `lib/governance/transfer_proposal_page.dart` | 转账表单页 | 新建 |
-| `lib/governance/transfer_proposal_detail_page.dart` | 提案详情 + 投票页 | 新建 |
-| `lib/governance/transfer_proposal_service.dart` | 链上交互服务 | 新建 |
-| `lib/governance/institution_data.dart` | 增加 duoqianAddress 字段 | 修改 |
-| `lib/governance/proposal_types_page.dart` | "转账"按钮接入真实页面 | 修改 |
-| `lib/governance/institution_detail_page.dart` | 投票事件列表接入真实数据 | 修改 |
+| `lib/proposal/transfer/transfer_proposal_page.dart` | 转账表单页 | 已实现 |
+| `lib/proposal/transfer/transfer_proposal_detail_page.dart` | 提案详情 + 投票页 | 已实现 |
+| `lib/proposal/transfer/transfer_proposal_service.dart` | 链上交互服务 | 已实现 |
+| `lib/institution/institution_data.dart` | 机构账户模型与 SubjectId 编码 | 已修改 |
+| `lib/institution/governance_institution_registry.generated.dart` | 87 个治理机构静态账户注册表 | 已生成 |
+| `lib/institution/institution_detail_page.dart` | 机构信息区、更多账户内联展开、管理员入口、提案事件列表 | 已修改 |
 
 ## 11. 实施顺序
 
-1. `institution_data.dart` — 增加 87 个 duoqianAddress
+1. `institution_data.dart` — 定义 `InstitutionAccounts` 与 `mainAddress`
 2. `transfer_proposal_service.dart` — 链上交互（extrinsic 编码 + storage 查询）
 3. `transfer_proposal_page.dart` — 转账表单页 UI + 提交
 4. `proposal_types_page.dart` — 接入转账页面
 5. `transfer_proposal_detail_page.dart` — 提案详情 + 投票
-6. `institution_detail_page.dart` — 投票事件列表接入
+6. `institution_detail_page.dart` — 机构信息区、更多账户内联展开、管理员入口和投票事件列表接入

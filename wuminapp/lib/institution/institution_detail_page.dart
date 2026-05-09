@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -15,6 +18,7 @@ import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_detail_
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_detail_page.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
 /// 机构详情页。
@@ -39,6 +43,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   final WalletManager _walletManager = WalletManager();
   final TransferProposalService _transferService = TransferProposalService();
   final ActivationService _activationService = ActivationService();
+  final ChainRpc _chainRpc = ChainRpc();
   late final ProposalContextResolver _contextResolver = ProposalContextResolver(
     adminService: _adminService,
     walletManager: _walletManager,
@@ -62,6 +67,24 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 机构页可见的提案事件（本机构内部提案 + 全局联合投票提案）。
   List<ProposalWithDetail> _proposalEvents = const [];
 
+  /// 主账户实时可用余额（元）。
+  double? _mainBalance;
+
+  /// 更多制度账户是否已在当前页展开。
+  bool _extraAccountsExpanded = false;
+
+  /// 更多制度账户余额是否正在读取。
+  bool _extraAccountsLoading = false;
+
+  /// 更多制度账户余额是否已至少读取过一次。
+  bool _extraAccountsLoaded = false;
+
+  /// 更多制度账户余额读取错误。
+  String? _extraAccountsError;
+
+  /// 更多制度账户展示数据。
+  List<_InstitutionAccountView> _extraAccounts = const [];
+
   @override
   void initState() {
     super.initState();
@@ -84,11 +107,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           widget.institution.sfidNumber,
         ),
         _activationService.getActivatedAdmins(widget.institution.sfidNumber),
+        _transferService
+            .fetchInstitutionBalance(widget.institution)
+            .then<double?>((value) => value)
+            .catchError((_) => null),
       ]);
       final admins = results[0] as List<String>;
       final ctx = results[1] as ProposalContext;
       final proposals = results[2] as List<ProposalWithDetail>;
       final activated = results[3] as List<ActivatedAdmin>;
+      final mainBalance = results[4] as double?;
 
       // 已激活公钥集合
       final activatedPks = activated.map((a) => a.pubkeyHex).toSet();
@@ -121,6 +149,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _activatedPubkeys = activatedPks;
         _isCurrentUserAdmin = ctx.isAdmin;
         _proposalEvents = proposals;
+        _mainBalance = mainBalance;
         _loading = false;
       });
     } catch (e) {
@@ -187,10 +216,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
         await _load();
+        if (_extraAccountsExpanded) {
+          await _loadExtraAccounts(force: true);
+        }
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
+          _buildInstitutionInfo(),
+          const SizedBox(height: 12),
           _buildHeader(),
           const SizedBox(height: 12),
           if (_isCurrentUserAdmin) ...[
@@ -206,6 +240,422 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         ],
       ),
     );
+  }
+
+  // ──── 机构基础信息（身份 ID / 主账户 / 余额 / 更多账户）────
+
+  Widget _buildInstitutionInfo() {
+    final inst = widget.institution;
+    final extraSources = _extraAccountSources();
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: widget.badgeColor.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildAccountInfoTile(
+              icon: Icons.badge_outlined,
+              label: '身份ID',
+              value: inst.sfidNumber,
+            ),
+            const Divider(height: 18),
+            _buildAccountInfoTile(
+              icon: Icons.account_balance_wallet_outlined,
+              label: '主账户',
+              value: _shortAddress(_accountHexToSs58(inst.mainAddress)),
+            ),
+            const Divider(height: 18),
+            _buildAccountInfoTile(
+              icon: Icons.payments_outlined,
+              label: '主账户余额',
+              value: _mainBalance == null
+                  ? '读取失败'
+                  : AmountFormat.format(_mainBalance!, symbol: 'GMB'),
+              valueColor:
+                  _mainBalance == null ? AppTheme.danger : AppTheme.textPrimary,
+            ),
+            if (extraSources.isNotEmpty) ...[
+              const Divider(height: 18),
+              _buildMoreAccountsToggle(extraSources),
+              ClipRect(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: _extraAccountsExpanded
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: _buildExpandedAccounts(),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountInfoTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color valueColor = AppTheme.textPrimary,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceMuted,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: widget.badgeColor),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textTertiary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: valueColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoreAccountsToggle(
+    List<({String name, String address, IconData icon})> sources,
+  ) {
+    return InkWell(
+      onTap: _toggleExtraAccounts,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: widget.badgeColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                Icons.account_tree_outlined,
+                size: 16,
+                color: widget.badgeColor,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '更多账户',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.primaryDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    sources.map((item) => item.name).join(' / '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              _extraAccountsExpanded
+                  ? Icons.keyboard_arrow_up
+                  : Icons.keyboard_arrow_down,
+              size: 22,
+              color: AppTheme.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandedAccounts() {
+    if (_extraAccountsLoading) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceMuted,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text(
+              '正在读取更多账户余额...',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_extraAccountsError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: AppTheme.bannerDecoration(AppTheme.danger),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, size: 16, color: AppTheme.danger),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _extraAccountsError!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.danger,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _loadExtraAccounts(force: true),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_extraAccounts.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceMuted,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: const Text(
+          '暂无更多账户',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < _extraAccounts.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _buildExpandedAccountItem(_extraAccounts[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildExpandedAccountItem(_InstitutionAccountView account) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.borderLight),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: widget.badgeColor.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(account.icon, size: 15, color: widget.badgeColor),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  account.name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.primaryDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Flexible(
+                child: Text(
+                  AmountFormat.format(account.balance, symbol: 'GMB'),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _shortAddress(account.addressSs58),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textTertiary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<({String name, String address, IconData icon})> _extraAccountSources() {
+    final accounts = widget.institution.accounts;
+    final items = <({String name, String address, IconData icon})>[];
+
+    final feeAddress = accounts?.feeAddress;
+    if (feeAddress != null) {
+      items.add((
+        name: '费用账户',
+        address: feeAddress,
+        icon: Icons.receipt_long_outlined,
+      ));
+    }
+
+    final safetyFundAddress = accounts?.safetyFundAddress;
+    if (safetyFundAddress != null) {
+      items.add((
+        name: '安全基金账户',
+        address: safetyFundAddress,
+        icon: Icons.health_and_safety_outlined,
+      ));
+    }
+
+    final stakeAddress = accounts?.stakeAddress;
+    if (stakeAddress != null) {
+      items.add((
+        name: '质押账户',
+        address: stakeAddress,
+        icon: Icons.lock_outline,
+      ));
+    }
+
+    return items;
+  }
+
+  Future<void> _toggleExtraAccounts() async {
+    final shouldExpand = !_extraAccountsExpanded;
+    setState(() {
+      _extraAccountsExpanded = shouldExpand;
+    });
+    if (shouldExpand && !_extraAccountsLoaded) {
+      await _loadExtraAccounts();
+    }
+  }
+
+  Future<void> _loadExtraAccounts({bool force = false}) async {
+    if (_extraAccountsLoading) return;
+    if (_extraAccountsLoaded && !force) return;
+
+    final sources = _extraAccountSources();
+    if (sources.isEmpty) {
+      setState(() {
+        _extraAccounts = const [];
+        _extraAccountsLoaded = true;
+        _extraAccountsError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _extraAccountsLoading = true;
+      _extraAccountsError = null;
+    });
+
+    try {
+      // 中文注释：更多账户余额只在用户展开时读取，避免机构详情列表初次进入时放大 RPC 压力。
+      final views = await Future.wait(
+        sources.map((item) async {
+          final balance = await _chainRpc.fetchBalance(item.address);
+          return _InstitutionAccountView(
+            name: item.name,
+            addressSs58: _accountHexToSs58(item.address),
+            balance: balance,
+            icon: item.icon,
+          );
+        }),
+      );
+      if (!mounted) return;
+      setState(() {
+        _extraAccounts = views;
+        _extraAccountsLoaded = true;
+        _extraAccountsLoading = false;
+        _extraAccountsError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _extraAccountsLoading = false;
+        _extraAccountsLoaded = false;
+        _extraAccountsError =
+            SmoldotClientManager.instance.buildUserFacingError(e);
+      });
+    }
   }
 
   // ──── 顶部机构卡片（横向布局 + 右箭头进入提案页） ────
@@ -687,6 +1137,25 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
   }
 
+  String _accountHexToSs58(String hex) {
+    return Keyring().encodeAddress(Uint8List.fromList(_hexDecode(hex)), 2027);
+  }
+
+  List<int> _hexDecode(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return List<int>.generate(
+      clean.length ~/ 2,
+      (index) =>
+          int.parse(clean.substring(index * 2, index * 2 + 2), radix: 16),
+      growable: false,
+    );
+  }
+
+  String _shortAddress(String address) {
+    if (address.length <= 18) return address;
+    return '${address.substring(0, 8)}...${address.substring(address.length - 8)}';
+  }
+
   void _openAdminList() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -706,4 +1175,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       ),
     );
   }
+}
+
+class _InstitutionAccountView {
+  const _InstitutionAccountView({
+    required this.name,
+    required this.addressSs58,
+    required this.balance,
+    required this.icon,
+  });
+
+  final String name;
+  final String addressSs58;
+  final double balance;
+  final IconData icon;
 }

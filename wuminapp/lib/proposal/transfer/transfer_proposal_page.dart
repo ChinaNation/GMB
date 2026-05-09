@@ -63,7 +63,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
   void initState() {
     super.initState();
     _selectedWallet = widget.adminWallets.first;
-    _fromSs58 = _duoqianHexToSs58(widget.institution.duoqianAddress);
+    _fromSs58 = _accountHexToSs58(widget.institution.mainAddress);
     _fetchBalance();
     _amountController.addListener(_onAmountChanged);
   }
@@ -76,7 +76,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     super.dispose();
   }
 
-  String _duoqianHexToSs58(String hex) {
+  String _accountHexToSs58(String hex) {
     final bytes = _hexToBytes(hex);
     return Keyring().encodeAddress(Uint8List.fromList(bytes), 2027);
   }
@@ -137,7 +137,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     // 检查是否与机构地址相同
     final beneficiaryBytes = Keyring().decodeAddress(address);
     final institutionBytes =
-        Uint8List.fromList(_hexToBytes(widget.institution.duoqianAddress));
+        Uint8List.fromList(_hexToBytes(widget.institution.mainAddress));
     if (_bytesEqual(beneficiaryBytes, institutionBytes)) {
       setState(() => _addressError = '收款地址不能与机构地址相同');
       return false;
@@ -338,12 +338,12 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       final isar = await WalletIsar.instance.db();
       final personal = await isar.personalDuoqianEntitys
           .filter()
-          .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+          .duoqianAddressEqualTo(widget.institution.mainAddress)
           .findFirst();
       if (personal == null) return; // 非个人多签,跳过
 
       await PersonalProposalHistoryService().recordOrUpdate(
-        personalAddressHex: widget.institution.duoqianAddress,
+        personalAddressHex: widget.institution.mainAddress,
         proposalId: proposalId,
         action: PersonalProposalAction.transfer,
         status: PersonalProposalStatus.voting,

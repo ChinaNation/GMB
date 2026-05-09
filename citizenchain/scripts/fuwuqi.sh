@@ -13,8 +13,8 @@ set -euo pipefail
 # ╚══════════════════════════════════════════════════════════════╝
 # 用法：引导节点不带0x；
 
-NODE_KEY=""
-GRANDPA_KEY=""
+NODE_KEY="c60d6c01708e3dc6d11d98dcd7bc9b9dfa854abbbe4f07d1927234dbb0ee539e"
+GRANDPA_KEY="0xc8190443ae260e102d93800d8fc1b513843aeedce0a84a8f7f3566549156a2f4"
 MINER_REWARD_ADDRESS=""
 
 # ══════════════════════════════════════════════════════════════

@@ -44,7 +44,9 @@ pub fn fresh_genesis_config() -> Result<ChainSpec, String> {
         .ok_or_else(|| "冻结 chainspec 缺少 bootNodes 数组".to_string())?
         .iter()
         .map(|v| {
-            let s = v.as_str().ok_or_else(|| "bootNodes 元素非字符串".to_string())?;
+            let s = v
+                .as_str()
+                .ok_or_else(|| "bootNodes 元素非字符串".to_string())?;
             MultiaddrWithPeerId::from_str(s).map_err(|e| format!("解析 bootnode {s} 失败: {e}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
