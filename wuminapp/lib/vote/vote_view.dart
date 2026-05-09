@@ -11,7 +11,7 @@ import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
+import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';

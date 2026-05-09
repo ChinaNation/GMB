@@ -21,8 +21,8 @@ use std::{
 };
 use tauri::AppHandle;
 
-use super::institution;
-use super::signing::{self, pubkey_to_ss58};
+use crate::governance::institution;
+use crate::governance::signing::{self, pubkey_to_ss58};
 
 /// 激活管理员存储文件名。
 const ACTIVATED_ADMINS_FILE: &str = "activated-admins.json";
@@ -196,8 +196,8 @@ pub async fn build_activate_admin_request(
     }
 
     // 查找机构名称（用于 display）
-    let institution_name =
-        super::find_institution_name(&sfid_number).unwrap_or_else(|| sfid_number.clone());
+    let institution_name = crate::governance::find_institution_name(&sfid_number)
+        .unwrap_or_else(|| sfid_number.clone());
 
     // 构建激活 payload
     let timestamp = now_secs();

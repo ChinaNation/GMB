@@ -1,7 +1,7 @@
 // 省储会顶级 Section：列表（orgType=1）→ 机构详情 两级导航。
 // 2026-04-24 重构：从原 GovernanceSection.tsx 的 PRC 分支拆分独立。
 import { useState } from 'react';
-import { AdminListPage } from './AdminListPage';
+import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
@@ -13,6 +13,7 @@ type PrcView =
   | { page: 'list' }
   | { page: 'detail'; sfidNumber: string }
   | { page: 'admin-list'; sfidNumber: string }
+  | { page: 'admin-set-change'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
   | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-sweep'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] };
@@ -57,6 +58,18 @@ export function PrcSection() {
     );
   }
 
+  if (view.page === 'admin-set-change') {
+    return (
+      <AdminSetChangePage
+        sfidNumber={view.sfidNumber}
+        institutionName={view.institutionName}
+        adminWallets={view.adminWallets}
+        onBack={() => backToDetail(view.sfidNumber)}
+        onSuccess={() => backToDetail(view.sfidNumber)}
+      />
+    );
+  }
+
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
@@ -81,6 +94,9 @@ export function PrcSection() {
         }
         onCreateProposal={(sid, orgType, name, mainAddress, aw) =>
           setView({ page: 'create-proposal', sfidNumber: sid, orgType, institutionName: name, mainAddress, adminWallets: aw })
+        }
+        onCreateAdminSetChange={(sid, name, aw) =>
+          setView({ page: 'admin-set-change', sfidNumber: sid, institutionName: name, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
           setView({ page: 'propose-sweep', sfidNumber: sid, institutionName: name, adminWallets: aw })

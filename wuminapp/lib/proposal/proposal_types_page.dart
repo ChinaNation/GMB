@@ -5,6 +5,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
 import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/admins_change/pages/admin_set_change_page.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_page.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_page.dart';
 import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
@@ -205,7 +206,13 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
             subtitle: '提议更换本机构管理员',
             color: AppTheme.accent,
             enabled: proposalActionsEnabled,
-            onTap: () => _checkAndOpenProposal(context, null, name: '换管理员'),
+            onTap: () => _checkAndOpenProposal(
+              context,
+              () => AdminSetChangePage(
+                institution: widget.institution,
+                adminWallets: widget.adminWallets,
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           _ProposalTypeCard(

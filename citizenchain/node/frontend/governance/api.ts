@@ -1,7 +1,5 @@
 import { invoke } from '../core/tauri';
 import type {
-  ActivateRequestResult,
-  ActivatedAdmin,
   GovernanceOverview,
   InstitutionDetail,
   ProposalDisplayMeta,
@@ -41,27 +39,6 @@ export const governanceApi = {
     invoke<number[]>('list_proposals_by_institution', { sfidNumber }),
   listProposalsByOwner: (moduleTagScaleHex: string) =>
     invoke<number[]>('list_proposals_by_owner', { moduleTagScaleHex }),
-  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string) =>
-    invoke<ActivateRequestResult>('build_activate_admin_request', { pubkeyHex, sfidNumber }),
-  verifyActivateAdmin: (
-    requestId: string,
-    pubkeyHex: string,
-    expectedPayloadHash: string,
-    payloadHex: string,
-    responseJson: string,
-  ) =>
-    invoke<ActivatedAdmin>('verify_activate_admin', {
-      requestId,
-      pubkeyHex,
-      expectedPayloadHash,
-      payloadHex,
-      responseJson,
-    }),
-  getActivatedAdmins: (sfidNumber: string) =>
-    invoke<ActivatedAdmin[]>('get_activated_admins', { sfidNumber }),
-  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, unlockPassword: string) =>
-    invoke<void>('deactivate_admin', { pubkeyHex, sfidNumber, unlockPassword }),
-  hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
   buildVoteRequest: (proposalId: number, pubkeyHex: string, approve: boolean) =>
     invoke<VoteSignRequestResult>('build_vote_request', { proposalId, pubkeyHex, approve }),
   buildJointVoteRequest: (proposalId: number, pubkeyHex: string, sfidNumber: string, approve: boolean) =>

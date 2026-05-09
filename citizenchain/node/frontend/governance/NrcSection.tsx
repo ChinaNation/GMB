@@ -2,7 +2,7 @@
 // 特权动作：runtime 升级提案、安全基金转账提案 — 仅国储会管理员可发起。
 // 子视图类型来自原 GovernanceSection.tsx 的 NRC 分支拆分（2026-04-24 重构）。
 import { useState } from 'react';
-import { AdminListPage } from './AdminListPage';
+import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateProposalPage } from './CreateProposalPage';
@@ -17,6 +17,7 @@ const NRC_SFID_NUMBER = 'GFR-LN001-CB0X-944805165-2026';
 type NrcView =
   | { page: 'detail' }
   | { page: 'admin-list' }
+  | { page: 'admin-set-change'; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string }
   | { page: 'create-proposal'; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-upgrade'; adminWallets: AdminWalletMatch[] }
@@ -44,6 +45,18 @@ export function NrcSection() {
         adminWallets={view.adminWallets}
         sfidNumber={view.sfidNumber}
         onBack={backToDetail}
+      />
+    );
+  }
+
+  if (view.page === 'admin-set-change') {
+    return (
+      <AdminSetChangePage
+        sfidNumber={NRC_SFID_NUMBER}
+        institutionName={view.institutionName}
+        adminWallets={view.adminWallets}
+        onBack={backToDetail}
+        onSuccess={backToDetail}
       />
     );
   }
@@ -106,6 +119,9 @@ export function NrcSection() {
       }
       onCreateProposal={(_sid, orgType, name, mainAddress, aw) =>
         setView({ page: 'create-proposal', orgType, institutionName: name, mainAddress, adminWallets: aw })
+      }
+      onCreateAdminSetChange={(_sid, name, aw) =>
+        setView({ page: 'admin-set-change', institutionName: name, adminWallets: aw })
       }
       onCreateRuntimeUpgrade={(aw) =>
         setView({ page: 'propose-upgrade', adminWallets: aw })

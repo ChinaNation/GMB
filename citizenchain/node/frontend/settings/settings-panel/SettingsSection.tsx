@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { governanceApi } from '../../governance/api';
+import { adminsChangeApi } from '../../governance/admins_change/api';
 import { homeNodeApi } from '../../home/home-node/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
@@ -23,7 +23,7 @@ export function SettingsSection() {
       settingsApi.getRewardWallet(),
       settingsApi.getBootnodeKey(),
       homeNodeApi.getChainStatus(),
-      governanceApi.hasAnyActivatedAdmin(),
+      adminsChangeApi.hasAnyActivatedAdmin(),
     ]);
     if (w.status === 'fulfilled') setWallet(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);

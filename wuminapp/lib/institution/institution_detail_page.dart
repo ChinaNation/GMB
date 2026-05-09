@@ -2,14 +2,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 
+import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.dart';
+import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/institution/institution_activation_service.dart';
 import 'package:wuminapp_mobile/institution/institution_admin_list_page.dart';
-import 'package:wuminapp_mobile/institution/institution_admin_service.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';

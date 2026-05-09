@@ -10,6 +10,7 @@
 //                                顶部按钮:未声明节点 → declare-node;已声明 → 内联展示节点信息
 //   other-accounts-list          子页:其他账户列表
 //   admin-list                   子页:管理员列表
+//   admin-set-change             子页:复用 governance/admins_change 更换管理员流程
 //   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
 //   wait-vote                    等待管理员投票通过(轮询 Institutions[sfid_number].status === 'Active')
 //   declare-node                 多签 Active 但本机未声明节点 → 填 RPC + 自测 + 签名声明
@@ -21,6 +22,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { sanitizeError } from '../core/tauri';
+import { AdminSetChangePage } from '../governance/admins_change';
+import { adminsChangeApi } from '../governance/admins_change/api';
+import { hexToSs58 } from '../shared/ss58';
 import { offchainApi } from './api';
 import type {
   AccountWithBalance,
@@ -98,6 +102,24 @@ export function ClearingBankSection() {
     setView({ kind: 'institution-detail', sfidNumber });
   }, []);
 
+  const goAdminSetChange = useCallback(async (detail: InstitutionDetail) => {
+    try {
+      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.sfidNumber);
+      setView({
+        kind: 'admin-set-change',
+        sfidNumber: detail.sfidNumber,
+        institutionName: detail.institutionName,
+        adminWallets: activatedAdmins.map((admin) => ({
+          address: hexToSs58(admin.pubkeyHex),
+          pubkeyHex: admin.pubkeyHex,
+          name: '',
+        })),
+      });
+    } catch (e) {
+      window.alert(sanitizeError(e));
+    }
+  }, []);
+
   return (
     <div className="governance-section clearing-bank-section">
       {view.kind === 'empty' && (
@@ -149,6 +171,17 @@ export function ClearingBankSection() {
           onDeclareNode={(sfidNumber, institutionName) =>
             setView({ kind: 'declare-node', sfidNumber, institutionName })
           }
+          onCreateAdminSetChange={goAdminSetChange}
+        />
+      )}
+
+      {view.kind === 'admin-set-change' && (
+        <AdminSetChangePage
+          sfidNumber={view.sfidNumber}
+          institutionName={view.institutionName}
+          adminWallets={view.adminWallets}
+          onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
+          onSuccess={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}
         />
       )}
 

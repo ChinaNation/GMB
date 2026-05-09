@@ -1,5 +1,7 @@
 // 清算行 tab 相关 DTO 与状态机类型,与 Tauri 后端 offchain/types.rs 对齐。
 
+import type { AdminWalletMatch } from '../governance/types';
+
 export type EligibleClearingBankCandidate = {
   sfidNumber: string;
   institutionName: string;
@@ -133,6 +135,7 @@ export type DecryptAdminRequestResult = {
  *                                  ├─ 已存在 → institution-detail
  *                                  └─ 不存在 → create-multisig-institution
  *   institution-detail           机构详情卡片栅格 + 折叠子页入口 + 节点信息内联
+ *   admin-set-change             进入 admins_change 管理员更换流程
  *   other-accounts-list          其他账户列表子页(折叠卡片入口)
  *   admin-list                   管理员列表子页(折叠卡片入口)
  *   create-multisig-institution  创建机构多签 propose_create_institution(冷钱包签 + 提交)
@@ -144,6 +147,7 @@ export type ClearingBankView =
   | { kind: 'add-input-sfid' }
   | { kind: 'check-multisig'; sfidNumber: string; institutionName: string }
   | { kind: 'institution-detail'; sfidNumber: string }
+  | { kind: 'admin-set-change'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { kind: 'create-multisig-institution'; sfidNumber: string }
   | { kind: 'wait-vote'; sfidNumber: string; institutionName: string }
   | { kind: 'declare-node'; sfidNumber: string; institutionName: string }
