@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
+import { LOCAL_DOCS } from '../../generated/local-docs.generated';
 import { otherTabsApi as api } from './api';
+import { LocalDocViewer } from './LocalDocViewer';
 import type { OtherTabsPayload } from './types';
 
 type Props = {
@@ -50,18 +52,20 @@ export function OtherTabsSection({ activeKey }: Props) {
     );
   }
 
-  // 白皮书/公民宪法页不再在 UI 内重复显示标题文字(顶部 tab 栏已经表明当前页),
-  // 让 iframe/文本内容直接铺满可用区域。tab.title 仍传给 iframe 的 title 属性用于无障碍。
+  // 中文注释：本地文档以当前 tab 为绑定源，避免字段缺失时误回退到白皮书。
+  const localDoc =
+    tab.contentType === 'document'
+      ? LOCAL_DOCS.find((doc) => doc.key === activeKey)
+      : null;
+
   return (
     <section className="section other-tab-section" key={tab.key}>
-      {tab.contentType === 'iframe' ? (
-        <iframe
-          className="other-tab-iframe"
-          src={tab.url}
-          title={tab.title}
-          sandbox="allow-scripts allow-same-origin"
-          referrerPolicy="no-referrer"
-        />
+      {tab.contentType === 'document' ? (
+        localDoc ? (
+          <LocalDocViewer doc={localDoc} />
+        ) : (
+          <pre className="error">文档配置错误：{activeKey}</pre>
+        )
       ) : (
         <p>{tab.text}</p>
       )}

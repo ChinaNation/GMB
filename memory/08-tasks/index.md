@@ -4,8 +4,8 @@
 
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
-- `memory/08-tasks/open/20260508-clean-run-fresh-genesis.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
+- `memory/08-tasks/open/20260508-clean-run-fresh-genesis.md`
 
 ## done
 
@@ -258,4 +258,10 @@
 - `memory/08-tasks/done/20260507-sfid-format-d8-to-d4-and-1000-retry.md`
 - `memory/08-tasks/done/20260507-sfid-step1-rename-shenfen-to-sfid-number-and-city-001.md`
 - `memory/08-tasks/done/20260507-sfid-step2-regenerate-derived-addresses.md`
+- `memory/08-tasks/done/20260508-164118-docs-and-governance-registry.md`
+- `memory/08-tasks/done/20260508-170114-restore-doc-style.md`
+- `memory/08-tasks/done/20260508-172933-fix-doc-tab-binding-title.md`
+- `memory/08-tasks/done/20260508-174253-governance-detail-inline-accounts.md`
+- `memory/08-tasks/done/20260508-175514-只读排查-wuminapp-交易-多签交易中创建个人多签提案时-发起人可投票并出块-但其他管理员投票后前端显示.md`
+- `memory/08-tasks/done/20260508-181814-修复-wuminapp-个人多签投票确认状态和进度条阈值.md`
 - `memory/08-tasks/done/20260508-admins-change-lifecycle-events.md`

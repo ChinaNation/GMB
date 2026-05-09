@@ -64,6 +64,21 @@ class PendingVoteRecord {
   }
 }
 
+/// 待确认投票批量检查结果。
+class PendingVoteConfirmSummary {
+  const PendingVoteConfirmSummary({
+    required this.stillPending,
+    required this.confirmed,
+    required this.lost,
+    required this.errored,
+  });
+
+  final List<PendingVoteRecord> stillPending;
+  final List<PendingVoteRecord> confirmed;
+  final List<PendingVoteRecord> lost;
+  final List<PendingVoteRecord> errored;
+}
+
 /// 通用的待确认投票存储。
 ///
 /// 使用 Isar [AppKvEntity] 持久化，key 格式：
@@ -129,10 +144,27 @@ class PendingVoteStore {
     int proposalId,
     OnchainRpc onchainRpc,
   ) async {
+    final summary =
+        await confirmAllDetailed(proposalType, proposalId, onchainRpc);
+    return summary.stillPending;
+  }
+
+  /// 批量检查链上确认状态，并返回完整分类结果。
+  ///
+  /// 中文注释：详情页需要知道 lost/confirmed 结果来提示用户和重置本地 nonce；
+  /// 旧 confirmAll 仅返回 stillPending，保留给其他页面兼容使用。
+  Future<PendingVoteConfirmSummary> confirmAllDetailed(
+    String proposalType,
+    int proposalId,
+    OnchainRpc onchainRpc,
+  ) async {
     final pending = await getPending(proposalType, proposalId);
     debugPrint(
         '[PendingVote.confirmAll] proposalId=$proposalId pending.len=${pending.length}');
     final stillPending = <PendingVoteRecord>[];
+    final confirmed = <PendingVoteRecord>[];
+    final lost = <PendingVoteRecord>[];
+    final errored = <PendingVoteRecord>[];
 
     for (final record in pending) {
       try {
@@ -146,17 +178,26 @@ class PendingVoteStore {
             '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} → $result');
         if (result == TxConfirmResult.pending) {
           stillPending.add(record);
+        } else if (result == TxConfirmResult.confirmed) {
+          confirmed.add(record);
+          await remove(proposalType, proposalId, record.walletPubkey);
         } else {
-          // confirmed 或 lost，清除记录
+          lost.add(record);
           await remove(proposalType, proposalId, record.walletPubkey);
         }
       } catch (e) {
         // 节点不可达时保留，下次重试
         debugPrint(
             '[PendingVote.confirmAll] checkTxStatus 异常,保留记录 ${record.txHash}: $e');
+        errored.add(record);
         stillPending.add(record);
       }
     }
-    return stillPending;
+    return PendingVoteConfirmSummary(
+      stillPending: stillPending,
+      confirmed: confirmed,
+      lost: lost,
+      errored: errored,
+    );
   }
 }

@@ -140,10 +140,16 @@ lib/rpc/
 
 ### 6.5 Extrinsic 提交
 
-`ChainRpc.submitExtrinsic(Uint8List encoded) → Future<Uint8List>`
+`ChainRpc.submitExtrinsic(Uint8List encoded, {TxPoolWatchCallback? onWatchEvent}) → Future<Uint8List>`
 
 - 调用原生 `smoldot_submit_extrinsic`
 - 返回交易哈希 32 字节
+- 返回交易哈希只代表 RPC 已接收交易，不代表已出块
+- 可选 `onWatchEvent` 会接收后台 `author_submitAndWatchExtrinsic` 状态：
+  - `ready / broadcast`：交易进入交易池或已广播
+  - `inBlock / finalized`：交易被区块包含或最终化
+  - `future / invalid / dropped / usurped / retracted / finalityTimeout / timeout / error`：交易未能按预期确认，业务页面必须停止“投票中”等待态并给出可操作提示；其中 `timeout` 只表示 60 秒内完全没有收到交易池状态，若已收到 `ready/broadcast` 但尚未出块，则继续交由 nonce 轮询确认
+- 业务层不得把 `txHash` 返回渲染为“投票成功”；链上投票是否生效必须继续读取对应 storage（如 `InternalVote::InternalVotesByAccount`）确认
 
 ### 6.6 Storage Key 计算
 

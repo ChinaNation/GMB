@@ -8,6 +8,63 @@ import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 
 import 'smoldot_client.dart';
 
+/// 交易池观察状态。
+///
+/// 中文注释：submitExtrinsic 返回 txHash 只代表已提交到 RPC，不能代表已出块。
+/// 业务页面可订阅这里的状态，把 future/invalid/dropped 等失败原因回显给用户。
+enum TxPoolWatchKind {
+  ready,
+  broadcast,
+  inBlock,
+  finalized,
+  future,
+  invalid,
+  dropped,
+  usurped,
+  retracted,
+  finalityTimeout,
+  timeout,
+  error,
+  unknown,
+}
+
+class TxPoolWatchEvent {
+  const TxPoolWatchEvent({
+    required this.kind,
+    required this.description,
+    required this.raw,
+  });
+
+  final TxPoolWatchKind kind;
+  final String description;
+  final String raw;
+
+  bool get isFailure {
+    switch (kind) {
+      case TxPoolWatchKind.future:
+      case TxPoolWatchKind.invalid:
+      case TxPoolWatchKind.dropped:
+      case TxPoolWatchKind.usurped:
+      case TxPoolWatchKind.retracted:
+      case TxPoolWatchKind.finalityTimeout:
+      case TxPoolWatchKind.timeout:
+      case TxPoolWatchKind.error:
+        return true;
+      case TxPoolWatchKind.ready:
+      case TxPoolWatchKind.broadcast:
+      case TxPoolWatchKind.inBlock:
+      case TxPoolWatchKind.finalized:
+      case TxPoolWatchKind.unknown:
+        return false;
+    }
+  }
+
+  bool get isIncluded =>
+      kind == TxPoolWatchKind.inBlock || kind == TxPoolWatchKind.finalized;
+}
+
+typedef TxPoolWatchCallback = void Function(TxPoolWatchEvent event);
+
 /// citizenchain RPC 客户端。
 ///
 /// 只使用 smoldot 轻节点（P2P 网络，无需远程 RPC 服务器）。
@@ -141,7 +198,10 @@ class ChainRpc {
   /// 在 GMB 链 6 分钟出块的节奏下经常 1 秒内拿不到 txHash 导致 `completeError` 抛出,
   /// UI 反而误判失败并继续转圈。最终回到 submit-only,放弃在客户端拦截 mempool reject,
   /// reject 排查改走 polkadot.js apps + 终端日志。
-  Future<Uint8List> submitExtrinsic(Uint8List encoded) async {
+  Future<Uint8List> submitExtrinsic(
+    Uint8List encoded, {
+    TxPoolWatchCallback? onWatchEvent,
+  }) async {
     final hex = '0x${_hexEncode(encoded)}';
     // 完整 extrinsic hex 用 debugPrint 输出,便于直接复制到 polkadot.js apps
     // "Tools → Decode" 验证编码(call/signer/nonce/era 等);旧版仅前 80 字符,
@@ -157,7 +217,7 @@ class ChainRpc {
     }
     debugPrint('[ChainRpc.submitExtrinsic] smoldot 返回 txHash: $txHashHex');
 
-    unawaited(_watchTxRejectInBackground(hex, txHashHex));
+    unawaited(_watchTxRejectInBackground(hex, txHashHex, onWatchEvent));
     return _hexDecode(_stripHexPrefix(txHashHex));
   }
 
@@ -165,17 +225,32 @@ class ChainRpc {
   ///
   /// 60 秒内未收到任何状态视为 timeout(smoldot 转发失败 / 全节点完全不响应),
   /// 也打日志退出 — 这是排查"提交成功但链上没出块"的核心诊断输入。
-  Future<void> _watchTxRejectInBackground(String hex, String txHashHex) async {
+  Future<void> _watchTxRejectInBackground(
+    String hex,
+    String txHashHex,
+    TxPoolWatchCallback? onWatchEvent,
+  ) async {
     StreamSubscription? sub;
     Timer? bailTimer;
     try {
       final stream = SmoldotClientManager.instance
           .subscribe('author_submitAndWatchExtrinsic', [hex]);
       final done = Completer<void>();
+      var sawAnyStatus = false;
       bailTimer = Timer(const Duration(seconds: 60), () {
         if (!done.isCompleted) {
-          debugPrint(
-              '[ChainRpc.bgWatch] $txHashHex 60s timeout 仍未收到终态,可能 smoldot 转发失败或全节点静默 drop');
+          if (!sawAnyStatus) {
+            onWatchEvent?.call(const TxPoolWatchEvent(
+              kind: TxPoolWatchKind.timeout,
+              description: '60 秒内未收到交易池状态，可能转发失败或交易被静默丢弃',
+              raw: 'timeout',
+            ));
+            debugPrint(
+                '[ChainRpc.bgWatch] $txHashHex 60s timeout 未收到任何状态,可能 smoldot 转发失败或全节点静默 drop');
+          } else {
+            debugPrint(
+                '[ChainRpc.bgWatch] $txHashHex 60s 后结束后台监听,交易仍交由 nonce 轮询确认');
+          }
           done.complete();
         }
       });
@@ -183,7 +258,10 @@ class ChainRpc {
         (event) {
           try {
             final dynamic raw = (event as dynamic).result;
+            sawAnyStatus = true;
             final cls = _classifyTxStatus(raw);
+            final watchEvent = _toWatchEvent(raw);
+            onWatchEvent?.call(watchEvent);
             debugPrint(
                 '[ChainRpc.bgWatch] $txHashHex status=$raw classify=$cls');
             if (cls == _TxResult.failure) {
@@ -196,6 +274,11 @@ class ChainRpc {
           }
         },
         onError: (Object e) {
+          onWatchEvent?.call(TxPoolWatchEvent(
+            kind: TxPoolWatchKind.error,
+            description: '交易池订阅异常：$e',
+            raw: '$e',
+          ));
           debugPrint('[ChainRpc.bgWatch] $txHashHex stream error: $e');
           if (!done.isCompleted) done.complete();
         },
@@ -240,6 +323,49 @@ class ChainRpc {
       }
     }
     return _TxResult.pending;
+  }
+
+  TxPoolWatchEvent _toWatchEvent(dynamic status) {
+    if (status is String) {
+      final kind = switch (status) {
+        'ready' => TxPoolWatchKind.ready,
+        'broadcast' => TxPoolWatchKind.broadcast,
+        'future' => TxPoolWatchKind.future,
+        'invalid' => TxPoolWatchKind.invalid,
+        'dropped' => TxPoolWatchKind.dropped,
+        'finalityTimeout' => TxPoolWatchKind.finalityTimeout,
+        _ => TxPoolWatchKind.unknown,
+      };
+      return TxPoolWatchEvent(
+        kind: kind,
+        description: _describeTxStatus(status),
+        raw: status,
+      );
+    }
+    if (status is Map) {
+      TxPoolWatchKind kind = TxPoolWatchKind.unknown;
+      if (status.containsKey('inBlock')) {
+        kind = TxPoolWatchKind.inBlock;
+      } else if (status.containsKey('finalized')) {
+        kind = TxPoolWatchKind.finalized;
+      } else if (status.containsKey('broadcast')) {
+        kind = TxPoolWatchKind.broadcast;
+      } else if (status.containsKey('usurped')) {
+        kind = TxPoolWatchKind.usurped;
+      } else if (status.containsKey('retracted')) {
+        kind = TxPoolWatchKind.retracted;
+      }
+      return TxPoolWatchEvent(
+        kind: kind,
+        description: _describeTxStatus(status),
+        raw: '$status',
+      );
+    }
+    return TxPoolWatchEvent(
+      kind: TxPoolWatchKind.unknown,
+      description: '$status',
+      raw: '$status',
+    );
   }
 
   /// 把 TransactionStatus 转成可读 reject 原因(仅后台日志使用)。

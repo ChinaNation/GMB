@@ -60,6 +60,7 @@ class SignedExtrinsicBuilder {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
     void Function(SignedExtrinsicTrace trace)? onTrace,
+    TxPoolWatchCallback? onWatchEvent,
   }) async {
     debugPrint('[$_logLabel] 步骤1: 获取 metadata...');
     final metadata = await _rpc.fetchMetadata();
@@ -122,7 +123,10 @@ class SignedExtrinsicBuilder {
     debugPrint('[$_logLabel] 步骤7: 提交到链...');
     debugPrint('[$_logLabel] call data hex: ${hexEncode(callData)}');
     try {
-      final txHash = await _rpc.submitExtrinsic(encoded);
+      final txHash = await _rpc.submitExtrinsic(
+        encoded,
+        onWatchEvent: onWatchEvent,
+      );
       debugPrint('[$_logLabel] 提交成功: 0x${hexEncode(txHash)}');
       return (txHash: '0x${hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
