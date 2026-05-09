@@ -11,7 +11,7 @@
 pub(crate) mod node_runner;
 
 use crate::{
-    governance,
+    duoqian_transfer, governance,
     home::{self, cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState},
     mining, other, settings,
 };
@@ -65,19 +65,18 @@ pub fn run_desktop() {
             governance::admins_change::commands::submit_admin_set_change,
             governance::build_vote_request,
             governance::build_joint_vote_request,
-            governance::build_propose_transfer_request,
-            governance::submit_propose_transfer,
+            duoqian_transfer::commands::build_duoqian_transfer_request,
+            duoqian_transfer::commands::submit_duoqian_transfer,
+            duoqian_transfer::commands::build_duoqian_safety_fund_request,
+            duoqian_transfer::commands::submit_duoqian_safety_fund,
+            duoqian_transfer::commands::build_duoqian_sweep_request,
+            duoqian_transfer::commands::submit_duoqian_sweep,
             governance::build_developer_upgrade_request,
             governance::submit_developer_upgrade,
             governance::build_propose_upgrade_request,
             governance::submit_propose_upgrade,
             governance::submit_vote,
             governance::check_vote_status,
-            governance::build_propose_sweep_request,
-            governance::submit_propose_sweep,
-            governance::build_propose_safety_fund_request,
-            governance::submit_propose_safety_fund,
-            // Phase 3: safety_fund/sweep 投票统一走 governance::build_vote_request。
             home::transaction::get_wallets,
             home::transaction::add_wallet,
             home::transaction::remove_wallet,

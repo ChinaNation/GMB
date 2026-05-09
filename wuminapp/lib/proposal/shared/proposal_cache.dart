@@ -9,7 +9,6 @@ class ProposalCache {
   // ──── 内存缓存 ────
 
   static final Map<int, ProposalMeta> _metaCache = {};
-  static final Map<int, TransferProposalInfo> _transferDetailCache = {};
   static final Map<int, RuntimeUpgradeProposalInfo> _runtimeUpgradeDetailCache =
       {};
   static final Map<int, CreateDuoqianProposalInfo> _createDuoqianDetailCache =
@@ -20,10 +19,6 @@ class ProposalCache {
 
   /// 获取提案元数据，命中返回缓存，未命中返回 null。
   static ProposalMeta? getMeta(int proposalId) => _metaCache[proposalId];
-
-  /// 获取转账提案详情，命中返回缓存，未命中返回 null。
-  static TransferProposalInfo? getTransferDetail(int proposalId) =>
-      _transferDetailCache[proposalId];
 
   /// 获取 Runtime 升级提案详情，命中返回缓存，未命中返回 null。
   static RuntimeUpgradeProposalInfo? getRuntimeUpgradeDetail(int proposalId) =>
@@ -42,10 +37,6 @@ class ProposalCache {
   /// 存入提案元数据。
   static void putMeta(int proposalId, ProposalMeta meta) =>
       _metaCache[proposalId] = meta;
-
-  /// 存入转账提案详情。
-  static void putTransferDetail(int proposalId, TransferProposalInfo detail) =>
-      _transferDetailCache[proposalId] = detail;
 
   /// 存入 Runtime 升级提案详情。
   static void putRuntimeUpgradeDetail(
@@ -67,7 +58,6 @@ class ProposalCache {
   /// 清空所有缓存（下拉刷新时调用）。
   static void clear() {
     _metaCache.clear();
-    _transferDetailCache.clear();
     _runtimeUpgradeDetailCache.clear();
     _createDuoqianDetailCache.clear();
     _closeDuoqianDetailCache.clear();
@@ -76,7 +66,6 @@ class ProposalCache {
   /// 使单个提案缓存失效（轻节点推送新区块时用）。
   static void invalidate(int proposalId) {
     _metaCache.remove(proposalId);
-    _transferDetailCache.remove(proposalId);
     _runtimeUpgradeDetailCache.remove(proposalId);
     _createDuoqianDetailCache.remove(proposalId);
     _closeDuoqianDetailCache.remove(proposalId);

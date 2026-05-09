@@ -16,7 +16,7 @@ import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_query_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
 /// 提案动作类型常量(对齐 Isar entity action 字段)。
@@ -82,12 +82,12 @@ class PersonalDuoqianProposalView {
 class PersonalProposalHistoryService {
   PersonalProposalHistoryService({
     ChainRpc? chainRpc,
-    TransferProposalService? proposalService,
+    ProposalQueryService? proposalService,
   })  : _rpc = chainRpc ?? ChainRpc(),
-        _proposalService = proposalService ?? TransferProposalService();
+        _proposalService = proposalService ?? ProposalQueryService();
 
   final ChainRpc _rpc;
-  final TransferProposalService _proposalService;
+  final ProposalQueryService _proposalService;
 
   /// 拉取该多签的全部提案(活跃 + 历史),按 createdAt desc 排序。
   ///
@@ -131,7 +131,8 @@ class PersonalProposalHistoryService {
 
       for (final e in votingEntities) {
         try {
-          final chainStatus = await _proposalService.fetchProposalStatus(e.proposalId);
+          final chainStatus =
+              await _proposalService.fetchProposalStatus(e.proposalId);
           if (chainStatus == null) continue; // 链上不存在,跳过
           final tally = await _proposalService.fetchVoteTally(e.proposalId);
           await recordOrUpdate(
@@ -184,9 +185,8 @@ class PersonalProposalHistoryService {
       entity.status = status;
       entity.yesVotes = yesVotes;
       entity.noVotes = noVotes;
-      entity.finalStatusAtMillis = isFinal
-          ? (existing?.finalStatusAtMillis ?? now)
-          : null;
+      entity.finalStatusAtMillis =
+          isFinal ? (existing?.finalStatusAtMillis ?? now) : null;
       if (snapshot != null) {
         entity.snapshotJson = jsonEncode(snapshot);
       } else if (existing != null) {
@@ -229,7 +229,8 @@ class PersonalProposalHistoryService {
     int proposalId,
   ) async {
     try {
-      final chainStatus = await _proposalService.fetchProposalStatus(proposalId);
+      final chainStatus =
+          await _proposalService.fetchProposalStatus(proposalId);
       final tally = await _proposalService.fetchVoteTally(proposalId);
       final statusStr = mapChainStatus(chainStatus);
 
@@ -293,7 +294,7 @@ class PersonalProposalHistoryService {
     );
   }
 
-  // ──── 编码 / 哈希工具(对齐 transfer_proposal_service) ────
+  // ──── 编码 / 哈希工具(对齐 votingengine storage key) ────
 
   /// 个人多签 SubjectId = byte[0]=0x03 PersonalDuoqian + byte[1..33]=address(32B) + byte[33..48]=zeros(15B)。
   ///
@@ -316,8 +317,10 @@ class PersonalProposalHistoryService {
     final palletHash = Hasher.twoxx128.hashString(pallet);
     final storageHash = Hasher.twoxx128.hashString(storage);
     final keyHash = Hasher.blake2b128.hash(keyData);
-    final result =
-        Uint8List(palletHash.length + storageHash.length + keyHash.length + keyData.length);
+    final result = Uint8List(palletHash.length +
+        storageHash.length +
+        keyHash.length +
+        keyData.length);
     var offset = 0;
     result.setAll(offset, palletHash);
     offset += palletHash.length;

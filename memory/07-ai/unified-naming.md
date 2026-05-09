@@ -26,14 +26,15 @@
 
 1. 所有命名尽量精简，不把需求描述塞进名称里。
 2. 不确定的命名必须先报告用户确认，不得擅自新建。
-3. 新命名必须说明中文名、英文名、使用位置和简介。
-4. 同一概念只能有一个当前命名；旧名必须标为废弃或历史。
-5. 文件名只表达主题，不表达完整需求；完整中文标题写入文件内容。
-6. 目录名只表达边界，不表达流程步骤。
-7. 字段名必须表达数据含义，不表达 UI 文案。
-8. 跨端同一字段必须同名，除非有明确语言风格差异并在本文件登记。
-9. 不允许为规避冲突随意加 `new`、`old`、`v2`、`temp`、`fix`、`final`。
-10. 需要中英文名称的地方，中文名用于说明和 UI，英文名用于目录、代码、字段和接口。
+3. 未获得用户明确允许时，不允许新建任何目录或文件；需要新建目录或文件时，必须先列出完整路径、用途和原因，等用户明确同意后才能创建。
+4. 新命名必须说明中文名、英文名、使用位置和简介。
+5. 同一概念只能有一个当前命名；旧名必须标为废弃或历史。
+6. 文件名只表达主题，不表达完整需求；完整中文标题写入文件内容。
+7. 目录名只表达边界，不表达流程步骤。
+8. 字段名必须表达数据含义，不表达 UI 文案。
+9. 跨端同一字段必须同名，除非有明确语言风格差异并在本文件登记。
+10. 不允许为规避冲突随意加 `new`、`old`、`v2`、`temp`、`fix`、`final`。
+11. 需要中英文名称的地方，中文名用于说明和 UI，英文名用于目录、代码、字段和接口。
 
 ## 3. 命名风格
 
@@ -261,6 +262,7 @@
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
 | `wuminapp/lib/duoqian/` | 多签钱包 | duoqian | 机构和个人多签钱包业务 |
+| `wuminapp/lib/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
 | `wuminapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
 | `wuminapp/lib/institution/` | 机构 | institution | 机构相关移动端业务 |
 | `wuminapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
@@ -317,6 +319,7 @@
 |---|---|---|---|
 | `citizenchain/node/src/core/` | 核心 | core | 节点核心启动和共享能力 |
 | `citizenchain/node/src/desktop/` | 桌面端 | desktop | Tauri 桌面端命令和集成 |
+| `citizenchain/node/src/duoqian_transfer/` | 多签转账后端 | duoqian-transfer-node-backend | node 后端多签转账 Tauri 命令、SubjectId 编码和签名提交 |
 | `citizenchain/node/src/governance/` | 治理 | governance | 节点治理业务和签名构造 |
 | `citizenchain/node/src/home/` | 首页 | home | 桌面端首页后端能力 |
 | `citizenchain/node/src/mining/` | 挖矿 | mining | 挖矿业务能力 |
@@ -324,6 +327,13 @@
 | `citizenchain/node/src/other/` | 其他 | other | 未归入专门边界的节点能力 |
 | `citizenchain/node/src/settings/` | 设置 | settings | 节点设置和配置 |
 | `citizenchain/node/src/shared/` | 共享 | shared | 节点后端共享类型和工具 |
+
+## 14.1 citizenchain node 前端目录命名登记
+
+| 路径 | 中文名称 | English name | 简介 |
+|---|---|---|---|
+| `citizenchain/node/frontend/duoqian-transfer/` | 多签转账前端 | duoqian-transfer-node-frontend | node 前端多签转账创建页、API 和类型 |
+| `citizenchain/node/frontend/governance/` | 治理前端 | governance-frontend | node 前端治理机构、提案列表和非多签转账治理页面 |
 
 ## 15. API 字段名登记
 

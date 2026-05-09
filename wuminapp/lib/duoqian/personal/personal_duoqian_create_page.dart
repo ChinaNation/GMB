@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_query_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
@@ -285,7 +285,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       // 写入 Isar `PersonalDuoqianProposalEntity` 时使用,后续详情页打开
       // 通过 PersonalProposalHistoryService 同步链上状态时按此 ID 校准。
       final predictedProposalId =
-          await TransferProposalService().fetchNextProposalId();
+          await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,

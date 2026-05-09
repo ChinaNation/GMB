@@ -5,7 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/institution/institution_data.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_query_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage, QrScanTransferResult;
@@ -186,7 +186,7 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
 
       // 提前查链上 NextProposalId 作为本次关闭提案的预测 ID(req 5 历史保留)。
       final predictedProposalId =
-          await TransferProposalService().fetchNextProposalId();
+          await ProposalQueryService().fetchNextProposalId();
 
       final result = await _manageService.submitProposeClosePersonal(
         duoqianAddress: widget.institution.duoqianAddress,
@@ -369,7 +369,7 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
                   // QrScanPage 在 transfer 模式下 pop 的是 QrScanTransferResult 对象
                   // 而非 String;之前用 Navigator.push<String> 类型不匹配,Flutter
                   // 框架 cast 失败 → push 的 future 拿到 null → 受益人栏不会被填。
-                  // 改抄 transfer_proposal_page._scanToAddress 同款写法。
+                  // 复用转账扫码结果解析写法，仅取收款地址。
                   final result = await Navigator.push<QrScanTransferResult>(
                     context,
                     MaterialPageRoute(

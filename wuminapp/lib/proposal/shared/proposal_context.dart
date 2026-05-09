@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/proposal/shared/internal_vote_query_service.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 用户与某个提案的关系上下文。
@@ -300,12 +300,13 @@ class ProposalContextResolver {
 /// 避免不同入口查错存储导致的状态不一致。
 class VoteChecker {
   VoteChecker({
-    TransferProposalService? proposalService,
+    InternalVoteQueryService? internalVoteService,
     RuntimeUpgradeService? runtimeService,
-  })  : _proposalService = proposalService ?? TransferProposalService(),
+  })  : _internalVoteService =
+            internalVoteService ?? InternalVoteQueryService(),
         _runtimeService = runtimeService ?? RuntimeUpgradeService();
 
-  final TransferProposalService _proposalService;
+  final InternalVoteQueryService _internalVoteService;
   final RuntimeUpgradeService _runtimeService;
 
   /// 检查某管理员是否已对某提案投票。
@@ -324,7 +325,7 @@ class VoteChecker {
     final pk = _normalize(pubkeyHex);
     switch (kind) {
       case 0: // 内部投票
-        return _proposalService.fetchAdminVote(proposalId, pk);
+        return _internalVoteService.fetchAdminVote(proposalId, pk);
       case 1: // 联合投票
         if (institutionBytes == null || institutionBytes.length != 48) {
           return null;

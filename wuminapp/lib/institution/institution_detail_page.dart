@@ -5,6 +5,8 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_entry.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
@@ -16,8 +18,6 @@ import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/proposal_types_page.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_detail_page.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 
@@ -41,7 +41,8 @@ class InstitutionDetailPage extends StatefulWidget {
 class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final WalletManager _walletManager = WalletManager();
-  final TransferProposalService _transferService = TransferProposalService();
+  final DuoqianTransferProposalFeed _duoqianTransferFeed =
+      DuoqianTransferProposalFeed();
   final ActivationService _activationService = ActivationService();
   final ChainRpc _chainRpc = ChainRpc();
   late final ProposalContextResolver _contextResolver = ProposalContextResolver(
@@ -103,11 +104,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _contextResolver.resolve(
           knownInstitution: widget.institution,
         ),
-        _transferService.fetchInstitutionVisibleProposals(
+        _duoqianTransferFeed.fetchInstitutionVisibleProposals(
           widget.institution.sfidNumber,
         ),
         _activationService.getActivatedAdmins(widget.institution.sfidNumber),
-        _transferService
+        _duoqianTransferFeed
             .fetchInstitutionBalance(widget.institution)
             .then<double?>((value) => value)
             .catchError((_) => null),
@@ -215,6 +216,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _adminService.clearCache(widget.institution.sfidNumber);
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
+        DuoqianTransferProposalAdapter.clearCache();
         await _load();
         if (_extraAccountsExpanded) {
           await _loadExtraAccounts(force: true);
@@ -236,6 +238,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ],
           _buildAdminEntry(),
           const SizedBox(height: 12),
+          if (_isCurrentUserAdmin) ...[
+            DuoqianTransferEntryCard(
+              institution: widget.institution,
+              isPersonal: false,
+              enabled: true,
+              loadAdminWallets: () async => _adminWallets,
+              onCreated: _load,
+            ),
+            const SizedBox(height: 12),
+          ],
           _buildProposalList(),
         ],
       ),
@@ -908,8 +920,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   String _proposalTitle(ProposalWithDetail proposal) {
     final proposalId = formatProposalId(proposal.meta.displayMeta);
-    if (proposal.transferDetail != null) {
-      return '转账提案 $proposalId';
+    final duoqianTransferTitle =
+        DuoqianTransferProposalAdapter.title(proposal, proposalId);
+    if (duoqianTransferTitle != null) {
+      return duoqianTransferTitle;
     }
     if (proposal.createDuoqianDetail != null) {
       return '创建多签 $proposalId';
@@ -928,9 +942,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   String _proposalSubtitle(ProposalWithDetail proposal) {
     final status = _statusLabel(proposal.meta.status);
-    final transferDetail = proposal.transferDetail;
-    if (transferDetail != null) {
-      return '${AmountFormat.format(transferDetail.amountYuan, symbol: '')} 元 · $status';
+    final duoqianTransferSubtitle =
+        DuoqianTransferProposalAdapter.subtitle(proposal, status);
+    if (duoqianTransferSubtitle != null) {
+      return duoqianTransferSubtitle;
     }
     final createDetail = proposal.createDuoqianDetail;
     if (createDetail != null) {
@@ -949,8 +964,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   }
 
   IconData _proposalIcon(ProposalWithDetail proposal) {
-    if (proposal.transferDetail != null) {
-      return Icons.send_outlined;
+    final duoqianTransferIcon = DuoqianTransferProposalAdapter.icon(proposal);
+    if (duoqianTransferIcon != null) {
+      return duoqianTransferIcon;
     }
     if (proposal.createDuoqianDetail != null) {
       return Icons.group_add;
@@ -1058,6 +1074,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (mounted) {
       _adminService.clearCache(widget.institution.sfidNumber);
       ProposalCache.clear();
+      DuoqianTransferProposalAdapter.clearCache();
       _load();
     }
   }
@@ -1078,15 +1095,12 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
       );
-    } else if (proposal.transferDetail != null) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: widget.institution,
-            proposalId: proposalId,
-            proposalContext: ctx,
-          ),
-        ),
+    } else if (DuoqianTransferProposalAdapter.matches(proposal)) {
+      await DuoqianTransferProposalAdapter.openDetail(
+        context,
+        proposal: proposal,
+        institution: widget.institution,
+        proposalContext: ctx,
       );
     } else if (proposal.createDuoqianDetail != null ||
         proposal.closeDuoqianDetail != null) {
@@ -1096,30 +1110,6 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             institution: widget.institution,
             proposalId: proposalId,
             proposalContext: ctx,
-          ),
-        ),
-      );
-    } else if (proposal.safetyFundDetail != null) {
-      // 安全基金转账提案：传 kind=safetyFund，页面内按 call_index=4 投票。
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: widget.institution,
-            proposalId: proposalId,
-            proposalContext: ctx,
-            kind: TransferProposalKind.safetyFund,
-          ),
-        ),
-      );
-    } else if (proposal.sweepDetail != null) {
-      // 手续费划转提案：传 kind=sweep，页面内按 call_index=6 投票。
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: widget.institution,
-            proposalId: proposalId,
-            proposalContext: ctx,
-            kind: TransferProposalKind.sweep,
           ),
         ),
       );
@@ -1133,6 +1123,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     if (mounted) {
       _adminService.clearCache(widget.institution.sfidNumber);
       ProposalCache.clear();
+      DuoqianTransferProposalAdapter.clearCache();
       _load();
     }
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -7,9 +9,11 @@ import 'package:wuminapp_mobile/admins_change/services/institution_admin_service
 import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_balance_guard.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_models.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
@@ -23,7 +27,7 @@ import 'package:wuminapp_mobile/proposal/shared/proposal_vote_widgets.dart';
 /// Phase 3(2026-04-22)起,投票动作统一走 `InternalVote::cast`
 /// (9.0),不再按 kind 区分 call_index;`kind` 仅影响"创建提案"路径与
 /// 详情展示逻辑。
-enum TransferProposalKind {
+enum DuoqianTransferKind {
   /// 机构转账提案（propose_transfer, pallet=19 call=0）。
   transfer,
 
@@ -38,18 +42,18 @@ enum TransferProposalKind {
 ///
 /// 通过 [kind] 区分三种转账类提案；不同 kind 读不同 storage、提交不同 extrinsic、
 /// QR 签名显示不同文案。
-class TransferProposalDetailPage extends StatefulWidget {
-  const TransferProposalDetailPage({
+class DuoqianTransferDetailPage extends StatefulWidget {
+  const DuoqianTransferDetailPage({
     super.key,
     required this.institution,
     required this.proposalId,
     required this.proposalContext,
-    this.kind = TransferProposalKind.transfer,
+    this.kind = DuoqianTransferKind.transfer,
   });
 
   final InstitutionInfo institution;
   final int proposalId;
-  final TransferProposalKind kind;
+  final DuoqianTransferKind kind;
 
   /// 统一的提案上下文。
   final ProposalContext proposalContext;
@@ -58,15 +62,14 @@ class TransferProposalDetailPage extends StatefulWidget {
   List<WalletProfile> get adminWallets => proposalContext.adminWallets;
 
   @override
-  State<TransferProposalDetailPage> createState() =>
-      _TransferProposalDetailPageState();
+  State<DuoqianTransferDetailPage> createState() =>
+      _DuoqianTransferDetailPageState();
 }
 
-class _TransferProposalDetailPageState
-    extends State<TransferProposalDetailPage> {
+class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   static const int _statusVoting = 0;
 
-  final TransferProposalService _proposalService = TransferProposalService();
+  final DuoqianTransferService _proposalService = DuoqianTransferService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   bool _loading = true;
   String? _error;
@@ -86,11 +89,11 @@ class _TransferProposalDetailPageState
   /// 本详情页绑定的提案类型标签（供 PendingVoteStore 区分 key）。
   String get _proposalTypeKey {
     switch (widget.kind) {
-      case TransferProposalKind.transfer:
+      case DuoqianTransferKind.transfer:
         return 'transfer';
-      case TransferProposalKind.safetyFund:
+      case DuoqianTransferKind.safetyFund:
         return 'safety_fund';
-      case TransferProposalKind.sweep:
+      case DuoqianTransferKind.sweep:
         return 'sweep';
     }
   }
@@ -98,11 +101,11 @@ class _TransferProposalDetailPageState
   /// 签名显示用的人类可读类型名。
   String get _kindLabel {
     switch (widget.kind) {
-      case TransferProposalKind.transfer:
+      case DuoqianTransferKind.transfer:
         return '转账提案';
-      case TransferProposalKind.safetyFund:
+      case DuoqianTransferKind.safetyFund:
         return '安全基金转账提案';
-      case TransferProposalKind.sweep:
+      case DuoqianTransferKind.sweep:
         return '手续费划转提案';
     }
   }
@@ -116,6 +119,7 @@ class _TransferProposalDetailPageState
   // 投票计数
   int _yesCount = 0;
   int _noCount = 0;
+  int? _thresholdSnapshot;
 
   // 管理员列表与投票记录
   List<String> _admins = const [];
@@ -149,31 +153,41 @@ class _TransferProposalDetailPageState
       //   sweep      → DuoqianTransfer.SweepProposalActions
       final Future<dynamic> detailFuture;
       switch (widget.kind) {
-        case TransferProposalKind.transfer:
+        case DuoqianTransferKind.transfer:
           detailFuture =
               _proposalService.fetchProposalAction(widget.proposalId);
           break;
-        case TransferProposalKind.safetyFund:
+        case DuoqianTransferKind.safetyFund:
           detailFuture =
               _proposalService.fetchSafetyFundAction(widget.proposalId);
           break;
-        case TransferProposalKind.sweep:
+        case DuoqianTransferKind.sweep:
           detailFuture = _proposalService.fetchSweepAction(widget.proposalId);
           break;
       }
 
-      // 并行加载管理员列表、提案状态、投票计数、提案详情
+      // 并行加载提案快照、提案状态、投票计数、提案详情。
+      // 中文注释：多签转账投票资格和进度必须以提案创建时的快照为准，
+      // 不能使用机构当前管理员列表或当前阈值，否则管理员变更后旧提案会显示错误。
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.sfidNumber),
+        _proposalService.fetchAdminSnapshot(
+          widget.proposalId,
+          widget.institution.sfidNumber,
+        ),
+        _proposalService.fetchInternalThresholdSnapshot(widget.proposalId),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
         detailFuture,
       ]);
 
-      final admins = results[0] as List<String>;
-      final status = results[1] as int?;
-      final tally = results[2] as ({int yes, int no});
-      final detail = results[3];
+      var admins = results[0] as List<String>;
+      final thresholdSnapshot = results[1] as int?;
+      final status = results[2] as int?;
+      final tally = results[3] as ({int yes, int no});
+      final detail = results[4];
+      if (admins.isEmpty) {
+        admins = await _adminService.fetchAdmins(widget.institution.sfidNumber);
+      }
 
       // 逐个查询每位管理员的投票记录
       final votes = <String, bool?>{};
@@ -215,6 +229,7 @@ class _TransferProposalDetailPageState
         _status = status;
         _yesCount = tally.yes;
         _noCount = tally.no;
+        _thresholdSnapshot = thresholdSnapshot;
         _adminVotes = votes;
         _pendingPubkeys = pendingPks;
         _votableWallets = votable;
@@ -223,13 +238,13 @@ class _TransferProposalDetailPageState
         _safetyFundInfo = null;
         _sweepInfo = null;
         switch (widget.kind) {
-          case TransferProposalKind.transfer:
+          case DuoqianTransferKind.transfer:
             _transferInfo = detail as TransferProposalInfo?;
             break;
-          case TransferProposalKind.safetyFund:
+          case DuoqianTransferKind.safetyFund:
             _safetyFundInfo = detail as SafetyFundProposalInfo?;
             break;
-          case TransferProposalKind.sweep:
+          case DuoqianTransferKind.sweep:
             _sweepInfo = detail as SweepProposalInfo?;
             break;
         }
@@ -300,10 +315,30 @@ class _TransferProposalDetailPageState
     final wallet = _selectedVoteWallet;
     if (wallet == null) return;
 
+    final balanceBlockedReason =
+        await DuoqianTransferBalanceGuard.checkAdminWalletBalance(
+      wallet: wallet,
+      requiredFeeYuan: DuoqianTransferBalanceGuard.voteFeeYuan,
+      actionLabel: '提交多签转账投票',
+    );
+    if (balanceBlockedReason != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(balanceBlockedReason),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+      return;
+    }
+
     setState(() => _submitting = true);
 
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
+      var pubkey = wallet.pubkeyHex.toLowerCase();
+      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+      TxPoolWatchEvent? txFailureEvent;
 
       Future<Uint8List> signCallback(Uint8List payload) async {
         // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
@@ -355,20 +390,42 @@ class _TransferProposalDetailPageState
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
+        onWatchEvent: (event) {
+          if (!event.isFailure) return;
+          txFailureEvent = event;
+          unawaited(PendingVoteStore.instance.remove(
+            _proposalTypeKey,
+            widget.proposalId,
+            pubkey,
+          ));
+          if (!mounted) return;
+          setState(() {
+            _pendingPubkeys = _pendingPubkeys.difference({pubkey});
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('投票交易未出块：${event.description}'),
+              backgroundColor: AppTheme.danger,
+            ),
+          );
+        },
       );
 
       // 持久化待确认投票记录
-      var pubkey = wallet.pubkeyHex.toLowerCase();
-      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-      await PendingVoteStore.instance.save(PendingVoteRecord(
-        proposalType: _proposalTypeKey,
-        proposalId: widget.proposalId,
-        walletPubkey: pubkey,
-        approve: approve,
-        txHash: result.txHash,
-        usedNonce: result.usedNonce,
-        createdAt: DateTime.now(),
-      ));
+      if (txFailureEvent != null) {
+        throw Exception(txFailureEvent!.description);
+      }
+      await PendingVoteStore.instance.save(
+        PendingVoteRecord(
+          proposalType: _proposalTypeKey,
+          proposalId: widget.proposalId,
+          walletPubkey: pubkey,
+          approve: approve,
+          txHash: result.txHash,
+          usedNonce: result.usedNonce,
+          createdAt: DateTime.now(),
+        ),
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -498,7 +555,8 @@ class _TransferProposalDetailPageState
           ProposalVoteProgress(
             yesCount: _yesCount,
             noCount: _noCount,
-            threshold: widget.institution.internalThreshold,
+            threshold:
+                _thresholdSnapshot ?? widget.institution.internalThreshold,
           ),
           const SizedBox(height: 16),
           ProposalAdminVoteList(
@@ -517,11 +575,11 @@ class _TransferProposalDetailPageState
   /// 提案创建者公钥（仅 transfer / safetyFund 有）。
   String? get _proposerPubkey {
     switch (widget.kind) {
-      case TransferProposalKind.transfer:
+      case DuoqianTransferKind.transfer:
         return _transferInfo?.proposer;
-      case TransferProposalKind.safetyFund:
+      case DuoqianTransferKind.safetyFund:
         return _safetyFundInfo?.proposer;
-      case TransferProposalKind.sweep:
+      case DuoqianTransferKind.sweep:
         return null; // sweep 提案 storage 不记录 proposer
     }
   }
@@ -558,11 +616,11 @@ class _TransferProposalDetailPageState
   /// 按 kind 生成提案信息卡的内容行（含 Divider）。
   List<Widget> _buildInfoRowsByKind() {
     switch (widget.kind) {
-      case TransferProposalKind.transfer:
+      case DuoqianTransferKind.transfer:
         return _buildTransferRows();
-      case TransferProposalKind.safetyFund:
+      case DuoqianTransferKind.safetyFund:
         return _buildSafetyFundRows();
-      case TransferProposalKind.sweep:
+      case DuoqianTransferKind.sweep:
         return _buildSweepRows();
     }
   }

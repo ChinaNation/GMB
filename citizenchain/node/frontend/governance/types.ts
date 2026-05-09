@@ -1,4 +1,5 @@
 // 治理模块前端类型定义，与后端 governance::types 和 admins_change::activation 对应。
+import type { DuoqianTransferProposalDetails } from '../duoqian-transfer/types';
 
 // ── 签名请求/响应 ──
 
@@ -155,15 +156,6 @@ export type ProposalMeta = {
   institutionHex: string | null;
 };
 
-export type TransferProposalDetail = {
-  proposalId: number;
-  institutionHex: string;
-  beneficiaryHex: string;
-  amountFen: string;
-  remark: string;
-  proposerHex: string;
-};
-
 export type RuntimeUpgradeDetail = {
   proposalId: number;
   proposerHex: string;
@@ -172,26 +164,9 @@ export type RuntimeUpgradeDetail = {
   status: number;
 };
 
-
-export type SweepProposalDetail = {
-  proposalId: number;
-  institutionHex: string;
-  amountFen: string;
-};
-
-export type SafetyFundProposalDetail = {
-  proposalId: number;
-  beneficiaryHex: string;
-  amountFen: string;
-  remark: string;
-};
-
-export type ProposalFullInfo = {
+export type ProposalFullInfo = DuoqianTransferProposalDetails & {
   meta: ProposalMeta;
-  transferDetail: TransferProposalDetail | null;
   runtimeUpgradeDetail: RuntimeUpgradeDetail | null;
-  safetyFundDetail: SafetyFundProposalDetail | null;
-  sweepDetail: SweepProposalDetail | null;
   internalTally: VoteTally | null;
   jointTally: VoteTally | null;
   citizenTally: { yes: number; no: number } | null;

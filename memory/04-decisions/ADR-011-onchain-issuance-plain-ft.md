@@ -264,7 +264,7 @@ Phase 2 视实际需求再开 set_metadata。
 **客户端硬编码同步要求**:
 - `wumin/lib/signer/pallet_registry.dart` 必须加 `onchainIssuancePallet=25` + 10 个 call_index 常量
 - `wumin/lib/signer/payload_decoder.dart` 必须加 OnchainIssuance(25) 路由分支 + 10 个 `_decodeProposeOnchainXxx` SCALE 解码器
-- `wuminapp/lib/asset/shared/onchain_asset_constants.dart` 必须加 pallet_index 与 call_index 常量(用于 `transfer_proposal_service.dart` 风格的 RuntimeCall 构造)
+- `wuminapp/lib/asset/shared/onchain_asset_constants.dart` 必须加 pallet_index 与 call_index 常量(用于业务模块 service 风格的 RuntimeCall 构造)
 
 ### 十、ACTION 常量(VotingEngine ProposalData 业务标签)
 

@@ -6,18 +6,17 @@ import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/admins_change/pages/admin_set_change_page.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_limit_service.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_page.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_page.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 提案类型选择页。
 ///
 /// 根据机构类型条件显示可发起的提案类型：
-/// - 所有机构：转账、换管理员、决议销毁
+/// - 所有机构：换管理员、决议销毁
 /// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级、验证密钥
-/// - 仅国储会（NRC）：安全基金转账
+/// 其他业务入口由所属模块提供，proposal 模块不实现业务创建页。
 class ProposalTypesPage extends StatefulWidget {
   const ProposalTypesPage({
     super.key,
@@ -185,22 +184,6 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
           _buildSectionTitle('通用提案'),
           const SizedBox(height: 8),
           _ProposalTypeCard(
-            icon: Icons.send_outlined,
-            title: '转账',
-            subtitle: '从机构多签账户发起转账',
-            color: AppTheme.primary,
-            enabled: proposalActionsEnabled,
-            onTap: () => _checkAndOpenProposal(
-                context,
-                () => TransferProposalPage(
-                      institution: widget.institution,
-                      icon: widget.icon,
-                      badgeColor: widget.badgeColor,
-                      adminWallets: widget.adminWallets,
-                    )),
-          ),
-          const SizedBox(height: 8),
-          _ProposalTypeCard(
             icon: Icons.swap_horiz,
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
@@ -260,21 +243,6 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
               onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
             ),
           ],
-
-          // ──── 国储会专属提案 ────
-          if (widget.institution.orgType == OrgType.nrc) ...[
-            const SizedBox(height: 20),
-            _buildSectionTitle('国储会专属提案'),
-            const SizedBox(height: 8),
-            _ProposalTypeCard(
-              icon: Icons.shield_outlined,
-              title: '安全基金转账',
-              subtitle: '从安全基金账户向指定地址转账',
-              color: AppTheme.info,
-              enabled: proposalActionsEnabled,
-              onTap: () => _checkAndOpenProposal(context, null, name: '安全基金转账'),
-            ),
-          ],
         ],
       ),
     );
@@ -308,20 +276,20 @@ class _ProposalTypesPageState extends State<ProposalTypesPage> {
       return;
     }
     try {
-      final service = TransferProposalService();
+      final service = ProposalLimitService();
       final activeIds =
           await service.fetchActiveProposalIds(widget.institution.sfidNumber);
       if (!context.mounted) return;
 
       if (activeIds.length >=
-          TransferProposalService.maxActiveProposalsPerInstitution) {
+          ProposalLimitService.maxActiveProposalsPerInstitution) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('提案数量已达上限'),
             content: Text(
               '本机构当前有 ${activeIds.length} 个活跃提案，'
-              '已达上限 ${TransferProposalService.maxActiveProposalsPerInstitution} 个。'
+              '已达上限 ${ProposalLimitService.maxActiveProposalsPerInstitution} 个。'
               '请等待现有提案完成后再发起新提案。',
             ),
             actions: [

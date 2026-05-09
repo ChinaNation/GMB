@@ -433,71 +433,18 @@ message = blake2_256(SCALE.encode(payload))
 
 提交成功后，提案类型页应把创建结果向上冒泡到机构详情页，触发列表刷新，避免“链上已创建但机构页仍停留旧状态”。
 
-### 7.5 转账提案功能（已实现）
+### 7.5 多签转账边界
 
-#### 7.5.1 链上模块
+多签转账不属于 governance/proposal 的实现范围。wuminapp 端创建、详情、投票、
+列表适配、余额提示、缓存和页面跳转统一由
+`memory/05-modules/wuminapp/duoqian-transfer/DUOQIAN_TRANSFER_APP_TECHNICAL.md`
+管理。
 
-`duoqian-transfer`(pallet_index=19)提供 propose 系列 extrinsic,投票走统一入口
-`InternalVote::cast`(pallet 22.0):
+governance 侧只允许保留通用提案列表、机构详情页挂载点、投票上下文和
+`InternalVote::cast` 共享能力；不得在 governance 文档或代码中重新描述
+`DuoqianTransfer::propose_*` 的字段、页面、service 或投票实现。
 
-| Extrinsic | pallet.call | 说明 |
-| --- | --- | --- |
-| `propose_transfer(org, institution, beneficiary, amount, remark)` | 19.0 | 管理员发起转账提案 |
-| `InternalVote::cast(proposal_id, approve)` | 22.0 | 管理员投票,达到阈值自动执行(统一入口) |
-
-投票通过后自动执行 `Currency::transfer(转出资金账户 → beneficiary)`（治理机构为 `main_address`，个人多签为 `0x03` 账户，注册机构账户为 `0x05` 账户）。
-执行失败不回滚投票，提案保持 `PASSED`，管理员可通过 `VotingEngine::retry_passed_proposal(9.4)` 统一重试。
-
-#### 7.5.1.1 手续费模型
-
-**提案提交和投票均免费**（`CallAmount` 返回 `NoAmount`），管理员个人账户零消耗，0 余额管理员也能操作。
-
-**手续费仅在投票通过后执行转账时扣取**，从转出资金账户一次性扣除 `转账金额 + 手续费`。
-
-手续费计算公式（与链上交易费一致）：
-- 费率：`amount × 0.1%`
-- 单笔最低：`10 分（0.1 元）`
-
-手续费按制度规则三方分账：
-| 接收方 | 比例 | 说明 |
-| --- | --- | --- |
-| 全节点矿工奖励钱包 | 80% | 通过 `MinerRewardWalletProvider` 查找当前区块矿工绑定钱包 |
-| 国储会账户 | 10% | 通过 `NrcAccountProvider` 提供 |
-| 安全基金账户 | 10% | NRC_ANQUAN_ADDRESS |
-
-分账在 pallet 内部的 `distribute_fee` 函数中完成，与 `OnchainFeeRouter` 规则一致。
-
-#### 7.5.2 App 侧页面
-
-| 页面 | 文件 | 说明 |
-| --- | --- | --- |
-| 转账表单 | `transfer_proposal_page.dart` | 填写收款地址、金额、备注，校验后签名提交 |
-| 提案详情 | `transfer_proposal_detail_page.dart` | 查看提案信息（含备注折叠展开）、投票进度、管理员投票明细、投票操作 |
-
-#### 7.5.2.1 签名方式
-
-所有需要签名的操作（发起提案、投票、普通转账）统一检查钱包类型：
-- **热钱包**（`signMode == 'local'`）：通过 `WalletManager.signWithWallet()` 本地签名，私钥不出类；签名前必须校验本地 seed 派生公钥与页面选中的管理员钱包 `pubkeyHex` 一致
-- **冷钱包**（`signMode == 'external'`）：通过 `QrSigner` 协议（`WUMIN_QR_V1`）发起扫码签名会话，导航到 `QrSignSessionPage` 展示请求二维码，用户用离线设备扫码签名后扫描回执二维码获取签名；回执中的 `pubkey` 必须与页面选中的管理员钱包一致
-
-管理员钱包选择硬约束：
-- 发起提案页面中选中的管理员钱包，是本次提案唯一允许的签名钱包
-- 提案页面用于请求 SFID 人口快照的 `account_pubkey`，必须与最终链上 extrinsic 的签名钱包相同
-- 任何“页面选中 A 钱包，但实际由 B 钱包签名”的情况，都必须在 App 侧直接拦截，不能继续提交
-
-#### 7.5.3 App 侧服务
-
-`TransferProposalService`（`transfer_proposal_service.dart`）封装：
-- Extrinsic 编码（SCALE 编码 call data）和签名提交
-- Storage 查询：活跃提案 ID、投票计数、提案状态、管理员投票记录
-- 机构余额查询
-
-#### 7.5.4 Extrinsic SCALE 编码
-
-**propose_transfer**: `[0x13][0x00][org:u8][institution:48B][beneficiary:32B][amount:u128_le_16B][Vec remark]`
-**InternalVote::cast** (统一投票入口): `[0x16][0x00][proposal_id:u64_le][approve:bool]`
-
-#### 7.5.5 转出资金账户（mainAddress / accounts）
+#### 7.5.1 转出资金账户（mainAddress / accounts）
 
 `InstitutionInfo` 对治理机构使用 `InstitutionAccounts` 表达制度账户：
 - `mainAddress`：主账户，转账提案的默认转出账户
@@ -538,26 +485,23 @@ message = blake2_256(SCALE.encode(payload))
 | `lib/citizen/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
 | `lib/citizen/governance/proposal_cache.dart` | 提案内存缓存（Meta + Transfer Detail + Runtime Upgrade Detail） |
 | `lib/citizen/citizen_tab_page.dart` | 公民 Tab 二级导航入口（投票 / 治理 / 机构） |
-| `lib/citizen/vote/vote_page.dart` | 投票二级页，当前保留公民投票扩展占位 |
+| `lib/vote/vote_view.dart` | 投票二级页，全局治理提案列表与待投票红点 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
-| `lib/citizen/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
-| `lib/citizen/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
-| `lib/citizen/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
+| `lib/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
+| `lib/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
+| `lib/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
 | `lib/admins_change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminSubjectService` 读取 `AdminsChange::Subjects`） |
-| `lib/citizen/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
-| `lib/citizen/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
-| `lib/citizen/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
-| `lib/citizen/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
-| `lib/citizen/proposal/shared/pending_vote_store.dart` | 多提案共用待确认投票记录 |
-| `lib/citizen/proposal/shared/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
-| `lib/citizen/proposal/proposal_types_page.dart` | 提案类型选择页（转账已接入真实页面） |
-| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
-| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
-| `lib/citizen/proposal/runtime_upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
-| `lib/citizen/institution/admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
-| `lib/citizen/proposal/transfer/transfer_proposal_page.dart` | 转账提案创建页（表单 + 校验 + 签名提交） |
-| `lib/citizen/proposal/transfer/transfer_proposal_detail_page.dart` | 转账提案详情页（投票进度 + 管理员明细 + 投票操作） |
-| `lib/citizen/proposal/transfer/transfer_proposal_service.dart` | 提案列表装配服务（转账提案 + 联合提案查询、分页与机构页事件聚合） |
+| `lib/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
+| `lib/proposal/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
+| `lib/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
+| `lib/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
+| `lib/proposal/shared/pending_vote_store.dart` | 多提案共用待确认投票记录 |
+| `lib/proposal/shared/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
+| `lib/proposal/proposal_types_page.dart` | 提案类型选择页 |
+| `lib/proposal/runtime_upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
+| `lib/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
+| `lib/proposal/runtime_upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
+| `lib/institution/institution_admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
 | `lib/duoqian/shared` | 纯多签共享层（单类型列表、账户详情、管理服务、关闭提案、二维码、管理提案详情） |
 | `lib/duoqian/institution` | 机构多签层（机构列表入口、机构创建表单） |
 | `lib/duoqian/personal` | 个人多签层（个人列表入口、个人创建表单） |
@@ -609,15 +553,14 @@ message = blake2_256(SCALE.encode(payload))
 2. 其他管理员调用 `InternalVote::cast` → 投票引擎记票
 3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
 
-### 8.7 转账接入
+### 8.7 多签转账接入边界
 
-- `wuminapp` 现已把三类可转账账户都编码为 `SubjectId(48)`：
-  - 治理机构：`0x01 + sfid_number UTF-8 + 右零填充`
-  - 个人多签：`0x03 + duoqian_address(32) + 15 字节 0`
-  - 注册机构账户：`0x05 + duoqian_address(32) + 15 字节 0`
-- `TransferProposalService` 会统一按这套编码查询活跃提案、过滤机构提案并构造 `propose_transfer` call data。
-- `InstitutionAdminService` 对注册机构账户按 `registeredDuoqianIdentity` 内的账户地址读取 `AdminsChange::Subjects[0x05 InstitutionAccount]`；个人多签直接读取 `0x03 PersonalDuoqian`；内置治理机构读取 `0x01 BuiltinInstitution`。
-- 冷钱包 `propose_transfer` 展示字段为 `institution / beneficiary / amount_yuan / remark`，其中 `institution` 从 SubjectId 解码为内置机构名、`个人多签 <short>` 或 `机构账户 <short>`；`org` 仅用于链端路由，不进入展示字段。
+多签账户管理目录只负责账户注册、创建、关闭、状态展示和管理员管理。
+发起转账、转账详情、投票进度、余额提示、列表适配与详情跳转均由
+`lib/duoqian-transfer/` 实现。
+
+`lib/duoqian/` 不实现多签转账逻辑；账户详情页如需展示转账入口，
+只允许挂载 `lib/duoqian-transfer/duoqian_transfer_entry.dart` 提供的入口组件。
 
 ### 8.8 手机端入口分流
 
@@ -628,13 +571,13 @@ message = blake2_256(SCALE.encode(payload))
 - `个人多签`：只读取 `PersonalDuoqianEntity`，右上角提供“创建个人多签账户”和链上自动发现/刷新入口。
 
 旧的 `lib/trade/duoqian/duoqian_trade_page.dart` 聚合页已删除。发起转账提案不删除，
-入口改为放在每个多签账户详情页，进入后仍使用
-`lib/citizen/proposal/transfer/transfer_proposal_page.dart` 构造 `DuoqianTransfer::propose_transfer`。
+入口由 `lib/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
+具体页面和链上构造仍归 `lib/duoqian-transfer/`。
 
 2026-04-30 第二轮收口只迁移纯多签文件：账户管理模型/服务、账户详情、创建、
 关闭、账户二维码与多签管理提案详情归入 `lib/duoqian`；QR 协议、Isar schema、
-钱包流水、治理聚合页、机构通用服务、内部投票通用服务与转账提案通用文件仍留在
-原模块目录。
+钱包流水、治理聚合页、机构通用服务和内部投票通用服务仍留在原模块目录；
+多签转账相关文件统一归 `lib/duoqian-transfer/`。
 
 2026-04-30 第三轮收口删除治理提案类型页中的“创建多签/关闭多签”入口。多签创建
 只能从 `机构多签` 或 `个人多签` 列表右上角进入；多签关闭只能从具体多签账户详情
@@ -665,14 +608,11 @@ message = blake2_256(SCALE.encode(payload))
 
 ## 9. 源码对齐基线
 
-- `lib/citizen/institution/institution_data.dart`
+- `lib/institution/institution_data.dart`
 - `lib/admins_change/services/institution_admin_service.dart`
-- `lib/citizen/institution/institution_detail_page.dart`
-- `lib/citizen/proposal/proposal_types_page.dart`
-- `lib/citizen/institution/admin_list_page.dart`
-- `lib/citizen/proposal/transfer/transfer_proposal_page.dart`
-- `lib/citizen/proposal/transfer/transfer_proposal_detail_page.dart`
-- `lib/citizen/proposal/transfer/transfer_proposal_service.dart`
+- `lib/institution/institution_detail_page.dart`
+- `lib/proposal/proposal_types_page.dart`
+- `lib/institution/institution_admin_list_page.dart`
 - `lib/duoqian/shared/duoqian_account_list_page.dart`
 - `lib/duoqian/shared/duoqian_account_info_page.dart`
 - `lib/duoqian/shared/duoqian_manage_models.dart`

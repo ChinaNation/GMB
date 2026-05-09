@@ -6,9 +6,9 @@ import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -339,33 +339,6 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  Future<void> _openTransferProposal() async {
-    final wallets = await _getAdminWallets();
-    if (!mounted || wallets.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未找到此多签账户的管理员钱包')),
-        );
-      }
-      return;
-    }
-
-    final created = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TransferProposalPage(
-          institution: widget.institution,
-          icon: widget.isPersonal ? Icons.person : Icons.business,
-          badgeColor: widget.isPersonal ? AppTheme.accent : AppTheme.info,
-          adminWallets: wallets,
-        ),
-      ),
-    );
-    if (created == true && mounted) {
-      await _load();
-    }
-  }
-
   // ──── UI ────
 
   @override
@@ -546,7 +519,13 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
           ),
 
           const SizedBox(height: 16),
-          _buildTransferEntryCard(),
+          DuoqianTransferEntryCard(
+            institution: widget.institution,
+            isPersonal: widget.isPersonal,
+            enabled: _accountInfo?.status == DuoqianStatus.active,
+            loadAdminWallets: _getAdminWallets,
+            onCreated: _load,
+          ),
 
           const SizedBox(height: 16),
 
@@ -685,82 +664,6 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     } catch (_) {
       return null;
     }
-  }
-
-  Widget _buildTransferEntryCard() {
-    // 待激活的多签账户(链上提案尚未通过 → DuoqianStatus.pending)不允许发起转账提案,
-    // 整张卡片置灰显示但不响应点击,文案提示用户先完成激活。
-    final canTransfer = _accountInfo?.status == DuoqianStatus.active;
-    final accentColor =
-        canTransfer ? AppTheme.primaryDark : AppTheme.textTertiary;
-    final subtitle = canTransfer ? '从当前多签账户发起链上转账' : '账户尚未激活,无法发起转账';
-
-    // bug 2(2026-05-03):卡片高度对齐 institution_detail_page._buildAdminEntry,
-    // 36×36 icon + Padding(14,12),与管理员卡片一致(原 38×38 + Padding(16,14) 偏高)。
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: accentColor.withValues(alpha: 0.15)),
-      ),
-      child: InkWell(
-        onTap: canTransfer ? _openTransferProposal : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Opacity(
-          opacity: canTransfer ? 1.0 : 0.5,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.send_outlined,
-                    size: 18,
-                    color: accentColor,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '发起转账',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.primaryDark,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: AppTheme.textTertiary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   /// 账户余额行(bug 4):

@@ -13,7 +13,8 @@ import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/duoqian/personal/personal_proposal_history_service.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_balance_guard.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart' show OnchainRpc;
@@ -22,8 +23,8 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 机构转账提案创建页面。
-class TransferProposalPage extends StatefulWidget {
-  const TransferProposalPage({
+class DuoqianTransferPage extends StatefulWidget {
+  const DuoqianTransferPage({
     super.key,
     required this.institution,
     required this.icon,
@@ -39,10 +40,10 @@ class TransferProposalPage extends StatefulWidget {
   final List<WalletProfile> adminWallets;
 
   @override
-  State<TransferProposalPage> createState() => _TransferProposalPageState();
+  State<DuoqianTransferPage> createState() => _DuoqianTransferPageState();
 }
 
-class _TransferProposalPageState extends State<TransferProposalPage> {
+class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   final _beneficiaryController = TextEditingController();
   final _amountController = TextEditingController();
   final _remarkController = TextEditingController();
@@ -83,7 +84,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
 
   Future<void> _fetchBalance() async {
     try {
-      final service = TransferProposalService();
+      final service = DuoqianTransferService();
       final balance = await service.fetchInstitutionBalance(widget.institution);
       if (!mounted) return;
       setState(() {
@@ -191,6 +192,21 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
     }
 
     final wallet = _selectedWallet;
+    final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
+    final requiredAdminFee = OnchainRpc.estimateTransferFeeYuan(amountYuan);
+    final balanceBlockedReason =
+        await DuoqianTransferBalanceGuard.checkAdminWalletBalance(
+      wallet: wallet,
+      requiredFeeYuan: requiredAdminFee,
+      actionLabel: '发起多签转账提案',
+    );
+    if (balanceBlockedReason != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(balanceBlockedReason)),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
 
@@ -261,7 +277,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
 
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
-      final service = TransferProposalService();
+      final service = DuoqianTransferService();
       // 提前查链上 NextProposalId,作为本次转账提案的预测 ID;
       // 若该多签是个人多签,后续写入 Isar 历史(req 5)。
       final predictedProposalId = await service.fetchNextProposalId();
@@ -269,7 +285,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       await service.submitProposeTransfer(
         institution: widget.institution,
         beneficiaryAddress: _beneficiaryController.text.trim(),
-        amountYuan: AmountFormat.tryParse(_amountController.text) ?? 0,
+        amountYuan: amountYuan,
         remark: _remarkController.text,
         fromAddress: wallet.address,
         signerPubkey: signerPubkey,
@@ -282,7 +298,7 @@ class _TransferProposalPageState extends State<TransferProposalPage> {
       await _maybeRecordPersonalProposal(
         proposalId: predictedProposalId,
         beneficiary: _beneficiaryController.text.trim(),
-        amountYuan: AmountFormat.tryParse(_amountController.text) ?? 0,
+        amountYuan: amountYuan,
       );
 
       if (!mounted) return;

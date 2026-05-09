@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateProposalPage } from './CreateProposalPage';
-import { SafetyFundProposalPage } from './SafetyFundProposalPage';
-import { SweepProposalPage } from './SweepProposalPage';
+import { CreateDuoqianTransferPage } from '../duoqian-transfer/CreateProposalPage';
+import { SafetyFundProposalPage } from '../duoqian-transfer/SafetyFundProposalPage';
+import { SweepProposalPage } from '../duoqian-transfer/SweepProposalPage';
 import { RuntimeUpgradeProposalPage } from './RuntimeUpgradeProposalPage';
 import type { AdminWalletMatch } from './types';
 
@@ -63,7 +63,7 @@ export function NrcSection() {
 
   if (view.page === 'create-proposal') {
     return (
-      <CreateProposalPage
+      <CreateDuoqianTransferPage
         sfidNumber={NRC_SFID_NUMBER}
         orgType={view.orgType}
         institutionName={view.institutionName}

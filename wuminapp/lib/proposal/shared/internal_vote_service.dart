@@ -10,10 +10,10 @@ import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 /// Phase 3(2026-04-22)「投票引擎统一入口整改」在客户端的落地:
 ///
 /// - 所有业务 pallet(admins_change / resolution_destro /
-///   grandpakey_change / duoqian_manage / duoqian_transfer)的
+///   grandpakey_change / duoqian_manage / transaction 业务)的
 ///   业务 pallet 不再提供独立投票入口,管理员一人一票一律走
 ///   `InternalVote::cast(proposal_id, approve)` 一条路径。
-/// - 业务 service(TransferProposalService / DuoqianManageService 等)
+/// - 业务 service(DuoqianManageService 等)
 ///   只负责发起提案(propose_X)；执行重试统一走 VotingEngine.retry_passed_proposal,
 ///   投票动作统一
 ///   委托本服务,避免多处构造相同的 call。
