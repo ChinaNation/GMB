@@ -1,0 +1,199 @@
+//! 多签转账 Tauri 命令。
+
+use crate::{governance, home};
+use tauri::AppHandle;
+
+/// 构建多签转账提案签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_duoqian_transfer_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    sfid_number: String,
+    org_type: u8,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+) -> Result<governance::signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        super::signing::build_propose_transfer_sign_request(
+            &pubkey_hex,
+            &sfid_number,
+            org_type,
+            &beneficiary_address,
+            amount_yuan,
+            &remark,
+        )
+    })
+    .await
+    .map_err(|e| format!("build duoqian transfer request task failed: {e}"))?
+}
+
+/// 验证签名响应并提交多签转账提案。
+#[tauri::command]
+pub async fn submit_duoqian_transfer(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    sfid_number: String,
+    org_type: u8,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<governance::signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法提交提案".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let amount_fen = (amount_yuan * 100.0).round() as u128;
+        let institution_id = super::subject_id::subject_id_from_transfer_identity(&sfid_number)?;
+        let beneficiary_bytes = governance::signing::decode_ss58_to_pubkey(&beneficiary_address)?;
+        let remark_bytes = remark.as_bytes();
+        let remark_compact = governance::signing::encode_compact_u32_pub(remark_bytes.len() as u32);
+
+        let mut call_data = Vec::new();
+        call_data.push(19u8);
+        call_data.push(0u8);
+        call_data.push(org_type);
+        call_data.extend_from_slice(&institution_id);
+        call_data.extend_from_slice(&beneficiary_bytes);
+        call_data.extend_from_slice(&amount_fen.to_le_bytes());
+        call_data.extend_from_slice(&remark_compact);
+        call_data.extend_from_slice(remark_bytes);
+
+        governance::signing::verify_and_submit(
+            &request_id,
+            &expected_pubkey_hex,
+            &expected_payload_hash,
+            &call_data,
+            sign_nonce,
+            sign_block_number,
+            &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit duoqian transfer task failed: {e}"))?
+}
+
+/// 构建安全基金转账提案签名请求 QR JSON（需要节点运行）。
+#[tauri::command]
+pub async fn build_duoqian_safety_fund_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+) -> Result<governance::signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法构建签名请求".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        super::signing::build_propose_safety_fund_sign_request(
+            &pubkey_hex,
+            &beneficiary_address,
+            amount_yuan,
+            &remark,
+        )
+    })
+    .await
+    .map_err(|e| format!("build duoqian safety fund request task failed: {e}"))?
+}
+
+/// 验证签名响应并提交安全基金转账提案。
+#[tauri::command]
+pub async fn submit_duoqian_safety_fund(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    beneficiary_address: String,
+    amount_yuan: f64,
+    remark: String,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<governance::signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行，无法提交提案".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let call_data = super::signing::build_safety_fund_call_data(
+            &beneficiary_address,
+            amount_yuan,
+            &remark,
+        )?;
+        governance::signing::verify_and_submit(
+            &request_id,
+            &expected_pubkey_hex,
+            &expected_payload_hash,
+            &call_data,
+            sign_nonce,
+            sign_block_number,
+            &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit duoqian safety fund task failed: {e}"))?
+}
+
+/// 构建手续费划转提案签名请求。
+#[tauri::command]
+pub async fn build_duoqian_sweep_request(
+    app: AppHandle,
+    pubkey_hex: String,
+    sfid_number: String,
+    amount_yuan: f64,
+) -> Result<governance::signing::VoteSignRequestResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        super::signing::build_propose_sweep_sign_request(&pubkey_hex, &sfid_number, amount_yuan)
+    })
+    .await
+    .map_err(|e| format!("build duoqian sweep failed: {e}"))?
+}
+
+/// 验证签名并提交手续费划转提案。
+#[tauri::command]
+pub async fn submit_duoqian_sweep(
+    app: AppHandle,
+    request_id: String,
+    expected_pubkey_hex: String,
+    expected_payload_hash: String,
+    sfid_number: String,
+    amount_yuan: f64,
+    sign_nonce: u32,
+    sign_block_number: u64,
+    response_json: String,
+) -> Result<governance::signing::VoteSubmitResult, String> {
+    let status = home::current_status(&app)?;
+    if !status.running {
+        return Err("节点未运行".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let call_data = super::signing::build_sweep_call_data(&sfid_number, amount_yuan)?;
+        governance::signing::verify_and_submit(
+            &request_id,
+            &expected_pubkey_hex,
+            &expected_payload_hash,
+            &call_data,
+            sign_nonce,
+            sign_block_number,
+            &response_json,
+        )
+    })
+    .await
+    .map_err(|e| format!("submit duoqian sweep failed: {e}"))?
+}

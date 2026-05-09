@@ -5,7 +5,7 @@ import { sanitizeError } from '../core/tauri';
 import { hexToSs58 } from '../shared/ss58';
 import { QrScanner } from '../shared/qr/QrScanner';
 import { AddressScanModal } from '../shared/qr/AddressScanModal';
-import { governanceApi as api } from './api';
+import { duoqianTransferApi as api } from './api';
 import type { AdminWalletMatch, VoteSignRequestResult } from './types';
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 
 type Step = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
-export function CreateProposalPage({
+export function CreateDuoqianTransferPage({
   sfidNumber, orgType, institutionName, mainAddress, adminWallets, onBack, onSuccess,
 }: Props) {
   const [step, setStep] = useState<Step>('form');
@@ -82,7 +82,7 @@ export function CreateProposalPage({
       const amount = parseFloat(amountYuan.replace(/,/g, ''));
       formValuesRef.current = { beneficiary: beneficiary.trim(), amountYuan: amount, remark };
 
-      const result = await api.buildProposeTransferRequest(
+      const result = await api.buildDuoqianTransferRequest(
         selectedWallet!.pubkeyHex, sfidNumber, orgType,
         beneficiary.trim(), amount, remark,
       );
@@ -110,7 +110,7 @@ export function CreateProposalPage({
     setStep('submit');
     try {
       const { beneficiary: ben, amountYuan: amt, remark: rmk } = formValuesRef.current;
-      const result = await api.submitProposeTransfer(
+      const result = await api.submitDuoqianTransfer(
         req.requestId, wallet.pubkeyHex, req.expectedPayloadHash,
         sfidNumber, orgType, ben, amt, rmk,
         req.signNonce, req.signBlockNumber, responseText,

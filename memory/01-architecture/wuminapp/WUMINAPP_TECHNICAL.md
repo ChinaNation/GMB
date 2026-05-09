@@ -71,17 +71,19 @@ wuminapp/
 - `proposal/`：提案域，按具体提案类型继续拆三级目录
 - `shared/`：公民模块跨二级目录共用能力
 
-`lib/citizen/proposal/` 下的具体结构：
+`lib/proposal/` 下的具体结构：
 
 ```text
 proposal/
   shared/           ← 多种提案共用模型、内部投票、待确认投票、投票组件
-  transfer/         ← 转账 / 安全基金转账 / 手续费划转提案
   runtime_upgrade/  ← Runtime 升级提案
   resolution_issuance/
   resolution_destroy/
   grandpakey_change/
 ```
+
+多签转账不是 `proposal/` 子目录；创建、详情、投票、列表适配和缓存统一放在
+`lib/duoqian-transfer/`。
 
 管理员更换和管理员激活归属 `lib/admins_change/`，不放在 `lib/proposal/` 或 `lib/institution/` 下；`proposal` 与机构页只保留入口跳转或调用。多钱账户注册/关闭与多钱管理提案详情归属 `lib/duoqian/`，不在公民提案三级目录下预留。
 
@@ -319,8 +321,8 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 | 能力 | 链上入口 | 手机端模块 | 签名域 | 当前状态 |
 | --- | --- | --- | --- | --- |
 | 转账 | `Balances::transfer_keep_alive` extrinsic（直连 RPC 节点） | `lib/onchain` | `onchain_tx` | 已实现（本机签名主链路） |
-| 提案 | 业务治理 pallet `propose_*` | `lib/citizen/proposal` | `onchain_tx`（交易签名）+ SFID 快照签名字段 | 转账、Runtime 升级已接入 |
-| 投票 | 业务治理内部投票 / 投票引擎 `joint_vote` / `citizen_vote` | `lib/citizen/proposal` | `onchain_tx`（交易签名）+ SFID 投票凭证签名字段 | 管理员内部/联合投票已接入，公民投票待补齐 |
+| 提案 | 业务治理 pallet `propose_*` | `lib/proposal` + 各业务模块目录 | `onchain_tx`（交易签名）+ SFID 快照签名字段 | Runtime 升级已接入，多签转账在 `lib/duoqian-transfer` |
+| 投票 | 业务治理内部投票 / 投票引擎 `joint_vote` / `citizen_vote` | `lib/proposal` + 各业务模块目录 | `onchain_tx`（交易签名）+ SFID 投票凭证签名字段 | 管理员内部/联合投票已接入，公民投票待补齐 |
 
 ### 7.2 区块链字段与格式标准（总则）
 

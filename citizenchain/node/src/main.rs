@@ -13,6 +13,7 @@
 
 mod core;
 mod desktop;
+mod duoqian_transfer;
 mod governance;
 mod home;
 mod mining;

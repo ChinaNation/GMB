@@ -277,7 +277,13 @@ pub enum Error<T> {
 
 ### 6.2 手续费处理方式
 
-提案提交和投票交易本身**免费**(`CallAmount` 返回 `NoAmount`)。手续费在投票通过后由 pallet 的 `try_execute_transfer_from_callback` 内部处理:
+提案提交和投票交易不是免费交易：
+
+- `DuoqianTransfer::propose_transfer / propose_safety_fund_transfer / propose_sweep_to_main` 由签名管理员钱包按转账金额计费（`amount × 0.1%`，最低 0.1 元）。
+- `InternalVote::cast` 由投票管理员钱包按 `VOTE_FLAT_FEE = 1 元` 计费。
+- 多签资金账户仍需在执行阶段承担实际转账金额、内部手续费和 ED 保留要求。
+
+投票通过后，pallet 的 `try_execute_transfer_from_callback` 内部还会处理转出账户侧的执行费用：
 
 1. 通过 `calculate_onchain_fee(amount)` 计算手续费。
 2. 校验余额 >= `amount + fee + ED`。
@@ -285,7 +291,7 @@ pub enum Error<T> {
 4. 执行 `Currency::withdraw()` 扣取手续费。
 5. 通过 `FeeRouter` 按规则分账。
 
-`RuntimeFeePayerExtractor` 对 `DuoqianTransfer` 返回 `None`（不参与外部手续费流程）。
+因此前端必须同时提示两类余额：管理员钱包余额不足会导致提案/投票交易被交易支付扩展拒绝；多签账户余额不足会导致提案执行失败。
 
 ### 6.3 手续费分账
 
@@ -465,10 +471,17 @@ impl duoqian_transfer::Config for Runtime {
 
 ### 13.2 CallAmount 配置
 
-`DuoqianTransfer` 的所有 extrinsic 返回 `NoAmount`（免费提交），手续费在 pallet 内部扣取：
+`DuoqianTransfer` 的 propose 系列 extrinsic 按金额计费；`InternalVote::cast` 按固定 1 元计费：
 ```rust
-RuntimeCall::DuoqianTransfer(_) => {
-    onchain_transaction::AmountExtractResult::NoAmount
+RuntimeCall::DuoqianTransfer(ref dt_call) => match dt_call {
+    duoqian_transfer::pallet::Call::propose_transfer { amount, .. }
+    | duoqian_transfer::pallet::Call::propose_safety_fund_transfer { amount, .. }
+    | duoqian_transfer::pallet::Call::propose_sweep_to_main { amount, .. } => {
+        onchain_transaction::AmountExtractResult::Amount(*amount)
+    }
+    _ => onchain_transaction::AmountExtractResult::Amount(
+        primitives::fee_policy::VOTE_FLAT_FEE,
+    ),
 }
 ```
 

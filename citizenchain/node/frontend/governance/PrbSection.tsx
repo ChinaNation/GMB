@@ -6,8 +6,8 @@ import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateProposalPage } from './CreateProposalPage';
-import { SweepProposalPage } from './SweepProposalPage';
+import { CreateDuoqianTransferPage } from '../duoqian-transfer/CreateProposalPage';
+import { SweepProposalPage } from '../duoqian-transfer/SweepProposalPage';
 import type { AdminWalletMatch } from './types';
 
 type PrbView =
@@ -47,7 +47,7 @@ export function PrbSection() {
 
   if (view.page === 'create-proposal') {
     return (
-      <CreateProposalPage
+      <CreateDuoqianTransferPage
         sfidNumber={view.sfidNumber}
         orgType={view.orgType}
         institutionName={view.institutionName}

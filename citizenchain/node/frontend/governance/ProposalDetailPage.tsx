@@ -1,9 +1,9 @@
-// 提案详情页：提案元数据 + 业务详情（转账/升级）+ 投票进度 + 管理员投票状态列表。
+// 提案详情页：提案元数据 + 业务详情模块挂载 + 投票进度 + 管理员投票状态列表。
 // 从提案列表和机构页面进入时行为一致：自动检测管理员钱包权限。
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../core/tauri';
-import { formatBalance } from '../shared/format';
 import { hexToSs58 } from '../shared/ss58';
+import { DuoqianTransferProposalDetailSection } from '../duoqian-transfer/ProposalDetailSection';
 import { adminsChangeApi } from './admins_change/api';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';
@@ -206,32 +206,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         )}
       </div>
 
-      {/* 转账提案详情 */}
-      {info.transferDetail && (
-        <div className="institution-info-section">
-          <h3>转账详情</h3>
-          <div className="proposal-detail-table">
-            <div className="detail-row">
-              <span className="detail-label">金额</span>
-              <span className="detail-value">
-                {formatBalance(info.transferDetail.amountFen)}
-              </span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">收款人</span>
-              <code className="detail-value">{hexToSs58(info.transferDetail.beneficiaryHex)}</code>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">备注</span>
-              <span className="detail-value">{info.transferDetail.remark || '—'}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">提案人</span>
-              <code className="detail-value">{hexToSs58(info.transferDetail.proposerHex)}</code>
-            </div>
-          </div>
-        </div>
-      )}
+      <DuoqianTransferProposalDetailSection info={info} />
 
       {/* Runtime 升级提案详情 */}
       {info.runtimeUpgradeDetail && (
@@ -255,42 +230,6 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             <div className="detail-row">
               <span className="detail-label">提案人</span>
               <code className="detail-value">{hexToSs58(info.runtimeUpgradeDetail.proposerHex)}</code>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 安全基金转账提案详情 */}
-      {info.safetyFundDetail && (
-        <div className="institution-info-section">
-          <h3>安全基金转账详情</h3>
-          <div className="proposal-detail-table">
-            <div className="detail-row">
-              <span className="detail-label">收款地址</span>
-              <code className="detail-value">{hexToSs58(info.safetyFundDetail.beneficiaryHex)}</code>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">金额</span>
-              <span className="detail-value">{formatBalance(info.safetyFundDetail.amountFen)}</span>
-            </div>
-            {info.safetyFundDetail.remark && (
-              <div className="detail-row">
-                <span className="detail-label">备注</span>
-                <span className="detail-value">{info.safetyFundDetail.remark}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 手续费划转提案详情 */}
-      {info.sweepDetail && (
-        <div className="institution-info-section">
-          <h3>手续费划转详情</h3>
-          <div className="proposal-detail-table">
-            <div className="detail-row">
-              <span className="detail-label">金额</span>
-              <span className="detail-value">{formatBalance(info.sweepDetail.amountFen)}</span>
             </div>
           </div>
         </div>

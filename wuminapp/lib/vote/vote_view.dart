@@ -2,23 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
 
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_detail_page.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/vote/constitution_quote.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
@@ -50,7 +46,8 @@ class _VoteViewState extends State<VoteView> {
   static const int _orgPrc = 1;
   static const int _orgPrb = 2;
 
-  final TransferProposalService _proposalService = TransferProposalService();
+  final DuoqianTransferProposalFeed _duoqianTransferFeed =
+      DuoqianTransferProposalFeed();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ProposalContextResolver _contextResolver = ProposalContextResolver();
   final VoteChecker _voteChecker = VoteChecker();
@@ -137,9 +134,9 @@ class _VoteViewState extends State<VoteView> {
   /// 拉三 org 反向索引并集,降序返回(主键单调,降序即按时间倒序)。
   Future<List<int>> _fetchAllGovernanceIds() async {
     final results = await Future.wait([
-      _proposalService.fetchProposalIdsByOrg(_orgNrc),
-      _proposalService.fetchProposalIdsByOrg(_orgPrc),
-      _proposalService.fetchProposalIdsByOrg(_orgPrb),
+      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgNrc),
+      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgPrc),
+      _duoqianTransferFeed.fetchProposalIdsByOrg(_orgPrb),
     ]);
     final all = <int>{...results[0], ...results[1], ...results[2]}.toList();
     all.sort((a, b) => b.compareTo(a));
@@ -224,7 +221,7 @@ class _VoteViewState extends State<VoteView> {
     if (ids.isEmpty) return const [];
 
     // 批量取提案详情(meta + 业务详情)
-    final proposals = await _proposalService.fetchProposalsByIds(ids);
+    final proposals = await _duoqianTransferFeed.fetchProposalsByIds(ids);
 
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
@@ -325,6 +322,7 @@ class _VoteViewState extends State<VoteView> {
           _adminService.clearCache();
           _contextResolver.clearWalletCache();
           ProposalCache.clear();
+          DuoqianTransferProposalAdapter.clearCache();
           await _loadFirstPage();
         },
         child: ListView(
@@ -339,6 +337,7 @@ class _VoteViewState extends State<VoteView> {
         _adminService.clearCache();
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
+        DuoqianTransferProposalAdapter.clearCache();
         await _loadFirstPage();
       },
       child: ListView.separated(
@@ -371,7 +370,8 @@ class _VoteViewState extends State<VoteView> {
     final inst = item.institution;
     final statusColor = _statusColor(meta.status);
     final statusLabel = _statusLabel(meta.status);
-    final detail = item.proposal.transferDetail;
+    final duoqianTransferSummary =
+        DuoqianTransferProposalAdapter.listSummary(item.proposal);
     final upgradeDetail = item.proposal.runtimeUpgradeDetail;
     final createDqDetail = item.proposal.createDuoqianDetail;
     final closeDqDetail = item.proposal.closeDuoqianDetail;
@@ -402,8 +402,13 @@ class _VoteViewState extends State<VoteView> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                      _proposalIcon(detail, upgradeDetail, createDqDetail,
-                          closeDqDetail, resIssuance, resDestroy),
+                      _proposalIcon(
+                          item.proposal,
+                          upgradeDetail,
+                          createDqDetail != null,
+                          closeDqDetail != null,
+                          resIssuance,
+                          resDestroy),
                       size: 18,
                       color: statusColor),
                 ),
@@ -444,9 +449,8 @@ class _VoteViewState extends State<VoteView> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        detail != null
-                            ? '转账 ${AmountFormat.format(detail.amountYuan, symbol: '')} 元'
-                            : upgradeDetail != null
+                        duoqianTransferSummary ??
+                            (upgradeDetail != null
                                 ? 'Runtime 升级'
                                 : createDqDetail != null
                                     ? '创建个人多签'
@@ -458,7 +462,7 @@ class _VoteViewState extends State<VoteView> {
                                                 ? '决议销毁'
                                                 : meta.kind == 1
                                                     ? '联合投票提案'
-                                                    : '提案 ${_kindLabel(meta.kind)}',
+                                                    : '提案 ${_kindLabel(meta.kind)}'),
                         style: const TextStyle(
                             fontSize: 12, color: AppTheme.textTertiary),
                       ),
@@ -529,17 +533,18 @@ class _VoteViewState extends State<VoteView> {
 
   /// 根据提案类型返回图标。
   IconData _proposalIcon(
-    TransferProposalInfo? detail,
+    ProposalWithDetail proposal,
     RuntimeUpgradeProposalInfo? upgradeDetail, [
-    CreateDuoqianProposalInfo? createDqDetail,
-    CloseDuoqianProposalInfo? closeDqDetail,
+    bool hasCreateDqDetail = false,
+    bool hasCloseDqDetail = false,
     String? resIssuance,
     String? resDestroy,
   ]) {
-    if (detail != null) return Icons.send_outlined; // 转账
+    final duoqianTransferIcon = DuoqianTransferProposalAdapter.icon(proposal);
+    if (duoqianTransferIcon != null) return duoqianTransferIcon;
     if (upgradeDetail != null) return Icons.arrow_upward; // Runtime 升级
-    if (createDqDetail != null) return Icons.group_add; // 创建多签
-    if (closeDqDetail != null) return Icons.group_remove; // 关闭多签
+    if (hasCreateDqDetail) return Icons.group_add; // 创建多签
+    if (hasCloseDqDetail) return Icons.group_remove; // 关闭多签
     if (resIssuance != null) return Icons.add_circle_outline; // 决议发行
     if (resDestroy != null) return Icons.remove_circle_outline; // 决议销毁
     return Icons.description_outlined; // 其他/未知
@@ -570,16 +575,12 @@ class _VoteViewState extends State<VoteView> {
           ),
         ),
       );
-    } else if (item.proposal.transferDetail != null && inst != null) {
-      // 转账提案
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: inst,
-            proposalId: proposalId,
-            proposalContext: item.context,
-          ),
-        ),
+    } else if (DuoqianTransferProposalAdapter.matches(item.proposal)) {
+      await DuoqianTransferProposalAdapter.openDetail(
+        context,
+        proposal: item.proposal,
+        institution: inst,
+        proposalContext: item.context,
       );
     } else if ((item.proposal.createDuoqianDetail != null ||
             item.proposal.closeDuoqianDetail != null) &&
@@ -591,32 +592,6 @@ class _VoteViewState extends State<VoteView> {
             institution: inst,
             proposalId: proposalId,
             proposalContext: item.context,
-          ),
-        ),
-      );
-    } else if (item.proposal.safetyFundDetail != null && inst != null) {
-      // 安全基金转账提案：复用 TransferProposalDetailPage，传 kind=safetyFund。
-      // Phase 3 后管理员投票统一走 InternalVote::cast(22.0)。
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: inst,
-            proposalId: proposalId,
-            proposalContext: item.context,
-            kind: TransferProposalKind.safetyFund,
-          ),
-        ),
-      );
-    } else if (item.proposal.sweepDetail != null && inst != null) {
-      // 手续费划转提案：kind=sweep。
-      // Phase 3 后管理员投票统一走 InternalVote::cast(22.0)。
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransferProposalDetailPage(
-            institution: inst,
-            proposalId: proposalId,
-            proposalContext: item.context,
-            kind: TransferProposalKind.sweep,
           ),
         ),
       );
@@ -632,6 +607,7 @@ class _VoteViewState extends State<VoteView> {
     if (mounted) {
       _adminService.clearCache();
       ProposalCache.clear();
+      DuoqianTransferProposalAdapter.clearCache();
       _loadFirstPage();
     }
   }
@@ -649,5 +625,4 @@ class _ProposalDisplayItem {
   final bool needsVote;
 
   InstitutionInfo? get institution => context.institution;
-  List<WalletProfile> get adminWallets => context.adminWallets;
 }

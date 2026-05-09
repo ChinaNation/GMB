@@ -20,7 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/institution/institution_data.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_query_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
@@ -76,7 +76,7 @@ class PersonalAdminListPage extends StatefulWidget {
 class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
   static final _keyring = Keyring();
 
-  final TransferProposalService _proposalService = TransferProposalService();
+  final ProposalQueryService _proposalService = ProposalQueryService();
   final PersonalPendingCreateLookup _lookup = PersonalPendingCreateLookup();
 
   bool _loading = true;
@@ -310,8 +310,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
               ListTile(
                 leading: CircleAvatar(
                   radius: 16,
-                  backgroundColor:
-                      AppTheme.primaryDark.withValues(alpha: 0.08),
+                  backgroundColor: AppTheme.primaryDark.withValues(alpha: 0.08),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
@@ -330,8 +329,7 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
                 ),
                 subtitle: isCreator
                     ? const Text('创建者',
-                        style:
-                            TextStyle(fontSize: 11, color: AppTheme.accent))
+                        style: TextStyle(fontSize: 11, color: AppTheme.accent))
                     : null,
                 trailing: _buildActivateButton(state),
               ),
@@ -371,9 +369,8 @@ class _PersonalAdminListPageState extends State<PersonalAdminListPage> {
   /// 编码失败(理论上不会发生,数据来自链上 storage)兜底返回原始 hex,避免崩溃。
   String _pubkeyToSS58(String pubkeyHex) {
     try {
-      final hex = pubkeyHex.startsWith('0x')
-          ? pubkeyHex.substring(2)
-          : pubkeyHex;
+      final hex =
+          pubkeyHex.startsWith('0x') ? pubkeyHex.substring(2) : pubkeyHex;
       final bytes = Uint8List(hex.length ~/ 2);
       for (var i = 0; i < bytes.length; i++) {
         bytes[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);

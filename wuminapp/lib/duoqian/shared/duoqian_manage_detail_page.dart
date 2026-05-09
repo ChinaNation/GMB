@@ -11,7 +11,7 @@ import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_vote_widgets.dart';
-import 'package:wuminapp_mobile/proposal/transfer/transfer_proposal_service.dart';
+import 'package:wuminapp_mobile/proposal/shared/proposal_query_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
@@ -49,7 +49,7 @@ class DuoqianManageDetailPage extends StatefulWidget {
 class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   static const int _statusVoting = 0;
 
-  final TransferProposalService _proposalService = TransferProposalService();
+  final ProposalQueryService _proposalService = ProposalQueryService();
   final DuoqianManageService _manageService = DuoqianManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
   bool _loading = true;

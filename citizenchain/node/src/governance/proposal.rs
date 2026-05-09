@@ -1,5 +1,6 @@
 // 提案查询：提案列表、详情、投票计数，通过 RPC 读取 VotingEngine 链上存储。
 
+use crate::shared::proposal_business;
 use crate::shared::rpc;
 use serde::Serialize;
 use serde_json::Value;
@@ -9,8 +10,6 @@ use super::{signing, storage_keys};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// MODULE_TAG 前缀（必须与对应 pallet 保持一致）。
-const TAG_TRANSFER: &[u8] = b"dq-xfer";
 const TAG_RUNTIME_UPGRADE: &[u8] = b"rt-upg";
 const TAG_RESOLUTION_ISSUANCE: &[u8] = b"res-iss";
 const TAG_RESOLUTION_DESTROY: &[u8] = b"res-dst";
@@ -54,22 +53,6 @@ pub struct ProposalMeta {
     pub institution_hex: Option<String>,
 }
 
-/// 转账提案详情（从 VotingEngine::ProposalData 解码）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransferProposalDetail {
-    pub proposal_id: u64,
-    /// 机构 48 字节 hex。
-    pub institution_hex: String,
-    /// 收款人公钥 hex。
-    pub beneficiary_hex: String,
-    /// 金额（分）。
-    pub amount_fen: String,
-    pub remark: String,
-    /// 提案人公钥 hex。
-    pub proposer_hex: String,
-}
-
 /// Runtime 升级提案详情（从 VotingEngine::ProposalData 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,11 +94,10 @@ pub struct ReferendumVoteTally {
 #[serde(rename_all = "camelCase")]
 pub struct ProposalFullInfo {
     pub meta: ProposalMeta,
-    pub transfer_detail: Option<TransferProposalDetail>,
+    #[serde(flatten)]
+    pub business_details: proposal_business::ProposalDetails,
     pub runtime_upgrade_detail: Option<RuntimeUpgradeDetail>,
     pub fee_rate_detail: Option<FeeRateProposalDetail>,
-    pub safety_fund_detail: Option<SafetyFundProposalDetail>,
-    pub sweep_detail: Option<SweepProposalDetail>,
     pub resolution_issuance_detail: Option<ResolutionIssuanceDetail>,
     pub resolution_destroy_detail: Option<ResolutionDestroyDetail>,
     pub internal_tally: Option<VoteTally>,
@@ -123,25 +105,6 @@ pub struct ProposalFullInfo {
     pub referendum_tally: Option<ReferendumVoteTally>,
     /// 关联机构名称（通过 institutionBytes 反查）。
     pub institution_name: Option<String>,
-}
-
-/// 安全基金转账提案详情。
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SafetyFundProposalDetail {
-    pub proposal_id: u64,
-    pub beneficiary_hex: String,
-    pub amount_fen: String,
-    pub remark: String,
-}
-
-/// 手续费划转提案详情。
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SweepProposalDetail {
-    pub proposal_id: u64,
-    pub institution_hex: String,
-    pub amount_fen: String,
 }
 
 /// 费率提案详情。
@@ -221,15 +184,13 @@ struct ProposalDisplayInfo {
 ///
 /// 每种变体用 `Box` 包裹是为了控制 enum 大小(`ResolutionIssuance` 含 Vec 较重)。
 enum ProposalAction {
-    Transfer(Box<TransferProposalDetail>),
+    Business(Box<proposal_business::ProposalAction>),
     RuntimeUpgrade(Box<RuntimeUpgradeDetail>),
     ResolutionIssuance(Box<ResolutionIssuanceDetail>),
     ResolutionDestroy(Box<ResolutionDestroyDetail>),
     /// 中文注释：费率提案详情展示结构已保留，链上查询接入前该动作分支暂不构造。
     #[allow(dead_code)]
     FeeRate(Box<FeeRateProposalDetail>),
-    SafetyFund(Box<SafetyFundProposalDetail>),
-    Sweep(Box<SweepProposalDetail>),
     /// 所有可能数据源都查过仍无命中,展示层回退为"无详情数据"。
     Unknown,
 }
@@ -361,13 +322,11 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     // 业务动作:一次性解析,按变体分发到 7 个 *_detail 字段。
     let action = resolve_proposal_action(proposal_id, &meta)?;
     let (
-        transfer_detail,
+        business_details,
         runtime_upgrade_detail,
         resolution_issuance_detail,
         resolution_destroy_detail,
         fee_rate_detail,
-        safety_fund_detail,
-        sweep_detail,
     ) = split_action_into_details(action);
 
     // 根据提案阶段查询对应的投票计数。
@@ -393,11 +352,9 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
 
     Ok(ProposalFullInfo {
         meta,
-        transfer_detail,
+        business_details,
         runtime_upgrade_detail,
         fee_rate_detail,
-        safety_fund_detail,
-        sweep_detail,
         resolution_issuance_detail,
         resolution_destroy_detail,
         internal_tally,
@@ -407,32 +364,57 @@ pub fn fetch_proposal_full(proposal_id: u64) -> Result<ProposalFullInfo, String>
     })
 }
 
-/// 把 [`ProposalAction`] 展开成 `ProposalFullInfo` 的 7 个 `*_detail` Option。
+/// 把 [`ProposalAction`] 展开成 `ProposalFullInfo` 的业务详情字段。
 ///
-/// 返回元组顺序:transfer / runtime_upgrade / resolution_issuance / resolution_destroy
-/// / fee_rate / safety_fund / sweep。未命中的类型全部为 `None`;
-/// `Unknown` 时 7 个字段都是 `None`。
+/// 业务模块详情由共享适配层承载，再 flatten 到接口返回值中；
+/// 其它治理详情仍保留在本聚合层。
 #[allow(clippy::type_complexity)]
 fn split_action_into_details(
     action: ProposalAction,
 ) -> (
-    Option<TransferProposalDetail>,
+    proposal_business::ProposalDetails,
     Option<RuntimeUpgradeDetail>,
     Option<ResolutionIssuanceDetail>,
     Option<ResolutionDestroyDetail>,
     Option<FeeRateProposalDetail>,
-    Option<SafetyFundProposalDetail>,
-    Option<SweepProposalDetail>,
 ) {
     match action {
-        ProposalAction::Transfer(d) => (Some(*d), None, None, None, None, None, None),
-        ProposalAction::RuntimeUpgrade(d) => (None, Some(*d), None, None, None, None, None),
-        ProposalAction::ResolutionIssuance(d) => (None, None, Some(*d), None, None, None, None),
-        ProposalAction::ResolutionDestroy(d) => (None, None, None, Some(*d), None, None, None),
-        ProposalAction::FeeRate(d) => (None, None, None, None, Some(*d), None, None),
-        ProposalAction::SafetyFund(d) => (None, None, None, None, None, Some(*d), None),
-        ProposalAction::Sweep(d) => (None, None, None, None, None, None, Some(*d)),
-        ProposalAction::Unknown => (None, None, None, None, None, None, None),
+        ProposalAction::Business(d) => ((*d).into_details(), None, None, None, None),
+        ProposalAction::RuntimeUpgrade(d) => (
+            proposal_business::ProposalDetails::default(),
+            Some(*d),
+            None,
+            None,
+            None,
+        ),
+        ProposalAction::ResolutionIssuance(d) => (
+            proposal_business::ProposalDetails::default(),
+            None,
+            Some(*d),
+            None,
+            None,
+        ),
+        ProposalAction::ResolutionDestroy(d) => (
+            proposal_business::ProposalDetails::default(),
+            None,
+            None,
+            Some(*d),
+            None,
+        ),
+        ProposalAction::FeeRate(d) => (
+            proposal_business::ProposalDetails::default(),
+            None,
+            None,
+            None,
+            Some(*d),
+        ),
+        ProposalAction::Unknown => (
+            proposal_business::ProposalDetails::default(),
+            None,
+            None,
+            None,
+            None,
+        ),
     }
 }
 
@@ -567,13 +549,12 @@ fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> 
 /// 按优先级依次查询所有提案动作来源,返回命中的第一个业务动作。
 ///
 /// 查找顺序(命中即返回,不重复查询):
-/// 1. `VotingEngine::ProposalData`(转账/升级/发行/销毁 4 种,按 kind 分流)
-/// 2. `DuoqianTransfer::SafetyFundProposalActions`
-/// 3. `DuoqianTransfer::SweepProposalActions`
-/// 4. 全部未命中 → [`ProposalAction::Unknown`]
+/// 1. `VotingEngine::ProposalData`(业务模块/升级/发行/销毁,按 kind 分流)
+/// 2. 业务模块独立 storage 动作
+/// 3. 全部未命中 → [`ProposalAction::Unknown`]
 ///
-/// 常见提案(转账/升级/销毁/发行)1 次 RPC 即可命中;安全基金/手续费划转
-/// 因业务 detail 存在独立 pallet 存储,会多查 1~2 次,但这几类提案频率极低。
+/// 常见提案(业务模块/升级/销毁/发行)1 次 RPC 即可命中;少量业务 detail
+/// 存在独立 pallet 存储,会多查 1~2 次,但这几类提案频率极低。
 /// 原"省储行费率提案"(`RateProposalActions`)已在 Step 2b-iv-b 随老省储行
 /// pallet Call 一起下线,此处不再枚举。
 fn resolve_proposal_action(
@@ -597,9 +578,11 @@ fn resolve_proposal_action(
                         return Ok(ProposalAction::ResolutionIssuance(Box::new(detail)));
                     }
                 } else {
-                    // 内部投票:先转账,再销毁
-                    if let Some(detail) = decode_transfer_action(proposal_id, data) {
-                        return Ok(ProposalAction::Transfer(Box::new(detail)));
+                    // 内部投票:先交给业务模块适配层识别,再识别治理侧销毁。
+                    if let Some(action) =
+                        proposal_business::decode_internal_proposal_data_action(proposal_id, data)
+                    {
+                        return Ok(ProposalAction::Business(Box::new(action)));
                     }
                     if let Some(detail) = decode_resolution_destroy_action(proposal_id, data) {
                         return Ok(ProposalAction::ResolutionDestroy(Box::new(detail)));
@@ -609,17 +592,12 @@ fn resolve_proposal_action(
         }
     }
 
-    // ── Step 2:SafetyFundProposalActions(安全基金) ──
-    if let Ok(Some(detail)) = fetch_safety_fund_proposal_action(proposal_id) {
-        return Ok(ProposalAction::SafetyFund(Box::new(detail)));
+    // ── Step 2:业务模块独立 storage ──
+    if let Some(action) = proposal_business::fetch_stored_action(proposal_id)? {
+        return Ok(ProposalAction::Business(Box::new(action)));
     }
 
-    // ── Step 3:SweepProposalActions(手续费划转) ──
-    if let Ok(Some(detail)) = fetch_sweep_proposal_action(proposal_id) {
-        return Ok(ProposalAction::Sweep(Box::new(detail)));
-    }
-
-    // 4:全部未命中
+    // Step 3:全部未命中
     Ok(ProposalAction::Unknown)
 }
 
@@ -756,52 +734,6 @@ fn decode_proposal_meta(proposal_id: u64, data: &[u8]) -> Option<ProposalMeta> {
         status,
         internal_org,
         institution_hex,
-    })
-}
-
-fn decode_transfer_action(proposal_id: u64, data: &[u8]) -> Option<TransferProposalDetail> {
-    // MODULE_TAG("dq-xfer":7) + institution: [u8;48] + beneficiary: [u8;32] + amount: u128(16)
-    // + remark: Vec<u8> + proposer: [u8;32]
-    let tag = TAG_TRANSFER;
-    if data.len() < tag.len() + 48 + 32 + 16 + 1 + 32 {
-        return None;
-    }
-    if &data[..tag.len()] != tag {
-        return None;
-    }
-    let mut offset = tag.len();
-
-    let institution_hex = hex::encode(&data[offset..offset + 48]);
-    offset += 48;
-
-    let beneficiary_hex = hex::encode(&data[offset..offset + 32]);
-    offset += 32;
-
-    let amount_bytes: [u8; 16] = data[offset..offset + 16].try_into().ok()?;
-    let amount_fen = u128::from_le_bytes(amount_bytes);
-    offset += 16;
-
-    // remark: Vec<u8>
-    let (remark_len, remark_len_size) = read_compact_u32(data, offset).ok()?;
-    offset += remark_len_size;
-    if offset + remark_len as usize > data.len() {
-        return None;
-    }
-    let remark = String::from_utf8_lossy(&data[offset..offset + remark_len as usize]).to_string();
-    offset += remark_len as usize;
-
-    if offset + 32 > data.len() {
-        return None;
-    }
-    let proposer_hex = hex::encode(&data[offset..offset + 32]);
-
-    Some(TransferProposalDetail {
-        proposal_id,
-        institution_hex,
-        beneficiary_hex,
-        amount_fen: amount_fen.to_string(),
-        remark,
-        proposer_hex,
     })
 }
 
@@ -1133,8 +1065,10 @@ fn fetch_proposal_display(
 ) -> Result<ProposalDisplayInfo, String> {
     let action = resolve_proposal_action(proposal_id, meta)?;
     let (summary, status, status_label_s) = match action {
-        ProposalAction::Transfer(d) => (
-            format_transfer_summary(&d),
+        ProposalAction::Business(action) => (
+            proposal_business::format_summary(&action, |institution_hex| {
+                resolve_institution_name(Some(institution_hex))
+            }),
             meta.status,
             status_label(meta.status).to_string(),
         ),
@@ -1164,16 +1098,6 @@ fn fetch_proposal_display(
             meta.status,
             status_label(meta.status).to_string(),
         ),
-        ProposalAction::SafetyFund(d) => (
-            format_safety_fund_summary(&d),
-            meta.status,
-            status_label(meta.status).to_string(),
-        ),
-        ProposalAction::Sweep(d) => (
-            format_sweep_summary(&d),
-            meta.status,
-            status_label(meta.status).to_string(),
-        ),
         ProposalAction::Unknown => (
             "（无详情数据）".to_string(),
             meta.status,
@@ -1198,15 +1122,6 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
     } else {
         truncated
     }
-}
-
-fn format_transfer_summary(d: &TransferProposalDetail) -> String {
-    let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    let remark_short = truncate_chars(&d.remark, 30);
-    format!(
-        "转账 {} 元：{remark_short}",
-        signing::format_amount(amount as f64 / 100.0)
-    )
 }
 
 fn format_runtime_upgrade_summary(d: &RuntimeUpgradeDetail) -> String {
@@ -1240,24 +1155,6 @@ fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let inst_name = resolve_institution_name(Some(&d.institution_hex))
         .unwrap_or_else(|| "未知机构".to_string());
     format!("费率设置 {rate_percent}：{inst_name}")
-}
-
-fn format_safety_fund_summary(d: &SafetyFundProposalDetail) -> String {
-    let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    format!(
-        "安全基金转账 {} 元",
-        signing::format_amount(amount as f64 / 100.0)
-    )
-}
-
-fn format_sweep_summary(d: &SweepProposalDetail) -> String {
-    let amount: u128 = d.amount_fen.parse().unwrap_or(0);
-    let inst_name = resolve_institution_name(Some(&d.institution_hex))
-        .unwrap_or_else(|| "未知机构".to_string());
-    format!(
-        "手续费划转 {} 元：{inst_name}",
-        signing::format_amount(amount as f64 / 100.0)
-    )
 }
 
 fn runtime_upgrade_display_status(runtime_status: u8, fallback_status: u8) -> (u8, &'static str) {
@@ -1358,85 +1255,6 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
     }
 }
 
-// ──── 费率提案 ────
-
-/// 从链上 SafetyFundProposalActions 存储查询安全基金提案数据。
-fn fetch_safety_fund_proposal_action(
-    proposal_id: u64,
-) -> Result<Option<SafetyFundProposalDetail>, String> {
-    let key = storage_keys::map_key(
-        "DuoqianTransfer",
-        "SafetyFundProposalActions",
-        &proposal_id.to_le_bytes(),
-    );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
-            let data = decode_hex_storage(&hex_data)?;
-            // SafetyFundAction: beneficiary(32) + amount(u128=16) + remark(compact+bytes) + proposer(32)
-            if data.len() < 80 {
-                return Ok(None);
-            }
-            let beneficiary_hex = hex::encode(&data[..32]);
-            let amount_fen = {
-                let mut bytes = [0u8; 16];
-                bytes.copy_from_slice(&data[32..48]);
-                u128::from_le_bytes(bytes)
-            };
-            // remark: compact length + bytes
-            let (remark_len, compact_size) = read_compact_u32(&data, 48)?;
-            let remark_start = 48 + compact_size;
-            let remark_end = remark_start + remark_len as usize;
-            let remark = if remark_end <= data.len() {
-                String::from_utf8_lossy(&data[remark_start..remark_end]).to_string()
-            } else {
-                String::new()
-            };
-
-            Ok(Some(SafetyFundProposalDetail {
-                proposal_id,
-                beneficiary_hex,
-                amount_fen: amount_fen.to_string(),
-                remark,
-            }))
-        }
-        _ => Ok(None),
-    }
-}
-
-/// 从链上 DuoqianTransfer::SweepProposalActions 存储查询手续费划转提案数据。
-fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalDetail>, String> {
-    let key = storage_keys::map_key(
-        "DuoqianTransfer",
-        "SweepProposalActions",
-        &proposal_id.to_le_bytes(),
-    );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
-    match result {
-        Value::Null => Ok(None),
-        Value::String(hex_data) => {
-            let data = decode_hex_storage(&hex_data)?;
-            // SweepAction: institution([u8;48]) + amount(u128=16)
-            if data.len() < 64 {
-                return Ok(None);
-            }
-            let institution_hex = hex::encode(&data[..48]);
-            let amount_fen = {
-                let mut bytes = [0u8; 16];
-                bytes.copy_from_slice(&data[48..64]);
-                u128::from_le_bytes(bytes)
-            };
-            Ok(Some(SweepProposalDetail {
-                proposal_id,
-                institution_hex,
-                amount_fen: amount_fen.to_string(),
-            }))
-        }
-        _ => Ok(None),
-    }
-}
-
 // ──── 单元测试 ────
 
 #[cfg(test)]
@@ -1459,34 +1277,6 @@ mod format_summary_tests {
         assert_eq!(truncate_chars("中华人民共和国家", 10), "中华人民共和国家");
         // 8 个汉字 > 4 字符上限 → 保留前 4 字符 + …
         assert_eq!(truncate_chars("中华人民共和国家", 4), "中华人民…");
-    }
-
-    #[test]
-    fn format_transfer_summary_basic() {
-        let d = TransferProposalDetail {
-            proposal_id: 1,
-            institution_hex: String::new(),
-            beneficiary_hex: String::new(),
-            amount_fen: "23400".to_string(), // 234.00 元
-            remark: "办公采购".to_string(),
-            proposer_hex: String::new(),
-        };
-        assert_eq!(format_transfer_summary(&d), "转账 234.00 元：办公采购");
-    }
-
-    #[test]
-    fn format_transfer_summary_truncates_long_remark() {
-        let long = "一二三四五六七八九十".repeat(4); // 40 个汉字
-        let d = TransferProposalDetail {
-            proposal_id: 1,
-            institution_hex: String::new(),
-            beneficiary_hex: String::new(),
-            amount_fen: "100".to_string(),
-            remark: long,
-            proposer_hex: String::new(),
-        };
-        let summary = format_transfer_summary(&d);
-        assert!(summary.contains("…"), "超过 30 字符时应带省略号: {summary}");
     }
 
     #[test]
@@ -1549,43 +1339,21 @@ mod format_summary_tests {
     }
 
     #[test]
-    fn format_safety_fund_summary_shows_amount() {
-        let d = SafetyFundProposalDetail {
-            proposal_id: 6,
-            beneficiary_hex: String::new(),
-            amount_fen: "12345".to_string(), // 123.45 元
-            remark: String::new(),
-        };
-        assert_eq!(format_safety_fund_summary(&d), "安全基金转账 123.45 元");
-    }
-
-    #[test]
-    fn format_sweep_summary_shows_amount_and_unknown_institution() {
-        let d = SweepProposalDetail {
-            proposal_id: 7,
-            institution_hex: "00".repeat(48),
-            amount_fen: "999900".to_string(), // 9999 元
-        };
-        assert_eq!(format_sweep_summary(&d), "手续费划转 9,999.00 元：未知机构");
-    }
-
-    #[test]
     fn split_action_into_details_maps_each_variant() {
-        let boxed = |a: u128| TransferProposalDetail {
+        let detail = RuntimeUpgradeDetail {
             proposal_id: 1,
-            institution_hex: String::new(),
-            beneficiary_hex: String::new(),
-            amount_fen: a.to_string(),
-            remark: String::new(),
             proposer_hex: String::new(),
+            reason: "升级".to_string(),
+            code_hash_hex: String::new(),
+            status: 0,
         };
-        let (t, ru, ri, rd, fr, sf, sw) =
-            split_action_into_details(ProposalAction::Transfer(Box::new(boxed(1))));
-        assert!(t.is_some());
-        assert!(ru.is_none() && ri.is_none() && rd.is_none());
-        assert!(fr.is_none() && sf.is_none() && sw.is_none());
+        let (dq, ru, ri, rd, fr) =
+            split_action_into_details(ProposalAction::RuntimeUpgrade(Box::new(detail)));
+        let _ = dq;
+        assert!(ru.is_some());
+        assert!(ri.is_none() && rd.is_none() && fr.is_none());
 
-        let (t2, _, _, _, _, _, _) = split_action_into_details(ProposalAction::Unknown);
-        assert!(t2.is_none());
+        let (_, ru2, _, _, _) = split_action_into_details(ProposalAction::Unknown);
+        assert!(ru2.is_none());
     }
 }

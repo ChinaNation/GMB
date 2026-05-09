@@ -14,12 +14,14 @@ import 'package:wuminapp_mobile/institution/institution_data.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_cache.dart';
+import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_models.dart';
 
 /// 机构转账提案链上交互服务。
 ///
 /// 负责 extrinsic 编码/提交 和 storage 查询。
-class TransferProposalService {
-  TransferProposalService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+class DuoqianTransferService {
+  DuoqianTransferService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
   final ChainRpc _rpc;
 
@@ -502,7 +504,8 @@ class TransferProposalService {
         }
       } else {
         // 内部投票提案：先查转账缓存，再查管理缓存
-        final cachedTransfer = ProposalCache.getTransferDetail(entry.key);
+        final cachedTransfer =
+            DuoqianTransferCache.getTransferDetail(entry.key);
         if (cachedTransfer != null) {
           cachedTransferDetails[entry.key] = cachedTransfer;
           continue;
@@ -561,7 +564,7 @@ class TransferProposalService {
         final transferDetail = _decodeProposalData(id, raw);
         if (transferDetail != null) {
           cachedTransferDetails[id] = transferDetail;
-          ProposalCache.putTransferDetail(id, transferDetail);
+          DuoqianTransferCache.putTransferDetail(id, transferDetail);
         }
       }
     }
@@ -616,12 +619,18 @@ class TransferProposalService {
       }
       results.add(ProposalWithDetail(
         meta: meta,
-        transferDetail: transferDetail?.copyWithStatus(meta.status),
         runtimeUpgradeDetail: runtimeUpgradeDetail,
         createDuoqianDetail: createDuoqianDetail?.copyWithStatus(meta.status),
         closeDuoqianDetail: closeDuoqianDetail?.copyWithStatus(meta.status),
-        safetyFundDetail: safetyFundDetail,
-        sweepDetail: sweepDetail,
+        businessDetails: {
+          if (transferDetail != null)
+            DuoqianTransferProposalDetailKeys.transfer:
+                transferDetail.copyWithStatus(meta.status),
+          if (safetyFundDetail != null)
+            DuoqianTransferProposalDetailKeys.safetyFund: safetyFundDetail,
+          if (sweepDetail != null)
+            DuoqianTransferProposalDetailKeys.sweep: sweepDetail,
+        },
         resolutionIssuanceSummary: resIssuanceSummary,
         resolutionDestroySummary: resDestroySummary,
       ));
@@ -691,12 +700,13 @@ class TransferProposalService {
     final proposals = <TransferProposalInfo>[];
 
     for (final proposal in visibleProposals) {
-      final detail = proposal.transferDetail;
-      if (detail == null) {
+      final detailObject =
+          proposal.businessDetails[DuoqianTransferProposalDetailKeys.transfer];
+      if (detailObject is! TransferProposalInfo) {
         continue;
       }
-      if (_bytesEqual(detail.institutionBytes, institutionBytes)) {
-        proposals.add(detail.copyWithStatus(proposal.meta.status));
+      if (_bytesEqual(detailObject.institutionBytes, institutionBytes)) {
+        proposals.add(detailObject.copyWithStatus(proposal.meta.status));
       }
     }
 
