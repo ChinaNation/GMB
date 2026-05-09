@@ -4,8 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_models.dart'
+    as org_models;
+import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/personal-manage/personal_manage_models.dart';
+import 'package:wuminapp_mobile/personal-manage/personal_manage_service.dart';
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
@@ -529,6 +532,7 @@ class DuoqianTransferService {
 
     if (uncachedDetailKeys.isNotEmpty) {
       final manageService = DuoqianManageService(chainRpc: _rpc);
+      final personalManageService = PersonalManageService(chainRpc: _rpc);
       final batchResult = await _rpc.fetchStorageBatch(uncachedDetailKeys);
       for (var i = 0; i < uncachedDetailIds.length; i++) {
         final id = uncachedDetailIds[i];
@@ -547,17 +551,31 @@ class DuoqianTransferService {
           continue;
         }
 
-        // 内部投票提案：先尝试解码为多签管理提案，失败再尝试转账提案。
-        // 管理提案按 MODULE_TAG 区分 org-mgmt / per-mgmt，再解析各自 action。
-        final manageDetail = manageService.decodeManageProposalData(id, raw);
-        if (manageDetail is CreateDuoqianProposalInfo) {
-          cachedCreateDuoqianDetails[id] = manageDetail;
-          ProposalCache.putCreateDuoqianDetail(id, manageDetail);
+        // 内部投票提案：先按 PersonalManage 解码，再按 OrganizationManage 解码，
+        // 失败后才尝试普通多签转账提案。
+        final personalDetail =
+            personalManageService.decodePersonalProposalData(id, raw);
+        if (personalDetail is CreateDuoqianProposalInfo) {
+          cachedCreateDuoqianDetails[id] = personalDetail;
+          ProposalCache.putCreateDuoqianDetail(id, personalDetail);
           continue;
         }
-        if (manageDetail is CloseDuoqianProposalInfo) {
-          cachedCloseDuoqianDetails[id] = manageDetail;
-          ProposalCache.putCloseDuoqianDetail(id, manageDetail);
+        if (personalDetail is CloseDuoqianProposalInfo) {
+          cachedCloseDuoqianDetails[id] = personalDetail;
+          ProposalCache.putCloseDuoqianDetail(id, personalDetail);
+          continue;
+        }
+        final orgManageDetail = manageService.decodeManageProposalData(id, raw);
+        if (orgManageDetail is org_models.CloseDuoqianProposalInfo) {
+          final detail = CloseDuoqianProposalInfo(
+            proposalId: orgManageDetail.proposalId,
+            duoqianAddress: orgManageDetail.duoqianAddress,
+            beneficiary: orgManageDetail.beneficiary,
+            proposer: orgManageDetail.proposer,
+            status: orgManageDetail.status,
+          );
+          cachedCloseDuoqianDetails[id] = detail;
+          ProposalCache.putCloseDuoqianDetail(id, detail);
           continue;
         }
 

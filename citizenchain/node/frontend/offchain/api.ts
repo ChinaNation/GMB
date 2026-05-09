@@ -5,18 +5,10 @@ import type {
   ConnectivityTestReport,
   DecryptAdminRequestResult,
   DecryptedAdminInfo,
-  EligibleClearingBankCandidate,
-  InitialAccountInputDto,
-  InstitutionDetail,
-  InstitutionProposalPage,
-  InstitutionRegistrationInfoResp,
 } from './types';
 
-// 清算行 offchain 页面专用 Tauri API。全局 api.ts 不再承载清算行业务命令。
+// 清算行 offchain 网络专用 Tauri API。机构多签命令归 governance/organization-manage/api.ts。
 export const offchainApi = {
-  searchEligibleClearingBanks: (query: string, limit?: number) =>
-    invoke<EligibleClearingBankCandidate[]>('search_eligible_clearing_banks', { query, limit }),
-
   queryClearingBankNodeInfo: (sfidNumber: string) =>
     invoke<ClearingBankNodeOnChainInfo | null>('query_clearing_bank_node_info', { sfidNumber }),
 
@@ -148,84 +140,4 @@ export const offchainApi = {
 
   lockDecryptedAdmin: (pubkeyHex: string) =>
     invoke<void>('lock_decrypted_admin', { pubkeyHex }),
-
-  // ── 机构详情(链上 organization-manage::Institutions[sfid_number]) ──
-
-  fetchInstitutionDetail: (sfidNumber: string) =>
-    invoke<InstitutionDetail | null>('fetch_clearing_bank_institution_detail', { sfidNumber }),
-
-  fetchInstitutionProposals: (sfidNumber: string, startId: number, pageSize: number) =>
-    invoke<InstitutionProposalPage>('fetch_clearing_bank_institution_proposals', {
-      sfidNumber,
-      startId,
-      pageSize,
-    }),
-
-  // ── 创建机构多签:拉 SFID registration-info + 构 extrinsic + 提交 ──
-
-  fetchInstitutionRegistrationInfo: (sfidNumber: string) =>
-    invoke<InstitutionRegistrationInfoResp>(
-      'fetch_clearing_bank_institution_registration_info',
-      { sfidNumber },
-    ),
-
-  buildProposeCreateInstitutionRequest: (params: {
-    pubkeyHex: string;
-    sfidNumber: string;
-    institutionName: string;
-    accounts: InitialAccountInputDto[];
-    adminPubkeys: string[];
-    threshold: number;
-    registerNonce: string;
-    signatureHex: string;
-    signingProvince: string;
-    signerAdminPubkey: string;
-  }) =>
-    invoke<VoteSignRequestResult>('build_propose_create_institution_request', {
-      pubkeyHex: params.pubkeyHex,
-      sfidNumber: params.sfidNumber,
-      institutionName: params.institutionName,
-      accounts: params.accounts,
-      adminPubkeys: params.adminPubkeys,
-      threshold: params.threshold,
-      registerNonce: params.registerNonce,
-      signatureHex: params.signatureHex,
-      signingProvince: params.signingProvince,
-      signerAdminPubkey: params.signerAdminPubkey,
-    }),
-
-  submitProposeCreateInstitution: (params: {
-    requestId: string;
-    expectedPubkeyHex: string;
-    expectedPayloadHash: string;
-    sfidNumber: string;
-    institutionName: string;
-    accounts: InitialAccountInputDto[];
-    adminPubkeys: string[];
-    threshold: number;
-    registerNonce: string;
-    signatureHex: string;
-    signingProvince: string;
-    signerAdminPubkey: string;
-    signNonce: number;
-    signBlockNumber: number;
-    responseJson: string;
-  }) =>
-    invoke<VoteSubmitResult>('submit_propose_create_institution', {
-      requestId: params.requestId,
-      expectedPubkeyHex: params.expectedPubkeyHex,
-      expectedPayloadHash: params.expectedPayloadHash,
-      sfidNumber: params.sfidNumber,
-      institutionName: params.institutionName,
-      accounts: params.accounts,
-      adminPubkeys: params.adminPubkeys,
-      threshold: params.threshold,
-      registerNonce: params.registerNonce,
-      signatureHex: params.signatureHex,
-      signingProvince: params.signingProvince,
-      signerAdminPubkey: params.signerAdminPubkey,
-      signNonce: params.signNonce,
-      signBlockNumber: params.signBlockNumber,
-      responseJson: params.responseJson,
-    }),
 };

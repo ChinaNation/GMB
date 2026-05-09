@@ -13,7 +13,7 @@
 
 边界：
 
-- 不属于 `offchain/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admins_change`。
+- 不属于 `governance/organization-manage`。机构管理只负责机构和机构账户的注册、注销、索引查询；其“换管理员”按钮只作为入口跳转到 `admins_change`。
 - 不在 `frontend/governance/` 根目录继续堆管理员更换页面；根目录只保留页面路由入口。
 - 管理员激活/已激活管理员查询的前端 API 只放在 `frontend/governance/admins_change/api.ts`，根 `governance/api.ts` 不再承载这些方法。
 - `storage_keys.rs` 只保留通用哈希与 SubjectId 工具，`AdminsChange::Subjects` 专用读取在 `admins_change/storage.rs`。
@@ -70,7 +70,7 @@ citizenchain/node/frontend/governance/admins_change/
 
 页面流程：
 
-1. 治理机构详情页或 `offchain/organization-manage` 机构详情页点击“换管理员”。
+1. 治理机构详情页或 `governance/organization-manage` 机构详情页点击“换管理员”。
 2. `AdminSetChangePage` 读取 `AdminsChange::Subjects`。
 3. 用户选择已激活管理员钱包，编辑完整的新管理员集合。
 4. 后端构建 `propose_admin_set_change` 签名请求。

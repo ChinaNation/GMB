@@ -3,6 +3,8 @@
 pub mod admins_change;
 pub(crate) mod balance_watch;
 pub(crate) mod institution;
+#[path = "organization-manage/mod.rs"]
+pub mod organization_manage;
 pub mod proposal;
 pub(crate) mod registry;
 pub mod sfid_api;

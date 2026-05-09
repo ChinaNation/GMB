@@ -31,18 +31,19 @@ empty → add-input-sfid (debounce 自动搜,无"查询"按钮)
                 └── Active → declare-node
 ```
 
-## 2. 文件清单(`citizenchain/node/frontend/offchain/`)
+## 2. 文件清单
 
 | 文件 | 职责 |
 |---|---|
-| `section.tsx` | 状态机驱动;EmptyView / CheckMultisigView / WaitVoteView 子组件 |
-| `organization-manage/add-candidate.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
-| `organization-manage/institution-detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
-| `organization-manage/other-accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
-| `settlement/admin-unlock.tsx` | ClearingBankAdminListPage:管理员列表/解锁入口 |
-| `organization-manage/create-multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
-| `offchain-transaction/node-register.tsx` | ClearingBankDeclareNodePage(声明本机为清算行节点)|
-| `api.ts` / `types.ts` / `styles.css` | Tauri invoke / 类型 / 样式 |
+| `citizenchain/node/frontend/offchain/section.tsx` | 状态机驱动;EmptyView / CheckMultisigView / WaitVoteView 子组件 |
+| `citizenchain/node/frontend/governance/organization-manage/add-candidate.tsx` | ClearingBankAddPage:debounce 自动搜 SFID 候选(2026-05-01 删"查询"按钮) |
+| `citizenchain/node/frontend/governance/organization-manage/institution-detail.tsx` | ClearingBankInstitutionDetailPage:卡片栅格 + 折叠子页入口 + 节点信息 + 发起提案占位 + 提案列表 |
+| `citizenchain/node/frontend/governance/organization-manage/other-accounts.tsx` | OtherAccountsListPage:其他账户列表子页 |
+| `citizenchain/node/frontend/offchain/settlement/admin-unlock.tsx` | ClearingBankAdminListPage:管理员列表/解锁入口 |
+| `citizenchain/node/frontend/governance/organization-manage/create-multisig.tsx` | CreateMultisigInstitutionPage:创建机构多签流程 |
+| `citizenchain/node/frontend/offchain/offchain-transaction/node-register.tsx` | ClearingBankDeclareNodePage(声明本机为清算行节点)|
+| `citizenchain/node/frontend/governance/organization-manage/api.ts` / `types.ts` | 机构多签 Tauri invoke / 类型 |
+| `citizenchain/node/frontend/offchain/api.ts` / `types.ts` / `styles.css` | 清算行节点声明、解锁、连通性 invoke / 类型 / 样式 |
 
 ### 2026-05-02 删除清单
 
@@ -57,11 +58,11 @@ Tauri 命令按业务拆分:
 
 | 目录 | 命令 | 用途 |
 |---|---|
-| `offchain/organization_manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
-| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_number]` + `InstitutionAccounts[sfid_number, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
-| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
-| `offchain/organization_manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_number/registration-info` 拉链上注册专用信息 |
-| `offchain/organization_manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
+| `governance/organization-manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
+| `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_number]` + `InstitutionAccounts[sfid_number, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
+| `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
+| `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_number/registration-info` 拉链上注册专用信息 |
+| `governance/organization-manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |
 | `offchain/offchain_transaction/commands.rs` | `query_clearing_bank_node_info` / `query_local_peer_id` / `test_clearing_bank_endpoint_connectivity` | 清算行节点声明和端点自测 |
 | `offchain/offchain_transaction/commands.rs` | `build_register_*` / `submit_register_*` / `build_update_*` / `submit_update_*` / `build_unregister_*` / `submit_unregister_*` | 清算行节点注册、端点更新、注销 |
 | `offchain/settlement/commands.rs` | `build_decrypt_admin_request` / `verify_and_decrypt_admin` / `list_decrypted_admins` / `lock_decrypted_admin` | 结算前管理员解锁 |
@@ -88,7 +89,7 @@ province: Vec<u8>                   = Compact(len) || bytes
 signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 ```
 
-**任何字段顺序变更必须同步改 `offchain/organization_manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
+**任何字段顺序变更必须同步改 `governance/organization-manage/signing.rs::build_propose_create_institution_call_data`**,否则冷钱包签名 payload 与链上 call_data 不一致。
 
 注册业务字段只允许来自 SFID `registration-info` 的 `sfid_number / institution_name / account_names[]`。
 `a3 / sub_type / parent_sfid_number` 只属于 `eligible-search` 查询筛选和展示,不得进入注册 call_data。

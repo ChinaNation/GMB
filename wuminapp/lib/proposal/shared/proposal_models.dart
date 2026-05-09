@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:wuminapp_mobile/duoqian/shared/duoqian_manage_models.dart';
+import 'package:wuminapp_mobile/personal-manage/personal_manage_models.dart';
 
 /// 提案展示号(双层 ID 设计,spec_version v1)。
 ///

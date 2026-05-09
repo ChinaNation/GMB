@@ -32,7 +32,7 @@ lib/citizen/
     grandpakey_change/
 ```
 
-`duoqian_manage` 代表注册个人/机构多签账户的多钱业务能力，归属 `lib/duoqian/`，不作为公民提案三级目录预留。
+`organization-manage` 代表注册机构多签账户的多签管理能力，归属 `lib/organization-manage/`，不作为公民提案三级目录预留。
 
 ## 2. 链上入口与权限边界
 
@@ -497,14 +497,15 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
 | `lib/proposal/shared/pending_vote_store.dart` | 多提案共用待确认投票记录 |
 | `lib/proposal/shared/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
+| `lib/proposal/shared/duoqian_manage_detail_page.dart` | 跨个人/机构的多签管理提案详情页 |
 | `lib/proposal/proposal_types_page.dart` | 提案类型选择页 |
 | `lib/proposal/runtime_upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
 | `lib/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
 | `lib/proposal/runtime_upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
 | `lib/institution/institution_admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
-| `lib/duoqian/shared` | 纯多签共享层（单类型列表、账户详情、管理服务、关闭提案、二维码、管理提案详情） |
-| `lib/duoqian/institution` | 机构多签层（机构列表入口、机构创建表单） |
-| `lib/duoqian/personal` | 个人多签层（个人列表入口、个人创建表单） |
+| `lib/organization-manage/shared` | 机构多签层（机构账户列表、机构详情、机构管理服务、机构 storage codec、机构发现服务） |
+| `lib/organization-manage/institution` | 机构多签层（机构列表入口、机构创建表单） |
+| `lib/personal-manage` | 个人多签层（个人列表、详情、发现、创建、关闭、管理员激活、提案历史、PersonalManage 链上编解码） |
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | App 壳、应用锁与底部导航；不再内联公民 Tab 业务页面 |
 
@@ -534,10 +535,10 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
-| `register_sfid_institution(sfid_number)` | 2 | SFID 系统登记机构，派生多签地址 | 不需要 |
-| `propose_create(sfid_number, admin_count, admins, threshold, amount)` | 0 | 发起"创建多签账户"提案 | 投票引擎 |
-| `propose_close(duoqian_address, beneficiary)` | 1 | 发起"关闭多签账户"提案 | 投票引擎 |
-| `propose_create_personal(account_name, admin_count, admins, threshold, amount)` | 3 | 发起个人多签账户创建提案 | 投票引擎 |
+| `OrganizationManage::propose_create_institution(...)` | 17.5 | 发起 SFID 机构多签账户创建提案 | 投票引擎 |
+| `OrganizationManage::propose_close(duoqian_address, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
+| `PersonalManage::propose_create(account_name, duoqian_admins, amount)` | 7.0 | 发起个人多签账户创建提案 | 投票引擎 |
+| `PersonalManage::propose_close(duoqian_address, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）
@@ -559,7 +560,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 发起转账、转账详情、投票进度、余额提示、列表适配与详情跳转均由
 `lib/duoqian-transfer/` 实现。
 
-`lib/duoqian/` 不实现多签转账逻辑；账户详情页如需展示转账入口，
+`lib/organization-manage/` 不实现多签转账逻辑；账户详情页如需展示转账入口，
 只允许挂载 `lib/duoqian-transfer/duoqian_transfer_entry.dart` 提供的入口组件。
 
 ### 8.8 手机端入口分流
@@ -575,30 +576,42 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 具体页面和链上构造仍归 `lib/duoqian-transfer/`。
 
 2026-04-30 第二轮收口只迁移纯多签文件：账户管理模型/服务、账户详情、创建、
-关闭、账户二维码与多签管理提案详情归入 `lib/duoqian`；QR 协议、Isar schema、
-钱包流水、治理聚合页、机构通用服务和内部投票通用服务仍留在原模块目录；
+关闭、账户列表、账户详情和机构发现归入 `lib/organization-manage`；跨个人/机构的
+多签管理提案详情留在 `lib/proposal/shared/duoqian_manage_detail_page.dart`。
+QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和内部投票通用服务仍留在原模块目录；
 多签转账相关文件统一归 `lib/duoqian-transfer/`。
 
 2026-04-30 第三轮收口删除治理提案类型页中的“创建多签/关闭多签”入口。多签创建
 只能从 `机构多签` 或 `个人多签` 列表右上角进入；多签关闭只能从具体多签账户详情
 页进入。机构多签关闭与个人多签关闭分别使用独立页面，不能再共用一个关闭入口。
 
+2026-05-09 起，wuminapp 个人多签主业务与 runtime `personal-manage` 对齐：
+个人创建、关闭、管理员激活、待创建提案反查、提案历史、PersonalManage call data、
+PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage codec
+统一放入 `lib/personal-manage/`。`lib/organization-manage/shared/` 不再承载这些个人主业务；
+目前仅保留机构多签能力和 `AdminInstitutionCodec` 这类个人/机构都要读取的底层 Subject 解码能力。
+
 ### 8.9 关键文件
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/duoqian/shared/duoqian_account_list_page.dart` | 单类型多签账户列表页 |
-| `lib/duoqian/shared/duoqian_account_info_page.dart` | 多签账户详情页 |
-| `lib/duoqian/shared/duoqian_manage_models.dart` | 多签管理提案模型与账户状态模型 |
-| `lib/duoqian/shared/duoqian_manage_service.dart` | `DuoqianManage` 链上交互服务 |
-| `lib/duoqian/shared/duoqian_manage_detail_page.dart` | 多签创建/关闭管理提案详情页 |
-| `lib/duoqian/shared/duoqian_qr_sheet.dart` | 多签账户二维码弹窗 |
-| `lib/duoqian/institution/institution_duoqian_list_page.dart` | 机构多签入口页 |
-| `lib/duoqian/institution/institution_duoqian_create_page.dart` | 机构多签创建表单 |
-| `lib/duoqian/institution/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
-| `lib/duoqian/personal/personal_duoqian_list_page.dart` | 个人多签入口页 |
-| `lib/duoqian/personal/personal_duoqian_create_page.dart` | 个人多签创建表单 |
-| `lib/duoqian/personal/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
+| `lib/organization-manage/shared/duoqian_account_list_page.dart` | 机构多签账户列表页 |
+| `lib/organization-manage/shared/duoqian_account_info_page.dart` | 机构多签账户详情页 |
+| `lib/organization-manage/shared/duoqian_discovery_service.dart` | 机构多签反向索引发现服务 |
+| `lib/organization-manage/shared/duoqian_manage_models.dart` | 机构关闭提案模型与机构账户状态模型 |
+| `lib/organization-manage/shared/duoqian_manage_service.dart` | OrganizationManage 机构多签链上交互服务 |
+| `lib/proposal/shared/duoqian_manage_detail_page.dart` | 个人/机构多签管理提案共用投票详情页；业务解码委托对应 manage 服务 |
+| `lib/organization-manage/institution/institution_duoqian_create_page.dart` | 机构多签创建表单 |
+| `lib/organization-manage/institution/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
+| `lib/personal-manage/personal_duoqian_create_page.dart` | 个人多签创建表单 |
+| `lib/personal-manage/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
+| `lib/personal-manage/personal_admin_list_page.dart` | 个人多签管理员激活列表 |
+| `lib/personal-manage/personal_manage_account_list_page.dart` | 个人多签账户列表页 |
+| `lib/personal-manage/personal_manage_account_info_page.dart` | 个人多签账户详情页 |
+| `lib/personal-manage/personal_manage_discovery_service.dart` | 个人多签反向索引发现服务 |
+| `lib/personal-manage/personal_manage_service.dart` | PersonalManage 个人多签链上交互服务 |
+| `lib/personal-manage/personal_manage_storage_codec.dart` | PersonalManage storage key 与 SCALE 解码 |
+| `lib/personal-manage/personal_proposal_history_service.dart` | 个人多签提案历史聚合与 Isar 持久化 |
 | `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
@@ -613,18 +626,23 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - `lib/institution/institution_detail_page.dart`
 - `lib/proposal/proposal_types_page.dart`
 - `lib/institution/institution_admin_list_page.dart`
-- `lib/duoqian/shared/duoqian_account_list_page.dart`
-- `lib/duoqian/shared/duoqian_account_info_page.dart`
-- `lib/duoqian/shared/duoqian_manage_models.dart`
-- `lib/duoqian/shared/duoqian_manage_service.dart`
-- `lib/duoqian/shared/duoqian_manage_detail_page.dart`
-- `lib/duoqian/shared/duoqian_qr_sheet.dart`
-- `lib/duoqian/institution/institution_duoqian_list_page.dart`
-- `lib/duoqian/institution/institution_duoqian_create_page.dart`
-- `lib/duoqian/institution/institution_duoqian_close_page.dart`
-- `lib/duoqian/personal/personal_duoqian_list_page.dart`
-- `lib/duoqian/personal/personal_duoqian_create_page.dart`
-- `lib/duoqian/personal/personal_duoqian_close_page.dart`
+- `lib/organization-manage/shared/duoqian_account_list_page.dart`
+- `lib/organization-manage/shared/duoqian_account_info_page.dart`
+- `lib/organization-manage/shared/duoqian_discovery_service.dart`
+- `lib/organization-manage/shared/duoqian_manage_models.dart`
+- `lib/organization-manage/shared/duoqian_manage_service.dart`
+- `lib/proposal/shared/duoqian_manage_detail_page.dart`
+- `lib/organization-manage/institution/institution_duoqian_create_page.dart`
+- `lib/organization-manage/institution/institution_duoqian_close_page.dart`
+- `lib/personal-manage/personal_duoqian_create_page.dart`
+- `lib/personal-manage/personal_duoqian_close_page.dart`
+- `lib/personal-manage/personal_admin_list_page.dart`
+- `lib/personal-manage/personal_manage_account_list_page.dart`
+- `lib/personal-manage/personal_manage_account_info_page.dart`
+- `lib/personal-manage/personal_manage_discovery_service.dart`
+- `lib/personal-manage/personal_manage_service.dart`
+- `lib/personal-manage/personal_manage_storage_codec.dart`
+- `lib/personal-manage/personal_proposal_history_service.dart`
 - `lib/rpc/chain_rpc.dart`
 - `citizenchain/runtime/transaction/duoqian-transfer/src/lib.rs`
 - `citizenchain/runtime/governance/organization-manage/src/lib.rs`
