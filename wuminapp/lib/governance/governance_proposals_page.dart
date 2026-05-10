@@ -8,6 +8,9 @@ import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/pages/admin_set_change_page.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_limit_service.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_page.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_page.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/safety_fund_transfer_page.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/sweep_to_main_page.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -184,6 +187,40 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
           _buildSectionTitle('通用提案'),
           const SizedBox(height: 8),
           _ProposalTypeCard(
+            icon: Icons.send_outlined,
+            title: '转账',
+            subtitle: '从机构主账户向指定地址发起转账提案',
+            color: AppTheme.primary,
+            enabled: proposalActionsEnabled,
+            onTap: () => _checkAndOpenProposal(
+              context,
+              () => DuoqianTransferPage(
+                institution: widget.institution,
+                icon: widget.icon,
+                badgeColor: widget.badgeColor,
+                adminWallets: widget.adminWallets,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ProposalTypeCard(
+            icon: Icons.account_balance_wallet_outlined,
+            title: '手续费划转',
+            subtitle: '从机构费用账户向本机构主账户划转手续费',
+            color: AppTheme.info,
+            enabled: proposalActionsEnabled,
+            onTap: () => _checkAndOpenProposal(
+              context,
+              () => SweepToMainPage(
+                institution: widget.institution,
+                icon: widget.icon,
+                badgeColor: widget.badgeColor,
+                adminWallets: widget.adminWallets,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ProposalTypeCard(
             icon: Icons.swap_horiz,
             title: '换管理员',
             subtitle: '提议更换本机构管理员',
@@ -241,6 +278,29 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
               color: const Color(0xFF4527A0),
               enabled: proposalActionsEnabled,
               onTap: () => _checkAndOpenProposal(context, null, name: '验证密钥'),
+            ),
+          ],
+
+          // ──── 国储会专属提案（仅 NRC 可发起）────
+          if (widget.institution.orgType == OrgType.nrc) ...[
+            const SizedBox(height: 20),
+            _buildSectionTitle('国储会专属提案'),
+            const SizedBox(height: 8),
+            _ProposalTypeCard(
+              icon: Icons.shield_outlined,
+              title: '安全基金转账',
+              subtitle: '从国储会安全基金账户向指定地址发起转账提案',
+              color: AppTheme.warning,
+              enabled: proposalActionsEnabled,
+              onTap: () => _checkAndOpenProposal(
+                context,
+                () => SafetyFundTransferPage(
+                  institution: widget.institution,
+                  icon: widget.icon,
+                  badgeColor: widget.badgeColor,
+                  adminWallets: widget.adminWallets,
+                ),
+              ),
             ),
           ],
         ],

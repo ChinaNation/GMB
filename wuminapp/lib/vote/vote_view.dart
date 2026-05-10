@@ -14,7 +14,7 @@ import 'package:wuminapp_mobile/common/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
-import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/vote/constitution_quote.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。

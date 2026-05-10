@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/offchain/models/payment_intent.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/models/payment_intent.dart';
 
 /// 扫码支付 Step 2c-ii-a 新增:**跨端 golden vectors**。
 ///

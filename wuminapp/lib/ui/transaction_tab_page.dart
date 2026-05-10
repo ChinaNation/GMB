@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/duoqian_account_list_page.dart';
-import 'package:wuminapp_mobile/offchain/services/offchain_scan_flow.dart';
-import 'package:wuminapp_mobile/onchain/onchain_payment_page.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/services/offchain_scan_flow.dart';
+import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_account_list_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';

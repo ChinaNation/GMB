@@ -26,7 +26,7 @@
 ### 不负责
 
 - 机构多签创建、关闭、SFID 机构账户查询：继续由 `wuminapp/lib/governance/organization-manage/` 机构路径处理。
-- 多签转账：唯一实现目录仍是 `wuminapp/lib/duoqian-transfer/`。
+- 多签转账：唯一实现目录仍是 `wuminapp/lib/transaction/duoqian-transfer/`。
 - Isar schema 定义：仍在 `wuminapp/lib/isar/`，本模块只使用既有实体。
 - 通用投票、签名、RPC：仍使用 `proposal/shared`、`signer`、`rpc` 等共用能力。
 - 个人/机构多签管理提案投票详情页：共用入口位于 `wuminapp/lib/governance/duoqian_manage_detail_page.dart`，本模块只提供 PersonalManage 解码服务。

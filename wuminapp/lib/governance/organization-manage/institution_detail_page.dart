@@ -5,8 +5,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_entry.dart';
-import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
@@ -238,16 +237,6 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ],
           _buildAdminEntry(),
           const SizedBox(height: 12),
-          if (_isCurrentUserAdmin) ...[
-            DuoqianTransferEntryCard(
-              institution: widget.institution,
-              isPersonal: false,
-              enabled: true,
-              loadAdminWallets: () async => _adminWallets,
-              onCreated: _load,
-            ),
-            const SizedBox(height: 12),
-          ],
           _buildProposalList(),
         ],
       ),

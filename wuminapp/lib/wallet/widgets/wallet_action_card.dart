@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/offchain/rpc/offchain_clearing_rpc.dart';
-import 'package:wuminapp_mobile/offchain/services/clearing_bank_prefs.dart';
-import 'package:wuminapp_mobile/offchain/pages/deposit_page.dart';
-import 'package:wuminapp_mobile/offchain/pages/withdraw_page.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/rpc/offchain_clearing_rpc.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/deposit_page.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/withdraw_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 

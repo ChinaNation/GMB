@@ -14,7 +14,7 @@ import 'package:saver_gallery/saver_gallery.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
-import 'package:wuminapp_mobile/onchain/onchain_payment_page.dart';
+import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
