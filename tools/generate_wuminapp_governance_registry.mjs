@@ -7,7 +7,7 @@ const cbPath = path.join(repoRoot, 'citizenchain/runtime/primitives/china/china_
 const chPath = path.join(repoRoot, 'citizenchain/runtime/primitives/china/china_ch.rs');
 const outPath = path.join(
   repoRoot,
-  'wuminapp/lib/organization-manage/governance_institution_registry.generated.dart',
+  'wuminapp/lib/governance/organization-manage/governance_institution_registry.generated.dart',
 );
 
 function extractField(block, name) {

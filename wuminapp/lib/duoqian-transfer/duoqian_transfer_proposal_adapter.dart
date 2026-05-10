@@ -5,8 +5,8 @@ import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_detail_page.da
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_models.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 
 /// 多签转账给外部列表页使用的只读适配器。

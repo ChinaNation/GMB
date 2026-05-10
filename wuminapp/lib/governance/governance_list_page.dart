@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/organization-manage/institution_detail_page.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_detail_page.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/page_transitions.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';

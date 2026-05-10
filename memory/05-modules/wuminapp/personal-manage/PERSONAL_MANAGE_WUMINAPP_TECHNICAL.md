@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-`wuminapp/lib/personal-manage/` 是 wuminapp 端个人多签主业务目录，对齐 runtime `citizenchain/runtime/governance/personal-manage/`。
+`wuminapp/lib/governance/personal-manage/` 是 wuminapp 端个人多签主业务目录，对齐 runtime `citizenchain/runtime/governance/personal-manage/`。
 
 本目录只处理个人多签，不承载机构多签、机构 SFID 账户、多签转账业务。
 
@@ -25,11 +25,11 @@
 
 ### 不负责
 
-- 机构多签创建、关闭、SFID 机构账户查询：继续由 `wuminapp/lib/organization-manage/` 机构路径处理。
+- 机构多签创建、关闭、SFID 机构账户查询：继续由 `wuminapp/lib/governance/organization-manage/` 机构路径处理。
 - 多签转账：唯一实现目录仍是 `wuminapp/lib/duoqian-transfer/`。
 - Isar schema 定义：仍在 `wuminapp/lib/isar/`，本模块只使用既有实体。
 - 通用投票、签名、RPC：仍使用 `proposal/shared`、`signer`、`rpc` 等共用能力。
-- 个人/机构多签管理提案投票详情页：共用入口位于 `wuminapp/lib/proposal/shared/duoqian_manage_detail_page.dart`，本模块只提供 PersonalManage 解码服务。
+- 个人/机构多签管理提案投票详情页：共用入口位于 `wuminapp/lib/governance/duoqian_manage_detail_page.dart`，本模块只提供 PersonalManage 解码服务。
 
 ## 3. 链上契约
 
@@ -51,7 +51,7 @@ PersonalManage storage：
 
 ## 4. 与 organization-manage 目录关系
 
-`wuminapp/lib/organization-manage/` 不再承载 PersonalManage 主业务。当前仅保留：
+`wuminapp/lib/governance/organization-manage/` 不再承载 PersonalManage 主业务。当前仅保留：
 
 - 机构多签 OrganizationManage 服务与机构 storage codec。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。
@@ -63,11 +63,11 @@ PersonalManage storage：
 
 个人多签测试集中在：
 
-- `wuminapp/test/personal-manage/personal_manage_service_test.dart`
-- `wuminapp/test/personal-manage/personal_manage_storage_codec_test.dart`
-- `wuminapp/test/personal-manage/personal_manage_discovery_service_test.dart`
-- `wuminapp/test/personal-manage/personal_pending_create_lookup_test.dart`
-- `wuminapp/test/personal-manage/personal_proposal_history_service_test.dart`
+- `wuminapp/test/governance/personal-manage/personal_manage_service_test.dart`
+- `wuminapp/test/governance/personal-manage/personal_manage_storage_codec_test.dart`
+- `wuminapp/test/governance/personal-manage/personal_manage_discovery_service_test.dart`
+- `wuminapp/test/governance/personal-manage/personal_pending_create_lookup_test.dart`
+- `wuminapp/test/governance/personal-manage/personal_proposal_history_service_test.dart`
 
 本轮拆分验收命令：
 

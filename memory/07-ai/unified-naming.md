@@ -269,7 +269,6 @@
 | `wuminapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
 | `wuminapp/lib/offchain/` | 链下 | offchain | 链下请求和链下业务辅助 |
 | `wuminapp/lib/onchain/` | 链上 | onchain | 链上交易和链上状态辅助 |
-| `wuminapp/lib/proposal/` | 提案 | proposal | 提案创建、展示和历史 |
 | `wuminapp/lib/public/` | 公共 | public | 公共页面和公开能力 |
 | `wuminapp/lib/qr/` | QR | qr | 扫码、二维码和签名请求 |
 | `wuminapp/lib/rpc/` | RPC | rpc | RPC 客户端、轻节点和 extrinsic 构造 |
