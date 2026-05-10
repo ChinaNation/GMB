@@ -13,6 +13,10 @@
 
 约束：钱包相关代码只应从 `wallet/...` 引用。
 
+本地 Android 启动产物约定：`wuminapp/scripts/wuminapp-run.sh` 运行后把 APK 复制到
+`wuminapp/target/公民.apk`；`wumin/scripts/wumin-run.sh` 运行后把冷钱包 APK 复制到
+`wumin/target/公民钱包.apk`。
+
 ## 2. 目录结构
 
 ```text
