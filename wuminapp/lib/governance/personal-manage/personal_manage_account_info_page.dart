@@ -626,7 +626,7 @@ class _PersonalManageAccountInfoPageState
   Widget _buildBalanceRow(DuoqianStatus? status) {
     final balanceStr = _balanceYuan == null
         ? '—'
-        : '${AmountFormat.format(_balanceYuan!)} GMB';
+        : AmountFormat.format(_balanceYuan!);
     final isPending = status != DuoqianStatus.active;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

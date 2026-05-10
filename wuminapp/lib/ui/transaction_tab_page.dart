@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:wuminapp_mobile/governance/organization-manage/duoqian_account_list_page.dart';
+import 'package:wuminapp_mobile/governance/duoqian_account_list_page.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/services/offchain_scan_flow.dart';
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_page.dart';
-import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_account_list_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -32,21 +31,11 @@ class TransactionTabPage extends StatelessWidget {
       extraEntriesBuilder: (context, wallet) => [
         _TransactionEntryRow(
           icon: const Icon(
-            Icons.person_outline,
-            size: 18,
-            color: AppTheme.primary,
-          ),
-          title: '个人多签',
-          onTap: () => _push(context, const PersonalManageAccountListPage()),
-        ),
-        const SizedBox(height: 12),
-        _TransactionEntryRow(
-          icon: const Icon(
             Icons.account_tree_outlined,
             size: 18,
             color: AppTheme.primary,
           ),
-          title: '机构多签',
+          title: '多签交易',
           onTap: () => _push(context, const DuoqianAccountListPage()),
         ),
         const SizedBox(height: 12),
