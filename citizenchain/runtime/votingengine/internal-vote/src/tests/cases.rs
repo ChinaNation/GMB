@@ -182,6 +182,26 @@ fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
 }
 
 #[test]
+fn institution_account_orgs_use_dynamic_pending_snapshot_and_threshold() {
+    new_test_ext().execute_with(|| {
+        for org in [ORG_PUP, ORG_OTH] {
+            let proposal_id = create_pending_subject_proposal_via_engine(
+                pending_subject_admin(0),
+                org,
+                pending_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(2));
+            assert!(VotingEngine::is_admin_in_snapshot(
+                proposal_id,
+                pending_subject_institution(),
+                &pending_subject_admin(1)
+            ));
+        }
+    });
+}
+
+#[test]
 fn pending_subject_provider_threshold_requires_all_admins() {
     new_test_ext().execute_with(|| {
         set_pending_duoqian_threshold(1);
@@ -343,6 +363,27 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
                 .status,
             STATUS_PASSED
         );
+    });
+}
+
+#[test]
+fn institution_account_orgs_snapshot_dynamic_active_threshold() {
+    new_test_ext().execute_with(|| {
+        for org in [ORG_PUP, ORG_OTH] {
+            set_registered_duoqian_threshold(3);
+            let proposal_id = create_internal_proposal_via_engine(
+                registered_subject_admin(0),
+                org,
+                registered_subject_institution(),
+            );
+
+            assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
+            assert!(VotingEngine::is_admin_in_snapshot(
+                proposal_id,
+                registered_subject_institution(),
+                &registered_subject_admin(2)
+            ));
+        }
     });
 }
 

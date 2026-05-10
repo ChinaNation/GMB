@@ -1,6 +1,6 @@
 # ADMINS_CHANGE Technical Notes
 
-最新更新：2026-05-08，生命周期清理和事件协议已收口：Pending 主体不存在时不再静默成功，生命周期事件统一携带 `org`。
+最新更新：2026-05-10，管理员主体与 org 边界已收口：`ORG_REN` 只用于个人多签，`ORG_PUP / ORG_OTH` 用于机构账户，`SfidInstitution` 不再允许作为新增管理员主体。
 
 ## 1. 模块定位
 
@@ -34,7 +34,7 @@
 `AdminSubjectKind` 当前值：
 
 - `BuiltinInstitution`：NRC / PRC / PRB 等内置治理主体。
-- `SfidInstitution`：保留给过渡期机构级主体和 SFID 归属索引语义；后续机构账户级改造完成后，不应再作为新增账户管理员主体。
+- `SfidInstitution`：仅保留 SCALE ABI 兼容和 SFID 机构归属/检索语义；新增、变更和生命周期写入路径一律拒绝作为管理员主体。
 - `PersonalDuoqian`：注册个人账户主体。
 - `InstitutionAccount`：注册机构某个具体账户的账户级主体。
 
@@ -59,7 +59,7 @@ Subjects<SubjectId, AdminSubject>
 
 `AdminSubject` 字段：
 
-- `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN`。
+- `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH`。
 - `kind`：管理员主体类型。
 - `admins`：当前管理员完整列表。
 - `threshold`：当前普通业务阈值。动态账户由 `derived_threshold` 计算后写入，不能由用户自由指定。
@@ -108,8 +108,9 @@ validate_admin_set_for_subject(kind, org, admins)
 - 主体类型与 `org` 匹配。
 - 管理员列表不能重复。
 - `BuiltinInstitution` 必须等于固定人数：NRC 19、PRC 9、PRB 9。
-- `PersonalDuoqian` 管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
-- `InstitutionAccount` 管理员数量必须在 `2..=MaxAdminsPerInstitution`。
+- `PersonalDuoqian` 必须使用 `ORG_REN`，管理员数量必须在 `2..=MaxPersonalAccountAdmins`。
+- `InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，管理员数量必须在 `2..=MaxAdminsPerInstitution`。
+- `SfidInstitution` 不能作为管理员主体，写入和变更路径返回 `InvalidSubjectKind`。
 - 当前 runtime 配置：`MaxPersonalAccountAdmins = 64`，`MaxAdminsPerInstitution = 1989`。
 
 ## 6. 生命周期
@@ -200,7 +201,7 @@ propose_admin_set_change(org, subject, new_admins)
 - `admins_change::Config::MaxAdminsPerInstitution = 1989`。
 - `admins_change::Config::MaxPersonalAccountAdmins = 64`。
 - `RuntimeInternalAdminProvider` 统一读取 `admins-change` Active / Pending API。
-- `RuntimeInternalThresholdProvider` 对治理机构返回固定制度阈值，对 `ORG_REN` 返回 `admins-change` 中的 Active / Pending 阈值。
+- `RuntimeInternalThresholdProvider` 对治理机构返回固定制度阈值，对 `ORG_REN / ORG_PUP / ORG_OTH` 返回 `admins-change` 中的 Active / Pending 阈值。
 - `RuntimeInternalAdminCountProvider` 从 `active_subject_admin_count` 读取。
 
 ## 10. 事件
@@ -226,7 +227,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 当前结果：
 
-- `admins-change`：41 passed(新增 L-1/L-2 生命周期清理与事件 org 字段测试,2026-05-08)。
+- `admins-change`：42 passed(新增 `REN/PUP/OTH` 主体边界与 `SfidInstitution` 拒绝测试,2026-05-10)。
 - `primitives`：24 passed。
 
 覆盖重点：
@@ -242,5 +243,6 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。
-- `InstitutionAccount` kind 5 条独立单测:最小 2 人、ceil(n/2) 阈值阶梯、< 2 拒绝、
-  非 ORG_REN 拒绝、`MaxAdminsPerInstitution` 上界。
+- `InstitutionAccount` kind 独立单测覆盖最小 2 人、ceil(n/2) 阈值阶梯、< 2 拒绝、
+  `ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
+- `SfidInstitution` 新写入路径拒绝，`derived_threshold` 返回 `None`。

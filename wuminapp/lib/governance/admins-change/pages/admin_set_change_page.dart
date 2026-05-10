@@ -151,7 +151,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
           payloadHex: '0x${AdminSubjectIdCodec.hexEncode(payload)}',
           display: AdminSetChangeQrAdapter.buildDisplay(
             subject: subject,
-            newAdminCount: _newAdmins.length,
+            newAdmins: _newAdmins,
           ),
         );
         final response = await Navigator.of(context).push(
@@ -174,6 +174,8 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
         signerPubkey: AdminSubjectIdCodec.hexDecode(wallet.pubkeyHex),
         sign: signCallback,
       );
+      _subjectService.clearSubjectCache(subject.subjectIdHex);
+      _subjectService.clearCache(widget.institution.sfidNumber);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(

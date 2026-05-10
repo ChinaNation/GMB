@@ -30,6 +30,10 @@ export type AccountWithBalance = {
 export type InstitutionDetail = {
   sfidNumber: string;
   institutionName: string;
+  /** 管理员更换使用的账户级 SubjectId，清算行当前指向主账户。 */
+  adminSubjectIdHex: string;
+  /** 管理员更换使用的 org：清算行属于 ORG_OTH。 */
+  adminOrg: number;
 
   mainAccount: AccountWithBalance;
   feeAccount: AccountWithBalance;

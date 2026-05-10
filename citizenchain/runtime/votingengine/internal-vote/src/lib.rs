@@ -33,7 +33,10 @@ use primitives::count_const::VOTING_DURATION_BLOCKS;
 use votingengine::{
     nrc_subject_id,
     pallet::{AdminSnapshot, Proposals},
-    types::{fixed_governance_pass_threshold, is_valid_org, ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
+    types::{
+        fixed_governance_pass_threshold, is_registered_multisig_org, is_valid_org, ORG_NRC,
+        ORG_PRB, ORG_PRC,
+    },
     InternalAdminProvider, InternalProposalMutexKind, InternalThresholdProvider, Proposal,
     SubjectId, PROPOSAL_KIND_INTERNAL, STAGE_INTERNAL, STATUS_PASSED, STATUS_REJECTED,
 };
@@ -158,16 +161,18 @@ fn is_valid_internal_institution<T: Config>(
                     .filter_map(|n| subject_id_from_sfid_number(n.sfid_number))
                     .any(|pid| pid == institution)
         }
-        ORG_REN if pending_subject => {
+        org if is_registered_multisig_org(org) && pending_subject => {
             <T as votingengine::Config>::InternalThresholdProvider::is_known_pending_subject(
                 org,
                 institution,
             )
         }
-        ORG_REN => <T as votingengine::Config>::InternalThresholdProvider::is_known_subject(
-            org,
-            institution,
-        ),
+        org if is_registered_multisig_org(org) => {
+            <T as votingengine::Config>::InternalThresholdProvider::is_known_subject(
+                org,
+                institution,
+            )
+        }
         _ => false,
     }
 }
@@ -195,13 +200,13 @@ fn internal_threshold<T: Config>(
 ) -> Option<u32> {
     match org {
         ORG_NRC | ORG_PRC | ORG_PRB => fixed_governance_pass_threshold(org),
-        ORG_REN if pending_subject => {
+        org if is_registered_multisig_org(org) && pending_subject => {
             <T as votingengine::Config>::InternalThresholdProvider::pending_pass_threshold(
                 org,
                 institution,
             )
         }
-        ORG_REN => {
+        org if is_registered_multisig_org(org) => {
             <T as votingengine::Config>::InternalThresholdProvider::pass_threshold(org, institution)
         }
         _ => None,
@@ -278,7 +283,10 @@ impl<T: Config> Pallet<T> {
         admins: sp_std::vec::Vec<T::AccountId>,
         threshold: u32,
     ) -> Result<u64, DispatchError> {
-        ensure!(org == ORG_REN, Error::<T>::InvalidInternalOrg);
+        ensure!(
+            is_registered_multisig_org(org),
+            Error::<T>::InvalidInternalOrg
+        );
         ensure!(
             !admins.is_empty(),
             votingengine::Error::<T>::MissingAdminSnapshot

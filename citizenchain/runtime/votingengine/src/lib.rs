@@ -41,8 +41,8 @@ pub mod weights;
 pub use pallet::*;
 pub use traits::*;
 pub use traits::{SfidEligibility, VoteCredentialCleanup};
-pub use types::ORG_REN;
 pub use types::*;
+pub use types::{ORG_OTH, ORG_PUP, ORG_REN};
 
 use frame_support::dispatch::DispatchResult;
 use sp_runtime::DispatchError;
@@ -145,7 +145,7 @@ pub mod pallet {
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
         type InternalAdminCountProvider: InternalAdminCountProvider;
-        /// 内部投票阈值动态提供器（治理机构硬编码，注册多签动态读取）。
+        /// 内部投票阈值动态提供器（治理机构硬编码，注册多签账户动态读取）。
         type InternalThresholdProvider: InternalThresholdProvider;
 
         /// 每个机构最大管理员数量（与 admins-change 一致），用于管理员快照 BoundedVec。

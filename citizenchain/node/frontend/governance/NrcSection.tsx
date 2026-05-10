@@ -53,7 +53,7 @@ export function NrcSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        sfidNumber={NRC_SFID_NUMBER}
+        subjectRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
         onBack={backToDetail}
@@ -131,7 +131,7 @@ export function NrcSection() {
       onCreateProposal={(_sid, orgType, name, mainAddress, aw) =>
         setView({ page: 'create-proposal', orgType, institutionName: name, mainAddress, adminWallets: aw })
       }
-      onCreateAdminSetChange={(_sid, name, aw) =>
+      onCreateAdminSetChange={(_sid, _orgType, name, aw) =>
         setView({ page: 'admin-set-change', institutionName: name, adminWallets: aw })
       }
       onCreateProtocolUpgrade={(aw) =>

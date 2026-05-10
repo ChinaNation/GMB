@@ -18,6 +18,7 @@ use votingengine::pallet::{
     ProposalDisplayId, ProposalExecutionRetryStates, Proposals, ProposalsByExpiry,
     ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner, ProposalsByYear, YearProposalCounter,
 };
+use votingengine::types::{ORG_OTH, ORG_PUP, ORG_REN};
 // joint mode storage 在 joint-vote sub-pallet
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
@@ -221,7 +222,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                 .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_REN => {
+            ORG_REN | ORG_PUP | ORG_OTH => {
                 institution == registered_subject_institution()
                     && [
                         registered_subject_admin(0),
@@ -257,7 +258,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
                         .map(AccountId32::new)
                         .collect()
                 }),
-            ORG_REN if institution == registered_subject_institution() => {
+            ORG_REN | ORG_PUP | ORG_OTH if institution == registered_subject_institution() => {
                 let override_admins =
                     REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| value.borrow().clone());
                 Some(override_admins.unwrap_or_else(|| {
@@ -273,7 +274,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     }
 
     fn is_pending_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
-        org == ORG_REN
+        is_registered_multisig_org(org)
             && institution == pending_subject_institution()
             && [pending_subject_admin(0), pending_subject_admin(1)]
                 .iter()
@@ -284,7 +285,7 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
         org: u8,
         institution: SubjectId,
     ) -> Option<sp_std::vec::Vec<AccountId32>> {
-        if org != ORG_REN || institution != pending_subject_institution() {
+        if !is_registered_multisig_org(org) || institution != pending_subject_institution() {
             return None;
         }
         Some(sp_std::vec![
@@ -296,15 +297,15 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
 
 impl InternalThresholdProvider for TestInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        org == ORG_REN && institution == registered_subject_institution()
+        is_registered_multisig_org(org) && institution == registered_subject_institution()
     }
 
     fn is_known_pending_subject(org: u8, institution: SubjectId) -> bool {
-        org == ORG_REN && institution == pending_subject_institution()
+        is_registered_multisig_org(org) && institution == pending_subject_institution()
     }
 
     fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org == ORG_REN && institution == registered_subject_institution() {
+        if is_registered_multisig_org(org) && institution == registered_subject_institution() {
             return REGISTERED_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()));
         }
         // 中文注释：治理机构返回“毒化阈值”，用于证明治理投票不再依赖动态 Provider。
@@ -315,7 +316,7 @@ impl InternalThresholdProvider for TestInternalThresholdProvider {
     }
 
     fn pending_pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org != ORG_REN || institution != pending_subject_institution() {
+        if !is_registered_multisig_org(org) || institution != pending_subject_institution() {
             return None;
         }
         PENDING_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()))

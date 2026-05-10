@@ -13,7 +13,7 @@ class InstitutionAdminState {
 
 /// 管理员查询兼容门面。
 ///
-/// 中文注释：管理员主体真源已收口到 `lib/admins_change/`；本类在新目录内保留
+/// 中文注释：管理员主体真源已收口到 `lib/governance/admins-change/`；本类在新目录内保留
 /// 原 public API，供机构详情、提案上下文等既有调用方继续复用。
 class InstitutionAdminService {
   InstitutionAdminService({ChainRpc? chainRpc})

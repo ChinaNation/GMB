@@ -1,6 +1,4 @@
 pub const SUBJECT_KIND_BUILTIN: u8 = 0x01;
-pub const SUBJECT_KIND_SFID_INSTITUTION: u8 = 0x02;
-pub const SUBJECT_KIND_PERSONAL_DUOQIAN: u8 = 0x03;
 pub const SUBJECT_KIND_INSTITUTION_ACCOUNT: u8 = 0x05;
 
 /// 将内置治理机构 sfidNumber 派生为 48 字节 SubjectId。

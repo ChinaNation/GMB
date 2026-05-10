@@ -11,6 +11,9 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
+use crate::governance::admins_change::subject_id::{
+    self as admin_subject_id, SUBJECT_KIND_INSTITUTION_ACCOUNT,
+};
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
@@ -18,6 +21,7 @@ use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 use super::types::{AccountWithBalance, InstitutionDetail, InstitutionProposalPage};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const CLEARING_BANK_ADMIN_ORG: u8 = 5;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(
@@ -177,6 +181,10 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
     let main_addr_bytes: [u8; 32] = inst.main_address.clone().into();
     let fee_addr_bytes: [u8; 32] = inst.fee_address.clone().into();
+    let admin_subject_id = admin_subject_id::subject_id_from_account_hex(
+        SUBJECT_KIND_INSTITUTION_ACCOUNT,
+        &hex::encode(main_addr_bytes),
+    )?;
     let main_addr_ss58 = pubkey_to_ss58(&main_addr_bytes).unwrap_or_default();
     let fee_addr_ss58 = pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default();
     let mut main_account: Option<AccountWithBalance> = None;
@@ -231,6 +239,8 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     Ok(Some(InstitutionDetail {
         sfid_number: sfid_number.to_string(),
         institution_name,
+        admin_subject_id_hex: hex::encode(admin_subject_id),
+        admin_org: CLEARING_BANK_ADMIN_ORG,
         main_account,
         fee_account,
         other_accounts,

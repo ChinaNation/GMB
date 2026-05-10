@@ -1536,16 +1536,20 @@ impl votingengine::InternalAdminProvider<AccountId> for RuntimeInternalAdminProv
 
 pub struct RuntimeInternalThresholdProvider;
 
+fn is_registered_multisig_org(org: u8) -> bool {
+    votingengine::types::is_registered_multisig_org(org)
+}
+
 impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: votingengine::SubjectId) -> bool {
-        if org != votingengine::types::ORG_REN {
+        if !is_registered_multisig_org(org) {
             return false;
         }
         admins_change::Pallet::<Runtime>::active_subject_exists(org, institution)
     }
 
     fn is_known_pending_subject(org: u8, institution: votingengine::SubjectId) -> bool {
-        if org != votingengine::types::ORG_REN {
+        if !is_registered_multisig_org(org) {
             return false;
         }
         admins_change::Pallet::<Runtime>::pending_subject_exists_for_snapshot(org, institution)
@@ -1558,7 +1562,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
             | votingengine::types::ORG_PRB => {
                 votingengine::types::fixed_governance_pass_threshold(org)
             }
-            votingengine::types::ORG_REN => {
+            org if is_registered_multisig_org(org) => {
                 admins_change::Pallet::<Runtime>::active_subject_threshold(org, institution)
             }
             _ => None,
@@ -1566,7 +1570,7 @@ impl votingengine::InternalThresholdProvider for RuntimeInternalThresholdProvide
     }
 
     fn pending_pass_threshold(org: u8, institution: votingengine::SubjectId) -> Option<u32> {
-        if org != votingengine::types::ORG_REN {
+        if !is_registered_multisig_org(org) {
             return None;
         }
         admins_change::Pallet::<Runtime>::pending_subject_threshold_for_snapshot(org, institution)

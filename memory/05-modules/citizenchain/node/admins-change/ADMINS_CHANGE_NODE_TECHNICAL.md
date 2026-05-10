@@ -1,6 +1,6 @@
 # node 管理员更换模块技术文档
 
-最新更新：2026-05-09。
+最新更新：2026-05-10。
 
 ## 模块定位
 
@@ -38,11 +38,11 @@ Tauri 命令：
 
 - `build_activate_admin_request`：验证链上管理员身份，构建本地激活签名请求。
 - `verify_activate_admin`：验证冷钱包激活签名并写入本地激活记录。
-- `get_activated_admins`：读取已激活管理员，并与链上当前管理员集合交叉校验。
+- `get_activated_admins`：读取已激活管理员，并与链上当前管理员集合交叉校验；账户级主体可附带 `subjectIdHex + expectedOrg` 做链上过滤，本地激活记录仍按 `sfidNumber` 归档。
 - `deactivate_admin`：取消本地管理员激活。
-- `get_admin_subject_state`：按 `sfidNumber` 或 `subjectIdHex` 读取管理员主体。
-- `build_admin_set_change_request`：校验当前管理员身份和新管理员集合，构建冷钱包签名请求。
-- `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic。
+- `get_admin_subject_state`：按 `AdminSubjectRef` 读取管理员主体。内置治理机构可用 `sfidNumber + expectedOrg`；个人多签和机构账户必须用 `subjectIdHex + expectedOrg`。
+- `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建冷钱包签名请求。
+- `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminSubjectRef` 读取主体。
 
 链上 call data：
 
@@ -77,6 +77,12 @@ citizenchain/node/frontend/governance/admins_change/
 5. 前端展示 WUMIN_QR_V1 二维码，扫码签名回执后提交。
 6. 成功后返回机构详情页。
 
+主体引用：
+
+- `AdminSubjectRef.sfidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带 `org=0/1/2` 防止错主体。
+- `AdminSubjectRef.subjectIdHex`：用于个人多签和机构账户，必须带 `org=3/4/5`。缺少 `subjectIdHex` 时后端直接拒绝动态主体管理员更换。
+- `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
+
 ## 校验规则
 
 - 主体必须为 `Active`。
@@ -84,7 +90,9 @@ citizenchain/node/frontend/governance/admins_change/
 - 新管理员公钥必须为 32 字节 hex，不能重复。
 - 新集合不能与当前集合完全相同。
 - 内置治理机构固定人数：NRC 19，PRC 9，PRB 9。
-- 个人多签管理员数量：`2..=64`。
-- 机构账户 / 过渡 SFID 机构主体管理员数量：`2..=1989`。
+- `SfidInstitution` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
+- 个人多签必须使用 `ORG_REN`，管理员数量：`2..=64`。
+- 机构账户必须使用 `ORG_PUP / ORG_OTH`，管理员数量：`2..=1989`。
+- QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`new_admins`；`subject/new_admins` 使用 `0x` 小写 hex。
 
 链端仍是最终裁判；桌面端校验只用于提前给出明确错误。

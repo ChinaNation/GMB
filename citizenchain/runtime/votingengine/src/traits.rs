@@ -97,7 +97,7 @@ pub trait InternalVoteEngine<AccountId> {
 
     /// 创建普通内部提案,**显式传 threshold**(不走 InternalThresholdProvider 反查)。
     ///
-    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 ORG_REN 多签,
+    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 REN/PUP/OTH 注册多签账户,
     /// 业务规则要求**全员通过**(threshold = admins.len()),不是用户自定义 m-of-n。
     ///
     /// admins 仍从 active 主体反查(InternalAdminProvider::get_admin_list),
@@ -645,8 +645,8 @@ impl InternalAdminCountProvider for () {
     }
 }
 
-/// 注册多签内部投票阈值提供器。
-/// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接注册多签主体阈值。
+/// 注册多签账户内部投票阈值提供器。
+/// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接 REN/PUP/OTH 账户主体阈值。
 pub trait InternalThresholdProvider {
     /// 查询 Active 主体是否存在。用于机构合法性判断，不与阈值读取混用。
     fn is_known_subject(_org: u8, _institution: SubjectId) -> bool {
@@ -660,7 +660,7 @@ pub trait InternalThresholdProvider {
 
     fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32>;
 
-    /// Pending 注册多签主体创建投票使用的阈值。普通业务不得通过此方法授权。
+    /// Pending 注册多签账户主体创建投票使用的阈值。普通业务不得通过此方法授权。
     fn pending_pass_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
         None
     }

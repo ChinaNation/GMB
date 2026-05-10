@@ -29,7 +29,7 @@ use primitives::count_const::{
     PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
 };
 use votingengine::{
-    types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
+    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
     InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, PROPOSAL_KIND_INTERNAL,
     STAGE_INTERNAL, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED, STATUS_VOTING,
 };
@@ -70,10 +70,10 @@ pub struct AdminSetChangeAction<AdminList> {
 pub enum AdminSubjectKind {
     /// 国储会、省储会、省储行等创世内置机构。
     BuiltinInstitution,
-    /// SFID 系统登记后在链上注册的机构多签。
+    /// SFID 系统登记的机构归属主体。
     ///
-    /// 中文注释：保留给旧链上机构级主体和 SFID 机构归属索引过渡；新账户级
-    /// 内部投票主体应使用 `InstitutionAccount`。
+    /// 中文注释：该枚举值保留是为了 SCALE ABI 兼容。新写入、新变更和
+    /// 生命周期路径不得使用它作为管理员主体；机构账户必须使用 `InstitutionAccount`。
     SfidInstitution,
     /// 用户自建的个人多签。
     PersonalDuoqian,
@@ -207,7 +207,7 @@ pub fn dynamic_threshold(admin_count: u32) -> Option<u32> {
 
 /// 按主体类型推导最终写入链上的阈值。
 ///
-/// 治理机构走固定常量；动态账户走 [`dynamic_threshold`]。
+/// 治理机构走固定常量；个人多签和机构账户走 [`dynamic_threshold`]。
 pub fn derived_threshold(kind: AdminSubjectKind, org: u8, admin_count: u32) -> Option<u32> {
     match kind {
         AdminSubjectKind::BuiltinInstitution => {
@@ -218,9 +218,10 @@ pub fn derived_threshold(kind: AdminSubjectKind, org: u8, admin_count: u32) -> O
                 None
             }
         }
-        AdminSubjectKind::PersonalDuoqian
-        | AdminSubjectKind::InstitutionAccount
-        | AdminSubjectKind::SfidInstitution => dynamic_threshold(admin_count),
+        AdminSubjectKind::PersonalDuoqian | AdminSubjectKind::InstitutionAccount => {
+            dynamic_threshold(admin_count)
+        }
+        AdminSubjectKind::SfidInstitution => None,
     }
 }
 
@@ -547,12 +548,15 @@ pub mod pallet {
                         Error::<T>::InvalidAdminCount
                     );
                 }
-                AdminSubjectKind::InstitutionAccount | AdminSubjectKind::SfidInstitution => {
+                AdminSubjectKind::InstitutionAccount => {
                     ensure!(admins_len >= 2, Error::<T>::InvalidAdminCount);
                     ensure!(
                         admins_len <= <T as Config>::MaxAdminsPerInstitution::get() as usize,
                         Error::<T>::InvalidAdminCount
                     );
+                }
+                AdminSubjectKind::SfidInstitution => {
+                    return Err(Error::<T>::InvalidSubjectKind.into());
                 }
             }
             Ok(())
@@ -598,10 +602,17 @@ pub mod pallet {
                         Error::<T>::InvalidSubjectKind
                     );
                 }
-                AdminSubjectKind::SfidInstitution
-                | AdminSubjectKind::PersonalDuoqian
-                | AdminSubjectKind::InstitutionAccount => {
+                AdminSubjectKind::SfidInstitution => {
+                    return Err(Error::<T>::InvalidSubjectKind.into());
+                }
+                AdminSubjectKind::PersonalDuoqian => {
                     ensure!(org == ORG_REN, Error::<T>::InvalidSubjectKind);
+                }
+                AdminSubjectKind::InstitutionAccount => {
+                    ensure!(
+                        matches!(org, ORG_PUP | ORG_OTH),
+                        Error::<T>::InvalidSubjectKind
+                    );
                 }
             }
             Ok(())

@@ -31,16 +31,26 @@ pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
 /// 治理机构:省储行
 pub const ORG_PRB: u8 = 2;
-/// 注册多签:个人(管理员与阈值由 admins-change 统一主体表提供)
+/// 注册多签:个人多签账户(管理员与阈值由 admins-change 统一主体表提供)
 pub const ORG_REN: u8 = 3;
-/// 注册多签:公权(政府/教育/司法/立法/监察)— Phase 2 启用业务路径
+/// 注册多签:公权机构账户(政府/教育/司法/立法/监察)
 pub const ORG_PUP: u8 = 4;
-/// 注册多签:其他(公司/银行/基金/...)— Phase 2 启用业务路径
+/// 注册多签:其他机构账户(公司/银行/基金/...)
 pub const ORG_OTH: u8 = 5;
 
-/// Phase 1:只接受治理 + 个人(REN);PUP/OTH 占位但 Phase 2 才启用业务路径
+/// 是否为内部投票支持的 org。
 pub fn is_valid_org(org: u8) -> bool {
-    matches!(org, ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN)
+    matches!(
+        org,
+        ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN | ORG_PUP | ORG_OTH
+    )
+}
+
+/// 是否为注册多签动态主体 org。
+///
+/// 中文注释：REN 只代表个人多签；PUP/OTH 代表机构账户，不能互相代替。
+pub fn is_registered_multisig_org(org: u8) -> bool {
+    matches!(org, ORG_REN | ORG_PUP | ORG_OTH)
 }
 
 /// 治理机构(NRC/PRC/PRB)的固定制度阈值。

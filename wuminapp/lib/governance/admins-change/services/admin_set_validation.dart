@@ -47,11 +47,22 @@ class AdminSetValidation {
       return;
     }
     if (kind == 2) {
+      if (org != 3) throw StateError('个人多签管理员更换必须使用 ORG_REN');
       if (count < 2 || count > 64) throw StateError('个人多签管理员数量必须在 2..=64 之间');
       return;
     }
-    if (count < 2 || count > 1989) {
-      throw StateError('机构账户管理员数量必须在 2..=1989 之间');
+    if (kind == 3) {
+      if (org != 4 && org != 5) {
+        throw StateError('机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH');
+      }
+      if (count < 2 || count > 1989) {
+        throw StateError('机构账户管理员数量必须在 2..=1989 之间');
+      }
+      return;
     }
+    if (kind == 1) {
+      throw StateError('SfidInstitution 只用于机构归属/检索，不能作为管理员更换主体');
+    }
+    throw StateError('未知管理员主体类型');
   }
 }

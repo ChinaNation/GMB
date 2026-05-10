@@ -5,12 +5,12 @@ import { AdminSetChangeSigningFlow } from './AdminSetChangeSigningFlow';
 import { AdminSetDiff } from './AdminSetDiff';
 import { AdminSetEditor } from './AdminSetEditor';
 import { AdminWalletSelector } from './AdminWalletSelector';
-import type { AdminSubjectState, VoteSignRequestResult } from './types';
+import type { AdminSubjectRef, AdminSubjectState, VoteSignRequestResult } from './types';
 import type { AdminWalletMatch } from '../types';
 import './styles.css';
 
 type Props = {
-  sfidNumber: string;
+  subjectRef: AdminSubjectRef;
   institutionName: string;
   adminWallets: AdminWalletMatch[];
   onBack: () => void;
@@ -20,7 +20,7 @@ type Props = {
 type Step = 'form' | 'sign';
 
 export function AdminSetChangePage({
-  sfidNumber,
+  subjectRef,
   institutionName,
   adminWallets,
   onBack,
@@ -43,14 +43,16 @@ export function AdminSetChangePage({
   const signRequestRef = useRef<VoteSignRequestResult | null>(null);
   const selectedWalletRef = useRef<AdminWalletMatch | null>(null);
   const newAdminsRef = useRef<string[]>([]);
+  const subjectRefRef = useRef<AdminSubjectRef>(subjectRef);
 
   signRequestRef.current = signRequest;
   selectedWalletRef.current = selectedWallet;
   newAdminsRef.current = newAdmins;
+  subjectRefRef.current = subjectRef;
 
   useEffect(() => {
     setLoading(true);
-    api.getAdminSubjectState(sfidNumber)
+    api.getAdminSubjectState(subjectRef)
       .then((state) => {
         setSubject(state);
         setNewAdmins(state?.admins ?? []);
@@ -58,7 +60,7 @@ export function AdminSetChangePage({
       })
       .catch((e) => setFormError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [sfidNumber]);
+  }, [subjectRef.sfidNumber, subjectRef.subjectIdHex, subjectRef.org]);
 
   const buildRequest = async () => {
     if (!subject || !selectedWallet) return;
@@ -67,7 +69,7 @@ export function AdminSetChangePage({
     try {
       const result = await api.buildAdminSetChangeRequest(
         selectedWallet.pubkeyHex,
-        sfidNumber,
+        subjectRef,
         newAdmins,
       );
       setSignRequest(result);
@@ -98,7 +100,7 @@ export function AdminSetChangePage({
         req.requestId,
         wallet.pubkeyHex,
         req.expectedPayloadHash,
-        sfidNumber,
+        subjectRefRef.current,
         newAdminsRef.current,
         req.signNonce,
         req.signBlockNumber,
@@ -110,7 +112,7 @@ export function AdminSetChangePage({
     } finally {
       setSubmitting(false);
     }
-  }, [sfidNumber]);
+  }, []);
 
   if (loading) {
     return <div className="governance-section"><p>加载中…</p></div>;

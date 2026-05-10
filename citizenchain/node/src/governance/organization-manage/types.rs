@@ -47,6 +47,10 @@ pub struct AccountWithBalance {
 pub struct InstitutionDetail {
     pub sfid_number: String,
     pub institution_name: String,
+    /// 管理员更换使用的账户级 SubjectId。当前清算行以主账户作为机构管理员主体。
+    pub admin_subject_id_hex: String,
+    /// 管理员更换使用的 org。清算行属于 ORG_OTH 机构账户。
+    pub admin_org: u8,
     pub main_account: AccountWithBalance,
     pub fee_account: AccountWithBalance,
     /// 主账户/费用账户之外的全部账户(自定义初始账户)。
