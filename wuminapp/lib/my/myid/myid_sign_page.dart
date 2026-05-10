@@ -1,4 +1,4 @@
-// 热钱包投票账户现场签名页。
+// 热钱包电子护照现场签名页。
 //
 // 用户到 SFID 现场后：
 // 1. 打开此页，摄像头扫描 SFID 管理端屏幕上的 sign_request 二维码
@@ -19,18 +19,18 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-class VoteSignPage extends StatefulWidget {
-  const VoteSignPage({super.key, required this.wallet});
+class MyIdSignPage extends StatefulWidget {
+  const MyIdSignPage({super.key, required this.wallet});
 
   final WalletProfile wallet;
 
   @override
-  State<VoteSignPage> createState() => _VoteSignPageState();
+  State<MyIdSignPage> createState() => _MyIdSignPageState();
 }
 
 enum _PageStep { scanning, signing, showResponse }
 
-class _VoteSignPageState extends State<VoteSignPage> {
+class _MyIdSignPageState extends State<MyIdSignPage> {
   _PageStep _step = _PageStep.scanning;
   String? _responseJson;
   String? _errorMessage;
@@ -80,8 +80,7 @@ class _VoteSignPageState extends State<VoteSignPage> {
       // 构造 sign_response envelope
       final sigHex =
           '0x${signature.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final payloadHash =
-          QrSigner.computePayloadHash(request.body.payloadHex);
+      final payloadHash = QrSigner.computePayloadHash(request.body.payloadHex);
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final responseEnvelope = QrEnvelope<SignResponseBody>(
         kind: QrKind.signResponse,
@@ -125,7 +124,7 @@ class _VoteSignPageState extends State<VoteSignPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('投票账户签名'),
+        title: const Text('电子护照签名'),
         centerTitle: true,
       ),
       body: Padding(
@@ -208,8 +207,8 @@ class _VoteSignPageState extends State<VoteSignPage> {
           decoration: AppTheme.bannerDecoration(AppTheme.success),
           child: const Text(
             '签名成功，请让 SFID 管理员扫描下方二维码',
-            style: TextStyle(
-                color: AppTheme.success, fontWeight: FontWeight.w600),
+            style:
+                TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
           ),
         ),
         const Spacer(),

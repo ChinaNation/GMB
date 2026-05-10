@@ -103,6 +103,8 @@ jobs:
           echo "产出: 公民钱包.apk"
 
       - name: 上传 公民钱包.apk
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: 公民钱包

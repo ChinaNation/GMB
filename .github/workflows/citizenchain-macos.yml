@@ -19,8 +19,8 @@ jobs:
   build-macos:
     name: 打包公民链.dmg (macOS)
     runs-on: macos-latest
-    # 仅在 WASM CI 成功后运行，或手动触发时运行
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    # 本地 push 触发的 WASM CI 不再上传 artifact；桌面端打包只允许手动触发。
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -76,6 +76,8 @@ jobs:
           echo "产出: 公民链.dmg ($(du -h 公民链.dmg | cut -f1))"
 
       - name: 上传公民链.dmg
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: 公民链-macos

@@ -13,7 +13,7 @@ import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'personal_admin_list_page.dart';

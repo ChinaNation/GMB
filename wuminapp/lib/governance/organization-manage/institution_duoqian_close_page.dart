@@ -13,7 +13,7 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'duoqian_manage_service.dart';

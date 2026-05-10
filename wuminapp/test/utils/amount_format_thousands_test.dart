@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 
 /// 中文注释:AmountFormat.formatThousands 边界覆盖。
 void main() {
@@ -41,8 +41,8 @@ void main() {
     });
 
     test('亿级大数', () {
-      expect(AmountFormat.formatThousands(123456789012.34),
-          '123,456,789,012.34');
+      expect(
+          AmountFormat.formatThousands(123456789012.34), '123,456,789,012.34');
     });
   });
 }

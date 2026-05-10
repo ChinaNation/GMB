@@ -110,6 +110,7 @@ jobs:
           echo "产出: CPMS.deb ($(du -h CPMS.deb | cut -f1))"
 
       - name: 清理旧 artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -120,6 +121,8 @@ jobs:
             done
 
       - name: 上传 CPMS.deb
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: CPMS

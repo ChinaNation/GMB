@@ -13,18 +13,20 @@ class UserProfileState {
 
   final String? avatarPath;
   final String? backgroundPath;
+
   /// 通信账户钱包 index（对应 WalletProfile.walletIndex）。
   final int? communicationWalletIndex;
+
   /// 通信账户钱包地址（SS58）。
   final String? communicationAddress;
+
   /// 通信账户钱包名称（= 用户昵称）。
   final String? communicationWalletName;
 
   /// 用户昵称 = 通信钱包名称，未设置时显示默认值。
-  String get nickname =>
-      communicationWalletName?.trim().isNotEmpty == true
-          ? communicationWalletName!
-          : UserProfileService.defaultNickname;
+  String get nickname => communicationWalletName?.trim().isNotEmpty == true
+      ? communicationWalletName!
+      : UserProfileService.defaultNickname;
 
   UserProfileState copyWith({
     Object? avatarPath = _sentinel,
@@ -214,8 +216,7 @@ class UserProfileService {
       String walletName) async {
     final current = await getState();
     if (current.communicationWalletIndex == null) return current;
-    return saveState(
-        current.copyWith(communicationWalletName: walletName));
+    return saveState(current.copyWith(communicationWalletName: walletName));
   }
 }
 

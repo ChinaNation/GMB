@@ -35,8 +35,7 @@ lib/
     │   ├── wallet_manager.dart         ← 钱包生命周期 + seed 读取守卫
     │   └── wallet_secure_keys.dart
     ├── capabilities/
-    │   ├── api_client.dart         ← SFID 绑定、管理员目录等非链上查询
-    │   ├── sfid_binding_service.dart
+    │   ├── api_client.dart         ← 管理员目录、机构信息等非链上查询
     │   ├── attestation_service.dart
     │   └── wallet_type_service.dart
     ├── pages/
@@ -70,13 +69,13 @@ lib/
 ### 3.2 `capabilities`
 
 - `api_client.dart`
-  - 非链上查询的外部服务接口（SFID 绑定、管理员目录）
+  - 非链上查询的外部服务接口（管理员目录、机构信息等）
 - `wallet_type_service.dart`
   - 管理员目录缓存与角色识别
 - `attestation_service.dart`
   - 证明 token（secure）+ 元信息（Isar）
-- `sfid_binding_service.dart`
-  - SFID 绑定请求状态管理（当前仍用 SharedPreferences）
+
+电子护照归属 `lib/my/myid/`；钱包模块只提供钱包选择、热钱包签名和钱包元数据。
 
 ### 3.3 `pages`
 
@@ -211,7 +210,7 @@ lib/
 
 ### 5.3 其他 SharedPreferences（尚未迁移）
 
-- `sfid.bind.*`（`SfidBindingService`）
+- `sfid.bind.*`（`lib/my/myid/MyIdService` 继续使用的旧存储键）
 
 ### 5.4 钱包详情页布局 `WalletDetailPage`
 

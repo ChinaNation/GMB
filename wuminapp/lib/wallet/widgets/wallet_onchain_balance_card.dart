@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 钱包链上余额卡(钱包详情页第 3 张卡)。

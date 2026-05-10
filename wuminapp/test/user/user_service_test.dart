@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/user/user_service.dart';
+import 'package:wuminapp_mobile/my/user/user_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -138,8 +138,9 @@ jobs:
       - name: 重命名为公民.apk
         run: cp wuminapp/build/app/outputs/flutter-apk/app-release.apk wuminapp/build/app/outputs/flutter-apk/公民.apk
 
-      # 清理旧版 APK artifact 后上传新版
+      # 本地 push 只验证 APK 能否构建；只有 GitHub 页面手动运行时才维护 APK 产物。
       - name: 清理旧版 APK artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -151,6 +152,8 @@ jobs:
             done
 
       - name: 上传公民.apk
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: 公民.apk

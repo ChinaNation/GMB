@@ -160,109 +160,6 @@ class ApiClient {
     );
   }
 
-  /// 注册投票账户（带 sr25519 签名证明私钥所有权）。
-  Future<void> registerVoteAccount({
-    required String address,
-    required String pubkeyHex,
-    required String signatureHex,
-    required String signMessage,
-  }) async {
-    final normalized = _normalizePubkeyHex(pubkeyHex);
-    final uri = Uri.parse('$_baseUrl/api/v1/app/vote-account/register');
-    http.Response response;
-    try {
-      response = await http
-          .post(
-            uri,
-            headers: _headers(includeContentType: true),
-            body: jsonEncode({
-              'address': address,
-              'pubkey': normalized,
-              'signature': signatureHex.startsWith('0x')
-                  ? signatureHex
-                  : '0x$signatureHex',
-              'sign_message': signMessage,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
-    } on TimeoutException catch (_) {
-      throw Exception('注册请求超时，请检查网络连接');
-    } on SocketException catch (_) {
-      if ((Platform.isAndroid || Platform.isIOS) &&
-          _baseUrl.contains('127.0.0.1')) {
-        throw Exception(
-          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
-        );
-      }
-      rethrow;
-    }
-    if (response.statusCode != 200) {
-      throw Exception('vote account register failed: ${response.statusCode}');
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final code = payload['code'] as int? ?? -1;
-    final message = payload['message']?.toString() ?? 'unknown';
-    if (code != 0) {
-      throw Exception(
-        'vote account register rejected: code=$code message=$message',
-      );
-    }
-  }
-
-  /// 查询投票账户绑定状态。
-  ///
-  /// [walletAddress] 必须是 SS58 格式地址（后端按 address 参数接收并解析）。
-  Future<VoteAccountStatusResponse> queryVoteAccountStatus(
-      String walletAddress) async {
-    final addr = walletAddress.trim();
-    if (addr.isEmpty) {
-      throw Exception('walletAddress is empty');
-    }
-    final uri =
-        Uri.parse('$_baseUrl/api/v1/app/vote-account/status?address=$addr');
-    http.Response response;
-    try {
-      response = await http
-          .get(uri, headers: _headers())
-          .timeout(const Duration(seconds: 15));
-    } on TimeoutException catch (_) {
-      throw Exception('状态查询超时，请检查网络连接');
-    } on SocketException catch (_) {
-      if ((Platform.isAndroid || Platform.isIOS) &&
-          _baseUrl.contains('127.0.0.1')) {
-        throw Exception(
-          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
-        );
-      }
-      rethrow;
-    }
-    if (response.statusCode != 200) {
-      throw Exception(
-          'vote account status query failed: ${response.statusCode}');
-    }
-
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final code = payload['code'] as int? ?? -1;
-    final message = payload['message']?.toString() ?? 'unknown';
-    if (code != 0) {
-      throw Exception(
-        'vote account status rejected: code=$code message=$message',
-      );
-    }
-
-    final data = payload['data'];
-    if (data is! Map<String, dynamic>) {
-      throw Exception('vote account status invalid response: missing data');
-    }
-
-    return VoteAccountStatusResponse(
-      status: (data['status']?.toString() ?? 'unset').trim(),
-      address: data['address']?.toString(),
-      sfidCode: data['sfid_code']?.toString(),
-    );
-  }
-
   String _normalizePubkeyHex(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -649,19 +546,6 @@ class VoteCredentialResponse {
     required this.voteNonce,
     required this.signature,
   });
-}
-
-class VoteAccountStatusResponse {
-  const VoteAccountStatusResponse({
-    required this.status,
-    this.address,
-    this.sfidCode,
-  });
-
-  /// "pending" | "bound" | "unset"
-  final String status;
-  final String? address;
-  final String? sfidCode;
 }
 
 /// 机构下单个多签账户条目。

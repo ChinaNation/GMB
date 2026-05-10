@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';

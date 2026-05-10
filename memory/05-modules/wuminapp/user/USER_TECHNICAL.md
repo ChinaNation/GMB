@@ -2,23 +2,23 @@
 
 ## 1. 模块目标
 
-`lib/user/` 负责 WuminApp 的"我的 / 用户"模块，当前覆盖以下能力：
+`lib/my/user/` 负责 WuminApp 的"我的 / 用户"模块，当前覆盖以下能力：
 
 - 用户背景图上传与更换
 - 用户头像上传与更换
 - 通信账户选择（钱包名称即用户昵称，双向同步）
-- 投票账户选择与 SFID 绑定
 - 用户二维码生成与展示
 - 通讯录扫码导入与本地昵称修改
+- 电子护照入口展示
 
 ## 2. 文件结构
 
-- `lib/user/user.dart`
+- `lib/my/user/user.dart`
   - 用户主页 `ProfilePage`
   - 用户资料编辑页 `ProfileEditPage`
   - 二维码页面 `UserQrPage`
   - 通讯录页面 `ContactBookPage`
-- `lib/user/user_service.dart`
+- `lib/my/user/user_service.dart`
   - 用户资料模型与持久化
   - 用户二维码载荷模型
   - 通讯录模型与持久化
@@ -26,12 +26,11 @@
 相关协作模块：
 
 - `lib/wallet/pages/wallet_page.dart`
-  - 在选择通信账户/投票账户时提供钱包选择
+  - 在选择通信账户时提供钱包选择
   - 钱包改名时同步更新用户资料中的通信钱包名称
-- `lib/wallet/capabilities/sfid_binding_service.dart`
-  - 保存投票账户绑定状态、地址、公钥，并负责向后端发起注册请求 + 同步后端状态
-- `lib/user/vote_sign_page.dart`
-  - 热钱包用户到 SFID 现场时：扫 sign_request → 本机签名 → 展示 sign_response QR
+- `lib/my/myid/`
+  - 电子护照页面、状态服务、后端接口封装和现场签名页
+  - “我的”页面只提供入口，不承载电子护照设置流程
 
 ## 3. 数据模型
 
@@ -78,20 +77,6 @@
 - `localNickname` — 本机自定义显示昵称
 - `addedAtMillis` / `updatedAtMillis` — 时间戳
 
-### 3.4 投票账户绑定状态 `SfidBindState`
-
-状态：`unset` → `pending` → `bound`
-
-- `unset`：未设置，用户未选择投票账户
-- `pending`：已注册（带签名），等待 SFID 现场绑定 + 推链
-- `bound`：链上已确认
-
-新增字段：
-- `isColdWallet`：标记冷/热钱包（热钱包显示【签名】按钮）
-
-注册接口：`POST /api/v1/app/vote-account/register`（带 sr25519 签名 `CITIZEN_VOTE_REGISTER|{address}|{timestamp}`）
-状态查询：`GET /api/v1/app/vote-account/status?pubkey=0x...`（initState 时同步后端状态）
-
 ## 4. 持久化方案
 
 ### 4.1 用户资料
@@ -104,15 +89,15 @@
 
 存储：`SharedPreferences`，键 `user.contacts.items.v1`
 
-### 4.3 投票账户绑定
+### 4.3 电子护照
 
-存储：`SharedPreferences`，键 `sfid.bind.*`
+电子护照状态归属 `lib/my/myid/MyIdService`，用户模块不直接读写电子护照状态。
 
 ## 5. 页面与交互流程
 
 ### 5.1 用户主页
 
-页面元素：背景图、头像、昵称（通信钱包名称）、二维码图标、右箭头、通讯录/钱包/设置入口
+页面元素：背景图、头像、昵称（通信钱包名称）、二维码图标、右箭头、钱包/通讯录/电子护照/设置入口
 
 ### 5.2 用户资料页 `ProfileEditPage`
 
@@ -121,7 +106,6 @@
 2. 用户头像行（左侧头像 + 右箭头，点击换头像）
 3. 用户昵称行（左侧显示通信钱包名称 + 右箭头，点击弹窗修改，同步改钱包名）
 4. 通信账户行（选择钱包后即时保存）
-5. 投票账户行（选择钱包后提交 SFID 绑定）
 
 ### 5.3 昵称双向同步
 
@@ -134,10 +118,11 @@
 2. 选中钱包后保存 `walletIndex + address + walletName`
 3. 二维码实时更新
 
-### 5.5 投票账户流程
+### 5.5 电子护照入口
 
-1. 选择钱包 → 提交 SFID 绑定
-2. 状态：未设置 → 绑定中 → 已绑定
+1. “我的”页面点击电子护照入口
+2. 跳转 `lib/my/myid/MyIdPage`
+3. 电子护照设置、状态同步和现场签名由 `lib/my/myid/` 负责
 
 ### 5.6 通讯录
 
@@ -148,4 +133,4 @@
 ## 6. 依赖
 
 - `image_picker`、`qr_flutter`、`shared_preferences`、`local_auth`
-- 协作：`WalletManager`、`SfidBindingService`
+- 协作：`WalletManager`、`lib/my/myid/MyIdPage`
