@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
-import { saveKnownSfid } from '../../offchain/section';
+import { saveKnownSfid } from '../../transaction/offchain-transaction/section';
 import { organizationManageApi } from './api';
 import type { InitialAccountInputDto, InstitutionRegistrationInfoResp } from './types';
 

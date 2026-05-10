@@ -234,7 +234,6 @@ class PersonalProposalHistoryService {
       final tally = await _proposalService.fetchVoteTally(proposalId);
       final statusStr = mapChainStatus(chainStatus);
 
-      // 已知该 entity 时保留 action / snapshot,首次发现则归类 unknown(本机无快照)。
       final isar = await WalletIsar.instance.db();
       final existing = await isar.personalDuoqianProposalEntitys
           .filter()
@@ -242,10 +241,24 @@ class PersonalProposalHistoryService {
           .proposalIdEqualTo(proposalId)
           .findFirst();
 
+      // action 决策(2026-05-09 修):
+      // 1) 本设备已发起过该提案 → 用 Isar 已存的 action(权威,与发起页面一致)
+      // 2) 首次发现(其他设备发起 / 历史扫回) → 拉链上 ProposalData 真解码
+      //    MODULE_TAG + action_byte;不再默认 create
+      // 3) 链上数据被 90 天清理或解码失败 → fallback create
+      String action = existing?.action ?? PersonalProposalAction.create;
+      if (existing == null) {
+        final raw = await _fetchProposalDataRaw(proposalId);
+        if (raw != null) {
+          final decoded = _decodeActionFromProposalData(raw);
+          if (decoded != null) action = decoded;
+        }
+      }
+
       await recordOrUpdate(
         personalAddressHex: personalAddressHex,
         proposalId: proposalId,
-        action: existing?.action ?? PersonalProposalAction.create,
+        action: action,
         status: statusStr,
         yesVotes: tally.yes,
         noVotes: tally.no,
@@ -253,6 +266,74 @@ class PersonalProposalHistoryService {
     } catch (_) {
       // 单条同步失败不阻断其他提案同步。
     }
+  }
+
+  /// 从链上 `VotingEngine.ProposalData[id]` 原始字节解码 `PersonalProposalAction`。
+  ///
+  /// ProposalData 是 BoundedVec<u8>:Compact<len> + bytes,bytes 格式:
+  /// `MODULE_TAG`(per-mgmt 8B / dq-xfer 7B) + `action_byte`(1B) + 业务参数。
+  ///
+  /// 个人多签提案能命中的映射:
+  /// - per-mgmt + 0 → create (PersonalManage::propose_create)
+  /// - per-mgmt + 1 → close  (PersonalManage::propose_close)
+  /// - dq-xfer + 0 → transfer (DuoqianTransfer::propose_transfer)
+  /// 个人多签不会触发 safety_fund/sweep,无需识别。
+  String? _decodeActionFromProposalData(Uint8List raw) {
+    if (raw.length < 2) return null;
+    final mode = raw[0] & 0x03;
+    final int offset;
+    if (mode == 0) {
+      offset = 1;
+    } else if (mode == 1) {
+      offset = 2;
+    } else if (mode == 2) {
+      offset = 4;
+    } else {
+      return null;
+    }
+    // per-mgmt = b"per-mgmt" 8 字节
+    const perMgmt = [0x70, 0x65, 0x72, 0x2d, 0x6d, 0x67, 0x6d, 0x74];
+    // dq-xfer = b"dq-xfer" 7 字节
+    const dqXfer = [0x64, 0x71, 0x2d, 0x78, 0x66, 0x65, 0x72];
+    if (_startsWithAt(raw, perMgmt, offset)) {
+      if (offset + perMgmt.length >= raw.length) return null;
+      final action = raw[offset + perMgmt.length];
+      if (action == 0) return PersonalProposalAction.create;
+      if (action == 1) return PersonalProposalAction.close;
+    } else if (_startsWithAt(raw, dqXfer, offset)) {
+      if (offset + dqXfer.length >= raw.length) return null;
+      final action = raw[offset + dqXfer.length];
+      if (action == 0) return PersonalProposalAction.transfer;
+    }
+    return null;
+  }
+
+  bool _startsWithAt(Uint8List data, List<int> prefix, int offset) {
+    if (offset + prefix.length > data.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (data[offset + i] != prefix[i]) return false;
+    }
+    return true;
+  }
+
+  /// 读取 `VotingEngine.ProposalData[id]` 原始字节(BoundedVec<u8> SCALE 编码)。
+  Future<Uint8List?> _fetchProposalDataRaw(int proposalId) async {
+    try {
+      final key = _buildStorageKey(
+        'VotingEngine',
+        'ProposalData',
+        _u64ToLeBytes(proposalId),
+      );
+      return await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Uint8List _u64ToLeBytes(int value) {
+    final bytes = Uint8List(8);
+    ByteData.sublistView(bytes).setUint64(0, value, Endian.little);
+    return bytes;
   }
 
   Future<List<PersonalDuoqianProposalView>> _readAllFromIsar(

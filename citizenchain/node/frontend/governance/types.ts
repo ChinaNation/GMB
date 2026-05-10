@@ -1,5 +1,5 @@
 // 治理模块前端类型定义，与后端 governance::types 和 admins_change::activation 对应。
-import type { DuoqianTransferProposalDetails } from '../duoqian-transfer/types';
+import type { DuoqianTransferProposalDetails } from '../transaction/duoqian-transfer/types';
 
 // ── 签名请求/响应 ──
 

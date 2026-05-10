@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { sanitizeError } from '../core/tauri';
 import { hexToSs58 } from '../shared/ss58';
-import { DuoqianTransferProposalDetailSection } from '../duoqian-transfer/ProposalDetailSection';
+import { DuoqianTransferProposalDetailSection } from '../transaction/duoqian-transfer/ProposalDetailSection';
 import { adminsChangeApi } from './admins_change/api';
 import { governanceApi as api } from './api';
 import type { ProposalFullInfo, AdminWalletMatch, UserVoteStatus, InstitutionDetail } from './types';

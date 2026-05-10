@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateDuoqianTransferPage } from '../duoqian-transfer/CreateProposalPage';
-import { SafetyFundProposalPage } from '../duoqian-transfer/SafetyFundProposalPage';
-import { SweepProposalPage } from '../duoqian-transfer/SweepProposalPage';
+import { CreateDuoqianTransferPage } from '../transaction/duoqian-transfer/CreateProposalPage';
+import { SafetyFundProposalPage } from '../transaction/duoqian-transfer/SafetyFundProposalPage';
+import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposalPage';
 import { DeveloperUpgradePage, ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 

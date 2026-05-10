@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -60,23 +61,36 @@ class _PersonalProposalListSectionState
   }
 
   Future<void> _openProposal(PersonalDuoqianProposalView view) async {
-    // 历史(已终态)提案在链上可能已被 90 天清理,DuoqianManageDetailPage 以链上为准,
+    // 历史(已终态)提案在链上可能已被 90 天清理,详情页以链上为准,
     // 终态后可能拉不到完整数据;但仍允许进入展示已知信息。
+    //
+    // 按 view.action 分流到对应详情页:
+    // - transfer → DuoqianTransferDetailPage(转账提案专用页)
+    // - create / close → DuoqianManageDetailPage(多签管理提案,只懂 create/close)
+    final ctx = ProposalContext(
+      institution: widget.institution,
+      adminWallets: widget.adminWallets,
+      role: widget.adminWallets.isEmpty
+          ? ProposalRole.viewer
+          : ProposalRole.admin,
+    );
+    final Widget page;
+    if (view.action == PersonalProposalAction.transfer) {
+      page = DuoqianTransferDetailPage(
+        institution: widget.institution,
+        proposalId: view.proposalId,
+        proposalContext: ctx,
+      );
+    } else {
+      page = DuoqianManageDetailPage(
+        institution: widget.institution,
+        proposalId: view.proposalId,
+        proposalContext: ctx,
+      );
+    }
     final pushed = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(
-        builder: (_) => DuoqianManageDetailPage(
-          institution: widget.institution,
-          proposalId: view.proposalId,
-          proposalContext: ProposalContext(
-            institution: widget.institution,
-            adminWallets: widget.adminWallets,
-            role: widget.adminWallets.isEmpty
-                ? ProposalRole.viewer
-                : ProposalRole.admin,
-          ),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => page),
     );
     if (pushed == true && mounted) {
       // 投票/操作后可能改变了提案状态,重读

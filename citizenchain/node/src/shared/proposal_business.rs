@@ -3,7 +3,7 @@
 //! governance 提案聚合只依赖本文件的通用函数；具体业务模块的详情结构、
 //! 解码和独立 storage 查询由各业务模块自己维护。
 
-use crate::duoqian_transfer::proposal as transfer_module;
+use crate::transaction::duoqian_transfer::proposal as transfer_module;
 
 pub use transfer_module::ProposalDetails;
 

@@ -340,8 +340,19 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
       TxPoolWatchEvent? txFailureEvent;
 
+      // 热钱包：先认证，后续 signCallback 优先走本地签名;冷钱包：fallback QR 签名。
+      WalletManager? hotWalletManager;
+      if (wallet.isHotWallet) {
+        hotWalletManager = WalletManager();
+        await hotWalletManager.authenticateForSigning();
+      }
+
       Future<Uint8List> signCallback(Uint8List payload) async {
-        // 管理员投票统一通过 QR 码签名（wumin 冷钱包）
+        if (hotWalletManager != null) {
+          return await hotWalletManager.signWithWalletNoAuth(
+              wallet.walletIndex, payload);
+        }
+        // 冷钱包 QR 签名
         final qrSigner = QrSigner();
         final voteText = approve ? '赞成' : '反对';
         final request = qrSigner.buildRequest(
