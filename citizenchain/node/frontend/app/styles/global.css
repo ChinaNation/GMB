@@ -179,8 +179,7 @@ body {
 }
 
 .settings-wallet-section .wallet-inline,
-.settings-nodekey-section .bootnode-inline,
-.settings-devup-section .bootnode-inline {
+.settings-nodekey-section .bootnode-inline {
   column-gap: 10px;
   min-height: 84px;
   min-width: 0;
@@ -202,43 +201,13 @@ body {
 }
 
 .settings-wallet-section .wallet-current,
-.settings-nodekey-section .bootnode-inline h2,
-.settings-devup-section .bootnode-inline h2 {
+.settings-nodekey-section .bootnode-inline h2 {
   margin: 0;
   display: flex;
   align-items: center;
   font-size: 16px;
   line-height: normal;
   white-space: nowrap;
-}
-
-/* 开发升级：与 settings-nodekey-section 视觉一致，独立 margin 控制避免叠加。 */
-.settings-devup-section {
-  margin-top: 12px;
-  padding-top: 0;
-  border-top: none;
-}
-
-/* form 阶段左侧 slot：标题 + 选择文件按钮 + 文件名 紧邻排布，整体占据 max-content 列。
-   宽度收敛：文件名过长时省略号，避免挤压中间的管理员下拉。 */
-.devup-label-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.devup-label-group .dev-upgrade-file-name {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-devup-section .devup-inline select {
-  flex: 0 0 auto;
-  min-width: 240px;
-  max-width: 360px;
 }
 
 .settings-wallet-section .wallet-inline input,

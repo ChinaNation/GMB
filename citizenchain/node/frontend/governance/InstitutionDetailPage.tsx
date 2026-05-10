@@ -20,7 +20,8 @@ type Props = {
   onOpenAdminList?: () => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], sfidNumber: string) => void;
   onCreateProposal?: (sfidNumber: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateRuntimeUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
+  onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
+  onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSweep?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateAdminSetChange?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
@@ -28,7 +29,7 @@ type Props = {
   hideBackButton?: boolean;
 };
 
-export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateRuntimeUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
+export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onSelectProposal, onCreateProposal, onCreateProtocolUpgrade, onCreateDeveloperUpgrade, onCreateSafetyFund, onCreateSweep, onCreateAdminSetChange, hideBackButton }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [proposals, setProposals] = useState<ProposalListItem[]>([]);
   const [proposalHasMore, setProposalHasMore] = useState(false);
@@ -289,9 +290,16 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
               <button className="proposal-type-button" disabled title="即将上线">验证密钥</button>
               <button
                 className="proposal-type-button"
-                disabled={!isAdmin}
-                onClick={() => isAdmin && onCreateRuntimeUpgrade?.(adminWallets)}
-              >状态升级</button>
+                disabled={!isAdmin || !onCreateProtocolUpgrade}
+                onClick={() => isAdmin && onCreateProtocolUpgrade?.(adminWallets)}
+              >协议升级</button>
+              {detail.orgType === 0 && (
+                <button
+                  className="proposal-type-button"
+                  disabled={!isAdmin || !onCreateDeveloperUpgrade}
+                  onClick={() => isAdmin && onCreateDeveloperUpgrade?.(adminWallets)}
+                >开发升级</button>
+              )}
             </>
           )}
         </div>

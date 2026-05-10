@@ -117,7 +117,28 @@
   - `node/frontend/governance/InstitutionDetailPage.tsx` 只监听事件并覆盖现有 state
   - 不改 UI 布局、不改卡片顺序、不改现有中文命名
 
-## 7. 文件索引
+## 7. Runtime 升级 node 端边界
+
+2026-05-09 起，node 端 runtime 升级入口按“协议升级 / 开发升级”拆分，并统一收口在治理模块的 runtime-upgrade 目录。
+
+- 后端实现：
+  - `node/src/governance/runtime_upgrade/commands.rs`：Tauri 命令入口，保留 `build_propose_upgrade_request`、`submit_propose_upgrade`、`build_developer_upgrade_request`、`submit_developer_upgrade` 命令名。
+  - `node/src/governance/runtime_upgrade/call_data.rs`：RuntimeUpgrade pallet call_data 编码，只承载 `propose_runtime_upgrade` 与 `developer_direct_upgrade`。
+  - `node/src/governance/runtime_upgrade/signing.rs`：Runtime WASM 大 payload 的 QR 签名请求构建，通用签名校验仍复用 `node/src/governance/signing.rs`。
+  - 开发升级命令会校验签名公钥属于本机已激活国储会管理员，避免绕过前端直接调用 Tauri 命令。
+- 前端实现：
+  - `node/frontend/governance/runtime-upgrade/ProtocolUpgradeProposalPage.tsx`：国储会详情页“协议升级”，提交运行期 Runtime 升级提案，进入联合投票。
+  - `node/frontend/governance/runtime-upgrade/DeveloperUpgradePage.tsx`：国储会详情页“开发升级”，只使用当前国储会已激活管理员发起开发期直升。
+  - `node/frontend/governance/runtime-upgrade/api.ts`：Runtime 升级专用 Tauri API；`governance/api.ts` 不再承载 runtime 升级创建/提交接口。
+- 入口约束：
+  - 国储会详情页原“状态升级”按钮已改为“协议升级”。
+  - “开发升级”是独立按钮，放在“协议升级”后，不与协议升级合并。
+  - 设置页不再保留任何开发升级入口或 `settings/developer-upgrade` 代码。
+- 当前边界：
+  - 第 1 步只调整 node 前后端入口、目录收口和 node 侧开发升级管理员校验。
+  - Runtime pallet 的开发期权限收窄和运行期参数削减放在第 2 步处理；node 端当前仍按现有 runtime call 参数兼容。
+
+## 8. 文件索引
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
@@ -130,6 +151,8 @@
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
 | `src/desktop/mod.rs` | 120 | 桌面端 Tauri 入口与命令注册 |
+| `src/governance/runtime_upgrade/` | 5 files | Runtime 升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
+| `frontend/governance/runtime-upgrade/` | 4 files | Runtime 升级 node 前端，含协议升级、开发升级和专用 API |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
 | `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |
 | `src/main.rs` | 70 | CLI / 桌面入口分发,release 走 windows subsystem 不弹控制台 |
@@ -151,9 +174,9 @@
 - 各功能目录自持 `api.ts` 与 `types.ts`；根层不再保留全局 `api.ts`、`types.ts`、`format.ts`，避免新功能继续污染前端根层。
 - 前端构建脚本使用 `tsc --noEmit && vite build`；`vite.config.ts` 由主 `tsconfig.json` 直接类型检查，不再通过 `tsconfig.node.json` 产出 `vite.config.js` / `vite.config.d.ts` 或 `*.tsbuildinfo`。
 
-## 8. 安全风险（已知）
+## 9. 安全风险（已知）
 
-### 7.1 奖励钱包 RPC 代签无鉴权
+### 9.1 奖励钱包 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
 - **当前缓解**：桌面内嵌节点只面向本机端口使用，奖励钱包 RPC 不转移余额。
 - **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
@@ -161,7 +184,7 @@
 
 矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 
-### 7.2 空块策略仍与 runtime panic 耦合
+### 9.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：
 - `pre_digest` 中放入矿工 `sr25519` 公钥
 - `seal` 中附带 `(nonce, 签名)`
@@ -172,7 +195,7 @@
 - **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
 - **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。
 
-## 9. 已知限制
+## 10. 已知限制
 
 1. `target_block_time_ms` 仅启动时读取一次，链上迁移修改后需重启节点生效。
 2. 节点层无单元测试（Substrate 节点模板通病，功能验证依赖集成测试）。

@@ -6,8 +6,8 @@
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
 - `memory/08-tasks/open/20260508-clean-run-fresh-genesis.md`
-- `memory/08-tasks/open/20260509-org-manage-split.md`
 - `memory/08-tasks/open/20260509-admins-change-node-wuminapp.md`
+- `memory/08-tasks/open/20260509-org-manage-split.md`
 
 ## done
 
@@ -271,5 +271,8 @@
 - `memory/08-tasks/done/20260509-131106-检查-runtime-upgrade-模块完成度-输出代码-测试-文档-兼容性和残留风险的只读审计报告.md`
 - `memory/08-tasks/done/20260509-135931-personal-manage-完成度检查.md`
 - `memory/08-tasks/done/20260509-144425-personal-manage-个人多签目录拆分.md`
+- `memory/08-tasks/done/20260509-161649-wuminapp-模块边界整改-institution-shared-common.md`
+- `memory/08-tasks/done/20260509-165919-wuminapp-admins-change-命名统一-单文件子目录扁平化.md`
+- `memory/08-tasks/done/20260509-182958-调整国储会详情页-runtime-升级入口-状态升级改为协议升级-并新增独立开发升级按钮.md`
 - `memory/08-tasks/done/20260509-duoqian-transfer-boundary.md`
 - `memory/08-tasks/done/20260509-duoqian-transfer-strict-boundary-cleanup.md`

@@ -1,12 +1,12 @@
-// Runtime 升级提案页：选择 WASM 文件 → 填写理由 → 选冷钱包 → QR 签名 → 提交 propose_runtime_upgrade。
+// 运行期协议升级页：提交 Runtime WASM 提案,走联合投票流程。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
-import { sanitizeError } from '../core/tauri';
-import { hexToSs58 } from '../shared/ss58';
-import { QrScanner } from '../shared/qr/QrScanner';
-import { governanceApi as api } from './api';
-import type { AdminWalletMatch, ProposeUpgradeRequestResult } from './types';
+import { sanitizeError } from '../../core/tauri';
+import { hexToSs58 } from '../../shared/ss58';
+import { QrScanner } from '../../shared/qr/QrScanner';
+import { runtimeUpgradeApi as api } from './api';
+import type { AdminWalletMatch, ProposeUpgradeRequestResult } from '../types';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
@@ -16,7 +16,7 @@ type Props = {
   onSuccess: () => void;
 };
 
-export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: Props) {
+export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }: Props) {
   const [wasmPath, setWasmPath] = useState('');
   const [wasmFileName, setWasmFileName] = useState('');
   const [reason, setReason] = useState('');
@@ -40,7 +40,6 @@ export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: 
   wasmPathRef.current = wasmPath;
   reasonRef.current = reason;
 
-  // QR 倒计时
   useEffect(() => {
     if (step !== 'qr') return;
     if (countdown <= 0) { setError('签名请求已过期，请重新操作'); setStep('error'); return; }
@@ -111,9 +110,9 @@ export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: 
   return (
     <div className="governance-section">
       <button className="back-button" onClick={onBack}>&larr; 返回</button>
-      <h2>Runtime 升级提案</h2>
+      <h2>协议升级</h2>
       <p className="upgrade-proposal-hint">
-        提交运行时升级提案，需经联合投票 + 公民投票通过后执行。
+        提交运行期 Runtime 协议升级提案，进入联合投票流程。
       </p>
 
       {step === 'form' && (
@@ -208,10 +207,10 @@ export function RuntimeUpgradeProposalPage({ adminWallets, onBack, onSuccess }: 
       {step === 'done' && (
         <div className="vote-signing-body">
           <div className="vote-success">
-            <p>Runtime 升级提案已提交</p>
+            <p>Runtime 协议升级提案已提交</p>
             {txHash && <code className="tx-hash">交易哈希: {txHash}</code>}
           </div>
-          <p className="upgrade-done-note">提案已进入联合投票阶段，需各机构管理员投票通过后进入公民投票。</p>
+          <p className="upgrade-done-note">提案已进入联合投票阶段。</p>
           <button className="vote-signing-confirm" onClick={onSuccess}>完成</button>
         </div>
       )}

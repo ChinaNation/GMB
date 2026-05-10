@@ -4,7 +4,6 @@ import { homeNodeApi } from '../../home/home-node/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
-import { DeveloperUpgradePage } from '../developer-upgrade';
 import type { ChainStatus } from '../../home/home-node/types';
 import type { BootnodeKey, RewardWallet } from '../types';
 
@@ -47,7 +46,6 @@ export function SettingsSection() {
           }}
         />
       )}
-      {isAdmin && <DeveloperUpgradePage />}
       {chainStatus && (
         <div className="settings-version-section">
           <div className="settings-version-row">
