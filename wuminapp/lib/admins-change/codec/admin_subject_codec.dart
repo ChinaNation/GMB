@@ -20,16 +20,16 @@ class AdminSubjectCodec {
           AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    if (offset + 4 + 32 + 8 + 8 + 1 > data.length) return null;
+    if (offset + 4 + 32 + 4 + 4 + 1 > data.length) return null;
     final threshold = _readU32(data, offset);
     offset += 4;
     final creatorHex =
         AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32));
     offset += 32;
-    final createdAt = _readU64(data, offset);
-    offset += 8;
-    final updatedAt = _readU64(data, offset);
-    offset += 8;
+    final createdAt = _readU32(data, offset);
+    offset += 4;
+    final updatedAt = _readU32(data, offset);
+    offset += 4;
     final status = data[offset];
     return AdminSubjectState(
       subjectIdHex: AdminSubjectIdCodec.hexEncode(subjectId),
@@ -68,9 +68,5 @@ class AdminSubjectCodec {
 
   static int _readU32(Uint8List data, int offset) {
     return ByteData.sublistView(data).getUint32(offset, Endian.little);
-  }
-
-  static int _readU64(Uint8List data, int offset) {
-    return ByteData.sublistView(data).getUint64(offset, Endian.little);
   }
 }
