@@ -67,26 +67,17 @@ wuminapp/
 
 - `citizen_tab_page.dart`：公民 Tab 二级导航（投票 / 治理 / 机构）
 - `vote/`：投票页，当前保留原公民宪法引言占位，后续扩展公民投票聚合能力
-- `governance/`：治理页，负责全局提案列表、分页、缓存、红点待投票统计
-- `institution/`：机构页，负责机构分类、机构详情、管理员列表与管理员激活
-- `proposal/`：提案域，按具体提案类型继续拆三级目录
-- `shared/`：公民模块跨二级目录共用能力
+- `governance/`：治理域，与链端 `runtime/governance/` 对齐，包含 4 个 pallet 子模块（`admins-change/` / `organization-manage/` / `personal-manage/` / `runtime-upgrade/`）+ 治理列表入口 `governance_list_page.dart` + 治理提案聚合页 `governance_proposals_page.dart` + 跨子模块多签管理详情 `duoqian_manage_detail_page.dart`
 
-`lib/proposal/` 下的具体结构：
+跨 pallet 共用能力分布：
 
 ```text
-proposal/
-  shared/           ← 多种提案共用模型、内部投票、待确认投票、投票组件
-  runtime_upgrade/  ← Runtime 升级提案
-  resolution_issuance/
-  resolution_destroy/
-  grandpakey_change/
+lib/common/proposal/        ← 提案通用模型/上下文/查询/限额/缓存
+lib/votingengine/internal-vote/  ← 投票引擎客户端(投票服务/查询/待确认存储/投票UI),与 runtime/votingengine/internal-vote 对齐
+lib/duoqian-transfer/       ← 多签转账业务(创建/详情/投票/列表适配/缓存统一收口),不进 governance/ 子模块
 ```
 
-多签转账不是 `proposal/` 子目录；创建、详情、投票、列表适配和缓存统一放在
-`lib/duoqian-transfer/`。
-
-管理员更换和管理员激活归属 `lib/admins-change/`，不放在 `lib/proposal/` 或 `lib/institution/` 下；`proposal` 与机构页只保留入口跳转或调用。机构多签注册/关闭与 OrganizationManage 提案详情归属 `lib/organization-manage/`，不在公民提案三级目录下预留。
+管理员更换、机构多签注册/关闭等业务都归 `lib/governance/<对应子模块>/`,治理提案聚合页只保留入口跳转或调用。
 
 ### 4.2.1 机构页
 
@@ -108,8 +99,8 @@ proposal/
   - 右上角：选择交易钱包
 - `ChainProgressBanner` 保留在交易页内容顶部
 - 交易页在链上支付表单上方保留/插入独立入口：
-  - 个人多签 → `lib/personal-manage/personal_manage_account_list_page.dart`
-  - 机构多签 → `lib/organization-manage/duoqian_account_list_page.dart`
+  - 个人多签 → `lib/governance/personal-manage/personal_manage_account_list_page.dart`
+  - 机构多签 → `lib/governance/organization-manage/duoqian_account_list_page.dart`
   - 扫码支付 → `lib/offchain/services/offchain_scan_flow.dart`
 - `lib/onchain/` 只处理普通链上转账 / 纯链上支付
 - 扫码支付、机构多签、个人多签均为独立功能域，不通过链上支付页或 `trade_page.dart` 聚合页分流

@@ -1,0 +1,576 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
+import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+
+/// Runtime upgrade 提案链上交互服务。
+///
+/// 负责 extrinsic 编码/提交 和 storage 查询。
+class RuntimeUpgradeService {
+  RuntimeUpgradeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+
+  final ChainRpc _rpc;
+
+  // ──── 常量 ────
+
+  /// runtime-upgrade pallet index=13。
+  static const _palletIndex = 13;
+
+  /// JointVote sub-pallet pallet_index=23。
+  static const _jointVotePalletIndex = 23;
+
+  /// propose_runtime_upgrade call_index=0。
+  static const _proposeCallIndex = 0;
+
+  /// JointVote::cast_admin call_index=0。
+  static const _jointVoteCallIndex = 0;
+
+  // ──── Extrinsic 提交 ────
+
+  /// 提交 propose_runtime_upgrade extrinsic。
+  ///
+  /// ADR-008 step3 双层凭证(province, signer_admin_pubkey)由 SFID 后端
+  /// 在签发人口快照时一并下发,本服务仅按 SCALE 顺序透传到 chain。
+  ///
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitProposeRuntimeUpgrade({
+    required String reason,
+    required Uint8List wasmCode,
+    required int eligibleTotal,
+    required Uint8List snapshotNonce,
+    required Uint8List signature,
+    required Uint8List province,
+    required Uint8List signerAdminPubkey,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    if (signerAdminPubkey.length != 32) {
+      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
+    }
+    final callData = buildProposeRuntimeUpgradeCallForTest(
+      reason: reason,
+      wasmCode: wasmCode,
+      eligibleTotal: eligibleTotal,
+      snapshotNonce: snapshotNonce,
+      signature: signature,
+      province: province,
+      signerAdminPubkey: signerAdminPubkey,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  /// 提交机构管理员的联合投票。
+  ///
+  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
+  Future<({String txHash, int usedNonce})> submitJointVote({
+    required int proposalId,
+    required Uint8List institutionId48,
+    required bool approve,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    final callData = _buildJointVoteCall(
+      proposalId: proposalId,
+      institutionId48: institutionId48,
+      approve: approve,
+    );
+    return _signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  // ──── 链上查询 ────
+
+  /// 查询 runtime upgrade 提案详情。返回 null 表示不存在。
+  ///
+  /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
+  /// 原始字节布局：
+  ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
+  ///   + code_hash: [u8;32] + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
+  Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
+      int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'ProposalData',
+      _u64ToLeBytes(proposalId),
+    );
+    final raw = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (raw == null || raw.isEmpty) return null;
+    return decodeRuntimeUpgradeStorageValue(proposalId, raw);
+  }
+
+  /// 解码 `ProposalData` 的原始 storage value（带 Compact 长度前缀）。
+  ///
+  /// 中文注释：分页列表会批量读取 ProposalData，随后在内存里按提案类型解码；
+  /// 这里提供公共入口，避免不同页面各自复制一套 runtime 提案解码逻辑。
+  RuntimeUpgradeProposalInfo? decodeRuntimeUpgradeStorageValue(
+      int proposalId, Uint8List raw) {
+    try {
+      int offset = 0;
+      final (vecLen, lenBytes) = _decodeCompact(raw, offset);
+      offset += lenBytes;
+      if (offset + vecLen > raw.length) return null;
+      final data = raw.sublist(offset, offset + vecLen);
+      return _decodeRuntimeUpgradeAction(proposalId, data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 查询联合投票计数（JointTallies）。
+  ///
+  /// Value: VoteCountU32 { yes: u32, no: u32 } = 8 bytes。
+  Future<({int yes, int no})> fetchJointTally(int proposalId) async {
+    final key = _buildStorageKey(
+      'JointVote',
+      'JointTallies',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    // VoteCountU32: { yes: u32, no: u32 } — 4+4 bytes little-endian
+    final yes = _decodeU32(data, 0);
+    final no = _decodeU32(data, 4);
+    return (yes: yes, no: no);
+  }
+
+  /// 查询联合投票中某机构的投票记录。
+  ///
+  /// 双 map：blake2_128_concat(u64_le) + blake2_128_concat(48 bytes)。
+  /// Value: Option<bool> — null=未投票，true=赞成，false=反对。
+  Future<bool?> fetchJointVoteByInstitution(
+      int proposalId, Uint8List institutionId48) async {
+    final fullKey = _buildDoubleStorageKey(
+      'JointVote',
+      'JointVotesByInstitution',
+      _u64ToLeBytes(proposalId),
+      institutionId48,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    if (data == null || data.isEmpty) return null;
+    return data[0] == 1;
+  }
+
+  /// 查询某机构在联合投票阶段的管理员票数统计。
+  Future<({int yes, int no})> fetchJointInstitutionTally(
+      int proposalId, Uint8List institutionId48) async {
+    final fullKey = _buildDoubleStorageKey(
+      'JointVote',
+      'JointInstitutionTallies',
+      _u64ToLeBytes(proposalId),
+      institutionId48,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    if (data == null || data.length < 8) return (yes: 0, no: 0);
+    return (yes: _decodeU32(data, 0), no: _decodeU32(data, 4));
+  }
+
+  /// 查询某管理员在某机构联合投票中的投票记录。
+  Future<bool?> fetchJointAdminVote(
+    int proposalId,
+    Uint8List institutionId48,
+    String pubkeyHex,
+  ) async {
+    final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
+    if (institutionId48.length != 48 || accountBytes.length != 32) return null;
+    final compositeKey = Uint8List(institutionId48.length + accountBytes.length)
+      ..setAll(0, institutionId48)
+      ..setAll(institutionId48.length, accountBytes);
+    final fullKey = _buildDoubleStorageKey(
+      'JointVote',
+      'JointVotesByAdmin',
+      _u64ToLeBytes(proposalId),
+      compositeKey,
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    if (data == null || data.isEmpty) return null;
+    return data[0] == 1;
+  }
+
+  /// 查询公民投票计数（CitizenTallies）。
+  ///
+  /// Value: VoteCountU64 { yes: u64, no: u64 } = 16 bytes。
+  Future<({int yes, int no})> fetchReferendumTally(int proposalId) async {
+    final key = _buildStorageKey(
+      'JointVote',
+      'ReferendumTallies',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 16) return (yes: 0, no: 0);
+    // VoteCountU64: { yes: u64, no: u64 } — 8+8 bytes little-endian
+    final yes = _decodeU64(data.sublist(0, 8));
+    final no = _decodeU64(data.sublist(8, 16));
+    return (yes: yes, no: no);
+  }
+
+  /// 查询提案完整元数据（status + institution bytes）。
+  /// 返回 null 表示提案不存在。
+  Future<ProposalMeta?> fetchProposalMeta(int proposalId) async {
+    final key = _buildStorageKey(
+      'VotingEngine',
+      'Proposals',
+      _u64ToLeBytes(proposalId),
+    );
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 3) return null;
+
+    final kind = data[0];
+    final stage = data[1];
+    final status = data[2];
+
+    // internal_org: Option<u8>
+    var offset = 3;
+    int? internalOrg;
+    if (offset < data.length && data[offset] == 1) {
+      offset++;
+      if (offset < data.length) {
+        internalOrg = data[offset];
+        offset++;
+      }
+    } else {
+      offset++; // skip 0x00 (None)
+    }
+
+    // internal_institution: Option<[u8;48]>
+    Uint8List? institutionBytes;
+    if (offset < data.length && data[offset] == 1) {
+      offset++;
+      if (offset + 48 <= data.length) {
+        institutionBytes =
+            Uint8List.fromList(data.sublist(offset, offset + 48));
+        offset += 48;
+      }
+    }
+
+    return ProposalMeta(
+      proposalId: proposalId,
+      kind: kind,
+      stage: stage,
+      status: status,
+      internalOrg: internalOrg,
+      institutionBytes: institutionBytes,
+    );
+  }
+
+  /// 查询 NextProposalId（投票引擎全局递增 ID）。
+  Future<int> fetchNextProposalId() async {
+    final palletHash = _twoxx128String('VotingEngine');
+    final storageHash = _twoxx128String('NextProposalId');
+    final key = Uint8List(palletHash.length + storageHash.length);
+    key.setAll(0, palletHash);
+    key.setAll(palletHash.length, storageHash);
+    final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+    if (data == null || data.length < 8) return 0;
+    return _decodeU64(data);
+  }
+
+  // ──── 内部：解码 ────
+
+  /// 解码 RuntimeUpgradeAction SCALE 数据。
+  RuntimeUpgradeProposalInfo? _decodeRuntimeUpgradeAction(
+      int proposalId, Uint8List data) {
+    try {
+      var offset = 0;
+
+      // proposer: AccountId32 (32 bytes)
+      if (offset + 32 > data.length) return null;
+      final proposerBytes = data.sublist(offset, offset + 32);
+      offset += 32;
+
+      // reason: Vec<u8> (Compact length + bytes)
+      final (reasonLen, reasonLenSize) = _decodeCompact(data, offset);
+      offset += reasonLenSize;
+      if (offset + reasonLen > data.length) return null;
+      final reasonBytes = data.sublist(offset, offset + reasonLen);
+      final reason = utf8.decode(reasonBytes, allowMalformed: true);
+      offset += reasonLen;
+
+      // code_hash: [u8; 32]
+      if (offset + 32 > data.length) return null;
+      final codeHashBytes = data.sublist(offset, offset + 32);
+      offset += 32;
+
+      // status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
+      if (offset >= data.length) return null;
+      final status = data[offset];
+
+      final proposerSs58 =
+          Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
+      final codeHashHex = _hexEncode(Uint8List.fromList(codeHashBytes));
+
+      return RuntimeUpgradeProposalInfo(
+        proposalId: proposalId,
+        proposer: proposerSs58,
+        reason: reason,
+        codeHashHex: codeHashHex,
+        status: status,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ──── 内部：extrinsic 编码 ────
+
+  /// 构造 propose_runtime_upgrade call data。
+  ///
+  /// 格式(ADR-008 step3 双层凭证)：
+  /// `[13][0]
+  ///  [compact_len+reason_utf8]
+  ///  [compact_len+wasm_bytes]
+  ///  [u64_le:eligible_total]
+  ///  [compact_len+nonce_bytes]
+  ///  [compact_len+signature_bytes]
+  ///  [compact_len+province_bytes]   ★ ADR-008 step3
+  ///  [32B signer_admin_pubkey]      ★ ADR-008 step3`
+  ///
+  /// 与链端 `propose_runtime_upgrade` extrinsic SCALE 顺序逐字一致。
+  /// signer_admin_pubkey 是 [u8; 32] 固定字段(无 Compact 长度前缀)。
+  /// feedback_scale_domain_must_be_array.md:固定长度 byte array 不走 Vec 编码。
+  ///
+  /// `@visibleForTesting`:对 step2d 双端 SCALE fixture 暴露,链端 = wumin =
+  /// wuminapp 三处字节序列必须逐字一致,因此该构造逻辑被独立测试覆盖。
+  @visibleForTesting
+  static Uint8List buildProposeRuntimeUpgradeCallForTest({
+    required String reason,
+    required Uint8List wasmCode,
+    required int eligibleTotal,
+    required Uint8List snapshotNonce,
+    required Uint8List signature,
+    required Uint8List province,
+    required Uint8List signerAdminPubkey,
+  }) {
+    if (signerAdminPubkey.length != 32) {
+      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
+    }
+    final output = ByteOutput();
+    output.pushByte(_palletIndex);
+    output.pushByte(_proposeCallIndex);
+
+    // reason: Vec<u8> = Compact<u32> length + utf8 bytes
+    final reasonBytes = utf8.encode(reason);
+    output.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(reasonBytes.length)));
+    if (reasonBytes.isNotEmpty) {
+      output.write(Uint8List.fromList(reasonBytes));
+    }
+
+    // wasm_code: Vec<u8> = Compact<u32> length + bytes
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(wasmCode.length)));
+    if (wasmCode.isNotEmpty) {
+      output.write(wasmCode);
+    }
+
+    // eligible_total: u64 little-endian
+    output.write(_u64ToLeBytes(eligibleTotal));
+
+    // snapshot_nonce: Vec<u8> = Compact<u32> length + bytes
+    output.write(
+        CompactBigIntCodec.codec.encode(BigInt.from(snapshotNonce.length)));
+    if (snapshotNonce.isNotEmpty) {
+      output.write(snapshotNonce);
+    }
+
+    // signature: Vec<u8> = Compact<u32> length + bytes
+    output
+        .write(CompactBigIntCodec.codec.encode(BigInt.from(signature.length)));
+    if (signature.isNotEmpty) {
+      output.write(signature);
+    }
+
+    // ★ province: BoundedVec<u8, ConstU32<64>> = Compact<u32> length + bytes
+    output.write(CompactBigIntCodec.codec.encode(BigInt.from(province.length)));
+    if (province.isNotEmpty) {
+      output.write(province);
+    }
+
+    // ★ signer_admin_pubkey: [u8; 32] 固定字节,无 Compact 前缀
+    output.write(signerAdminPubkey);
+
+    return output.toBytes();
+  }
+
+  Uint8List _buildJointVoteCall({
+    required int proposalId,
+    required Uint8List institutionId48,
+    required bool approve,
+  }) {
+    if (institutionId48.length != 48) {
+      throw ArgumentError('institutionId48 必须为 48 字节');
+    }
+
+    final output = ByteOutput();
+    output.pushByte(_jointVotePalletIndex);
+    output.pushByte(_jointVoteCallIndex);
+    output.write(_u64ToLeBytes(proposalId));
+    output.write(institutionId48);
+    output.pushByte(approve ? 1 : 0);
+
+    return output.toBytes();
+  }
+
+  /// 签名并提交 extrinsic。
+  ///
+  /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
+  Future<({String txHash, int usedNonce})> _signAndSubmit({
+    required Uint8List callData,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'RuntimeUpgrade',
+    ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+      onTrace: (trace) {
+        debugPrint(
+            '[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
+      },
+    );
+  }
+
+  // ──── 内部：storage key 构造 ────
+
+  /// 构造 storage key：twox128(pallet) + twox128(storage) + blake2_128_concat(keyData)。
+  Uint8List _buildStorageKey(
+    String palletName,
+    String storageName,
+    Uint8List keyData,
+  ) {
+    final palletHash = _twoxx128String(palletName);
+    final storageHash = _twoxx128String(storageName);
+    final keyHash = _blake2128Concat(keyData);
+
+    final result =
+        Uint8List(palletHash.length + storageHash.length + keyHash.length);
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, keyHash);
+    return result;
+  }
+
+  /// 构造双 map storage key：twox128(pallet) + twox128(storage)
+  /// + blake2_128_concat(key1) + blake2_128_concat(key2)。
+  Uint8List _buildDoubleStorageKey(
+    String palletName,
+    String storageName,
+    Uint8List key1Data,
+    Uint8List key2Data,
+  ) {
+    final palletHash = _twoxx128String(palletName);
+    final storageHash = _twoxx128String(storageName);
+    final key1Hash = _blake2128Concat(key1Data);
+    final key2Hash = _blake2128Concat(key2Data);
+
+    final result = Uint8List(palletHash.length +
+        storageHash.length +
+        key1Hash.length +
+        key2Hash.length);
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, key1Hash);
+    offset += key1Hash.length;
+    result.setAll(offset, key2Hash);
+    return result;
+  }
+
+  // ──── 内部：编码工具 ────
+
+  static Uint8List _u64ToLeBytes(int value) {
+    final bytes = Uint8List(8);
+    final bd = ByteData.sublistView(bytes);
+    bd.setUint64(0, value, Endian.little);
+    return bytes;
+  }
+
+  int _decodeU64(Uint8List data) {
+    final bd = ByteData.sublistView(data);
+    return bd.getUint64(0, Endian.little);
+  }
+
+  int _decodeU32(Uint8List data, int offset) {
+    final bd = ByteData.sublistView(data);
+    return bd.getUint32(offset, Endian.little);
+  }
+
+  /// 解码 SCALE Compact<u32>，返回 (value, bytesConsumed)。
+  (int, int) _decodeCompact(Uint8List data, int offset) {
+    final first = data[offset];
+    final mode = first & 0x03;
+    if (mode == 0) {
+      return (first >> 2, 1);
+    } else if (mode == 1) {
+      final val = (data[offset] | (data[offset + 1] << 8)) >> 2;
+      return (val, 2);
+    } else if (mode == 2) {
+      final val = (data[offset] |
+              (data[offset + 1] << 8) |
+              (data[offset + 2] << 16) |
+              (data[offset + 3] << 24)) >>
+          2;
+      return (val, 4);
+    } else {
+      // big integer mode — 简单处理，假设不超过 256
+      final lenBytes = (first >> 2) + 4;
+      var val = 0;
+      for (var i = lenBytes - 1; i >= 0; i--) {
+        val = (val << 8) | data[offset + 1 + i];
+      }
+      return (val, 1 + lenBytes);
+    }
+  }
+
+  static String _hexEncode(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static List<int> _hexDecode(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final out = <int>[];
+    for (var i = 0; i + 1 < clean.length; i += 2) {
+      out.add(int.parse(clean.substring(i, i + 2), radix: 16));
+    }
+    return out;
+  }
+
+  // ──── 内部：哈希（直接使用 polkadart Hasher）────
+
+  Uint8List _twoxx128String(String input) {
+    return Hasher.twoxx128.hashString(input);
+  }
+
+  Uint8List _blake2128Concat(Uint8List data) {
+    final hash = Hasher.blake2b128.hash(data);
+    final result = Uint8List(hash.length + data.length);
+    result.setAll(0, hash);
+    result.setAll(hash.length, data);
+    return result;
+  }
+}

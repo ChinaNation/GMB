@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/organization-manage/institution_registry.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
 
 void main() {
   test('内置机构身份编码为 0x01 Builtin SubjectId', () {

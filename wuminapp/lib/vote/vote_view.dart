@@ -1,19 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:wuminapp_mobile/proposal/shared/duoqian_manage_detail_page.dart';
+import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
 
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/pressable_card.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
 import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/admins-change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_cache.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/vote/constitution_quote.dart';
 

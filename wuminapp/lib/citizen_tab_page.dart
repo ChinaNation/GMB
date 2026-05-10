@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:wuminapp_mobile/governance/governance_list_page.dart';
-import 'package:wuminapp_mobile/organization-manage/institution_registry.dart';
+import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
 import 'package:wuminapp_mobile/public/public_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/vote/vote_view.dart';

@@ -5,10 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/admins-change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
-import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
+import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_balance_guard.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_models.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
@@ -19,7 +19,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
-import 'package:wuminapp_mobile/proposal/shared/proposal_vote_widgets.dart';
+import 'package:wuminapp_mobile/votingengine/internal-vote/proposal_vote_widgets.dart';
 
 /// 详情页展示/投票的三种提案类型。
 ///
