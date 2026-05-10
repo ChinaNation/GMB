@@ -10735,23 +10735,28 @@ const DuoqianInstitutionEntitySchema = CollectionSchema(
       name: r'discoveredViaAdmin',
       type: IsarType.bool,
     ),
-    r'duoqianAddress': PropertySchema(
+    r'adminSubjectOrg': PropertySchema(
       id: 2,
+      name: r'adminSubjectOrg',
+      type: IsarType.long,
+    ),
+    r'duoqianAddress': PropertySchema(
+      id: 3,
       name: r'duoqianAddress',
       type: IsarType.string,
     ),
     r'matchedAdminPubkeys': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'matchedAdminPubkeys',
       type: IsarType.stringList,
     ),
     r'name': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'name',
       type: IsarType.string,
     ),
     r'sfidNumber': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'sfidNumber',
       type: IsarType.string,
     )
@@ -10837,10 +10842,11 @@ void _duoqianInstitutionEntitySerialize(
 ) {
   writer.writeLong(offsets[0], object.addedAtMillis);
   writer.writeBool(offsets[1], object.discoveredViaAdmin);
-  writer.writeString(offsets[2], object.duoqianAddress);
-  writer.writeStringList(offsets[3], object.matchedAdminPubkeys);
-  writer.writeString(offsets[4], object.name);
-  writer.writeString(offsets[5], object.sfidNumber);
+  writer.writeLong(offsets[2], object.adminSubjectOrg);
+  writer.writeString(offsets[3], object.duoqianAddress);
+  writer.writeStringList(offsets[4], object.matchedAdminPubkeys);
+  writer.writeString(offsets[5], object.name);
+  writer.writeString(offsets[6], object.sfidNumber);
 }
 
 DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
@@ -10851,12 +10857,13 @@ DuoqianInstitutionEntity _duoqianInstitutionEntityDeserialize(
 ) {
   final object = DuoqianInstitutionEntity();
   object.addedAtMillis = reader.readLong(offsets[0]);
+  object.adminSubjectOrg = reader.readLongOrNull(offsets[2]);
   object.discoveredViaAdmin = reader.readBool(offsets[1]);
-  object.duoqianAddress = reader.readString(offsets[2]);
+  object.duoqianAddress = reader.readString(offsets[3]);
   object.id = id;
-  object.matchedAdminPubkeys = reader.readStringList(offsets[3]) ?? [];
-  object.name = reader.readString(offsets[4]);
-  object.sfidNumber = reader.readString(offsets[5]);
+  object.matchedAdminPubkeys = reader.readStringList(offsets[4]) ?? [];
+  object.name = reader.readString(offsets[5]);
+  object.sfidNumber = reader.readString(offsets[6]);
   return object;
 }
 
@@ -10872,12 +10879,14 @@ P _duoqianInstitutionEntityDeserializeProp<P>(
     case 1:
       return (reader.readBool(offset)) as P;
     case 2:
-      return (reader.readString(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 3:
-      return (reader.readStringList(offset) ?? []) as P;
-    case 4:
       return (reader.readString(offset)) as P;
+    case 4:
+      return (reader.readStringList(offset) ?? []) as P;
     case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -15081,8 +15090,8 @@ extension LocalTxEntityQueryWhereDistinct
     });
   }
 
-  QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct> distinctByBankSfidNumber(
-      {bool caseSensitive = true}) {
+  QueryBuilder<LocalTxEntity, LocalTxEntity, QDistinct>
+      distinctByBankSfidNumber({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'bankSfidNumber',
           caseSensitive: caseSensitive);

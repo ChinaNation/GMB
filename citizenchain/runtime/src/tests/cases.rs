@@ -438,7 +438,6 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
             proposer,
             reason,
             code_hash,
-            status: runtime_upgrade::pallet::ProposalStatus::Voting,
         };
         let mut encoded = Vec::from(runtime_upgrade::MODULE_TAG);
         encoded.extend_from_slice(&codec::Encode::encode(&proposal));
@@ -471,6 +470,19 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
                 object_hash,
             },
         );
+        votingengine::Proposals::<Runtime>::insert(
+            proposal_id,
+            votingengine::Proposal {
+                kind: votingengine::PROPOSAL_KIND_JOINT,
+                stage: votingengine::STAGE_JOINT,
+                status: votingengine::STATUS_REJECTED,
+                internal_org: None,
+                internal_institution: None,
+                start: 0u32,
+                end: 100u32,
+                citizen_eligible_total: 10,
+            },
+        );
 
         // 回调拒绝后，业务摘要保持创建时快照，终态由 votingengine 统一维护。
         let outcome = RuntimeJointVoteResultCallback::on_joint_vote_finalized(proposal_id, false)
@@ -485,10 +497,13 @@ fn joint_vote_callback_missing_proposal_and_runtime_upgrade_route() {
         );
         let updated = runtime_upgrade::pallet::Proposal::<Runtime>::decode(&mut &raw[tag.len()..])
             .expect("should decode");
-        assert!(matches!(
-            updated.status,
-            runtime_upgrade::pallet::ProposalStatus::Voting
-        ));
+        assert_eq!(updated.code_hash, code_hash);
+        assert_eq!(
+            votingengine::Proposals::<Runtime>::get(proposal_id)
+                .expect("engine proposal should exist")
+                .status,
+            votingengine::STATUS_REJECTED
+        );
     });
 }
 

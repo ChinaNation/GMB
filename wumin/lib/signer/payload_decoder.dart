@@ -51,12 +51,9 @@ class PayloadDecoder {
   /// call data 从 payload 起始位置开始，以 pallet_index 和 call_index 为前两字节。
   ///
   /// 返回 null 表示无法识别或解码失败 → strict 模式下 decodeFailed → 禁止签名。
-  /// "GMB_ACTIVATE" 前缀（12 字节 ASCII）。
-  static const _activatePrefix = [
-    0x47, 0x4D, 0x42, 0x5F, // GMB_
-    0x41, 0x43, 0x54, 0x49, // ACTI
-    0x56, 0x41, 0x54, 0x45, // VATE
-  ];
+  static final _activateSubjectPrefix = Uint8List.fromList(
+    'GMB_ACTIVATE_SUBJECT_V1'.codeUnits,
+  );
 
   /// "GMB_DECRYPT_V1" 前缀（14 字节 ASCII）。
   ///
@@ -72,17 +69,10 @@ class PayloadDecoder {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
     try {
       final raw = _hexToBytes(payloadHex);
-      if (raw.length == 84) {
-        bool isActivate = true;
-        for (var i = 0; i < 12; i++) {
-          if (raw[i] != _activatePrefix[i]) {
-            isActivate = false;
-            break;
-          }
-        }
-        if (isActivate) {
-          return _decodeActivateAdmin(raw);
-        }
+      if (raw.length ==
+              _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16 &&
+          _hasPrefix(raw, _activateSubjectPrefix)) {
+        return _decodeActivateAdminSubject(raw);
       }
       if (raw.length == 118) {
         bool isDecrypt = true;
@@ -167,7 +157,7 @@ class PayloadDecoder {
         }
       }
 
-      // ── RuntimeUpgrade(13) ──
+      // ── 协议升级 RuntimeUpgrade(13) ──
       // 路由分支删除:propose_runtime_upgrade / developer_direct_upgrade 的
       // call_data 含完整 WASM(600KB+),物理上塞不进 QR。server 在 QR 里只放
       // blake2_256(payload) = 32 字节哈希,decoder 拿不到 call_data,无法
@@ -660,7 +650,7 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // RuntimeUpgrade(13) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
+  // 协议升级 RuntimeUpgrade(13) / propose_runtime_upgrade(0) / developer_direct_upgrade(2)
   //
   // 已删除原 SCALE decoder:
   //   - call_data 含完整 WASM(600KB+),物理上塞不进 QR
@@ -677,25 +667,35 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // 管理员激活（非链上交易）
-  // 格式：GMB_ACTIVATE(12B) + sfid_number(48B, 右补零) + timestamp(8B, u64 LE) + nonce(16B)
+  // 格式：GMB_ACTIVATE_SUBJECT_V1 + subject_id(48B) + org(u8) + kind(u8)
+  //      + pubkey(32B) + timestamp(8B, u64 LE) + nonce(16B)
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeActivateAdmin(Uint8List bytes) {
-    if (bytes.length < 84) return null;
+  static DecodedPayload? _decodeActivateAdminSubject(Uint8List bytes) {
+    final expectedLength =
+        _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16;
+    if (bytes.length != expectedLength) return null;
 
-    // sfid_number: 48 bytes (offset 12), 去尾部零字节
-    final idBytes = bytes.sublist(12, 60);
-    var endIndex = 48;
-    while (endIndex > 0 && idBytes[endIndex - 1] == 0) {
-      endIndex--;
+    var offset = _activateSubjectPrefix.length;
+    final subjectBytes = bytes.sublist(offset, offset + 48);
+    final subject = _decodeSpendSubjectId(subjectBytes);
+    if (subject == null) return null;
+    offset += 48;
+
+    final org = bytes[offset++];
+    final kind = bytes[offset++];
+    if (!_activationSubjectKindMatchesOrg(org, kind, subject.kind)) {
+      return null;
     }
-    if (endIndex == 0) return null;
-    final sfidNumber = String.fromCharCodes(idBytes.sublist(0, endIndex));
+
+    final pubkey = bytes.sublist(offset, offset + 32);
 
     return DecodedPayload(
-      action: 'activate_admin',
-      summary: '激活管理员 - $sfidNumber',
+      action: 'activate_admin_subject',
+      summary: '激活${_orgName(org)}管理员',
       fields: {
-        'sfid_number': sfidNumber,
+        'org': _orgName(org),
+        'subject': _bytesToLowerHex(subjectBytes),
+        'pubkey': _bytesToLowerHex(pubkey),
       },
     );
   }
@@ -735,6 +735,7 @@ class PayloadDecoder {
   //     institution_name: AccountNameOf<T>,   // BoundedVec<u8>
   //     accounts: InstitutionInitialAccountsOf<T>,
   //         // BoundedVec<{ account_name: BoundedVec<u8>, amount: u128 }>
+  //     admin_org: u8,                        // ORG_PUP / ORG_OTH
   //     admin_count: u32,
   //     duoqian_admins: DuoqianAdminsOf<T>,   // BoundedVec<AccountId32>
   //     threshold: u32,
@@ -788,6 +789,12 @@ class PayloadDecoder {
       accountsTotal += amount;
       offset += 16;
     }
+
+    // admin_org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
+    if (offset + 1 > bytes.length) return null;
+    final adminOrg = bytes[offset];
+    if (adminOrg != 4 && adminOrg != 5) return null;
+    offset += 1;
 
     // admin_count: u32 (LE)
     if (offset + 4 > bytes.length) return null;
@@ -844,6 +851,7 @@ class PayloadDecoder {
     final fields = <String, String>{
       'sfid_number': sfidNumber,
       'institution_name': institutionName,
+      'org': _orgName(adminOrg),
       'admin_count': adminCount.toString(),
       'threshold': '$threshold/$adminCount',
       'total_amount_yuan': '$amountYuan GMB',
@@ -1505,6 +1513,31 @@ class PayloadDecoder {
       default:
         return false;
     }
+  }
+
+  static bool _activationSubjectKindMatchesOrg(
+      int org, int kind, int subjectKind) {
+    switch (org) {
+      case 0:
+      case 1:
+      case 2:
+        return kind == 0 && subjectKind == _subjectKindBuiltin;
+      case 3:
+        return kind == 2 && subjectKind == _subjectKindPersonalDuoqian;
+      case 4:
+      case 5:
+        return kind == 3 && subjectKind == _subjectKindInstitutionAccount;
+      default:
+        return false;
+    }
+  }
+
+  static bool _hasPrefix(Uint8List bytes, Uint8List prefix) {
+    if (bytes.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (bytes[i] != prefix[i]) return false;
+    }
+    return true;
   }
 
   /// 分 → 元字符串（带千分位）。

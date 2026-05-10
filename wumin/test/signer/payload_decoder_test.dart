@@ -558,6 +558,51 @@ void main() {
       expect(decoded.summary, contains('管理员集合变更'));
     });
 
+    test('decodes subject-level admin activation payload', () {
+      final subject = subjectIdFromAccount(
+        0x05,
+        List<int>.generate(32, (i) => 0x20 + i),
+      );
+      final pubkey = List<int>.filled(32, 0xaa);
+      final payload = Uint8List.fromList([
+        ...utf8.encode('GMB_ACTIVATE_SUBJECT_V1'),
+        ...subject,
+        0x05, // org = 其他机构账户
+        0x03, // kind = InstitutionAccount
+        ...pubkey,
+        1, 0, 0, 0, 0, 0, 0, 0, // timestamp u64 LE
+        ...List<int>.filled(16, 0),
+      ]);
+
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'activate_admin_subject');
+      expect(decoded.fields['org'], '其他机构账户');
+      expect(decoded.fields['subject'],
+          '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+      expect(decoded.fields['pubkey'], '0x${'aa' * 32}');
+    });
+
+    test('rejects legacy admin activation payload', () {
+      final payload = Uint8List.fromList([
+        ...utf8.encode('GMB_ACTIVATE'),
+        ...utf8.encode('GFR-LN001-CB0X-944805165-2026'),
+        ...List<int>.filled(48 - 'GFR-LN001-CB0X-944805165-2026'.length, 0),
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        ...List<int>.filled(16, 0),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
     test('decodes institution-account admin set change org labels', () {
       final subject = subjectIdFromAccount(
         0x05,
@@ -657,7 +702,7 @@ void main() {
     });
 
     // -----------------------------------------------------------------------
-    // propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
+    // 协议升级 propose_runtime_upgrade / developer_direct_upgrade 的 SCALE decoder 已删
     // (call_data 含 600KB+ WASM,塞不进 QR;server 在 QR 里只放 32 字节 blake2
     // 哈希,decoder 路径不可达)。改走 OfflineSignService 的"哈希直签例外"。
     // 相关回归测试见 wumin/test/signer/offline_sign_service_*_test.dart。
@@ -711,6 +756,8 @@ void main() {
         (feeAccount.length << 2) & 0xff,
         ...feeAccount,
         ...feeAmount,
+        // admin_org: ORG_OTH
+        5,
         // admin_count: u32 LE
         2, 0, 0, 0,
         // duoqian_admins: BoundedVec<AccountId32> count=2
@@ -759,6 +806,7 @@ void main() {
       expect(decoded!.action, 'propose_create_institution');
       expect(decoded.fields['sfid_number'], 'SFR-AH001-1234567890-20260501');
       expect(decoded.fields['institution_name'], '安徽省储行');
+      expect(decoded.fields['org'], '其他机构账户');
       expect(decoded.fields['admin_count'], '2');
       expect(decoded.fields['threshold'], '2/2');
       expect(decoded.fields['total_amount_yuan'], '10,002.22 GMB');
@@ -882,7 +930,7 @@ void main() {
           (caseEntry['fields'] as Map)['signer_admin_pubkey_hex']);
     });
 
-    // fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
+    // 协议升级 fixture step2d propose_runtime_upgrade decoder 用例已删:同上,SCALE decoder
     // 整体下线,fixture 走 OfflineSignService.verifyPayload 的哈希直签例外。
 
     test('fixture step2d propose_resolution_issuance: decoder 解出新字段', () {

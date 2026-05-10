@@ -48,14 +48,12 @@ class RuntimeUpgradeProposalInfo {
     required this.proposer,
     required this.reason,
     required this.codeHashHex,
-    required this.status,
   });
 
   final int proposalId;
   final String proposer; // SS58 (ss58Format 2027)
   final String reason; // UTF-8 decoded
   final String codeHashHex; // 32-byte hash as hex
-  final int status; // 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed
 }
 
 /// 提案 + 业务详情（用于全局提案列表与机构投票事件展示）。
@@ -72,7 +70,7 @@ class ProposalWithDetail {
 
   final ProposalMeta meta;
 
-  /// Runtime 升级提案详情（非升级提案为 null）。
+  /// 协议升级提案详情（非升级提案为 null）。
   final RuntimeUpgradeProposalInfo? runtimeUpgradeDetail;
 
   /// 创建多签账户提案详情。

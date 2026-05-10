@@ -97,14 +97,14 @@ lib/signer/
 
 | 类型 | action | 说明 |
 | --- | --- | --- |
-| GMB_ACTIVATE 前缀 (非链上) | `activate_admin` | 管理员激活签名 |
+| `GMB_ACTIVATE_SUBJECT_V1` 内层 payload | `activate_admin_subject` | subject 级管理员激活签名，字段为 `org / subject / pubkey` |
 | Balances(2) / transfer_keep_alive(3) | `transfer` | 转账 |
 | DuoqianTransfer(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
 | InternalVote(22) / cast(0) | `internal_vote` | 内部投票(管理员一人一票,统一入口) |
 | JointVote(23) / cast_admin(0) | `joint_vote` | 联合投票管理员阶段 |
 | JointVote(23) / cast_referendum(1) | `citizen_vote` | 联合公投全民兜底(原 citizen_vote) |
-| RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | Runtime 升级提案 |
-| RuntimeUpgrade(13) / developer(2) | `developer_upgrade` | 开发者直升 |
+| RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | 协议升级提案（大 WASM 哈希直签例外，不做 SCALE 展开） |
+| RuntimeUpgrade(13) / developer(2) | `developer_direct_upgrade` | 开发期协议直升（大 WASM 哈希直签例外，不做 SCALE 展开） |
 | OffchainTransaction(21) / bind(30) | `bind_clearing_bank` | 绑定清算行 |
 | OffchainTransaction(21) / deposit(31) | `deposit_clearing_bank` | 清算行充值 |
 | OffchainTransaction(21) / withdraw(32) | `withdraw_clearing_bank` | 清算行提现 |
@@ -202,7 +202,7 @@ WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 
 ### 7.3 SFID 凭证签名域（由 SFID 系统产出）
 
-- 人口快照签名（联合提案字段）：
+- 人口快照签名（投票引擎人口快照准备流程字段）：
 
 ```text
 (DUOQIAN_DOMAIN, OP_SIGN_POP, genesis_hash, who, eligible_total, nonce)

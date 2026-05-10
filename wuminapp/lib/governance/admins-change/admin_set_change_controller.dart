@@ -7,7 +7,7 @@ class AdminSetChangeController {
 
   final AdminSubjectService _subjectService;
 
-  Future<AdminSubjectState?> loadSubject(String institutionIdentity) {
-    return _subjectService.fetchByInstitutionIdentity(institutionIdentity);
+  Future<AdminSubjectState?> loadSubject(AdminSubjectIdentity identity) {
+    return _subjectService.fetchByIdentity(identity);
   }
 }

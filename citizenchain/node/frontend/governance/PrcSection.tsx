@@ -7,15 +7,17 @@ import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
 import { CreateDuoqianTransferPage } from '../transaction/duoqian-transfer/CreateProposalPage';
 import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposalPage';
+import { ProtocolUpgradeProposalPage } from './runtime-upgrade';
 import type { AdminWalletMatch } from './types';
 
 type PrcView =
   | { page: 'list' }
   | { page: 'detail'; sfidNumber: string }
-  | { page: 'admin-list'; sfidNumber: string }
+  | { page: 'admin-list'; sfidNumber: string; orgType: number }
   | { page: 'admin-set-change'; sfidNumber: string; orgType: number; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
   | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'protocol-upgrade'; sfidNumber: string; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-sweep'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] };
 
 export function PrcSection() {
@@ -28,6 +30,7 @@ export function PrcSection() {
     return (
       <AdminListPage
         sfidNumber={view.sfidNumber}
+        subjectRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
         onBack={() => backToDetail(view.sfidNumber)}
       />
     );
@@ -70,6 +73,16 @@ export function PrcSection() {
     );
   }
 
+  if (view.page === 'protocol-upgrade') {
+    return (
+      <ProtocolUpgradeProposalPage
+        adminWallets={view.adminWallets}
+        onBack={() => backToDetail(view.sfidNumber)}
+        onSuccess={() => backToDetail(view.sfidNumber)}
+      />
+    );
+  }
+
   if (view.page === 'propose-sweep') {
     return (
       <SweepProposalPage
@@ -88,7 +101,7 @@ export function PrcSection() {
       <InstitutionDetailPage
         sfidNumber={sfidNumber}
         onBack={backToList}
-        onOpenAdminList={() => setView({ page: 'admin-list', sfidNumber })}
+        onOpenAdminList={(sid, orgType) => setView({ page: 'admin-list', sfidNumber: sid, orgType })}
         onSelectProposal={(proposalId, adminWallets, sid) =>
           setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid, originSfidNumber: sfidNumber })
         }
@@ -97,6 +110,9 @@ export function PrcSection() {
         }
         onCreateAdminSetChange={(sid, orgType, name, aw) =>
           setView({ page: 'admin-set-change', sfidNumber: sid, orgType, institutionName: name, adminWallets: aw })
+        }
+        onCreateProtocolUpgrade={(aw) =>
+          setView({ page: 'protocol-upgrade', sfidNumber, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
           setView({ page: 'propose-sweep', sfidNumber: sid, institutionName: name, adminWallets: aw })

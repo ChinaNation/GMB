@@ -33,7 +33,8 @@ use votingengine::{
 
 use super::pallet::{
     Config, Error, Event, JointInstitutionTallies, JointTallies, JointVotesByAdmin,
-    JointVotesByInstitution, Pallet, UsedPopulationSnapshotNonce,
+    JointVotesByInstitution, Pallet, PendingPopulationSnapshots, PreparedPopulationSnapshot,
+    UsedPopulationSnapshotNonce,
 };
 use super::{institution_info, is_joint_unanimous};
 
@@ -137,18 +138,19 @@ impl<T: Config> Pallet<T> {
         (VOTING_DURATION_BLOCKS as u64).saturated_into()
     }
 
-    /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + PRBs)管理员快照,
-    /// 并在创建时锁定联合公投阶段总人口分母(eligible_total),后续阶段切换不再改写。
-    /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段透传至 verifier。
-    pub fn do_create_joint_proposal(
+    /// 准备联合投票人口快照。
+    ///
+    /// 中文注释：这是投票引擎内部能力。业务模块不再传快照材料，只能在发起
+    /// 联合提案前由管理员调用本入口，让 joint-vote 验签、去重并缓存总人数。
+    pub fn do_prepare_population_snapshot(
         who: T::AccountId,
         eligible_total: u64,
         snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
         signature: votingengine::pallet::VoteSignatureOf<T>,
         province: &[u8],
         signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError> {
-        let proposer_institution = resolve_proposer_institution::<T>(&who)
+    ) -> DispatchResult {
+        let _proposer_institution = resolve_proposer_institution::<T>(&who)
             .ok_or(votingengine::Error::<T>::NoPermission)?;
         ensure!(eligible_total > 0, Error::<T>::CitizenEligibleTotalNotSet);
         ensure!(
@@ -175,6 +177,32 @@ impl<T: Config> Pallet<T> {
             Error::<T>::InvalidPopulationSnapshot
         );
 
+        let now = <frame_system::Pallet<T>>::block_number();
+        UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
+        PendingPopulationSnapshots::<T>::insert(
+            &who,
+            PreparedPopulationSnapshot {
+                eligible_total,
+                nonce_hash: snapshot_nonce_hash,
+                prepared_at: now,
+            },
+        );
+        Self::deposit_event(Event::<T>::PopulationSnapshotPrepared {
+            who,
+            eligible_total,
+            nonce_hash: snapshot_nonce_hash,
+        });
+        Ok(())
+    }
+
+    /// 创建联合投票提案。锁定全部参与机构(NRC + 43 PRC + PRBs)管理员快照,
+    /// 并消费已准备的人口快照总分母，后续阶段切换不再改写。
+    pub fn do_create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
+        let proposer_institution = resolve_proposer_institution::<T>(&who)
+            .ok_or(votingengine::Error::<T>::NoPermission)?;
+        let prepared = PendingPopulationSnapshots::<T>::get(&who)
+            .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
+        let eligible_total = prepared.eligible_total;
         let now = <frame_system::Pallet<T>>::block_number();
         let end = now.saturating_add(Self::joint_stage_duration());
 
@@ -260,7 +288,7 @@ impl<T: Config> Pallet<T> {
                 ));
             }
 
-            UsedPopulationSnapshotNonce::<T>::insert(snapshot_nonce_hash, true);
+            PendingPopulationSnapshots::<T>::remove(&who);
             Proposals::<T>::insert(id, proposal);
             if let Err(err) = <votingengine::Pallet<T>>::schedule_proposal_expiry(id, end) {
                 return TransactionOutcome::Rollback(Err(err));

@@ -13,7 +13,7 @@ import type { AdminWalletMatch } from './types';
 type PrbView =
   | { page: 'list' }
   | { page: 'detail'; sfidNumber: string }
-  | { page: 'admin-list'; sfidNumber: string }
+  | { page: 'admin-list'; sfidNumber: string; orgType: number }
   | { page: 'admin-set-change'; sfidNumber: string; orgType: number; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
   | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
@@ -29,6 +29,7 @@ export function PrbSection() {
     return (
       <AdminListPage
         sfidNumber={view.sfidNumber}
+        subjectRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
         onBack={() => backToDetail(view.sfidNumber)}
       />
     );
@@ -89,7 +90,7 @@ export function PrbSection() {
       <InstitutionDetailPage
         sfidNumber={sfidNumber}
         onBack={backToList}
-        onOpenAdminList={() => setView({ page: 'admin-list', sfidNumber })}
+        onOpenAdminList={(sid, orgType) => setView({ page: 'admin-list', sfidNumber: sid, orgType })}
         onSelectProposal={(proposalId, adminWallets, sid) =>
           setView({ page: 'proposal-detail', proposalId, adminWallets, sfidNumber: sid, originSfidNumber: sfidNumber })
         }

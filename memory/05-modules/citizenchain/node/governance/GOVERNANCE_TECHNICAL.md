@@ -7,11 +7,11 @@ governance/
 ├── mod.rs              # Tauri 命令入口：提案创建、投票、签名请求/提交
 ├── admins_change/      # 管理员管理：激活、主体读取、管理员集合变更、签名提交
 ├── organization-manage/# 机构多签管理：SFID 凭证、机构详情、创建机构多签签名请求
+├── runtime_upgrade/    # 协议升级：开发期直升、运行期协议升级业务签名与提交
 ├── signing.rs          # QR 签名协议实现：payload 构建、签名验证、交易提交
 ├── proposal.rs         # 提案查询与解码：从链上 storage 读取并解析提案详情
 ├── institution.rs      # 机构信息查询：管理员列表、机构名称
 ├── storage_keys.rs     # 链上存储 key 构造：twox_128 / blake2b_128 / double_map_key
-├── sfid_api.rs         # SFID 人口快照 API 客户端
 └── types.rs            # 共享类型定义
 ```
 
@@ -21,11 +21,12 @@ governance/
 - 实现管理员激活机制（冷钱包扫码签名 → 本地验证 → 解锁提案操作）
 - 实现 WUMIN_QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
 - 从链上 RPC 解码提案数据（联合投票/内部投票/机构管理员/销毁/发行/运行时升级）
-- 从 SFID 服务获取人口快照（eligible_total + snapshot_nonce + signature）
+- 治理聚合层不得实现投票流程、人口快照获取、计票或投票状态推进；这些职责统一归投票引擎
 
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API
 - `node/frontend/governance/admins_change/`：管理员列表与管理员更换页面
+- `node/frontend/governance/runtime-upgrade/`：协议升级与开发升级页面，只提交业务提案，不实现投票流程
 - `node/frontend/governance/organization-manage/`：机构多签管理页面、API 和 DTO
 - `node/frontend/governance/types.ts`：治理页面 DTO 类型
 - `node/frontend/shared/qr/`：QR 扫码组件与 WUMIN_QR_V1 解析协议，治理前端通过共享层引用，不再把扫码能力放在治理目录内
@@ -42,21 +43,24 @@ governance/
 
 1. 用户点击管理员行的"激活"按钮
 2. 后端验证公钥在链上管理员列表中
-3. 构建 GMB_ACTIVATE 签名 payload（非链上交易）
+3. 构建 `GMB_ACTIVATE_SUBJECT_V1` subject 级签名 payload（非链上交易）
 4. 生成 WUMIN_QR_V1 格式的 QR 签名请求
 5. 用户用 wumin 冷钱包扫码签名
-6. 后端验证 sr25519 签名（本地验证，不提交链上）
+6. 后端验证 sr25519 签名，并重新确认链上主体仍 Active
 7. 签名验证成功 → 写入本地加密存储
 8. 前端刷新 → 管理员变绿 + 提案按钮可操作
 
 ### 激活 payload 格式
 
 ```
-GMB_ACTIVATE (12 字节 ASCII)
-+ sfid_number (48 字节，右补零)
+GMB_ACTIVATE_SUBJECT_V1 (23 字节 ASCII)
++ subject_id (48 字节)
++ org (1 字节)
++ kind (1 字节)
++ pubkey (32 字节)
 + timestamp (8 字节, u64 LE)
 + random_nonce (16 字节)
-= 总计 84 字节
+= 总计 129 字节
 ```
 
 非链上交易，不需要 nonce/era/genesis_hash 等扩展。
@@ -72,10 +76,10 @@ GMB_ACTIVATE (12 字节 ASCII)
 
 ### 存储
 
-- 文件：`{app_data}/activated-admins.json`
-- 格式：JSON 数组，每条记录包含 pubkey_hex、sfid_number、activated_at_ms、signature_hex、payload_hash_hex
+- 文件：`{app_data}/activated-admin-subjects.json`
+- 格式：JSON 数组，每条记录包含 `pubkey_hex / subject_id_hex / org / kind / activated_at_ms / signature_hex / payload_hash_hex`
 - 安全：文件权限限制（通过 security::write_text_atomic_restricted）
-- 失效：每次 get_activated_admins 调用时与链上管理员列表交叉校验
+- 失效：每次 `get_activated_admins` 调用时与链上管理员主体的 `org/kind/admins/status` 交叉校验
 
 ### 省储行验证者
 
@@ -91,7 +95,7 @@ GMB_ACTIVATE (12 字节 ASCII)
 4. 节点桌面端验证签名、构造完整 extrinsic、提交到链上
 
 ### 支持的签名类型
-- 管理员激活（activate_admin，非链上交易）
+- 管理员激活（activate_admin_subject，非链上交易）
 - 联合投票（省储会/省储行管理员投票）
 - 内部投票（机构管理员替换/销毁/多签）
 - 公民投票
@@ -117,12 +121,12 @@ GMB_ACTIVATE (12 字节 ASCII)
 - `state_getStorage`：读取链上存储
 - `state_getKeysPaged`：遍历 StorageMap
 
-## sfid_api.rs — 人口快照
+## runtime_upgrade/ — 协议升级
 
-- SFID 地址统一走 [shared/SFID_CONFIG_TECHNICAL.md](../shared/SFID_CONFIG_TECHNICAL.md)
-- `SFID_BASE_URL` 环境变量优先；debug 默认 `http://127.0.0.1:8899`；release 默认 `http://147.224.14.117:8899`
-- 超时：10 秒
-- 返回：`PopulationSnapshot { eligible_total, snapshot_nonce, signature }`
+- 后端只负责读取 WASM、构建协议升级业务 call data、生成冷钱包签名请求、验证签名回执并提交交易。
+- 前端只负责协议升级表单、WASM 选择、冷钱包签名流程和提交结果展示。
+- `runtime_upgrade` 不获取 SFID 人口快照，不接收联合签名上下文，不推进投票状态，不实现联合投票/公民投票流程。
+- 协议升级提案进入链上后，由投票引擎统一负责投票流程、状态、计票、通过/否决判定和结果回调。
 
 ## institution.rs — 机构查询
 

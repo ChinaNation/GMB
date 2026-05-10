@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart';
 
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
@@ -17,6 +18,7 @@ class AdminListPage extends StatefulWidget {
   const AdminListPage({
     super.key,
     required this.institution,
+    required this.subjectIdentity,
     required this.admins,
     required this.importedColdPubkeys,
     required this.activatedPubkeys,
@@ -25,6 +27,7 @@ class AdminListPage extends StatefulWidget {
   });
 
   final InstitutionInfo institution;
+  final AdminSubjectIdentity subjectIdentity;
   final List<String> admins;
 
   /// 用户已导入的冷钱包公钥集合（小写 hex，不含 0x）。
@@ -106,6 +109,7 @@ class _AdminListPageState extends State<AdminListPage> {
                 isImported: isImported,
                 isActivated: isActivated,
                 institution: widget.institution,
+                subjectIdentity: widget.subjectIdentity,
                 onActivated: () => _onAdminActivated(pubkey),
               );
             }),
@@ -164,6 +168,7 @@ class _AdminTile extends StatelessWidget {
     required this.isImported,
     required this.isActivated,
     required this.institution,
+    required this.subjectIdentity,
     required this.onActivated,
   });
 
@@ -176,6 +181,7 @@ class _AdminTile extends StatelessWidget {
   /// 此管理员是否已激活。
   final bool isActivated;
   final InstitutionInfo institution;
+  final AdminSubjectIdentity subjectIdentity;
   final VoidCallback onActivated;
 
   String _toSs58() {
@@ -224,7 +230,7 @@ class _AdminTile extends StatelessWidget {
     final activationService = ActivationService();
     final (:request, :json) = activationService.buildActivationRequest(
       pubkeyHex: pubkeyHex,
-      sfidNumber: institution.sfidNumber,
+      identity: subjectIdentity,
     );
 
     if (!context.mounted) return;
@@ -246,7 +252,7 @@ class _AdminTile extends StatelessWidget {
     try {
       await activationService.activateViaQr(
         pubkeyHex: pubkeyHex,
-        sfidNumber: institution.sfidNumber,
+        identity: subjectIdentity,
         response: response,
       );
       onActivated();

@@ -781,6 +781,11 @@ pub mod pallet {
             if subject.org != org || subject.status != status {
                 return None;
             }
+            // 中文注释：读侧也要执行主体类型边界校验，避免升级前写入的旧脏数据
+            // 继续通过 active/pending 查询 API 被其他业务模块当作有效管理员主体。
+            if Self::ensure_subject_kind_matches_org(subject.kind, subject.org).is_err() {
+                return None;
+            }
             Some(subject)
         }
 

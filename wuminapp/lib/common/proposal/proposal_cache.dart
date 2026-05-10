@@ -20,7 +20,7 @@ class ProposalCache {
   /// 获取提案元数据，命中返回缓存，未命中返回 null。
   static ProposalMeta? getMeta(int proposalId) => _metaCache[proposalId];
 
-  /// 获取 Runtime 升级提案详情，命中返回缓存，未命中返回 null。
+  /// 获取协议升级提案详情，命中返回缓存，未命中返回 null。
   static RuntimeUpgradeProposalInfo? getRuntimeUpgradeDetail(int proposalId) =>
       _runtimeUpgradeDetailCache[proposalId];
 
@@ -38,7 +38,7 @@ class ProposalCache {
   static void putMeta(int proposalId, ProposalMeta meta) =>
       _metaCache[proposalId] = meta;
 
-  /// 存入 Runtime 升级提案详情。
+  /// 存入协议升级提案详情。
   static void putRuntimeUpgradeDetail(
           int proposalId, RuntimeUpgradeProposalInfo detail) =>
       _runtimeUpgradeDetailCache[proposalId] = detail;

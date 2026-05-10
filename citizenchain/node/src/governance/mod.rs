@@ -8,7 +8,6 @@ pub mod organization_manage;
 pub mod proposal;
 pub(crate) mod registry;
 pub mod runtime_upgrade;
-pub mod sfid_api;
 pub mod signing;
 pub(crate) mod storage_keys;
 pub mod types;

@@ -4,7 +4,7 @@
 
 use codec::Decode;
 use frame_benchmarking::v2::*;
-use frame_support::{pallet_prelude::ConstU32, traits::Get, BoundedVec};
+use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
 use primitives::china::china_cb::CHINA_CB;
 use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
@@ -60,27 +60,6 @@ fn full_allocations<T: pallet::Config>() -> (pallet::AllocationOf<T>, pallet::Ba
     )
 }
 
-fn snapshot_nonce_ok<T: pallet::Config>() -> pallet::SnapshotNonceOf<T> {
-    let len = core::cmp::max(1usize, T::MaxSnapshotNonceLength::get() as usize).min(16);
-    vec![b'n'; len].try_into().expect("nonce fits")
-}
-
-fn snapshot_sig_ok<T: pallet::Config>() -> pallet::SnapshotSignatureOf<T> {
-    let len = core::cmp::max(1usize, T::MaxSnapshotSignatureLength::get() as usize).min(64);
-    vec![b's'; len].try_into().expect("signature fits")
-}
-
-fn province_ok() -> BoundedVec<u8, ConstU32<64>> {
-    b"liaoning"
-        .to_vec()
-        .try_into()
-        .expect("benchmark province should fit")
-}
-
-fn signer_admin_pubkey_ok() -> [u8; 32] {
-    [7u8; 32]
-}
-
 #[benchmarks]
 mod benchmarks {
     use super::*;
@@ -105,10 +84,6 @@ mod benchmarks {
 
         let reason = reason_max::<T>();
         let (allocations, total_amount) = full_allocations::<T>();
-        let nonce = snapshot_nonce_ok::<T>();
-        let signature = snapshot_sig_ok::<T>();
-        let province = province_ok();
-        let signer_admin_pubkey = signer_admin_pubkey_ok();
 
         #[extrinsic_call]
         propose_resolution_issuance(
@@ -116,11 +91,6 @@ mod benchmarks {
             reason,
             total_amount,
             allocations,
-            10u64,
-            nonce,
-            signature,
-            province,
-            signer_admin_pubkey,
         );
 
         assert_eq!(VotingProposalCount::<T>::get(), 1u32);

@@ -16,11 +16,15 @@ pub use primitives::traits::{
 
 /// 机构多签账户的查询 trait,供 duoqian-transfer / runtime config 等下游调用。
 ///
-/// 输入任意机构账户(主/费用/自创)都返回该机构的 admin 配置,
-/// 实现:`AddressRegisteredSfid[addr]` → `admins-change::Subjects[sfid_number]`。
+/// 输入任意机构账户(主/费用/自创)都返回该账户的 admin 配置,
+/// 实现:`AddressRegisteredSfid[addr]` → `Institutions[sfid].admin_org`
+/// → `admins-change::Subjects[subject_id_from_institution_account(addr)]`。
 /// 与 personal-manage::PersonalMultisigQuery 对仗,duoqian-transfer 通过 union
 /// 查询(先 personal、再 institution)定位多签 admin 配置。
 pub trait InstitutionMultisigQuery<AccountId> {
+    /// 返回机构账户管理员主体 org。机构账户只能是 ORG_PUP 或 ORG_OTH。
+    fn lookup_admin_org(addr: &AccountId) -> Option<u8>;
+
     fn lookup_admin_config(
         addr: &AccountId,
     ) -> Option<primitives::types::MultisigConfigSnapshot<AccountId>>;
@@ -28,6 +32,10 @@ pub trait InstitutionMultisigQuery<AccountId> {
 }
 
 impl<AccountId> InstitutionMultisigQuery<AccountId> for () {
+    fn lookup_admin_org(_addr: &AccountId) -> Option<u8> {
+        None
+    }
+
     fn lookup_admin_config(
         _addr: &AccountId,
     ) -> Option<primitives::types::MultisigConfigSnapshot<AccountId>> {

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
@@ -70,6 +71,9 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 主账户实时可用余额（元）。
   double? _mainBalance;
 
+  AdminSubjectIdentity get _subjectIdentity =>
+      AdminSubjectIdentity.fromInstitution(widget.institution);
+
   /// 更多制度账户是否已在当前页展开。
   bool _extraAccountsExpanded = false;
 
@@ -98,15 +102,16 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     });
 
     try {
+      final subjectIdentity = _subjectIdentity;
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.sfidNumber),
+        _adminService.fetchAdmins(subjectIdentity),
         _contextResolver.resolve(
           knownInstitution: widget.institution,
         ),
         _duoqianTransferFeed.fetchInstitutionVisibleProposals(
           widget.institution.sfidNumber,
         ),
-        _activationService.getActivatedAdmins(widget.institution.sfidNumber),
+        _activationService.getActivatedAdmins(subjectIdentity),
         _duoqianTransferFeed
             .fetchInstitutionBalance(widget.institution)
             .then<double?>((value) => value)
@@ -212,7 +217,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.sfidNumber);
+        _adminService.clearCache(_subjectIdentity);
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
         DuoqianTransferProposalAdapter.clearCache();
@@ -921,7 +926,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       return '关闭多签 $proposalId';
     }
     if (proposal.runtimeUpgradeDetail != null) {
-      return 'Runtime 升级 $proposalId';
+      return '协议升级 $proposalId';
     }
     if (proposal.meta.kind == 1) {
       return '联合投票提案 $proposalId';
@@ -944,7 +949,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       return '关闭多签账户 · $status';
     }
     if (proposal.runtimeUpgradeDetail != null) {
-      return 'Runtime 升级 · $status';
+      return '协议升级 · $status';
     }
     if (proposal.meta.kind == 1) {
       return '联合投票 · $status';
@@ -1061,7 +1066,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
     // 返回后刷新（可能新建了提案）
     if (mounted) {
-      _adminService.clearCache(widget.institution.sfidNumber);
+      _adminService.clearCache(_subjectIdentity);
       ProposalCache.clear();
       DuoqianTransferProposalAdapter.clearCache();
       _load();
@@ -1110,7 +1115,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
     // 返回后刷新（投票状态可能变化）
     if (mounted) {
-      _adminService.clearCache(widget.institution.sfidNumber);
+      _adminService.clearCache(_subjectIdentity);
       ProposalCache.clear();
       DuoqianTransferProposalAdapter.clearCache();
       _load();
@@ -1141,13 +1146,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       MaterialPageRoute(
         builder: (_) => AdminListPage(
           institution: widget.institution,
+          subjectIdentity: _subjectIdentity,
           admins: _admins,
           importedColdPubkeys: _importedColdPubkeys,
           activatedPubkeys: _activatedPubkeys,
           badgeColor: widget.badgeColor,
           onActivated: () {
             // 激活成功后刷新页面
-            _adminService.clearCache(widget.institution.sfidNumber);
+            _adminService.clearCache(_subjectIdentity);
             _contextResolver.clearWalletCache();
             _load();
           },

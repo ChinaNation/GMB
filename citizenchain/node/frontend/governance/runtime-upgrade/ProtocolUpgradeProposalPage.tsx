@@ -1,4 +1,4 @@
-// 运行期协议升级页：提交 Runtime WASM 提案,走联合投票流程。
+// 运行期协议升级页：提交 WASM 提案,走联合投票流程。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
@@ -6,7 +6,8 @@ import { sanitizeError } from '../../core/tauri';
 import { hexToSs58 } from '../../shared/ss58';
 import { QrScanner } from '../../shared/qr/QrScanner';
 import { runtimeUpgradeApi as api } from './api';
-import type { AdminWalletMatch, ProposeUpgradeRequestResult } from '../types';
+import type { AdminWalletMatch } from '../types';
+import type { ProposeUpgradeRequestResult } from './api';
 
 type FlowStep = 'form' | 'qr' | 'scan' | 'submit' | 'done' | 'error';
 
@@ -70,7 +71,11 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     setBuilding(true);
     setError(null);
     try {
-      const result = await api.buildProposeUpgradeRequest(selectedPubkey, wasmPath.trim(), reason.trim());
+      const result = await api.buildProposeUpgradeRequest(
+        selectedPubkey,
+        wasmPath.trim(),
+        reason.trim(),
+      );
       setSignRequest(result);
       setRequestJson(result.requestJson);
       setCountdown(90);
@@ -93,8 +98,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
     try {
       const result = await api.submitProposeUpgrade(
         req.requestId, pubkey, req.expectedPayloadHash,
-        path, reasonVal, req.eligibleTotal,
-        req.snapshotNonce, req.snapshotSignature,
+        path, reasonVal,
         req.signNonce, req.signBlockNumber, responseText,
       );
       setTxHash(result.txHash);
@@ -112,7 +116,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
       <button className="back-button" onClick={onBack}>&larr; 返回</button>
       <h2>协议升级</h2>
       <p className="upgrade-proposal-hint">
-        提交运行期 Runtime 协议升级提案，进入联合投票流程。
+        提交运行期协议升级提案，进入联合投票流程。
       </p>
 
       {step === 'form' && (
@@ -173,7 +177,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
             disabled={!canSubmit || building}
             onClick={handleBuildRequest}
           >
-            {building ? '获取人口快照并构建签名…' : '生成签名请求'}
+            {building ? '正在生成协议升级签名请求…' : '生成协议升级签名请求'}
           </button>
         </div>
       )}
@@ -207,7 +211,7 @@ export function ProtocolUpgradeProposalPage({ adminWallets, onBack, onSuccess }:
       {step === 'done' && (
         <div className="vote-signing-body">
           <div className="vote-success">
-            <p>Runtime 协议升级提案已提交</p>
+            <p>协议升级提案已提交</p>
             {txHash && <code className="tx-hash">交易哈希: {txHash}</code>}
           </div>
           <p className="upgrade-done-note">提案已进入联合投票阶段。</p>

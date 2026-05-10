@@ -6,12 +6,12 @@
 
 use tauri::AppHandle;
 
-use crate::governance::signing as gov_signing;
-use crate::home;
 use super::types::{
     EligibleClearingBankCandidate, InstitutionDetail, InstitutionProposalPage,
     InstitutionRegistrationInfoResp,
 };
+use crate::governance::signing as gov_signing;
+use crate::home;
 
 use super::signing::InitialAccountInput;
 
@@ -111,6 +111,7 @@ pub async fn build_propose_create_institution_request(
     sfid_number: String,
     institution_name: String,
     accounts: Vec<InitialAccountInputDto>,
+    admin_org: u8,
     admin_pubkeys: Vec<String>,
     threshold: u32,
     register_nonce: String,
@@ -130,6 +131,7 @@ pub async fn build_propose_create_institution_request(
             &sfid_number,
             &institution_name,
             &parsed_accounts,
+            admin_org,
             admin_count,
             &admin_pubkeys,
             threshold,
@@ -153,6 +155,7 @@ pub async fn submit_propose_create_institution(
     sfid_number: String,
     institution_name: String,
     accounts: Vec<InitialAccountInputDto>,
+    admin_org: u8,
     admin_pubkeys: Vec<String>,
     threshold: u32,
     register_nonce: String,
@@ -174,6 +177,7 @@ pub async fn submit_propose_create_institution(
             &sfid_number,
             &institution_name,
             &parsed_accounts,
+            admin_org,
             admin_count,
             &admin_pubkeys,
             threshold,

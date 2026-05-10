@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
@@ -108,6 +109,7 @@ class ProposalContextResolver {
   /// [knownInstitution] 如果调用方已知机构信息（如从机构页面进入），直接传入跳过反查。
   Future<ProposalContext> resolve({
     List<int>? institutionBytes,
+    int? internalOrg,
     InstitutionInfo? knownInstitution,
   }) async {
     final wallets = await _getWallets();
@@ -117,7 +119,8 @@ class ProposalContextResolver {
     InstitutionInfo? institution = knownInstitution;
 
     if (institution == null && institutionBytes != null) {
-      institution = findInstitutionByPalletId(institutionBytes);
+      institution = findInstitutionByPalletId(institutionBytes,
+          adminSubjectOrg: internalOrg);
     }
 
     // 2. 如果仍然没有机构（如联合投票 institutionBytes 反查失败），
@@ -131,10 +134,12 @@ class ProposalContextResolver {
       return const ProposalContext();
     }
 
+    late final AdminSubjectIdentity identity;
     try {
+      identity = AdminSubjectIdentity.fromInstitution(institution);
       if (institution.isRegisteredDuoqian) {
         final threshold = await _adminService.fetchThreshold(
-          institution.sfidNumber,
+          identity,
         );
         if (threshold != null) {
           institution = institution.copyWith(
@@ -143,12 +148,12 @@ class ProposalContextResolver {
         }
       }
     } catch (_) {
-      // ignore
+      return ProposalContext(institution: institution);
     }
 
     // 仅通过激活记录匹配管理员钱包
     final activatedAdmins = await _activationService
-        .getActivatedAdmins(institution!.sfidNumber)
+        .getActivatedAdmins(identity)
         .catchError((_) => <ActivatedAdmin>[]);
 
     final matchedWallets = <WalletProfile>[];
@@ -182,17 +187,22 @@ class ProposalContextResolver {
   ///
   /// 返回 Map<提案索引, ProposalContext>，与传入列表一一对应。
   Future<List<ProposalContext>> resolveBatch(
-    List<List<int>?> institutionBytesList,
-  ) async {
+      List<List<int>?> institutionBytesList,
+      {List<int?>? internalOrgList}) async {
     final wallets = await _getWallets();
     final coldWallets = wallets.where((w) => w.isColdWallet).toList();
     final results = <ProposalContext>[];
 
-    for (final institutionBytes in institutionBytesList) {
+    for (var i = 0; i < institutionBytesList.length; i++) {
+      final institutionBytes = institutionBytesList[i];
+      final internalOrg = internalOrgList != null && i < internalOrgList.length
+          ? internalOrgList[i]
+          : null;
       InstitutionInfo? institution;
 
       if (institutionBytes != null) {
-        institution = findInstitutionByPalletId(institutionBytes);
+        institution = findInstitutionByPalletId(institutionBytes,
+            adminSubjectOrg: internalOrg);
       }
 
       if (institution == null && coldWallets.isNotEmpty) {
@@ -204,10 +214,12 @@ class ProposalContextResolver {
         continue;
       }
 
+      late final AdminSubjectIdentity identity;
       try {
+        identity = AdminSubjectIdentity.fromInstitution(institution);
         if (institution.isRegisteredDuoqian) {
           final threshold = await _adminService.fetchThreshold(
-            institution.sfidNumber,
+            identity,
           );
           if (threshold != null) {
             institution = institution.copyWith(
@@ -216,12 +228,13 @@ class ProposalContextResolver {
           }
         }
       } catch (_) {
-        // ignore
+        results.add(ProposalContext(institution: institution));
+        continue;
       }
 
       // 仅通过激活记录匹配管理员钱包
       final activatedAdmins = await _activationService
-          .getActivatedAdmins(institution!.sfidNumber)
+          .getActivatedAdmins(identity)
           .catchError((_) => <ActivatedAdmin>[]);
 
       final matchedWallets = <WalletProfile>[];
@@ -275,7 +288,9 @@ class ProposalContextResolver {
     for (final inst in allInstitutions) {
       List<String> admins;
       try {
-        admins = await _adminService.fetchAdmins(inst.sfidNumber);
+        admins = await _adminService.fetchAdmins(
+          AdminSubjectIdentity.fromInstitution(inst),
+        );
       } catch (_) {
         continue;
       }

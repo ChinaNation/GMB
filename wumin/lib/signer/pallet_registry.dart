@@ -66,7 +66,7 @@ class PalletRegistry {
   static const int proposeSafetyFundCall = 1;
   static const int proposeSweepCall = 2;
 
-  // ---- RuntimeUpgrade (13) ----
+  // ---- 协议升级 RuntimeUpgrade (13) ----
   static const int runtimeUpgradePallet = 13;
   static const int proposeRuntimeUpgradeCall = 0;
   static const int developerDirectUpgradeCall = 2;
@@ -81,7 +81,7 @@ class PalletRegistry {
   static const int cleanupRejectedProposalCall = 4;
 
   /// `propose_create_institution(sfid_number, institution_name, accounts,
-  /// admin_count, duoqian_admins, threshold, register_nonce, signature,
+  /// admin_org, admin_count, duoqian_admins, threshold, register_nonce, signature,
   /// province, signer_admin_pubkey)` —
   /// 机构多签账户创建提案,凭证由 SFID 后端按 (province, admin_pubkey)
   /// 双层签发(ADR-008 step2b)。

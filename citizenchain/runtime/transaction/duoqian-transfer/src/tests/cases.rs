@@ -204,7 +204,7 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
 
         assert_ok!(DuoqianTransfer::propose_transfer(
             RuntimeOrigin::signed(registered_institution_admin(0)),
-            ORG_REN,
+            ORG_OTH,
             institution,
             dest.clone(),
             2_000,
@@ -216,7 +216,7 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
             &registered_institution_pairs(2),
             2,
             pid,
-            ORG_REN,
+            ORG_OTH,
             institution,
             inst_account.clone(),
             dest.clone(),
@@ -232,6 +232,35 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
                 .expect("proposal should exist")
                 .status,
             STATUS_EXECUTED
+        );
+    });
+}
+
+#[test]
+fn institution_account_rejects_personal_org() {
+    new_test_ext().execute_with(|| {
+        let institution = registered_institution_subject();
+        let inst_account = registered_institution_account();
+        let admins = BoundedVec::try_from(vec![
+            registered_institution_admin(0),
+            registered_institution_admin(1),
+            registered_institution_admin(2),
+        ])
+        .expect("admins should fit");
+
+        insert_active_registered_institution_account(&inst_account, institution, admins);
+        let _ = Balances::deposit_creating(&inst_account, 10_000);
+
+        assert_noop!(
+            DuoqianTransfer::propose_transfer(
+                RuntimeOrigin::signed(registered_institution_admin(0)),
+                ORG_REN,
+                institution,
+                beneficiary(),
+                1_000,
+                BoundedVec::default(),
+            ),
+            Error::<Test>::InstitutionOrgMismatch
         );
     });
 }

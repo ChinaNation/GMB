@@ -5,6 +5,7 @@
 //! - 清算行节点声明(register/update/unregister)属于扫码支付网络准入,
 //!   放在 `offchain_transaction::signing`。
 
+use crate::governance::admins_change::types::qr_org_display_value;
 use crate::governance::signing::{
     build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,
 };
@@ -60,12 +61,13 @@ fn encode_u128_le(v: u128) -> [u8; 16] {
 /// 构造 `propose_create_institution`(pallet=17, call=5)的 call_data。
 ///
 /// 入参顺序与 [`citizenchain/runtime/governance/organization-manage/src/lib.rs::propose_create_institution`]
-/// 严格一致(10 个字段)。任一字段顺序变更必须同步改本函数。
+/// 严格一致(11 个字段)。任一字段顺序变更必须同步改本函数和冷钱包 decoder。
 #[allow(clippy::too_many_arguments)]
 pub fn build_propose_create_institution_call_data(
     sfid_number: &str,
     institution_name: &str,
     accounts: &[InitialAccountInput],
+    admin_org: u8,
     admin_count: u32,
     admin_pubkeys: &[String],
     threshold: u32,
@@ -82,6 +84,9 @@ pub fn build_propose_create_institution_call_data(
     }
     if accounts.is_empty() {
         return Err("accounts 至少 1 项(主账户)".to_string());
+    }
+    if !matches!(admin_org, 4 | 5) {
+        return Err("机构账户管理员 org 必须是 ORG_PUP(4) 或 ORG_OTH(5)".to_string());
     }
     if admin_count < 2 {
         return Err("admin_count 必须 >= 2".to_string());
@@ -131,23 +136,25 @@ pub fn build_propose_create_institution_call_data(
         call.extend_from_slice(&encode_bytes_with_len(acc.account_name.as_bytes()));
         call.extend_from_slice(&encode_u128_le(acc.amount_fen));
     }
-    // 4. admin_count: u32 LE
+    // 4. admin_org: u8(ORG_PUP/ORG_OTH)
+    call.push(admin_org);
+    // 5. admin_count: u32 LE
     call.extend_from_slice(&admin_count.to_le_bytes());
-    // 5. duoqian_admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
+    // 6. duoqian_admins: BoundedVec<AccountId32> = Compact(N) + N × 32B
     call.extend_from_slice(&encode_compact_u32_pub(admin_pubkeys.len() as u32));
     for pk in admin_pubkeys {
         let bytes = parse_account32(pk)?;
         call.extend_from_slice(&bytes);
     }
-    // 6. threshold: u32 LE
+    // 7. threshold: u32 LE
     call.extend_from_slice(&threshold.to_le_bytes());
-    // 7. register_nonce: BoundedVec<u8>
+    // 8. register_nonce: BoundedVec<u8>
     call.extend_from_slice(&encode_bytes_with_len(register_nonce.as_bytes()));
-    // 8. signature: BoundedVec<u8>(64 字节)
+    // 9. signature: BoundedVec<u8>(64 字节)
     call.extend_from_slice(&encode_bytes_with_len(&signature_bytes));
-    // 9. province: Vec<u8>(本流程必填,链端要查 ShengSigningPubkey[province])
+    // 10. province: Vec<u8>(本流程必填,链端要查 ShengSigningPubkey[province])
     call.extend_from_slice(&encode_bytes_with_len(signing_province.as_bytes()));
-    // 10. signer_admin_pubkey: [u8; 32](固定 32 字节,无长度前缀)
+    // 11. signer_admin_pubkey: [u8; 32](固定 32 字节,无长度前缀)
     call.extend_from_slice(&signer_admin_pubkey_bytes);
 
     Ok(call)
@@ -160,6 +167,7 @@ pub fn build_propose_create_institution_sign_request(
     sfid_number: &str,
     institution_name: &str,
     accounts: &[InitialAccountInput],
+    admin_org: u8,
     admin_count: u32,
     admin_pubkeys: &[String],
     threshold: u32,
@@ -173,6 +181,7 @@ pub fn build_propose_create_institution_sign_request(
         sfid_number,
         institution_name,
         accounts,
+        admin_org,
         admin_count,
         admin_pubkeys,
         threshold,
@@ -186,6 +195,7 @@ pub fn build_propose_create_institution_sign_request(
     let mut fields = vec![
         serde_json::json!({ "key": "sfid_number", "label": "机构身份号码", "value": sfid_number }),
         serde_json::json!({ "key": "institution_name", "label": "机构名称", "value": institution_name }),
+        serde_json::json!({ "key": "org", "label": "管理员组织类型", "value": qr_org_display_value(admin_org) }),
         serde_json::json!({ "key": "admin_count", "label": "管理员数量", "value": admin_count.to_string() }),
         serde_json::json!({ "key": "threshold", "label": "通过阈值", "value": format!("{threshold}/{admin_count}") }),
         serde_json::json!({

@@ -211,6 +211,7 @@ fn propose_create_institution_writes_pending_and_reserves() {
             sfid.clone(),
             institution_name("机构甲".as_bytes()),
             typical_accounts(),
+            ORG_OTH,
             3,
             admins_vec(3),
             2,
@@ -226,6 +227,10 @@ fn propose_create_institution_writes_pending_and_reserves() {
         assert_eq!(
             pallet::Institutions::<Test>::get(&sfid).unwrap().status,
             InstitutionLifecycleStatus::Pending,
+        );
+        assert_eq!(
+            pallet::Institutions::<Test>::get(&sfid).unwrap().admin_org,
+            ORG_OTH,
         );
         // 主+费用 共 2_000 入金 + fee = max(2000*0.001, 10) = 10 → reserve 2_010
         assert_eq!(Balances::reserved_balance(&c), 2_000 + 10);
@@ -244,6 +249,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             sfid.clone(),
             institution_name("机构乙".as_bytes()),
             typical_accounts(),
+            ORG_OTH,
             3,
             admins_vec(3),
             2,
@@ -291,6 +297,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
             sfid.clone(),
             institution_name("机构丙".as_bytes()),
             typical_accounts(),
+            ORG_OTH,
             3,
             admins_vec(3),
             2,
@@ -325,6 +332,7 @@ fn propose_create_rejects_below_create_amount_minimum() {
                 sfid_number(b"SFID-MIN"),
                 institution_name(b"X"),
                 bad_accounts,
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 2,
@@ -354,6 +362,7 @@ fn propose_create_rejects_duplicate_account_name() {
                 sfid_number(b"SFID-DUP"),
                 institution_name(b"X"),
                 dup,
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 2,
@@ -378,6 +387,7 @@ fn propose_create_rejects_missing_main_account() {
                 sfid_number(b"SFID-NM"),
                 institution_name(b"X"),
                 no_main,
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 2,
@@ -402,6 +412,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 sfid_number(b"SFID-T1"),
                 institution_name(b"X"),
                 typical_accounts(),
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 1,
@@ -419,6 +430,7 @@ fn propose_create_rejects_invalid_admin_threshold() {
                 sfid_number(b"SFID-T2"),
                 institution_name(b"X"),
                 typical_accounts(),
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 4,
@@ -444,6 +456,7 @@ fn propose_create_rejects_when_institution_already_exists() {
             sfid.clone(),
             institution_name(b"A"),
             typical_accounts(),
+            ORG_OTH,
             3,
             admins_vec(3),
             2,
@@ -459,6 +472,7 @@ fn propose_create_rejects_when_institution_already_exists() {
                 sfid,
                 institution_name(b"B"),
                 typical_accounts(),
+                ORG_OTH,
                 3,
                 admins_vec(3),
                 2,
@@ -490,6 +504,7 @@ fn create_and_activate_institution(
         sfid.clone(),
         institution_name(b"X"),
         typical_accounts(),
+        ORG_OTH,
         admin_count as u32,
         admins_vec(admin_count),
         admin_count.saturating_add(1) as u32 / 2 + 1, // m-of-n 治理阈值,取一个能通过的
@@ -622,6 +637,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
             sfid_number(b"SFID-CU"),
             institution_name(b"X"),
             typical_accounts(),
+            ORG_OTH,
             3,
             admins_vec(3),
             2,
@@ -661,6 +677,7 @@ fn non_admin_cannot_propose_create() {
                 sfid_number(b"SFID-NA"),
                 institution_name(b"X"),
                 typical_accounts(),
+                ORG_OTH,
                 3,
                 admins_no_creator,
                 2,
@@ -696,13 +713,11 @@ fn existential_deposit_is_preserved_after_close() {
 }
 
 #[test]
-fn subject_id_is_built_from_sfid_number_with_kind_tag() {
+fn admin_subject_id_is_built_from_main_account_with_kind_tag() {
     new_test_ext().execute_with(|| {
-        // 验 ADR-010:institution_id = subject_id_from_sfid_number(sfid_number)
-        // tag byte = SubjectKind::SfidInstitution = 0x02
-        let sfid_bytes = b"SFID-TAG-CHECK";
-        let subj = primitives::derive::subject_id_from_registered_sfid_number(sfid_bytes)
-            .expect("sfid_number should derive subject_id");
-        assert_eq!(subj[0], 0x02, "kind tag must be SfidInstitution");
+        // 管理员更换主体必须是主账户地址派生的 InstitutionAccount,不是 SFID 机构号。
+        let main = AccountId32::new([0x42; 32]);
+        let subj = primitives::derive::subject_id_from_institution_account(&main);
+        assert_eq!(subj[0], 0x05, "kind tag must be InstitutionAccount");
     });
 }

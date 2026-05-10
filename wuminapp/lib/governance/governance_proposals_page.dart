@@ -5,6 +5,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
 import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/pages/admin_set_change_page.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_limit_service.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_page.dart';
@@ -18,7 +19,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///
 /// 根据机构类型条件显示可发起的提案类型：
 /// - 所有机构：换管理员、决议销毁
-/// - 国储会 + 省储会（NRC/PRC）：决议发行、状态升级、验证密钥
+/// - 国储会 + 省储会（NRC/PRC）：决议发行、协议升级、验证密钥
 /// 其他业务入口由所属模块提供，proposal 模块不实现业务创建页。
 class GovernanceProposalsPage extends StatefulWidget {
   const GovernanceProposalsPage({
@@ -41,7 +42,8 @@ class GovernanceProposalsPage extends StatefulWidget {
   final bool isActivated;
 
   @override
-  State<GovernanceProposalsPage> createState() => _GovernanceProposalsPageState();
+  State<GovernanceProposalsPage> createState() =>
+      _GovernanceProposalsPageState();
 }
 
 class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
@@ -230,6 +232,8 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
               context,
               () => AdminSetChangePage(
                 institution: widget.institution,
+                subjectIdentity:
+                    AdminSubjectIdentity.fromInstitution(widget.institution),
                 adminWallets: widget.adminWallets,
               ),
             ),
@@ -261,13 +265,15 @@ class _GovernanceProposalsPageState extends State<GovernanceProposalsPage> {
             const SizedBox(height: 8),
             _ProposalTypeCard(
               icon: Icons.arrow_upward,
-              title: '状态升级',
-              subtitle: 'Runtime 升级，需联合投票:内部投票阶段+联合公投阶段',
+              title: '协议升级',
+              subtitle: '查看协议升级说明及流程',
               color: AppTheme.info,
               enabled: proposalActionsEnabled,
-              onTap: () => _checkAndOpenProposal(
-                context,
-                () => RuntimeUpgradePage(adminWallets: widget.adminWallets),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      RuntimeUpgradePage(adminWallets: widget.adminWallets),
+                ),
               ),
             ),
             const SizedBox(height: 8),

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { sanitizeError } from '../../core/tauri';
 import { adminsChangeApi } from '../../governance/admins_change/api';
+import { organizationManageApi } from '../../governance/organization-manage/api';
 import { hexToSs58 } from '../../shared/ss58';
 import { QrScanner } from '../../shared/qr/QrScanner';
 import type { ActivatedAdmin, AdminWalletMatch, VoteSignRequestResult } from '../../governance/types';
@@ -50,12 +51,20 @@ export function ClearingBankDeclareNodePage({ sfidNumber, institutionName, onBac
   const signRequestRef = useRef(signRequest);
   signRequestRef.current = signRequest;
 
-  // 初始化:拉本机 PeerId + 拉本机构已激活管理员
+  // 初始化:拉本机 PeerId + 拉本机构 subject 级已激活管理员
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       offchainApi.queryLocalPeerId().catch(() => ''),
-      adminsChangeApi.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
+      organizationManageApi.fetchInstitutionDetail(sfidNumber)
+        .then((detail) => detail
+          ? adminsChangeApi.getActivatedAdmins(sfidNumber, {
+              sfidNumber,
+              subjectIdHex: detail.adminSubjectIdHex,
+              org: detail.adminOrg,
+            })
+          : [] as ActivatedAdmin[])
+        .catch(() => [] as ActivatedAdmin[]),
     ]).then(([pid, aa]) => {
       if (cancelled) return;
       setPeerId(pid);

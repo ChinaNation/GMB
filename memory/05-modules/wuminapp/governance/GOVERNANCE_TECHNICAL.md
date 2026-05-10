@@ -95,15 +95,17 @@ lib/citizen/
 
 | 业务类型 | 提案入口 | 必填字段 | 发起权限 | 投票入口 |
 | --- | --- | --- | --- | --- |
-| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[], eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
-| Runtime 升级 | `propose_runtime_upgrade` | `reason, code, eligible_total, snapshot_nonce, signature` | 国储会 + 43 个省储会管理员 | 联合+公民 |
+| 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[]` | 国储会 + 43 个省储会管理员 | 联合+公民 |
+| 协议升级 | `propose_runtime_upgrade` | `reason, code` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | 管理员集合变更 | `propose_admin_set_change` | `org, subject, new_admins[]` | 目标账户当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标省级管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 省级管理员 | 内部 |
 | 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
 | 清算行费率治理(新) | `propose_l2_fee_rate(call_index 40)` / `set_max_l2_fee_rate(call_index 41, Root)` | `bank, new_rate_bp` | 清算行管理员 / Root | — |
 
-### 4.1 联合提案额外字段标准（决议发行 / Runtime 升级）
+### 4.1 联合提案投票引擎字段标准
+
+业务模块不接收人口快照字段。`eligible_total / snapshot_nonce / signature / province / signer_admin_pubkey` 只属于投票引擎的联合投票人口快照准备流程。
 
 - `eligible_total`：`u64`，必须 `> 0`。
 - `snapshot_nonce`：`1..64` 字节。
@@ -239,7 +241,7 @@ message = blake2_256(SCALE.encode(payload))
   - `ProposalAdvancedToCitizen`
   - `ProposalFinalized`
 
-#### 6.2.1 Runtime 升级提案在 App 里的联合投票实现
+#### 6.2.1 协议升级提案在 App 里的联合投票实现
 
 - `RuntimeUpgradeDetailPage` 从机构页进入时必须带上：
   - `institution`
@@ -326,16 +328,12 @@ message = blake2_256(SCALE.encode(payload))
 - `votingengine/src/limit.rs`（活跃提案限制）
 - `votingengine/src/lib.rs`（ProposalData/ProposalObject/ProposalMeta/CleanupQueue Storage + 公共接口）
 
-### 6.4.1 Runtime 升级提案的摘要 / 对象分层
+### 6.4.1 协议升级提案的摘要 / 对象分层
 
-- `runtime-upgrade` 现在只把 `proposer + reason + code_hash + status` 编进 `ProposalData`
+- `runtime-upgrade` 现在只把 `proposer + reason + code_hash` 编进 `ProposalData`
 - 原始 wasm 不再塞进摘要层，而是统一进入 `ProposalObject(kind=runtime_wasm)`
 - App 列表与详情页默认只读取摘要层，不主动拉取大对象
-- App 展示 runtime 升级提案真实结果时，应优先解码摘要层里的业务 `status`：
-  - `Voting`：显示“投票中”
-  - `Passed`：显示“已执行”
-  - `Rejected`：显示“已否决”
-  - `ExecutionFailed`：显示“执行失败”
+- App 展示协议升级提案真实结果时，只读取 `VotingEngine::Proposals.status`。
 
 ## 7. App 侧管理员权限检测与机构详情
 
@@ -366,7 +364,7 @@ message = blake2_256(SCALE.encode(payload))
    - 非管理员用户：卡片不可点击，不显示右箭头。
 2. **管理员身份标识**（仅管理员可见）：绿色提示条"你是本省级管理员，点击上方卡片可发起提案"。
 3. **管理员列表入口**：所有用户可见，点击进入管理员列表页。
-4. **投票事件列表**：所有用户可见，显示“本机构内部提案 + 所有机构都可见的联合投票提案”，按 ID 倒序展示。Runtime 升级等联合投票提案必须在所有机构入口可见，不能只挂在国储会单一列表下。
+4. **投票事件列表**：所有用户可见，显示“本机构内部提案 + 所有机构都可见的联合投票提案”，按 ID 倒序展示。协议升级等联合投票提案必须在所有机构入口可见，不能只挂在国储会单一列表下。
 
 ### 7.2.1 全局提案列表（投票 tab）
 
@@ -385,7 +383,7 @@ message = blake2_256(SCALE.encode(payload))
 
 **提案类型识别**：
 - 内部提案：按转账等内部提案数据结构解码。
-- 联合提案：按 `meta.kind == 1` 单独走联合提案解码链路，Runtime 升级提案进入 `runtime_upgrade_detail_page.dart`。
+- 联合提案：按 `meta.kind == 1` 单独走联合提案解码链路，协议升级提案进入 `runtime_upgrade_detail_page.dart`。
 - 未接入专用详情页的联合提案，列表仍需可见，至少保留通用联合提案卡片。
 
 **投票权判断**：
@@ -438,7 +436,7 @@ message = blake2_256(SCALE.encode(payload))
 **国储会专属提案（仅 NRC）：**
 - 决议发行：发起公民币发行决议，需联合投票+公民投票
 - 验证密钥：更换 GRANDPA 共识验证密钥
-- 状态升级：Runtime 升级，需联合投票+公民投票
+- 协议升级：协议升级提案详情展示与投票入口，提案发起只在 node 管理端
 
 提交成功后，提案类型页应把创建结果向上冒泡到机构详情页，触发列表刷新，避免“链上已创建但机构页仍停留旧状态”。
 
@@ -461,7 +459,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - `safetyFundAddress`：安全基金账户，仅国储会显示
 - `stakeAddress`：质押账户，仅省储行显示
 
-个人多签和注册机构账户仍可通过旧构造入口传入账户地址，但业务侧统一读取
+个人多签和机构账户可通过 `InstitutionInfo` 传入账户地址，但业务侧统一读取
 `InstitutionInfo.mainAddress`。治理机构不得再使用 `duoqianAddress` 表达主账户。
 通过 `Keyring().encodeAddress(bytes, 2027)` 转为 SS58 地址展示。
 
@@ -508,9 +506,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/votingengine/internal-vote/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
 | `lib/governance/duoqian_manage_detail_page.dart` | 跨个人/机构的多签管理提案详情页 |
 | `lib/governance/governance_proposals_page.dart` | 提案类型选择页 |
-| `lib/governance/runtime-upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
-| `lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
-| `lib/governance/runtime-upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
+| `lib/governance/runtime-upgrade/runtime_upgrade_page.dart` | 协议升级说明页（不发起提案、不选择 WASM、不获取人口快照） |
+| `lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart` | 协议升级提案详情页（联合投票/公民投票进度） |
+| `lib/governance/runtime-upgrade/runtime_upgrade_service.dart` | 协议升级提案链上交互服务 |
 | `lib/governance/organization-manage/institution_admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
 | `lib/governance/organization-manage/shared` | 机构多签层（机构账户列表、机构详情、机构管理服务、机构 storage codec、机构发现服务） |
 | `lib/governance/organization-manage/institution` | 机构多签层（机构列表入口、机构创建表单） |
@@ -544,7 +542,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 | Extrinsic | call_index | 说明 | 投票 |
 | --- | --- | --- | --- |
-| `OrganizationManage::propose_create_institution(...)` | 17.5 | 发起 SFID 机构多签账户创建提案 | 投票引擎 |
+| `OrganizationManage::propose_create_institution(..., admin_org, ...)` | 17.5 | 发起 SFID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
 | `OrganizationManage::propose_close(duoqian_address, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
 | `PersonalManage::propose_create(account_name, duoqian_admins, amount)` | 7.0 | 发起个人多签账户创建提案 | 投票引擎 |
 | `PersonalManage::propose_close(duoqian_address, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
@@ -623,7 +621,7 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 | `lib/governance/personal-manage/personal_proposal_history_service.dart` | 个人多签提案历史聚合与 Isar 持久化 |
 | `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
-| `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
+| `duoqian-transfer/src/lib.rs` | 机构账户转账复用现有提案/投票/执行流程 |
 | `votingengine/internal-vote/src/lib.rs` | 投票引擎（支持 ORG_REN / ORG_PUP / ORG_OTH 动态主体） |
 | `votingengine/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |

@@ -46,8 +46,14 @@ export const adminsChangeApi = {
       subjectIdHex: subjectRef?.subjectIdHex ?? null,
       expectedOrg: subjectRef?.org ?? null,
     }),
-  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, unlockPassword: string) =>
-    invoke<void>('deactivate_admin', { pubkeyHex, sfidNumber, unlockPassword }),
+  deactivateAdmin: (pubkeyHex: string, sfidNumber: string, subjectRef: AdminSubjectRef, unlockPassword: string) =>
+    invoke<void>('deactivate_admin', {
+      pubkeyHex,
+      sfidNumber,
+      subjectIdHex: subjectRef.subjectIdHex ?? null,
+      expectedOrg: subjectRef.org ?? null,
+      unlockPassword,
+    }),
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
   getAdminSubjectState: (subjectRef: AdminSubjectRef) =>
     invoke<AdminSubjectState | null>('get_admin_subject_state', subjectRefParams(subjectRef)),

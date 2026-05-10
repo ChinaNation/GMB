@@ -10,8 +10,10 @@ use tauri::AppHandle;
 
 use crate::governance::signing as gov_signing;
 use crate::home;
-use crate::transaction::offchain_transaction::types::{ClearingBankNodeOnChainInfo, ConnectivityTestReport};
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
+use crate::transaction::offchain_transaction::types::{
+    ClearingBankNodeOnChainInfo, ConnectivityTestReport,
+};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 

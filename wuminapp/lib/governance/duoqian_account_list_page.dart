@@ -114,7 +114,8 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     });
     var anyChanged = false;
     try {
-      final personalFuture = PersonalManageDiscoveryService().discoverByMyWallets(
+      final personalFuture =
+          PersonalManageDiscoveryService().discoverByMyWallets(
         force: force,
         onProgress: (s, t, m) {
           if (mounted) {
@@ -178,8 +179,8 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.account_tree_outlined,
-                  color: AppTheme.info),
+              leading:
+                  const Icon(Icons.account_tree_outlined, color: AppTheme.info),
               title: const Text('新增机构多签'),
               onTap: () => Navigator.pop(sheetCtx, _DuoqianKind.institution),
             ),
@@ -222,6 +223,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             sfidNumber:
                 'duoqian:0000000000000000000000000000000000000000000000000000000000000000',
             orgType: OrgType.duoqian,
+            adminSubjectOrg: 5,
             duoqianAddress:
                 '0000000000000000000000000000000000000000000000000000000000000000',
           ),
@@ -250,6 +252,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               name: item.name,
               sfidNumber: registeredDuoqianIdentity(item.duoqianAddress),
               orgType: OrgType.duoqian,
+              adminSubjectOrg: item.institution?.adminSubjectOrg,
               duoqianAddress: item.duoqianAddress,
             ),
           ),
@@ -371,8 +374,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final tag = isPersonal ? '个人' : '机构';
     final subtitleParts = <String>[
       _truncateAddress(ss58),
-      if (item.discoveredViaAdmin)
-        '我作为 ${item.matchedAdminCount} 位管理员之一参与',
+      if (item.discoveredViaAdmin) '我作为 ${item.matchedAdminCount} 位管理员之一参与',
     ];
     return Card(
       elevation: 0,

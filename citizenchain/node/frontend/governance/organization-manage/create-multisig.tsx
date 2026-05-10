@@ -18,6 +18,8 @@ import { saveKnownSfid } from '../../transaction/offchain-transaction/section';
 import { organizationManageApi } from './api';
 import type { InitialAccountInputDto, InstitutionRegistrationInfoResp } from './types';
 
+const CLEARING_BANK_ADMIN_ORG = 5;
+
 type AdminWalletProfile = {
   address: string;
   pubkeyHex: string;
@@ -177,6 +179,7 @@ export function CreateMultisigInstitutionPage({
         sfidNumber,
         institutionName,
         accounts: accountInputs,
+        adminOrg: CLEARING_BANK_ADMIN_ORG,
         adminPubkeys,
         threshold,
         registerNonce: sfidCredential.register_nonce,

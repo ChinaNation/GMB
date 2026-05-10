@@ -17,7 +17,7 @@ import type {
 type Props = {
   sfidNumber: string;
   onBack: () => void;
-  onOpenAdminList?: () => void;
+  onOpenAdminList?: (sfidNumber: string, orgType: number) => void;
   onSelectProposal?: (proposalId: number, adminWallets: AdminWalletMatch[], sfidNumber: string) => void;
   onCreateProposal?: (sfidNumber: string, orgType: number, institutionName: string, mainAddress: string, adminWallets: AdminWalletMatch[]) => void;
   onCreateProtocolUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
@@ -51,16 +51,16 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
 
   useEffect(() => {
     setLoading(true);
-    // 双层 ID v1:不再需要 getNextProposalId 找起点 — 反向索引内部按 startId 过滤,
-    // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
-    Promise.all([
-      api.getInstitutionDetail(sfidNumber),
-      adminsChangeApi.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
-    ])
-      .then(async ([d, aa]) => {
+    api.getInstitutionDetail(sfidNumber)
+      .then(async (d) => {
+        const aa = await adminsChangeApi
+          .getActivatedAdmins(sfidNumber, { sfidNumber, org: d.orgType })
+          .catch(() => [] as ActivatedAdmin[]);
         setDetail(d);
         setActivatedAdmins(aa);
         try {
+          // 双层 ID v1:不再需要 getNextProposalId 找起点 — 反向索引内部按 startId 过滤,
+          // 用 Number.MAX_SAFE_INTEGER 作首页起点等价于"从最新一条开始取"。
           const page = await api.getInstitutionProposalPage(
             sfidNumber,
             Number.MAX_SAFE_INTEGER,
@@ -238,10 +238,10 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
       <div className="institution-info-section">
         <div
           className="metric-card admin-entry-card"
-          onClick={onOpenAdminList}
+          onClick={() => detail && onOpenAdminList?.(sfidNumber, detail.orgType)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onOpenAdminList?.()}
+          onKeyDown={(e) => e.key === 'Enter' && detail && onOpenAdminList?.(sfidNumber, detail.orgType)}
         >
           <div className="admin-entry-left">
             <div className="admin-entry-title">管理员列表（{detail.admins.length} 人）</div>

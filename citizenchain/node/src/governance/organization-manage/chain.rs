@@ -11,8 +11,9 @@ use sp_core::ConstU32;
 use sp_runtime::{AccountId32, BoundedVec};
 use std::time::Duration;
 
-use crate::governance::admins_change::subject_id::{
-    self as admin_subject_id, SUBJECT_KIND_INSTITUTION_ACCOUNT,
+use crate::governance::admins_change::{
+    storage as admins_storage,
+    subject_id::{self as admin_subject_id, SUBJECT_KIND_INSTITUTION_ACCOUNT},
 };
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
@@ -21,7 +22,6 @@ use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
 use super::types::{AccountWithBalance, InstitutionDetail, InstitutionProposalPage};
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
-const CLEARING_BANK_ADMIN_ORG: u8 = 5;
 
 fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     rpc::rpc_post(
@@ -66,6 +66,7 @@ struct OnChainInstitution {
     institution_name: BoundedVec<u8, ConstU32<128>>,
     main_address: AccountId32,
     fee_address: AccountId32,
+    admin_org: u8,
     admin_count: u32,
     threshold: u32,
     duoqian_admins: BoundedVec<AccountId32, ConstU32<64>>,
@@ -155,6 +156,17 @@ fn fetch_account_free_balance(account: &AccountId32) -> Result<u128, String> {
     }
 }
 
+fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
+    let clean = admin_hex.strip_prefix("0x").unwrap_or(admin_hex);
+    let raw = hex::decode(clean).ok()?;
+    if raw.len() != 32 {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(&raw);
+    pubkey_to_ss58(&bytes).ok()
+}
+
 /// 链上查询某机构的多签信息。返回 `None` = 该 sfid_number 尚未创建机构(进入创建流程)。
 ///
 /// 数据来源:
@@ -222,14 +234,29 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         }
     });
 
-    let duoqian_admins_ss58 = inst
-        .duoqian_admins
-        .iter()
-        .filter_map(|a| {
-            let raw: [u8; 32] = (*a).clone().into();
-            pubkey_to_ss58(&raw).ok()
-        })
-        .collect();
+    let admin_state = admins_storage::fetch_admin_subject(&admin_subject_id, None)?;
+    let (duoqian_admins_ss58, admin_count, threshold) = match admin_state {
+        Some(state) if state.org == inst.admin_org => {
+            let admins = state
+                .admins
+                .iter()
+                .filter_map(|a| admin_hex_to_ss58(a))
+                .collect::<Vec<_>>();
+            (admins, state.admins.len() as u32, state.threshold)
+        }
+        _ => {
+            // 创建 Pending 阶段 AdminsChange::Subjects 尚未激活,详情页回退显示创建快照。
+            let admins = inst
+                .duoqian_admins
+                .iter()
+                .filter_map(|a| {
+                    let raw: [u8; 32] = (*a).clone().into();
+                    pubkey_to_ss58(&raw).ok()
+                })
+                .collect::<Vec<_>>();
+            (admins, inst.admin_count, inst.threshold)
+        }
+    };
     let creator_bytes: [u8; 32] = inst.creator.clone().into();
     let creator_ss58 = pubkey_to_ss58(&creator_bytes).unwrap_or_default();
 
@@ -240,12 +267,12 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         sfid_number: sfid_number.to_string(),
         institution_name,
         admin_subject_id_hex: hex::encode(admin_subject_id),
-        admin_org: CLEARING_BANK_ADMIN_ORG,
+        admin_org: inst.admin_org,
         main_account,
         fee_account,
         other_accounts,
-        admin_count: inst.admin_count,
-        threshold: inst.threshold,
+        admin_count,
+        threshold,
         duoqian_admins_ss58,
         status: inst.status.label().to_string(),
         creator_ss58,

@@ -226,6 +226,7 @@ class _VoteViewState extends State<VoteView> {
     // 批量解析提案上下文
     final contexts = await _contextResolver.resolveBatch(
       proposals.map((p) => p.meta.institutionBytes?.toList()).toList(),
+      internalOrgList: proposals.map((p) => p.meta.internalOrg).toList(),
     );
 
     final items = <_ProposalDisplayItem>[];
@@ -451,7 +452,7 @@ class _VoteViewState extends State<VoteView> {
                       Text(
                         duoqianTransferSummary ??
                             (upgradeDetail != null
-                                ? 'Runtime 升级'
+                                ? '协议升级'
                                 : createDqDetail != null
                                     ? '创建个人多签'
                                     : closeDqDetail != null
@@ -542,7 +543,7 @@ class _VoteViewState extends State<VoteView> {
   ]) {
     final duoqianTransferIcon = DuoqianTransferProposalAdapter.icon(proposal);
     if (duoqianTransferIcon != null) return duoqianTransferIcon;
-    if (upgradeDetail != null) return Icons.arrow_upward; // Runtime 升级
+    if (upgradeDetail != null) return Icons.arrow_upward; // 协议升级
     if (hasCreateDqDetail) return Icons.group_add; // 创建多签
     if (hasCloseDqDetail) return Icons.group_remove; // 关闭多签
     if (resIssuance != null) return Icons.add_circle_outline; // 决议发行
@@ -565,7 +566,7 @@ class _VoteViewState extends State<VoteView> {
     final inst = item.institution;
     final proposalId = item.proposal.meta.proposalId;
 
-    // Runtime 升级提案（联合投票，kind=1）
+    // 协议升级提案（联合投票，kind=1）
     if (item.proposal.runtimeUpgradeDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(

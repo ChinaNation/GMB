@@ -85,6 +85,7 @@ void main() {
         ...compactVec('安徽省储行'),
         ...List<int>.filled(32, 0xa1),
         ...List<int>.filled(32, 0xa2),
+        5,
         ...u32Le(2),
         ...u32Le(2),
         (2 << 2) & 0xff,

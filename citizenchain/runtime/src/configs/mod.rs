@@ -1192,17 +1192,20 @@ impl offchain_transaction::bank_check::SfidAccountQuery<AccountId> for DuoqianSf
 
     /// 扫码支付 Step 2 新增:判定 `who` 是否是 `bank` 多签账户的管理员之一。
     /// 用于费率提案 / 批次提交等治理动作的身份校验。
+    ///
+    /// 中文注释:机构账户按自身地址派生 InstitutionAccount 主体,org 来自
+    /// `Institutions[sfid].admin_org`;ORG_REN 只给 personal-manage 使用。
     fn is_admin_of(bank: &AccountId, who: &AccountId) -> bool {
         let Some(subject_id) =
             organization_manage::Pallet::<Runtime>::resolve_admin_subject_for_account(bank)
         else {
             return false;
         };
-        admins_change::Pallet::<Runtime>::is_active_subject_admin(
-            votingengine::types::ORG_REN,
-            subject_id,
-            who,
-        )
+        let Some(org) = organization_manage::Pallet::<Runtime>::resolve_admin_org_for_account(bank)
+        else {
+            return false;
+        };
+        admins_change::Pallet::<Runtime>::is_active_subject_admin(org, subject_id, who)
     }
 
     /// Step 2(2026-05-02):清算行资格由 SFID 系统的 eligible-search 负责筛选。
@@ -1340,8 +1343,6 @@ impl resolution_issuance::Config for Runtime {
     type JointVoteEngine = JointVote;
     type MaxReasonLen = ResolutionIssuanceMaxReasonLen;
     type MaxAllocations = ResolutionIssuanceMaxAllocations;
-    type MaxSnapshotNonceLength = ConstU32<64>;
-    type MaxSnapshotSignatureLength = ConstU32<64>;
     type MaxTotalIssuance = ResolutionIssuanceMaxTotalIssuance;
     type MaxSingleIssuance = ResolutionIssuanceMaxSingleIssuance;
 }
@@ -1349,13 +1350,12 @@ impl resolution_issuance::Config for Runtime {
 impl runtime_upgrade::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type ProposeOrigin = EnsureJointProposer;
+    type DeveloperUpgradeOrigin = EnsureNrcAdmin;
     type JointVoteEngine = JointVote;
     type RuntimeCodeExecutor = RuntimeSetCodeExecutor;
     type DeveloperUpgradeCheck = GenesisPallet;
     type MaxReasonLen = RuntimeUpgradeMaxReasonLen;
     type MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize;
-    type MaxSnapshotNonceLength = ConstU32<64>;
-    type MaxSnapshotSignatureLength = ConstU32<64>;
     type WeightInfo = runtime_upgrade::weights::SubstrateWeight<Runtime>;
 }
 

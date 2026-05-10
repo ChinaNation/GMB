@@ -62,13 +62,14 @@ class DuoqianManageService {
   /// 提交机构多签 propose_create_institution extrinsic。
   ///
   /// 参数编码以 `memory/07-ai/unified-protocols.md` 的 P-TX-001 为准：
-  /// [0x11][0x05] + sfid_number + institution_name + accounts + admin_count
+  /// [0x11][0x05] + sfid_number + institution_name + accounts + admin_org + admin_count
   ///   + duoqian_admins + threshold + register_nonce + signature
   ///   + province + signer_admin_pubkey。
   Future<({String txHash, int usedNonce})> submitProposeCreateInstitution({
     required String sfidNumber,
     required String institutionName,
     required List<InstitutionInitialAccountInput> accounts,
+    required int adminOrg,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
@@ -84,6 +85,7 @@ class DuoqianManageService {
       sfidNumber: sfidNumber,
       institutionName: institutionName,
       accounts: accounts,
+      adminOrg: adminOrg,
       adminCount: adminCount,
       adminPubkeys: adminPubkeys,
       threshold: threshold,
@@ -106,6 +108,7 @@ class DuoqianManageService {
     required String sfidNumber,
     required String institutionName,
     required List<InstitutionInitialAccountInput> accounts,
+    required int adminOrg,
     required int adminCount,
     required List<Uint8List> adminPubkeys,
     required int threshold,
@@ -136,6 +139,9 @@ class DuoqianManageService {
     }
     if (accounts.isEmpty) {
       throw ArgumentError('accounts 不可为空');
+    }
+    if (adminOrg != 4 && adminOrg != 5) {
+      throw ArgumentError('机构账户管理员 org 必须为 ORG_PUP 或 ORG_OTH');
     }
     if (adminCount < 2 || adminCount != adminPubkeys.length) {
       throw ArgumentError('admin_count 必须 >=2 且等于管理员公钥数量');
@@ -176,6 +182,9 @@ class DuoqianManageService {
       _writeBoundedBytes(output, accountNameBytes);
       output.write(_u128ToLeBytesStatic(account.amountFen));
     }
+
+    // admin_org: u8。机构账户只能使用 ORG_PUP(4) 或 ORG_OTH(5)。
+    output.pushByte(adminOrg);
 
     // admin_count: u32 little-endian
     output.write(_u32ToLeBytesStatic(adminCount));

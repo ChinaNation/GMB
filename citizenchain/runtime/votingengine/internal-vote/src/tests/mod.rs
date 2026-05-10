@@ -677,6 +677,31 @@ fn snapshot_sig_ok() -> votingengine::pallet::VoteSignatureOf<Test> {
         .expect("snapshot signature should fit")
 }
 
+fn prepare_population_snapshot_for(
+    who: AccountId32,
+    eligible_total: u64,
+    nonce: votingengine::pallet::VoteNonceOf<Test>,
+) {
+    assert_ok!(JointVote::prepare_joint_population_snapshot(
+        RuntimeOrigin::signed(who),
+        eligible_total,
+        nonce,
+        snapshot_sig_ok(),
+        province_ok(),
+        signer_admin_pubkey_ok(),
+    ));
+}
+
+fn create_joint_proposal_for(
+    who: AccountId32,
+    eligible_total: u64,
+    nonce: votingengine::pallet::VoteNonceOf<Test>,
+) -> u64 {
+    prepare_population_snapshot_for(who.clone(), eligible_total, nonce);
+    <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(who)
+        .expect("joint proposal should be created")
+}
+
 fn set_joint_callback_should_fail(should_fail: bool) {
     JOINT_CALLBACK_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = should_fail);
 }

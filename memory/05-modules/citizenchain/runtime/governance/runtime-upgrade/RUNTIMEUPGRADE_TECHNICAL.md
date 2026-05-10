@@ -7,34 +7,36 @@
 - 升级提案必须先经过 `votingengine` 的联合投票。
 - 联合阶段由各机构管理员个人钱包直接上链投票，链上按机构阈值自动形成机构结果。
 - 联合投票通过后才允许执行 `set_code`。
+- 开发期直升通道只允许国储会管理员使用，并且必须受 `DeveloperUpgradeEnabled` 开关约束。
 - 投票结果、执行结果必须在链上可追踪。
 
 ### 0.2 提案创建需求
 - 提案必须携带非空升级理由 `reason`。
 - 提案必须携带非空 wasm `code`。
 - 创建提案时同步在 `votingengine` 创建联合投票，使用投票引擎统一分配的 `proposal_id`（本模块不维护独立 ID）。
+- 本模块不接收、不生成、不校验人口快照、联合签名、投票资格和计票数据；这些都属于 `votingengine`。
 
 ### 0.3 联合投票回调需求
-- 联合投票拒绝时，提案必须进入 `Rejected`。
+- 联合投票拒绝时，投票引擎状态保持 `STATUS_REJECTED`。
 - 联合投票通过时，模块必须尝试执行 runtime code。
 - 联合投票结束后，投票引擎侧状态保持真实业务结果：执行成功写为 `STATUS_EXECUTED`，否决保持 `STATUS_REJECTED`，执行失败写为 `STATUS_EXECUTION_FAILED`。
 - 回调直接使用投票引擎的 `proposal_id`，无需映射反查。
 
 ### 0.4 执行失败处理
-- 若联合投票已通过但 `set_code` 执行失败，提案进入 `ExecutionFailed`。
+- 若联合投票已通过但 `set_code` 执行失败，投票引擎状态进入 `STATUS_EXECUTION_FAILED`。
 - runtime wasm 不再内嵌在摘要结构里，而是统一存入 `votingengine::ProposalObject`。
 - 执行成功、拒绝、执行失败后，wasm 对象继续保留到投票引擎 90 天延迟清理统一删除，不由业务模块手工删除。
 
 ### 0.5 可审计与运维需求
 - 需要区分以下事件：提案创建、联合投票终结、升级执行成功、升级执行失败。
-- 提案状态机：
-  - `Voting → Passed`（投票通过且执行成功）
-  - `Voting → Rejected`（投票拒绝）
-  - `Voting → ExecutionFailed`（投票通过但执行失败）
+- 投票引擎侧状态机：
+  - `VOTING → PASSED → EXECUTED`（投票通过且执行成功）
+  - `VOTING → REJECTED`（投票拒绝）
+  - `VOTING → PASSED → EXECUTION_FAILED`（投票通过但执行失败）
 - 所有终态均为不可逆（无重试、无取消）。
 
 ## 1. 模块定位
-`runtime-upgrade` 是"Runtime 升级治理编排模块"，负责：
+`runtime-upgrade` 是"协议升级治理编排模块"，负责：
 - 接收国储会或省储会管理员提交的 wasm 升级提案；
 - 调用 `votingengine` 创建联合投票；
 - 在联合投票回调后执行 `set_code`；
@@ -44,11 +46,24 @@
 
 代码位置：
 - `runtime/governance/runtime-upgrade/src/lib.rs`
+- `node/src/governance/runtime_upgrade/`
+- `node/frontend/governance/runtime-upgrade/`
 
 命名说明：
 - 2026-04-29 起，本模块统一使用 `runtime-upgrade` / `runtime_upgrade` / `RuntimeUpgrade`。
 - 模块位于 `citizenchain/runtime/governance/runtime-upgrade/`。
 - `pallet_index = 13`、call index 与 `MODULE_TAG = b"rt-upg"` 保持不变。
+
+节点侧边界：
+- node 后端 `runtime_upgrade` 只负责读取 wasm、构建协议升级 call data、生成签名请求、提交签名交易。
+- node 前端 `runtime-upgrade` 只负责协议升级/开发升级页面交互和签名流程。
+- node 的 `runtime_upgrade` 不获取人口快照、不接收联合签名上下文、不拥有投票引擎状态、不展示投票终态。
+- 协议升级提案详情展示真实状态时必须以 `VotingEngine::Proposals.status` 为准，`runtime-upgrade` 摘要里不保存业务状态字段。
+
+wuminapp / wumin 边界：
+- wuminapp 的 `governance/runtime-upgrade` 不发起协议升级提案，不选择 WASM，不获取人口快照，不提交 `propose_runtime_upgrade`。
+- wuminapp 只展示协议升级介绍、协议升级提案详情，并保留现有提案详情页投票入口。
+- wumin 冷钱包不恢复 runtime-upgrade SCALE decoder；大 WASM 交易继续走哈希直签例外，由用户核对显示字段中的代码哈希。
 
 ## 2. 运行时接线
 Runtime 配置位置：
@@ -56,14 +71,13 @@ Runtime 配置位置：
 
 当前接线：
 - `ProposeOrigin = EnsureJointProposer`
+- `DeveloperUpgradeOrigin = EnsureNrcAdmin`
 - `JointVoteEngine = VotingEngine`
 - `RuntimeCodeExecutor = RuntimeSetCodeExecutor`
 - `MaxReasonLen = RuntimeUpgradeMaxReasonLen`（1024）
 - `MaxRuntimeCodeSize = RuntimeUpgradeMaxCodeSize`（5 * 1024 * 1024）
 - `VotingEngine::MaxProposalDataLen = 100 * 1024`
 - `VotingEngine::MaxProposalObjectLen = 10 * 1024 * 1024`
-- `MaxSnapshotNonceLength = 64`
-- `MaxSnapshotSignatureLength = 64`
 - `WeightInfo = runtime_upgrade::weights::SubstrateWeight<Runtime>`
 
 说明：
@@ -71,25 +85,22 @@ Runtime 配置位置：
 - 正常生产路径只能由投票引擎通过 `JointVoteResultCallback` 自动回调本模块，避免 Root 手工回放形成第二条执行入口。
 
 ## 3. 核心数据结构
-### 3.1 ProposalStatus
-- `Voting`：创建时摘要快照；生产终态以 votingengine 的 `Proposal.status` 为准。
-- `Passed`：历史兼容枚举，生产回调路径不再写入。
-- `Rejected`：历史兼容枚举，生产回调路径不再写入。
-- `ExecutionFailed`：历史兼容枚举，生产回调路径不再写入。
-
-### 3.2 Proposal（摘要，序列化存入 votingengine ProposalData）
+### 3.1 Proposal（摘要，序列化存入 votingengine ProposalData）
 - `proposer: AccountId`：提案发起人（国储会或省储会管理员）
 - `reason: BoundedVec<u8, MaxReasonLen>`：升级理由
 - `code_hash: Hash`：升级 code 哈希，便于事件与链下审计对齐
-- `status: ProposalStatus`：创建时摘要字段；真实投票/执行状态读取 votingengine。
 
-### 3.3 对象层数据（统一存入 votingengine ProposalObject）
+说明：
+- `Proposal` 只保存业务展示所需摘要，不保存投票状态。
+- 协议升级真实状态只能读取 `votingengine::Proposals.status`。
+
+### 3.2 对象层数据（统一存入 votingengine ProposalObject）
 - `kind = 1`：表示 runtime wasm 对象
 - `object_len`：wasm 字节长度
 - `object_hash`：对象哈希
 - `object bytes`：原始 wasm 字节（对象层上限 10MB，业务自身继续限制 5MB）
 
-### 3.4 模块标识
+### 3.3 模块标识
 - `MODULE_TAG = b"rt-upg"`：存入 ProposalData 的前缀，用于区分不同业务模块，防止跨模块误解码。
 
 ## 4. 存储模型
@@ -107,35 +118,38 @@ Runtime 配置位置：
 2. 校验 `reason` 与 `code` 非空。
 3. 计算 `code_hash`，构造摘要 `Proposal` 并加 `MODULE_TAG` 序列化。
 4. 调用 `JointVoteEngine::create_joint_proposal_with_data_and_object` 创建联合投票，并在同一事务中写入 owner/data/meta 和 runtime wasm 对象。
-5. 不再通过 caller-supplied `MODULE_TAG` 调用投票引擎后续写接口，避免跨模块覆写对象层。
-6. 发出 `RuntimeUpgradeProposed` 事件。
+5. 发出 `RuntimeUpgradeProposed` 事件。
+
+边界：
+- 该接口只接收 `origin / reason / code`。
+- 人口快照、联合签名、投票资格、计票与终态推进均由投票引擎内部流程负责。
 
 ### 5.2 call index 1 空缺
 原 `finalize_joint_vote` 手工入口已删除。该位置保持空缺，不再注册任何 extrinsic。
 
-Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_joint_vote_finalized` 进入：
-1. 从 `ProposalData` 加载提案摘要；若投票引擎 `Proposals` 存在，则要求其状态与本次回调方向一致（通过为 `STATUS_PASSED`，否决为 `STATUS_REJECTED`）。
-2. 若 `approved=false`：
-   - 不改写业务摘要，保持创建时快照
+协议升级联合投票终结流程只允许从 `JointVoteResultCallback::on_joint_vote_finalized` 进入：
+1. 从 `ProposalData` 加载提案摘要，并要求投票引擎 `Proposals` 必须存在。
+2. 要求投票引擎状态与本次回调方向一致：通过为 `STATUS_PASSED`，否决为 `STATUS_REJECTED`。
+3. 若 `approved=false`：
+   - 不改写业务摘要
    - 返回 `ProposalExecutionOutcome::Executed`，投票引擎保持 `STATUS_REJECTED`
    - 发出 `JointVoteFinalized`
-3. 若 `approved=true`：
+4. 若 `approved=true`：
    - 从 `ProposalObject` 加载 runtime wasm
    - 尝试执行 `RuntimeCodeExecutor::execute_runtime_code`
    - 成功：回调返回 `ProposalExecutionOutcome::Executed`
    - 失败：回调返回 `ProposalExecutionOutcome::FatalFailed`
    - 发出 `JointVoteFinalized` + 执行成功或失败事件
-4. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
+5. wasm 对象不由本模块手工删除，统一交由投票引擎 90 天延迟清理。
 
 ### 5.3 `developer_direct_upgrade`（call index = 2）
 说明：
-- 开发期快捷通道：联合提案发起人（国储会或省储会管理员）直接 `set_code`，不走联合投票。
+- 开发期快捷通道：仅国储会管理员直接 `set_code`，不走联合投票。
 - 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
-- node 端第 1 步已把页面入口限制到国储会详情页“开发升级”，后端 Tauri 命令也会校验签名公钥属于本机已激活国储会管理员；runtime 侧 `ProposeOrigin` 仍按现有实现兼容，开发期链上权限收窄到“国储会 19 个管理员任意 1 个”由第 2 步更新 runtime 模块时完成。
 
 流程：
-1. 校验 `ProposeOrigin`。
+1. 校验 `DeveloperUpgradeOrigin`（`EnsureNrcAdmin`）。
 2. 校验 `DeveloperUpgradeCheck::is_enabled()`，关闭则拒绝（`DeveloperUpgradeDisabled`）。
 3. 校验 `code` 非空。
 4. 计算 `code_hash`，调用 `RuntimeCodeExecutor::execute_runtime_code`。
@@ -152,7 +166,7 @@ Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_
 - runtime code 执行成功时，本模块返回 `ProposalExecutionOutcome::Executed`，投票引擎写入执行成功终态
 - runtime code 执行失败时，本模块返回 `ProposalExecutionOutcome::FatalFailed`，投票引擎写入执行失败终态
 
-原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只返回统一执行结果，不再回写 `ProposalData` 中的 `ProposalStatus`；最终状态、`ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
+原因：本模块的执行逻辑运行在投票引擎 `set_status_and_emit` 的回调事务内。业务回调只返回统一执行结果，不回写任何业务状态字段；最终状态、`ProposalFinalized`、清理登记和互斥锁释放由投票引擎外层统一执行一次。
 
 提案状态流转（投票引擎侧）：
 - `VOTING → PASSED → EXECUTED`（联合投票通过且 runtime code 执行成功）
@@ -160,13 +174,11 @@ Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_
 - `VOTING → PASSED → EXECUTION_FAILED`（联合投票通过，但 runtime code 执行失败）
 
 说明：
-- 本模块自身的 `ProposalStatus` 仅作为历史兼容和摘要结构字段保留，生产回调不再回写它。
 - 节点 UI / RPC 查询层如果需要面向用户展示真实升级结果，应读取 `VotingEngine::Proposals.status`；`ProposalData` 只用于展示 proposer、reason、code_hash 等摘要信息。
   - `VotingEngine::STATUS_VOTING` / `STATUS_PASSED` → 投票中或执行待重试态
   - `VotingEngine::STATUS_REJECTED` → 已否决
   - `VotingEngine::STATUS_EXECUTED` → 已执行
   - `VotingEngine::STATUS_EXECUTION_FAILED` → 执行失败
-  - `Passed` / `Rejected` / `ExecutionFailed` → 历史兼容枚举，不再由生产回调路径写入
 
 ## 6. 回调路径
 `JointVoteResultCallback::on_joint_vote_finalized`：
@@ -186,7 +198,7 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 - 先执行，根据结果返回 `ProposalExecutionOutcome`
 - 执行成功由投票引擎进入 `STATUS_EXECUTED`
 - 执行失败由投票引擎进入 `STATUS_EXECUTION_FAILED`
-- 业务摘要中的 `ProposalStatus` 不再作为生产终态来源
+- 业务摘要不再保存业务状态字段
 
 ### 7.2 已修复风险：大 wasm 直接塞入 ProposalData 导致提案创建失败
 旧实现中整份 runtime wasm 会直接编码进 `ProposalData`，而投票引擎通用摘要存储无法承载 MB 级对象，runtime 升级提案会在创建阶段触发 `ProposalDataTooLarge`。
@@ -211,7 +223,8 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 ### 7.4 已修复风险：benchmark 与实际逻辑不一致
 旧版 benchmark 存在偏差。现已修复：
 - `propose_runtime_upgrade` benchmark 改为真实 extrinsic
-- `propose_runtime_upgrade` benchmark 已同步 ADR-008 step3 的 `province` 与 `signer_admin_pubkey` 参数，避免 runtime-benchmarks 聚合编译时继续走旧签名
+- `propose_runtime_upgrade` benchmark 已删除人口快照、联合签名、省份和签名管理员公钥参数。
+- 权重数值与生成注释不手工改，按项目规则交给 CI benchmark 流程重算。
 - `finalize_joint_vote` benchmark 与权重项已删除，终结执行成本由 `votingengine` 的联合投票终态回调路径覆盖。
 
 ### 7.5 已收口入口
@@ -220,25 +233,26 @@ Runtime 层的 `RuntimeJointVoteResultCallback` 负责路由：先尝试 `resolu
 ## 8. 中文注释覆盖重点
 本模块当前已在以下关键位置补充中文注释：
 - `RuntimeCodeExecutor` 职责边界
-- `ProposalStatus` 各状态语义
+- `propose_runtime_upgrade` 与 votingengine 的职责边界
 - 联合投票通过后的执行/失败分叉
 - `ProposalExecutionOutcome::Executed / FatalFailed` 与投票引擎状态的映射原因
 - `on_joint_vote_finalized` 回调入口
 
 ## 9. 测试覆盖
-已覆盖（当前单测与框架完整性检查共 16 个测试）：
+已覆盖（当前单测与框架完整性检查共 17 个测试）：
 - 国储会和省储会管理员均可发起提案，非联合提案发起人拒绝
 - 提案摘要与对象数据正确分别存入 votingengine
-- 联合投票拒绝进入 `Rejected`（含 wasm 对象保留到统一清理）
-- 联合投票通过并成功执行进入 `Passed`
-- 联合投票通过但执行失败进入 `ExecutionFailed`
+- 联合投票拒绝时保持 votingengine `STATUS_REJECTED`（含 wasm 对象保留到统一清理）
+- 联合投票通过并成功执行进入 votingengine `STATUS_EXECUTED`
+- 联合投票通过但执行失败进入 votingengine `STATUS_EXECUTION_FAILED`
 - 联合投票通过成功时投票引擎状态进入 `STATUS_EXECUTED`
 - `owns_proposal` 能正确识别本模块提案
 - 已终结的提案不可重复终结（`ProposalNotVoting`）
 - 不存在的提案终结失败（`ProposalNotFound`）
-- 开发者直升：联合提案发起人可直接升级
+- 开发者直升：国储会管理员可直接升级
+- 开发者直升：省储会管理员拒绝（`BadOrigin`）
 - 开发者直升：开关关闭时拒绝（`DeveloperUpgradeDisabled`）
-- 开发者直升：非联合提案发起人拒绝（`BadOrigin`）
+- 开发者直升：非国储会管理员拒绝（`BadOrigin`）
 - 开发者直升：空 code 拒绝（`EmptyRuntimeCode`）
 - GenesisConfig 构建成功
 - Runtime 完整性检查
@@ -248,8 +262,9 @@ Runtime 集成测试：
 - 回调正确路由到本模块并执行拒绝流程
 
 本地验证：
-- `cargo test -p runtime-upgrade`
-- `cargo check -p citizenchain --features runtime-benchmarks`
+- 2026-05-10 `cargo test --manifest-path citizenchain/Cargo.toml -p runtime-upgrade --lib`：通过，17 passed。
+- 2026-05-10 `cargo check --manifest-path citizenchain/Cargo.toml -p runtime-upgrade`：通过。
+- 已执行格式整理与残留扫描。
 
 ## 10. 文件索引
 - 模块代码：`src/lib.rs`

@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use crate::governance::signing::pubkey_to_ss58;
 use crate::governance::storage_keys;
-use crate::transaction::offchain_transaction::types::ClearingBankNodeOnChainInfo;
 use crate::shared::{constants::RPC_RESPONSE_LIMIT_SMALL, rpc};
+use crate::transaction::offchain_transaction::types::ClearingBankNodeOnChainInfo;
 
 const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 

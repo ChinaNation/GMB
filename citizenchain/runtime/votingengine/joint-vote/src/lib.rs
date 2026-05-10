@@ -97,8 +97,8 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
 
     /// pallet 自身 StorageVersion。
-    /// v1:sub-pallet 拆分迁移完成(storage 已从 `VotingEngine` 前缀搬到 `JointVote`)。
-    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+    /// v2:联合投票人口快照准备状态收回到 joint-vote，不再由业务模块透传。
+    pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config {
@@ -161,9 +161,46 @@ pub mod pallet {
     pub type UsedPopulationSnapshotNonce<T: Config> =
         StorageMap<_, Blake2_128Concat, T::Hash, bool, ValueQuery>;
 
+    #[derive(
+        Encode,
+        Decode,
+        DecodeWithMemTracking,
+        Clone,
+        RuntimeDebug,
+        TypeInfo,
+        MaxEncodedLen,
+        PartialEq,
+        Eq,
+    )]
+    pub struct PreparedPopulationSnapshot<BlockNumber, Hash> {
+        /// 中文注释：联合公投阶段可投票总人数，由投票引擎验签后缓存。
+        pub eligible_total: u64,
+        /// 中文注释：人口快照 nonce 哈希，用于审计和防重放。
+        pub nonce_hash: Hash,
+        /// 中文注释：准备快照所在区块。
+        pub prepared_at: BlockNumber,
+    }
+
+    /// 已验签的人口快照缓存：发起联合提案时由投票引擎消费。
+    #[pallet::storage]
+    #[pallet::getter(fn pending_population_snapshot)]
+    pub type PendingPopulationSnapshots<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        T::AccountId,
+        PreparedPopulationSnapshot<BlockNumberFor<T>, T::Hash>,
+        OptionQuery,
+    >;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
+        /// 联合投票人口快照已由投票引擎验签并缓存。
+        PopulationSnapshotPrepared {
+            who: T::AccountId,
+            eligible_total: u64,
+            nonce_hash: T::Hash,
+        },
         /// 联合投票中某机构管理员已投出一票。
         JointAdminVoteCast {
             proposal_id: u64,
@@ -192,6 +229,8 @@ pub mod pallet {
         CitizenEligibleTotalNotSet,
         /// 人口快照参数无效(nonce 为空/已使用/签名验证失败)。
         InvalidPopulationSnapshot,
+        /// 发起联合提案前尚未准备人口快照。
+        PopulationSnapshotNotPrepared,
         /// SFID 资格校验未通过(binding_id 未绑定或不匹配)。
         SfidNotEligible,
         /// SFID 投票凭证验签失败或已被消费。
@@ -242,6 +281,31 @@ pub mod pallet {
                 approve,
             )
         }
+
+        /// 准备联合投票人口快照。
+        ///
+        /// 中文注释：人口快照、联合签名、nonce 防重放全部属于投票引擎。
+        /// 业务模块只能在随后创建提案时消费已准备快照，不能再透传这些字段。
+        #[pallet::call_index(2)]
+        #[pallet::weight(<T as Config>::WeightInfo::prepare_joint_population_snapshot())]
+        pub fn prepare_joint_population_snapshot(
+            origin: OriginFor<T>,
+            eligible_total: u64,
+            snapshot_nonce: votingengine::pallet::VoteNonceOf<T>,
+            signature: votingengine::pallet::VoteSignatureOf<T>,
+            province: BoundedVec<u8, ConstU32<64>>,
+            signer_admin_pubkey: [u8; 32],
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            Self::do_prepare_population_snapshot(
+                who,
+                eligible_total,
+                snapshot_nonce,
+                signature,
+                province.as_slice(),
+                &signer_admin_pubkey,
+            )
+        }
     }
 }
 
@@ -250,59 +314,17 @@ pub mod pallet {
 // ──────────────────────────────────────────────────────────────────
 
 impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
-    fn create_joint_proposal(
-        who: T::AccountId,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError> {
-        let snapshot_nonce: votingengine::pallet::VoteNonceOf<T> = snapshot_nonce
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
-        let signature: votingengine::pallet::VoteSignatureOf<T> = signature
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
-        Self::do_create_joint_proposal(
-            who,
-            eligible_total,
-            snapshot_nonce,
-            signature,
-            province,
-            signer_admin_pubkey,
-        )
+    fn create_joint_proposal(who: T::AccountId) -> Result<u64, DispatchError> {
+        Self::do_create_joint_proposal(who)
     }
 
     fn create_joint_proposal_with_data(
         who: T::AccountId,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let snapshot_nonce: votingengine::pallet::VoteNonceOf<T> = snapshot_nonce
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
-        let signature: votingengine::pallet::VoteSignatureOf<T> = signature
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
         frame_support::storage::with_transaction(|| {
-            let proposal_id = match Self::do_create_joint_proposal(
-                who,
-                eligible_total,
-                snapshot_nonce,
-                signature,
-                province,
-                signer_admin_pubkey,
-            ) {
+            let proposal_id = match Self::do_create_joint_proposal(who) {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };
@@ -321,33 +343,13 @@ impl<T: Config> votingengine::JointVoteEngine<T::AccountId> for Pallet<T> {
 
     fn create_joint_proposal_with_data_and_object(
         who: T::AccountId,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
         object_kind: u8,
         object_data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let snapshot_nonce: votingengine::pallet::VoteNonceOf<T> = snapshot_nonce
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
-        let signature: votingengine::pallet::VoteSignatureOf<T> = signature
-            .to_vec()
-            .try_into()
-            .map_err(|_| Error::<T>::InvalidPopulationSnapshot)?;
         frame_support::storage::with_transaction(|| {
-            let proposal_id = match Self::do_create_joint_proposal(
-                who,
-                eligible_total,
-                snapshot_nonce,
-                signature,
-                province,
-                signer_admin_pubkey,
-            ) {
+            let proposal_id = match Self::do_create_joint_proposal(who) {
                 Ok(id) => id,
                 Err(err) => return frame_support::storage::TransactionOutcome::Rollback(Err(err)),
             };

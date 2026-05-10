@@ -4,7 +4,7 @@
 
 节点桌面端需要在多个功能里访问 SFID HTTP API：
 
-- 治理提案创建时读取人口快照
+- 机构注册等 SFID 服务调用
 - 清算行添加页搜索具备清算行资格的机构
 
 这些调用必须使用同一套地址规则，避免本地开发节点误连正式 SFID，
@@ -51,5 +51,5 @@ SFID_BASE_URL=http://新的-sfid-服务地址:8899
 
 | 调用方 | 用途 |
 |---|---|
-| `governance/sfid_api.rs` | 公民投票人口快照 |
+| `governance/organization-manage/sfid.rs` | 机构注册凭证、清算行候选查询 |
 | `offchain/sfid.rs` | 清算行资格候选搜索 |

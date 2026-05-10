@@ -51,7 +51,7 @@
 - 本模块处理三类多签账户转账：
   - 创世预置的治理机构（NRC / PRC / PRB）
   - `personal-manage` 注册并处于 Active 状态的个人多签账户（`ORG_REN`）
-  - `organization-manage` 注册并处于 Active 状态的机构账户（`ORG_REN`）
+  - `organization-manage` 注册并处于 Active 状态的机构账户（`ORG_PUP / ORG_OTH`）
 - 当前也尚未接入新补充的内置机构 `ZF / LF / JC / JY / SF`。
 - 本模块不负责投票引擎实现，投票逻辑委托给 `votingengine` 的 `InternalVoteEngine`。
 
@@ -64,7 +64,7 @@
 
 | 模块 | 职责 | 地址类型 | 审批方式 |
 | --- | --- | --- | --- |
-| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `sfid` 主签名登记 + `ORG_REN` 内部投票 |
+| `organization-manage` | 多签名地址的注册、创建、关闭 | 注册的非治理机构账户 | `sfid` 主签名登记 + `ORG_PUP / ORG_OTH` 内部投票 |
 | `duoqian-transfer` | 多签名地址转账 | 预置治理机构 + 注册型 Active 多签机构 | 链上内部投票引擎（逐票投票） |
 
 ### 0.4 与 `resolution-destro` 的关系
@@ -425,7 +425,7 @@ pub trait Config:
 }
 ```
 
-说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。
+说明：`Currency`、`InternalVoteEngine`、`ProtectedSourceChecker`、`InstitutionAsset` 等类型由上游 `organization_manage::Config` 和 `votingengine::Config` 提供；个人/机构注册账户状态通过本模块的 `PersonalQuery` / `InstitutionQuery` 配置项注入。机构账户提案的实际 org 由 `InstitutionQuery::lookup_admin_org(account)` 返回，必须是 `ORG_PUP / ORG_OTH`，传 `ORG_REN` 会被 `InstitutionOrgMismatch` 拒绝。
 
 ## 11. Weight 估算
 

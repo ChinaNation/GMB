@@ -1,7 +1,7 @@
 //! 转发 SFID `/api/v1/app/clearing-banks/eligible-search`,把"资格白名单内但可能未激活"
 //! 候选列表给前端"添加清算行"页用。
 //!
-//! 与 `governance/sfid_api.rs` 共用 crate 根层 `sfid_config` 配置。
+//! 机构注册凭证客户端，只服务 organization-manage 业务边界。
 //! 本地 debug 默认查 127.0.0.1,正式 release 默认查 147 服务器。
 //!
 //! ## 反序列化契约(2026-05-01 修复 P0)
@@ -37,9 +37,7 @@ use std::time::Duration;
 
 use crate::shared::sfid_config;
 
-use super::types::{
-    EligibleClearingBankCandidate, InstitutionRegistrationInfoResp,
-};
+use super::types::{EligibleClearingBankCandidate, InstitutionRegistrationInfoResp};
 
 const SFID_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 

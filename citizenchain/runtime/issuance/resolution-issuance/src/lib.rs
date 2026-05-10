@@ -43,8 +43,6 @@ pub mod pallet {
         RecipientAmount<<T as frame_system::Config>::AccountId, BalanceOf<T>>,
         <T as Config>::MaxAllocations,
     >;
-    pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
-    pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
 
     /// 中文注释：联合投票终结后的业务执行结果，用于回调时告知投票引擎写入最终执行状态。
     pub(crate) enum FinalizeOutcome {
@@ -74,10 +72,6 @@ pub mod pallet {
         type MaxReasonLen: Get<u32>;
         #[pallet::constant]
         type MaxAllocations: Get<u32>;
-        #[pallet::constant]
-        type MaxSnapshotNonceLength: Get<u32>;
-        #[pallet::constant]
-        type MaxSnapshotSignatureLength: Get<u32>;
         #[pallet::constant]
         type MaxTotalIssuance: Get<BalanceOf<Self>>;
         #[pallet::constant]
@@ -251,8 +245,8 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 创建“决议发行”联合投票提案。
-        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
-        /// 由 votingengine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
+        /// 中文注释：本模块只提交决议发行业务内容；人口快照、联合签名、
+        /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_resolution_issuance())]
         pub fn propose_resolution_issuance(
@@ -260,24 +254,9 @@ pub mod pallet {
             reason: ReasonOf<T>,
             total_amount: BalanceOf<T>,
             allocations: AllocationOf<T>,
-            eligible_total: u64,
-            snapshot_nonce: SnapshotNonceOf<T>,
-            signature: SnapshotSignatureOf<T>,
-            province: BoundedVec<u8, ConstU32<64>>,
-            signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
-            Self::create_resolution_issuance_proposal(
-                proposer,
-                reason,
-                total_amount,
-                allocations,
-                eligible_total,
-                snapshot_nonce,
-                signature,
-                province,
-                signer_admin_pubkey,
-            )
+            Self::create_resolution_issuance_proposal(proposer, reason, total_amount, allocations)
         }
 
         /// 更新链上合法收款账户集合（只允许新增，不允许删除）。

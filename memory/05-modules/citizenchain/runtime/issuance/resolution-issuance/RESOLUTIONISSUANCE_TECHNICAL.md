@@ -24,6 +24,7 @@
 - `propose_resolution_issuance` 保持 call index `0`，降低冷钱包签名路径的变更范围。
 - `finalize_joint_vote` 手工 extrinsic 已删除，call index `1` 保持空缺，避免 Root 或误配 origin 绕过投票引擎。
 - 提案核心数据、owner、业务 data 和投票凭证清理由 `votingengine` 终态清理队列统一处理，本模块不再持有独立清理入口。
+- 本模块只负责决议发行业务提案和执行回调，不接收、不生成、不校验人口快照、联合签名、地区或签名管理员公钥；这些全部属于 `votingengine` 的联合投票流程。
 - 旧 index `7` 不再注册任何 pallet。
 - 当前链处于开发期 fresh genesis 口径，合并不做历史 storage 迁移；`migration.rs` 只推进 `StorageVersion`，不再为 `AllowedRecipients` 保留运行期兜底写入。如果未来已有运行链数据，必须单独设计显式迁移。
 
@@ -76,9 +77,9 @@ citizenchain/runtime/issuance/resolution-issuance/
 
 ## 6. 核心流程
 
-1. 管理员调用 `propose_resolution_issuance`。
+1. 管理员调用 `propose_resolution_issuance`，只提交决议发行业务数据。
 2. 模块校验理由、总金额、分配明细和合法收款名单。
-3. 模块通过 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票提案，并在同一事务中写入 owner/data/meta。
+3. 模块通过 `JointVoteEngine::create_joint_proposal_with_data` 创建联合投票提案，并在同一事务中写入 owner/data/meta；人口快照准备和消费由投票引擎完成。
 4. `ProposalData` 内容为 `MODULE_TAG + IssuanceProposalData`。
 5. 投票引擎终结联合投票后，在自身状态转换事务内回调 `ResolutionIssuance`。
 6. 如果投票通过，模块在同一事务内执行发行、记录防重放并递减计数；提案数据由 votingengine 终态清理队列统一延迟清理。
@@ -120,7 +121,7 @@ WASM_BUILD_FROM_SOURCE=1 cargo check -p citizenchain --features runtime-benchmar
 
 ## 10. 权重状态
 
-- `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口；`propose_resolution_issuance` benchmark 已同步 ADR-008 step3 的 `province` 与 `signer_admin_pubkey` 参数，避免 runtime-benchmarks 聚合编译时继续走旧签名。
+- `benchmarks.rs` 已覆盖 `set_allowed_recipients`、`propose_resolution_issuance`、`clear_executed`、`set_paused` 四个公开入口；`propose_resolution_issuance` benchmark 已删除人口快照、联合签名、省份和签名管理员公钥参数，避免业务模块继续承载投票引擎职责。
 - Cargo feature：`runtime-benchmarks` 会向 `pallet-balances` 与 `votingengine` 传播；`primitives` 当前不暴露 benchmark feature，不在传播列表中。
 - 当前本地尝试生成正式 `weights.rs` 时，普通 CI WASM 缺少 Benchmark Runtime API；`WASM_BUILD_FROM_SOURCE=1` 又被 `wasm32v1-none` 下 `serde_core` / `byte-slice-cast` 的 `std` feature 问题阻塞。
 - 因此 `weights.rs` 暂时采用偏高保守 fallback，发布前必须准备 benchmark runtime WASM 后重新生成。

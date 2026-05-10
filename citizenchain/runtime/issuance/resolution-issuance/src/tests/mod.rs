@@ -8,7 +8,10 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system as system;
-use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
+use sp_runtime::{
+    traits::{Hash, IdentityLookup},
+    AccountId32, BuildStorage, DispatchError,
+};
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -96,21 +99,7 @@ thread_local! {
 
 pub struct TestJointVoteEngine;
 impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    fn create_joint_proposal(
-        _who: AccountId32,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError> {
-        if eligible_total == 0
-            || snapshot_nonce.is_empty()
-            || signature.is_empty()
-            || province.is_empty()
-        {
-            return Err(DispatchError::Other("bad snapshot"));
-        }
+    fn create_joint_proposal(_who: AccountId32) -> Result<u64, DispatchError> {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
             let v = *id;
@@ -121,22 +110,10 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
 
     fn create_joint_proposal_with_data(
         who: AccountId32,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal(
-            who,
-            eligible_total,
-            snapshot_nonce,
-            signature,
-            province,
-            signer_admin_pubkey,
-        )?;
+        let proposal_id = Self::create_joint_proposal(who)?;
         let bounded_data: frame_support::BoundedVec<
             u8,
             <Test as votingengine::Config>::MaxProposalDataLen,
@@ -150,6 +127,35 @@ impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
         votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
         votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
+        Ok(proposal_id)
+    }
+
+    fn create_joint_proposal_with_data_and_object(
+        who: AccountId32,
+        module_tag: &[u8],
+        data: Vec<u8>,
+        object_kind: u8,
+        object_data: Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        let proposal_id = Self::create_joint_proposal_with_data(who, module_tag, data)?;
+        let object_len = u32::try_from(object_data.len())
+            .map_err(|_| DispatchError::Other("proposal object too large"))?;
+        let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
+        let bounded_object: frame_support::BoundedVec<
+            u8,
+            <Test as votingengine::Config>::MaxProposalObjectLen,
+        > = object_data
+            .try_into()
+            .map_err(|_| DispatchError::Other("proposal object too large"))?;
+        votingengine::ProposalObject::<Test>::insert(proposal_id, bounded_object);
+        votingengine::ProposalObjectMeta::<Test>::insert(
+            proposal_id,
+            votingengine::ProposalObjectMetadata {
+                kind: object_kind,
+                object_len,
+                object_hash,
+            },
+        );
         Ok(proposal_id)
     }
 }
@@ -258,8 +264,6 @@ impl pallet::Config for Test {
     type JointVoteEngine = TestJointVoteEngine;
     type MaxReasonLen = ConstU32<128>;
     type MaxAllocations = ConstU32<64>;
-    type MaxSnapshotNonceLength = ConstU32<64>;
-    type MaxSnapshotSignatureLength = ConstU32<64>;
     type MaxTotalIssuance = ConstU128<14_434_973_780_000>;
     type MaxSingleIssuance = ConstU128<14_434_973_780_000>;
     type WeightInfo = ();
@@ -349,31 +353,6 @@ fn call_joint_callback(
 
 fn reason_ok() -> pallet::ReasonOf<Test> {
     b"issuance".to_vec().try_into().expect("reason should fit")
-}
-
-fn nonce_ok() -> pallet::SnapshotNonceOf<Test> {
-    b"snap-nonce".to_vec().try_into().expect("nonce should fit")
-}
-
-fn sig_ok() -> pallet::SnapshotSignatureOf<Test> {
-    b"snap-signature"
-        .to_vec()
-        .try_into()
-        .expect("signature should fit")
-}
-
-/// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
-/// 仅在 `TestPopulationSnapshotVerifier` / `TestJointVoteEngine` 内做空字段非空检验,
-/// 不参与真实 sr25519 验签(真实验签覆盖留 runtime 层测试)。
-fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-    b"liaoning"
-        .to_vec()
-        .try_into()
-        .expect("province should fit")
-}
-
-fn signer_admin_pubkey_ok() -> [u8; 32] {
-    [7u8; 32]
 }
 
 fn reserve_council_accounts() -> Vec<AccountId32> {

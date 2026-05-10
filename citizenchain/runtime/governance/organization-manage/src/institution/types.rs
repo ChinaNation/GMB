@@ -45,7 +45,7 @@ pub enum InstitutionLifecycleStatus {
     Closed,
 }
 
-/// 机构级多签信息。管理员和阈值绑定到机构，而不是绑定到单个账户名。
+/// 机构信息。管理员更换主体由主账户地址派生,机构本身只保存归属与展示信息。
 #[derive(
     Encode,
     Decode,
@@ -62,6 +62,8 @@ pub struct InstitutionInfo<AdminList, AccountId, BlockNumber, AccountName> {
     pub institution_name: AccountName,
     pub main_address: AccountId,
     pub fee_address: AccountId,
+    /// 管理员更换使用的 org：机构账户只能是 ORG_PUP 或 ORG_OTH。
+    pub admin_org: u8,
     pub admin_count: u32,
     pub threshold: u32,
     pub duoqian_admins: AdminList,
@@ -161,6 +163,8 @@ pub struct CreateInstitutionAction<
     pub main_address: AccountId,
     pub fee_address: AccountId,
     pub proposer: AccountId,
+    /// 创建阶段写入 pending admin subject 的机构账户 org。
+    pub admin_org: u8,
     pub admin_count: u32,
     pub threshold: u32,
     pub duoqian_admins: AdminList,

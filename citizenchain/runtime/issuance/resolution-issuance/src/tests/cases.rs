@@ -10,12 +10,7 @@ fn only_authorized_admin_can_propose() {
                 RuntimeOrigin::signed(AccountId32::new([2u8; 32])),
                 reason_ok(),
                 4300,
-                allocations_ok(4300),
-                10,
-                nonce_ok(),
-                sig_ok(),
-                province_ok(),
-                signer_admin_pubkey_ok()
+                allocations_ok(4300)
             ),
             sp_runtime::DispatchError::BadOrigin
         );
@@ -35,12 +30,7 @@ fn reject_invalid_allocation_count() {
                 RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
                 reason_ok(),
                 1000,
-                alloc,
-                10,
-                nonce_ok(),
-                sig_ok(),
-                province_ok(),
-                signer_admin_pubkey_ok()
+                alloc
             ),
             pallet::Error::<Test>::InvalidAllocationCount
         );
@@ -54,12 +44,7 @@ fn approved_callback_executes_issuance() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         insert_engine_proposal(100);
@@ -84,12 +69,7 @@ fn callback_rejects_non_finalizable_engine_status() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         insert_engine_proposal_with_status(100, votingengine::STATUS_VOTING);
@@ -110,12 +90,7 @@ fn callback_requires_votingengine_scope() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         insert_engine_proposal(100);
@@ -135,12 +110,7 @@ fn second_callback_after_executed_is_rejected() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         insert_engine_proposal(100);
@@ -167,12 +137,7 @@ fn rejected_callback_does_not_issue() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         insert_engine_proposal_with_status(100, votingengine::STATUS_REJECTED);
@@ -190,12 +155,7 @@ fn callback_rejects_corrupted_reason_with_reason_too_long() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
 
         overwrite_proposal_data(
@@ -225,12 +185,7 @@ fn clear_executed_does_not_allow_replay() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));
@@ -260,12 +215,7 @@ fn pause_blocks_approved_execution() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
         assert_ok!(ResolutionIssuance::set_paused(RuntimeOrigin::root(), true));
         insert_engine_proposal(100);
@@ -289,12 +239,7 @@ fn set_allowed_recipients_rejected_when_voting_exists() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
         let recipients: BoundedVec<AccountId32, ConstU32<64>> = reserve_council_accounts()
             .try_into()
@@ -313,12 +258,7 @@ fn issuance_event_comes_from_unified_pallet() {
             RuntimeOrigin::signed(AccountId32::new([1u8; 32])),
             reason_ok(),
             4300,
-            allocations_ok(4300),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            allocations_ok(4300)
         ));
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));

@@ -31,7 +31,7 @@ void main() {
   }
 
   group('DuoqianManageService', () {
-    test('builds propose_create_institution call_data as P-TX-001 10 fields',
+    test('builds propose_create_institution call_data as P-TX-001 11 fields',
         () {
       final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
       final admin2 = Uint8List.fromList(List<int>.filled(32, 0x22));
@@ -52,6 +52,7 @@ void main() {
             amountFen: BigInt.from(222),
           ),
         ],
+        adminOrg: 5,
         adminCount: 2,
         adminPubkeys: [admin1, admin2],
         threshold: 2,
@@ -71,6 +72,7 @@ void main() {
         ...u128Le(BigInt.from(111)),
         ...compactVec('费用账户'),
         ...u128Le(BigInt.from(222)),
+        5,
         ...u32Le(2),
         (2 << 2) & 0xff,
         ...admin1,

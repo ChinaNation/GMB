@@ -13,12 +13,12 @@ use std::{
     time::Duration,
 };
 
+use super::super::rpc::OffchainClearingRpcImpl;
+use super::super::start_clearing_bank_components;
 use super::keystore::{OffchainKeystore, SigningKey};
 use super::packer::{BatchSigner, BatchSubmitter};
 use super::signer::KeystoreBatchSigner;
 use super::submitter::{PoolBatchSubmitter, TxPool};
-use super::super::rpc::OffchainClearingRpcImpl;
-use super::super::start_clearing_bank_components;
 
 /// 根据 CLI 参数启动清算行 offchain 运行组件。
 ///

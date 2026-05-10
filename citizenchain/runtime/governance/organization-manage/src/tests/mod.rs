@@ -11,7 +11,7 @@ use frame_support::{
 use frame_system as system;
 use sp_core::{sr25519, Pair as PairT};
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
-use votingengine::types::ORG_REN;
+use votingengine::types::{is_registered_multisig_org, ORG_OTH};
 
 type Balance = u128;
 type Block = frame_system::mocking::MockBlock<Test>;
@@ -180,16 +180,16 @@ impl
     }
 }
 
-// ── Provider:仅支持 ORG_REN 的机构主体 ──
+// ── Provider:支持注册多签动态主体(ORG_REN/ORG_PUP/ORG_OTH) ──
 //
-// 机构 institution = subject_id_from_sfid_number(sfid_number),不能直接反推 sfid_number。
-// 所以这里直接读 admins-change::Subjects[institution] 的 admins 列表
+// 机构账户 institution = subject_id_from_institution_account(account)。
+// 测试环境直接读 admins-change::Subjects[institution] 的管理员列表
 // (propose 阶段就以 Pending 状态写入,带 admins/threshold)。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
     fn is_internal_admin(org: u8, institution: SubjectId, who: &AccountId32) -> bool {
-        if org != ORG_REN {
+        if !is_registered_multisig_org(org) {
             return false;
         }
         admins_change::Subjects::<Test>::get(institution)
@@ -198,7 +198,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 
     fn get_admin_list(org: u8, institution: SubjectId) -> Option<alloc::vec::Vec<AccountId32>> {
-        if org != ORG_REN {
+        if !is_registered_multisig_org(org) {
             return None;
         }
         admins_change::Subjects::<Test>::get(institution).map(|s| s.admins.into_inner())
@@ -208,7 +208,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 pub struct TestInternalAdminCountProvider;
 impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider {
     fn admin_count(org: u8, institution: SubjectId) -> Option<u32> {
-        if org != ORG_REN {
+        if !is_registered_multisig_org(org) {
             return None;
         }
         admins_change::Subjects::<Test>::get(institution).map(|s| s.admins.len() as u32)
@@ -218,14 +218,14 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
 pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        if org != ORG_REN {
+        if !is_registered_multisig_org(org) {
             return false;
         }
         admins_change::Subjects::<Test>::contains_key(institution)
     }
 
     fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org != ORG_REN {
+        if !is_registered_multisig_org(org) {
             return None;
         }
         admins_change::Subjects::<Test>::get(institution).map(|s| s.threshold)

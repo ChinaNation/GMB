@@ -15,17 +15,6 @@ export type VoteSubmitResult = {
   txHash: string;
 };
 
-export type ProposeUpgradeRequestResult = {
-  requestJson: string;
-  requestId: string;
-  expectedPayloadHash: string;
-  signNonce: number;
-  signBlockNumber: number;
-  eligibleTotal: number;
-  snapshotNonce: string;
-  snapshotSignature: string;
-};
-
 // ── 投票状态 ──
 
 export type UserVoteStatus = {
@@ -48,7 +37,9 @@ export type AdminWalletMatch = {
 
 export type ActivatedAdmin = {
   pubkeyHex: string;
-  sfidNumber: string;
+  subjectIdHex: string;
+  org: number;
+  kind: number;
   activatedAtMs: number;
 };
 
@@ -161,7 +152,6 @@ export type RuntimeUpgradeDetail = {
   proposerHex: string;
   reason: string;
   codeHashHex: string;
-  status: number;
 };
 
 export type ProposalFullInfo = DuoqianTransferProposalDetails & {

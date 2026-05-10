@@ -6,7 +6,7 @@
 //! 业务流程:
 //! 1. 校验地址是机构地址(否则返回 `NotInstitutionDuoqian`)
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
-//! 3. 校验发起人是该机构的活跃管理员(admins-change::Subjects[sfid_number])
+//! 3. 校验发起人是该机构账户的活跃管理员(admins-change::Subjects[account subject])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
 //! 5. 全员投票阈值 = active_subject_admin_count
 //! 6. 写入 InstitutionPendingClose[address] = proposal_id 防并发
@@ -85,7 +85,8 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     // 校验发起人是机构主体的活跃管理员
     let subject_id = Pallet::<T>::resolve_admin_subject_for_account(&duoqian_address)
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let org = votingengine::types::ORG_REN;
+    let org = Pallet::<T>::resolve_admin_org_for_account(&duoqian_address)
+        .ok_or(Error::<T>::DuoqianNotFound)?;
     ensure!(
         admins_change::Pallet::<T>::is_active_subject_admin(org, subject_id, &who),
         Error::<T>::PermissionDenied

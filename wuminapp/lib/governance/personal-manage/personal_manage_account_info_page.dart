@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
@@ -44,6 +45,9 @@ class _PersonalManageAccountInfoPageState
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ChainRpc _rpc = ChainRpc();
 
+  AdminSubjectIdentity get _subjectIdentity =>
+      AdminSubjectIdentity.fromInstitution(widget.institution);
+
   bool _loading = true;
   String? _error;
 
@@ -71,7 +75,7 @@ class _PersonalManageAccountInfoPageState
         _personalManageService.fetchPersonalAccount(
           widget.institution.duoqianAddress,
         ),
-        _adminService.fetchAdmins(widget.institution.sfidNumber),
+        _adminService.fetchAdmins(_subjectIdentity),
       ]);
 
       final accountInfo = results[0] as DuoqianAccountInfo?;
@@ -425,7 +429,7 @@ class _PersonalManageAccountInfoPageState
 
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.sfidNumber);
+        _adminService.clearCache(_subjectIdentity);
         await _load();
       },
       child: ListView(
@@ -624,9 +628,8 @@ class _PersonalManageAccountInfoPageState
   /// - Active:链上 free_balance 实时(无标签)
   /// - Pending / null:发起人承诺金额(snapshot.amount_fen)+ "不可用" 灰色标签
   Widget _buildBalanceRow(DuoqianStatus? status) {
-    final balanceStr = _balanceYuan == null
-        ? '—'
-        : AmountFormat.format(_balanceYuan!);
+    final balanceStr =
+        _balanceYuan == null ? '—' : AmountFormat.format(_balanceYuan!);
     final isPending = status != DuoqianStatus.active;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -2,7 +2,7 @@
 
 use crate::pallet::{
     AllocationOf, BalanceOf, Config, Error, Event, FinalizeOutcome, Pallet, ReasonOf,
-    SnapshotNonceOf, SnapshotSignatureOf, VotingProposalCount,
+    VotingProposalCount,
 };
 use codec::{Decode, Encode};
 use frame_support::{
@@ -50,11 +50,6 @@ impl<T: Config> Pallet<T> {
         reason: ReasonOf<T>,
         total_amount: BalanceOf<T>,
         allocations: AllocationOf<T>,
-        eligible_total: u64,
-        snapshot_nonce: SnapshotNonceOf<T>,
-        signature: SnapshotSignatureOf<T>,
-        province: BoundedVec<u8, ConstU32<64>>,
-        signer_admin_pubkey: [u8; 32],
     ) -> DispatchResult {
         ensure!(!reason.is_empty(), Error::<T>::EmptyReason);
         Self::validate_proposal_allocations(&total_amount, allocations.as_slice())?;
@@ -72,11 +67,6 @@ impl<T: Config> Pallet<T> {
             encoded.extend_from_slice(&data.encode());
             let proposal_id = match T::JointVoteEngine::create_joint_proposal_with_data(
                 proposer.clone(),
-                eligible_total,
-                snapshot_nonce.as_slice(),
-                signature.as_slice(),
-                province.as_slice(),
-                &signer_admin_pubkey,
                 crate::MODULE_TAG,
                 encoded,
             ) {

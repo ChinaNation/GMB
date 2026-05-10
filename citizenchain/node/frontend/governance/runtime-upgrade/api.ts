@@ -1,23 +1,29 @@
 import { invoke } from '../../core/tauri';
 import type {
-  ProposeUpgradeRequestResult,
   VoteSignRequestResult,
   VoteSubmitResult,
 } from '../types';
 
-// Runtime 升级专用 Tauri API。创建入口只在 node 端,移动端只展示/签名。
+export type ProposeUpgradeRequestResult = VoteSignRequestResult;
+
+// 协议升级专用 Tauri API。这里只提交业务提案，投票流程统一交给投票引擎。
 export const runtimeUpgradeApi = {
-  buildProposeUpgradeRequest: (pubkeyHex: string, wasmPath: string, reason: string) =>
-    invoke<ProposeUpgradeRequestResult>('build_propose_upgrade_request', { pubkeyHex, wasmPath, reason }),
+  buildProposeUpgradeRequest: (
+    pubkeyHex: string,
+    wasmPath: string,
+    reason: string,
+  ) =>
+    invoke<ProposeUpgradeRequestResult>('build_propose_upgrade_request', {
+      pubkeyHex,
+      wasmPath,
+      reason,
+    }),
   submitProposeUpgrade: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
     wasmPath: string,
     reason: string,
-    eligibleTotal: number,
-    snapshotNonce: string,
-    snapshotSignature: string,
     signNonce: number,
     signBlockNumber: number,
     responseJson: string,
@@ -28,9 +34,6 @@ export const runtimeUpgradeApi = {
       expectedPayloadHash,
       wasmPath,
       reason,
-      eligibleTotal,
-      snapshotNonce,
-      snapshotSignature,
       signNonce,
       signBlockNumber,
       responseJson,
