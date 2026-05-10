@@ -1,9 +1,9 @@
-// 首页模块入口，按职责拆分为进程管理、RPC、身份管理和交易四个子模块。
+// 首页模块入口，按职责拆分为进程管理、RPC 和身份管理三个子模块。
+// 钱包/链上转账已下沉到 `transaction::onchain_transaction`，对齐 runtime/transaction/onchain-transaction 边界。
 
 pub(crate) mod identity;
 pub(crate) mod process;
 pub(crate) mod rpc;
-pub(crate) mod transaction;
 
 // 公共类型与 Tauri 命令（Tauri command 注册在 desktop.rs 中使用子模块全路径）。
 pub(crate) use process::{cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState};

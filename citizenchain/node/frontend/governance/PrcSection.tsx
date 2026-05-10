@@ -5,8 +5,8 @@ import { AdminListPage, AdminSetChangePage } from './admins_change';
 import { InstitutionListView } from './InstitutionListView';
 import { InstitutionDetailPage } from './InstitutionDetailPage';
 import { ProposalDetailPage } from './ProposalDetailPage';
-import { CreateDuoqianTransferPage } from '../duoqian-transfer/CreateProposalPage';
-import { SweepProposalPage } from '../duoqian-transfer/SweepProposalPage';
+import { CreateDuoqianTransferPage } from '../transaction/duoqian-transfer/CreateProposalPage';
+import { SweepProposalPage } from '../transaction/duoqian-transfer/SweepProposalPage';
 import type { AdminWalletMatch } from './types';
 
 type PrcView =

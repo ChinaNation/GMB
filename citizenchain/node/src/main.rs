@@ -13,16 +13,13 @@
 
 mod core;
 mod desktop;
-mod duoqian_transfer;
 mod governance;
 mod home;
 mod mining;
 mod other;
-// 扫码支付清算体系 清算行节点组件。
-// Step 2b-iv-a 清理:删除旧 offchain_{ledger,packer,gossip}.rs(省储行清算模型
-mod offchain;
 mod settings;
 mod shared;
+mod transaction;
 
 fn main() {
     // 有子命令（build-spec、purge-chain 等）→ CLI 工具模式

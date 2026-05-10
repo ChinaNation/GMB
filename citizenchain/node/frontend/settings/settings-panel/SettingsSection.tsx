@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminsChangeApi } from '../../governance/admins_change/api';
-import { homeNodeApi } from '../../home/home-node/api';
+import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
-import type { ChainStatus } from '../../home/home-node/types';
+import type { ChainStatus } from '../../home/types';
 import type { BootnodeKey, RewardWallet } from '../types';
 
 export function SettingsSection() {

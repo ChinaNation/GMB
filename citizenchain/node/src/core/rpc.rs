@@ -78,7 +78,7 @@ pub struct FullDeps<C, P> {
     /// 扫码支付 Step 2b-ii-β-2-b 新增:清算行节点的 RPC 命名空间实现。
     /// None 表示本节点未以清算行角色启动,跳过 `offchain_*` RPC 注入。
     pub offchain_clearing_rpc:
-        Option<Arc<crate::offchain::offchain_transaction::rpc::OffchainClearingRpcImpl>>,
+        Option<Arc<crate::transaction::offchain_transaction::rpc::OffchainClearingRpcImpl>>,
 }
 
 /// 构造并签名一笔 powr 矿工交易，提交到交易池。
@@ -233,7 +233,7 @@ where
 
     // 扫码支付 Step 2b-ii-β-2-b:若清算行组件已启动,合并 offchain_* RPC 命名空间。
     if let Some(impl_) = offchain_clearing_rpc {
-        use crate::offchain::offchain_transaction::rpc::OffchainClearingRpcServer;
+        use crate::transaction::offchain_transaction::rpc::OffchainClearingRpcServer;
         module
             .merge(OffchainClearingRpcServer::into_rpc((*impl_).clone()))
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {

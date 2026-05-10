@@ -8,10 +8,10 @@ import { useState } from 'react';
 import { NrcSection } from '../governance/NrcSection';
 import { PrcSection } from '../governance/PrcSection';
 import { PrbSection } from '../governance/PrbSection';
-import { ClearingBankSection } from '../offchain/section';
-import { HomeNodeSection } from '../home/home-node';
-import { TransactionPanel } from '../home/transaction/TransactionPanel';
-import { MiningDashboardSection } from '../mining/dashboard';
+import { ClearingBankSection } from '../transaction/offchain-transaction/section';
+import { HomeNodeSection } from '../home';
+import { TransactionPanel } from '../transaction/onchain-transaction/TransactionPanel';
+import { MiningDashboardSection } from '../mining';
 import { OtherTabsSection } from '../other/other-tabs';
 import { SettingsSection } from '../settings/settings-panel';
 

@@ -9,8 +9,8 @@
 
 import { useEffect, useState } from 'react';
 import { sanitizeError } from '../../core/tauri';
-import { offchainApi } from '../../offchain/api';
-import type { ClearingBankNodeOnChainInfo } from '../../offchain/types';
+import { offchainApi } from '../../transaction/offchain-transaction/api';
+import type { ClearingBankNodeOnChainInfo } from '../../transaction/offchain-transaction/types';
 import { organizationManageApi } from './api';
 import type { InstitutionDetail, InstitutionProposalItem } from './types';
 
