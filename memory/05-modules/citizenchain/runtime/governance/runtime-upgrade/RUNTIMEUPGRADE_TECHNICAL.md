@@ -132,6 +132,7 @@ Runtime 升级联合投票终结流程只允许从 `JointVoteResultCallback::on_
 - 开发期快捷通道：联合提案发起人（国储会或省储会管理员）直接 `set_code`，不走联合投票。
 - 仅在 `genesis-pallet` 的 `DeveloperUpgradeEnabled` 为 `true` 时可用。
 - 链进入运行期后此调用永久失效，升级必须走 `propose_runtime_upgrade` 联合投票。
+- node 端第 1 步已把页面入口限制到国储会详情页“开发升级”，后端 Tauri 命令也会校验签名公钥属于本机已激活国储会管理员；runtime 侧 `ProposeOrigin` 仍按现有实现兼容，开发期链上权限收窄到“国储会 19 个管理员任意 1 个”由第 2 步更新 runtime 模块时完成。
 
 流程：
 1. 校验 `ProposeOrigin`。
