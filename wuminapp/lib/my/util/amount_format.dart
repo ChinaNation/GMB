@@ -136,7 +136,8 @@ class ThousandSeparatorFormatter extends TextInputFormatter {
     // 拆整数部分和小数部分
     final parts = cleaned.split('.');
     final intPart = parts[0];
-    final decPart = parts.length > 1 ? '.${parts[1]}' : (text.endsWith('.') ? '.' : '');
+    final decPart =
+        parts.length > 1 ? '.${parts[1]}' : (text.endsWith('.') ? '.' : '');
 
     // 添加千分位
     final formattedInt = intPart.replaceAllMapped(

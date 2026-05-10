@@ -37,7 +37,9 @@ jobs:
       # 原逻辑每次 CI 跑都把 spec_version +1,与"重新创世 + 钉死版本号"的语义冲突。
       # 版本号从此纯手动管理:runtime 代码改时由开发者显式改 spec_version 提交。
 
+      # 本地 push 只验证 WASM 能否编译；只有 GitHub 页面手动运行时才维护产物。
       - name: 清理旧版 WASM artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -61,6 +63,8 @@ jobs:
         run: cargo build --release -p citizenchain
 
       - name: 上传 WASM
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: citizenchain-wasm

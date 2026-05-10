@@ -1,5 +1,5 @@
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 多签转账管理员钱包余额检查。

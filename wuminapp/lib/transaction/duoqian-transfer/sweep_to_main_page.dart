@@ -13,7 +13,7 @@ import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_ba
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 治理机构手续费划转提案创建页面。
@@ -306,22 +306,18 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
           ),
           _buildInstitutionHeader(),
           const SizedBox(height: 16),
-
           _buildLabel('发起管理员'),
           const SizedBox(height: 6),
           _buildAdminSelector(),
           const SizedBox(height: 16),
-
           _buildLabel('转出账户（费用账户）'),
           const SizedBox(height: 6),
           _buildReadOnlyField(_fromSs58),
           const SizedBox(height: 16),
-
           _buildLabel('划入账户（本机构主账户）'),
           const SizedBox(height: 6),
           _buildReadOnlyField(_toSs58),
           const SizedBox(height: 16),
-
           _buildLabel('划转金额（元）'),
           const SizedBox(height: 6),
           TextField(
@@ -356,7 +352,6 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 12),
-
           _buildInfoRow(
             '预估手续费',
             _estimatedFee > 0
@@ -364,7 +359,6 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
                 : '--',
           ),
           const SizedBox(height: 8),
-
           _buildInfoRow(
             '费用账户可用余额',
             _loadingBalance
@@ -374,7 +368,6 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
                     : '查询失败',
           ),
           const SizedBox(height: 24),
-
           SizedBox(
             width: double.infinity,
             height: 48,

@@ -6,14 +6,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen_tab_page.dart';
+import 'package:wuminapp_mobile/my/myid/myid_service.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/ui/transaction_tab_page.dart';
-import 'package:wuminapp_mobile/util/screenshot_guard.dart';
+import 'package:wuminapp_mobile/my/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
-import 'package:wuminapp_mobile/user/user.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
+import 'package:wuminapp_mobile/my/user/user.dart';
 
 import 'ui/app_theme.dart';
 
@@ -543,7 +543,7 @@ class MessagePage extends StatefulWidget {
 }
 
 class _MessagePageState extends State<MessagePage> {
-  final SfidBindingService _sfidBindingService = SfidBindingService();
+  final MyIdService _myIdService = MyIdService();
   String _selfAccountPubkeyHex = '';
 
   @override
@@ -553,7 +553,7 @@ class _MessagePageState extends State<MessagePage> {
   }
 
   Future<void> _loadSelfAccount() async {
-    final state = await _sfidBindingService.getState();
+    final state = await _myIdService.getState();
     if (!mounted) {
       return;
     }

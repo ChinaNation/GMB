@@ -9,7 +9,7 @@ import 'package:wuminapp_mobile/governance/admins-change/services/institution_ad
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
 import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_admin_list_page.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';

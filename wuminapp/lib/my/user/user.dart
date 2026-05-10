@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -11,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import 'package:wuminapp_mobile/my/myid/myid_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
@@ -18,12 +18,10 @@ import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
-import 'package:wuminapp_mobile/user/user_service.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/sfid_binding_service.dart';
+import 'package:wuminapp_mobile/my/user/user_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
-import 'package:wuminapp_mobile/user/vote_sign_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -337,6 +335,23 @@ class _ProfilePageState extends State<ProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
                 leading: const Icon(
+                  Icons.badge_outlined,
+                  color: AppTheme.primaryDark,
+                  size: 22,
+                ),
+                title: '电子护照',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const MyIdPage()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _buildEntryCard(
+                leading: const Icon(
                   Icons.settings_outlined,
                   color: AppTheme.textSecondary,
                   size: 22,
@@ -372,34 +387,15 @@ class ProfileEditPage extends StatefulWidget {
 class _ProfileEditPageState extends State<ProfileEditPage> {
   final ImagePicker _imagePicker = ImagePicker();
   final UserProfileService _profileService = UserProfileService();
-  final SfidBindingService _sfidBindingService = SfidBindingService();
 
   final GlobalKey _qrKey = GlobalKey();
   late UserProfileState _profile;
-  SfidBindState _voteBindState =
-      const SfidBindState(status: SfidBindStatus.unset);
-  bool _voteSubmitting = false;
   bool _isSavingQr = false;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.initialState;
-    _loadVoteState();
-  }
-
-  Future<void> _loadVoteState() async {
-    // 先读本地缓存快速显示，再异步同步后端状态
-    final localState = await _sfidBindingService.getState();
-    if (!mounted) return;
-    setState(() {
-      _voteBindState = localState;
-    });
-    final synced = await _sfidBindingService.syncFromBackend();
-    if (!mounted) return;
-    setState(() {
-      _voteBindState = synced;
-    });
   }
 
   // ---- 二维码数据 ----
@@ -550,115 +546,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     });
   }
 
-  // ---- 投票账户 ----
-
-  Future<void> _selectVoteWallet() async {
-    if (_voteSubmitting) return;
-    final wallet = await Navigator.of(context).push<WalletProfile>(
-      MaterialPageRoute(
-        builder: (_) => const MyWalletPage(selectForBind: true),
-      ),
-    );
-    if (!mounted || wallet == null) return;
-    setState(() {
-      _voteSubmitting = true;
-    });
-    try {
-      // 构造签名消息：CITIZEN_VOTE_REGISTER|{SS58地址}|{unix_timestamp}
-      final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final signMessage = 'CITIZEN_VOTE_REGISTER|${wallet.address}|$timestamp';
-      final messageBytes = Uint8List.fromList(utf8.encode(signMessage));
-
-      // 2026-04-22 两色识别整改:删除投票账户注册的冷钱包 QR 签名分支
-      // (Registry 无对应 action + decoder 无解码分支 → 必红色拒签)。
-      // 热钱包路径保留;冷钱包用户需先改用热钱包注册投票账户,
-      // 或等后续补 decoder / envelope 两色通路再启用。
-      if (!wallet.isHotWallet) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('冷钱包暂不支持投票账户注册,请使用热钱包')),
-        );
-        setState(() => _voteSubmitting = false);
-        return;
-      }
-      final walletManager = WalletManager();
-      final signatureBytes = await walletManager.signWithWallet(
-        wallet.walletIndex,
-        messageBytes,
-      );
-
-      final sigHex =
-          '0x${signatureBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final state = await _sfidBindingService.registerVoteAccount(
-        walletAddress: wallet.address,
-        walletPubkeyHex: wallet.pubkeyHex,
-        isColdWallet: wallet.isColdWallet,
-        signatureHex: sigHex,
-        signMessage: signMessage,
-      );
-      if (!mounted) return;
-      setState(() {
-        _voteBindState = state;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('投票账户已注册，等待现场绑定')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('投票账户注册失败：$e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _voteSubmitting = false;
-        });
-      }
-    }
-  }
-
-  String _voteStatusLabel() {
-    return switch (_voteBindState.status) {
-      SfidBindStatus.unset => '未设置',
-      SfidBindStatus.pending => '待绑定',
-      SfidBindStatus.bound => '已绑定',
-    };
-  }
-
-  Color _voteStatusColor() {
-    return switch (_voteBindState.status) {
-      SfidBindStatus.unset => AppTheme.textTertiary,
-      SfidBindStatus.pending => AppTheme.warning,
-      SfidBindStatus.bound => AppTheme.success,
-    };
-  }
-
-  /// 热钱包用户到 SFID 现场时，扫描 sign_request → 本机签名 → 展示回执。
-  Future<void> _openVoteSignPage() async {
-    if (_voteBindState.walletPubkeyHex == null) return;
-    // 查找匹配的热钱包
-    final walletManager = WalletManager();
-    final wallets = await walletManager.getWallets();
-    final wallet = wallets.cast<WalletProfile?>().firstWhere(
-          (w) =>
-              w!.pubkeyHex.toLowerCase() ==
-              _voteBindState.walletPubkeyHex!.toLowerCase(),
-          orElse: () => null,
-        );
-    if (!mounted) return;
-    if (wallet == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未找到匹配的钱包')),
-      );
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => VoteSignPage(wallet: wallet),
-      ),
-    );
-  }
-
   // ---- 通用行构建 ----
 
   Widget _buildSettingRow({
@@ -807,62 +694,6 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
             label: '通信账户',
             value: _profile.communicationAddress ?? '未设置',
             onTap: _selectCommunicationWallet,
-          ),
-          const Divider(height: 1),
-          // ---- 投票账户 ----
-          _buildSettingRow(
-            label: '投票账户',
-            value: _voteBindState.walletAddress ?? '未设置',
-            trailing: _voteBindState.status != SfidBindStatus.unset
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _voteStatusColor().withAlpha(25),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _voteStatusLabel(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: _voteStatusColor(),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      // 热钱包 + 待绑定 → 显示【签名】按钮
-                      if (_voteBindState.status == SfidBindStatus.pending &&
-                          !_voteBindState.isColdWallet) ...[
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _openVoteSignPage,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppTheme.success.withAlpha(25),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                  color: AppTheme.success.withAlpha(80)),
-                            ),
-                            child: const Text(
-                              '签名',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.success,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  )
-                : null,
-            onTap: _voteSubmitting ? null : _selectVoteWallet,
           ),
           const Divider(height: 1),
         ],

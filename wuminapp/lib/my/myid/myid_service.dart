@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/wallet/capabilities/api_client.dart';
+import 'package:wuminapp_mobile/my/myid/myid_api.dart';
 
-/// 投票账户绑定状态（与后端 /api/v1/app/vote-account/status 对齐）。
-enum SfidBindStatus { unset, pending, bound }
+/// 电子护照绑定状态（与后端状态响应对齐）。
+enum MyIdStatus { unset, pending, bound }
 
-class SfidBindState {
-  const SfidBindState({
+class MyIdState {
+  const MyIdState({
     required this.status,
     this.walletAddress,
     this.walletPubkeyHex,
@@ -14,31 +14,32 @@ class SfidBindState {
     this.updatedAtMillis,
   });
 
-  final SfidBindStatus status;
+  final MyIdStatus status;
   final String? walletAddress;
   final String? walletPubkeyHex;
   final bool isColdWallet;
   final int? updatedAtMillis;
 }
 
-class SfidBindingService {
-  final ApiClient _apiClient = ApiClient();
+class MyIdService {
+  final MyIdApi _api = MyIdApi();
 
+  // 中文注释：存储 key 暂时沿用旧 sfid.bind.*，避免用户升级后丢失已登记状态。
   static const _kStatus = 'sfid.bind.status';
   static const _kAddress = 'sfid.bind.address';
   static const _kPubkeyHex = 'sfid.bind.pubkey_hex';
   static const _kIsColdWallet = 'sfid.bind.is_cold_wallet';
   static const _kUpdatedAt = 'sfid.bind.updated_at';
 
-  Future<SfidBindState> getState() async {
+  Future<MyIdState> getState() async {
     final prefs = await SharedPreferences.getInstance();
     final rawStatus = prefs.getString(_kStatus) ?? 'unset';
     final status = switch (rawStatus) {
-      'pending' => SfidBindStatus.pending,
-      'bound' => SfidBindStatus.bound,
-      _ => SfidBindStatus.unset,
+      'pending' => MyIdStatus.pending,
+      'bound' => MyIdStatus.bound,
+      _ => MyIdStatus.unset,
     };
-    return SfidBindState(
+    return MyIdState(
       status: status,
       walletAddress: prefs.getString(_kAddress),
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
@@ -47,17 +48,17 @@ class SfidBindingService {
     );
   }
 
-  /// 注册投票账户（带签名证明私钥所有权）。
+  /// 注册电子护照账户（带签名证明私钥所有权）。
   ///
-  /// 调用后端 POST /api/v1/app/vote-account/register，成功后本地状态变为 pending。
-  Future<SfidBindState> registerVoteAccount({
+  /// 调用后端注册接口成功后，本地状态变为 pending。
+  Future<MyIdState> registerMyId({
     required String walletAddress,
     required String walletPubkeyHex,
     required bool isColdWallet,
     required String signatureHex,
     required String signMessage,
   }) async {
-    await _apiClient.registerVoteAccount(
+    await _api.registerMyId(
       address: walletAddress,
       pubkeyHex: walletPubkeyHex,
       signatureHex: signatureHex,
@@ -70,21 +71,20 @@ class SfidBindingService {
     await prefs.setString(_kPubkeyHex, walletPubkeyHex.trim());
     await prefs.setBool(_kIsColdWallet, isColdWallet);
     await prefs.setInt(_kUpdatedAt, now);
-    debugPrint('vote account registered: address=$walletAddress');
+    debugPrint('myid registered: address=$walletAddress');
     return getState();
   }
 
-  /// 从后端同步投票账户状态。
+  /// 从后端同步电子护照状态。
   ///
   /// 在 initState / onResume 时调用，静默更新本地缓存。
-  Future<SfidBindState> syncFromBackend() async {
+  Future<MyIdState> syncFromBackend() async {
     final localState = await getState();
-    if (localState.walletAddress == null ||
-        localState.walletAddress!.isEmpty) {
+    if (localState.walletAddress == null || localState.walletAddress!.isEmpty) {
       return localState;
     }
     try {
-      final remote = await _apiClient.queryVoteAccountStatus(
+      final remote = await _api.queryMyIdStatus(
         localState.walletAddress!,
       );
       final prefs = await SharedPreferences.getInstance();
@@ -111,7 +111,7 @@ class SfidBindingService {
   }
 
   /// 清除本地绑定状态。
-  Future<SfidBindState> clear() async {
+  Future<MyIdState> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kStatus);
     await prefs.remove(_kAddress);

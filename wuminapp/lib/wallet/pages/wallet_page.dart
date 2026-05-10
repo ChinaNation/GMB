@@ -3,11 +3,12 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/trade/local_tx_store.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/user/user_service.dart' show UserProfileService;
+import 'package:wuminapp_mobile/my/user/user_service.dart'
+    show UserProfileService;
 import 'package:wuminapp_mobile/ui/widgets/bip39_input.dart';
 import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
-import 'package:wuminapp_mobile/util/screenshot_guard.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -24,10 +25,14 @@ class MyWalletPage extends StatefulWidget {
     super.key,
     this.selectForTrade = false,
     this.selectForBind = false,
+    this.bindPurposeLabel = '通信账户',
   });
 
   final bool selectForTrade;
   final bool selectForBind;
+
+  /// 中文注释：选择绑定钱包时的用途文案；电子护照复用钱包选择器时传入“电子护照”。
+  final String bindPurposeLabel;
 
   @override
   State<MyWalletPage> createState() => _MyWalletPageState();
@@ -286,7 +291,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
       builder: (context) => AlertDialog(
         title: const Text('设置账户'),
         content: Text(
-          '确定使用「${wallet.walletName}」作为通信账户吗？',
+          '确定使用「${wallet.walletName}」作为${widget.bindPurposeLabel}吗？',
         ),
         actions: [
           TextButton(
@@ -471,7 +476,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
         title: Text(
           widget.selectForTrade
               ? '选择交易钱包'
-              : (widget.selectForBind ? '选择绑定钱包' : '我的钱包'),
+              : (widget.selectForBind
+                  ? '选择${widget.bindPurposeLabel}'
+                  : '我的钱包'),
         ),
         centerTitle: true,
         actions: [

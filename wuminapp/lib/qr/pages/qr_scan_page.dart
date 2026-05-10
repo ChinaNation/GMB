@@ -5,7 +5,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
 import 'package:wuminapp_mobile/qr/qr_router.dart';
-import 'package:wuminapp_mobile/user/user_service.dart';
+import 'package:wuminapp_mobile/my/user/user_service.dart';
 
 /// 扫码结果：收款码预填数据。
 class QrScanTransferResult {

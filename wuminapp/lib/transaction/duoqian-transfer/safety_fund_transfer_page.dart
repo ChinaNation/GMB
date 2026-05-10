@@ -17,7 +17,7 @@ import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_ba
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
-import 'package:wuminapp_mobile/util/amount_format.dart';
+import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 国储会安全基金转账提案创建页面。
@@ -68,7 +68,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
     _selectedWallet = widget.adminWallets.first;
     final hex = widget.institution.accounts?.safetyFundAddress;
     if (hex == null) {
-      throw StateError('国储会 InstitutionAccounts.safetyFundAddress 为空,无法发起安全基金转账');
+      throw StateError(
+          '国储会 InstitutionAccounts.safetyFundAddress 为空,无法发起安全基金转账');
     }
     _safetyFundAddressHex = hex;
     _fromSs58 = _accountHexToSs58(_safetyFundAddressHex);
@@ -142,7 +143,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       return false;
     }
     final beneficiaryBytes = Keyring().decodeAddress(address);
-    final safetyFundBytes = Uint8List.fromList(_hexToBytes(_safetyFundAddressHex));
+    final safetyFundBytes =
+        Uint8List.fromList(_hexToBytes(_safetyFundAddressHex));
     if (_bytesEqual(beneficiaryBytes, safetyFundBytes)) {
       setState(() => _addressError = '收款地址不能与安全基金账户相同');
       return false;
@@ -240,8 +242,7 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
           payloadHex: '0x${_toHex(payload)}',
           display: SignDisplay(
             action: 'propose_safety_fund_transfer',
-            summary:
-                '国储会安全基金 提案转账 $amountFormatted GMB 给 $beneficiary',
+            summary: '国储会安全基金 提案转账 $amountFormatted GMB 给 $beneficiary',
             fields: [
               const SignDisplayField(
                   key: 'institution', label: '转出账户', value: '国储会安全基金账户'),
@@ -362,17 +363,14 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
           ),
           _buildInstitutionHeader(),
           const SizedBox(height: 16),
-
           _buildLabel('发起管理员'),
           const SizedBox(height: 6),
           _buildAdminSelector(),
           const SizedBox(height: 16),
-
           _buildLabel('转出账户（国储会安全基金）'),
           const SizedBox(height: 6),
           _buildReadOnlyField(_fromSs58),
           const SizedBox(height: 16),
-
           _buildLabel('收款地址'),
           const SizedBox(height: 6),
           TextField(
@@ -413,7 +411,6 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 16),
-
           _buildLabel('转账金额（元）'),
           const SizedBox(height: 6),
           TextField(
@@ -448,7 +445,6 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 12),
-
           _buildInfoRow(
             '预估手续费',
             _estimatedFee > 0
@@ -456,7 +452,6 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
                 : '--',
           ),
           const SizedBox(height: 8),
-
           _buildInfoRow(
             '安全基金可用余额',
             _loadingBalance
@@ -466,7 +461,6 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
                     : '查询失败',
           ),
           const SizedBox(height: 16),
-
           _buildLabel('备注（可选）'),
           const SizedBox(height: 6),
           TextField(
@@ -490,7 +484,6 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
             style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 24),
-
           SizedBox(
             width: double.infinity,
             height: 48,
