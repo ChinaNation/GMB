@@ -35,7 +35,7 @@ wuminapp/
 │   ├── offchain/           ← 扫码支付 / 清算行能力
 │   ├── organization-manage/← 机构多签管理
 │   ├── personal-manage/    ← 个人多签管理
-│   ├── admins_change/      ← 管理员更换一级业务模块
+│   ├── admins-change/      ← 管理员更换一级业务模块
 │   ├── citizen/            ← 公民 Tab：投票 / 治理 / 机构 / 提案
 │   ├── qr/                 ← 二维码统一模块（登录/收款/用户码）
 │   ├── signer/
@@ -86,7 +86,7 @@ proposal/
 多签转账不是 `proposal/` 子目录；创建、详情、投票、列表适配和缓存统一放在
 `lib/duoqian-transfer/`。
 
-管理员更换和管理员激活归属 `lib/admins_change/`，不放在 `lib/proposal/` 或 `lib/institution/` 下；`proposal` 与机构页只保留入口跳转或调用。机构多签注册/关闭与 OrganizationManage 提案详情归属 `lib/organization-manage/`，不在公民提案三级目录下预留。
+管理员更换和管理员激活归属 `lib/admins-change/`，不放在 `lib/proposal/` 或 `lib/institution/` 下；`proposal` 与机构页只保留入口跳转或调用。机构多签注册/关闭与 OrganizationManage 提案详情归属 `lib/organization-manage/`，不在公民提案三级目录下预留。
 
 ### 4.2.1 机构页
 
@@ -109,7 +109,7 @@ proposal/
 - `ChainProgressBanner` 保留在交易页内容顶部
 - 交易页在链上支付表单上方保留/插入独立入口：
   - 个人多签 → `lib/personal-manage/personal_manage_account_list_page.dart`
-  - 机构多签 → `lib/organization-manage/shared/duoqian_account_list_page.dart`
+  - 机构多签 → `lib/organization-manage/duoqian_account_list_page.dart`
   - 扫码支付 → `lib/offchain/services/offchain_scan_flow.dart`
 - `lib/onchain/` 只处理普通链上转账 / 纯链上支付
 - 扫码支付、机构多签、个人多签均为独立功能域，不通过链上支付页或 `trade_page.dart` 聚合页分流

@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/admins-change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/proposal/shared/internal_vote_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/pending_vote_store.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
@@ -25,9 +25,9 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/personal-manage/personal_manage_models.dart'
     as personal_models;
 import 'package:wuminapp_mobile/personal-manage/personal_manage_service.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_models.dart'
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_models.dart'
     as org_models;
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_service.dart';
 
 /// 多签管理提案详情页：展示创建/关闭提案信息、投票进度及投票操作。
 class DuoqianManageDetailPage extends StatefulWidget {

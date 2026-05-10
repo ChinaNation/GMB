@@ -8,7 +8,7 @@ import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/admin_institution_codec.dart';
+import 'package:wuminapp_mobile/common/admin_institution_codec.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';

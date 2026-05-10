@@ -7,7 +7,7 @@ const cbPath = path.join(repoRoot, 'citizenchain/runtime/primitives/china/china_
 const chPath = path.join(repoRoot, 'citizenchain/runtime/primitives/china/china_ch.rs');
 const outPath = path.join(
   repoRoot,
-  'wuminapp/lib/institution/governance_institution_registry.generated.dart',
+  'wuminapp/lib/organization-manage/governance_institution_registry.generated.dart',
 );
 
 function extractField(block, name) {
@@ -88,7 +88,7 @@ if (chItems.length !== 43) {
 }
 
 const content = [
-  "part of 'institution_data.dart';",
+  "part of 'institution_registry.dart';",
   '',
   '// 本文件由 tools/generate_wuminapp_governance_registry.mjs 自动生成。',
   '// 中文注释：治理机构名称、身份 ID 和制度账户地址来自 runtime primitives；管理员必须动态读取链上 AdminsChange::Subjects。',
