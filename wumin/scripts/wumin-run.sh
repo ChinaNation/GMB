@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WUMIN_DIR="$SCRIPT_DIR/.."
 REPO_ROOT="$SCRIPT_DIR/../.."
+TARGET_DIR="$WUMIN_DIR/target"
+TARGET_APK="$TARGET_DIR/公民钱包.apk"
 cd "$WUMIN_DIR"
 
 echo "==> 同步 runtime pallet/call 索引..."
@@ -45,5 +47,21 @@ echo "==> 获取依赖..."
 flutter pub get
 echo "==> 生成 Isar 代码..."
 flutter pub run build_runner build --delete-conflicting-outputs
+
+sync_android_artifact() {
+  local source_apk="build/app/outputs/flutter-apk/app-debug.apk"
+  if [[ -f "$source_apk" ]]; then
+    mkdir -p "$TARGET_DIR"
+    cp "$source_apk" "$TARGET_APK"
+    echo "==> Android 产物已保存: $TARGET_APK"
+  fi
+}
+
+# 中文注释：启动脚本固定把本地 APK 产物沉淀到项目根 target/，方便冷钱包设备离线安装和回滚。
+echo "==> 生成 Android 产物..."
+flutter build apk --debug
+sync_android_artifact
+
 echo "==> 编译并启动 App..."
 flutter run
+sync_android_artifact

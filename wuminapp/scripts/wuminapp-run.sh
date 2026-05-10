@@ -4,7 +4,10 @@
 # 固定使用 smoldot 轻节点连接区块链（无需 RPC 服务器）。
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$(dirname "$0")/.."
+APP_ROOT="$SCRIPT_DIR/.."
+TARGET_DIR="$APP_ROOT/target"
+TARGET_APK="$TARGET_DIR/公民.apk"
+cd "$APP_ROOT"
 
 ENV_FILE="../sfid/.env.dev.local"
 if [[ -f "$ENV_FILE" ]]; then
@@ -125,5 +128,22 @@ else
   echo "==> 未检测到本地诊断节点 ($DEV_NODE_RPC)，跳过 USB 桥接（仅走远端 bootnode）"
 fi
 
+sync_android_artifact() {
+  local source_apk="build/app/outputs/flutter-apk/app-debug.apk"
+  if [[ -f "$source_apk" ]]; then
+    mkdir -p "$TARGET_DIR"
+    cp "$source_apk" "$TARGET_APK"
+    echo "==> Android 产物已保存: $TARGET_APK"
+  fi
+}
+
+if [[ "$DEVICE_LINE" == "android" ]]; then
+  # 中文注释：启动脚本固定把本地 APK 产物沉淀到项目根 target/，便于离线安装和回滚。
+  echo "==> 生成 Android 产物..."
+  flutter build apk --debug "${DART_DEFINES[@]}"
+  sync_android_artifact
+fi
+
 echo "==> 编译并启动 App..."
 flutter run "${DART_DEFINES[@]}"
+sync_android_artifact

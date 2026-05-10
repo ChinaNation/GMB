@@ -33,7 +33,7 @@ home/
 ## 开发脚本语义
 
 当前约定：
-1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，会保留现有 `node-data`，但仍使用 `dev-chain` feature 拉起 `--chain dev`
+1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，会保留现有 `node-data`，但仍使用 `dev-chain` feature 拉起 `--chain dev`，并把启动所用 WASM 固定保存到 `citizenchain/target/wasm/`
 2. `citizenchain/scripts/clean-dev.sh` 负责“清库后启动开发链”，会先删除应用数据目录，再使用 `dev-chain` feature 启动全新创世的开发链
 3. 两个脚本都属于开发用途，区别只在于是否先删除本地应用数据目录，而不是是否使用开发链
 

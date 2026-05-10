@@ -15,7 +15,8 @@ trap cleanup EXIT INT TERM HUP
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-WASM_DIR="$REPO_ROOT/target/wasm"
+TARGET_DIR="$REPO_ROOT/target"
+WASM_DIR="$TARGET_DIR/wasm"
 
 # ── 1. 清空 target/wasm/ 下所有文件 ──
 echo "==> 清空 target/wasm/..."
@@ -31,6 +32,7 @@ fi
 export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
 [ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
 echo "    WASM: $WASM_FILE"
+echo "    节点启动产物目录: $TARGET_DIR"
 
 
 # ── 3. 启动 ──
