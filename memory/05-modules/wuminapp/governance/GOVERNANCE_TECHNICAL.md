@@ -558,10 +558,10 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 多签账户管理目录只负责账户注册、创建、关闭、状态展示和管理员管理。
 发起转账、转账详情、投票进度、余额提示、列表适配与详情跳转均由
-`lib/duoqian-transfer/` 实现。
+`lib/transaction/duoqian-transfer/` 实现。
 
 `lib/governance/organization-manage/` 不实现多签转账逻辑；账户详情页如需展示转账入口，
-只允许挂载 `lib/duoqian-transfer/duoqian_transfer_entry.dart` 提供的入口组件。
+只允许挂载 `lib/transaction/duoqian-transfer/duoqian_transfer_entry.dart` 提供的入口组件。
 
 ### 8.8 手机端入口分流
 
@@ -572,14 +572,14 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - `个人多签`：只读取 `PersonalDuoqianEntity`，右上角提供“创建个人多签账户”和链上自动发现/刷新入口。
 
 旧的 `lib/trade/duoqian/duoqian_trade_page.dart` 聚合页已删除。发起转账提案不删除，
-入口由 `lib/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
-具体页面和链上构造仍归 `lib/duoqian-transfer/`。
+入口由 `lib/transaction/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
+具体页面和链上构造仍归 `lib/transaction/duoqian-transfer/`。
 
 2026-04-30 第二轮收口只迁移纯多签文件：账户管理模型/服务、账户详情、创建、
 关闭、账户列表、账户详情和机构发现归入 `lib/organization-manage`；跨个人/机构的
 多签管理提案详情留在 `lib/governance/duoqian_manage_detail_page.dart`。
 QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和内部投票通用服务仍留在原模块目录；
-多签转账相关文件统一归 `lib/duoqian-transfer/`。
+多签转账相关文件统一归 `lib/transaction/duoqian-transfer/`。
 
 2026-04-30 第三轮收口删除治理提案类型页中的“创建多签/关闭多签”入口。多签创建
 只能从 `机构多签` 或 `个人多签` 列表右上角进入；多签关闭只能从具体多签账户详情

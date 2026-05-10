@@ -263,12 +263,12 @@
 |---|---|---|---|
 | `wuminapp/lib/organization-manage/` | 机构多签管理 | organization-manage | wuminapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
 | `wuminapp/lib/personal-manage/` | 个人多签管理 | personal-manage | wuminapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
-| `wuminapp/lib/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
+| `wuminapp/lib/transaction/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
 | `wuminapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
 | `wuminapp/lib/institution/` | 机构 | institution | 机构相关移动端业务 |
 | `wuminapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
-| `wuminapp/lib/offchain/` | 链下 | offchain | 链下请求和链下业务辅助 |
-| `wuminapp/lib/onchain/` | 链上 | onchain | 链上交易和链上状态辅助 |
+| `wuminapp/lib/transaction/offchain-transaction/` | 链下 | offchain | 链下请求和链下业务辅助 |
+| `wuminapp/lib/transaction/onchain-transaction/` | 链上 | onchain | 链上交易和链上状态辅助 |
 | `wuminapp/lib/public/` | 公共 | public | 公共页面和公开能力 |
 | `wuminapp/lib/qr/` | QR | qr | 扫码、二维码和签名请求 |
 | `wuminapp/lib/rpc/` | RPC | rpc | RPC 客户端、轻节点和 extrinsic 构造 |

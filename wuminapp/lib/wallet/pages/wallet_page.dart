@@ -17,7 +17,7 @@ import 'package:wuminapp_mobile/wallet/widgets/wallet_onchain_balance_card.dart'
 import 'package:wuminapp_mobile/wallet/pages/transaction_history_page.dart';
 import 'package:wuminapp_mobile/rpc/chain_tx_monitor.dart';
 // 清算行设置属于 lib/offchain 业务域,钱包页仅保留入口展示。
-import 'package:wuminapp_mobile/offchain/pages/clearing_bank_settings_page.dart';
+import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/clearing_bank_settings_page.dart';
 
 class MyWalletPage extends StatefulWidget {
   const MyWalletPage({
