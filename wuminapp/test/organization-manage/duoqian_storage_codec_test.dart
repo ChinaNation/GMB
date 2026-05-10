@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_storage_codec.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_storage_codec.dart';
 
 void main() {
   List<int> compactVec(String text) {

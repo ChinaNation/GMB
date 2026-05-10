@@ -7,7 +7,7 @@
 `wuminapp` 是 Flutter 客户端，不区分传统前端 / 后端，不新建 `backend/`。管理员更换作为一级业务模块放在：
 
 ```text
-/Users/rhett/GMB/wuminapp/lib/admins_change/
+/Users/rhett/GMB/wuminapp/lib/admins-change/
 ```
 
 边界：
@@ -20,8 +20,9 @@
 ## 目录结构
 
 ```text
-wuminapp/lib/admins_change/
-├── admins_change.dart
+wuminapp/lib/admins-change/
+├── admin_set_change_controller.dart
+├── admin_set_change_qr_adapter.dart
 ├── models/
 │   ├── admin_subject.dart
 │   ├── admin_set_change.dart
@@ -36,10 +37,6 @@ wuminapp/lib/admins_change/
 │   ├── institution_admin_service.dart
 │   ├── admin_set_validation.dart
 │   └── admin_set_change_service.dart
-├── qr/
-│   └── admin_set_change_qr_adapter.dart
-├── controllers/
-│   └── admin_set_change_controller.dart
 ├── pages/
 │   ├── admin_subject_detail_page.dart
 │   ├── admin_set_change_page.dart
@@ -54,7 +51,7 @@ wuminapp/lib/admins_change/
 测试目录：
 
 ```text
-wuminapp/test/admins_change/
+wuminapp/test/admins-change/
 ├── admins_change_codec_test.dart
 └── institution_admin_service_test.dart
 ```
@@ -74,6 +71,6 @@ wuminapp/test/admins_change/
 
 ## 兼容入口
 
-`/Users/rhett/GMB/wuminapp/lib/admins_change/services/institution_admin_service.dart` 保留原 public API，但实现委托到 `AdminSubjectService`。这是为了让机构详情、投票、提案详情等既有调用方继续使用同一查询门面；旧的 `lib/institution/institution_admin_service.dart` 不再保留。
+`/Users/rhett/GMB/wuminapp/lib/admins-change/services/institution_admin_service.dart` 保留原 public API，但实现委托到 `AdminSubjectService`。这是为了让机构详情、投票、提案详情等既有调用方继续使用同一查询门面；旧的 `lib/institution/institution_admin_service.dart` 不再保留。
 
-管理员激活服务位于 `/Users/rhett/GMB/wuminapp/lib/admins_change/services/admin_activation_service.dart`。机构管理员列表和提案上下文只引用该服务，不再从 `lib/institution/` 承载激活逻辑。
+管理员激活服务位于 `/Users/rhett/GMB/wuminapp/lib/admins-change/services/admin_activation_service.dart`。机构管理员列表和提案上下文只引用该服务，不再从 `lib/institution/` 承载激活逻辑。

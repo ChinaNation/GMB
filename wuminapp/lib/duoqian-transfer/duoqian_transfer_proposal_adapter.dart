@@ -4,7 +4,7 @@ import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_cache.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_detail_page.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_models.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_context.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';

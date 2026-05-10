@@ -12,7 +12,7 @@ import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/personal-manage/personal_proposal_history_service.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_balance_guard.dart';
 import 'package:wuminapp_mobile/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';

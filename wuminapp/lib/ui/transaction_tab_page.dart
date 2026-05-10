@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_account_list_page.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_account_list_page.dart';
 import 'package:wuminapp_mobile/offchain/services/offchain_scan_flow.dart';
 import 'package:wuminapp_mobile/onchain/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/personal-manage/personal_manage_account_list_page.dart';

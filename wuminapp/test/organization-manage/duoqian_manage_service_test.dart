@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_service.dart';
 
 void main() {
   String hexOf(List<int> bytes) =>

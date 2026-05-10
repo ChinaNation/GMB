@@ -4,16 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_models.dart'
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_models.dart'
     as org_models;
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_service.dart';
 import 'package:wuminapp_mobile/personal-manage/personal_manage_models.dart';
 import 'package:wuminapp_mobile/personal-manage/personal_manage_service.dart';
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_cache.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/proposal/shared/proposal_models.dart';

@@ -487,11 +487,11 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/citizen/citizen_tab_page.dart` | 公民 Tab 二级导航入口（投票 / 治理 / 机构） |
 | `lib/vote/vote_view.dart` | 投票二级页，全局治理提案列表与待投票红点 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
-| `lib/institution/institution_data.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
+| `lib/common/institution_info.dart + lib/organization-manage/institution_registry.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
 | `lib/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
 | `lib/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
-| `lib/admins_change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminSubjectService` 读取 `AdminsChange::Subjects`） |
-| `lib/institution/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
+| `lib/admins-change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminSubjectService` 读取 `AdminsChange::Subjects`） |
+| `lib/organization-manage/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
 | `lib/proposal/shared/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
 | `lib/proposal/shared/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
 | `lib/proposal/shared/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
@@ -502,7 +502,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/proposal/runtime_upgrade/runtime_upgrade_page.dart` | Runtime 升级提案创建页（人口快照 + WASM 上传 + 签名提交） |
 | `lib/proposal/runtime_upgrade/runtime_upgrade_detail_page.dart` | Runtime 升级提案详情页（联合投票/公民投票进度） |
 | `lib/proposal/runtime_upgrade/runtime_upgrade_service.dart` | Runtime 升级提案链上交互服务 |
-| `lib/institution/institution_admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
+| `lib/organization-manage/institution_admin_list_page.dart` | 管理员列表页（SS58 地址展示） |
 | `lib/organization-manage/shared` | 机构多签层（机构账户列表、机构详情、机构管理服务、机构 storage codec、机构发现服务） |
 | `lib/organization-manage/institution` | 机构多签层（机构列表入口、机构创建表单） |
 | `lib/personal-manage` | 个人多签层（个人列表、详情、发现、创建、关闭、管理员激活、提案历史、PersonalManage 链上编解码） |
@@ -588,21 +588,21 @@ QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和
 2026-05-09 起，wuminapp 个人多签主业务与 runtime `personal-manage` 对齐：
 个人创建、关闭、管理员激活、待创建提案反查、提案历史、PersonalManage call data、
 PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage codec
-统一放入 `lib/personal-manage/`。`lib/organization-manage/shared/` 不再承载这些个人主业务；
+统一放入 `lib/personal-manage/`。`lib/organization-manage/` 不再承载这些个人主业务；
 目前仅保留机构多签能力和 `AdminInstitutionCodec` 这类个人/机构都要读取的底层 Subject 解码能力。
 
 ### 8.9 关键文件
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/organization-manage/shared/duoqian_account_list_page.dart` | 机构多签账户列表页 |
-| `lib/organization-manage/shared/duoqian_account_info_page.dart` | 机构多签账户详情页 |
-| `lib/organization-manage/shared/duoqian_discovery_service.dart` | 机构多签反向索引发现服务 |
-| `lib/organization-manage/shared/duoqian_manage_models.dart` | 机构关闭提案模型与机构账户状态模型 |
-| `lib/organization-manage/shared/duoqian_manage_service.dart` | OrganizationManage 机构多签链上交互服务 |
+| `lib/organization-manage/duoqian_account_list_page.dart` | 机构多签账户列表页 |
+| `lib/organization-manage/duoqian_account_info_page.dart` | 机构多签账户详情页 |
+| `lib/organization-manage/duoqian_discovery_service.dart` | 机构多签反向索引发现服务 |
+| `lib/organization-manage/duoqian_manage_models.dart` | 机构关闭提案模型与机构账户状态模型 |
+| `lib/organization-manage/duoqian_manage_service.dart` | OrganizationManage 机构多签链上交互服务 |
 | `lib/proposal/shared/duoqian_manage_detail_page.dart` | 个人/机构多签管理提案共用投票详情页；业务解码委托对应 manage 服务 |
-| `lib/organization-manage/institution/institution_duoqian_create_page.dart` | 机构多签创建表单 |
-| `lib/organization-manage/institution/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
+| `lib/organization-manage/institution_duoqian_create_page.dart` | 机构多签创建表单 |
+| `lib/organization-manage/institution_duoqian_close_page.dart` | 机构多签关闭表单 |
 | `lib/personal-manage/personal_duoqian_create_page.dart` | 个人多签创建表单 |
 | `lib/personal-manage/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
 | `lib/personal-manage/personal_admin_list_page.dart` | 个人多签管理员激活列表 |
@@ -621,19 +621,19 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 
 ## 9. 源码对齐基线
 
-- `lib/institution/institution_data.dart`
-- `lib/admins_change/services/institution_admin_service.dart`
-- `lib/institution/institution_detail_page.dart`
+- `lib/common/institution_info.dart + lib/organization-manage/institution_registry.dart`
+- `lib/admins-change/services/institution_admin_service.dart`
+- `lib/organization-manage/institution_detail_page.dart`
 - `lib/proposal/proposal_types_page.dart`
-- `lib/institution/institution_admin_list_page.dart`
-- `lib/organization-manage/shared/duoqian_account_list_page.dart`
-- `lib/organization-manage/shared/duoqian_account_info_page.dart`
-- `lib/organization-manage/shared/duoqian_discovery_service.dart`
-- `lib/organization-manage/shared/duoqian_manage_models.dart`
-- `lib/organization-manage/shared/duoqian_manage_service.dart`
+- `lib/organization-manage/institution_admin_list_page.dart`
+- `lib/organization-manage/duoqian_account_list_page.dart`
+- `lib/organization-manage/duoqian_account_info_page.dart`
+- `lib/organization-manage/duoqian_discovery_service.dart`
+- `lib/organization-manage/duoqian_manage_models.dart`
+- `lib/organization-manage/duoqian_manage_service.dart`
 - `lib/proposal/shared/duoqian_manage_detail_page.dart`
-- `lib/organization-manage/institution/institution_duoqian_create_page.dart`
-- `lib/organization-manage/institution/institution_duoqian_close_page.dart`
+- `lib/organization-manage/institution_duoqian_create_page.dart`
+- `lib/organization-manage/institution_duoqian_close_page.dart`
 - `lib/personal-manage/personal_duoqian_create_page.dart`
 - `lib/personal-manage/personal_duoqian_close_page.dart`
 - `lib/personal-manage/personal_admin_list_page.dart`

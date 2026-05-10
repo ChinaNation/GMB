@@ -51,7 +51,7 @@ PersonalManage storage：
 
 ## 4. 与 organization-manage 目录关系
 
-`wuminapp/lib/organization-manage/shared/` 不再承载 PersonalManage 主业务。当前仅保留：
+`wuminapp/lib/organization-manage/` 不再承载 PersonalManage 主业务。当前仅保留：
 
 - 机构多签 OrganizationManage 服务与机构 storage codec。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。

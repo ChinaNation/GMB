@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:wuminapp_mobile/admins_change/services/admin_activation_service.dart';
-import 'package:wuminapp_mobile/admins_change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/institution/institution_data.dart';
+import 'package:wuminapp_mobile/admins-change/services/admin_activation_service.dart';
+import 'package:wuminapp_mobile/admins-change/services/institution_admin_service.dart';
+import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/organization-manage/institution_registry.dart';
 import 'package:wuminapp_mobile/proposal/shared/internal_vote_query_service.dart';
 import 'package:wuminapp_mobile/proposal/runtime_upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';

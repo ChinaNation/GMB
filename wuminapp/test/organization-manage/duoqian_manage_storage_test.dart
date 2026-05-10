@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_models.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_manage_service.dart';
-import 'package:wuminapp_mobile/organization-manage/shared/duoqian_storage_codec.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_models.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_manage_service.dart';
+import 'package:wuminapp_mobile/organization-manage/duoqian_storage_codec.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
 class FakeChainRpc extends ChainRpc {
