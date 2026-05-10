@@ -15,16 +15,6 @@ void main() {
         (value >> 24) & 0xff,
       ];
 
-  List<int> u64Le(int value) {
-    final out = List<int>.filled(8, 0);
-    var tmp = value;
-    for (var i = 0; i < out.length; i++) {
-      out[i] = tmp & 0xff;
-      tmp >>= 8;
-    }
-    return out;
-  }
-
   group('admins_change codec', () {
     test('builds AdminsChange::Subjects storage key', () {
       final subjectId = AdminSubjectIdCodec.fromBuiltinSfid(
@@ -49,8 +39,8 @@ void main() {
         ...List<int>.filled(32, 0xbb),
         ...u32Le(13),
         ...List<int>.filled(32, 0xcc),
-        ...u64Le(7),
-        ...u64Le(9),
+        ...u32Le(7),
+        ...u32Le(9),
         1,
       ]);
 

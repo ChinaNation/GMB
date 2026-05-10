@@ -5,7 +5,8 @@ use super::types::AdminSubjectDecoded;
 ///
 /// 链上布局:
 /// org:u8 + kind:u8 + admins:BoundedVec<AccountId32> + threshold:u32
-/// + creator:AccountId32 + created_at:u64 + updated_at:u64 + status:u8。
+/// + creator:AccountId32 + created_at:u32 + updated_at:u32 + status:u8。
+/// 中文注释:created_at/updated_at 是 BlockNumberFor<T>,citizenchain runtime 配置为 u32。
 pub fn decode_admin_subject(data: &[u8]) -> Result<AdminSubjectDecoded, String> {
     if data.len() < 2 {
         return Err("AdminSubject 数据不足".to_string());
@@ -36,17 +37,17 @@ pub fn decode_admin_subject(data: &[u8]) -> Result<AdminSubjectDecoded, String> 
     let creator_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
-    if offset + 8 > data.len() {
+    if offset + 4 > data.len() {
         return Err("AdminSubject created_at 数据不足".to_string());
     }
-    let created_at = read_u64_le(data, offset);
-    offset += 8;
+    let created_at = read_u32_le(data, offset);
+    offset += 4;
 
-    if offset + 8 > data.len() {
+    if offset + 4 > data.len() {
         return Err("AdminSubject updated_at 数据不足".to_string());
     }
-    let updated_at = read_u64_le(data, offset);
-    offset += 8;
+    let updated_at = read_u32_le(data, offset);
+    offset += 4;
 
     if offset >= data.len() {
         return Err("AdminSubject status 数据不足".to_string());
@@ -126,19 +127,6 @@ fn read_u32_le(data: &[u8], offset: usize) -> u32 {
     ])
 }
 
-fn read_u64_le(data: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes([
-        data[offset],
-        data[offset + 1],
-        data[offset + 2],
-        data[offset + 3],
-        data[offset + 4],
-        data[offset + 5],
-        data[offset + 6],
-        data[offset + 7],
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,8 +144,8 @@ mod tests {
         data.extend_from_slice(&[0xaa; 32]);
         data.extend_from_slice(&13u32.to_le_bytes());
         data.extend_from_slice(&[0xbb; 32]);
-        data.extend_from_slice(&7u64.to_le_bytes());
-        data.extend_from_slice(&9u64.to_le_bytes());
+        data.extend_from_slice(&7u32.to_le_bytes());
+        data.extend_from_slice(&9u32.to_le_bytes());
         data.push(1);
         let decoded = decode_admin_subject(&data).unwrap();
         assert_eq!(decoded.admins, vec!["aa".repeat(32)]);

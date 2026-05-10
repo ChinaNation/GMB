@@ -18,8 +18,8 @@ pub struct AdminSubjectState {
     pub admins: Vec<String>,
     pub threshold: u32,
     pub creator_hex: String,
-    pub created_at: u64,
-    pub updated_at: u64,
+    pub created_at: u32,
+    pub updated_at: u32,
     /// 链上 AdminSubjectStatus 枚举值。
     pub status: u8,
     pub status_label: String,
@@ -33,8 +33,8 @@ pub struct AdminSubjectDecoded {
     pub admins: Vec<String>,
     pub threshold: u32,
     pub creator_hex: String,
-    pub created_at: u64,
-    pub updated_at: u64,
+    pub created_at: u32,
+    pub updated_at: u32,
     pub status: u8,
 }
 
