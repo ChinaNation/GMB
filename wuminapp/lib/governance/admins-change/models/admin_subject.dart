@@ -25,10 +25,20 @@ class AdminSubjectState {
 
   String get kindLabel => switch (kind) {
         0 => '内置治理机构',
-        1 => 'SFID机构',
+        1 => 'SFID机构归属',
         2 => '个人多签',
         3 => '机构账户',
         _ => '未知主体',
+      };
+
+  String get orgLabel => switch (org) {
+        0 => '国储会',
+        1 => '省储会',
+        2 => '省储行',
+        3 => '个人多签',
+        4 => '公权机构账户',
+        5 => '其他机构账户',
+        _ => '未知组织',
       };
 
   String get statusLabel => switch (status) {

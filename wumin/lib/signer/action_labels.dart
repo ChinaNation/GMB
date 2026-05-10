@@ -34,7 +34,7 @@ const Map<String, String> actionLabels = {
   'propose_close_personal': '关闭个人多签提案',
   'cleanup_rejected_personal_proposal': '清理被拒个人多签提案',
   'propose_destroy': '销毁决议提案',
-  'propose_admin_replacement': '管理员替换提案',
+  'propose_admin_set_change': '管理员集合变更提案',
   'propose_replace_grandpa_key': 'GRANDPA 密钥提案',
   'propose_resolution_issuance': '决议发行提案',
 

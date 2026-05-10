@@ -30,3 +30,8 @@ export type AdminSubjectState = {
   statusLabel: string;
 };
 
+export type AdminSubjectRef = {
+  sfidNumber?: string | null;
+  subjectIdHex?: string | null;
+  org?: number | null;
+};

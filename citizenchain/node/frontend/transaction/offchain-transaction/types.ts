@@ -68,7 +68,14 @@ export type ClearingBankView =
   | { kind: 'add-input-sfid' }
   | { kind: 'check-multisig'; sfidNumber: string; institutionName: string }
   | { kind: 'institution-detail'; sfidNumber: string }
-  | { kind: 'admin-set-change'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] }
+  | {
+      kind: 'admin-set-change';
+      sfidNumber: string;
+      institutionName: string;
+      adminSubjectIdHex: string;
+      adminOrg: number;
+      adminWallets: AdminWalletMatch[];
+    }
   | { kind: 'create-multisig-institution'; sfidNumber: string }
   | { kind: 'wait-vote'; sfidNumber: string; institutionName: string }
   | { kind: 'declare-node'; sfidNumber: string; institutionName: string }

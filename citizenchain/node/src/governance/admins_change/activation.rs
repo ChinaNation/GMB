@@ -21,7 +21,7 @@ use std::{
 };
 use tauri::AppHandle;
 
-use crate::governance::institution;
+use crate::governance::admins_change::storage;
 use crate::governance::signing::{self, pubkey_to_ss58};
 
 /// 激活管理员存储文件名。
@@ -146,6 +146,32 @@ fn build_activate_payload(sfid_number: &str, timestamp: u64) -> Vec<u8> {
     payload
 }
 
+/// 激活凭证仍按 sfid_number 本地归档；链上管理员校验可切到账户级 subject。
+fn fetch_chain_admins(
+    sfid_number: &str,
+    subject_id_hex: Option<String>,
+    expected_org: Option<u8>,
+) -> Result<Vec<String>, String> {
+    let state = if let Some(subject_id_hex) = subject_id_hex.filter(|item| !item.trim().is_empty())
+    {
+        let subject_id = super::subject_id::subject_id_from_hex(&subject_id_hex)?;
+        storage::fetch_admin_subject(&subject_id, Some(sfid_number.to_string()))?
+            .ok_or_else(|| "链上不存在该管理员主体".to_string())?
+    } else {
+        storage::fetch_admin_subject_by_sfid_number(sfid_number)?
+            .ok_or_else(|| "链上不存在该管理员主体".to_string())?
+    };
+    if let Some(org) = expected_org {
+        if state.org != org {
+            return Err(format!(
+                "管理员主体 org 不匹配：请求 org={}，链上 org={}",
+                org, state.org
+            ));
+        }
+    }
+    Ok(state.admins)
+}
+
 // ──── Tauri 命令 ────
 
 /// 构建管理员激活签名请求 QR JSON（需要节点运行）。
@@ -157,6 +183,8 @@ pub async fn build_activate_admin_request(
     app: AppHandle,
     pubkey_hex: String,
     sfid_number: String,
+    subject_id_hex: Option<String>,
+    expected_org: Option<u8>,
 ) -> Result<ActivateRequestResult, String> {
     // 检查节点状态
     let status = home::current_status(&app)?;
@@ -184,12 +212,15 @@ pub async fn build_activate_admin_request(
     }
 
     let sid = sfid_number.clone();
+    let subject = subject_id_hex.clone();
     let pk = pubkey_clean.clone();
 
     // 在链上验证管理员身份
-    let admins = tauri::async_runtime::spawn_blocking(move || institution::fetch_admins(&sid))
-        .await
-        .map_err(|e| format!("查询管理员列表失败: {e}"))??;
+    let admins = tauri::async_runtime::spawn_blocking(move || {
+        fetch_chain_admins(&sid, subject, expected_org)
+    })
+    .await
+    .map_err(|e| format!("查询管理员列表失败: {e}"))??;
 
     if !admins.iter().any(|a| *a == pk) {
         return Err("该公钥不在此机构的链上管理员列表中".to_string());
@@ -407,6 +438,8 @@ pub async fn verify_activate_admin(
 pub async fn get_activated_admins(
     app: AppHandle,
     sfid_number: String,
+    subject_id_hex: Option<String>,
+    expected_org: Option<u8>,
 ) -> Result<Vec<ActivatedAdmin>, String> {
     let mut activations = load_activations(&app)?;
 
@@ -424,9 +457,12 @@ pub async fn get_activated_admins(
     let status = home::current_status(&app)?;
     if status.running {
         let sid = sfid_number.clone();
-        let admins = tauri::async_runtime::spawn_blocking(move || institution::fetch_admins(&sid))
-            .await
-            .map_err(|e| format!("查询管理员列表失败: {e}"));
+        let subject = subject_id_hex.clone();
+        let admins = tauri::async_runtime::spawn_blocking(move || {
+            fetch_chain_admins(&sid, subject, expected_org)
+        })
+        .await
+        .map_err(|e| format!("查询管理员列表失败: {e}"));
 
         if let Ok(Ok(chain_admins)) = admins {
             // 删除不再是链上管理员的激活记录

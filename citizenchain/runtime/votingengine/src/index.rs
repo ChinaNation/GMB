@@ -1,7 +1,7 @@
 //! 反向索引(spec_version v1)。
 //!
 //! 链上 4 张反向索引让客户端按"分类"O(分类内规模)迭代提案,不用扫全表:
-//! - **`ProposalsByOrg[org][id]`** — 按 ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN 反查
+//! - **`ProposalsByOrg[org][id]`** — 按 ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH 反查
 //! - **`ProposalsByInstitution[subject_id][id]`** — 按机构主体反查
 //!   (如某省储行所有提案、某个多签账户所有提案)
 //! - **`ProposalsByOwner[module_tag][id]`** — 按业务模块 MODULE_TAG 反查

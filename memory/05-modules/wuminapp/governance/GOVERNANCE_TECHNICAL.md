@@ -63,7 +63,7 @@ lib/citizen/
 
 ### 3.2 枚举与编码
 
-- `org`：`0 = NRC(国储会)`，`1 = PRC(省储会)`，`2 = PRB(省储行)`，`3 = DUOQIAN(注册多签机构)`。
+- `org`：`0 = NRC(国储会)`，`1 = PRC(省储会)`，`2 = PRB(省储行)`，`3 = REN(个人多签)`，`4 = PUP(公权机构账户)`，`5 = OTH(其他机构账户)`。
 - proposal kind：`0 = internal`，`1 = joint`。
 - stage：`0 = internal`，`1 = joint`，`2 = citizen`。
 - status：`0 = voting`，`1 = passed`，`2 = rejected`。
@@ -75,7 +75,7 @@ lib/citizen/
   - NRC：`13`（硬编码）
   - PRC：`6`（硬编码）
   - PRB：`6`（硬编码）
-  - DUOQIAN：`用户注册时设定的 threshold`（链上 `admins-change::Subjects.threshold` 动态读取）
+  - REN/PUP/OTH 动态账户：链上 `admins-change::Subjects.threshold` 动态读取
 - 联合投票权重：
   - NRC：`19`
   - 每个 PRC：`1`
@@ -342,11 +342,20 @@ message = blake2_256(SCALE.encode(payload))
 ### 7.1 管理员身份检测流程
 
 1. 用户打开机构详情页，App 并行加载管理员列表和当前钱包信息。
-2. 通过 `state_getStorage` 查询链上 `AdminsChange.Subjects(subject_id)` 存储。
-3. Storage key 格式：`twox_128("AdminsChange") + twox_128("Institutions") + blake2_128(institution_48bytes) + institution_48bytes`。
-4. 返回 SCALE 编码的 `BoundedVec<AccountId32, MaxAdminsPerInstitution>`（Compact 长度前缀 + N×32 字节公钥）。
-5. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在列表中，确定管理员身份。
-6. 查询结果内存缓存，下拉刷新时清除缓存重新查询。
+2. 通过 `state_getStorage` 查询链上 `AdminsChange::Subjects(subject_id)` 存储。
+3. Storage key 格式：`twox_128("AdminsChange") + twox_128("Subjects") + blake2_128(subject_id) + subject_id`。
+4. `subject_id` 按主体类型派生：内置治理机构为 `0x01 + sfid_number`，个人多签为 `0x03 + AccountId32`，机构账户为 `0x05 + AccountId32`；`0x02 SfidInstitution` 只用于归属/检索，不进入管理员更换。
+5. 返回 SCALE 编码的 `AdminSubject { org, kind, admins, threshold, creator, created_at, updated_at, status }`。
+6. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在 `admins` 中，确定管理员身份。
+7. 查询结果以内存 `subjectIdHex` 缓存；提交管理员更换、投票执行返回、下拉刷新时清除缓存重新查询。
+
+### 7.1.1 管理员更换手机端协议
+
+- 目录边界：手机端管理员更换只在 `lib/governance/admins-change/` 内实现；机构/个人注册、注销仍归 `organization-manage` / `personal-manage`。
+- 主体规则：`PersonalDuoqian` 必须使用 `ORG_REN`，`InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，`SfidInstitution` 不能作为管理员更换主体。
+- QR call data：`[AdminsChange=12][call=0][org:u8][subject_id:48][new_admins:Compact<Vec<AccountId32>>]`。
+- QR display 字段必须与 wumin 冷钱包 decoder 严格一致：`org`、`subject`、`new_admins`，其中 `subject/new_admins` 均使用 `0x` 小写 hex。
+- 提交成功后必须按 `subjectIdHex` 清理 `AdminSubjectService` 缓存，避免页面继续展示旧管理员集合。
 
 ### 7.2 机构详情页结构
 
@@ -509,7 +518,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | `lib/rpc/chain_rpc.dart` | RPC 服务（含 `fetchStorage` 公开方法） |
 | `lib/main.dart` | App 壳、应用锁与底部导航；不再内联公民 Tab 业务页面 |
 
-## 8. 注册多签机构（organization-manage / personal-manage）
+## 8. 注册多签账户（organization-manage / personal-manage）
 
 ### 8.1 概述
 
@@ -517,16 +526,16 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 ### 8.2 机构类型
 
-注册个人账户和注册机构账户使用 `org = 3`（`ORG_REN`），与治理机构 org 0/1/2 并列。
+注册个人账户使用 `org = 3`（`ORG_REN`）；注册机构账户按类型使用 `org = 4`（`ORG_PUP`，公权机构账户）或 `org = 5`（`ORG_OTH`，其他机构账户），与治理机构 org 0/1/2 并列。
 
 `SubjectId`（48 字节）使用 SubjectKind 协议：个人账户为 `0x03 PersonalDuoqian`，机构账户为 `0x05 InstitutionAccount`，payload 均为账户 `AccountId` 前 32 字节并右填零。
 
 ### 8.3 动态阈值与管理员
 
-| 项目 | 治理机构（NRC/PRC/PRB） | 注册多签机构（DUOQIAN） |
+| 项目 | 治理机构（NRC/PRC/PRB） | 注册多签账户（REN/PUP/OTH） |
 | --- | --- | --- |
 | 管理员来源 | `admins_change::Subjects`（创世/治理替换） | `admins_change::Subjects`（注册时写入，治理替换后更新） |
-| 阈值来源 | `admins_change::Subjects.threshold`（创世写入 13/6/6） | `admins_change::Subjects.threshold`（注册时设定） |
+| 阈值来源 | `admins_change::Subjects.threshold`（创世写入 13/6/6） | `admins_change::Subjects.threshold`（链端按管理员数量派生） |
 | 管理员存储类型 | `AccountId` | `AccountId` |
 
 通过 `InternalThresholdProvider` trait 和 `InternalAdminProvider` trait，投票引擎动态查询阈值和管理员列表。
@@ -615,7 +624,7 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 | `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 注册型多签机构转账复用现有提案/投票/执行流程 |
-| `votingengine/src/internal_vote.rs` | 投票引擎（含 ORG_REN 支持） |
+| `votingengine/internal-vote/src/lib.rs` | 投票引擎（支持 ORG_REN / ORG_PUP / ORG_OTH 动态主体） |
 | `votingengine/src/lib.rs` | InternalThresholdProvider trait |
 | `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
 

@@ -13,20 +13,21 @@ class AdminSubjectService {
   final Map<String, AdminSubjectState> _cache = {};
 
   Future<AdminSubjectState?> fetchByInstitutionIdentity(String identity) async {
-    final cached = _cache[identity];
-    if (cached != null) return cached;
     final subjectId = _subjectIdFromInstitutionIdentity(identity);
-    final state = await fetchBySubjectId(subjectId);
-    if (state != null) _cache[identity] = state;
-    return state;
+    return fetchBySubjectId(subjectId);
   }
 
   Future<AdminSubjectState?> fetchBySubjectId(Uint8List subjectId) async {
+    final subjectKey = AdminSubjectIdCodec.hexEncode(subjectId);
+    final cached = _cache[subjectKey];
+    if (cached != null) return cached;
     final key = AdminSubjectIdCodec.adminSubjectStorageKey(subjectId);
     final data =
         await _rpc.fetchStorage('0x${AdminSubjectIdCodec.hexEncode(key)}');
     if (data == null) return null;
-    return AdminSubjectCodec.decode(subjectId, data);
+    final state = AdminSubjectCodec.decode(subjectId, data);
+    if (state != null) _cache[subjectKey] = state;
+    return state;
   }
 
   Future<List<String>> fetchAdmins(String identity) async {
@@ -48,7 +49,18 @@ class AdminSubjectService {
       _cache.clear();
     } else {
       _cache.remove(identity);
+      try {
+        _cache.remove(AdminSubjectIdCodec.hexEncode(
+          _subjectIdFromInstitutionIdentity(identity),
+        ));
+      } catch (_) {
+        // 中文注释：旧调用可能传入的不是机构身份，保守忽略即可。
+      }
     }
+  }
+
+  void clearSubjectCache(String subjectIdHex) {
+    _cache.remove(AdminSubjectIdCodec.normalizeHex(subjectIdHex));
   }
 
   Uint8List _subjectIdFromInstitutionIdentity(String identity) {

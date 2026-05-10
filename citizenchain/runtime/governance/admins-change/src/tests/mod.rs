@@ -7,7 +7,7 @@ use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
 use sp_runtime::{traits::IdentityLookup, AccountId32, BuildStorage};
 use votingengine::{
-    types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
+    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
     InternalVoteEngine, STATUS_EXECUTED, STATUS_EXECUTION_FAILED, STATUS_PASSED, STATUS_REJECTED,
 };
 
@@ -106,7 +106,7 @@ pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: SubjectId) -> bool {
         match org {
-            ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN => {
+            ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN | ORG_PUP | ORG_OTH => {
                 pallet::Pallet::<Test>::active_subject_exists(org, institution)
             }
             _ => false,
@@ -118,7 +118,9 @@ impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
             ORG_NRC | ORG_PRC | ORG_PRB => {
                 votingengine::types::fixed_governance_pass_threshold(org)
             }
-            ORG_REN => pallet::Pallet::<Test>::active_subject_threshold(org, institution),
+            ORG_REN | ORG_PUP | ORG_OTH => {
+                pallet::Pallet::<Test>::active_subject_threshold(org, institution)
+            }
             _ => None,
         }
     }

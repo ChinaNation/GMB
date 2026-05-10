@@ -24,7 +24,7 @@ type Props = {
   onCreateDeveloperUpgrade?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSafetyFund?: (adminWallets: AdminWalletMatch[]) => void;
   onCreateSweep?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
-  onCreateAdminSetChange?: (sfidNumber: string, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
+  onCreateAdminSetChange?: (sfidNumber: string, orgType: number, institutionName: string, adminWallets: AdminWalletMatch[]) => void;
   /** 隐藏返回按钮（用于直接作为 Tab 内容显示时）。 */
   hideBackButton?: boolean;
 };
@@ -267,7 +267,7 @@ export function InstitutionDetailPage({ sfidNumber, onBack, onOpenAdminList, onS
           <button
             className="proposal-type-button"
             disabled={!isAdmin}
-            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(sfidNumber, detail.name, adminWallets)}
+            onClick={() => isAdmin && detail && onCreateAdminSetChange?.(sfidNumber, detail.orgType, detail.name, adminWallets)}
           >换管理员</button>
           <button className="proposal-type-button" disabled title="即将上线">决议销毁</button>
           {(detail.orgType === 0 || detail.orgType === 2) && (

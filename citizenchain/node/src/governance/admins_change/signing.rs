@@ -4,7 +4,7 @@ use crate::governance::signing::{self as gov_signing, VoteSignRequestResult, Vot
 
 use super::call_data::build_admin_set_change_call_data;
 use super::subject_id;
-use super::types::AdminSubjectState;
+use super::types::{qr_org_display_value, AdminSubjectState};
 use super::validation::validate_admin_set_change;
 
 pub fn build_admin_set_change_sign_request(
@@ -23,14 +23,29 @@ pub fn build_admin_set_change_sign_request(
         state.admins.len(),
         normalized.len()
     );
-    let fields = json!({
-        "org": state.org_label,
-        "subjectId": format!("0x{}", state.subject_id_hex),
-        "oldAdminCount": state.admins.len(),
-        "newAdminCount": normalized.len(),
-        "threshold": state.threshold,
-        "newAdmins": normalized.iter().map(|item| format!("0x{item}")).collect::<Vec<_>>(),
-    });
+    // display.fields 必须和 wumin PayloadDecoder 对 propose_admin_set_change
+    // 解出的字段逐项一致：org / subject / new_admins。
+    let fields = json!([
+        {
+            "key": "org",
+            "label": "组织类型",
+            "value": qr_org_display_value(state.org),
+        },
+        {
+            "key": "subject",
+            "label": "管理员主体",
+            "value": format!("0x{}", state.subject_id_hex),
+        },
+        {
+            "key": "new_admins",
+            "label": "新管理员",
+            "value": normalized
+                .iter()
+                .map(|admin| format!("0x{admin}"))
+                .collect::<Vec<_>>()
+                .join(","),
+        }
+    ]);
 
     gov_signing::build_sign_request_from_call_data(
         &pubkey_clean,

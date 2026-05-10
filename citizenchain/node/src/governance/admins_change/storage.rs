@@ -33,11 +33,6 @@ pub fn admin_subjects_key(subject_id: &[u8; 48]) -> String {
     format!("0x{}", hex::encode(key))
 }
 
-pub fn admin_subjects_key_from_sfid_number(sfid_number: &str) -> Result<String, String> {
-    let subject_id = subject_id::subject_id_from_builtin_sfid(sfid_number)?;
-    Ok(admin_subjects_key(&subject_id))
-}
-
 pub fn fetch_admin_subject_by_sfid_number(
     sfid_number: &str,
 ) -> Result<Option<AdminSubjectState>, String> {

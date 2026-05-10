@@ -14,7 +14,7 @@ type PrbView =
   | { page: 'list' }
   | { page: 'detail'; sfidNumber: string }
   | { page: 'admin-list'; sfidNumber: string }
-  | { page: 'admin-set-change'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] }
+  | { page: 'admin-set-change'; sfidNumber: string; orgType: number; institutionName: string; adminWallets: AdminWalletMatch[] }
   | { page: 'proposal-detail'; proposalId: number; adminWallets: AdminWalletMatch[]; sfidNumber?: string; originSfidNumber: string }
   | { page: 'create-proposal'; sfidNumber: string; orgType: number; institutionName: string; mainAddress: string; adminWallets: AdminWalletMatch[] }
   | { page: 'propose-sweep'; sfidNumber: string; institutionName: string; adminWallets: AdminWalletMatch[] };
@@ -62,7 +62,7 @@ export function PrbSection() {
   if (view.page === 'admin-set-change') {
     return (
       <AdminSetChangePage
-        sfidNumber={view.sfidNumber}
+        subjectRef={{ sfidNumber: view.sfidNumber, org: view.orgType }}
         institutionName={view.institutionName}
         adminWallets={view.adminWallets}
         onBack={() => backToDetail(view.sfidNumber)}
@@ -96,8 +96,8 @@ export function PrbSection() {
         onCreateProposal={(sid, orgType, name, mainAddress, aw) =>
           setView({ page: 'create-proposal', sfidNumber: sid, orgType, institutionName: name, mainAddress, adminWallets: aw })
         }
-        onCreateAdminSetChange={(sid, name, aw) =>
-          setView({ page: 'admin-set-change', sfidNumber: sid, institutionName: name, adminWallets: aw })
+        onCreateAdminSetChange={(sid, orgType, name, aw) =>
+          setView({ page: 'admin-set-change', sfidNumber: sid, orgType, institutionName: name, adminWallets: aw })
         }
         onCreateSweep={(sid, name, aw) =>
           setView({ page: 'propose-sweep', sfidNumber: sid, institutionName: name, adminWallets: aw })

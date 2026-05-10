@@ -47,17 +47,83 @@ fn validate_count(kind: u8, org: u8, count: usize) -> Result<(), String> {
                 return Err(format!("内置治理机构管理员数量必须保持 {expected} 人"));
             }
         }
-        1 | 3 => {
-            if !(2..=1989).contains(&count) {
-                return Err("机构账户管理员数量必须在 2..=1989 之间".to_string());
-            }
+        1 => {
+            return Err("SfidInstitution 只用于机构归属/检索，不能作为管理员更换主体".to_string());
         }
         2 => {
+            if org != 3 {
+                return Err("个人多签管理员更换必须使用 ORG_REN".to_string());
+            }
             if !(2..=64).contains(&count) {
                 return Err("个人多签管理员数量必须在 2..=64 之间".to_string());
+            }
+        }
+        3 => {
+            if !matches!(org, 4 | 5) {
+                return Err("机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH".to_string());
+            }
+            if !(2..=1989).contains(&count) {
+                return Err("机构账户管理员数量必须在 2..=1989 之间".to_string());
             }
         }
         _ => return Err("未知管理员主体类型".to_string()),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn admin(seed: u8) -> String {
+        format!("{seed:02x}").repeat(32)
+    }
+
+    fn state(kind: u8, org: u8, admins: Vec<String>) -> AdminSubjectState {
+        AdminSubjectState {
+            subject_id_hex: "11".repeat(48),
+            sfid_number: Some("TEST-SFID".to_string()),
+            org,
+            org_label: String::new(),
+            kind,
+            kind_label: String::new(),
+            admins,
+            threshold: 2,
+            creator_hex: admin(9),
+            created_at: 1,
+            updated_at: 1,
+            status: 1,
+            status_label: "已激活".to_string(),
+        }
+    }
+
+    #[test]
+    fn rejects_sfid_institution_subject_for_admin_set_change() {
+        let current = vec![admin(1), admin(2)];
+        let next = vec![admin(1), admin(3)];
+        let err = validate_admin_set_change(&state(1, 4, current), &admin(1), &next).unwrap_err();
+        assert!(err.contains("SfidInstitution"));
+    }
+
+    #[test]
+    fn personal_duoqian_requires_org_ren() {
+        let current = vec![admin(1), admin(2)];
+        let next = vec![admin(1), admin(3)];
+        let err = validate_admin_set_change(&state(2, 4, current), &admin(1), &next).unwrap_err();
+        assert_eq!(err, "个人多签管理员更换必须使用 ORG_REN");
+    }
+
+    #[test]
+    fn institution_account_requires_org_pup_or_oth() {
+        let current = vec![admin(1), admin(2)];
+        let next = vec![admin(1), admin(3)];
+
+        for org in [4u8, 5u8] {
+            validate_admin_set_change(&state(3, org, current.clone()), &admin(1), &next)
+                .expect("PUP/OTH 机构账户应允许管理员更换");
+        }
+
+        let err = validate_admin_set_change(&state(3, 3, current), &admin(1), &next).unwrap_err();
+        assert_eq!(err, "机构账户管理员更换必须使用 ORG_PUP 或 ORG_OTH");
+    }
 }

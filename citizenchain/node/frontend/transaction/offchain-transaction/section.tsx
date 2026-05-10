@@ -104,12 +104,19 @@ export function ClearingBankSection() {
   }, []);
 
   const goAdminSetChange = useCallback(async (detail: InstitutionDetail) => {
+    const subjectRef = {
+      sfidNumber: detail.sfidNumber,
+      subjectIdHex: detail.adminSubjectIdHex,
+      org: detail.adminOrg,
+    };
     try {
-      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.sfidNumber);
+      const activatedAdmins = await adminsChangeApi.getActivatedAdmins(detail.sfidNumber, subjectRef);
       setView({
         kind: 'admin-set-change',
         sfidNumber: detail.sfidNumber,
         institutionName: detail.institutionName,
+        adminSubjectIdHex: detail.adminSubjectIdHex,
+        adminOrg: detail.adminOrg,
         adminWallets: activatedAdmins.map((admin) => ({
           address: hexToSs58(admin.pubkeyHex),
           pubkeyHex: admin.pubkeyHex,
@@ -178,7 +185,11 @@ export function ClearingBankSection() {
 
       {view.kind === 'admin-set-change' && (
         <AdminSetChangePage
-          sfidNumber={view.sfidNumber}
+          subjectRef={{
+            sfidNumber: view.sfidNumber,
+            subjectIdHex: view.adminSubjectIdHex,
+            org: view.adminOrg,
+          }}
           institutionName={view.institutionName}
           adminWallets={view.adminWallets}
           onBack={() => setView({ kind: 'institution-detail', sfidNumber: view.sfidNumber })}

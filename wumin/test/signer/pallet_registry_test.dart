@@ -49,6 +49,9 @@ void main() {
       expect(PalletRegistry.proposeSafetyFundCall, 1);
       expect(PalletRegistry.proposeSweepCall, 2);
 
+      // AdminsChange(12): call_index=0 是管理员集合变更，call_index=1 留洞不复用。
+      expect(PalletRegistry.proposeAdminSetChangeCall, 0);
+
       // OrganizationManage(17): call_index=0/3 留洞不复用
       // (0 = 单账户机构 propose_create 已废弃; 3 = propose_create_personal 已迁出至 PersonalManage(7))
       expect(PalletRegistry.proposeCloseCall, 1);

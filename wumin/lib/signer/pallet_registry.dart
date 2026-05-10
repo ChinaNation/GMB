@@ -105,7 +105,7 @@ class PalletRegistry {
   // ---- AdminsChange (12) ----
   // call_index 1 留洞不复用。
   static const int adminsChangePallet = 12;
-  static const int proposeAdminReplacementCall = 0;
+  static const int proposeAdminSetChangeCall = 0;
 
   // ---- GrandpaKeyChange (16) ----
   // call_index 1, 2 留洞不复用。

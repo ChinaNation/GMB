@@ -41,4 +41,18 @@ mod tests {
         assert_eq!(&call[3..51], &[0x11u8; 48]);
         assert_eq!(call[51], 0x04);
     }
+
+    #[test]
+    fn builds_dynamic_org_admin_set_change_call_prefix() {
+        let subject_id = [0x55u8; 48];
+        let admins = vec!["66".repeat(32), "77".repeat(32)];
+
+        for org in [4u8, 5u8] {
+            let call = build_admin_set_change_call_data(org, &subject_id, &admins).unwrap();
+            assert_eq!(call[0], ADMINS_CHANGE_PALLET_INDEX);
+            assert_eq!(call[1], PROPOSE_ADMIN_SET_CHANGE_CALL_INDEX);
+            assert_eq!(call[2], org);
+            assert_eq!(&call[3..51], &[0x55u8; 48]);
+        }
+    }
 }

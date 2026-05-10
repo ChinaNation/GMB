@@ -2,6 +2,7 @@ import { invoke } from '../../core/tauri';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
+  AdminSubjectRef,
   AdminSubjectState,
   InstitutionDetail,
   VoteSignRequestResult,
@@ -9,11 +10,22 @@ import type {
 } from './types';
 
 // 管理员更换模块前端 API。激活、更换与主体读取统一聚合到 admins_change。
+const subjectRefParams = (subjectRef: AdminSubjectRef) => ({
+  sfidNumber: subjectRef.sfidNumber ?? null,
+  subjectIdHex: subjectRef.subjectIdHex ?? null,
+  expectedOrg: subjectRef.org ?? null,
+});
+
 export const adminsChangeApi = {
   getInstitutionDetail: (sfidNumber: string) =>
     invoke<InstitutionDetail>('get_institution_detail', { sfidNumber }),
-  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string) =>
-    invoke<ActivateRequestResult>('build_activate_admin_request', { pubkeyHex, sfidNumber }),
+  buildActivateAdminRequest: (pubkeyHex: string, sfidNumber: string, subjectRef?: AdminSubjectRef) =>
+    invoke<ActivateRequestResult>('build_activate_admin_request', {
+      pubkeyHex,
+      sfidNumber,
+      subjectIdHex: subjectRef?.subjectIdHex ?? null,
+      expectedOrg: subjectRef?.org ?? null,
+    }),
   verifyActivateAdmin: (
     requestId: string,
     pubkeyHex: string,
@@ -28,25 +40,28 @@ export const adminsChangeApi = {
       payloadHex,
       responseJson,
     }),
-  getActivatedAdmins: (sfidNumber: string) =>
-    invoke<ActivatedAdmin[]>('get_activated_admins', { sfidNumber }),
+  getActivatedAdmins: (sfidNumber: string, subjectRef?: AdminSubjectRef) =>
+    invoke<ActivatedAdmin[]>('get_activated_admins', {
+      sfidNumber,
+      subjectIdHex: subjectRef?.subjectIdHex ?? null,
+      expectedOrg: subjectRef?.org ?? null,
+    }),
   deactivateAdmin: (pubkeyHex: string, sfidNumber: string, unlockPassword: string) =>
     invoke<void>('deactivate_admin', { pubkeyHex, sfidNumber, unlockPassword }),
   hasAnyActivatedAdmin: () => invoke<boolean>('has_any_activated_admin'),
-  getAdminSubjectState: (sfidNumber: string) =>
-    invoke<AdminSubjectState | null>('get_admin_subject_state', { sfidNumber, subjectIdHex: null }),
-  buildAdminSetChangeRequest: (pubkeyHex: string, sfidNumber: string, newAdmins: string[]) =>
+  getAdminSubjectState: (subjectRef: AdminSubjectRef) =>
+    invoke<AdminSubjectState | null>('get_admin_subject_state', subjectRefParams(subjectRef)),
+  buildAdminSetChangeRequest: (pubkeyHex: string, subjectRef: AdminSubjectRef, newAdmins: string[]) =>
     invoke<VoteSignRequestResult>('build_admin_set_change_request', {
       pubkeyHex,
-      sfidNumber,
-      subjectIdHex: null,
+      ...subjectRefParams(subjectRef),
       newAdmins,
     }),
   submitAdminSetChange: (
     requestId: string,
     expectedPubkeyHex: string,
     expectedPayloadHash: string,
-    sfidNumber: string,
+    subjectRef: AdminSubjectRef,
     newAdmins: string[],
     signNonce: number,
     signBlockNumber: number,
@@ -56,8 +71,7 @@ export const adminsChangeApi = {
       requestId,
       expectedPubkeyHex,
       expectedPayloadHash,
-      sfidNumber,
-      subjectIdHex: null,
+      ...subjectRefParams(subjectRef),
       newAdmins,
       signNonce,
       signBlockNumber,

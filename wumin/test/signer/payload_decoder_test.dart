@@ -513,7 +513,7 @@ void main() {
         [0x13, 0x04], // execute_safety_fund_transfer
         [0x13, 0x05], // execute_sweep_to_main
         [0x0e, 0x01], // execute_destroy
-        [0x0c, 0x01], // execute_admin_replacement
+        [0x0c, 0x01], // AdminsChange call_index=1 留洞不复用
         [0x10, 0x01], // execute_replace_grandpa_key
         [0x10, 0x02], // cancel_failed_replace_grandpa_key
       ];
@@ -523,6 +523,105 @@ void main() {
         expect(decoded, isNull,
             reason: 'pallet=${c[0]} call=${c[1]} 应已废弃,decoder 拒绝');
       }
+    });
+
+    test('decodes propose_admin_set_change (pallet=12 call=0)', () {
+      final subject = subjectIdFromAccount(
+        0x03,
+        List<int>.generate(32, (i) => 0x80 + i),
+      );
+      final admin1 = List<int>.filled(32, 0x11);
+      final admin2 = List<int>.filled(32, 0x22);
+      final payload = Uint8List.fromList([
+        0x0c, 0x00,
+        0x03, // org = 个人多签
+        ...subject,
+        0x08, // Compact(2)
+        ...admin1,
+        ...admin2,
+      ]);
+
+      final decoded = PayloadDecoder.decode(encodeHex(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_admin_set_change');
+      expect(decoded.fields['org'], '个人多签');
+      expect(decoded.fields['subject'],
+          '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+      expect(
+        decoded.fields['new_admins'],
+        [
+          '0x${admin1.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+          '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+        ].join(','),
+      );
+      expect(decoded.summary, contains('管理员集合变更'));
+    });
+
+    test('decodes institution-account admin set change org labels', () {
+      final subject = subjectIdFromAccount(
+        0x05,
+        List<int>.generate(32, (i) => 0x30 + i),
+      );
+      final admin1 = List<int>.filled(32, 0x44);
+      final admin2 = List<int>.filled(32, 0x55);
+
+      for (final entry in {
+        0x04: '公权机构账户',
+        0x05: '其他机构账户',
+      }.entries) {
+        final payload = Uint8List.fromList([
+          0x0c,
+          0x00,
+          entry.key,
+          ...subject,
+          0x08,
+          ...admin1,
+          ...admin2,
+        ]);
+
+        final decoded = PayloadDecoder.decode(encodeHex(payload));
+
+        expect(decoded, isNotNull);
+        expect(decoded!.fields['org'], entry.value);
+        expect(decoded.fields['subject'],
+            '0x${subject.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}');
+      }
+    });
+
+    test('rejects admin set change subject kind and org mismatch', () {
+      final institutionSubject = subjectIdFromAccount(
+        0x05,
+        List<int>.filled(32, 0x66),
+      );
+      final personalSubject = subjectIdFromAccount(
+        0x03,
+        List<int>.filled(32, 0x77),
+      );
+      final sfidSubject = subjectIdFromText(
+        0x02,
+        'GFR-LN001-CB0X-944805165-2026',
+      );
+      final admin1 = List<int>.filled(32, 0x11);
+      final admin2 = List<int>.filled(32, 0x22);
+
+      Uint8List payload(int org, List<int> subject) => Uint8List.fromList([
+            0x0c,
+            0x00,
+            org,
+            ...subject,
+            0x08,
+            ...admin1,
+            ...admin2,
+          ]);
+
+      expect(
+          PayloadDecoder.decode(encodeHex(payload(0x03, institutionSubject))),
+          isNull);
+      expect(PayloadDecoder.decode(encodeHex(payload(0x04, personalSubject))),
+          isNull);
+      expect(
+          PayloadDecoder.decode(encodeHex(payload(0x04, sfidSubject))), isNull);
     });
 
     test('decodes cleanup_rejected_proposal (pallet=17 call=4)', () {

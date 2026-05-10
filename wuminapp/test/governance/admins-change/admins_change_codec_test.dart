@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/admin_set_change_call_codec.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/admin_subject_codec.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
+import 'package:wuminapp_mobile/governance/admins-change/admin_set_change_qr_adapter.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_set_validation.dart';
 
@@ -94,6 +95,84 @@ void main() {
         ),
         throwsStateError,
       );
+    });
+
+    test('rejects invalid subject kind and org combinations', () {
+      AdminSubjectState subject({required int org, required int kind}) {
+        return AdminSubjectState(
+          subjectIdHex: '11' * 48,
+          org: org,
+          kind: kind,
+          admins: ['aa' * 32, 'bb' * 32],
+          threshold: 2,
+          creatorHex: 'aa' * 32,
+          createdAt: 1,
+          updatedAt: 1,
+          status: 1,
+        );
+      }
+
+      expect(
+        () => AdminSetValidation.validate(
+          subject: subject(org: 4, kind: 1),
+          proposerPubkeyHex: 'aa' * 32,
+          newAdmins: ['aa' * 32, 'cc' * 32],
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => AdminSetValidation.validate(
+          subject: subject(org: 4, kind: 2),
+          proposerPubkeyHex: 'aa' * 32,
+          newAdmins: ['aa' * 32, 'cc' * 32],
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => AdminSetValidation.validate(
+          subject: subject(org: 3, kind: 3),
+          proposerPubkeyHex: 'aa' * 32,
+          newAdmins: ['aa' * 32, 'cc' * 32],
+        ),
+        throwsStateError,
+      );
+      expect(
+        AdminSetValidation.validate(
+          subject: subject(org: 5, kind: 3),
+          proposerPubkeyHex: 'aa' * 32,
+          newAdmins: ['aa' * 32, 'cc' * 32],
+        ),
+        ['aa' * 32, 'cc' * 32],
+      );
+    });
+
+    test('builds QR display fields matching cold wallet decoder keys', () {
+      final subject = AdminSubjectState(
+        subjectIdHex: '11' * 48,
+        org: 5,
+        kind: 3,
+        admins: ['aa' * 32, 'bb' * 32],
+        threshold: 2,
+        creatorHex: 'aa' * 32,
+        createdAt: 1,
+        updatedAt: 1,
+        status: 1,
+      );
+
+      final display = AdminSetChangeQrAdapter.buildDisplay(
+        subject: subject,
+        newAdmins: ['0x${'aa' * 32}', 'cc' * 32],
+      );
+      final fields = {
+        for (final field in display.fields) field.key: field.value
+      };
+
+      expect(fields['org'], '其他机构账户');
+      expect(fields['subject'], '0x${'11' * 48}');
+      expect(fields['new_admins'], '0x${'aa' * 32},0x${'cc' * 32}');
+      expect(fields.containsKey('subject_id'), isFalse);
+      expect(fields.containsKey('admin_count'), isFalse);
+      expect(fields.containsKey('threshold'), isFalse);
     });
   });
 }

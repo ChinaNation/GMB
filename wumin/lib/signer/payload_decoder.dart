@@ -243,10 +243,10 @@ class PayloadDecoder {
       }
 
       // ── AdminsChange(12) ──
-      // execute_admin_replacement 走 VotingEngine::retry_passed_proposal。
+      // 管理员集合变更走 propose_admin_set_change；执行统一由 VotingEngine 重试。
       if (palletIndex == PalletRegistry.adminsChangePallet) {
-        if (callIndex == PalletRegistry.proposeAdminReplacementCall) {
-          return _decodeProposeAdminReplacement(bytes);
+        if (callIndex == PalletRegistry.proposeAdminSetChangeCall) {
+          return _decodeProposeAdminSetChange(bytes);
         }
       }
 
@@ -1109,27 +1109,38 @@ class PayloadDecoder {
   }
 
   // ---------------------------------------------------------------------------
-  // AdminsChange(12) / propose_admin_replacement(0)
-  // 格式：[12][0][org:u8][institution:48][old_admin:32][new_admin:32]
+  // AdminsChange(12) / propose_admin_set_change(0)
+  // 格式：[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32]
   // ---------------------------------------------------------------------------
-  static DecodedPayload? _decodeProposeAdminReplacement(Uint8List bytes) {
-    if (bytes.length < 115) return null;
+  static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
+    if (bytes.length < 52) return null;
     var offset = 2;
     final org = bytes[offset];
     offset += 1;
-    offset += 48; // institution 跳过
-    final oldAdminId = bytes.sublist(offset, offset + 32);
-    offset += 32;
-    final newAdminId = bytes.sublist(offset, offset + 32);
-    final oldAdmin = Keyring().encodeAddress(oldAdminId.toList(), _ss58Prefix);
-    final newAdmin = Keyring().encodeAddress(newAdminId.toList(), _ss58Prefix);
+    final subjectBytes = bytes.sublist(offset, offset + 48);
+    final subject = _decodeSpendSubjectId(subjectBytes);
+    if (subject == null) return null;
+    if (!_adminSubjectKindMatchesOrg(org, subject.kind)) return null;
+    offset += 48;
+
+    final (adminCount, countSize) = _decodeCompactU32(bytes, offset);
+    if (countSize == 0 || adminCount < 1) return null;
+    offset += countSize;
+
+    final admins = <String>[];
+    for (var i = 0; i < adminCount; i++) {
+      if (offset + 32 > bytes.length) return null;
+      admins.add(_bytesToLowerHex(bytes.sublist(offset, offset + 32)));
+      offset += 32;
+    }
+
     return DecodedPayload(
-      action: 'propose_admin_replacement',
-      summary: '${_orgName(org)} 替换管理员',
+      action: 'propose_admin_set_change',
+      summary: '${_orgName(org)} 管理员集合变更：${subject.label} → $adminCount 人',
       fields: {
         'org': _orgName(org),
-        'old_admin': oldAdmin,
-        'new_admin': newAdmin,
+        'subject': _bytesToLowerHex(subjectBytes),
+        'new_admins': admins.join(','),
       },
     );
   }
@@ -1470,9 +1481,29 @@ class PayloadDecoder {
       case 2:
         return '省储行';
       case 3:
-        return '注册多签机构';
+        return '个人多签';
+      case 4:
+        return '公权机构账户';
+      case 5:
+        return '其他机构账户';
       default:
         return '机构$org';
+    }
+  }
+
+  static bool _adminSubjectKindMatchesOrg(int org, int subjectKind) {
+    switch (org) {
+      case 0:
+      case 1:
+      case 2:
+        return subjectKind == _subjectKindBuiltin;
+      case 3:
+        return subjectKind == _subjectKindPersonalDuoqian;
+      case 4:
+      case 5:
+        return subjectKind == _subjectKindInstitutionAccount;
+      default:
+        return false;
     }
   }
 
