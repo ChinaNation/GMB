@@ -29,7 +29,7 @@ class AdminInstitutionDecoded {
     required this.adminPubkeysHex,
   });
 
-  /// 治理 org 标识(0=NRC, 1=PRC, 2=PRB, 3=DUOQIAN 等)。
+  /// 治理 org 标识(0=NRC, 1=PRC, 2=PRB, 3=个人多签, 4=PUP, 5=OTH)。
   final int org;
 
   /// 主体类型:0=BuiltinInstitution / 1=SfidInstitution / 2=PersonalDuoqian / 3=InstitutionAccount。

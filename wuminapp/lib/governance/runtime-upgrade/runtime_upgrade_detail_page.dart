@@ -3,6 +3,7 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
@@ -18,7 +19,7 @@ import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/proposal_vote_widgets.dart';
 
-/// Runtime 升级提案详情页。
+/// 协议升级提案详情页。
 ///
 /// 从全链提案页进入时为只读模式；
 /// 从机构详情页进入时，当前机构管理员可直接提交联合投票。
@@ -125,7 +126,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
-        futures.add(_adminService.fetchAdmins(institution.sfidNumber));
+        futures.add(_adminService.fetchAdmins(
+          AdminSubjectIdentity.fromInstitution(institution),
+        ));
         futures.add(_service.fetchJointVoteByInstitution(
             widget.proposalId, _sfidNumberToFixed48(institution.sfidNumber)));
         futures.add(_service.fetchJointInstitutionTally(
@@ -365,7 +368,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         ),
       );
 
-      _adminService.clearCache(institution.sfidNumber);
+      _adminService
+          .clearCache(AdminSubjectIdentity.fromInstitution(institution));
       await _load();
     } on WalletAuthException catch (e) {
       if (!mounted) return;
@@ -411,15 +415,8 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   int? _resolvedStatusCode() {
-    // 中文注释：业务提案自己的 3 表示“执行失败”，投票引擎元数据的 3 表示“已执行”；
-    // 详情页优先展示业务状态，避免把已执行误标成失败。
-    if (_proposalInfo?.status == 3) {
-      return 4;
-    }
-    if (_meta?.status == 3) {
-      return 3;
-    }
-    return _proposalInfo?.status ?? _meta?.status;
+    // 中文注释：协议升级真实状态只以投票引擎元数据为准。
+    return _meta?.status;
   }
 
   String _institutionVoteLabel() {
@@ -433,7 +430,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '升级提案详情',
+          '协议升级详情',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -484,7 +481,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       onRefresh: () async {
         final institution = widget.institution;
         if (institution != null) {
-          _adminService.clearCache(institution.sfidNumber);
+          _adminService.clearCache(
+            AdminSubjectIdentity.fromInstitution(institution),
+          );
         }
         await _load();
       },
@@ -572,20 +571,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
                   );
                 },
               ),
-              const Divider(height: 20),
-              _buildInfoRow('Code 状态', _codeStatusLabel(info)),
-              const Divider(height: 20),
               _buildRemarkRow('升级理由', reason),
             ],
           ],
         ),
       ),
     );
-  }
-
-  String _codeStatusLabel(RuntimeUpgradeProposalInfo info) {
-    if (info.status == 0) return '待执行';
-    return '已归档';
   }
 
   Widget _buildRemarkRow(String label, String text) {
@@ -1057,7 +1048,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       builder: (ctx) => AlertDialog(
         title: Text('确认联合公投$label'),
         content: Text(
-          '将对此升级提案投"$label"票。投票后不可修改。',
+          '将对此协议升级提案投"$label"票。投票后不可修改。',
         ),
         actions: [
           TextButton(

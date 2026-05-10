@@ -2,16 +2,16 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:polkadart/scale_codec.dart' show CompactBigIntCodec, ByteOutput;
+import 'package:polkadart/scale_codec.dart' show ByteOutput;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
 
-/// Runtime upgrade 提案链上交互服务。
+/// 协议升级提案链上交互服务。
 ///
-/// 负责 extrinsic 编码/提交 和 storage 查询。
+/// 负责协议升级提案详情查询，并保留现有详情页投票提交能力。
 class RuntimeUpgradeService {
   RuntimeUpgradeService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -19,57 +19,16 @@ class RuntimeUpgradeService {
 
   // ──── 常量 ────
 
-  /// runtime-upgrade pallet index=13。
-  static const _palletIndex = 13;
-
   /// JointVote sub-pallet pallet_index=23。
   static const _jointVotePalletIndex = 23;
-
-  /// propose_runtime_upgrade call_index=0。
-  static const _proposeCallIndex = 0;
 
   /// JointVote::cast_admin call_index=0。
   static const _jointVoteCallIndex = 0;
 
-  // ──── Extrinsic 提交 ────
+  /// runtime-upgrade 写入 VotingEngine::ProposalData 的业务前缀。
+  static const _moduleTag = [0x72, 0x74, 0x2d, 0x75, 0x70, 0x67]; // rt-upg
 
-  /// 提交 propose_runtime_upgrade extrinsic。
-  ///
-  /// ADR-008 step3 双层凭证(province, signer_admin_pubkey)由 SFID 后端
-  /// 在签发人口快照时一并下发,本服务仅按 SCALE 顺序透传到 chain。
-  ///
-  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
-  Future<({String txHash, int usedNonce})> submitProposeRuntimeUpgrade({
-    required String reason,
-    required Uint8List wasmCode,
-    required int eligibleTotal,
-    required Uint8List snapshotNonce,
-    required Uint8List signature,
-    required Uint8List province,
-    required Uint8List signerAdminPubkey,
-    required String fromAddress,
-    required Uint8List signerPubkey,
-    required Future<Uint8List> Function(Uint8List payload) sign,
-  }) async {
-    if (signerAdminPubkey.length != 32) {
-      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
-    }
-    final callData = buildProposeRuntimeUpgradeCallForTest(
-      reason: reason,
-      wasmCode: wasmCode,
-      eligibleTotal: eligibleTotal,
-      snapshotNonce: snapshotNonce,
-      signature: signature,
-      province: province,
-      signerAdminPubkey: signerAdminPubkey,
-    );
-    return _signAndSubmit(
-      callData: callData,
-      fromAddress: fromAddress,
-      signerPubkey: signerPubkey,
-      sign: sign,
-    );
-  }
+  // ──── Extrinsic 提交 ────
 
   /// 提交机构管理员的联合投票。
   ///
@@ -97,12 +56,12 @@ class RuntimeUpgradeService {
 
   // ──── 链上查询 ────
 
-  /// 查询 runtime upgrade 提案详情。返回 null 表示不存在。
+  /// 查询协议升级提案详情。返回 null 表示不存在。
   ///
   /// ProposalData 是 BoundedVec<u8>，SCALE 编码为 Compact 长度前缀 + 原始字节。
   /// 原始字节布局：
   ///   proposer: AccountId32(32) + reason: Vec<u8>(Compact len + bytes)
-  ///   + code_hash: [u8;32] + status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
+  ///   + code_hash: [u8;32]。真实状态只读取 VotingEngine::Proposals.status。
   Future<RuntimeUpgradeProposalInfo?> fetchRuntimeUpgradeProposal(
       int proposalId) async {
     final key = _buildStorageKey(
@@ -283,11 +242,12 @@ class RuntimeUpgradeService {
 
   // ──── 内部：解码 ────
 
-  /// 解码 RuntimeUpgradeAction SCALE 数据。
+  /// 解码协议升级提案摘要 SCALE 数据。
   RuntimeUpgradeProposalInfo? _decodeRuntimeUpgradeAction(
       int proposalId, Uint8List data) {
     try {
-      var offset = 0;
+      if (!_startsWith(data, _moduleTag)) return null;
+      var offset = _moduleTag.length;
 
       // proposer: AccountId32 (32 bytes)
       if (offset + 32 > data.length) return null;
@@ -307,9 +267,8 @@ class RuntimeUpgradeService {
       final codeHashBytes = data.sublist(offset, offset + 32);
       offset += 32;
 
-      // status: u8 enum (0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed)
-      if (offset >= data.length) return null;
-      final status = data[offset];
+      // 中文注释：协议升级摘要不保存业务状态，避免与投票引擎终态脱节。
+      if (offset != data.length) return null;
 
       final proposerSs58 =
           Keyring().encodeAddress(Uint8List.fromList(proposerBytes), 2027);
@@ -320,92 +279,21 @@ class RuntimeUpgradeService {
         proposer: proposerSs58,
         reason: reason,
         codeHashHex: codeHashHex,
-        status: status,
       );
     } catch (_) {
       return null;
     }
   }
 
-  // ──── 内部：extrinsic 编码 ────
-
-  /// 构造 propose_runtime_upgrade call data。
-  ///
-  /// 格式(ADR-008 step3 双层凭证)：
-  /// `[13][0]
-  ///  [compact_len+reason_utf8]
-  ///  [compact_len+wasm_bytes]
-  ///  [u64_le:eligible_total]
-  ///  [compact_len+nonce_bytes]
-  ///  [compact_len+signature_bytes]
-  ///  [compact_len+province_bytes]   ★ ADR-008 step3
-  ///  [32B signer_admin_pubkey]      ★ ADR-008 step3`
-  ///
-  /// 与链端 `propose_runtime_upgrade` extrinsic SCALE 顺序逐字一致。
-  /// signer_admin_pubkey 是 [u8; 32] 固定字段(无 Compact 长度前缀)。
-  /// feedback_scale_domain_must_be_array.md:固定长度 byte array 不走 Vec 编码。
-  ///
-  /// `@visibleForTesting`:对 step2d 双端 SCALE fixture 暴露,链端 = wumin =
-  /// wuminapp 三处字节序列必须逐字一致,因此该构造逻辑被独立测试覆盖。
-  @visibleForTesting
-  static Uint8List buildProposeRuntimeUpgradeCallForTest({
-    required String reason,
-    required Uint8List wasmCode,
-    required int eligibleTotal,
-    required Uint8List snapshotNonce,
-    required Uint8List signature,
-    required Uint8List province,
-    required Uint8List signerAdminPubkey,
-  }) {
-    if (signerAdminPubkey.length != 32) {
-      throw ArgumentError('signerAdminPubkey 必须为 32 字节(ADR-008 step3)');
+  bool _startsWith(Uint8List data, List<int> prefix) {
+    if (data.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (data[i] != prefix[i]) return false;
     }
-    final output = ByteOutput();
-    output.pushByte(_palletIndex);
-    output.pushByte(_proposeCallIndex);
-
-    // reason: Vec<u8> = Compact<u32> length + utf8 bytes
-    final reasonBytes = utf8.encode(reason);
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(reasonBytes.length)));
-    if (reasonBytes.isNotEmpty) {
-      output.write(Uint8List.fromList(reasonBytes));
-    }
-
-    // wasm_code: Vec<u8> = Compact<u32> length + bytes
-    output.write(CompactBigIntCodec.codec.encode(BigInt.from(wasmCode.length)));
-    if (wasmCode.isNotEmpty) {
-      output.write(wasmCode);
-    }
-
-    // eligible_total: u64 little-endian
-    output.write(_u64ToLeBytes(eligibleTotal));
-
-    // snapshot_nonce: Vec<u8> = Compact<u32> length + bytes
-    output.write(
-        CompactBigIntCodec.codec.encode(BigInt.from(snapshotNonce.length)));
-    if (snapshotNonce.isNotEmpty) {
-      output.write(snapshotNonce);
-    }
-
-    // signature: Vec<u8> = Compact<u32> length + bytes
-    output
-        .write(CompactBigIntCodec.codec.encode(BigInt.from(signature.length)));
-    if (signature.isNotEmpty) {
-      output.write(signature);
-    }
-
-    // ★ province: BoundedVec<u8, ConstU32<64>> = Compact<u32> length + bytes
-    output.write(CompactBigIntCodec.codec.encode(BigInt.from(province.length)));
-    if (province.isNotEmpty) {
-      output.write(province);
-    }
-
-    // ★ signer_admin_pubkey: [u8; 32] 固定字节,无 Compact 前缀
-    output.write(signerAdminPubkey);
-
-    return output.toBytes();
+    return true;
   }
+
+  // ──── 内部：extrinsic 编码 ────
 
   Uint8List _buildJointVoteCall({
     required int proposalId,
@@ -437,7 +325,7 @@ class RuntimeUpgradeService {
   }) async {
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
-      logLabel: 'RuntimeUpgrade',
+      logLabel: 'ProtocolUpgrade',
     ).signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,
@@ -445,7 +333,7 @@ class RuntimeUpgradeService {
       sign: sign,
       onTrace: (trace) {
         debugPrint(
-            '[RuntimeUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
+            '[ProtocolUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
       },
     );
   }

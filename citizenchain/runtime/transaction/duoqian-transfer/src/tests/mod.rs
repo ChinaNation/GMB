@@ -211,7 +211,7 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                 .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .map(|n| n.duoqian_admins.iter().any(|admin| *admin == who_arr))
                 .unwrap_or(false),
-            ORG_REN => {
+            ORG_REN | ORG_PUP | ORG_OTH => {
                 admins_change::Pallet::<Test>::is_active_subject_admin(org, institution, who)
             }
             _ => false,
@@ -243,7 +243,9 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
                         .map(AccountId32::new)
                         .collect()
                 }),
-            ORG_REN => admins_change::Pallet::<Test>::active_subject_admins(org, institution),
+            ORG_REN | ORG_PUP | ORG_OTH => {
+                admins_change::Pallet::<Test>::active_subject_admins(org, institution)
+            }
             _ => None,
         }
     }
@@ -261,7 +263,9 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
                 .iter()
                 .find(|n| subject_id_from_sfid_number(n.sfid_number) == Some(institution))
                 .and_then(|n| u32::try_from(n.duoqian_admins.len()).ok()),
-            ORG_REN => admins_change::Pallet::<Test>::active_subject_admin_count(org, institution),
+            ORG_REN | ORG_PUP | ORG_OTH => {
+                admins_change::Pallet::<Test>::active_subject_admin_count(org, institution)
+            }
             _ => None,
         }
     }
@@ -271,7 +275,9 @@ pub struct TestInternalThresholdProvider;
 impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
     fn is_known_subject(org: u8, institution: SubjectId) -> bool {
         match org {
-            ORG_REN => admins_change::Pallet::<Test>::active_subject_exists(org, institution),
+            ORG_REN | ORG_PUP | ORG_OTH => {
+                admins_change::Pallet::<Test>::active_subject_exists(org, institution)
+            }
             _ => false,
         }
     }
@@ -281,7 +287,9 @@ impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
             ORG_NRC | ORG_PRC | ORG_PRB => {
                 votingengine::types::fixed_governance_pass_threshold(org)
             }
-            ORG_REN => admins_change::Pallet::<Test>::active_subject_threshold(org, institution),
+            ORG_REN | ORG_PUP | ORG_OTH => {
+                admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
+            }
             _ => None,
         }
     }
@@ -493,9 +501,9 @@ fn registered_institution_admin(index: usize) -> AccountId32 {
     registered_institution_pair(index).0
 }
 
-/// 机构账户(ORG_REN / 0x05)的 admin sr25519 keypair helper。
+/// 机构账户(ORG_OTH / 0x05)的 admin sr25519 keypair helper。
 fn registered_institution_pair(index: usize) -> (AccountId32, sr25519::Pair) {
-    derive_admin_pair(ORG_REN, &registered_institution_subject(), index as u8)
+    derive_admin_pair(ORG_OTH, &registered_institution_subject(), index as u8)
 }
 
 fn registered_institution_pairs(count: u8) -> Vec<(AccountId32, sr25519::Pair)> {
@@ -525,11 +533,32 @@ fn insert_active_registered_institution_account(
 ) {
     let sfid_number = test_sfid_number();
     let account_name = test_account_name();
+    let institution_admins: organization_manage::pallet::DuoqianAdminsOf<Test> = admins
+        .clone()
+        .into_inner()
+        .try_into()
+        .expect("institution admins should fit organization-manage MaxAdmins");
     organization_manage::AddressRegisteredSfid::<Test>::insert(
         account,
         organization_manage::RegisteredInstitution {
             sfid_number: sfid_number.clone(),
             account_name: account_name.clone(),
+        },
+    );
+    organization_manage::Institutions::<Test>::insert(
+        &sfid_number,
+        organization_manage::InstitutionInfo {
+            institution_name: test_account_name(),
+            main_address: account.clone(),
+            fee_address: AccountId32::new([0x67; 32]),
+            admin_org: ORG_OTH,
+            admin_count: institution_admins.len() as u32,
+            threshold: 2,
+            duoqian_admins: institution_admins,
+            creator: registered_institution_admin(0),
+            created_at: 1,
+            status: organization_manage::InstitutionLifecycleStatus::Active,
+            account_count: 1,
         },
     );
     organization_manage::InstitutionAccounts::<Test>::insert(
@@ -546,7 +575,7 @@ fn insert_active_registered_institution_account(
     admins_change::Subjects::<Test>::insert(
         subject,
         admins_change::AdminSubject {
-            org: ORG_REN,
+            org: ORG_OTH,
             kind: admins_change::AdminSubjectKind::InstitutionAccount,
             admins,
             threshold: 2,
@@ -678,8 +707,8 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(ORG_NRC, nrc, nrc_accts);
         set_extra_admins(ORG_PRC, prc, prc_accts);
         set_extra_admins(ORG_PRB, prb, prb_accts);
-        // ORG_REN 的 admin / threshold 直接从 admins-change 读；
-        // personal-manage 只保存个人账户生命周期状态。
+        // ORG_REN/ORG_PUP/ORG_OTH 的 admin / threshold 直接从 admins-change 读；
+        // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalDuoqians + admins-change Subjects。
         let _ = dq;
     });

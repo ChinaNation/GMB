@@ -9,65 +9,42 @@ use sp_runtime::DispatchError;
 use crate::{ProposalCancelDecision, ProposalExecutionOutcome, SubjectId};
 
 pub trait JointVoteEngine<AccountId> {
-    fn create_joint_proposal(
-        who: AccountId,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError>;
+    fn create_joint_proposal(who: AccountId) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data(
         who: AccountId,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
     fn create_joint_proposal_with_data_and_object(
-        _who: AccountId,
-        _eligible_total: u64,
-        _snapshot_nonce: &[u8],
-        _signature: &[u8],
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
-        _module_tag: &[u8],
-        _data: sp_std::vec::Vec<u8>,
-        _object_kind: u8,
-        _object_data: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other(
-            "JointVoteEngineObjectStoreNotConfigured",
-        ))
-    }
+        who: AccountId,
+        module_tag: &[u8],
+        data: sp_std::vec::Vec<u8>,
+        object_kind: u8,
+        object_data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError>;
 }
 
 impl<AccountId> JointVoteEngine<AccountId> for () {
-    fn create_joint_proposal(
-        _who: AccountId,
-        _eligible_total: u64,
-        _snapshot_nonce: &[u8],
-        _signature: &[u8],
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError> {
+    fn create_joint_proposal(_who: AccountId) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("JointVoteEngineNotConfigured"))
     }
 
     fn create_joint_proposal_with_data(
         _who: AccountId,
-        _eligible_total: u64,
-        _snapshot_nonce: &[u8],
-        _signature: &[u8],
-        _province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
+    ) -> Result<u64, DispatchError> {
+        Err(DispatchError::Other("JointVoteEngineNotConfigured"))
+    }
+
+    fn create_joint_proposal_with_data_and_object(
+        _who: AccountId,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
+        _object_kind: u8,
+        _object_data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other("JointVoteEngineNotConfigured"))
     }

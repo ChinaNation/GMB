@@ -30,8 +30,9 @@ use frame_support::{
     storage::{with_transaction, TransactionOutcome},
     traits::ReservableCurrency,
 };
-use primitives::derive::subject_id_from_registered_sfid_number;
+use primitives::derive::subject_id_from_institution_account;
 use sp_runtime::{traits::Hash, DispatchResult};
+use votingengine::types::{ORG_OTH, ORG_PUP};
 use votingengine::InternalVoteEngine;
 
 /// 机构整体创建提案 (call_index=5,ADR-008 step2b)。
@@ -41,6 +42,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     sfid_number: SfidNumberOf<T>,
     institution_name: AccountNameOf<T>,
     accounts: InstitutionInitialAccountsOf<T>,
+    admin_org: u8,
     admin_count: u32,
     duoqian_admins: DuoqianAdminsOf<T>,
     threshold: u32,
@@ -61,6 +63,10 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         Error::<T>::InstitutionAlreadyExists
     );
     Pallet::<T>::ensure_admin_config(&who, admin_count, &duoqian_admins, threshold)?;
+    ensure!(
+        matches!(admin_org, ORG_PUP | ORG_OTH),
+        Error::<T>::InvalidAdminOrg
+    );
 
     let register_nonce_hash = <T as frame_system::Config>::Hashing::hash(register_nonce.as_slice());
     ensure!(
@@ -87,18 +93,17 @@ pub(crate) fn do_propose_create_institution<T: Config>(
     let (reserve_total, fee) = crate::common::ensure_proposer_can_afford::<T>(&who, initial_total)?;
 
     let now = <frame_system::Pallet<T>>::block_number();
-    // 中文注释:机构治理索引直接由 sfid_number 派生(2026-05-03 整改),
-    // 与 NRC/PRC/PRB 的 subject_id_from_sfid_number 协议一致(D 阶段 SubjectKind=0x02),
-    // 不再绕道 main_address。
-    let institution = subject_id_from_registered_sfid_number(sfid_number.as_slice())
-        .ok_or(Error::<T>::EmptySfidNumber)?;
-    let org = votingengine::types::ORG_REN;
+    // 中文注释:admins-change 只接受账户级主体。SFID 机构号只负责归属/检索,
+    // 管理员更换与内部投票均使用主账户地址派生的 InstitutionAccount SubjectId。
+    let institution = subject_id_from_institution_account(&main_address);
+    let org = admin_org;
     let action = CreateInstitutionAction {
         sfid_number: sfid_number.clone(),
         institution_name: institution_name.clone(),
         main_address: main_address.clone(),
         fee_address: fee_address.clone(),
         proposer: who.clone(),
+        admin_org,
         admin_count,
         threshold,
         duoqian_admins: duoqian_admins.clone(),
@@ -121,6 +126,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
                 institution_name: institution_name.clone(),
                 main_address: main_address.clone(),
                 fee_address: fee_address.clone(),
+                admin_org,
                 admin_count,
                 threshold,
                 duoqian_admins: duoqian_admins.clone(),
@@ -158,7 +164,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[subject_id_from_sfid_number(sfid_number)],
+        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[main_address 派生主体],
         // duoqian-transfer 通过 InstitutionMultisigQuery trait 查询。
 
         // 中文注释:创建提案需全员管理员通过(2026-05-03 整改)。
@@ -180,8 +186,9 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         UsedRegisterNonce::<T>::insert(register_nonce_hash, true);
         if let Err(err) = Pallet::<T>::create_pending_admin_subject_for_proposal(
             proposal_id,
+            org,
             institution,
-            admins_change::AdminSubjectKind::SfidInstitution,
+            admins_change::AdminSubjectKind::InstitutionAccount,
             &duoqian_admins,
             &who,
         ) {
@@ -202,6 +209,7 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         proposer: who,
         accounts: created_accounts,
         admins: duoqian_admins,
+        admin_org,
         admin_count,
         threshold,
         initial_total,

@@ -726,9 +726,8 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
             ),
           ),
         ),
-        // 原"注册多签机构"badge 已删除(2026-05-03):
-        // 个人多签和机构多签 orgType 都是 OrgType.duoqian → label 输出"注册多签机构",
-        // 但用户进入页面是个人多签时显示这个标签具有误导性。
+        // 中文注释：个人多签和机构账户共用 OrgType.duoqian；
+        // 这里不显示笼统 badge，避免把个人多签误标成机构账户。
         // 直接不显示标签,只显示多签账户名(已足够标识)。
       ],
     );

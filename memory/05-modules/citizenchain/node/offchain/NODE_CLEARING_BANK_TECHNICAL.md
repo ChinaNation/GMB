@@ -71,7 +71,7 @@ DTO 统一见 `offchain/common/types.rs`。
 
 ## 4. propose_create_institution(call_index 5)字节布局
 
-链端 [`organization-manage::propose_create_institution`](citizenchain/runtime/governance/organization-manage/src/lib.rs) 10 入参:
+链端 [`organization-manage::propose_create_institution`](citizenchain/runtime/governance/organization-manage/src/lib.rs) 11 入参:
 
 ```
 [pallet_index=17][call_index=5]
@@ -79,6 +79,7 @@ sfid_number: BoundedVec<u8>            = Compact(len) || bytes
 institution_name: BoundedVec<u8>   = Compact(len) || bytes
 accounts: BoundedVec<InstitutionInitialAccount>
                                     = Compact(N) || N × (account_name_compact || amount_u128_le)
+admin_org: u8                       = ORG_PUP(4) 或 ORG_OTH(5)
 admin_count: u32                    = u32 LE
 duoqian_admins: BoundedVec<AccountId32>
                                     = Compact(N) || N × 32B
@@ -145,7 +146,7 @@ signer_admin_pubkey: [u8; 32]       = 32B 原始公钥
 | F1 | 机构提案列表 full scan(`fetch_institution_proposals`)| votingengine 提案存储扫描 + institution_hex 过滤 |
 | F2 | 节点桌面"扫码添加管理员"接 wumin user_contact / user_duoqian QR | 当前 create-multisig 用粘贴兜底 |
 | F3 | 创建机构 extrinsic 提交后冷钱包两段握手实际接入(`VoteSigningFlow` 复用) | 当前 alert 占位 |
-| F4 | wumin decoder 加新版 `propose_create_institution` action 分支 | 必须按 10 字段新布局解码,否则冷钱包扫到 sign_request 会红色拒签 |
+| F4 | wumin decoder 加新版 `propose_create_institution` action 分支 | 已按 11 字段新布局同步，后续字段变更仍需三端同时更新 |
 | F5 | 发起提案按钮组的具体提案类型(转账 / 关闭多签 / 换管理员 / 手续费划转) | 当前全部 disabled "即将上线" |
 | F6 | 节点端"管理员激活"机制(冷钱包列表的来源)集成到 create-multisig 选签名钱包 | 当前 coldWallets={[]} 占位 |
 

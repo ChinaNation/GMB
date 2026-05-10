@@ -68,6 +68,25 @@ impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureJointProposerF
     }
 }
 
+pub struct EnsureNrcAdminForTest;
+impl frame_support::traits::EnsureOrigin<RuntimeOrigin> for EnsureNrcAdminForTest {
+    type Success = AccountId32;
+
+    fn try_origin(o: RuntimeOrigin) -> Result<Self::Success, RuntimeOrigin> {
+        let who = frame_system::EnsureSigned::<AccountId32>::try_origin(o)?;
+        if who == nrc_admin() {
+            Ok(who)
+        } else {
+            Err(RuntimeOrigin::from(frame_system::RawOrigin::Signed(who)))
+        }
+    }
+
+    #[cfg(feature = "runtime-benchmarks")]
+    fn try_successful_origin() -> Result<RuntimeOrigin, ()> {
+        Err(())
+    }
+}
+
 thread_local! {
     static NEXT_JOINT_ID: RefCell<u64> = const { RefCell::new(100) };
 }
@@ -77,85 +96,53 @@ thread_local! {
 
 pub struct TestJointVoteEngine;
 impl votingengine::JointVoteEngine<AccountId32> for TestJointVoteEngine {
-    fn create_joint_proposal(
-        _who: AccountId32,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        _signer_admin_pubkey: &[u8; 32],
-    ) -> Result<u64, DispatchError> {
-        if eligible_total == 0
-            || snapshot_nonce.is_empty()
-            || signature.is_empty()
-            || province.is_empty()
-        {
-            return Err(DispatchError::Other("bad snapshot"));
-        }
+    // 中文注释：测试 mock 模拟投票引擎“已准备好投票上下文”的创建入口，
+    // runtime-upgrade 测试不再传入人口快照或联合签名材料。
+    fn create_joint_proposal(_who: AccountId32) -> Result<u64, DispatchError> {
         NEXT_JOINT_ID.with(|id| {
             let mut id = id.borrow_mut();
-            let v = *id;
+            let proposal_id = *id;
             *id = id.saturating_add(1);
-            Ok(v)
+            Ok(proposal_id)
         })
     }
 
     fn create_joint_proposal_with_data(
-        who: AccountId32,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
+        _who: AccountId32,
         module_tag: &[u8],
         data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal(
-            who,
-            eligible_total,
-            snapshot_nonce,
-            signature,
-            province,
-            signer_admin_pubkey,
-        )?;
-        let bounded_data: frame_support::BoundedVec<
-            u8,
-            <Test as votingengine::Config>::MaxProposalDataLen,
-        > = data
-            .try_into()
-            .map_err(|_| DispatchError::Other("proposal data too large"))?;
-        let owner: frame_support::BoundedVec<u8, <Test as votingengine::Config>::MaxModuleTagLen> =
-            module_tag
+        NEXT_JOINT_ID.with(|id| {
+            let mut id = id.borrow_mut();
+            let proposal_id = *id;
+            *id = id.saturating_add(1);
+            let bounded_data: frame_support::BoundedVec<
+                u8,
+                <Test as votingengine::Config>::MaxProposalDataLen,
+            > = data
+                .try_into()
+                .map_err(|_| DispatchError::Other("proposal data too large"))?;
+            let owner: frame_support::BoundedVec<
+                u8,
+                <Test as votingengine::Config>::MaxModuleTagLen,
+            > = module_tag
                 .to_vec()
                 .try_into()
                 .map_err(|_| DispatchError::Other("module tag too large"))?;
-        votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
-        votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
-        Ok(proposal_id)
+            votingengine::ProposalData::<Test>::insert(proposal_id, bounded_data);
+            votingengine::ProposalOwner::<Test>::insert(proposal_id, owner);
+            Ok(proposal_id)
+        })
     }
 
     fn create_joint_proposal_with_data_and_object(
         who: AccountId32,
-        eligible_total: u64,
-        snapshot_nonce: &[u8],
-        signature: &[u8],
-        province: &[u8],
-        signer_admin_pubkey: &[u8; 32],
         module_tag: &[u8],
         data: Vec<u8>,
         object_kind: u8,
         object_data: Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        let proposal_id = Self::create_joint_proposal_with_data(
-            who,
-            eligible_total,
-            snapshot_nonce,
-            signature,
-            province,
-            signer_admin_pubkey,
-            module_tag,
-            data,
-        )?;
+        let proposal_id = Self::create_joint_proposal_with_data(who, module_tag, data)?;
         let object_len = u32::try_from(object_data.len())
             .map_err(|_| DispatchError::Other("proposal object too large"))?;
         let object_hash = <Test as frame_system::Config>::Hashing::hash(&object_data);
@@ -246,13 +233,12 @@ impl genesis_pallet::DeveloperUpgradeCheck for TestDeveloperUpgradeCheck {
 impl pallet::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type ProposeOrigin = EnsureJointProposerForTest;
+    type DeveloperUpgradeOrigin = EnsureNrcAdminForTest;
     type JointVoteEngine = TestJointVoteEngine;
     type RuntimeCodeExecutor = TestRuntimeCodeExecutor;
     type DeveloperUpgradeCheck = TestDeveloperUpgradeCheck;
     type MaxReasonLen = ConstU32<64>;
     type MaxRuntimeCodeSize = ConstU32<1024>;
-    type MaxSnapshotNonceLength = ConstU32<64>;
-    type MaxSnapshotSignatureLength = ConstU32<64>;
     type WeightInfo = ();
 }
 
@@ -311,33 +297,6 @@ fn code_ok() -> pallet::CodeOf<Test> {
         .expect("runtime code should fit")
 }
 
-fn nonce_ok() -> pallet::SnapshotNonceOf<Test> {
-    b"snap-nonce"
-        .to_vec()
-        .try_into()
-        .expect("snapshot nonce should fit")
-}
-
-fn sig_ok() -> pallet::SnapshotSignatureOf<Test> {
-    b"snap-signature"
-        .to_vec()
-        .try_into()
-        .expect("snapshot signature should fit")
-}
-
-/// ADR-008 step3:测试用占位 province + signer_admin_pubkey,
-/// `TestJointVoteEngine` 仅做空字段非空检验,真实 sr25519 验签覆盖留 runtime 层。
-fn province_ok() -> frame_support::BoundedVec<u8, frame_support::pallet_prelude::ConstU32<64>> {
-    b"liaoning"
-        .to_vec()
-        .try_into()
-        .expect("province should fit")
-}
-
-fn signer_admin_pubkey_ok() -> [u8; 32] {
-    [7u8; 32]
-}
-
 /// 从 ProposalData 读取并跳过 MODULE_TAG 后 decode 提案摘要。
 fn decode_proposal(proposal_id: u64) -> pallet::Proposal<Test> {
     let raw = votingengine::Pallet::<Test>::get_proposal_data(proposal_id)
@@ -354,12 +313,7 @@ fn propose_ok() {
     assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
         RuntimeOrigin::signed(nrc_admin()),
         reason_ok(),
-        code_ok(),
-        10,
-        nonce_ok(),
-        sig_ok(),
-        province_ok(),
-        signer_admin_pubkey_ok()
+        code_ok()
     ));
 }
 
@@ -367,16 +321,21 @@ fn propose_ok() {
 /// 测试 mock 的 TestJointVoteEngine 不创建真实 Proposals 条目，
 /// 需手工补一个以模拟真实回调上下文。
 fn insert_engine_proposal(proposal_id: u64) {
+    insert_engine_proposal_with_status(proposal_id, votingengine::STATUS_PASSED);
+}
+
+fn insert_engine_proposal_with_status(proposal_id: u64, status: u8) {
     votingengine::pallet::Proposals::<Test>::insert(
         proposal_id,
         votingengine::Proposal {
             kind: votingengine::PROPOSAL_KIND_JOINT,
             stage: votingengine::STAGE_JOINT,
-            status: votingengine::STATUS_PASSED,
+            status,
             internal_org: None,
             internal_institution: None,
             start: 0u64,
             end: 100u64,
+            // 中文注释：这是 votingengine::Proposal 的固定字段，非 runtime-upgrade 入参。
             citizen_eligible_total: 10,
         },
     );

@@ -16,6 +16,7 @@ import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_cache.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
@@ -59,8 +60,9 @@ class DuoqianTransferService {
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
+    final identity = AdminSubjectIdentity.fromInstitution(institution);
     final callData = _buildProposeTransferCall(
-      org: institution.orgType,
+      org: identity.org,
       institutionIdentity: institution.sfidNumber,
       beneficiaryAddress: beneficiaryAddress,
       amountFen: BigInt.from((amountYuan * 100).round()),

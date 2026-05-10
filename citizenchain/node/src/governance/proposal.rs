@@ -53,7 +53,7 @@ pub struct ProposalMeta {
     pub institution_hex: Option<String>,
 }
 
-/// Runtime 升级提案详情（从 VotingEngine::ProposalData 解码）。
+/// 协议升级提案详情（从 VotingEngine::ProposalData 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeUpgradeDetail {
@@ -61,8 +61,6 @@ pub struct RuntimeUpgradeDetail {
     pub proposer_hex: String,
     pub reason: String,
     pub code_hash_hex: String,
-    /// 0=Voting, 1=Passed, 2=Rejected, 3=ExecutionFailed。
-    pub status: u8,
 }
 
 /// 投票计数。
@@ -259,8 +257,7 @@ pub fn fetch_proposal_page(start_id: u64, count: u32) -> Result<ProposalPageResu
                     id -= 1;
                     continue;
                 }
-                // 中文注释:runtime-upgrade 的业务终态保存在 ProposalData,
-                // 这里只把它折叠成列表展示状态,避免 UI 把"已否决/执行失败"误显示成"已执行"。
+                // 中文注释:协议升级摘要只保存展示字段，真实状态统一读取 votingengine。
                 let display = match fetch_proposal_display(id, &meta) {
                     Ok(v) => v,
                     Err(_) => ProposalDisplayInfo {
@@ -768,18 +765,16 @@ fn decode_runtime_upgrade_action(proposal_id: u64, data: &[u8]) -> Option<Runtim
     let code_hash_hex = hex::encode(&data[offset..offset + 32]);
     offset += 32;
 
-    // status: u8
-    if offset >= data.len() {
+    // 中文注释：协议升级摘要不保存业务状态，真实状态只读 VotingEngine::Proposals.status。
+    if offset != data.len() {
         return None;
     }
-    let status = data[offset];
 
     Some(RuntimeUpgradeDetail {
         proposal_id,
         proposer_hex,
         reason,
         code_hash_hex,
-        status,
     })
 }
 
@@ -1056,7 +1051,7 @@ fn resolve_institution_name(institution_hex: Option<&str>) -> Option<String> {
     super::find_institution_name(sfid_number)
 }
 
-/// 列表卡片展示信息:一次解析,按动作变体生成 summary + status(runtime 升级需折叠状态)。
+/// 列表卡片展示信息:一次解析,按动作变体生成 summary + votingengine status。
 ///
 /// 与 [`fetch_proposal_full`] 共用 [`resolve_proposal_action`],保证两条路径对同一提案看到一致内容。
 fn fetch_proposal_display(
@@ -1072,17 +1067,11 @@ fn fetch_proposal_display(
             meta.status,
             status_label(meta.status).to_string(),
         ),
-        ProposalAction::RuntimeUpgrade(d) => {
-            // runtime 升级的业务终态由 detail.status 决定,需折叠到列表展示状态,
-            // 避免 UI 把"已否决/执行失败"误显示为"已执行"。
-            let (display_status, display_label) =
-                runtime_upgrade_display_status(d.status, meta.status);
-            (
-                format_runtime_upgrade_summary(&d),
-                display_status,
-                display_label.to_string(),
-            )
-        }
+        ProposalAction::RuntimeUpgrade(d) => (
+            format_runtime_upgrade_summary(&d),
+            meta.status,
+            status_label(meta.status).to_string(),
+        ),
         ProposalAction::ResolutionIssuance(d) => (
             format_issuance_summary(&d),
             meta.status,
@@ -1126,7 +1115,7 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
 
 fn format_runtime_upgrade_summary(d: &RuntimeUpgradeDetail) -> String {
     let reason_short = truncate_chars(&d.reason, 50);
-    format!("运行时升级：{reason_short}")
+    format!("协议升级：{reason_short}")
 }
 
 fn format_issuance_summary(d: &ResolutionIssuanceDetail) -> String {
@@ -1155,16 +1144,6 @@ fn format_fee_rate_summary(d: &FeeRateProposalDetail) -> String {
     let inst_name = resolve_institution_name(Some(&d.institution_hex))
         .unwrap_or_else(|| "未知机构".to_string());
     format!("费率设置 {rate_percent}：{inst_name}")
-}
-
-fn runtime_upgrade_display_status(runtime_status: u8, fallback_status: u8) -> (u8, &'static str) {
-    match runtime_status {
-        0 => (0, status_label(0)),
-        1 => (3, status_label(3)),
-        2 => (2, status_label(2)),
-        3 => (4, status_label(4)),
-        _ => (fallback_status, status_label(fallback_status)),
-    }
 }
 
 // ──── 投票状态查询 ────
@@ -1261,6 +1240,14 @@ fn fetch_option_bool(storage_key: &str) -> Result<Option<bool>, String> {
 mod format_summary_tests {
     use super::*;
 
+    fn compact_bytes_for_test(bytes: &[u8]) -> Vec<u8> {
+        assert!(bytes.len() < 64, "test helper only supports short vectors");
+        let mut out = Vec::with_capacity(1 + bytes.len());
+        out.push((bytes.len() as u8) << 2);
+        out.extend_from_slice(bytes);
+        out
+    }
+
     #[test]
     fn truncate_chars_keeps_short_input_unchanged() {
         assert_eq!(truncate_chars("hello", 10), "hello");
@@ -1287,11 +1274,30 @@ mod format_summary_tests {
             proposer_hex: String::new(),
             reason: long,
             code_hash_hex: String::new(),
-            status: 0,
         };
         let summary = format_runtime_upgrade_summary(&d);
-        assert!(summary.starts_with("运行时升级："));
+        assert!(summary.starts_with("协议升级："));
         assert!(summary.contains("…"));
+    }
+
+    #[test]
+    fn decode_runtime_upgrade_action_uses_current_summary_layout() {
+        let mut data = Vec::from(TAG_RUNTIME_UPGRADE);
+        data.extend_from_slice(&[7u8; 32]);
+        data.extend_from_slice(&compact_bytes_for_test("升级".as_bytes()));
+        data.extend_from_slice(&[9u8; 32]);
+
+        let detail =
+            decode_runtime_upgrade_action(10, &data).expect("current layout should decode");
+        assert_eq!(detail.proposal_id, 10);
+        assert_eq!(detail.reason, "升级");
+        assert_eq!(detail.code_hash_hex, "09".repeat(32));
+
+        data.push(0);
+        assert!(
+            decode_runtime_upgrade_action(10, &data).is_none(),
+            "old runtime-upgrade summary status field must not be accepted"
+        );
     }
 
     #[test]
@@ -1345,7 +1351,6 @@ mod format_summary_tests {
             proposer_hex: String::new(),
             reason: "升级".to_string(),
             code_hash_hex: String::new(),
-            status: 0,
         };
         let (dq, ru, ri, rd, fr) =
             split_action_into_details(ProposalAction::RuntimeUpgrade(Box::new(detail)));

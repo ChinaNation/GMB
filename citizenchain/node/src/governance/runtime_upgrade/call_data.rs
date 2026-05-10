@@ -1,4 +1,4 @@
-use crate::governance::{sfid_api::PopulationSnapshot, signing::encode_compact_u32};
+use crate::governance::signing::encode_compact_u32;
 
 const RUNTIME_UPGRADE_PALLET_INDEX: u8 = 13;
 const PROPOSE_RUNTIME_UPGRADE_CALL_INDEX: u8 = 0;
@@ -36,39 +36,17 @@ pub(crate) fn developer_direct_upgrade_from_file(wasm_path: &str) -> Result<Vec<
 }
 
 /// 构建运行期协议升级提案 call_data: RuntimeUpgrade.propose_runtime_upgrade(...)。
-pub(crate) fn propose_runtime_upgrade(
-    wasm_code: &[u8],
-    reason: &str,
-    snapshot: &PopulationSnapshot,
-) -> Result<Vec<u8>, String> {
+pub(crate) fn propose_runtime_upgrade(wasm_code: &[u8], reason: &str) -> Result<Vec<u8>, String> {
     let reason_bytes = reason.as_bytes();
     if reason_bytes.is_empty() {
         return Err("升级理由不能为空".to_string());
     }
 
-    let nonce_bytes = snapshot.snapshot_nonce.as_bytes();
-    let sig_hex = snapshot
-        .signature
-        .strip_prefix("0x")
-        .unwrap_or(&snapshot.signature);
-    let sig_bytes =
-        hex::decode(sig_hex).map_err(|e| format!("snapshot signature 解码失败: {e}"))?;
-
     let reason_compact = encode_compact_u32(reason_bytes.len() as u32);
     let wasm_compact = encode_compact_u32(wasm_code.len() as u32);
-    let nonce_compact = encode_compact_u32(nonce_bytes.len() as u32);
-    let sig_compact = encode_compact_u32(sig_bytes.len() as u32);
 
     let mut call_data = Vec::with_capacity(
-        2 + reason_compact.len()
-            + reason_bytes.len()
-            + wasm_compact.len()
-            + wasm_code.len()
-            + 8
-            + nonce_compact.len()
-            + nonce_bytes.len()
-            + sig_compact.len()
-            + sig_bytes.len(),
+        2 + reason_compact.len() + reason_bytes.len() + wasm_compact.len() + wasm_code.len(),
     );
     call_data.push(RUNTIME_UPGRADE_PALLET_INDEX);
     call_data.push(PROPOSE_RUNTIME_UPGRADE_CALL_INDEX);
@@ -76,27 +54,14 @@ pub(crate) fn propose_runtime_upgrade(
     call_data.extend_from_slice(reason_bytes);
     call_data.extend_from_slice(&wasm_compact);
     call_data.extend_from_slice(wasm_code);
-    call_data.extend_from_slice(&snapshot.eligible_total.to_le_bytes());
-    call_data.extend_from_slice(&nonce_compact);
-    call_data.extend_from_slice(nonce_bytes);
-    call_data.extend_from_slice(&sig_compact);
-    call_data.extend_from_slice(&sig_bytes);
     Ok(call_data)
 }
 
-/// 从文件和前端回传快照重建运行期协议升级提案 call_data。
+/// 从文件重建运行期协议升级提案 call_data。
 pub(crate) fn propose_runtime_upgrade_from_file(
     wasm_path: &str,
     reason: &str,
-    eligible_total: u64,
-    snapshot_nonce: &str,
-    snapshot_signature: &str,
 ) -> Result<Vec<u8>, String> {
     let (wasm_code, _) = read_wasm(wasm_path)?;
-    let snapshot = PopulationSnapshot {
-        eligible_total,
-        snapshot_nonce: snapshot_nonce.to_string(),
-        signature: snapshot_signature.to_string(),
-    };
-    propose_runtime_upgrade(&wasm_code, reason, &snapshot)
+    propose_runtime_upgrade(&wasm_code, reason)
 }

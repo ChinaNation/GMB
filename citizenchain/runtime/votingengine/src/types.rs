@@ -159,9 +159,8 @@ pub struct ExecutionRetryState<BlockNumber> {
     pub last_attempt_at: Option<BlockNumber>,
 }
 
-/// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案并写入人口快照。
-/// ADR-008 step3:每个入口都加 `(province, signer_admin_pubkey)` 双层匹配字段,
-/// 业务 pallet extrinsic 必须把这两个字段从外部传进来。
+/// 中文注释：事项模块接入联合投票时，统一由投票引擎创建提案。
+/// 人口快照、联合签名、投票资格和计票数据只允许在 votingengine/joint-vote 内处理。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Encode, Decode, TypeInfo, MaxEncodedLen)]
 pub struct Proposal<BlockNumber> {
     /// 提案类型：内部投票/联合投票

@@ -526,15 +526,16 @@ pub fn new_full(
     };
 
     // 清算行启动细节归入 `transaction::offchain_transaction::settlement::bootstrap`,service.rs 只做节点通用接线。
-    let clearing_rpc_impl = crate::transaction::offchain_transaction::settlement::bootstrap::start_from_cli(
-        clearing_bank.as_deref(),
-        clearing_bank_password.as_deref(),
-        clearing_reserve_monitor_interval_secs,
-        config.base_path.path(),
-        client.clone(),
-        transaction_pool.clone(),
-        &task_manager,
-    );
+    let clearing_rpc_impl =
+        crate::transaction::offchain_transaction::settlement::bootstrap::start_from_cli(
+            clearing_bank.as_deref(),
+            clearing_bank_password.as_deref(),
+            clearing_reserve_monitor_interval_secs,
+            config.base_path.path(),
+            client.clone(),
+            transaction_pool.clone(),
+            &task_manager,
+        );
 
     let rpc_extensions_builder = {
         let client = client.clone();

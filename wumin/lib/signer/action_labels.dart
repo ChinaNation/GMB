@@ -45,12 +45,12 @@ const Map<String, String> actionLabels = {
   'cleanup_rejected_proposal': '清理被否决提案',
   'register_sfid_institution': '登记 SFID 机构信息',
 
-  // Runtime 升级
-  'propose_runtime_upgrade': 'Runtime 升级提案',
-  'developer_direct_upgrade': '开发期直升 Runtime',
+  // 协议升级
+  'propose_runtime_upgrade': '协议升级提案',
+  'developer_direct_upgrade': '开发期协议直升',
 
   // 其他
-  'activate_admin': '管理员激活',
+  'activate_admin_subject': '管理员激活',
   'decrypt_admin': '解密清算行管理员',
   'offchain_pay': '链下支付',
   'bind_clearing_bank': '绑定清算行',

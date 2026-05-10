@@ -179,9 +179,10 @@ class DuoqianStorageCodec {
     final name = readBoundedBytes(data, offset);
     if (name == null) return null;
     offset = name.nextOffset;
-    if (offset + 32 + 32 + 4 + 4 > data.length) return null;
+    if (offset + 32 + 32 + 1 + 4 + 4 > data.length) return null;
     offset += 32; // main_address
     offset += 32; // fee_address
+    offset += 1; // admin_org
     final adminCount = readU32Le(data, offset);
     offset += 4;
     final threshold = readU32Le(data, offset);

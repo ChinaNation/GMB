@@ -38,7 +38,7 @@ class OrgType {
   /// 省储行 Provincial Reserve Bank
   static const int prb = 2;
 
-  /// 注册型多签机构
+  /// 多签账户。具体是个人多签还是机构账户，由 admins-change 的 subject identity 区分。
   static const int duoqian = 3;
 
   static String label(int orgType) {
@@ -50,7 +50,7 @@ class OrgType {
       case prb:
         return '省储行';
       case duoqian:
-        return '注册多签机构';
+        return '多签账户';
       default:
         return '未知';
     }
@@ -60,7 +60,7 @@ class OrgType {
 /// 治理机构及多签账户的制度账户集合。
 ///
 /// 中文注释：内置治理机构没有笼统的 `duoqianAddress`；链端按主账户、费用账户、
-/// 国储会安全基金账户、省储行质押账户分别建模。个人多签/注册机构账户只使用主账户。
+/// 国储会安全基金账户、省储行质押账户分别建模。个人多签/机构账户只使用主账户。
 class InstitutionAccounts {
   const InstitutionAccounts({
     required this.mainAddress,
@@ -90,6 +90,7 @@ class InstitutionInfo {
     required this.orgType,
     this.accounts,
     String? duoqianAddress,
+    this.adminSubjectOrg,
     this.internalThresholdOverride,
   })  : assert(accounts != null || duoqianAddress != null),
         _legacyMainAddress = duoqianAddress;
@@ -104,9 +105,12 @@ class InstitutionInfo {
   /// 机构类型：0=NRC, 1=PRC, 2=PRB。
   final int orgType;
 
+  /// 注册机构账户管理员更换使用的 org：4=公权机构账户，5=其他机构账户。
+  final int? adminSubjectOrg;
+
   /// 制度账户集合。
   ///
-  /// 中文注释：治理机构使用生成的完整账户集合；个人/注册多签旧入口传入
+  /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户旧入口传入
   /// `duoqianAddress` 时会被视为 `mainAddress`。
   final InstitutionAccounts? accounts;
 
@@ -118,10 +122,10 @@ class InstitutionInfo {
   /// 兼容个人多签/注册机构旧调用；治理机构新代码不得再使用这个语义。
   String get duoqianAddress => mainAddress;
 
-  /// 注册型机构的动态阈值覆盖。
+  /// 机构账户的动态阈值覆盖。
   final int? internalThresholdOverride;
 
-  /// 是否为注册型多签机构。
+  /// 是否为链上注册的机构账户。
   bool get isRegisteredDuoqian =>
       orgType == OrgType.duoqian && isRegisteredDuoqianIdentity(sfidNumber);
 
@@ -161,6 +165,7 @@ class InstitutionInfo {
     int? orgType,
     InstitutionAccounts? accounts,
     String? duoqianAddress,
+    int? adminSubjectOrg,
     int? internalThresholdOverride,
   }) {
     return InstitutionInfo(
@@ -169,6 +174,7 @@ class InstitutionInfo {
       orgType: orgType ?? this.orgType,
       accounts: accounts ?? this.accounts,
       duoqianAddress: duoqianAddress ?? _legacyMainAddress,
+      adminSubjectOrg: adminSubjectOrg ?? this.adminSubjectOrg,
       internalThresholdOverride:
           internalThresholdOverride ?? this.internalThresholdOverride,
     );

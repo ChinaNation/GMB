@@ -529,6 +529,75 @@ fn sfid_institution_is_not_valid_admin_subject_kind() {
 }
 
 #[test]
+fn read_apis_hide_legacy_invalid_subject_kind_org_pairs() {
+    new_test_ext().execute_with(|| {
+        let admin_a = AccountId32::new([243u8; 32]);
+        let admin_b = AccountId32::new([244u8; 32]);
+        let active_subject = pending_subject_id();
+        let mut pending_subject = pending_subject_id();
+        pending_subject[0] = pending_subject[0].saturating_add(1);
+
+        // 中文注释：模拟升级前误写入的机构账户 + ORG_REN Active 脏数据。
+        Subjects::<Test>::insert(
+            active_subject,
+            AdminSubject {
+                org: ORG_REN,
+                kind: AdminSubjectKind::InstitutionAccount,
+                admins: bounded_admins(vec![admin_a.clone(), admin_b.clone()]),
+                threshold: 2,
+                creator: admin_a.clone(),
+                created_at: 1,
+                updated_at: 1,
+                status: AdminSubjectStatus::Active,
+            },
+        );
+        assert!(!AdminsChange::active_subject_exists(
+            ORG_REN,
+            active_subject
+        ));
+        assert!(!AdminsChange::is_active_subject_admin(
+            ORG_REN,
+            active_subject,
+            &admin_a
+        ));
+        assert!(AdminsChange::active_subject_admins(ORG_REN, active_subject).is_none());
+        assert!(AdminsChange::active_subject_threshold(ORG_REN, active_subject).is_none());
+        assert!(AdminsChange::active_subject_admin_count(ORG_REN, active_subject).is_none());
+
+        // 中文注释：模拟升级前误写入的 SfidInstitution Pending 脏数据。
+        Subjects::<Test>::insert(
+            pending_subject,
+            AdminSubject {
+                org: ORG_PUP,
+                kind: AdminSubjectKind::SfidInstitution,
+                admins: bounded_admins(vec![admin_a.clone(), admin_b.clone()]),
+                threshold: 2,
+                creator: admin_a.clone(),
+                created_at: 1,
+                updated_at: 1,
+                status: AdminSubjectStatus::Pending,
+            },
+        );
+        assert!(!AdminsChange::pending_subject_exists_for_snapshot(
+            ORG_PUP,
+            pending_subject
+        ));
+        assert!(!AdminsChange::is_pending_subject_admin_for_snapshot(
+            ORG_PUP,
+            pending_subject,
+            &admin_a
+        ));
+        assert!(
+            AdminsChange::pending_subject_admins_for_snapshot(ORG_PUP, pending_subject).is_none()
+        );
+        assert!(
+            AdminsChange::pending_subject_threshold_for_snapshot(ORG_PUP, pending_subject)
+                .is_none()
+        );
+    });
+}
+
+#[test]
 fn nrc_set_change_executes_when_yes_votes_reach_threshold() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();

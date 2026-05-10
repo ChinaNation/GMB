@@ -1,3 +1,4 @@
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_subject_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
@@ -11,38 +12,38 @@ class InstitutionAdminState {
   final int? threshold;
 }
 
-/// 管理员查询兼容门面。
+/// 管理员查询门面。
 ///
-/// 中文注释：管理员主体真源已收口到 `lib/governance/admins-change/`；本类在新目录内保留
-/// 原 public API，供机构详情、提案上下文等既有调用方继续复用。
+/// 中文注释：调用方必须传入明确的 `AdminSubjectIdentity`，不再把
+/// `sfidNumber` 当作个人多签、机构账户和治理机构共用的模糊参数。
 class InstitutionAdminService {
   InstitutionAdminService({ChainRpc? chainRpc})
       : _subjectService = AdminSubjectService(chainRpc: chainRpc);
 
   final AdminSubjectService _subjectService;
 
-  Future<List<String>> fetchAdmins(String sfidNumber) {
-    return _subjectService.fetchAdmins(sfidNumber);
+  Future<List<String>> fetchAdmins(AdminSubjectIdentity identity) {
+    return _subjectService.fetchAdmins(identity);
   }
 
-  Future<int?> fetchThreshold(String sfidNumber) {
-    return _subjectService.fetchThreshold(sfidNumber);
+  Future<int?> fetchThreshold(AdminSubjectIdentity identity) {
+    return _subjectService.fetchThreshold(identity);
   }
 
-  Future<bool> isAdmin(String pubkeyHex, String sfidNumber) {
-    return _subjectService.isAdmin(pubkeyHex, sfidNumber);
+  Future<bool> isAdmin(String pubkeyHex, AdminSubjectIdentity identity) {
+    return _subjectService.isAdmin(pubkeyHex, identity);
   }
 
-  Future<InstitutionAdminState> fetchState(String sfidNumber) async {
-    final subject =
-        await _subjectService.fetchByInstitutionIdentity(sfidNumber);
+  Future<InstitutionAdminState> fetchState(
+      AdminSubjectIdentity identity) async {
+    final subject = await _subjectService.fetchByIdentity(identity);
     return InstitutionAdminState(
       admins: subject?.admins ?? const [],
       threshold: subject?.threshold,
     );
   }
 
-  void clearCache([String? sfidNumber]) {
-    _subjectService.clearCache(sfidNumber);
+  void clearCache([AdminSubjectIdentity? identity]) {
+    _subjectService.clearCache(identity);
   }
 }

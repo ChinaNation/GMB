@@ -34,7 +34,7 @@ use frame_support::{
     BoundedVec,
 };
 use frame_system::pallet_prelude::*;
-use primitives::derive::subject_id_from_registered_sfid_number;
+use primitives::derive::subject_id_from_institution_account;
 use sp_core::sr25519::Public as Sr25519Public;
 use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
@@ -56,7 +56,7 @@ pub(crate) type BalanceOf<T> =
 pub mod pallet {
     use super::*;
     use crate::weights::WeightInfo;
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(6);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(7);
 
     #[pallet::config]
     pub trait Config: frame_system::Config + votingengine::Config + admins_change::Config {
@@ -305,6 +305,7 @@ pub mod pallet {
             proposer: T::AccountId,
             accounts: CreateInstitutionAccountsOf<T>,
             admins: DuoqianAdminsOf<T>,
+            admin_org: u8,
             admin_count: u32,
             threshold: u32,
             initial_total: BalanceOf<T>,
@@ -370,6 +371,8 @@ pub mod pallet {
         InvalidAdminCount,
         /// 管理员数量与列表长度不一致
         AdminCountMismatch,
+        /// 机构账户管理员 org 只能是 ORG_PUP 或 ORG_OTH
+        InvalidAdminOrg,
         /// 多签账户不存在
         DuoqianNotFound,
         /// 多签账户处于 pending 状态，不可操作
@@ -501,6 +504,7 @@ pub mod pallet {
             sfid_number: SfidNumberOf<T>,
             institution_name: AccountNameOf<T>,
             accounts: InstitutionInitialAccountsOf<T>,
+            admin_org: u8,
             admin_count: u32,
             duoqian_admins: DuoqianAdminsOf<T>,
             threshold: u32,
@@ -516,6 +520,7 @@ pub mod pallet {
                 sfid_number,
                 institution_name,
                 accounts,
+                admin_org,
                 admin_count,
                 duoqian_admins,
                 threshold,
@@ -727,6 +732,7 @@ pub mod pallet {
 
         pub(crate) fn create_pending_admin_subject_for_proposal(
             proposal_id: u64,
+            org: u8,
             institution_id: votingengine::SubjectId,
             kind: admins_change::AdminSubjectKind,
             admins: &DuoqianAdminsOf<T>,
@@ -736,7 +742,7 @@ pub mod pallet {
                 proposal_id,
                 crate::MODULE_TAG,
                 institution_id,
-                votingengine::types::ORG_REN,
+                org,
                 kind,
                 admins.iter().cloned().collect(),
                 creator.clone(),
@@ -776,15 +782,23 @@ pub mod pallet {
             )
         }
 
-        /// 从任意多签账户反查其管理员主体的 SubjectId。
+        /// 从任意机构多签账户反查其管理员主体的 SubjectId。
         ///
-        /// - SFID 机构任意账户(主/费用/自创):subject_id_from_sfid_number(sfid_number)
+        /// - SFID 机构任意账户(主/费用/自创):subject_id_from_institution_account(account)
         ///
         /// 个人多签的 subject_id 解析由 personal-manage 自持(直接 subject_id_from_account),
         /// 本函数仅服务机构账户;对个人地址返回 None,调用方必须自行选 pallet。
         pub fn resolve_admin_subject_for_account(account: &T::AccountId) -> Option<SubjectId> {
+            AddressRegisteredSfid::<T>::get(account)?;
+            Some(subject_id_from_institution_account(account))
+        }
+
+        /// 从任意机构账户反查管理员更换 org。
+        ///
+        /// 中文注释:机构账户必须使用 ORG_PUP/ORG_OTH；ORG_REN 只属于个人多签。
+        pub fn resolve_admin_org_for_account(account: &T::AccountId) -> Option<u8> {
             let registered = AddressRegisteredSfid::<T>::get(account)?;
-            subject_id_from_registered_sfid_number(registered.sfid_number.as_slice())
+            Institutions::<T>::get(&registered.sfid_number).map(|inst| inst.admin_org)
         }
 
         // account_names_payload_from_initial_accounts 已迁至
@@ -811,20 +825,20 @@ pub mod pallet {
 
 // ──── InstitutionMultisigQuery 实现:对 duoqian-transfer / runtime config 暴露查询 ────
 //
-// 输入任意机构账户(主/费用/自创),通过 AddressRegisteredSfid 反查 sfid_number,
-// 再通过 admins-change::Subjects[subject_id_from_sfid_number(sfid_number)] 取得
-// admin 配置。这条路径让机构所有账户都能命中同一套 admin/threshold,
-// 取代 A 阶段 DuoqianAccounts mirror 的 fallback 查询(B 阶段已删)。
+// 输入任意机构账户(主/费用/自创),通过账户自身派生 InstitutionAccount SubjectId,
+// 再按 Institutions[sfid_number].admin_org 读取 admins-change 主体。这条路径保证
+// 机构账户只使用 ORG_PUP/ORG_OTH,不再把机构账户错误塞到 ORG_REN。
 
 impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for pallet::Pallet<T> {
+    fn lookup_admin_org(addr: &T::AccountId) -> Option<u8> {
+        pallet::Pallet::<T>::resolve_admin_org_for_account(addr)
+    }
+
     fn lookup_admin_config(
         addr: &T::AccountId,
     ) -> Option<primitives::types::MultisigConfigSnapshot<T::AccountId>> {
-        let registered = pallet::AddressRegisteredSfid::<T>::get(addr)?;
-        let institution_id = primitives::derive::subject_id_from_registered_sfid_number(
-            registered.sfid_number.as_slice(),
-        )?;
-        let org = votingengine::types::ORG_REN;
+        let org = Self::lookup_admin_org(addr)?;
+        let institution_id = pallet::Pallet::<T>::resolve_admin_subject_for_account(addr)?;
         let admins = admins_change::Pallet::<T>::active_subject_admins(org, institution_id)?;
         let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, institution_id)?;
         let admin_count = admins.len() as u32;

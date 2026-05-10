@@ -1,5 +1,5 @@
 [package]
-name = "runtime-upgrade"  # 运行时状态升级与超级管理员模块
+name = "runtime-upgrade"  # 运行时协议升级治理模块
 edition.workspace = true   # 默认 Rust 版本
 version.workspace = true   # 版本号
 authors.workspace = true   # 作者

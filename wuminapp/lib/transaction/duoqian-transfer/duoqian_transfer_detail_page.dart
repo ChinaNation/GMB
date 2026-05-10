@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/util/amount_format.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
@@ -71,6 +72,8 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
 
   final DuoqianTransferService _proposalService = DuoqianTransferService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
+  AdminSubjectIdentity get _subjectIdentity =>
+      AdminSubjectIdentity.fromInstitution(widget.institution);
   bool _loading = true;
   String? _error;
   bool _submitting = false;
@@ -186,7 +189,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       final tally = results[3] as ({int yes, int no});
       final detail = results[4];
       if (admins.isEmpty) {
-        admins = await _adminService.fetchAdmins(widget.institution.sfidNumber);
+        admins = await _adminService.fetchAdmins(_subjectIdentity);
       }
 
       // 逐个查询每位管理员的投票记录
@@ -447,7 +450,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       );
 
       // 刷新数据
-      _adminService.clearCache(widget.institution.sfidNumber);
+      _adminService.clearCache(_subjectIdentity);
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -553,7 +556,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.sfidNumber);
+        _adminService.clearCache(_subjectIdentity);
         await _load();
       },
       child: ListView(

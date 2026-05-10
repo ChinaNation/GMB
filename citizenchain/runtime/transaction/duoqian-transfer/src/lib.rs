@@ -23,7 +23,7 @@ extern crate alloc;
 use primitives::china::china_cb::{CHINA_CB, NRC_ANQUAN_ADDRESS};
 use primitives::china::china_ch::CHINA_CH;
 use votingengine::{
-    types::{ORG_NRC, ORG_PRB, ORG_PRC, ORG_REN},
+    types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
     InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_PASSED,
 };
 
@@ -624,6 +624,8 @@ pub mod pallet {
         fn resolve_institution_account(
             institution: SubjectId,
         ) -> Result<(u8, T::AccountId), Error<T>> {
+            use organization_manage::traits::InstitutionMultisigQuery;
+
             if let Some(actual_org) = subject_org(institution) {
                 let raw_account =
                     subject_pallet_address(institution).ok_or(Error::<T>::InvalidInstitution)?;
@@ -633,7 +635,16 @@ pub mod pallet {
             }
 
             let institution_account = Self::registered_duoqian_account(institution)?;
-            Ok((ORG_REN, institution_account))
+            if account_bytes_from_subject_id(institution, SubjectKind::PersonalDuoqian).is_some() {
+                return Ok((ORG_REN, institution_account));
+            }
+            let org = <T as Config>::InstitutionQuery::lookup_admin_org(&institution_account)
+                .ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                matches!(org, ORG_PUP | ORG_OTH),
+                Error::<T>::InvalidInstitution
+            );
+            Ok((org, institution_account))
         }
 
         fn is_internal_admin(org: u8, institution: SubjectId, who: &T::AccountId) -> bool {

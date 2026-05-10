@@ -1,4 +1,4 @@
-// 开发期 Runtime 直升页：国储会任意已激活管理员签名后直接提交 developer_direct_upgrade。
+// 开发期直升页：国储会任意已激活管理员签名后直接提交 developer_direct_upgrade。
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { QRCodeSVG } from 'qrcode.react';
@@ -184,7 +184,7 @@ export function DeveloperUpgradePage({ adminWallets, onBack, onSuccess }: Props)
       {step === 'done' && (
         <div className="vote-signing-body">
           <div className="vote-success">
-            <p>Runtime 开发升级已提交</p>
+            <p>开发升级已提交</p>
             {txHash && <code className="tx-hash">交易哈希: {txHash}</code>}
           </div>
           <button

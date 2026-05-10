@@ -27,7 +27,9 @@ use crate::governance::signing::{
     pubkey_to_ss58, sha256_hash_public, QrSignRequest, QrSignResponse, SignRequestBody,
 };
 
-use crate::transaction::offchain_transaction::types::{DecryptAdminRequestResult, DecryptedAdminInfo};
+use crate::transaction::offchain_transaction::types::{
+    DecryptAdminRequestResult, DecryptedAdminInfo,
+};
 
 const PROTOCOL_VERSION: &str = "WUMIN_QR_V1";
 const DECRYPT_PREFIX: &[u8; 14] = b"GMB_DECRYPT_V1";

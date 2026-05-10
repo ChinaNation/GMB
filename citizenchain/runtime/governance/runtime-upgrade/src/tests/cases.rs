@@ -7,12 +7,7 @@ fn joint_proposers_can_propose_runtime_upgrade() {
             RuntimeUpgrade::propose_runtime_upgrade(
                 RuntimeOrigin::signed(outsider()),
                 reason_ok(),
-                code_ok(),
-                10,
-                nonce_ok(),
-                sig_ok(),
-                province_ok(),
-                signer_admin_pubkey_ok()
+                code_ok()
             ),
             sp_runtime::DispatchError::BadOrigin
         );
@@ -20,23 +15,13 @@ fn joint_proposers_can_propose_runtime_upgrade() {
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
             reason_ok(),
-            code_ok(),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            code_ok()
         ));
 
         assert_ok!(RuntimeUpgrade::propose_runtime_upgrade(
             RuntimeOrigin::signed(prc_admin()),
             reason_ok(),
-            code_ok(),
-            10,
-            nonce_ok(),
-            sig_ok(),
-            province_ok(),
-            signer_admin_pubkey_ok()
+            code_ok()
         ));
 
         assert!(
@@ -60,7 +45,7 @@ fn proposal_data_stored_in_votingengine() {
             "proposal data should be stored in voting engine"
         );
         let proposal = decode_proposal(100);
-        assert!(matches!(proposal.status, pallet::ProposalStatus::Voting));
+        assert_eq!(proposal.proposer, nrc_admin());
         assert!(
             votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
             "runtime wasm should be stored in proposal object layer"
@@ -72,11 +57,11 @@ fn proposal_data_stored_in_votingengine() {
 fn rejected_joint_vote_marks_proposal_rejected() {
     new_test_ext().execute_with(|| {
         propose_ok();
+        insert_engine_proposal_with_status(100, votingengine::STATUS_REJECTED);
         // proposal_id == joint_vote_id == 100
         let outcome = call_joint_callback(100, false).expect("callback should succeed");
         assert_eq!(outcome, votingengine::ProposalExecutionOutcome::Executed);
-        let p = decode_proposal(100);
-        assert!(matches!(p.status, pallet::ProposalStatus::Voting));
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(100).is_some());
     });
 }
 
@@ -87,8 +72,10 @@ fn approved_joint_vote_executes_runtime_upgrade() {
         insert_engine_proposal(100);
         assert_ok!(call_joint_callback(100, true));
 
-        let p = decode_proposal(100);
-        assert!(matches!(p.status, pallet::ProposalStatus::Voting));
+        assert_eq!(
+            decode_proposal(100).code_hash,
+            <Test as frame_system::Config>::Hashing::hash(&code_ok())
+        );
         assert!(
             votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
             "approved proposal should still keep object data for unified cleanup"
@@ -107,8 +94,7 @@ fn approved_joint_vote_execution_failure_emits_event() {
 
         assert_ok!(call_joint_callback(100, true));
 
-        let p = decode_proposal(100);
-        assert!(matches!(p.status, pallet::ProposalStatus::Voting));
+        assert_eq!(decode_proposal(100).proposer, nrc_admin());
         let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
         assert!(
             !code_executed,
@@ -127,10 +113,10 @@ fn approved_joint_vote_execution_failure_emits_event() {
 fn rejected_joint_vote_retains_object_for_unified_cleanup() {
     new_test_ext().execute_with(|| {
         propose_ok();
+        insert_engine_proposal_with_status(100, votingengine::STATUS_REJECTED);
         assert_ok!(call_joint_callback(100, false));
 
-        let p = decode_proposal(100);
-        assert!(matches!(p.status, pallet::ProposalStatus::Voting));
+        assert!(votingengine::Pallet::<Test>::get_proposal_data(100).is_some());
         assert!(
             votingengine::Pallet::<Test>::get_proposal_object(100).is_some(),
             "rejected proposal object should stay until unified cleanup"
@@ -192,7 +178,7 @@ fn finalize_nonexistent_proposal_fails() {
 // ─── developer_direct_upgrade 测试 ─────────────────────────────────
 
 #[test]
-fn developer_direct_upgrade_allows_joint_proposer_when_enabled() {
+fn developer_direct_upgrade_allows_nrc_admin_when_enabled() {
     new_test_ext().execute_with(|| {
         assert_ok!(RuntimeUpgrade::developer_direct_upgrade(
             RuntimeOrigin::signed(nrc_admin()),
@@ -200,18 +186,6 @@ fn developer_direct_upgrade_allows_joint_proposer_when_enabled() {
         ));
         let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
         assert!(code_executed, "runtime code executor should be called");
-
-        RUNTIME_CODE_EXECUTED.with(|v| *v.borrow_mut() = false);
-
-        assert_ok!(RuntimeUpgrade::developer_direct_upgrade(
-            RuntimeOrigin::signed(prc_admin()),
-            code_ok(),
-        ));
-        let code_executed = RUNTIME_CODE_EXECUTED.with(|v| *v.borrow());
-        assert!(
-            code_executed,
-            "PRC proposer should also trigger runtime code executor"
-        );
     });
 }
 
@@ -230,7 +204,17 @@ fn developer_direct_upgrade_fails_when_disabled() {
 }
 
 #[test]
-fn developer_direct_upgrade_rejects_non_joint_proposer() {
+fn developer_direct_upgrade_rejects_prc_admin() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            RuntimeUpgrade::developer_direct_upgrade(RuntimeOrigin::signed(prc_admin()), code_ok(),),
+            sp_runtime::DispatchError::BadOrigin
+        );
+    });
+}
+
+#[test]
+fn developer_direct_upgrade_rejects_non_nrc_admin() {
     new_test_ext().execute_with(|| {
         assert_noop!(
             RuntimeUpgrade::developer_direct_upgrade(RuntimeOrigin::signed(outsider()), code_ok(),),

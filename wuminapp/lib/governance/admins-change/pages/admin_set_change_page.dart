@@ -20,10 +20,12 @@ class AdminSetChangePage extends StatefulWidget {
   const AdminSetChangePage({
     super.key,
     required this.institution,
+    required this.subjectIdentity,
     required this.adminWallets,
   });
 
   final InstitutionInfo institution;
+  final AdminSubjectIdentity subjectIdentity;
   final List<WalletProfile> adminWallets;
 
   @override
@@ -54,8 +56,9 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
       _error = null;
     });
     try {
-      final subject = await _subjectService
-          .fetchByInstitutionIdentity(widget.institution.sfidNumber);
+      final subject = await _subjectService.fetchByIdentity(
+        widget.subjectIdentity,
+      );
       if (!mounted) return;
       setState(() {
         _subject = subject;
@@ -175,7 +178,7 @@ class _AdminSetChangePageState extends State<AdminSetChangePage> {
         sign: signCallback,
       );
       _subjectService.clearSubjectCache(subject.subjectIdHex);
-      _subjectService.clearCache(widget.institution.sfidNumber);
+      _subjectService.clearIdentityCache(widget.subjectIdentity);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(

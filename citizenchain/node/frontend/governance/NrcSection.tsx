@@ -34,6 +34,7 @@ export function NrcSection() {
     return (
       <AdminListPage
         sfidNumber={NRC_SFID_NUMBER}
+        subjectRef={{ sfidNumber: NRC_SFID_NUMBER, org: 0 }}
         onBack={backToDetail}
       />
     );

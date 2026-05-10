@@ -655,48 +655,42 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 
         // 外部人员不能创建联合提案
         let outsider = AccountId32::new([9u8; 32]);
-        let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        assert!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                outsider,
+        assert_noop!(
+            JointVote::prepare_joint_population_snapshot(
+                RuntimeOrigin::signed(outsider),
                 10,
-                nonce.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok()
-            )
-            .is_err()
+                snapshot_nonce_ok(),
+                snapshot_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
+            ),
+            votingengine::Error::<Test>::NoPermission
         );
 
         // 省储会管理员可以创建联合提案
         let nonce_prc: votingengine::pallet::VoteNonceOf<Test> =
             b"snap-nonce-prc".to_vec().try_into().expect("nonce fits");
-        let sig = snapshot_sig_ok();
+        prepare_population_snapshot_for(prc_admin(0), 10, nonce_prc);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                prc_admin(0),
-                10,
-                nonce_prc.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok()
-            )
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(prc_admin(0))
         );
 
         // 国储会管理员可以创建联合提案
         let nonce_nrc: votingengine::pallet::VoteNonceOf<Test> =
             b"snap-nonce-nrc".to_vec().try_into().expect("nonce fits");
-        let sig = snapshot_sig_ok();
+        prepare_population_snapshot_for(nrc_admin(0), 10, nonce_nrc);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                10,
-                nonce_nrc.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok()
-            )
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0))
+        );
+    });
+}
+
+#[test]
+fn joint_proposal_requires_prepared_population_snapshot() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0)),
+            joint_vote::Error::<Test>::PopulationSnapshotNotPrepared
         );
     });
 }
@@ -705,16 +699,7 @@ fn joint_proposal_must_be_created_by_nrc_or_prc_admin() {
 fn joint_vote_requires_current_institution_admin() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
@@ -741,16 +726,7 @@ fn joint_vote_requires_current_institution_admin() {
 fn joint_vote_rejects_duplicate_admin_vote() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
@@ -770,16 +746,7 @@ fn joint_vote_rejects_duplicate_admin_vote() {
 fn joint_vote_uses_fixed_governance_threshold_not_provider() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         // 中文注释：测试 Provider 对治理机构故意返回 1；联合投票必须等固定阈值票数才形成机构结果。
         assert_ok!(submit_joint_vote(
@@ -812,16 +779,7 @@ fn joint_vote_uses_fixed_governance_threshold_not_provider() {
 fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         cast_joint_votes_until_finalized(proposal_id, nrc_pid(), false);
 
@@ -842,17 +800,7 @@ fn joint_vote_auto_rejects_institution_when_yes_is_no_longer_reachable() {
 fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id =
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                10,
-                nonce.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok(),
-            )
-            .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         assert!(
             VotingEngine::internal_proposal_mutex(ORG_NRC, nrc_pid()).is_some()
@@ -897,30 +845,22 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
 fn population_snapshot_nonce_cannot_be_reused_across_proposals() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
+        prepare_population_snapshot_for(nrc_admin(0), 10, nonce);
         assert_ok!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
-                10,
-                nonce.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok()
-            )
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0))
         );
 
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        assert!(
-            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-                nrc_admin(0),
+        assert_noop!(
+            JointVote::prepare_joint_population_snapshot(
+                RuntimeOrigin::signed(nrc_admin(0)),
                 11,
-                nonce.as_slice(),
-                sig.as_slice(),
-                province_ok().as_slice(),
-                &signer_admin_pubkey_ok()
-            )
-            .is_err()
+                nonce,
+                snapshot_sig_ok(),
+                province_ok(),
+                signer_admin_pubkey_ok()
+            ),
+            joint_vote::Error::<Test>::InvalidPopulationSnapshot
         );
     });
 }
@@ -1161,16 +1101,7 @@ fn citizen_vote_rejects_ineligible_hash_and_ineligible_account() {
 fn citizen_vote_rejects_when_not_in_citizen_stage() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, nonce);
 
         assert_noop!(
             <joint_vote::Pallet<Test>>::do_jointreferendum_vote(
@@ -1282,16 +1213,7 @@ fn citizen_reject_threshold_function_boundaries_are_correct() {
 fn joint_vote_all_yes_passes_immediately() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            100,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100, nonce);
 
         cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
 
@@ -1316,16 +1238,7 @@ fn joint_vote_all_yes_passes_immediately() {
 fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_rejects() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            77,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 77, nonce);
         cast_joint_votes_until_finalized(proposal_id, nrc_pid(), true);
         let first_prc = all_prc_institutions()
             .first()
@@ -1350,16 +1263,7 @@ fn joint_vote_non_unanimous_moves_to_citizen_immediately_after_one_institution_r
 fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            88,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 88, nonce);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
@@ -1389,16 +1293,7 @@ fn joint_vote_timeout_moves_to_citizen_when_not_unanimous() {
 fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            88,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 88, nonce);
 
         assert_ok!(submit_joint_vote(
             nrc_admin(0),
@@ -1427,16 +1322,7 @@ fn joint_vote_timeout_auto_moves_to_citizen_on_initialize() {
 fn joint_vote_timeout_with_unanimous_tally_passes() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            66,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 66, nonce);
         joint_vote::JointTallies::<Test>::insert(
             proposal_id,
             VoteCountU32 {
@@ -1462,16 +1348,7 @@ fn joint_vote_timeout_with_unanimous_tally_passes() {
 fn joint_vote_callback_failure_rolls_back_final_status() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            100,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100, nonce);
 
         set_joint_callback_should_fail(true);
         assert!(VotingEngine::set_status_and_emit(proposal_id, STATUS_PASSED).is_err());
@@ -1504,16 +1381,7 @@ fn joint_vote_callback_failure_does_not_cleanup_vote_credentials() {
 fn proposal_finalized_event_uses_status_after_joint_callback_override() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            100,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 100, nonce);
 
         set_joint_callback_override_status(Some(STATUS_EXECUTION_FAILED));
         assert_ok!(VotingEngine::set_status_and_emit(
@@ -1556,16 +1424,7 @@ fn proposal_finalized_event_uses_status_after_joint_callback_override() {
 fn auto_finalize_requeues_failed_joint_callback() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
-        let sig = snapshot_sig_ok();
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            66,
-            nonce.as_slice(),
-            sig.as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 66, nonce);
 
         joint_vote::JointTallies::<Test>::insert(
             proposal_id,
@@ -2168,15 +2027,7 @@ fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
 fn joint_retryable_outcome_is_forced_to_execution_failed() {
     new_test_ext().execute_with(|| {
         set_joint_callback_override_status(Some(STATUS_PASSED));
-        let proposal_id = <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(
-            nrc_admin(0),
-            10,
-            snapshot_nonce_ok().as_slice(),
-            snapshot_sig_ok().as_slice(),
-            province_ok().as_slice(),
-            &signer_admin_pubkey_ok(),
-        )
-        .expect("joint proposal should be created");
+        let proposal_id = create_joint_proposal_for(nrc_admin(0), 10, snapshot_nonce_ok());
 
         assert_ok!(VotingEngine::set_status_and_emit(
             proposal_id,

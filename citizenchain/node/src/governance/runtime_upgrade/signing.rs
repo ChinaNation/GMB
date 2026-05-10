@@ -1,11 +1,8 @@
 use super::call_data;
-use crate::governance::{
-    sfid_api::{self, PopulationSnapshot},
-    signing::{
-        build_signing_payload, fetch_genesis_hash, fetch_latest_block, fetch_nonce,
-        fetch_runtime_version, generate_request_id, now_secs, pubkey_to_ss58, sha256_hash,
-        QrSignRequest, SignRequestBody, VoteSignRequestResult, DEFAULT_TTL_SECS, PROTOCOL_VERSION,
-    },
+use crate::governance::signing::{
+    build_signing_payload, fetch_genesis_hash, fetch_latest_block, fetch_nonce,
+    fetch_runtime_version, generate_request_id, now_secs, pubkey_to_ss58, sha256_hash,
+    QrSignRequest, SignRequestBody, VoteSignRequestResult, DEFAULT_TTL_SECS, PROTOCOL_VERSION,
 };
 
 fn normalize_pubkey(pubkey_hex: &str) -> Result<(String, Vec<u8>), String> {
@@ -78,7 +75,7 @@ fn build_hashed_payload_request(
     })
 }
 
-/// 构建开发期 Runtime 直接升级签名请求。
+/// 构建开发期直接升级签名请求。
 pub(crate) fn build_developer_upgrade_sign_request(
     pubkey_hex: &str,
     wasm_path: &str,
@@ -89,7 +86,7 @@ pub(crate) fn build_developer_upgrade_sign_request(
 
     let display = serde_json::json!({
         "action": "developer_direct_upgrade",
-        "summary": format!("直接升级 runtime（{wasm_size_mb:.2} MB）"),
+        "summary": format!("开发期直接升级（{wasm_size_mb:.2} MB）"),
         "fields": [
             { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
             { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) }
@@ -99,29 +96,25 @@ pub(crate) fn build_developer_upgrade_sign_request(
     build_hashed_payload_request("devupg", &pubkey_clean, &pubkey_bytes, &call_data, display)
 }
 
-/// 构建运行期 Runtime 协议升级提案签名请求。
+/// 构建运行期协议升级提案签名请求。
 pub(crate) fn build_propose_runtime_upgrade_sign_request(
     pubkey_hex: &str,
     wasm_path: &str,
     reason: &str,
-) -> Result<(VoteSignRequestResult, PopulationSnapshot), String> {
+) -> Result<VoteSignRequestResult, String> {
     let (pubkey_clean, pubkey_bytes) = normalize_pubkey(pubkey_hex)?;
     let (wasm_code, wasm_size_mb) = call_data::read_wasm(wasm_path)?;
-    let snapshot = sfid_api::fetch_population_snapshot(&pubkey_clean)?;
-    let call_data = call_data::propose_runtime_upgrade(&wasm_code, reason, &snapshot)?;
+    let call_data = call_data::propose_runtime_upgrade(&wasm_code, reason)?;
 
     let display = serde_json::json!({
         "action": "propose_runtime_upgrade",
-        "summary": format!("提交运行时升级提案（{wasm_size_mb:.2} MB）"),
+        "summary": format!("提交协议升级提案（{wasm_size_mb:.2} MB）"),
         "fields": [
             { "key": "reason", "label": "升级理由", "value": reason },
             { "key": "wasm_size", "label": "WASM 大小", "value": format!("{wasm_size_mb:.2} MB") },
-            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) },
-            { "key": "eligible_total", "label": "公民人数", "value": snapshot.eligible_total.to_string() }
+            { "key": "wasm_hash", "label": "代码哈希", "value": format!("0x{}", hex::encode(sha256_hash(&wasm_code))) }
         ]
     });
 
-    let sign_result =
-        build_hashed_payload_request("upgrade", &pubkey_clean, &pubkey_bytes, &call_data, display)?;
-    Ok((sign_result, snapshot))
+    build_hashed_payload_request("upgrade", &pubkey_clean, &pubkey_bytes, &call_data, display)
 }

@@ -5,7 +5,7 @@
 /// - 通用类型 `InstitutionInfo` / `InstitutionAccounts` / `OrgType` + 身份编码工具
 ///   `institutionIdentityToPalletId` / `registeredDuoqianIdentity` 等已迁至
 ///   `lib/common/institution_info.dart`。
-/// - 静态注册表仅包含国储会/省储会/省储行三类内置治理机构，注册型多签机构与个人多签
+/// - 静态注册表仅包含国储会/省储会/省储行三类内置治理机构，机构账户与个人多签
 ///   不在此表中（动态从链上读取 `AdminsChange::Subjects`）。
 library;
 
@@ -23,9 +23,10 @@ const int jointVotePassThreshold = 105;
 /// 通过 48 字节 `SubjectId`(D 协议)反查机构信息。
 /// sfidNumber 按 SubjectKind=0x01 Builtin 派生(byte[0]=0x01 + payload UTF-8 + 右填零)后与 palletIdBytes 比较。
 ///
-/// 内置机构无匹配时尝试按"注册多签机构(0x05 InstitutionAccount)"/"个人多签(0x03
+/// 内置机构无匹配时尝试按"机构账户(0x05 InstitutionAccount)"/"个人多签(0x03
 /// PersonalDuoqian)"的 SubjectId 协议从字节自构 `InstitutionInfo`。
-InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
+InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes,
+    {int? adminSubjectOrg}) {
   if (palletIdBytes.length != 48) return null;
   for (final inst in [
     ...kNationalCouncil,
@@ -40,10 +41,11 @@ InstitutionInfo? findInstitutionByPalletId(List<int> palletIdBytes) {
       palletIdBytes, _subjectKindInstitutionAccount)) {
     final duoqianAddress = _hexEncode(palletIdBytes.sublist(1, 33));
     return InstitutionInfo(
-      name: '注册多签机构 ${duoqianAddress.substring(0, 8)}',
+      name: '机构账户 ${duoqianAddress.substring(0, 8)}',
       sfidNumber: registeredDuoqianIdentity(duoqianAddress),
       orgType: OrgType.duoqian,
       duoqianAddress: duoqianAddress,
+      adminSubjectOrg: adminSubjectOrg,
     );
   }
 

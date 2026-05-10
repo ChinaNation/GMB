@@ -1,7 +1,6 @@
 //! 公民人数快照凭证签发 handler。
 //!
-//! 节点端 `citizenchain/node/src/governance/sfid_api.rs::fetch_population_snapshot`
-//! 在用户发起联合投票提案前调本接口,把签好的人口快照随 extrinsic 一起带上链。
+//! 本接口只服务投票引擎的人口快照凭证流程,业务模块不得直接调用或转发。
 //!
 //! 无 token 鉴权:返回的凭证仅对请求者 `account_pubkey` 有效,链上还会再次验签,
 //! 全局 rate limiter 已防滥用。

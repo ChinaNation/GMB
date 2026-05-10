@@ -126,6 +126,7 @@ class DuoqianDiscoveryService {
     }
 
     final matchedInstitutionAddrs = <String, List<String>>{};
+    final matchedInstitutionOrgs = <String, int>{};
     var matchedCount = 0;
 
     for (var batchStart = 0;
@@ -148,7 +149,8 @@ class DuoqianDiscoveryService {
         if (value == null) continue;
         final decoded = AdminInstitutionCodec.tryDecode(value);
         if (decoded == null ||
-            decoded.kind != AdminInstitutionCodec.kindInstitutionAccount) {
+            decoded.kind != AdminInstitutionCodec.kindInstitutionAccount ||
+            (decoded.org != 4 && decoded.org != 5)) {
           continue;
         }
 
@@ -165,6 +167,7 @@ class DuoqianDiscoveryService {
             AdminInstitutionCodec.institutionAccountFromSubjectId(subjectId);
         if (addr == null) continue;
         matchedInstitutionAddrs[addr] = hits;
+        matchedInstitutionOrgs[addr] = decoded.org;
         matchedCount++;
       }
       onProgress?.call(allKeys.length, allKeys.length, matchedCount);
@@ -197,6 +200,7 @@ class DuoqianDiscoveryService {
         duoqianAddrHex: duoqianAddrHex,
         name: ref.accountNameText,
         sfidNumberUtf8: ref.sfidNumberText,
+        adminSubjectOrg: matchedInstitutionOrgs[duoqianAddrHex],
         matchedAdmins: hits,
       );
       if (added) newlyAdded++;
@@ -225,6 +229,7 @@ class DuoqianDiscoveryService {
     required String duoqianAddrHex,
     required String name,
     required String sfidNumberUtf8,
+    required int? adminSubjectOrg,
     required List<String> matchedAdmins,
   }) async {
     final exists = await isar.duoqianInstitutionEntitys
@@ -235,6 +240,7 @@ class DuoqianDiscoveryService {
     if (exists != null) {
       if (!exists.discoveredViaAdmin) return false;
       await isar.writeTxn(() async {
+        exists.adminSubjectOrg = adminSubjectOrg;
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.duoqianInstitutionEntitys.put(exists);
       });
@@ -245,6 +251,7 @@ class DuoqianDiscoveryService {
       final entity = DuoqianInstitutionEntity()
         ..duoqianAddress = duoqianAddrHex
         ..sfidNumber = sfidNumberUtf8
+        ..adminSubjectOrg = adminSubjectOrg
         ..name = name
         ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
         ..discoveredViaAdmin = true

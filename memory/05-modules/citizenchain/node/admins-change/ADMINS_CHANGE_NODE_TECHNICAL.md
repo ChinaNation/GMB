@@ -38,11 +38,25 @@ Tauri 命令：
 
 - `build_activate_admin_request`：验证链上管理员身份，构建本地激活签名请求。
 - `verify_activate_admin`：验证冷钱包激活签名并写入本地激活记录。
-- `get_activated_admins`：读取已激活管理员，并与链上当前管理员集合交叉校验；账户级主体可附带 `subjectIdHex + expectedOrg` 做链上过滤，本地激活记录仍按 `sfidNumber` 归档。
+- `get_activated_admins`：按 subject 读取已激活管理员，并与链上当前管理员集合交叉校验；个人多签和机构账户必须附带 `subjectIdHex + expectedOrg`。
 - `deactivate_admin`：取消本地管理员激活。
 - `get_admin_subject_state`：按 `AdminSubjectRef` 读取管理员主体。内置治理机构可用 `sfidNumber + expectedOrg`；个人多签和机构账户必须用 `subjectIdHex + expectedOrg`。
 - `build_admin_set_change_request`：校验当前管理员身份、主体 org 和新管理员集合，构建冷钱包签名请求。
 - `submit_admin_set_change`：复用签名时 nonce/block，验证冷钱包回执并提交 extrinsic；提交前再次按同一 `AdminSubjectRef` 读取主体。
+
+管理员激活 payload：
+
+```text
+GMB_ACTIVATE_SUBJECT_V1
++ subject_id(48)
++ org(u8)
++ kind(u8)
++ pubkey(32)
++ timestamp(u64 LE)
++ nonce(16)
+```
+
+激活 QR `display.action = activate_admin_subject`，字段必须为 `org / subject / pubkey`，并与 wumin 冷钱包解码结果逐项一致。本地激活记录写入 `{app_data}/activated-admin-subjects.json`，只按 `subjectIdHex / org / kind / pubkeyHex` 归档；旧 `activated-admins.json` 不读取、不迁移。
 
 链上 call data：
 
@@ -80,8 +94,8 @@ citizenchain/node/frontend/governance/admins_change/
 主体引用：
 
 - `AdminSubjectRef.sfidNumber`：仅用于 NRC / PRC / PRB 等内置治理机构，必须带 `org=0/1/2` 防止错主体。
-- `AdminSubjectRef.subjectIdHex`：用于个人多签和机构账户，必须带 `org=3/4/5`。缺少 `subjectIdHex` 时后端直接拒绝动态主体管理员更换。
-- `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
+- `AdminSubjectRef.subjectIdHex`：用于个人多签和机构账户，必须带 `org=3/4/5`。缺少 `subjectIdHex` 时后端直接拒绝动态主体管理员激活和管理员更换。
+- `offchain/organization-manage` 只提供页面入口和主账户 subject 元数据；管理员激活、更换读取、校验、QR 和提交仍全部走 `governance/admins_change`。
 
 ## 校验规则
 
@@ -93,6 +107,7 @@ citizenchain/node/frontend/governance/admins_change/
 - `SfidInstitution` 只用于机构归属、检索、展示和反查，不允许作为管理员更换主体。
 - 个人多签必须使用 `ORG_REN`，管理员数量：`2..=64`。
 - 机构账户必须使用 `ORG_PUP / ORG_OTH`，管理员数量：`2..=1989`。
-- QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`new_admins`；`subject/new_admins` 使用 `0x` 小写 hex。
+- 管理员激活 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`pubkey`。
+- 管理员更换 QR `display.fields` 必须与冷钱包解码保持一致：`org`、`subject`、`new_admins`；`subject/new_admins` 使用 `0x` 小写 hex。
 
 链端仍是最终裁判；桌面端校验只用于提前给出明确错误。

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
@@ -56,6 +57,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   final DuoqianManageService _manageService = DuoqianManageService();
   final PersonalManageService _personalManageService = PersonalManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
+  AdminSubjectIdentity get _subjectIdentity =>
+      AdminSubjectIdentity.fromInstitution(widget.institution);
   bool _loading = true;
   String? _error;
   bool _submitting = false;
@@ -120,7 +123,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
           .fetchAdminSnapshot(widget.proposalId, widget.institution.sfidNumber)
           .catchError((_) => const <String>[]);
       final results = await Future.wait([
-        _adminService.fetchAdmins(widget.institution.sfidNumber),
+        _adminService.fetchAdmins(_subjectIdentity),
         _proposalService.fetchProposalStatus(widget.proposalId),
         _proposalService.fetchVoteTally(widget.proposalId),
         thresholdFuture,
@@ -474,7 +477,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         await handlePoolFailure(earlyPoolFailure!);
       }
 
-      _adminService.clearCache(widget.institution.sfidNumber);
+      _adminService.clearCache(_subjectIdentity);
       // 中文注释:不再 await _load(),让 finally 立即把 _submitting 改回 false,
       // UI 的"投票中"转圈立即停;详情页数据后台异步刷新。即使 _load 内某个
       // smoldot RPC 卡住,也不会让按钮一直转 — 这是排查 GMB 链 6 分钟出块期
@@ -634,7 +637,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.sfidNumber);
+        _adminService.clearCache(_subjectIdentity);
         await _load();
       },
       child: ListView(

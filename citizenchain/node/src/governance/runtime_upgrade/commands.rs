@@ -31,7 +31,7 @@ async fn ensure_nrc_activated_admin(app: &AppHandle, pubkey_hex: &str) -> Result
     }
 }
 
-/// 构建开发期 runtime 直接升级签名请求 QR JSON（需要节点运行）。
+/// 构建开发期直接升级签名请求 QR JSON（需要节点运行）。
 #[tauri::command]
 pub async fn build_developer_upgrade_request(
     app: AppHandle,
@@ -50,7 +50,7 @@ pub async fn build_developer_upgrade_request(
     .map_err(|e| format!("build developer upgrade request task failed: {e}"))?
 }
 
-/// 验证签名响应并提交开发期 runtime 直接升级。
+/// 验证签名响应并提交开发期直接升级。
 #[tauri::command]
 pub async fn submit_developer_upgrade(
     app: AppHandle,
@@ -83,7 +83,7 @@ pub async fn submit_developer_upgrade(
     .map_err(|e| format!("submit developer upgrade task failed: {e}"))?
 }
 
-/// 构建运行期 Runtime 协议升级提案签名请求 QR JSON（需要节点运行）。
+/// 构建运行期协议升级提案签名请求 QR JSON（需要节点运行）。
 #[tauri::command]
 pub async fn build_propose_upgrade_request(
     app: AppHandle,
@@ -96,7 +96,7 @@ pub async fn build_propose_upgrade_request(
         return Err("节点未运行，无法构建签名请求".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let (sign_result, snapshot) = runtime_signing::build_propose_runtime_upgrade_sign_request(
+        let sign_result = runtime_signing::build_propose_runtime_upgrade_sign_request(
             &pubkey_hex,
             &wasm_path,
             &reason,
@@ -107,16 +107,13 @@ pub async fn build_propose_upgrade_request(
             expected_payload_hash: sign_result.expected_payload_hash,
             sign_nonce: sign_result.sign_nonce,
             sign_block_number: sign_result.sign_block_number,
-            eligible_total: snapshot.eligible_total,
-            snapshot_nonce: snapshot.snapshot_nonce,
-            snapshot_signature: snapshot.signature,
         })
     })
     .await
     .map_err(|e| format!("build propose upgrade request task failed: {e}"))?
 }
 
-/// 验证签名响应并提交运行期 Runtime 协议升级提案。
+/// 验证签名响应并提交运行期协议升级提案。
 #[tauri::command]
 pub async fn submit_propose_upgrade(
     app: AppHandle,
@@ -125,9 +122,6 @@ pub async fn submit_propose_upgrade(
     expected_payload_hash: String,
     wasm_path: String,
     reason: String,
-    eligible_total: u64,
-    snapshot_nonce: String,
-    snapshot_signature: String,
     sign_nonce: u32,
     sign_block_number: u64,
     response_json: String,
@@ -137,13 +131,7 @@ pub async fn submit_propose_upgrade(
         return Err("节点未运行，无法提交提案".to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let call_data = call_data::propose_runtime_upgrade_from_file(
-            &wasm_path,
-            &reason,
-            eligible_total,
-            &snapshot_nonce,
-            &snapshot_signature,
-        )?;
+        let call_data = call_data::propose_runtime_upgrade_from_file(&wasm_path, &reason)?;
         signing::verify_and_submit(
             &request_id,
             &expected_pubkey_hex,

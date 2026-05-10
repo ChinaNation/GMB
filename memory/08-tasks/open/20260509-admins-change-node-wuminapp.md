@@ -134,7 +134,7 @@
 - 已将 node QR display 字段统一为 `org / subject / new_admins`，与 wumin 冷钱包 `propose_admin_set_change` 解码字段一致。
 - 已将前端 `AdminSetChangePage` 改为接收 `subjectRef`，NRC/PRC/PRB 入口带治理 org，清算行入口从主账户派生 `InstitutionAccount(0x05)` subject 并按 `ORG_OTH` 进入 `governance/admins_change`。
 - 已补充 node 后端单测覆盖 `SfidInstitution` 拒绝、`PersonalDuoqian + 非 REN` 拒绝、`InstitutionAccount + PUP/OTH` 允许。
-- 已清理 node / wumin 冷钱包 QR 展示中的旧称：`ORG_REN` 显示为“个人多签”，不再显示“注册多签机构”。
+- 已清理 node / wumin 冷钱包 QR 展示中的旧机构类泛称：`ORG_REN` 显示为“个人多签”。
 - `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
 - `rustfmt --edition 2021 --check citizenchain/node/src/governance/admins_change/*.rs citizenchain/node/src/governance/organization-manage/chain.rs citizenchain/node/src/governance/organization-manage/types.rs citizenchain/node/src/governance/runtime_upgrade/commands.rs`：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：通过，7 个 node admins_change 相关测试通过。
@@ -155,3 +155,48 @@
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`wumin`）：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：通过，7 个 node admins_change 相关测试通过。
 - `flutter test test/governance/admins-change`（`wuminapp`）和 `flutter test test/signer/payload_decoder_test.dart test/signer/pallet_registry_test.dart`（`wumin`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`；已用 Dart 静态分析覆盖本次改动。
+
+### 2026-05-10 wuminapp admins-change 破坏式 identity 修复记录
+
+- 已新增 `AdminSubjectIdentity` 三类主体：`governanceInstitution`、`personalDuoqian`、`institutionAccount`。
+- 已删除 wuminapp admins-change 的旧模糊字符串查询入口；`InstitutionAdminService`、`AdminSubjectService`、`ActivationService`、`AdminSetChangePage` 均要求传入明确 `AdminSubjectIdentity`。
+- 已将管理员激活存储切到 `activated_admins_v3`，只保存 `subjectIdHex / identityKey / org / kind`，不读取、不迁移旧 `activated_admins_v1/v2`。
+- 已同步 wumin 冷钱包管理员激活解码：新增 `GMB_ACTIVATE_SUBJECT_V1` / `activate_admin_subject`，展示字段为 `org / subject / pubkey`，旧 `sfid_number` 激活 payload 不再识别为当前 admins-change 激活协议。
+- 已改造机构详情、管理员列表、提案上下文、个人多签详情、机构账户详情、转账详情、runtime 升级详情等调用点，统一从 `InstitutionInfo` 派生 `AdminSubjectIdentity` 后再调用 admins-change 服务。
+- 已清理 wuminapp 当前代码中的旧机构类泛称残留；通用 `OrgType.duoqian` 显示为“多签账户”，具体身份由 admins-change identity 区分。
+- 已补充 wuminapp admins-change 测试：机构账户、个人多签、治理机构 identity 派生；v3 激活记录按 `subjectIdHex` 过滤并忽略旧 `sfidNumber` 记录。
+- 已补充 wumin 冷钱包测试：subject 级管理员激活 payload 可解码，旧激活 payload 被拒绝。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change lib/common/institution_info.dart lib/governance/organization-manage/institution_registry.dart lib/governance/organization-manage/institution_admin_list_page.dart lib/governance/organization-manage/institution_detail_page.dart lib/governance/governance_proposals_page.dart lib/common/proposal/proposal_context.dart lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart lib/governance/duoqian_manage_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart lib/transaction/duoqian-transfer/duoqian_transfer_page.dart lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart`（`wuminapp`）：通过。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`wumin`）：通过。
+- `flutter test test/governance/admins-change`（`wuminapp`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`。
+- `flutter test test/signer/payload_decoder_test.dart test/signer/pallet_registry_test.dart`（`wumin`）：本机 Flutter SDK 缓存写权限阻断，报 `/Users/rhett/flutter/bin/cache/engine.stamp: Operation not permitted`。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart test test/governance/admins-change`（`wuminapp`）：不能作为替代，项目未引入 `package:test`，测试集依赖 Flutter 测试运行器。
+
+### 2026-05-10 admins-change 本模块复查修复记录
+
+- 已修复 runtime admins-change 读侧防线：`active_subject_*` 与 `pending_subject_*_for_snapshot` 返回前重新校验 kind/org，旧 `SfidInstitution` 管理员主体和 `InstitutionAccount + ORG_REN` 脏数据不再暴露给投票引擎或业务模块。
+- 已将 node 后端管理员激活从旧 `GMB_ACTIVATE / activate_admin / sfid_number` 切到 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_subject`。
+- 已将 node 本地激活记录从 `activated-admins.json` 切到 `activated-admin-subjects.json`，只按 `subjectIdHex / org / kind / pubkeyHex` 归档；旧文件不读取、不迁移。
+- 已将 node 前端管理员列表、机构详情、提案详情和清算行节点声明页的已激活管理员读取统一为 subject 级 `AdminSubjectRef`。
+- 已更新 node / runtime / wuminapp 文档和 wuminapp 激活服务注释，清理当前协议里的旧 `sfid_number` 激活说明。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：通过，43 个测试通过。
+- `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/admins-change test/governance/admins-change`（`wuminapp`）：通过。
+- `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node admins_change`：被当前工作区未完成的 `runtime-upgrade` 改动阻断，报 `JointVoteEngine::create_prepared_joint_proposal_with_data_and_object` 不存在；未进入 node admins_change 测试执行阶段。
+
+### 2026-05-10 admins-change 交互模块修复记录
+
+- 已修复 `organization-manage` 创建机构时的 admins-change 主体：`propose_create_institution` 新增 `admin_org`，只允许 `ORG_PUP / ORG_OTH`；Pending/Active 管理员主体改为主账户地址派生的 `InstitutionAccount(0x05)`，不再使用 `SfidInstitution(0x02)`。
+- 已将机构账户关闭、`InstitutionMultisigQuery`、`DuoqianSfidAccountQuery::is_admin_of` 改为读取账户级 subject 和 `Institutions[sfid].admin_org`；`duoqian-transfer` 对机构账户传 `ORG_REN` 会返回 `InstitutionOrgMismatch`。
+- 已同步 node 后端 `propose_create_institution` QR/call_data 为 11 字段布局，并在机构详情读取 `admin_org` 和 active admins-change 主体；Pending 阶段回退显示创建快照。
+- 已同步 node 前端创建机构入口传 `adminOrg=ORG_OTH`；wuminapp 创建机构、机构账户发现、提案上下文、转账入口均携带/使用 `adminSubjectOrg`，不再把机构账户当作个人多签。
+- 已同步 wumin 冷钱包 `propose_create_institution` decoder：读取并展示 `org`，只接受 `ORG_PUP / ORG_OTH`，字段顺序与 runtime/node/wuminapp 一致。
+- 已更新 organization-manage、duoqian-transfer、votingengine、node 清算行、wuminapp governance/admins-change 文档，清理“机构账户走 ORG_REN”和“10 字段布局”的旧说明。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：通过，43 个测试通过。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：通过，24 个测试通过。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p duoqian-transfer --lib`：通过，23 个测试通过。
+- `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p node organization_manage`：通过，3 个 node organization_manage 相关测试通过。
+- `npx tsc --noEmit`（`citizenchain/node/frontend`）：通过。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/organization-manage lib/common lib/transaction/duoqian-transfer lib/vote test/governance/organization-manage test/governance/admins-change`（`wuminapp`）：通过。
+- `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`wumin`）：通过。
+- `npx prettier --write ...`：当前环境无本地 prettier，且网络受限无法访问 `registry.npmjs.org`；未执行 prettier，已用 `tsc` 和 `git diff --check` 覆盖本次 TS 变更。

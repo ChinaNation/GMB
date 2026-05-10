@@ -27,8 +27,6 @@ pub mod pallet {
 
     pub type ReasonOf<T> = BoundedVec<u8, <T as Config>::MaxReasonLen>;
     pub type CodeOf<T> = BoundedVec<u8, <T as Config>::MaxRuntimeCodeSize>;
-    pub type SnapshotNonceOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotNonceLength>;
-    pub type SnapshotSignatureOf<T> = BoundedVec<u8, <T as Config>::MaxSnapshotSignatureLength>;
     pub const PROPOSAL_OBJECT_KIND_RUNTIME_WASM: u8 = 1;
 
     /// 提案摘要数据：序列化后存入 votingengine 的 ProposalData。
@@ -52,30 +50,6 @@ pub mod pallet {
         pub reason: ReasonOf<T>,
         /// 代码哈希，便于事件与链下审计对齐
         pub code_hash: T::Hash,
-        /// 创建时摘要状态；真实投票/执行终态由 votingengine 维护。
-        pub status: ProposalStatus,
-    }
-
-    #[derive(
-        Encode,
-        Decode,
-        DecodeWithMemTracking,
-        Clone,
-        RuntimeDebug,
-        TypeInfo,
-        MaxEncodedLen,
-        PartialEq,
-        Eq,
-    )]
-    pub enum ProposalStatus {
-        /// 创建时默认状态；生产回调路径不再回写该字段。
-        Voting,
-        /// 历史兼容枚举，真实成功终态读取 votingengine STATUS_EXECUTED。
-        Passed,
-        /// 历史兼容枚举，真实否决终态读取 votingengine STATUS_REJECTED。
-        Rejected,
-        /// 历史兼容枚举，真实失败终态读取 votingengine STATUS_EXECUTION_FAILED。
-        ExecutionFailed,
     }
 
     use crate::weights::WeightInfo;
@@ -88,6 +62,9 @@ pub mod pallet {
         /// 允许国储会或省储会管理员发起 runtime 升级提案。
         type ProposeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
 
+        /// 开发期直接升级权限：只允许国储会管理员绕过投票执行 set_code。
+        type DeveloperUpgradeOrigin: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+
         type JointVoteEngine: JointVoteEngine<Self::AccountId>;
         type RuntimeCodeExecutor: RuntimeCodeExecutor;
 
@@ -99,12 +76,6 @@ pub mod pallet {
 
         #[pallet::constant]
         type MaxRuntimeCodeSize: Get<u32>;
-
-        #[pallet::constant]
-        type MaxSnapshotNonceLength: Get<u32>;
-
-        #[pallet::constant]
-        type MaxSnapshotSignatureLength: Get<u32>;
 
         type WeightInfo: crate::weights::WeightInfo;
     }
@@ -156,19 +127,14 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         /// 国储会或省储会管理员发起 runtime 升级提案，升级流程走联合投票。
-        /// ADR-008 step3:`(province, signer_admin_pubkey)` 双层匹配字段必填,
-        /// 由 votingengine PopulationSnapshotVerifier 走 `ShengSigningPubkey` 派生公钥验签。
+        /// 中文注释：本模块只提交协议升级业务内容；人口快照、联合签名、
+        /// 投票资格和计票流程全部由 votingengine 负责。
         #[pallet::call_index(0)]
         #[pallet::weight(<T as Config>::WeightInfo::propose_runtime_upgrade())]
         pub fn propose_runtime_upgrade(
             origin: OriginFor<T>,
             reason: ReasonOf<T>,
             code: CodeOf<T>,
-            eligible_total: u64,
-            snapshot_nonce: SnapshotNonceOf<T>,
-            signature: SnapshotSignatureOf<T>,
-            province: BoundedVec<u8, ConstU32<64>>,
-            signer_admin_pubkey: [u8; 32],
         ) -> DispatchResult {
             let proposer = T::ProposeOrigin::ensure_origin(origin)?;
 
@@ -181,17 +147,11 @@ pub mod pallet {
                 proposer: proposer.clone(),
                 reason,
                 code_hash,
-                status: ProposalStatus::Voting,
             };
             let mut encoded = sp_runtime::sp_std::vec::Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&proposal.encode());
             let proposal_id = T::JointVoteEngine::create_joint_proposal_with_data_and_object(
                 proposer.clone(),
-                eligible_total,
-                snapshot_nonce.as_slice(),
-                signature.as_slice(),
-                province.as_slice(),
-                &signer_admin_pubkey,
                 crate::MODULE_TAG,
                 encoded,
                 PROPOSAL_OBJECT_KIND_RUNTIME_WASM,
@@ -207,7 +167,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// 开发期快捷通道：联合提案发起人直接 set_code，不走投票。
+        /// 开发期快捷通道：仅国储会管理员可直接 set_code，不走投票。
         /// 仅在 genesis-pallet 的 DeveloperUpgradeEnabled 为 true 时可用。
         /// 链进入运行期后此调用永久失效，升级必须走 propose_runtime_upgrade 联合投票。
         #[pallet::call_index(2)]
@@ -215,7 +175,7 @@ pub mod pallet {
             <<T as frame_system::Config>::SystemWeightInfo as frame_system::weights::WeightInfo>::set_code()
         )]
         pub fn developer_direct_upgrade(origin: OriginFor<T>, code: CodeOf<T>) -> DispatchResult {
-            let who = T::ProposeOrigin::ensure_origin(origin)?;
+            let who = T::DeveloperUpgradeOrigin::ensure_origin(origin)?;
             ensure!(
                 T::DeveloperUpgradeCheck::is_enabled(),
                 Error::<T>::DeveloperUpgradeDisabled
@@ -274,22 +234,17 @@ pub mod pallet {
             approved: bool,
         ) -> Result<votingengine::ProposalExecutionOutcome, DispatchError> {
             let proposal = Self::load_proposal(proposal_id)?;
-            if let Some(engine_proposal) = votingengine::Pallet::<T>::proposals(proposal_id) {
-                let expected_status = if approved {
-                    votingengine::STATUS_PASSED
-                } else {
-                    votingengine::STATUS_REJECTED
-                };
-                ensure!(
-                    engine_proposal.status == expected_status,
-                    Error::<T>::ProposalNotVoting
-                );
+            let engine_proposal = votingengine::Pallet::<T>::proposals(proposal_id)
+                .ok_or(Error::<T>::ProposalNotFound)?;
+            let expected_status = if approved {
+                votingengine::STATUS_PASSED
             } else {
-                ensure!(
-                    matches!(proposal.status, ProposalStatus::Voting),
-                    Error::<T>::ProposalNotVoting
-                );
-            }
+                votingengine::STATUS_REJECTED
+            };
+            ensure!(
+                engine_proposal.status == expected_status,
+                Error::<T>::ProposalNotVoting
+            );
 
             if approved {
                 let code_to_execute = Self::load_runtime_code(proposal_id)?;

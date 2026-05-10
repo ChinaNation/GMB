@@ -113,6 +113,11 @@ validate_admin_set_for_subject(kind, org, admins)
 - `SfidInstitution` 不能作为管理员主体，写入和变更路径返回 `InvalidSubjectKind`。
 - 当前 runtime 配置：`MaxPersonalAccountAdmins = 64`，`MaxAdminsPerInstitution = 1989`。
 
+读侧防线：
+
+- `active_subject_*` 与 `pending_subject_*_for_snapshot` 查询在返回前同样校验主体类型与 `org` 是否匹配。
+- 升级前误写入的 `SfidInstitution` 管理员主体，或 `InstitutionAccount + ORG_REN` 等旧脏数据，不再通过读 API 暴露给投票引擎和业务模块。
+
 ## 6. 生命周期
 
 跨 pallet 生命周期写入口统一走 `SubjectLifecycle` trait：
@@ -227,7 +232,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 当前结果：
 
-- `admins-change`：42 passed(新增 `REN/PUP/OTH` 主体边界与 `SfidInstitution` 拒绝测试,2026-05-10)。
+- `admins-change`：43 passed(新增读侧旧脏主体拦截测试，覆盖 Active/Pending 查询 API 不再暴露非法 kind/org 组合,2026-05-10)。
 - `primitives`：24 passed。
 
 覆盖重点：
@@ -246,3 +251,4 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - `InstitutionAccount` kind 独立单测覆盖最小 2 人、ceil(n/2) 阈值阶梯、< 2 拒绝、
   `ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
 - `SfidInstitution` 新写入路径拒绝，`derived_threshold` 返回 `None`。
+- 历史脏数据读侧拦截：`InstitutionAccount + ORG_REN`、`SfidInstitution + ORG_PUP` 不再通过 Active/Pending 业务 API 返回。

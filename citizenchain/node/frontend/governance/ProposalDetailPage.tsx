@@ -104,17 +104,18 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
         setResolvedSfidNumber(sid);
       }
       let wallets = externalAdminWallets;
-      if (externalAdminWallets.length === 0 && sid) {
-        try {
-          const activated = await adminsChangeApi.getActivatedAdmins(sid);
-          wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
-          setDetectedAdminWallets(wallets);
-        } catch (_) {}
-      }
       if (sid) {
         try {
           const inst = await api.getInstitutionDetail(sid);
           setInstitution(inst);
+          if (externalAdminWallets.length === 0) {
+            const activated = await adminsChangeApi.getActivatedAdmins(sid, {
+              sfidNumber: sid,
+              org: inst.orgType,
+            });
+            wallets = activated.map(a => ({ address: hexToSs58(a.pubkeyHex), pubkeyHex: a.pubkeyHex, name: '' }));
+            setDetectedAdminWallets(wallets);
+          }
           await fetchVoteStatuses(proposalId, inst.admins.map(a => a.pubkeyHex), sid);
         } catch (_) {}
       }
@@ -159,7 +160,7 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
 
   const { meta } = info;
   const displayId = formatProposalId(meta.proposalId, displayMeta);
-  const displayStatus = proposalDisplayStatus(meta.status, info.runtimeUpgradeDetail?.status);
+  const displayStatus = { code: meta.status, label: statusLabel(meta.status) };
 
   return (
     <div className="governance-section">
@@ -208,10 +209,10 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
 
       <DuoqianTransferProposalDetailSection info={info} />
 
-      {/* Runtime 升级提案详情 */}
+      {/* 协议升级提案详情 */}
       {info.runtimeUpgradeDetail && (
         <div className="institution-info-section">
-          <h3>运行时升级详情</h3>
+          <h3>协议升级详情</h3>
           <div className="proposal-detail-table">
             <div className="detail-row">
               <span className="detail-label">原因</span>
@@ -220,12 +221,6 @@ export function ProposalDetailPage({ proposalId, adminWallets: externalAdminWall
             <div className="detail-row">
               <span className="detail-label">代码哈希</span>
               <code className="detail-value">0x{info.runtimeUpgradeDetail.codeHashHex}</code>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">业务状态</span>
-              <span className={`detail-value status-text-${displayStatus.code}`}>
-                {runtimeUpgradeStatusLabel(info.runtimeUpgradeDetail.status)}
-              </span>
             </div>
             <div className="detail-row">
               <span className="detail-label">提案人</span>
@@ -336,27 +331,6 @@ function stageLabel(stage: number): string {
 }
 function statusLabel(status: number): string {
   switch (status) { case 0: return '投票中'; case 1: return '已通过'; case 2: return '已否决'; case 3: return '已执行'; case 4: return '执行失败'; default: return '未知'; }
-}
-function runtimeUpgradeStatusLabel(status: number): string {
-  switch (status) {
-    case 0: return '投票中';
-    case 1: return '已执行';
-    case 2: return '已否决';
-    case 3: return '执行失败';
-    default: return '未知';
-  }
-}
-function proposalDisplayStatus(metaStatus: number, runtimeUpgradeStatus?: number): { code: number; label: string } {
-  if (runtimeUpgradeStatus == null) {
-    return { code: metaStatus, label: statusLabel(metaStatus) };
-  }
-  switch (runtimeUpgradeStatus) {
-    case 0: return { code: 0, label: statusLabel(0) };
-    case 1: return { code: 3, label: statusLabel(3) };
-    case 2: return { code: 2, label: statusLabel(2) };
-    case 3: return { code: 4, label: statusLabel(4) };
-    default: return { code: metaStatus, label: statusLabel(metaStatus) };
-  }
 }
 function orgTypeLabel(orgType: number): string {
   switch (orgType) { case 0: return '国储会'; case 1: return '省储会'; case 2: return '省储行'; default: return '未知'; }

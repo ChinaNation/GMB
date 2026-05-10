@@ -38,6 +38,8 @@ class InstitutionDuoqianCreatePage extends StatefulWidget {
       _InstitutionDuoqianCreatePageState();
 }
 
+const int _defaultInstitutionAdminOrg = 5;
+
 class _InstitutionDuoqianCreatePageState
     extends State<InstitutionDuoqianCreatePage> {
   final _sfidNumberController = TextEditingController();
@@ -358,6 +360,8 @@ class _InstitutionDuoqianCreatePageState
                   key: 'institution_name',
                   label: '机构名称',
                   value: registrationInfo.institutionName),
+              const SignDisplayField(
+                  key: 'org', label: '管理员组织类型', value: '其他机构账户'),
               SignDisplayField(
                   key: 'admin_count',
                   label: '管理员数量',
@@ -407,6 +411,7 @@ class _InstitutionDuoqianCreatePageState
         sfidNumber: registrationInfo.sfidNumber,
         institutionName: registrationInfo.institutionName,
         accounts: accounts,
+        adminOrg: _defaultInstitutionAdminOrg,
         adminCount: _adminPubkeys.length,
         adminPubkeys: adminPubkeyBytes,
         threshold: threshold,

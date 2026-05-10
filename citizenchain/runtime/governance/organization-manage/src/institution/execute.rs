@@ -22,7 +22,7 @@ use crate::pallet::{
     AddressRegisteredSfid, Config, CreateInstitutionActionOf, Error, Event, InstitutionAccounts,
     Institutions, Pallet, PendingInstitutionCreate, SfidRegisteredAddress,
 };
-use primitives::derive::subject_id_from_registered_sfid_number;
+use primitives::derive::subject_id_from_institution_account;
 
 /// 投票否决/超时/执行失败终态时清理机构整体创建相关存储。
 pub(crate) fn cleanup_pending_institution_create<T: Config>(
@@ -38,13 +38,9 @@ pub(crate) fn cleanup_pending_institution_create<T: Config>(
         SfidRegisteredAddress::<T>::remove(&action.sfid_number, &account.account_name);
         AddressRegisteredSfid::<T>::remove(&account.address);
     }
-    // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-    // 机构主账户的 admin 配置由 admins-change::Subjects[institution_id] 承载,无需 mirror 清理。
-    if let Some(institution_id) =
-        subject_id_from_registered_sfid_number(action.sfid_number.as_slice())
-    {
-        Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
-    }
+    // admins-change pending 主体绑定主账户地址,不是 SFID 机构号。
+    let institution_id = subject_id_from_institution_account(&action.main_address);
+    Pallet::<T>::remove_pending_admin_subject(proposal_id, institution_id);
     if emit_event {
         Pallet::<T>::deposit_event(Event::<T>::InstitutionCreateRejected {
             proposal_id,
@@ -108,8 +104,7 @@ pub(crate) fn execute_create_institution_with_finalizer<T: Config>(
     })?;
     // B 阶段后机构主账户状态唯一在 Institutions[sfid_number].status 与
     // InstitutionAccounts[(sfid_number, "主账户")].status 双写;不再 mirror 到 DuoqianAccounts。
-    let institution_id = subject_id_from_registered_sfid_number(action.sfid_number.as_slice())
-        .ok_or(Error::<T>::EmptySfidNumber)?;
+    let institution_id = subject_id_from_institution_account(&action.main_address);
     Pallet::<T>::activate_admin_subject(proposal_id, institution_id)?;
     PendingInstitutionCreate::<T>::remove(proposal_id);
 

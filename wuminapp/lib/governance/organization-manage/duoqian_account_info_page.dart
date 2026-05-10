@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/common/institution_info.dart';
@@ -35,6 +36,9 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   final InstitutionAdminService _adminService = InstitutionAdminService();
   final ChainRpc _rpc = ChainRpc();
 
+  AdminSubjectIdentity get _subjectIdentity =>
+      AdminSubjectIdentity.fromInstitution(widget.institution);
+
   bool _loading = true;
   String? _error;
 
@@ -57,7 +61,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     try {
       final results = await Future.wait([
         _manageService.fetchDuoqianAccount(widget.institution.duoqianAddress),
-        _adminService.fetchAdmins(widget.institution.sfidNumber),
+        _adminService.fetchAdmins(_subjectIdentity),
       ]);
 
       final accountInfo = results[0] as DuoqianAccountInfo?;
@@ -247,7 +251,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(widget.institution.sfidNumber);
+        _adminService.clearCache(_subjectIdentity);
         await _load();
       },
       child: ListView(

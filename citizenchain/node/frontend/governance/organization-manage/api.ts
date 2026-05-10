@@ -34,6 +34,7 @@ export const organizationManageApi = {
     sfidNumber: string;
     institutionName: string;
     accounts: InitialAccountInputDto[];
+    adminOrg: number;
     adminPubkeys: string[];
     threshold: number;
     registerNonce: string;
@@ -46,6 +47,7 @@ export const organizationManageApi = {
       sfidNumber: params.sfidNumber,
       institutionName: params.institutionName,
       accounts: params.accounts,
+      adminOrg: params.adminOrg,
       adminPubkeys: params.adminPubkeys,
       threshold: params.threshold,
       registerNonce: params.registerNonce,
@@ -61,6 +63,7 @@ export const organizationManageApi = {
     sfidNumber: string;
     institutionName: string;
     accounts: InitialAccountInputDto[];
+    adminOrg: number;
     adminPubkeys: string[];
     threshold: number;
     registerNonce: string;
@@ -78,6 +81,7 @@ export const organizationManageApi = {
       sfidNumber: params.sfidNumber,
       institutionName: params.institutionName,
       accounts: params.accounts,
+      adminOrg: params.adminOrg,
       adminPubkeys: params.adminPubkeys,
       threshold: params.threshold,
       registerNonce: params.registerNonce,

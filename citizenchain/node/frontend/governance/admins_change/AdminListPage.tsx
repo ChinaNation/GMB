@@ -10,17 +10,19 @@ import { adminsChangeApi as api } from './api';
 import type {
   ActivateRequestResult,
   ActivatedAdmin,
+  AdminSubjectRef,
   InstitutionDetail,
 } from './types';
 
 type Props = {
   sfidNumber: string;
+  subjectRef: AdminSubjectRef;
   onBack: () => void;
 };
 
 type ActivateStep = 'idle' | 'qr' | 'scan' | 'verifying' | 'done' | 'error';
 
-export function AdminListPage({ sfidNumber, onBack }: Props) {
+export function AdminListPage({ sfidNumber, subjectRef, onBack }: Props) {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [activatedAdmins, setActivatedAdmins] = useState<ActivatedAdmin[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function AdminListPage({ sfidNumber, onBack }: Props) {
     setLoading(true);
     Promise.all([
       api.getInstitutionDetail(sfidNumber),
-      api.getActivatedAdmins(sfidNumber).catch(() => [] as ActivatedAdmin[]),
+      api.getActivatedAdmins(sfidNumber, subjectRef).catch(() => [] as ActivatedAdmin[]),
     ])
       .then(([d, aa]) => {
         setDetail(d);
@@ -46,7 +48,7 @@ export function AdminListPage({ sfidNumber, onBack }: Props) {
       })
       .catch((e) => setError(sanitizeError(e)))
       .finally(() => setLoading(false));
-  }, [sfidNumber]);
+  }, [sfidNumber, subjectRef.sfidNumber, subjectRef.subjectIdHex, subjectRef.org]);
 
   // 激活倒计时
   useEffect(() => {
@@ -64,7 +66,7 @@ export function AdminListPage({ sfidNumber, onBack }: Props) {
     setActivatePubkey(pubkeyHex);
     setActivateError(null);
     try {
-      const result = await api.buildActivateAdminRequest(pubkeyHex, sfidNumber);
+      const result = await api.buildActivateAdminRequest(pubkeyHex, sfidNumber, subjectRef);
       setActivateRequest(result);
       setActivateCountdown(90);
       setActivateStep('qr');
@@ -72,7 +74,7 @@ export function AdminListPage({ sfidNumber, onBack }: Props) {
       setActivateError(sanitizeError(e));
       setActivateStep('error');
     }
-  }, [sfidNumber]);
+  }, [sfidNumber, subjectRef.sfidNumber, subjectRef.subjectIdHex, subjectRef.org]);
 
   const handleActivateScan = useCallback(async (responseJson: string) => {
     if (!activateRequest) return;

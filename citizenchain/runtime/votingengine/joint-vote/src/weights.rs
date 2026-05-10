@@ -14,6 +14,8 @@ use frame_support::{
 };
 
 pub trait WeightInfo {
+    /// `prepare_joint_population_snapshot(...)` — 联合公投人口快照准备。
+    fn prepare_joint_population_snapshot() -> Weight;
     /// `cast_admin(proposal_id, institution, approve)` — 内部投票阶段。
     fn cast_admin() -> Weight;
     /// `cast_referendum(proposal_id, binding_id, ...)` — 联合公投阶段。
@@ -26,6 +28,12 @@ pub trait WeightInfo {
 
 pub struct SubstrateWeight<T>(PhantomData<T>);
 impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
+    fn prepare_joint_population_snapshot() -> Weight {
+        Weight::from_parts(40_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 3570))
+            .saturating_add(T::DbWeight::get().reads(2))
+            .saturating_add(T::DbWeight::get().writes(2))
+    }
     fn cast_admin() -> Weight {
         Weight::from_parts(23_123_000, 0)
             .saturating_add(Weight::from_parts(0, 3559))
@@ -53,6 +61,12 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 }
 
 impl WeightInfo for () {
+    fn prepare_joint_population_snapshot() -> Weight {
+        Weight::from_parts(40_000_000, 0)
+            .saturating_add(Weight::from_parts(0, 3570))
+            .saturating_add(RocksDbWeight::get().reads(2))
+            .saturating_add(RocksDbWeight::get().writes(2))
+    }
     fn cast_admin() -> Weight {
         Weight::from_parts(23_123_000, 0)
             .saturating_add(Weight::from_parts(0, 3559))
