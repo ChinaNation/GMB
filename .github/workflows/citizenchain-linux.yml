@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
 concurrency:
   group: citizenchain-linux-${{ github.ref }}
   cancel-in-progress: true
@@ -19,8 +23,8 @@ jobs:
   build-linux:
     name: 打包公民链.deb (Linux)
     runs-on: ubuntu-latest
-    # 本地 push 触发的 WASM CI 不再上传 artifact；桌面端打包只允许手动触发。
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    # 手动运行或上游 WASM CI 成功后才真正打包; WASM 失败时保留触发记录但跳过打包。
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -62,7 +66,14 @@ jobs:
           shared-key: "citizenchain-linux"
           workspaces: citizenchain -> target
 
-      - name: 下载最新 WASM 产物
+      - name: 下载上游 WASM 产物
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: gh run download ${{ github.event.workflow_run.id }} --name citizenchain-wasm --dir wasm-artifact -R ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 手动运行时下载最新 WASM 产物
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: gh run download --name citizenchain-wasm --dir wasm-artifact -R ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,11 +100,26 @@ jobs:
           echo "产出: 公民链.deb ($(du -h 公民链.deb | cut -f1))"
 
       - name: 上传公民链.deb
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: 公民链-linux
           path: 公民链.deb
           retention-days: 30
           overwrite: true
+
+      - name: 删除上一次 Linux CI
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: citizenchain-linux.yml
+        run: |
+          previous_run_id="$(
+            gh api "repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILE/runs?branch=main&status=completed&per_page=10" \
+              --jq '.workflow_runs[0].id // empty'
+          )"
+          if [ -z "$previous_run_id" ]; then
+            echo "没有可删除的上一条 Linux CI"
+            exit 0
+          fi
+          echo "删除上一条 Linux CI run: $previous_run_id"
+          gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$previous_run_id"
