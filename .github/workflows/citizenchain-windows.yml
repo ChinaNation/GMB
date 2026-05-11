@@ -1,10 +1,6 @@
 name: CitizenChain Windows
 
 on:
-  workflow_run:
-    workflows: ["CitizenChain WASM"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -23,8 +19,6 @@ jobs:
   build-windows:
     name: 打包公民链.exe (Windows)
     runs-on: windows-latest
-    # 手动运行或上游 WASM CI 成功后才真正打包; WASM 失败时保留触发记录但跳过打包。
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
@@ -52,23 +46,6 @@ jobs:
         with:
           shared-key: "citizenchain-windows"
           workspaces: citizenchain -> target
-
-      - name: 下载上游 WASM 产物
-        if: ${{ github.event_name == 'workflow_run' }}
-        run: gh run download ${{ github.event.workflow_run.id }} --name citizenchain-wasm --dir wasm-artifact -R ${{ env.GITHUB_REPOSITORY }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-
-      - name: 手动运行时下载最新 WASM 产物
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: gh run download --name citizenchain-wasm --dir wasm-artifact -R ${{ env.GITHUB_REPOSITORY }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-
-      - name: 设置 WASM_FILE
-        run: echo "WASM_FILE=${{ github.workspace }}/wasm-artifact/citizenchain.compact.compressed.wasm" >> $env:GITHUB_ENV
 
       - name: 安装前端依赖并构建
         run: |

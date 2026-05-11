@@ -1,11 +1,11 @@
 #[cfg(feature = "std")]
 fn main() {
-    // 强制每次编译都重新运行 build.rs，确保 WASM 是最新的。
+    // 强制环境切换时重新运行 build.rs，确保 WASM 来源明确。
     println!("cargo:rerun-if-env-changed=WASM_FILE");
     println!("cargo:rerun-if-env-changed=WASM_BUILD_FROM_SOURCE");
 
     if let Ok(wasm_file) = std::env::var("WASM_FILE") {
-        // ── 使用 CI 预编译的 WASM（三端 CI、本地脚本）──
+        // ── 使用 CI 预编译的 WASM（本地启动脚本、全新创世、升级工具）──
         let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
         let dest = std::path::Path::new(&out_dir).join("wasm_binary.rs");
 
@@ -29,14 +29,20 @@ pub const WASM_BINARY_BLOATY: Option<&[u8]> = Some(include_bytes!("{wasm_path_st
         // ── WASM CI 专用：从源码编译 WASM（仅 WASM CI workflow 使用）──
         substrate_wasm_builder::WasmBuilder::build_using_defaults();
     } else {
-        // ── 既没有 WASM_FILE 也没有 WASM_BUILD_FROM_SOURCE：拒绝编译 ──
-        panic!(
-            "\n\n错误：WASM_FILE 环境变量未设置。\n\
-             所有节点必须使用 CI 编译的统一 WASM，不允许本地编译。\n\
-             请通过以下方式启动：\n\
-             - 本地开发：cd ~/GMB && ./citizenchain/scripts/run.sh\n\
-             - 全新创世：cd ~/GMB && ./citizenchain/scripts/clean-run.sh\n\n"
-        );
+        // ── 普通桌面端打包：不内置 runtime WASM。
+        // 中文注释：现有链运行时从链上状态读取 runtime code，不依赖安装包内置 WASM。
+        // 只有本地重新创世或 runtime 升级工具才需要通过 WASM_FILE 显式提供 WASM。
+        let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+        let dest = std::path::Path::new(&out_dir).join("wasm_binary.rs");
+        std::fs::write(
+            &dest,
+            r#"pub const WASM_BINARY: Option<&[u8]> = None;
+pub const WASM_BINARY_BLOATY: Option<&[u8]> = None;
+"#,
+        )
+        .expect("写入空 wasm_binary.rs 失败");
+
+        eprintln!("未设置 WASM_FILE；本次构建不内置 runtime WASM");
     }
 }
 
