@@ -38,7 +38,9 @@ home/
 3. 两个脚本都属于开发用途，区别只在于是否先删除本地应用数据目录，而不是是否使用开发链
 
 WASM CI 版本规则：
-- `citizenchain-wasm.yml` 编译前必须通过 `CITIZENCHAIN_RPC_URL` 查询链上 `state_getRuntimeVersion.specVersion`；GitHub secret/variable 可覆盖默认的 `http://147.224.14.117:9944`
+- `citizenchain-wasm.yml` 编译前必须查询链上 `state_getRuntimeVersion.specVersion`
+- GitHub 配置 `CITIZENCHAIN_SSH_KEY` 后，CI 会通过 SSH 登录 `CITIZENCHAIN_SSH_USER@CITIZENCHAIN_SSH_HOST`，在服务器本机访问 `http://127.0.0.1:9944`
+- 如果没有 SSH key，CI 才使用 `CITIZENCHAIN_RPC_URL` 直连 HTTP RPC
 - 如果源码 `spec_version` 小于或等于链上版本，CI 只在本次工作区临时改为 `链上版本 + 1` 后编译 WASM artifact
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
 - 生成的 `citizenchain-wasm` artifact 用于开发升级和本地启动脚本下载；链 RPC 不可访问时 CI 应失败，避免产出会被 `System.set_code` 拒绝的 WASM
