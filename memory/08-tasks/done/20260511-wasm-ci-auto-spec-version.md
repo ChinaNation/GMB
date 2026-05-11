@@ -1,0 +1,34 @@
+# 20260511 WASM CI 自动对齐链上 spec_version
+
+## 任务目标
+
+- 修复开发升级使用最新 WASM 时因 `System::SpecVersionNeedsToIncrease` 被链上拒绝的问题。
+- WASM CI 每次编译前先查询链上 `state_getRuntimeVersion.specVersion`。
+- 当源码 `citizenchain/runtime/src/lib.rs` 中的 `spec_version` 小于或等于链上版本时，只在 CI 工作区临时提升到 `链上版本 + 1` 后再编译。
+- 不让 CI 自动提交版本号回 `main`，避免二次触发和版本提交噪音。
+
+## 预计修改目录
+
+- `.github/workflows`
+  - 修改 CitizenChain WASM CI，在编译前增加链上版本检查与临时 bump；涉及 CI 配置和旧注释清理。
+- `citizenchain/runtime/src`
+  - 调整 runtime 版本单测，不再把 `spec_version` 写死为单一值；涉及测试代码。
+- `memory/05-modules/citizenchain`
+  - 更新 WASM CI 与开发升级文档，说明 `spec_version` 的链上校验和 CI 产物规则；涉及文档。
+
+## 执行记录
+
+- 已在 `.github/workflows/citizenchain-wasm.yml` 增加链上版本检查步骤。
+- CI 通过 `CITIZENCHAIN_RPC_URL` 调用 `state_getRuntimeVersion`，读取链上 `specVersion`；GitHub secret/variable 可覆盖默认的 `http://147.224.14.117:9944`。
+- 当源码 `spec_version` 小于或等于链上版本时，CI 工作区临时改成 `链上版本 + 1` 后再编译 WASM。
+- 已保留“不自动 commit 回 main”的边界，避免二次触发 WASM CI。
+- 已删除旧的“版本只能纯手动管理 / 删除 spec_version 自增”的过时注释。
+- 已调整 runtime 版本测试，不再写死单一 `spec_version`。
+- 已同步更新 node 首页技术文档与 runtime-upgrade 技术文档。
+
+## 验证记录
+
+- `git diff --check`：通过。
+- `cargo fmt --manifest-path citizenchain/Cargo.toml -p citizenchain --check`：通过。
+- `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p citizenchain runtime_version_and_block_types_are_sane`：通过，1 passed。
+- 使用模拟链上 `specVersion=0` 本地执行 CI 版本检查脚本：通过，源码版本为 1 时不会被错误改写。

@@ -73,7 +73,10 @@ fn runtime_version_and_block_types_are_sane() {
     assert_eq!(VERSION.spec_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.impl_name.as_ref(), "citizenchain");
     assert_eq!(VERSION.authoring_version, 0);
-    assert_eq!(VERSION.spec_version, 1);
+    assert!(
+        VERSION.spec_version >= 1,
+        "spec_version 必须保持正向递增；WASM CI 会在编译产物时按链上版本临时提升"
+    );
     assert_eq!(VERSION.impl_version, 0);
     assert_eq!(VERSION.transaction_version, 0);
     assert_eq!(VERSION.system_version, 0);

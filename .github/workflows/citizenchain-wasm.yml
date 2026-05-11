@@ -15,6 +15,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CITIZENCHAIN_RPC_URL: ${{ secrets.CITIZENCHAIN_RPC_URL || vars.CITIZENCHAIN_RPC_URL || 'http://147.224.14.117:9944' }}
 
 jobs:
   build-wasm:
@@ -33,9 +34,73 @@ jobs:
       - name: 安装系统依赖
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
 
-      # Step 2 改造:删除 "spec_version 自增" 自动 bump step。
-      # 原逻辑每次 CI 跑都把 spec_version +1,与"重新创世 + 钉死版本号"的语义冲突。
-      # 版本号从此纯手动管理:runtime 代码改时由开发者显式改 spec_version 提交。
+      # 编译前以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
+      # 这里不提交回 main,避免 CI 自动 commit 触发二次构建和版本号噪音。
+      - name: 校验链上 WASM 版本并临时提升源码版本
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CITIZENCHAIN_RPC_URL:-}" ]; then
+            echo "::error::缺少 CITIZENCHAIN_RPC_URL。请配置可访问的链 RPC HTTP 地址。"
+            exit 1
+          fi
+
+          response="$(curl -sS --fail --max-time 20 \
+            -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"state_getRuntimeVersion","params":[]}' \
+            "$CITIZENCHAIN_RPC_URL")"
+          printf '%s' "$response" > /tmp/citizenchain-runtime-version.json
+
+          chain_spec_version="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("/tmp/citizenchain-runtime-version.json").read_text())
+          if "error" in data:
+              raise SystemExit(f"state_getRuntimeVersion 返回错误: {data['error']}")
+          result = data.get("result") or {}
+          version = result.get("specVersion", result.get("spec_version"))
+          if version is None:
+              raise SystemExit("state_getRuntimeVersion 响应缺少 specVersion")
+          print(int(version))
+          PY
+          )"
+          export CHAIN_SPEC_VERSION="$chain_spec_version"
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          chain_spec_version = int(os.environ["CHAIN_SPEC_VERSION"])
+          runtime_path = Path("citizenchain/runtime/src/lib.rs")
+          text = runtime_path.read_text()
+          match = re.search(r"(?m)^(\s*spec_version:\s*)(\d+)(\s*,)", text)
+          if not match:
+              raise SystemExit("未找到 runtime/src/lib.rs 中的 spec_version")
+
+          source_spec_version = int(match.group(2))
+          build_spec_version = source_spec_version
+          if source_spec_version <= chain_spec_version:
+              build_spec_version = chain_spec_version + 1
+              text = text[:match.start(2)] + str(build_spec_version) + text[match.end(2):]
+              runtime_path.write_text(text)
+
+          print(f"链上 spec_version: {chain_spec_version}")
+          print(f"源码 spec_version: {source_spec_version}")
+          print(f"本次编译 spec_version: {build_spec_version}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"CITIZENCHAIN_CHAIN_SPEC_VERSION={chain_spec_version}\n")
+              env.write(f"CITIZENCHAIN_SOURCE_SPEC_VERSION={source_spec_version}\n")
+              env.write(f"CITIZENCHAIN_BUILD_SPEC_VERSION={build_spec_version}\n")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## CitizenChain WASM 版本检查\n\n")
+              summary.write(f"- 链上 spec_version: `{chain_spec_version}`\n")
+              summary.write(f"- 源码 spec_version: `{source_spec_version}`\n")
+              summary.write(f"- 本次编译 spec_version: `{build_spec_version}`\n")
+          PY
 
       # WASM 是后续本地启动和桌面打包的基础产物，push 与手动运行都上传最新版本。
       - name: 清理旧版 WASM artifact
@@ -71,6 +136,3 @@ jobs:
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.wasm
             citizenchain/target/release/wbuild/citizenchain/citizenchain.compact.compressed.wasm
           retention-days: 30
-
-      # Step 2 改造:删除 "提交 spec_version 自增" 步骤,与前面的 bump step 配套删除。
-      # 版本号不再由 CI bot 自动 commit 回 main。
