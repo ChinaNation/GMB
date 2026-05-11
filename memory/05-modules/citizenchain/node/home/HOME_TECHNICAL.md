@@ -45,6 +45,7 @@ WASM CI 版本规则：
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
 - 生成的 `citizenchain-wasm` artifact 用于开发升级和本地启动脚本下载；链 RPC 不可访问时 CI 应失败，避免产出会被 `System.set_code` 拒绝的 WASM
 - 三端桌面安装包 CI 不再由 WASM CI 自动触发，也不再下载/内置最新 WASM；现有链要使用最新 runtime 仍必须走 runtime 升级
+- Linux 桌面安装包 CI 成功后，会把本次 `公民链-linux` artifact 中的 deb 按顺序部署到 6 台服务器；服务器部署只替换程序和重启 `citizenchain-node`，不清除 `/opt/citizenchain/data`
 
 ## process/mod.rs
 

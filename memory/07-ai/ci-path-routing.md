@@ -29,7 +29,8 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 三端打包 workflow 只允许手动触发，不再由 `CitizenChain WASM` 成功后自动触发
   - 三端安装包不下载、不内置最新 `citizenchain-wasm` artifact；现有链运行 runtime 以链上 `System.set_code` 为准
   - 本地重新创世、开发启动或 runtime 升级需要使用最新 WASM 时，由对应脚本或升级入口显式下载/选择 WASM
-  - 每个三端 CI 成功上传新产物后，删除同 workflow 的上一条已完成 CI run，使 GitHub 只保留最新有效运行和产物
+  - Linux CI 成功上传本次 `公民链-linux` artifact 后，顺序滚动部署同一个 deb 到 6 台固定服务器；部署失败时保留当前 run 和 artifact 供排查
+  - macOS/Windows CI 成功上传新产物后删除同 workflow 的上一条已完成 CI run；Linux CI 必须在 6 台服务器全部部署成功后才删除上一条 Linux CI run
 - 代码目录：
   - `citizenchain/node/**`
   - `citizenchain/node/frontend/**`
