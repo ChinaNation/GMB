@@ -19,7 +19,7 @@
 ## 执行记录
 
 - 已在 `.github/workflows/citizenchain-wasm.yml` 增加链上版本检查步骤。
-- CI 优先通过 `CITIZENCHAIN_SSH_KEY` 登录服务器，在服务器本机调用 `http://127.0.0.1:9944` 的 `state_getRuntimeVersion`，读取链上 `specVersion`。
+- CI 优先通过已有的无密码部署密钥 `SFID_DEPLOY_SSH_KEY` 登录服务器，在服务器本机调用 `http://127.0.0.1:9944` 的 `state_getRuntimeVersion`，读取链上 `specVersion`；没有该密钥时才回退到 `CITIZENCHAIN_SSH_KEY`。
 - 未配置 SSH key 时，CI 才使用 `CITIZENCHAIN_RPC_URL` 直连 HTTP RPC。
 - 当源码 `spec_version` 小于或等于链上版本时，CI 工作区临时改成 `链上版本 + 1` 后再编译 WASM。
 - 已保留“不自动 commit 回 main”的边界，避免二次触发 WASM CI。
@@ -34,3 +34,4 @@
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p citizenchain runtime_version_and_block_types_are_sane`：通过，1 passed。
 - 使用模拟链上 `specVersion=0` 本地执行 CI 版本检查脚本：通过，源码版本为 1 时不会被错误改写。
 - 追加修复 GitHub runner 访问公网 9944 超时问题：WASM CI 已改为优先 SSH 到服务器后查询本机 RPC。
+- 追加修复 GitHub Secret 私钥不匹配/带密码导致的 `Permission denied (publickey)`：WASM CI 优先复用已有 `SFID_DEPLOY_SSH_KEY`，并已将对应公钥加入服务器 `ubuntu` 用户的 `authorized_keys`。

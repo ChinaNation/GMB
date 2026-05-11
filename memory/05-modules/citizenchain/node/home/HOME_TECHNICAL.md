@@ -39,7 +39,7 @@ home/
 
 WASM CI 版本规则：
 - `citizenchain-wasm.yml` 编译前必须查询链上 `state_getRuntimeVersion.specVersion`
-- GitHub 配置 `CITIZENCHAIN_SSH_KEY` 后，CI 会通过 SSH 登录 `CITIZENCHAIN_SSH_USER@CITIZENCHAIN_SSH_HOST`，在服务器本机访问 `http://127.0.0.1:9944`
+- GitHub 配置 `SFID_DEPLOY_SSH_KEY` 或 `CITIZENCHAIN_SSH_KEY` 后，CI 会通过 SSH 登录 `CITIZENCHAIN_SSH_USER@CITIZENCHAIN_SSH_HOST`，在服务器本机访问 `http://127.0.0.1:9944`；当前优先复用已有的无密码部署密钥 `SFID_DEPLOY_SSH_KEY`
 - 如果没有 SSH key，CI 才使用 `CITIZENCHAIN_RPC_URL` 直连 HTTP RPC
 - 如果源码 `spec_version` 小于或等于链上版本，CI 只在本次工作区临时改为 `链上版本 + 1` 后编译 WASM artifact
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护

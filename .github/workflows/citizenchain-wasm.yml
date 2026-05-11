@@ -41,7 +41,7 @@ jobs:
           CITIZENCHAIN_SSH_HOST: ${{ secrets.CITIZENCHAIN_SSH_HOST || vars.CITIZENCHAIN_SSH_HOST || '147.224.14.117' }}
           CITIZENCHAIN_SSH_USER: ${{ secrets.CITIZENCHAIN_SSH_USER || vars.CITIZENCHAIN_SSH_USER || 'ubuntu' }}
           CITIZENCHAIN_SSH_PORT: ${{ secrets.CITIZENCHAIN_SSH_PORT || vars.CITIZENCHAIN_SSH_PORT || '22' }}
-          CITIZENCHAIN_SSH_KEY: ${{ secrets.CITIZENCHAIN_SSH_KEY }}
+          CITIZENCHAIN_SSH_KEY: ${{ secrets.SFID_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
         run: |
           set -euo pipefail
 
@@ -70,7 +70,7 @@ jobs:
               -d "$request_payload" \
               "$CITIZENCHAIN_RPC_URL")"
           else
-            echo "::error::缺少 CITIZENCHAIN_SSH_KEY 或 CITIZENCHAIN_RPC_URL，无法查询链上 runtime 版本。"
+            echo "::error::缺少 SFID_DEPLOY_SSH_KEY、CITIZENCHAIN_SSH_KEY 或 CITIZENCHAIN_RPC_URL，无法查询链上 runtime 版本。"
             exit 1
           fi
           printf '%s' "$response" > /tmp/citizenchain-runtime-version.json
