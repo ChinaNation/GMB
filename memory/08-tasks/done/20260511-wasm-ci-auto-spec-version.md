@@ -19,7 +19,8 @@
 ## 执行记录
 
 - 已在 `.github/workflows/citizenchain-wasm.yml` 增加链上版本检查步骤。
-- CI 通过 `CITIZENCHAIN_RPC_URL` 调用 `state_getRuntimeVersion`，读取链上 `specVersion`；GitHub secret/variable 可覆盖默认的 `http://147.224.14.117:9944`。
+- CI 优先通过 `CITIZENCHAIN_SSH_KEY` 登录服务器，在服务器本机调用 `http://127.0.0.1:9944` 的 `state_getRuntimeVersion`，读取链上 `specVersion`。
+- 未配置 SSH key 时，CI 才使用 `CITIZENCHAIN_RPC_URL` 直连 HTTP RPC。
 - 当源码 `spec_version` 小于或等于链上版本时，CI 工作区临时改成 `链上版本 + 1` 后再编译 WASM。
 - 已保留“不自动 commit 回 main”的边界，避免二次触发 WASM CI。
 - 已删除旧的“版本只能纯手动管理 / 删除 spec_version 自增”的过时注释。
@@ -32,3 +33,4 @@
 - `cargo fmt --manifest-path citizenchain/Cargo.toml -p citizenchain --check`：通过。
 - `WASM_FILE=/Users/rhett/GMB/citizenchain/target/wasm/citizenchain.compact.compressed.wasm cargo test --manifest-path citizenchain/Cargo.toml -p citizenchain runtime_version_and_block_types_are_sane`：通过，1 passed。
 - 使用模拟链上 `specVersion=0` 本地执行 CI 版本检查脚本：通过，源码版本为 1 时不会被错误改写。
+- 追加修复 GitHub runner 访问公网 9944 超时问题：WASM CI 已改为优先 SSH 到服务器后查询本机 RPC。

@@ -15,7 +15,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CITIZENCHAIN_RPC_URL: ${{ secrets.CITIZENCHAIN_RPC_URL || vars.CITIZENCHAIN_RPC_URL || 'http://147.224.14.117:9944' }}
 
 jobs:
   build-wasm:
@@ -32,23 +31,48 @@ jobs:
           components: rust-src
 
       - name: 安装系统依赖
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libclang-dev openssh-client
 
       # 编译前以链上 WASM 版本为准做保护性检查:源码版本不足时只在 CI 工作区临时 +1。
       # 这里不提交回 main,避免 CI 自动 commit 触发二次构建和版本号噪音。
       - name: 校验链上 WASM 版本并临时提升源码版本
+        env:
+          CITIZENCHAIN_RPC_URL: ${{ secrets.CITIZENCHAIN_RPC_URL || vars.CITIZENCHAIN_RPC_URL }}
+          CITIZENCHAIN_SSH_HOST: ${{ secrets.CITIZENCHAIN_SSH_HOST || vars.CITIZENCHAIN_SSH_HOST || '147.224.14.117' }}
+          CITIZENCHAIN_SSH_USER: ${{ secrets.CITIZENCHAIN_SSH_USER || vars.CITIZENCHAIN_SSH_USER || 'ubuntu' }}
+          CITIZENCHAIN_SSH_PORT: ${{ secrets.CITIZENCHAIN_SSH_PORT || vars.CITIZENCHAIN_SSH_PORT || '22' }}
+          CITIZENCHAIN_SSH_KEY: ${{ secrets.CITIZENCHAIN_SSH_KEY }}
         run: |
           set -euo pipefail
 
-          if [ -z "${CITIZENCHAIN_RPC_URL:-}" ]; then
-            echo "::error::缺少 CITIZENCHAIN_RPC_URL。请配置可访问的链 RPC HTTP 地址。"
+          request_payload='{"jsonrpc":"2.0","id":1,"method":"state_getRuntimeVersion","params":[]}'
+          if [ -n "${CITIZENCHAIN_SSH_KEY:-}" ]; then
+            ssh_dir="$RUNNER_TEMP/citizenchain-ssh"
+            mkdir -p "$ssh_dir"
+            key_file="$ssh_dir/id_ed25519"
+            known_hosts_file="$ssh_dir/known_hosts"
+            printf '%s\n' "$CITIZENCHAIN_SSH_KEY" | tr -d '\r' > "$key_file"
+            chmod 600 "$key_file"
+            ssh-keyscan -p "$CITIZENCHAIN_SSH_PORT" -H "$CITIZENCHAIN_SSH_HOST" >> "$known_hosts_file"
+            echo "通过 SSH 查询链上 spec_version: ${CITIZENCHAIN_SSH_USER}@${CITIZENCHAIN_SSH_HOST}:${CITIZENCHAIN_SSH_PORT}"
+            response="$(ssh \
+              -i "$key_file" \
+              -p "$CITIZENCHAIN_SSH_PORT" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$known_hosts_file" \
+              "$CITIZENCHAIN_SSH_USER@$CITIZENCHAIN_SSH_HOST" \
+              "curl -sS --fail --max-time 20 -H 'Content-Type: application/json' -d '$request_payload' http://127.0.0.1:9944")"
+          elif [ -n "${CITIZENCHAIN_RPC_URL:-}" ]; then
+            echo "通过 HTTP RPC 查询链上 spec_version: $CITIZENCHAIN_RPC_URL"
+            response="$(curl -sS --fail --max-time 20 \
+              -H 'Content-Type: application/json' \
+              -d "$request_payload" \
+              "$CITIZENCHAIN_RPC_URL")"
+          else
+            echo "::error::缺少 CITIZENCHAIN_SSH_KEY 或 CITIZENCHAIN_RPC_URL，无法查询链上 runtime 版本。"
             exit 1
           fi
-
-          response="$(curl -sS --fail --max-time 20 \
-            -H 'Content-Type: application/json' \
-            -d '{"jsonrpc":"2.0","id":1,"method":"state_getRuntimeVersion","params":[]}' \
-            "$CITIZENCHAIN_RPC_URL")"
           printf '%s' "$response" > /tmp/citizenchain-runtime-version.json
 
           chain_spec_version="$(python3 - <<'PY'
