@@ -157,6 +157,11 @@ Runtime 配置位置：
 
 权重：使用 `frame_system::set_code()` 的系统权重。
 
+版本要求：
+- `developer_direct_upgrade` 最终通过 `System.set_code` 写入新 runtime code，系统会拒绝 `spec_version` 小于或等于链上当前版本的 WASM，错误表现为 `System::SpecVersionNeedsToIncrease`
+- WASM CI 在编译前会读取链上 `state_getRuntimeVersion.specVersion`；源码版本不足时，只在 CI 工作区临时提升到 `链上版本 + 1` 再编译 artifact
+- CI 不把临时提升后的 `spec_version` 自动提交回仓库；源码中的版本号仍用于记录开发者认可的 runtime 版本基线
+
 ### 5.4 投票引擎状态协同
 
 当前实现与 `votingengine` 的协作关系如下：
