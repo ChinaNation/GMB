@@ -54,7 +54,7 @@
 - 已验证：`cargo test -p duoqian-transfer --lib --offline` 通过，20 个测试全绿。
 - 已验证：`cargo check --manifest-path sfid/backend/Cargo.toml --offline` 通过，仅保留既有 unused warnings。
 - 已验证：`flutter test test/signer/pallet_registry_test.dart` 通过，8 个测试全绿。
-- 补充说明：`SKIP_WASM_BUILD=1 cargo check -p citizenchain --offline` 被 runtime `build.rs` 的统一 WASM 策略阻塞，报错为 `WASM_FILE 环境变量未设置`；该限制来自仓库构建策略，不是本次命名解析错误。
+- 补充说明：当时 `SKIP_WASM_BUILD=1 cargo check -p citizenchain --offline` 被 runtime `build.rs` 的统一 WASM 策略阻塞，报错为 `WASM_FILE 环境变量未设置`；该限制来自当时的仓库构建策略，不是本次命名解析错误。后续 CI 策略已调整，未设置 `WASM_FILE` 时默认不内置 runtime WASM。
 - 复查补充：再次全仓库扫描发现 `citizenchain/scripts/benchmark.sh` 仍有旧 benchmark pallet 标识和旧 weights 路径，已改为 `duoqian_manage` / `duoqian_transfer` 与新路径。
 - 复查补充：再次全仓库扫描发现 `citizenchain/target` 与 `sfid/backend/target/doc` 中有旧生成缓存，已通过 `cargo clean -p citizenchain` 与 `cargo clean --manifest-path sfid/backend/Cargo.toml` 清理。
 - 复查补充：清理后重新执行旧命名文本扫描和旧命名文件名扫描，普通源码、文档、脚本与生成缓存均未再命中旧名。

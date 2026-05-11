@@ -107,7 +107,7 @@
 - `cargo check --offline --manifest-path sfid/backend/Cargo.toml` 通过，仅保留既有未使用代码警告。
 - `flutter analyze` 通过，`wuminapp` 无分析问题。
 - `npm run build` 通过，`website` 可构建。
-- `cargo check --offline --manifest-path citizenchain/Cargo.toml -p pow-difficulty -p sfid-system -p citizen-issuance -p duoqian-manage -p citizenchain -p node` 触发 runtime build script 的统一 WASM 策略阻塞：`WASM_FILE 环境变量未设置`。该失败来自仓库构建策略，不是本次改名引用残留。
+- `cargo check --offline --manifest-path citizenchain/Cargo.toml -p pow-difficulty -p sfid-system -p citizen-issuance -p duoqian-manage -p citizenchain -p node` 当时触发 runtime build script 的统一 WASM 策略阻塞：`WASM_FILE 环境变量未设置`。该失败来自当时的仓库构建策略，不是本次改名引用残留；后续 CI 策略已调整，未设置 `WASM_FILE` 时默认不内置 runtime WASM。
 
 ## 完成信息
 

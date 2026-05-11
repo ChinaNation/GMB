@@ -251,4 +251,4 @@ FatalFailed
 - `cargo test -p voting-engine`：66 passed。
 - `cargo test -p duoqian-transfer`：20 passed。
 - `cargo test -p resolution-destro -p grandpakey-change -p admins-change -p duoqian-manage -p runtime-upgrade -p resolution-issuance`：全部通过。
-- `cargo check -p citizenchain`：被 runtime/build.rs 的统一 WASM 保护阻断，错误为 `WASM_FILE 环境变量未设置`；这是仓库当前禁止本地 runtime WASM 编译的保护，不是本次代码编译错误。
+- `cargo check -p citizenchain`：按当时策略被 runtime/build.rs 的统一 WASM 保护阻断，错误为 `WASM_FILE 环境变量未设置`；这是当时仓库禁止本地 runtime WASM 编译的保护，不是本次代码编译错误。后续 CI 策略已调整，未设置 `WASM_FILE` 时默认不内置 runtime WASM。
