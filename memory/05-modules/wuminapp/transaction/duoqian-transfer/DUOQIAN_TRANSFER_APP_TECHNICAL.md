@@ -39,6 +39,13 @@
 
 ## 交易状态
 
+发起多签转账提案的成功判定：
+
+- `author_submitExtrinsic` / `txHash` 返回不代表提案创建成功。
+- wuminapp 必须等待交易进入区块，并读取该区块 `System.Events`。
+- 只有同一区块存在匹配本次发起人、机构主账户、收款人和金额的 `DuoqianTransfer::TransferProposed` 事件，才允许提示“提案创建成功”并写入本地个人多签提案历史。
+- 如果交易已入块但没有 `TransferProposed`，视为提案创建失败，不写本地历史。
+
 投票提交后监听交易池状态：
 
 - `invalid / dropped / future / usurped / retracted / timeout / error`：清除本地 pending，并提示交易未出块原因。

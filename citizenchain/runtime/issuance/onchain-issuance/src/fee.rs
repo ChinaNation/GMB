@@ -2,8 +2,8 @@
 //!
 //! - 费率单一权威源:`primitives::fee_policy::ONCHAIN_ASSET_CREATE_FEE`(100_000 FEN = 1000 元)
 //! - 仅 `propose_issue` 走本路径;mint/burn/transfer/close 走 VotingEngine InternalVote 自身的
-//!   `VOTE_FLAT_FEE = 1 元/次`(由 OnchainTxAmountExtractor 处理),与本文件无关
-//! - NRC 监管 5 动作 propose Free
+//!   `VOTE_FLAT_FEE = 1 元/次`(由 RuntimeFeeKindClassifier 处理),与本文件无关
+//! - NRC 监管 5 动作 propose 也属于治理提案交易,由 RuntimeFeeKindClassifier 按 1 元/次计费
 //!
 //! ## 三态押金机制
 //!

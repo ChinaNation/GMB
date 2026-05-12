@@ -7,7 +7,7 @@
 //!    creator 与 account_name,与管理员列表无关,所以未来换管理员地址不变
 //! 3. 同事务内：
 //!    - 写 Pending PersonalDuoqians 占位
-//!    - 调投票引擎 create_pending_subject_internal_proposal_with_snapshot_data
+//!    - 调投票引擎 create_registered_subject_create_proposal_with_data
 //!    - 调 admins-change 写 Pending 主体
 //! 4. 从投票引擎回读 expires_at,发射 PersonalDuoqianProposed 事件
 
@@ -38,6 +38,7 @@ pub(crate) fn do_propose_create<T: Config>(
     who: T::AccountId,
     account_name: AccountNameOf<T>,
     duoqian_admins: DuoqianAdminsOf<T>,
+    regular_threshold: u32,
     amount: BalanceOf<T>,
 ) -> DispatchResult {
     ensure!(
@@ -49,7 +50,7 @@ pub(crate) fn do_propose_create<T: Config>(
         amount >= T::MinCreateAmount::get(),
         Error::<T>::CreateAmountBelowMinimum
     );
-    let regular_threshold = Pallet::<T>::ensure_admin_config(&who, &duoqian_admins)?;
+    Pallet::<T>::ensure_admin_config(&who, &duoqian_admins, regular_threshold)?;
     let admin_count = duoqian_admins.len() as u32;
 
     let (reserve_total, fee) = Pallet::<T>::ensure_proposer_can_afford(&who, amount)?;
@@ -99,15 +100,14 @@ pub(crate) fn do_propose_create<T: Config>(
                 status: DuoqianStatus::Pending,
             },
         );
-        // 中文注释：创建提案需全员管理员通过；普通业务阈值由 admins-change 派生，
-        // 不再接收用户输入，也不在 personal-manage 里保存管理员镜像。
-        let create_threshold = duoqian_admins.len() as u32;
-        let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
+        // 中文注释：regular_threshold 是账户激活后的动态阈值配置；
+        // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
+        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_subject_create_proposal_with_data(
             who.clone(),
             org,
             institution,
             duoqian_admins.iter().cloned().collect(),
-            create_threshold,
+            regular_threshold,
             crate::MODULE_TAG,
             data,
         ) {

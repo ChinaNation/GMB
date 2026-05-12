@@ -2,8 +2,8 @@
 //! 管理员权限治理模块（admins-change）
 //! - 本模块只负责“管理员集合变更”这一类业务事项
 //! - 投票流程本身由 votingengine 提供（内部投票）
-//! - 约束：治理机构固定人数/固定阈值，仅允许等长更换；动态账户允许增删改，
-//!   阈值由本模块统一按管理员数量推导
+//! - 约束：治理机构固定人数，仅允许等长更换；动态账户允许增删改。
+//!   阈值校验、保存和更新统一由 votingengine/internal-vote 负责。
 
 extern crate alloc;
 
@@ -24,10 +24,7 @@ use sp_std::collections::btree_set::BTreeSet;
 
 use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
-use primitives::count_const::{
-    NRC_ADMIN_COUNT, NRC_INTERNAL_THRESHOLD, PRB_ADMIN_COUNT, PRB_INTERNAL_THRESHOLD,
-    PRC_ADMIN_COUNT, PRC_INTERNAL_THRESHOLD,
-};
+use primitives::count_const::{NRC_ADMIN_COUNT, PRB_ADMIN_COUNT, PRC_ADMIN_COUNT};
 use votingengine::{
     types::{ORG_NRC, ORG_OTH, ORG_PRB, ORG_PRC, ORG_PUP, ORG_REN},
     InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, PROPOSAL_KIND_INTERNAL,
@@ -52,6 +49,8 @@ pub struct AdminSetChangeAction<AdminList> {
     pub subject: SubjectId,
     /// 提案通过后写入的完整管理员集合。
     pub new_admins: AdminList,
+    /// 提案通过后写入投票引擎的动态阈值；固定治理机构必须等于制度固定阈值。
+    pub new_threshold: u32,
 }
 
 /// 管理员主体类型。所有需要内部投票的多签主体都在本模块统一登记。
@@ -72,8 +71,8 @@ pub enum AdminSubjectKind {
     BuiltinInstitution,
     /// SFID 系统登记的机构归属主体。
     ///
-    /// 中文注释：该枚举值保留是为了 SCALE ABI 兼容。新写入、新变更和
-    /// 生命周期路径不得使用它作为管理员主体；机构账户必须使用 `InstitutionAccount`。
+    /// 中文注释：该历史枚举值不再允许新写入、新变更或生命周期流转；
+    /// 机构账户必须使用 `InstitutionAccount`。
     SfidInstitution,
     /// 用户自建的个人多签。
     PersonalDuoqian,
@@ -120,7 +119,6 @@ pub struct AdminSubject<AdminList, AccountId, BlockNumber> {
     pub org: u8,
     pub kind: AdminSubjectKind,
     pub admins: AdminList,
-    pub threshold: u32,
     pub creator: AccountId,
     pub created_at: BlockNumber,
     pub updated_at: BlockNumber,
@@ -163,7 +161,8 @@ pub trait SubjectLifecycle<AccountId> {
 }
 
 /// admins-change pallet on-chain storage 版本。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+/// v3:管理员主体只保存管理员集合和生命周期，阈值归属 internal-vote。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
 fn nrc_subject_id() -> Option<SubjectId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
@@ -178,50 +177,6 @@ fn expected_admin_count(org: u8) -> Option<u32> {
         ORG_PRC => Some(PRC_ADMIN_COUNT),
         ORG_PRB => Some(PRB_ADMIN_COUNT),
         _ => None,
-    }
-}
-
-fn default_threshold(org: u8) -> Option<u32> {
-    match org {
-        ORG_NRC => Some(NRC_INTERNAL_THRESHOLD),
-        ORG_PRC => Some(PRC_INTERNAL_THRESHOLD),
-        ORG_PRB => Some(PRB_INTERNAL_THRESHOLD),
-        _ => None,
-    }
-}
-
-/// 动态账户管理员阈值统一推导规则。
-///
-/// 中文注释：个人账户、机构账户的阈值都不再由业务模块自由写入；所有创建、
-/// 增加、删除、更换后的阈值都走这里，保证链上查询和写入结果一致。
-/// - 2 个管理员时阈值必须是 2；
-/// - 3 个及以上管理员时阈值为 `ceil(admin_count / 2)`；
-/// - 0/1 个管理员不是合法内部投票账户，返回 None。
-pub fn dynamic_threshold(admin_count: u32) -> Option<u32> {
-    match admin_count {
-        0 | 1 => None,
-        2 => Some(2),
-        n => Some(n.saturating_add(1) / 2),
-    }
-}
-
-/// 按主体类型推导最终写入链上的阈值。
-///
-/// 治理机构走固定常量；个人多签和机构账户走 [`dynamic_threshold`]。
-pub fn derived_threshold(kind: AdminSubjectKind, org: u8, admin_count: u32) -> Option<u32> {
-    match kind {
-        AdminSubjectKind::BuiltinInstitution => {
-            let expected = expected_admin_count(org)?;
-            if admin_count == expected {
-                default_threshold(org)
-            } else {
-                None
-            }
-        }
-        AdminSubjectKind::PersonalDuoqian | AdminSubjectKind::InstitutionAccount => {
-            dynamic_threshold(admin_count)
-        }
-        AdminSubjectKind::SfidInstitution => None,
     }
 }
 
@@ -261,7 +216,7 @@ pub mod pallet {
     pub type AdminSubjectOf<T> =
         AdminSubject<AdminsOf<T>, <T as frame_system::Config>::AccountId, BlockNumberFor<T>>;
 
-    /// 统一管理员主体表：subject_id → 管理员、阈值和生命周期。
+    /// 统一管理员主体表：subject_id → 管理员和生命周期。
     ///
     /// 创世时写入国储会、省储会、省储行；个人账户由 `personal-manage` 写入；
     /// 机构账户由 `organization-manage` 在后续账户级改造中写入，投票通过后激活。
@@ -316,13 +271,10 @@ pub mod pallet {
                 sfid_number
             )
         });
-        let threshold =
-            default_threshold(org).unwrap_or_else(|| panic!("genesis: org {} 没有默认阈值", org));
         AdminSubject {
             org,
             kind: AdminSubjectKind::BuiltinInstitution,
             admins: bounded,
-            threshold,
             creator,
             created_at: Zero::zero(),
             updated_at: Zero::zero(),
@@ -409,7 +361,6 @@ pub mod pallet {
             kind: AdminSubjectKind,
             creator: T::AccountId,
             admin_count: u32,
-            threshold: u32,
         },
         /// 多签主体管理员配置已激活。
         AdminSubjectActivated { subject: SubjectId, org: u8 },
@@ -470,6 +421,7 @@ pub mod pallet {
             org: u8,
             subject_id: SubjectId,
             new_admins: AdminsOf<T>,
+            new_threshold: u32,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -489,27 +441,27 @@ pub mod pallet {
                 !Self::same_admin_set(current_admins.as_slice(), new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
-            let new_threshold =
-                derived_threshold(subject.kind, subject.org, new_admins.len() as u32)
-                    .ok_or(Error::<T>::InvalidThreshold)?;
-
             // 3) 在同一个链上事务中创建投票提案、互斥锁和业务数据。
             with_transaction(|| {
                 let action = AdminSetChangeAction {
                     subject: subject_id,
                     new_admins: new_admins.clone(),
+                    new_threshold,
                 };
                 let encoded = action.encode();
-                let proposal_id = match T::InternalVoteEngine::create_admin_set_mutation_internal_proposal_with_data(
-                    who.clone(),
-                    org,
-                    subject_id,
-                    crate::MODULE_TAG,
-                    encoded,
-                ) {
-                    Ok(proposal_id) => proposal_id,
-                    Err(err) => return TransactionOutcome::Rollback(Err(err)),
-                };
+                let proposal_id =
+                    match T::InternalVoteEngine::create_admin_change_internal_proposal_with_data(
+                        who.clone(),
+                        org,
+                        subject_id,
+                        new_admins.len() as u32,
+                        new_threshold,
+                        crate::MODULE_TAG,
+                        encoded,
+                    ) {
+                        Ok(proposal_id) => proposal_id,
+                        Err(err) => return TransactionOutcome::Rollback(Err(err)),
+                    };
 
                 Self::deposit_event(Event::<T>::AdminSetChangeProposed {
                     proposal_id,
@@ -570,10 +522,6 @@ pub mod pallet {
             Self::ensure_subject_kind_matches_org(kind, org)?;
             Self::validate_admin_count_for_subject(kind, org, admins.len())?;
             Self::ensure_unique_admins(admins)?;
-            ensure!(
-                derived_threshold(kind, org, admins.len() as u32).is_some(),
-                Error::<T>::InvalidThreshold
-            );
             Ok(())
         }
 
@@ -676,10 +624,6 @@ pub mod pallet {
                 Error::<T>::InstitutionAlreadyExists
             );
             Self::validate_admin_set_for_subject(kind, org, &admins)?;
-            // 中文注释：普通业务阈值一律由 admins-change 统一推导；
-            // 创建/注销提案的“全员通过”阈值由投票引擎快照单独保存。
-            let threshold = derived_threshold(kind, org, admins.len() as u32)
-                .ok_or(Error::<T>::InvalidThreshold)?;
 
             let bounded: AdminsOf<T> = admins
                 .try_into()
@@ -692,7 +636,6 @@ pub mod pallet {
                     org,
                     kind,
                     admins: bounded,
-                    threshold,
                     creator: creator.clone(),
                     created_at: now,
                     updated_at: now,
@@ -705,7 +648,6 @@ pub mod pallet {
                 kind,
                 creator,
                 admin_count,
-                threshold,
             });
             Ok(())
         }
@@ -814,12 +756,6 @@ pub mod pallet {
             Some(subject.admins.into_inner())
         }
 
-        /// 读取 Active 主体阈值。普通业务投票只能使用 Active 阈值。
-        pub fn active_subject_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
-            Some(subject.threshold)
-        }
-
         /// 读取 Active 主体管理员数量。普通业务阈值兜底判断只能使用 Active 主体。
         pub fn active_subject_admin_count(org: u8, institution: SubjectId) -> Option<u32> {
             let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Active)?;
@@ -852,15 +788,6 @@ pub mod pallet {
         ) -> Option<Vec<T::AccountId>> {
             let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Pending)?;
             Some(subject.admins.into_inner())
-        }
-
-        /// 读取 Pending 主体阈值。仅供投票引擎 Pending 创建入口写阈值快照。
-        pub fn pending_subject_threshold_for_snapshot(
-            org: u8,
-            institution: SubjectId,
-        ) -> Option<u32> {
-            let subject = Self::subject_with_status(org, institution, AdminSubjectStatus::Pending)?;
-            Some(subject.threshold)
         }
 
         /// 读取 Pending 主体管理员数量。仅用于创建/激活该主体的快照语义。
@@ -921,14 +848,9 @@ pub mod pallet {
                 !Self::same_admin_set(current_admins.as_slice(), action.new_admins.as_slice()),
                 Error::<T>::AdminSetUnchanged
             );
-            let new_threshold =
-                derived_threshold(subject.kind, subject.org, action.new_admins.len() as u32)
-                    .ok_or(Error::<T>::InvalidThreshold)?;
-
             Subjects::<T>::mutate(action.subject, |maybe| {
                 if let Some(subject) = maybe {
                     subject.admins = action.new_admins.clone();
-                    subject.threshold = new_threshold;
                     subject.updated_at = frame_system::Pallet::<T>::block_number();
                 }
             });
@@ -937,7 +859,7 @@ pub mod pallet {
                 proposal_id,
                 subject: action.subject,
                 admin_count: action.new_admins.len() as u32,
-                threshold: new_threshold,
+                threshold: action.new_threshold,
             });
 
             Ok(())

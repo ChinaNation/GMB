@@ -145,9 +145,6 @@ pub mod pallet {
         type InternalVoteResultCallback: InternalVoteResultCallback;
         type InternalAdminProvider: InternalAdminProvider<Self::AccountId>;
         type InternalAdminCountProvider: InternalAdminCountProvider;
-        /// 内部投票阈值动态提供器（治理机构硬编码，注册多签账户动态读取）。
-        type InternalThresholdProvider: InternalThresholdProvider;
-
         /// 每个机构最大管理员数量（与 admins-change 一致），用于管理员快照 BoundedVec。
         #[pallet::constant]
         type MaxAdminsPerInstitution: Get<u32>;
@@ -213,8 +210,8 @@ pub mod pallet {
 
     /// 回调执行作用域：只在 `set_status_and_emit` 调业务回调期间临时存在。
     ///
-    /// 中文注释：生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域只保护
-    /// 单测兼容辅助接口，避免非回调路径绕过最终事件和互斥锁释放逻辑。
+    /// 中文注释：生产业务模块通过回调返回 `ProposalExecutionOutcome`；该作用域保护
+    /// 测试和回调执行入口，避免非回调路径绕过最终事件和互斥锁释放逻辑。
     #[pallet::storage]
     pub type CallbackExecutionScopes<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, (), OptionQuery>;
@@ -824,6 +821,12 @@ pub mod pallet {
                 }
             }
             if let Some(proposal) = Proposals::<T>::get(proposal_id) {
+                if proposal.kind == PROPOSAL_KIND_INTERNAL {
+                    <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_terminal(
+                        proposal_id,
+                        status,
+                    )?;
+                }
                 if Self::should_release_internal_proposal_mutexes(
                     proposal.kind,
                     proposal.stage,
@@ -964,7 +967,13 @@ pub mod pallet {
             match outcome {
                 ProposalExecutionOutcome::Ignored => Err(Error::<T>::ProposalOwnerMissing.into()),
                 ProposalExecutionOutcome::Executed => {
-                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)
+                    Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
+                    if kind == PROPOSAL_KIND_INTERNAL {
+                        <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_executed(
+                            proposal_id,
+                        )?;
+                    }
+                    Ok(())
                 }
                 ProposalExecutionOutcome::RetryableFailed => {
                     if kind == PROPOSAL_KIND_INTERNAL {
@@ -1124,6 +1133,11 @@ pub mod pallet {
                     match outcome {
                         ProposalExecutionOutcome::Executed => {
                             Self::set_proposal_status(proposal_id, STATUS_EXECUTED)?;
+                            if proposal.kind == PROPOSAL_KIND_INTERNAL {
+                                <T::InternalCleanup as crate::traits::InternalCleanupHandler>::on_internal_proposal_executed(
+                                    proposal_id,
+                                )?;
+                            }
                             Self::deposit_event(Event::<T>::ProposalExecutionRetried {
                                 proposal_id,
                                 manual_attempts: state.manual_attempts,

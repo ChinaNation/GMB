@@ -278,11 +278,7 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       final signerPubkey = Uint8List.fromList(_hexToBytes(wallet.pubkeyHex));
 
       final service = DuoqianTransferService();
-      // 提前查链上 NextProposalId,作为本次转账提案的预测 ID;
-      // 若该多签是个人多签,后续写入 Isar 历史(req 5)。
-      final predictedProposalId = await service.fetchNextProposalId();
-
-      await service.submitProposeTransfer(
+      final submitResult = await service.submitProposeTransfer(
         institution: widget.institution,
         beneficiaryAddress: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
@@ -296,14 +292,14 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       // 本页 institution.orgType 个人/机构都是 OrgType.duoqian,通过 Isar 查
       // PersonalDuoqianEntity 命中即视作个人多签。
       await _maybeRecordPersonalProposal(
-        proposalId: predictedProposalId,
+        proposalId: submitResult.proposalId,
         beneficiary: _beneficiaryController.text.trim(),
         amountYuan: amountYuan,
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('提交成功')),
+        const SnackBar(content: Text('提案创建成功')),
       );
       Navigator.of(context).pop(true);
     } on WalletAuthException catch (e) {

@@ -5,7 +5,7 @@
 - crate 路径:`citizenchain/runtime/governance/personal-manage/`
 - MODULE_TAG:`b"per-mgmt"`(8 字节)
 - 创建日期:2026-05-06(任务卡 B 拆分)
-- 最新更新:2026-05-08(重新创世前总审计修复)
+- 最新更新:2026-05-11(动态阈值由用户输入并交投票引擎保存)
 - 关联 ADR:ADR-009(personal-manage 拆分)、ADR-010(SubjectId 协议)、ADR-015(账户级内部投票管理员模型)
 
 ## 模块定位
@@ -20,8 +20,8 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 - 管理员数量范围为 `2..=64`。
 - 创建和关闭必须全员投票通过。
 - 普通业务提案按动态阈值通过。
-- 管理员集合变更使用统一管理员集合变更提案，不拆分增加/删除/更换/改阈值。
-- 阈值不再由用户自由输入，而是由链端按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
+- 管理员集合变更使用统一管理员集合变更提案，不拆分增加/删除/更换。
+- 普通业务动态阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admin_count && threshold <= admin_count` 并保存。
 
 ## 协议参数
 
@@ -41,15 +41,16 @@ ADR-015 后，个人多签按“注册个人账户”治理：
 | `PendingPersonalCreate` | `StorageMap<proposal_id, CreateDuoqianAction>` | 创建提案投票期 reserve 资金与 fee 快照 |
 | `PendingCloseProposal` | `StorageMap<address, proposal_id>` | 防并发关闭提案 |
 
-管理员、管理员数量和普通阈值不再存储或镜像在 `PersonalDuoqians`。
-唯一真源为 `admins-change::Subjects[subject_id_from_account(personal_address)]`。
+管理员和管理员数量不再存储或镜像在 `PersonalDuoqians`。
+管理员唯一真源为 `admins-change::Subjects[subject_id_from_account(personal_address)]`。
+普通动态阈值唯一真源为 `internal-vote::ActiveDynamicThresholds[(ORG_REN, subject)]`。
 旧反向索引表已删除,反查 `creator + account_name` 直接读 `PersonalDuoqians`。
 
 ## extrinsic
 
 | call_index | 名 | 入参 | 业务 |
 |---|---|---|---|
-| 0 | `propose_create` | `account_name, duoqian_admins, amount` | 发起创建提案；`admin_count` 由管理员列表长度派生，普通阈值由 `admins-change` 派生，创建投票阈值为全员 |
+| 0 | `propose_create` | `account_name, duoqian_admins, regular_threshold, amount` | 发起创建提案；普通动态阈值由用户输入并交投票引擎保存，创建投票阈值为全员 |
 | 1 | `propose_close` | `personal_address, beneficiary` | 发起关闭提案(仅个人地址) |
 | 2 | `cleanup_rejected_proposal` | `proposal_id` | 清理被否决/超时的 Pending 残留 |
 
@@ -174,19 +175,14 @@ flutter test test/signer/payload_decoder_test.dart
 - ~~personal-manage 自持单测~~ → 初始 16 用例已补；重新创世前总审计修复后为 23 passed
 - ~~organization-manage 单测重写~~ → 22 用例已补(`src/tests/{mod.rs(441 行), cases.rs(716 行)}`,24 passed)
 
-## 第 3 步执行结果(2026-05-08)
+## 2026-05-11 投票边界修复结果
 
-- `propose_create` 已删除 `admin_count / threshold` 入参。
-- 创建流程校验管理员数量 `2..=64`、管理员去重、创建人必须在管理员集合内。
-- 创建提案的投票阈值为拟定管理员全员数量。
-- 普通阈值统一由 `admins-change::derived_threshold(PersonalDuoqian, ORG_REN, admin_count)` 派生。
-- `PersonalDuoqians` 已删除管理员列表、管理员数量和阈值镜像字段。
-- `CreateDuoqianAction` 已删除管理员数量和阈值字段。
-- 提案通过执行时，同一事务内先完成入金，再激活 `admins-change` 主体，最后激活个人账户状态。
-- `PersonalMultisigQuery` 和 `duoqian-transfer` 均从 `admins-change` 读取管理员配置。
-- wuminapp 创建页移除手填阈值，只展示派生日常阈值与创建全员阈值。
-- wumin 冷钱包拒绝旧个人创建交易载荷。
-- 本次未修改 `spec_version`。
+- `propose_create` 接收 `regular_threshold`，但该字段只表示账户激活后的普通业务动态阈值，不是本次注册投票通过阈值。
+- 创建流程校验管理员数量 `2..=64`、管理员去重、创建人必须在管理员集合内，并把动态阈值交给投票引擎按严格过半规则校验。
+- 创建提案和关闭提案的投票阈值由投票引擎按管理员快照写成全员。
+- `PersonalDuoqians` 不保存管理员列表、管理员数量和阈值镜像字段。
+- 提案通过执行时，同一事务内先完成入金，再激活 `admins-change` 主体，投票引擎随后把 pending 动态阈值激活为 active 动态阈值。
+- `PersonalMultisigQuery` 从 `admins-change` 读取管理员配置，从 `internal-vote` 读取动态阈值。
 
 ## 重新创世前总审计修复结果(2026-05-08)
 

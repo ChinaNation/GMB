@@ -14,7 +14,7 @@ fn nrc_destroy_executes_when_yes_votes_reach_threshold() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -36,7 +36,7 @@ fn prc_destroy_executes_when_yes_votes_reach_threshold() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..6 {
+        for i in 1..6 {
             assert_ok!(cast_vote(prc_admin(i), pid, true));
         }
 
@@ -58,7 +58,7 @@ fn prb_destroy_executes_when_yes_votes_reach_threshold() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..6 {
+        for i in 1..6 {
             assert_ok!(cast_vote(prb_admin(i), pid, true));
         }
 
@@ -119,11 +119,11 @@ fn zero_amount_and_insufficient_balance_are_rejected() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..12 {
+        for i in 1..12 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
-        // 第 13 票应被记录，自动执行失败不回滚投票，提案保留 PASSED 供后续重试。
+        // 中文注释：发起人已自动赞成，最后一张补票触发自动执行失败路径。
         assert_ok!(cast_vote(nrc_admin(12), pid, true));
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)
@@ -169,7 +169,7 @@ fn existential_deposit_is_preserved() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -242,7 +242,7 @@ fn execute_destroy_succeeds_after_failed_auto_execution() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -278,7 +278,7 @@ fn executed_proposal_does_not_block_new_proposal() {
         ));
         let pid1 = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid1, true));
         }
 
@@ -326,7 +326,7 @@ fn execute_destroy_requires_snapshot_admin() {
             1_100
         ));
         let pid = last_proposal_id();
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
         let _ = Balances::deposit_creating(&account, 200);

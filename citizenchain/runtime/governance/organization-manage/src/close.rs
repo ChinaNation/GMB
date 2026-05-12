@@ -8,7 +8,7 @@
 //! 2. 校验机构账户已 Active(从 InstitutionAccounts 读)
 //! 3. 校验发起人是该机构账户的活跃管理员(admins-change::Subjects[account subject])
 //! 4. 校验余额≥关闭门槛 + 转出金额≥ED + 无 reserved 余额
-//! 5. 全员投票阈值 = active_subject_admin_count
+//! 5. 注销生命周期投票的全员阈值由投票引擎按管理员快照生成
 //! 6. 写入 InstitutionPendingClose[address] = proposal_id 防并发
 //! 7. 发射 InstitutionCloseProposed 事件
 
@@ -118,9 +118,6 @@ pub(crate) fn do_propose_institution_close<T: Config>(
         Error::<T>::ReservedBalanceRemaining
     );
 
-    // 关闭提案需全员管理员通过(2026-05-03 整改)。
-    let close_threshold = admins_change::Pallet::<T>::active_subject_admin_count(org, subject_id)
-        .ok_or(Error::<T>::DuoqianNotFound)?;
     let action = CloseInstitutionAction {
         duoqian_address: duoqian_address.clone(),
         beneficiary: beneficiary.clone(),
@@ -130,11 +127,10 @@ pub(crate) fn do_propose_institution_close<T: Config>(
     data.push(ACTION_CLOSE);
     data.extend_from_slice(&action.encode());
     let proposal_id =
-        <T as Config>::InternalVoteEngine::create_internal_proposal_with_threshold_and_data(
+        <T as Config>::InternalVoteEngine::create_lifecycle_internal_proposal_with_data(
             who.clone(),
             org,
             subject_id,
-            close_threshold,
             crate::MODULE_TAG,
             data,
         )?;

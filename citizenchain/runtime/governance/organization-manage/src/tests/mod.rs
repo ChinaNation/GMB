@@ -183,8 +183,8 @@ impl
 // ── Provider:支持注册多签动态主体(ORG_REN/ORG_PUP/ORG_OTH) ──
 //
 // 机构账户 institution = subject_id_from_institution_account(account)。
-// 测试环境直接读 admins-change::Subjects[institution] 的管理员列表
-// (propose 阶段就以 Pending 状态写入,带 admins/threshold)。
+// 测试环境直接读 admins-change::Subjects[institution] 的管理员列表。
+// 中文注释：动态阈值由 internal-vote 保存，不再挂在管理员主体上。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -215,23 +215,6 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
     }
 }
 
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        if !is_registered_multisig_org(org) {
-            return false;
-        }
-        admins_change::Subjects::<Test>::contains_key(institution)
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if !is_registered_multisig_org(org) {
-            return None;
-        }
-        admins_change::Subjects::<Test>::get(institution).map(|s| s.threshold)
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -258,7 +241,6 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminCountProvider = TestInternalAdminCountProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type MaxAdminsPerInstitution = ConstU32<64>;
     type MaxProposalDataLen = ConstU32<2048>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;

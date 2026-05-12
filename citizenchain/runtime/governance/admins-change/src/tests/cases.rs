@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use primitives::count_const::{NRC_INTERNAL_THRESHOLD, PRC_INTERNAL_THRESHOLD};
 
 // 中文注释：生命周期事件按 subject + org 精确计数，确保索引器可直接按组织分桶。
 fn activated_event_count(subject: SubjectId, org: u8) -> usize {
@@ -49,13 +50,29 @@ fn closed_event_count(subject: SubjectId, org: u8) -> usize {
 }
 
 #[test]
-fn dynamic_threshold_is_derived_from_admin_count() {
-    assert_eq!(dynamic_threshold(0), None);
-    assert_eq!(dynamic_threshold(1), None);
-    assert_eq!(dynamic_threshold(2), Some(2));
-    assert_eq!(dynamic_threshold(3), Some(2));
-    assert_eq!(dynamic_threshold(4), Some(2));
-    assert_eq!(dynamic_threshold(5), Some(3));
+fn dynamic_threshold_is_not_stored_by_admins_change() {
+    new_test_ext().execute_with(|| {
+        let institution = pending_subject_id();
+        let admin_a = AccountId32::new([110u8; 32]);
+        let admin_b = AccountId32::new([111u8; 32]);
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            institution,
+            ORG_PUP,
+            AdminSubjectKind::InstitutionAccount,
+            vec![admin_a.clone(), admin_b],
+            admin_a,
+        ));
+        assert_ok!(AdminsChange::do_activate_subject(institution));
+        assert_eq!(
+            AdminsChange::active_subject_admin_count(ORG_PUP, institution),
+            Some(2)
+        );
+        assert_eq!(
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution),
+            None
+        );
+    });
 }
 
 #[test]
@@ -74,16 +91,16 @@ fn institution_account_min_admins_two_works() {
         ));
         assert_ok!(AdminsChange::do_activate_subject(institution));
         assert_eq!(
-            AdminsChange::active_subject_threshold(ORG_PUP, institution),
+            AdminsChange::active_subject_admin_count(ORG_PUP, institution),
             Some(2)
         );
     });
 }
 
 #[test]
-fn institution_account_threshold_follows_ceil_half() {
+fn institution_account_admin_count_does_not_create_threshold() {
     new_test_ext().execute_with(|| {
-        for (count, expected_threshold) in [(2u32, 2u32), (3, 2), (4, 2), (5, 3), (6, 3), (7, 4)] {
+        for count in [2u32, 3, 4, 5, 6, 7] {
             let mut institution = pending_subject_id();
             institution[1] = count as u8;
             let admins: Vec<AccountId32> = (0..count)
@@ -100,9 +117,12 @@ fn institution_account_threshold_follows_ceil_half() {
             ));
             assert_ok!(AdminsChange::do_activate_subject(institution));
             assert_eq!(
-                AdminsChange::active_subject_threshold(ORG_PUP, institution),
-                Some(expected_threshold),
-                "admin_count={count} expected ceil(n/2)={expected_threshold}"
+                AdminsChange::active_subject_admin_count(ORG_PUP, institution),
+                Some(count)
+            );
+            assert_eq!(
+                internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution),
+                None
             );
         }
     });
@@ -187,8 +207,8 @@ fn institution_account_at_max_admins_works() {
             Some(max)
         );
         assert_eq!(
-            AdminsChange::active_subject_threshold(ORG_OTH, institution),
-            Some(max.saturating_add(1) / 2)
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, institution),
+            None
         );
     });
 }
@@ -278,11 +298,6 @@ fn pending_subject_is_not_exposed_to_active_business_api() {
                 .expect("pending snapshot admins should exist"),
             vec![admin_a.clone(), admin_b.clone()]
         );
-        assert_eq!(
-            AdminsChange::pending_subject_threshold_for_snapshot(ORG_REN, institution),
-            Some(2)
-        );
-
         assert_ok!(AdminsChange::do_activate_subject(institution));
         assert!(AdminsChange::is_active_subject_admin(
             ORG_REN,
@@ -301,7 +316,7 @@ fn subject_lifecycle_trait_requires_votingengine_scope_for_activation() {
         let admin_b = AccountId32::new([202u8; 32]);
         let proposal_id = <internal_vote::Pallet<Test> as InternalVoteEngine<
             AccountId32,
-        >>::create_pending_subject_internal_proposal_with_snapshot_data(
+        >>::create_registered_subject_create_proposal_with_data(
             admin_a.clone(),
             ORG_REN,
             institution,
@@ -431,6 +446,7 @@ fn dynamic_subjects_can_use_admin_set_change_entry() {
                 admin_a.clone()
             ));
             assert_ok!(AdminsChange::do_activate_subject(institution));
+            internal_vote::ActiveDynamicThresholds::<Test>::insert(org, institution, 2);
 
             assert_ok!(propose_admin_set_replacement(
                 RuntimeOrigin::signed(admin_a.clone()),
@@ -459,8 +475,9 @@ fn dynamic_subject_set_change_can_add_delete_and_recalculate_threshold() {
             admin_a.clone()
         ));
         assert_ok!(AdminsChange::do_activate_subject(institution));
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_PUP, institution, 2);
         assert_eq!(
-            AdminsChange::active_subject_threshold(ORG_PUP, institution),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution),
             Some(2)
         );
 
@@ -468,17 +485,18 @@ fn dynamic_subject_set_change_can_add_delete_and_recalculate_threshold() {
             RuntimeOrigin::signed(admin_a.clone()),
             ORG_PUP,
             institution,
-            bounded_admins(vec![admin_a.clone(), admin_b.clone(), admin_c.clone()])
+            bounded_admins(vec![admin_a.clone(), admin_b.clone(), admin_c.clone()]),
+            2,
         ));
         let add_pid = last_proposal_id();
-        assert_ok!(cast_vote(admin_a.clone(), add_pid, true));
+        // 中文注释：发起人创建变更提案后，投票引擎已经自动记一票赞成。
         assert_ok!(cast_vote(admin_b.clone(), add_pid, true));
         assert_eq!(
             AdminsChange::active_subject_admin_count(ORG_PUP, institution),
             Some(3)
         );
         assert_eq!(
-            AdminsChange::active_subject_threshold(ORG_PUP, institution),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution),
             Some(2)
         );
 
@@ -486,17 +504,18 @@ fn dynamic_subject_set_change_can_add_delete_and_recalculate_threshold() {
             RuntimeOrigin::signed(admin_c.clone()),
             ORG_PUP,
             institution,
-            bounded_admins(vec![admin_a.clone(), admin_c.clone()])
+            bounded_admins(vec![admin_a.clone(), admin_c.clone()]),
+            2,
         ));
         let delete_pid = last_proposal_id();
+        // 中文注释：删除管理员提案同样只需要其他管理员补足阈值。
         assert_ok!(cast_vote(admin_a.clone(), delete_pid, true));
-        assert_ok!(cast_vote(admin_c.clone(), delete_pid, true));
         assert_eq!(
             AdminsChange::active_subject_admins(ORG_PUP, institution).unwrap(),
             vec![admin_a, admin_c]
         );
         assert_eq!(
-            AdminsChange::active_subject_threshold(ORG_PUP, institution),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_PUP, institution),
             Some(2)
         );
     });
@@ -521,10 +540,6 @@ fn sfid_institution_is_not_valid_admin_subject_kind() {
                 Error::<Test>::InvalidSubjectKind
             );
         }
-        assert_eq!(
-            derived_threshold(AdminSubjectKind::SfidInstitution, ORG_PUP, 2),
-            None
-        );
     });
 }
 
@@ -544,7 +559,6 @@ fn read_apis_hide_legacy_invalid_subject_kind_org_pairs() {
                 org: ORG_REN,
                 kind: AdminSubjectKind::InstitutionAccount,
                 admins: bounded_admins(vec![admin_a.clone(), admin_b.clone()]),
-                threshold: 2,
                 creator: admin_a.clone(),
                 created_at: 1,
                 updated_at: 1,
@@ -561,7 +575,6 @@ fn read_apis_hide_legacy_invalid_subject_kind_org_pairs() {
             &admin_a
         ));
         assert!(AdminsChange::active_subject_admins(ORG_REN, active_subject).is_none());
-        assert!(AdminsChange::active_subject_threshold(ORG_REN, active_subject).is_none());
         assert!(AdminsChange::active_subject_admin_count(ORG_REN, active_subject).is_none());
 
         // 中文注释：模拟升级前误写入的 SfidInstitution Pending 脏数据。
@@ -571,7 +584,6 @@ fn read_apis_hide_legacy_invalid_subject_kind_org_pairs() {
                 org: ORG_PUP,
                 kind: AdminSubjectKind::SfidInstitution,
                 admins: bounded_admins(vec![admin_a.clone(), admin_b.clone()]),
-                threshold: 2,
                 creator: admin_a.clone(),
                 created_at: 1,
                 updated_at: 1,
@@ -589,10 +601,6 @@ fn read_apis_hide_legacy_invalid_subject_kind_org_pairs() {
         ));
         assert!(
             AdminsChange::pending_subject_admins_for_snapshot(ORG_PUP, pending_subject).is_none()
-        );
-        assert!(
-            AdminsChange::pending_subject_threshold_for_snapshot(ORG_PUP, pending_subject)
-                .is_none()
         );
     });
 }
@@ -613,7 +621,7 @@ fn nrc_set_change_executes_when_yes_votes_reach_threshold() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -682,7 +690,7 @@ fn replaced_new_admin_can_propose_next_set_change() {
             new_admin.clone()
         ));
         let pid = last_proposal_id();
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -713,7 +721,7 @@ fn prc_set_change_executes_when_yes_votes_reach_threshold() {
         let pid = last_proposal_id();
 
         // 省储会内部投票阈值：>=6
-        for i in 0..6 {
+        for i in 1..6 {
             assert_ok!(cast_vote(prc_admin(i), pid, true));
         }
 
@@ -740,7 +748,7 @@ fn prb_set_change_executes_when_yes_votes_reach_threshold() {
         let pid = last_proposal_id();
 
         // 省储行内部投票阈值：>=6
-        for i in 0..6 {
+        for i in 1..6 {
             assert_ok!(cast_vote(prb_admin(i), pid, true));
         }
 
@@ -820,8 +828,12 @@ fn regular_internal_proposal_blocks_admin_set_change() {
         let institution = nrc_pallet_id();
         assert_ok!(<internal_vote::Pallet<Test> as InternalVoteEngine<
             AccountId32,
-        >>::create_internal_proposal(
-            nrc_admin(0), ORG_NRC, institution,
+        >>::create_general_internal_proposal_with_data(
+            nrc_admin(0),
+            ORG_NRC,
+            institution,
+            b"test",
+            b"payload".to_vec(),
         ));
 
         assert_noop!(
@@ -858,7 +870,7 @@ fn vote_does_not_rollback_when_auto_execute_fails() {
             subject.status = AdminSubjectStatus::Closed;
         });
 
-        for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
+        for i in [2usize, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -935,7 +947,8 @@ fn propose_fails_when_admin_set_unchanged() {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
-                bounded_admins(current_admins(institution))
+                bounded_admins(current_admins(institution)),
+                NRC_INTERNAL_THRESHOLD,
             ),
             Error::<Test>::AdminSetUnchanged
         );
@@ -954,7 +967,8 @@ fn propose_fails_when_admin_set_only_reordered() {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 institution,
-                bounded_admins(admins)
+                bounded_admins(admins),
+                NRC_INTERNAL_THRESHOLD,
             ),
             Error::<Test>::AdminSetUnchanged
         );
@@ -991,7 +1005,7 @@ fn executed_proposal_cannot_be_executed_again() {
         ));
         let pid = last_proposal_id();
 
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -1062,7 +1076,7 @@ fn failed_auto_execute_enters_terminal_status_and_cannot_retry() {
             subject.status = AdminSubjectStatus::Closed;
         });
 
-        for i in [0usize, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
+        for i in [2usize, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
             assert_ok!(cast_vote(nrc_admin(i), pid, true));
         }
 
@@ -1212,7 +1226,8 @@ fn invalid_institution_is_rejected() {
                 RuntimeOrigin::signed(nrc_admin(0)),
                 ORG_NRC,
                 [0u8; 48],
-                bounded_admins(vec![nrc_admin(0), AccountId32::new([205u8; 32])])
+                bounded_admins(vec![nrc_admin(0), AccountId32::new([205u8; 32])]),
+                NRC_INTERNAL_THRESHOLD,
             ),
             Error::<Test>::InvalidInstitution
         );
@@ -1240,7 +1255,7 @@ fn nrc_full_cycle_set_change_keeps_admin_count_stable() {
                 new_admin.clone()
             ));
             let pid = last_proposal_id();
-            for v in 0..NRC_INTERNAL_THRESHOLD as usize {
+            for v in 1..NRC_INTERNAL_THRESHOLD as usize {
                 assert_ok!(cast_vote(nrc_admin(v), pid, true));
             }
 
@@ -1326,7 +1341,7 @@ fn prc_set_change_isolates_provinces() {
             new_admin.clone()
         ));
         let pid = last_proposal_id();
-        for i in 0..PRC_INTERNAL_THRESHOLD as usize {
+        for i in 1..PRC_INTERNAL_THRESHOLD as usize {
             assert_ok!(cast_vote(prc_admin(i), pid, true));
         }
 

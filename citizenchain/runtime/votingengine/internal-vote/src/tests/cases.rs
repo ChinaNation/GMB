@@ -79,19 +79,23 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
         let outsider = AccountId32::new([7u8; 32]);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 outsider,
                 ORG_NRC,
                 nrc_pid(),
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
         );
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 prc_admin(0),
                 ORG_NRC,
                 nrc_pid(),
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::NoPermission
         );
@@ -116,10 +120,12 @@ fn internal_proposal_must_be_created_by_same_institution_admin() {
 fn active_internal_proposal_rejects_pending_subject() {
     new_test_ext().execute_with(|| {
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 pending_subject_admin(0),
                 ORG_REN,
                 pending_subject_institution(),
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::InvalidInstitution
         );
@@ -155,11 +161,6 @@ fn pending_subject_proposal_uses_pending_snapshot_and_threshold() {
             &pending_subject_admin(0)
         ));
 
-        assert_ok!(cast_internal_vote_via_extrinsic(
-            pending_subject_admin(0),
-            proposal_id,
-            true
-        ));
         assert_eq!(
             VotingEngine::proposals(proposal_id)
                 .expect("proposal should exist")
@@ -207,21 +208,7 @@ fn pending_subject_provider_threshold_requires_all_admins() {
         set_pending_duoqian_threshold(1);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal(
-                pending_subject_admin(0),
-                ORG_REN,
-                pending_subject_institution(),
-            ),
-            Error::<Test>::InvalidThresholdSnapshot
-        );
-    });
-}
-
-#[test]
-fn pending_subject_snapshot_data_requires_all_admins() {
-    new_test_ext().execute_with(|| {
-        assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal_with_snapshot_data(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_subject_create_proposal_with_data(
                 pending_subject_admin(0),
                 ORG_REN,
                 pending_subject_institution(),
@@ -230,7 +217,25 @@ fn pending_subject_snapshot_data_requires_all_admins() {
                 b"test",
                 b"payload".to_vec(),
             ),
-            Error::<Test>::InvalidThresholdSnapshot
+            Error::<Test>::InvalidDynamicThreshold
+        );
+    });
+}
+
+#[test]
+fn pending_subject_snapshot_data_requires_all_admins() {
+    new_test_ext().execute_with(|| {
+        assert_noop!(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_subject_create_proposal_with_data(
+                pending_subject_admin(0),
+                ORG_REN,
+                pending_subject_institution(),
+                sp_std::vec![pending_subject_admin(0), pending_subject_admin(1)],
+                1,
+                b"test",
+                b"payload".to_vec(),
+            ),
+            Error::<Test>::InvalidDynamicThreshold
         );
     });
 }
@@ -238,17 +243,16 @@ fn pending_subject_snapshot_data_requires_all_admins() {
 #[test]
 fn explicit_threshold_proposal_requires_all_snapshot_admins() {
     new_test_ext().execute_with(|| {
-        assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal_with_threshold_and_data(
+        let proposal_id =
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_lifecycle_internal_proposal_with_data(
                 registered_subject_admin(0),
                 ORG_REN,
                 registered_subject_institution(),
-                2,
                 b"close",
                 b"payload".to_vec(),
-            ),
-            Error::<Test>::InvalidThresholdSnapshot
-        );
+            )
+            .expect("lifecycle proposal should be created");
+        assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
     });
 }
 
@@ -258,12 +262,14 @@ fn registered_duoqian_threshold_must_not_exceed_snapshot_size() {
         set_registered_duoqian_threshold(4);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 registered_subject_admin(0),
                 ORG_REN,
                 registered_subject_institution(),
+                b"test",
+                b"payload".to_vec(),
             ),
-            Error::<Test>::InvalidThresholdSnapshot
+            Error::<Test>::InvalidDynamicThreshold
         );
     });
 }
@@ -274,12 +280,16 @@ fn admin_set_mutation_threshold_must_not_exceed_snapshot_size() {
         set_registered_duoqian_threshold(4);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
                 registered_subject_admin(0),
                 ORG_REN,
                 registered_subject_institution(),
+                3,
+                2,
+                b"test",
+                b"payload".to_vec(),
             ),
-            Error::<Test>::InvalidThresholdSnapshot
+            Error::<Test>::InvalidDynamicThreshold
         );
     });
 }
@@ -335,11 +345,6 @@ fn registered_duoqian_proposal_snapshots_dynamic_threshold() {
         assert_eq!(InternalThresholdSnapshot::<Test>::get(proposal_id), Some(3));
         set_registered_duoqian_threshold(2);
 
-        assert_ok!(cast_internal_vote_via_extrinsic(
-            registered_subject_admin(0),
-            proposal_id,
-            true
-        ));
         assert_ok!(cast_internal_vote_via_extrinsic(
             registered_subject_admin(1),
             proposal_id,
@@ -397,10 +402,12 @@ fn admin_set_mutation_mutex_blocks_same_subject_regular_proposal() {
         assert_eq!(state.admin_set_mutation_proposal, Some(proposal_id));
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 nrc_admin(1),
                 ORG_NRC,
                 nrc_pid(),
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::AdminSetMutationProposalActive
         );
@@ -421,10 +428,14 @@ fn regular_mutex_blocks_same_subject_admin_set_mutation() {
         assert_eq!(state.admin_set_mutation_proposal, None);
 
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
                 nrc_admin(1),
                 ORG_NRC,
                 nrc_pid(),
+                primitives::count_const::NRC_ADMIN_COUNT,
+                primitives::count_const::NRC_INTERNAL_THRESHOLD,
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::RegularInternalProposalActive
         );
@@ -470,10 +481,12 @@ fn admin_set_mutation_passed_status_keeps_mutex_until_terminal_status() {
         );
         assert!(VotingEngine::internal_proposal_mutex(ORG_NRC, nrc_pid()).is_some());
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
                 nrc_admin(1),
                 ORG_NRC,
                 nrc_pid(),
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::AdminSetMutationProposalActive
         );
@@ -571,7 +584,7 @@ fn nrc_internal_vote_passes_at_13_yes_votes() {
     new_test_ext().execute_with(|| {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
 
-        for i in 0..12 {
+        for i in 1..12 {
             assert_ok!(cast_internal_vote_via_extrinsic(
                 nrc_admin(i),
                 proposal_id,
@@ -809,10 +822,14 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
             VotingEngine::internal_proposal_mutex(ORG_PRC, prc_pid()).is_some()
         );
         assert_noop!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
                 nrc_admin(1),
                 ORG_NRC,
                 nrc_pid(),
+                primitives::count_const::NRC_ADMIN_COUNT,
+                primitives::count_const::NRC_INTERNAL_THRESHOLD,
+                b"test",
+                b"payload".to_vec(),
             ),
             votingengine::Error::<Test>::RegularInternalProposalActive
         );
@@ -832,10 +849,14 @@ fn joint_stage_mutex_blocks_admin_set_mutation_until_citizen_stage() {
         );
 
         assert_ok!(
-            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+            <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
                 nrc_admin(1),
                 ORG_NRC,
                 nrc_pid(),
+                primitives::count_const::NRC_ADMIN_COUNT,
+                primitives::count_const::NRC_INTERNAL_THRESHOLD,
+                b"test",
+                b"payload".to_vec(),
             )
         );
     });
@@ -1737,7 +1758,7 @@ fn internal_vote_public_call_casts_vote() {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
 
         assert_ok!(cast_internal_vote_via_extrinsic(
-            nrc_admin(0),
+            nrc_admin(1),
             proposal_id,
             true
         ));
@@ -1746,7 +1767,7 @@ fn internal_vote_public_call_casts_vote() {
             proposal_id,
             &nrc_admin(0)
         ));
-        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 2);
         assert_eq!(InternalTallies::<Test>::get(proposal_id).no, 0);
     });
 }
@@ -1762,7 +1783,7 @@ fn internal_vote_rejects_non_admin() {
             cast_internal_vote_via_extrinsic(prb_admin(0), proposal_id, true),
             votingengine::Error::<Test>::NoPermission
         );
-        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 0);
+        assert_eq!(InternalTallies::<Test>::get(proposal_id).yes, 1);
     });
 }
 
@@ -1771,11 +1792,6 @@ fn internal_vote_rejects_double_vote() {
     new_test_ext().execute_with(|| {
         reset_internal_callback_state();
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
-        assert_ok!(cast_internal_vote_via_extrinsic(
-            nrc_admin(0),
-            proposal_id,
-            true
-        ));
         assert_noop!(
             cast_internal_vote_via_extrinsic(nrc_admin(0), proposal_id, false),
             votingengine::Error::<Test>::AlreadyVoted
@@ -1790,7 +1806,7 @@ fn internal_vote_passes_triggers_callback_approved_true() {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
 
         // NRC 阈值 13 票;投 13 票赞成使提案进入 STATUS_PASSED。
-        for i in 0..13 {
+        for i in 1..13 {
             assert_ok!(cast_internal_vote_via_extrinsic(
                 nrc_admin(i),
                 proposal_id,
@@ -1818,7 +1834,7 @@ fn internal_vote_early_rejection_triggers_callback_approved_false() {
 
         // NRC 总管理员 19 人,阈值 13 票。7 票反对 → 剩余 12 人全同意也到不了 13,
         // 触发提前否决。
-        for i in 0..7 {
+        for i in 1..8 {
             assert_ok!(cast_internal_vote_via_extrinsic(
                 nrc_admin(i),
                 proposal_id,
@@ -1845,7 +1861,7 @@ fn internal_vote_callback_not_called_before_threshold() {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
 
         // 投 12 票赞成(阈值 13),未达阈值不应触发回调。
-        for i in 0..12 {
+        for i in 1..12 {
             assert_ok!(cast_internal_vote_via_extrinsic(
                 nrc_admin(i),
                 proposal_id,
@@ -1871,7 +1887,7 @@ fn internal_vote_callback_err_rolls_back_status() {
         let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
 
         // 前 12 票赞成(未达阈值,不触发回调,不受 SHOULD_FAIL 影响)。
-        for i in 0..12 {
+        for i in 1..12 {
             assert_ok!(cast_internal_vote_via_extrinsic(
                 nrc_admin(i),
                 proposal_id,

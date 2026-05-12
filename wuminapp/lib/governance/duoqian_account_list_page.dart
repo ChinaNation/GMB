@@ -25,12 +25,16 @@ import 'organization-manage/institution_duoqian_create_page.dart';
 import 'personal-manage/personal_duoqian_create_page.dart';
 import 'personal-manage/personal_manage_account_info_page.dart';
 import 'personal-manage/personal_manage_discovery_service.dart';
+import 'personal-manage/personal_manage_models.dart';
+import 'personal-manage/personal_manage_service.dart';
 
 enum _DuoqianKind { personal, institution }
 
 class _UnifiedItem {
-  _UnifiedItem.personal(PersonalDuoqianEntity item)
-      : kind = _DuoqianKind.personal,
+  _UnifiedItem.personal(
+    PersonalDuoqianEntity item, {
+    required this.localStatus,
+  })  : kind = _DuoqianKind.personal,
         name = item.name,
         duoqianAddress = item.duoqianAddress,
         addedAtMillis = item.addedAtMillis,
@@ -46,6 +50,7 @@ class _UnifiedItem {
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
         matchedAdminCount = item.matchedAdminPubkeys.length,
+        localStatus = null,
         personal = null,
         institution = item;
 
@@ -55,6 +60,7 @@ class _UnifiedItem {
   final int addedAtMillis;
   final bool discoveredViaAdmin;
   final int matchedAdminCount;
+  final String? localStatus;
   final PersonalDuoqianEntity? personal;
   final DuoqianInstitutionEntity? institution;
 }
@@ -71,6 +77,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   bool _loading = true;
   bool _scanning = false;
   String? _scanProgress;
+  final PersonalManageService _personalManageService = PersonalManageService();
 
   @override
   void initState() {
@@ -98,12 +105,49 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final isar = await WalletIsar.instance.db();
     final personals = await isar.personalDuoqianEntitys.where().findAll();
     final institutions = await isar.duoqianInstitutionEntitys.where().findAll();
+    await _syncPersonalStatuses(isar, personals);
+    final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
+      isar,
+      personals.map((p) => p.duoqianAddress),
+    );
     final merged = <_UnifiedItem>[
-      ...personals.map(_UnifiedItem.personal),
+      ...personals.map(
+        (p) => _UnifiedItem.personal(
+          p,
+          localStatus: personalStatuses[_normalizeHex(p.duoqianAddress)],
+        ),
+      ),
       ...institutions.map(_UnifiedItem.institution),
     ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
     if (!mounted) return;
     setState(() => _items = merged);
+  }
+
+  Future<void> _syncPersonalStatuses(
+    Isar isar,
+    List<PersonalDuoqianEntity> personals,
+  ) async {
+    for (final personal in personals) {
+      try {
+        final info = await _personalManageService.fetchPersonalAccount(
+          personal.duoqianAddress,
+        );
+        final status = info == null
+            ? PersonalDuoqianLocalState.statusClosed
+            : info.status == DuoqianStatus.active
+                ? PersonalDuoqianLocalState.statusActive
+                : PersonalDuoqianLocalState.statusPending;
+        await isar.writeTxn(() async {
+          await PersonalDuoqianLocalState.putStatusInTxn(
+            isar,
+            personal.duoqianAddress,
+            status,
+          );
+        });
+      } catch (_) {
+        // 中文注释：链路异常时不改本地状态，避免把网络失败误判成注销。
+      }
+    }
   }
 
   Future<void> _runBackgroundDiscovery({bool force = false}) async {
@@ -175,13 +219,15 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             ListTile(
               leading: const Icon(Icons.person_outline, color: AppTheme.accent),
               title: const Text('新增个人多签'),
+              subtitle: const Text('无需身份ID'),
               onTap: () => Navigator.pop(sheetCtx, _DuoqianKind.personal),
             ),
             const Divider(height: 1),
             ListTile(
-              leading:
-                  const Icon(Icons.account_tree_outlined, color: AppTheme.info),
+              leading: const Icon(Icons.account_balance_outlined,
+                  color: AppTheme.info),
               title: const Text('新增机构多签'),
+              subtitle: const Text('需要身份ID'),
               onTap: () => Navigator.pop(sheetCtx, _DuoqianKind.institution),
             ),
           ],
@@ -269,7 +315,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '多签交易',
+          '账户列表',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,
@@ -372,6 +418,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final color = isPersonal ? AppTheme.accent : AppTheme.info;
     final iconData = isPersonal ? Icons.person : Icons.business;
     final tag = isPersonal ? '个人' : '机构';
+    final isClosed = item.localStatus == PersonalDuoqianLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
       if (item.discoveredViaAdmin) '我作为 ${item.matchedAdminCount} 位管理员之一参与',
@@ -422,6 +469,26 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                             ),
                           ),
                         ),
+                        if (isClosed) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.textTertiary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '已注销',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textTertiary,
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -471,5 +538,10 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   String _truncateAddress(String address) {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 }

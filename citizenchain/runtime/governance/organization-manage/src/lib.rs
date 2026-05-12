@@ -39,7 +39,8 @@ use sp_core::sr25519::Public as Sr25519Public;
 use sp_runtime::traits::Hash;
 use sp_std::{collections::btree_set::BTreeSet, prelude::*};
 use votingengine::{
-    InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId, STATUS_REJECTED,
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId,
+    STATUS_REJECTED,
 };
 
 pub use address::{InstitutionAccountRole, RESERVED_NAME_FEE, RESERVED_NAME_MAIN};
@@ -196,7 +197,8 @@ pub mod pallet {
     /// 机构级多签信息：key 为 sfid_number。
     ///
     /// 链上创建的是“机构”，机构下账户只保存地址、初始余额与生命周期状态。
-    /// 管理员和阈值的长期真源在 admins-change；本表保存机构基本信息和创建快照。
+    /// 管理员长期真源在 admins-change，动态阈值长期真源在 internal-vote；
+    /// 本表保存机构基本信息和创建快照。
     #[pallet::storage]
     #[pallet::getter(fn institution_of)]
     pub type Institutions<T: Config> =
@@ -717,9 +719,10 @@ pub mod pallet {
                 duoqian_admins.len() as u32 == admin_count,
                 Error::<T>::AdminCountMismatch
             );
-            let min_threshold = core::cmp::max(2, admin_count.saturating_add(1) / 2);
             ensure!(
-                threshold >= min_threshold && threshold <= admin_count,
+                threshold > 0
+                    && threshold <= admin_count
+                    && u64::from(threshold).saturating_mul(2) > u64::from(admin_count),
                 Error::<T>::InvalidThreshold
             );
             Self::ensure_unique_admins(duoqian_admins)?;
@@ -840,7 +843,8 @@ impl<T: pallet::Config> traits::InstitutionMultisigQuery<T::AccountId> for palle
         let org = Self::lookup_admin_org(addr)?;
         let institution_id = pallet::Pallet::<T>::resolve_admin_subject_for_account(addr)?;
         let admins = admins_change::Pallet::<T>::active_subject_admins(org, institution_id)?;
-        let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, institution_id)?;
+        let threshold =
+            <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, institution_id)?;
         let admin_count = admins.len() as u32;
         Some(primitives::types::MultisigConfigSnapshot {
             admins,

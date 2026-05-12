@@ -33,11 +33,13 @@ class TxPoolWatchEvent {
     required this.kind,
     required this.description,
     required this.raw,
+    this.blockHashHex,
   });
 
   final TxPoolWatchKind kind;
   final String description;
   final String raw;
+  final String? blockHashHex;
 
   bool get isFailure {
     switch (kind) {
@@ -221,6 +223,84 @@ class ChainRpc {
     return _hexDecode(_stripHexPrefix(txHashHex));
   }
 
+  /// 提交已签名 extrinsic，并阻塞等待交易真正进入区块。
+  ///
+  /// 中文注释：提案类交易不能把 txHash 当成功；只有 `inBlock/finalized`
+  /// 状态携带区块哈希后，业务层才能继续读取 `System.Events` 核对事件。
+  Future<({Uint8List txHash, TxPoolWatchEvent included})>
+      submitExtrinsicAndWaitForInBlock(
+    Uint8List encoded, {
+    TxPoolWatchCallback? onWatchEvent,
+    Duration timeout = const Duration(minutes: 20),
+  }) async {
+    final hex = '0x${_hexEncode(encoded)}';
+    final txHash = Hasher.blake2b256.hash(encoded);
+    final txHashHex = '0x${_hexEncode(txHash)}';
+    debugPrint(
+        '[ChainRpc.submitExtrinsicAndWaitForInBlock] 提交 extrinsic (${encoded.length} bytes), txHash=$txHashHex');
+    debugPrint('[ChainRpc.submitExtrinsicAndWaitForInBlock] full hex: $hex');
+
+    StreamSubscription? sub;
+    Timer? bailTimer;
+    final done = Completer<TxPoolWatchEvent>();
+    try {
+      final stream = SmoldotClientManager.instance
+          .subscribe('author_submitAndWatchExtrinsic', [hex]);
+      bailTimer = Timer(timeout, () {
+        if (!done.isCompleted) {
+          done.completeError(TimeoutException(
+            '交易 $txHashHex 在 ${timeout.inMinutes} 分钟内未进入区块',
+            timeout,
+          ));
+        }
+      });
+      sub = stream.listen(
+        (event) {
+          try {
+            final dynamic raw = (event as dynamic).result;
+            final watchEvent = _toWatchEvent(raw);
+            onWatchEvent?.call(watchEvent);
+            debugPrint(
+                '[ChainRpc.submitExtrinsicAndWaitForInBlock] $txHashHex status=$raw');
+            if (watchEvent.isFailure && !done.isCompleted) {
+              done.completeError(StateError(watchEvent.description));
+              return;
+            }
+            if (watchEvent.isIncluded && !done.isCompleted) {
+              final blockHashHex = watchEvent.blockHashHex;
+              if (blockHashHex == null || blockHashHex.isEmpty) {
+                done.completeError(StateError('交易已入块，但订阅状态未返回区块哈希'));
+                return;
+              }
+              done.complete(watchEvent);
+            }
+          } catch (e) {
+            if (!done.isCompleted) done.completeError(e);
+          }
+        },
+        onError: (Object e) {
+          onWatchEvent?.call(TxPoolWatchEvent(
+            kind: TxPoolWatchKind.error,
+            description: '交易池订阅异常：$e',
+            raw: '$e',
+          ));
+          if (!done.isCompleted) done.completeError(e);
+        },
+        onDone: () {
+          if (!done.isCompleted) {
+            done.completeError(StateError('交易池订阅已结束，但交易未进入区块'));
+          }
+        },
+      );
+
+      final included = await done.future;
+      return (txHash: txHash, included: included);
+    } finally {
+      bailTimer?.cancel();
+      if (sub != null) unawaited(sub.cancel());
+    }
+  }
+
   /// 后台观察一条交易的 mempool 状态,**所有状态都打日志**,被拒时立即结束。
   ///
   /// 60 秒内未收到任何状态视为 timeout(smoldot 转发失败 / 全节点完全不响应),
@@ -318,7 +398,12 @@ class ChainRpc {
           status.containsKey('broadcast')) {
         return _TxResult.success;
       }
-      if (status.containsKey('usurped') || status.containsKey('retracted')) {
+      if (status.containsKey('future') ||
+          status.containsKey('invalid') ||
+          status.containsKey('dropped') ||
+          status.containsKey('usurped') ||
+          status.containsKey('retracted') ||
+          status.containsKey('finalityTimeout')) {
         return _TxResult.failure;
       }
     }
@@ -344,21 +429,33 @@ class ChainRpc {
     }
     if (status is Map) {
       TxPoolWatchKind kind = TxPoolWatchKind.unknown;
+      String? blockHashHex;
       if (status.containsKey('inBlock')) {
         kind = TxPoolWatchKind.inBlock;
+        blockHashHex = _statusHashHex(status['inBlock']);
       } else if (status.containsKey('finalized')) {
         kind = TxPoolWatchKind.finalized;
+        blockHashHex = _statusHashHex(status['finalized']);
       } else if (status.containsKey('broadcast')) {
         kind = TxPoolWatchKind.broadcast;
+      } else if (status.containsKey('future')) {
+        kind = TxPoolWatchKind.future;
+      } else if (status.containsKey('invalid')) {
+        kind = TxPoolWatchKind.invalid;
+      } else if (status.containsKey('dropped')) {
+        kind = TxPoolWatchKind.dropped;
       } else if (status.containsKey('usurped')) {
         kind = TxPoolWatchKind.usurped;
       } else if (status.containsKey('retracted')) {
         kind = TxPoolWatchKind.retracted;
+      } else if (status.containsKey('finalityTimeout')) {
+        kind = TxPoolWatchKind.finalityTimeout;
       }
       return TxPoolWatchEvent(
         kind: kind,
         description: _describeTxStatus(status),
         raw: '$status',
+        blockHashHex: blockHashHex,
       );
     }
     return TxPoolWatchEvent(
@@ -394,6 +491,13 @@ class ChainRpc {
     return '$status';
   }
 
+  String? _statusHashHex(dynamic value) {
+    if (value == null) return null;
+    final text = '$value';
+    if (text.isEmpty) return null;
+    return text.startsWith('0x') ? text : '0x$text';
+  }
+
   // ──── 链上状态查询 ────
 
   /// 通用 storage 查询：传入完整的 storage key（含 0x 前缀），
@@ -406,6 +510,17 @@ class ChainRpc {
     return _hexDecode(
       valueHex.startsWith('0x') ? valueHex.substring(2) : valueHex,
     );
+  }
+
+  /// 查询指定区块的 `System.Events` 原始 SCALE 数据。
+  Future<Uint8List?> fetchSystemEventsAtBlock(String blockHashHex) async {
+    final keyHex = '0x${_hexEncode(_buildStorageValueKey('System', 'Events'))}';
+    final valueHex = await SmoldotClientManager.instance.request(
+      'state_getStorage',
+      [keyHex, blockHashHex],
+    ) as String?;
+    if (valueHex == null || valueHex.isEmpty) return null;
+    return _hexDecode(_stripHexPrefix(valueHex));
   }
 
   /// 查询链上已打包的 nonce（不含交易池），账户不存在返回 0。

@@ -74,8 +74,7 @@ void main() {
   }
 
   group('PersonalManageService', () {
-    test('builds propose_create_personal call_data without threshold fields',
-        () {
+    test('builds propose_create_personal call_data with regular_threshold', () {
       final admin1 = Uint8List.fromList(List<int>.filled(32, 0x11));
       final admin2 = Uint8List.fromList(List<int>.filled(32, 0x22));
       final accountName = Uint8List.fromList(utf8.encode('家庭基金'));
@@ -83,6 +82,7 @@ void main() {
       final callData = PersonalManageService.buildProposeCreatePersonalCallData(
         accountName: accountName,
         adminPubkeys: [admin1, admin2],
+        regularThreshold: 2,
         amountFen: BigInt.from(111),
       );
 
@@ -93,10 +93,28 @@ void main() {
         (2 << 2) & 0xff,
         ...admin1,
         ...admin2,
+        ...u32Le(2),
         ...u128Le(BigInt.from(111)),
       ];
 
       expect(hexOf(callData), hexOf(expected));
+    });
+
+    test('rejects regular_threshold below strict majority', () {
+      final admins = List.generate(
+        4,
+        (i) => Uint8List.fromList(List<int>.filled(32, 0x10 + i)),
+      );
+
+      expect(
+        () => PersonalManageService.buildProposeCreatePersonalCallData(
+          accountName: Uint8List.fromList(utf8.encode('家庭基金')),
+          adminPubkeys: admins,
+          regularThreshold: 2,
+          amountFen: BigInt.from(111),
+        ),
+        throwsArgumentError,
+      );
     });
 
     test('decodes current PersonalManage create ProposalData', () {

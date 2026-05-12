@@ -46,6 +46,13 @@ void main() {
 
   List<int> u16Le(int value) => [value & 0xff, (value >> 8) & 0xff];
 
+  List<int> u32Le(int value) => [
+        value & 0xff,
+        (value >> 8) & 0xff,
+        (value >> 16) & 0xff,
+        (value >> 24) & 0xff,
+      ];
+
   group('PayloadDecoder', () {
     test('decodes transfer_keep_alive (pallet=2 call=3)', () {
       final dest = Keyring.sr25519.fromSeed(Uint8List(32));
@@ -828,7 +835,38 @@ void main() {
           reason: 'P-TX-001 禁止 a3/sub_type/parent_sfid_number 旧尾字段');
     });
 
-    test('decodes current propose_create_personal without threshold field', () {
+    test('decodes current propose_create_personal with regular_threshold field',
+        () {
+      final name = utf8.encode('家庭基金');
+      final admins = [
+        List<int>.filled(32, 0x11),
+        List<int>.filled(32, 0x22),
+        List<int>.filled(32, 0x33),
+      ];
+      final payload = Uint8List.fromList([
+        0x07,
+        0x00,
+        (name.length << 2) & 0xff,
+        ...name,
+        (admins.length << 2) & 0xff,
+        ...admins.expand((admin) => admin),
+        ...u32Le(3),
+        ...u128LeForTest(BigInt.from(12345)),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNotNull);
+      expect(decoded!.action, 'propose_create_personal');
+      expect(decoded.fields['account_name'], '家庭基金');
+      expect(decoded.fields['admin_count'], '3');
+      expect(decoded.fields['regular_threshold'], '3/3');
+      expect(decoded.fields['create_threshold'], '3/3');
+      expect(decoded.fields['amount_yuan'], '123.45 GMB');
+      expect(decoded.fields.containsKey('threshold'), isFalse);
+    });
+
+    test('rejects old propose_create_personal without regular_threshold', () {
       final name = utf8.encode('家庭基金');
       final admins = [
         List<int>.filled(32, 0x11),
@@ -847,14 +885,32 @@ void main() {
 
       final decoded = PayloadDecoder.decode(hexOf(payload));
 
-      expect(decoded, isNotNull);
-      expect(decoded!.action, 'propose_create_personal');
-      expect(decoded.fields['account_name'], '家庭基金');
-      expect(decoded.fields['admin_count'], '3');
-      expect(decoded.fields['regular_threshold'], '2/3');
-      expect(decoded.fields['create_threshold'], '3/3');
-      expect(decoded.fields['amount_yuan'], '123.45 GMB');
-      expect(decoded.fields.containsKey('threshold'), isFalse);
+      expect(decoded, isNull);
+    });
+
+    test('rejects propose_create_personal regular_threshold below majority',
+        () {
+      final name = utf8.encode('家庭基金');
+      final admins = [
+        List<int>.filled(32, 0x11),
+        List<int>.filled(32, 0x22),
+        List<int>.filled(32, 0x33),
+        List<int>.filled(32, 0x44),
+      ];
+      final payload = Uint8List.fromList([
+        0x07,
+        0x00,
+        (name.length << 2) & 0xff,
+        ...name,
+        (admins.length << 2) & 0xff,
+        ...admins.expand((admin) => admin),
+        ...u32Le(2),
+        ...u128LeForTest(BigInt.from(12345)),
+      ]);
+
+      final decoded = PayloadDecoder.decode(hexOf(payload));
+
+      expect(decoded, isNull);
     });
 
     test(

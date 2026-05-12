@@ -146,8 +146,7 @@ class DuoqianManageService {
     if (adminCount < 2 || adminCount != adminPubkeys.length) {
       throw ArgumentError('admin_count 必须 >=2 且等于管理员公钥数量');
     }
-    final minThresholdRaw = (adminCount + 1) ~/ 2;
-    final minThreshold = minThresholdRaw < 2 ? 2 : minThresholdRaw;
+    final minThreshold = (adminCount ~/ 2) + 1;
     if (threshold < minThreshold || threshold > adminCount) {
       throw ArgumentError('threshold 范围必须在 $minThreshold..=$adminCount');
     }

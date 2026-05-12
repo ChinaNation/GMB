@@ -150,31 +150,45 @@ fn new_test_ext() -> sp_io::TestExternalities {
     ext
 }
 
-struct AmountExtractorAmount;
-impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorAmount {
-    fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
-        AmountExtractResult::Amount(50_000)
+struct FeeKindExtractorOnchainAmount;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorOnchainAmount {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::OnchainAmount(50_000)
     }
 }
 
-struct AmountExtractorNoAmount;
-impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorNoAmount {
-    fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
-        AmountExtractResult::NoAmount
+struct FeeKindExtractorVoteFlat;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorVoteFlat {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::VoteFlat
     }
 }
 
-struct AmountExtractorUnknown;
-impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorUnknown {
-    fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
-        AmountExtractResult::Unknown
+struct FeeKindExtractorOffchainFee;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorOffchainFee {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::OffchainFee(88)
     }
 }
 
-struct AmountExtractorTiny;
-impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorTiny {
-    fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
-        AmountExtractResult::Amount(1)
+struct FeeKindExtractorFree;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorFree {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::Free
+    }
+}
+
+struct FeeKindExtractorUnknown;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorUnknown {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::Unknown
+    }
+}
+
+struct FeeKindExtractorTinyOnchainAmount;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorTinyOnchainAmount {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::OnchainAmount(1)
     }
 }
 

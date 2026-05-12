@@ -11,7 +11,7 @@ use frame_support::{
 };
 use frame_system as system;
 use onchain_transaction::{
-    AmountExtractResult, CallAmount, NrcAccountProvider, OnchainChargeAdapter, OnchainFeeRouter,
+    CallFeeKind, FeeChargeKind, NrcAccountProvider, OnchainChargeAdapter, OnchainFeeRouter,
     SafetyFundAccountProvider,
 };
 use pallet_transaction_payment::OnChargeTransaction;
@@ -124,10 +124,10 @@ impl SafetyFundAccountProvider<AccountId32> for MockSafetyFundAccountProvider {
     }
 }
 
-struct AmountExtractorAmount;
-impl CallAmount<AccountId32, RuntimeCall, Balance> for AmountExtractorAmount {
-    fn amount(_who: &AccountId32, _call: &RuntimeCall) -> AmountExtractResult<Balance> {
-        AmountExtractResult::Amount(50_000)
+struct FeeKindExtractorOnchainAmount;
+impl CallFeeKind<AccountId32, RuntimeCall, Balance> for FeeKindExtractorOnchainAmount {
+    fn fee_kind(_who: &AccountId32, _call: &RuntimeCall) -> FeeChargeKind<Balance> {
+        FeeChargeKind::OnchainAmount(50_000)
     }
 }
 
@@ -138,7 +138,7 @@ type BenchRouter = OnchainFeeRouter<
     MockNrcAccountProvider,
     MockSafetyFundAccountProvider,
 >;
-type BenchAdapter = OnchainChargeAdapter<Balances, BenchRouter, AmountExtractorAmount, ()>;
+type BenchAdapter = OnchainChargeAdapter<Balances, BenchRouter, FeeKindExtractorOnchainAmount, ()>;
 
 fn account(n: u8) -> AccountId32 {
     AccountId32::new([n; 32])

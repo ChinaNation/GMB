@@ -57,7 +57,7 @@
 
 补充说明：
 - 只要某类内置机构被本模块的 `institution_org()` / `institution_pallet_address()` 正式识别，
-- 且对应管理员与阈值已接入 runtime 的 `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider`，
+- 且对应管理员已接入 runtime 的 `RuntimeInternalAdminProvider`，固定阈值或动态阈值已由投票引擎自身提供，
 - 这类机构就可以直接复用本模块和内部投票引擎发起转账提案，不需要新增转账 pallet。
 
 ### 0.3 与 `organization-manage` 的关系
@@ -469,19 +469,17 @@ impl duoqian_transfer::Config for Runtime {
 }
 ```
 
-### 13.2 CallAmount 配置
+### 13.2 CallFeeKind 配置
 
-`DuoqianTransfer` 的 propose 系列 extrinsic 按金额计费；`InternalVote::cast` 按固定 1 元计费：
+`DuoqianTransfer` 的 propose 系列 extrinsic 只负责创建治理提案，交易本身按投票统一价 1 元计费；真正执行转账时，模块内部再按转出金额 `max(amount × 0.1%, 0.1 元)` 扣链上交易费：
 ```rust
 RuntimeCall::DuoqianTransfer(ref dt_call) => match dt_call {
-    duoqian_transfer::pallet::Call::propose_transfer { amount, .. }
-    | duoqian_transfer::pallet::Call::propose_safety_fund_transfer { amount, .. }
-    | duoqian_transfer::pallet::Call::propose_sweep_to_main { amount, .. } => {
-        onchain_transaction::AmountExtractResult::Amount(*amount)
+    duoqian_transfer::pallet::Call::propose_transfer { .. }
+    | duoqian_transfer::pallet::Call::propose_safety_fund_transfer { .. }
+    | duoqian_transfer::pallet::Call::propose_sweep_to_main { .. } => {
+        onchain_transaction::FeeChargeKind::VoteFlat
     }
-    _ => onchain_transaction::AmountExtractResult::Amount(
-        primitives::fee_policy::VOTE_FLAT_FEE,
-    ),
+    _ => onchain_transaction::FeeChargeKind::VoteFlat,
 }
 ```
 

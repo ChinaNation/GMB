@@ -164,12 +164,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 }
 
 pub struct TestTimeProvider;
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: SubjectId) -> Option<u32> {
-        votingengine::types::fixed_governance_pass_threshold(org)
-    }
-}
 
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -203,7 +197,6 @@ impl votingengine::Config for Test {
     // 挂上本模块 Executor,让提案通过后自动触发销毁执行。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type InternalAdminCountProvider = ();
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();

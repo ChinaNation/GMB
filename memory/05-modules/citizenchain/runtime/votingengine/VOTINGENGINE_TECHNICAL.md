@@ -1,11 +1,11 @@
 # Voting Engine 技术文档
 
-最新更新：2026-05-10，联合投票人口快照已收回到 `joint-vote` 内部准备和消费；业务模块只发起业务提案，不再传递 `eligible_total`、人口快照 nonce、签名、省份或签名管理员公钥。
+最新更新：2026-05-11，内部投票阈值职责已全部收回到 `internal-vote`；业务模块只能选择提案语义并提交业务数据，不得传入“本次投票通过阈值”。
 
 ## 0. 功能需求
 ### 0.1 统一投票引擎能力
 `votingengine` 必须作为治理基础设施，统一承载内部投票、联合机构投票、公民投票三类流程，并向上层事项模块暴露稳定 trait 能力：
-- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建显式 Pending 快照内部提案、创建管理员集合变更内部提案；业务模块必须优先使用 `*_with_data` 变体在同一事务中绑定 owner/data/meta
+- `InternalVoteEngine`：创建一般内部投票、生命周期内部投票、注册主体创建投票、管理员变更内部投票；业务模块必须使用语义化 `*_with_data` 接口在同一事务中绑定 owner/data/meta
 - `JointVoteEngine`：创建联合提案；业务模块必须优先使用 `create_joint_proposal_with_data` 在同一事务中绑定 owner/data/meta，且只能传业务摘要或对象，不得传人口快照、联合签名、投票资格或计票材料
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后把执行结果以 `ProposalExecutionOutcome` 回传给投票引擎
 
@@ -15,15 +15,17 @@
 - 内部提案只能由业务治理模块通过 `InternalVoteEngine` trait 创建，不能直接通过外部 extrinsic 创建。
 - 仅允许合法账户管理员为本账户创建内部提案。
 - 仅允许同账户管理员参与内部投票，禁止跨账户投票。
-- 普通内部提案只能读取 Active 管理员主体。
-- Pending 主体只能通过 `create_pending_subject_internal_proposal` 创建自身激活投票。
-- 管理员集合变更只能通过 `create_admin_set_mutation_internal_proposal` 创建，并与同一治理主体下的普通活跃提案互斥。
+- 一般内部投票只能读取 Active 管理员主体和当前固定/动态阈值。
+- 注册个人多签/机构多签只能通过注册主体创建投票创建，业务模块只提交初始管理员列表和用户填写的动态阈值。
+- 注销个人多签/机构多签只能通过生命周期内部投票创建，投票引擎按 Active 管理员快照写入全员通过阈值。
+- 管理员集合变更只能通过管理员变更内部投票创建，并与同一治理主体下的普通活跃提案互斥。
 - 创建提案时必须锁定管理员快照和阈值快照，投票期间不再实时读取主体状态。
-- 国储会、省储会、省储行使用永久固定治理阈值；注册个人账户和注册机构账户使用按管理员数量派生的动态阈值，并在创建提案时写入快照。
+- 国储会、省储会、省储行使用永久固定治理阈值；注册个人账户和注册机构账户使用注册或管理员变更时写入 `internal-vote` 的动态阈值。
 - 注册个人账户管理员数量范围为 `2..=64`；注册机构账户管理员数量范围为 `2..=1989`。
-- 动态账户普通提案阈值规则：`admin_count == 2` 时阈值为 2，`admin_count >= 3` 时阈值为 `ceil(admin_count / 2)`。
+- 动态账户普通提案阈值规则：`threshold * 2 > admin_count && threshold <= admin_count`。
 - 动态账户注册创建和注销关闭是生命周期操作，必须全员投票通过，即快照阈值为管理员数量。
-- 管理员快照必须非空、无重复；Pending 注册创建和注销关闭的阈值必须等于快照管理员人数；普通内部提案和管理员集合变更提案的阈值必须大于 0 且不超过快照管理员人数。
+- 管理员快照必须非空、无重复；注册创建和注销关闭的阈值必须等于快照管理员人数；一般内部提案使用当前固定/动态阈值，管理员变更提案使用当前阈值投票并校验新动态阈值。
+- 所有内部投票创建成功后，投票引擎必须在同一事务中自动记录发起人的赞成票。
 - 达阈值时立即通过；到期未达阈值时自动否决。
 
 ### 0.3 联合投票功能需求
@@ -62,7 +64,7 @@
 - 公民投票（`CITIZEN`）
 
 它通过 trait 为上层治理模块提供标准化能力：
-- `InternalVoteEngine`：创建普通内部提案、创建 Pending 主体内部提案、创建显式 Pending 快照内部提案、创建管理员集合变更内部提案
+- `InternalVoteEngine`：创建一般内部投票、生命周期内部投票、注册主体创建投票、管理员变更内部投票
 - `JointVoteEngine`：创建联合提案
 - `InternalVoteResultCallback` / `JointVoteResultCallback`：投票判定后回调目标治理模块，返回统一执行结果
 
@@ -116,7 +118,11 @@ any → unknown
 - `PendingExpiryBucket`：自动结算游标（上块未处理完的过期桶）
 - `InternalVotesByAccount` / `InternalTallies`
 - `AdminSnapshot`：提案创建时锁定的账户管理员名单。写入前拒绝空名单和重复管理员，确保“一管理员一票”语义不被快照数据破坏。
-- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人账户/注册机构账户写入链端按管理员数量派生的阈值。注册创建和注销关闭写入全员阈值。
+- `InternalThresholdSnapshot`：内部提案创建时锁定的通过阈值。治理三类机构写入固定制度阈值；注册个人账户/注册机构账户写入 `internal-vote` 保存的动态阈值；注册创建和注销关闭写入全员阈值。
+- `PendingDynamicThresholds`：注册多签创建提案通过前暂存的动态阈值，key 为 `(org, subject)`。
+- `ActiveDynamicThresholds`：注册多签激活后的动态阈值，key 为 `(org, subject)`。
+- `PendingAdminChangeThresholds`：管理员变更提案通过前暂存的新管理员数量和新动态阈值。
+- `InternalProposalRoles`：记录内部提案语义分类，用于终态时激活、删除或清理对应动态阈值。
 - `JointVotesByAdmin` / `JointInstitutionTallies`
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesByBindingId` / `CitizenTallies`
@@ -128,7 +134,7 @@ any → unknown
 - `ProposalExecutionRetryStates`：自动执行失败后的可重试状态，记录手动失败次数、首次失败区块、重试截止区块和最近手动尝试区块。
 - `ExecutionRetryDeadlines`：按区块索引待过期的 retry proposal，用于 `on_initialize` 到期转 `STATUS_EXECUTION_FAILED`。
 - `PendingExecutionRetryExpirations`：retry deadline 重排失败时的兜底队列。若目标 deadline 附近所有桶都满，提案不会丢失过期入口，而是在后续 `on_initialize` 中按配置额度转 `STATUS_EXECUTION_FAILED`。
-- `CallbackExecutionScopes`：回调执行临时作用域，仅保护单测兼容辅助接口；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
+- `CallbackExecutionScopes`：回调执行临时作用域，用于保护测试和回调路径的作用域校验；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
 - `ActiveProposalsByInstitution`：每机构当前活跃提案 ID 列表，容量由 `MaxActiveProposals` 配置，生产 runtime 当前为 10。
 - `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
 - `ProposalMutexBindings`：`proposal_id` 持有的互斥锁反向绑定，用于终态、阶段切换和清理时释放；单提案 binding 上限由 `MaxInternalProposalMutexBindings` 配置，生产 runtime 当前为 256。
@@ -154,14 +160,15 @@ any → unknown
 
 ## 3. 流程设计
 ### 3.1 内部提案
-1. 普通业务通过 `do_create_internal_proposal` 创建提案，阶段为 `STAGE_INTERNAL`，只接受 Active 管理员主体，并登记 `Regular` 锁。
-2. 创建多签主体的业务通过 `do_create_pending_subject_internal_proposal` 创建提案，只接受 Pending 管理员主体，并登记 `Regular` 锁。
-3. `organization-manage` 创建 Pending 主体时可调用 `do_create_pending_subject_internal_proposal_with_snapshot`，先用显式管理员列表固化快照，再由 `admins-change::SubjectLifecycle` 写 Pending 主体，避免“先写 Pending 再创建提案”的半成功窗口。显式快照创建必须满足 `threshold == admins.len()`。
-4. 管理员集合变更通过 `do_create_admin_set_mutation_internal_proposal` 创建提案，并登记 `AdminSetMutationExclusive` 锁。
-5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。NRC/PRC/PRB 的阈值快照来自固定治理常量；ORG_REN 的阈值快照来自 Active/Pending 注册账户主体或显式 Pending 快照。写阈值快照前必须先校验快照管理员人数。
-6. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过；缺少阈值快照返回 `MissingThresholdSnapshot`，缺少管理员快照返回 `MissingAdminSnapshot`，不再混用 `InvalidInternalOrg`。
-7. 达阈值时立即 `Passed`（`set_status_and_emit`）。
-8. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
+1. 一般内部投票通过 `create_general_internal_proposal_with_data` 创建，只接受 Active 管理员主体，使用当前固定阈值或 `ActiveDynamicThresholds`，并登记 `Regular` 锁。
+2. 注册个人多签/机构多签通过 `create_registered_subject_create_proposal_with_data` 创建，业务模块提交初始管理员列表和用户填写的动态阈值；投票引擎校验动态阈值、写 `PendingDynamicThresholds`，并把本次注册投票快照阈值写成全员。
+3. 注销个人多签/机构多签通过 `create_lifecycle_internal_proposal_with_data` 创建，只接受 Active 管理员主体，并把本次注销投票快照阈值写成全员。
+4. 管理员集合变更通过 `create_admin_change_internal_proposal_with_data` 创建，只允许 `admins-change` 调用；本次投票使用当前 active 阈值，新管理员数量和新动态阈值写入 `PendingAdminChangeThresholds`。
+5. 创建时写入 `AdminSnapshot` 与 `InternalThresholdSnapshot`，后续投票只认快照。写阈值快照前必须先校验快照管理员人数。
+6. 提案 data/owner/meta 写入完成后，投票引擎在同一事务中自动给发起人记录一票赞成；顺序必须保证业务回调能读到 `ProposalData`。
+7. `do_internal_vote` 由快照内管理员投票，按阈值快照判定是否通过；缺少阈值快照返回 `MissingThresholdSnapshot`，缺少管理员快照返回 `MissingAdminSnapshot`。
+8. 达阈值时立即 `Passed`（`set_status_and_emit`）。
+9. 未达阈值且到期后，在 `on_initialize` 自动走 `do_finalize_internal_timeout`，直接 `Rejected`。
 
 ### 3.2 联合提案
 1. 联合提案发起管理员先调用 `prepare_joint_population_snapshot`，由投票引擎校验人口快照、签名、nonce、防重放和发起权限，并写入 `PendingPopulationSnapshots`。
@@ -286,7 +293,7 @@ any → unknown
 - 避免提案在业务模块拒绝/异常时被错误标记为已通过或已否决。
 
 ### 5.6.1 Owner 绑定与数据写入收口
-- 创建提案时必须使用 `create_internal_proposal_with_data`、`create_pending_subject_internal_proposal_with_data`、`create_pending_subject_internal_proposal_with_snapshot_data`、`create_admin_set_mutation_internal_proposal_with_data`、`create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，在同一事务内写入 `ProposalOwner`、`ProposalData`、`ProposalMeta`，以及可选的 `ProposalObject`。
+- 创建提案时必须使用语义化接口：`create_general_internal_proposal_with_data`、`create_lifecycle_internal_proposal_with_data`、`create_registered_subject_create_proposal_with_data`、`create_admin_change_internal_proposal_with_data`、`create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，在同一事务内写入 `ProposalOwner`、`ProposalData`、`ProposalMeta`，以及可选的 `ProposalObject`。
 - `store_proposal_data`、`store_proposal_meta`、`set_proposal_passed`、`update_proposal_data`、`store_proposal_object_for`、`remove_proposal_object` 均不再是生产公开 API，避免任意 runtime caller 跨模块覆写业务数据、对象数据或伪造 passed_at。
 - `module_tag` 只用于 owner 路由与数据解码，不是权限凭据；生产业务模块不得通过 caller-supplied `module_tag` 修改已创建提案的数据。
 - 业务执行状态以后只通过 `ProposalExecutionOutcome` 反馈给投票引擎，由投票引擎统一写 `Proposal.status` 和终态清理。
@@ -344,23 +351,22 @@ any → unknown
 阈值来源按主体类型硬隔离：
 
 - 联合投票只服务 NRC/PRC/PRB 三类治理机构，机构阈值来自 `NRC_INTERNAL_THRESHOLD`、`PRC_INTERNAL_THRESHOLD`、`PRB_INTERNAL_THRESHOLD` 固定常量。
-- 联合投票不调用 `InternalThresholdProvider::pass_threshold`，避免把注册多签主体阈值误用于治理联合投票。
 - NRC/PRC/PRB 的内部提案创建时也使用固定治理阈值写入 `InternalThresholdSnapshot`。
-- `ORG_REN / ORG_PUP / ORG_OTH` 注册账户主体合法性通过 `is_known_subject` / `is_known_pending_subject` 显式判断，不再把 `pass_threshold(...).is_some()` 当作存在性判断。
-- `ORG_REN` 只用于个人多签，`ORG_PUP / ORG_OTH` 用于机构账户；三类注册账户阈值由 `admins-change` 按管理员数量派生，创建 Active/Pending 内部提案时写入 `InternalThresholdSnapshot`，投票期间只读快照。
-- Pending 注册创建提案不允许使用普通动态阈值，必须使用全员阈值。
-- 注销关闭等显式阈值生命周期提案必须满足 `threshold == AdminSnapshot.len()`，普通提案和管理员集合变更提案必须满足 `0 < threshold <= AdminSnapshot.len()`。
-- `InternalThresholdProvider for ()` 不提供任何默认阈值，runtime 与 mock runtime 必须显式注入 provider，避免漏配置时仍误走固定阈值。
+- `ORG_REN` 只用于个人多签，`ORG_PUP / ORG_OTH` 用于机构账户；三类注册账户的普通业务动态阈值由 `internal-vote` 的 `PendingDynamicThresholds / ActiveDynamicThresholds` 保存。
+- 注册创建和注销关闭是生命周期投票，必须写全员通过快照，不允许业务模块传本次投票阈值。
+- 一般内部投票读取固定阈值或 active 动态阈值；管理员变更投票读取当前 active 阈值，新动态阈值只在执行成功后更新 `ActiveDynamicThresholds`。
+- 动态阈值统一校验公式：`threshold * 2 > admin_count && threshold <= admin_count`，实现时必须转 `u64` 或使用安全乘法避免溢出。
 - 因联合投票阈值是永久制度常量，本模块不新增 `JointThresholdSnapshot`，也不需要存储迁移。
 
 ### 5.9.3 内部投票账户级快照强约束
-第 2 步已把内部投票创建路径收口为同一套快照约束：
+内部投票创建路径收口为语义化接口：
 
+- `create_general_internal_proposal_with_data`：一般内部投票，读取当前固定/动态阈值。
+- `create_lifecycle_internal_proposal_with_data`：注销生命周期投票，投票引擎写全员阈值。
+- `create_registered_subject_create_proposal_with_data`：注册生命周期投票，投票引擎校验并暂存动态阈值，同时写全员阈值。
+- `create_admin_change_internal_proposal_with_data`：管理员变更投票，只允许 `admins-change` 路径使用，本次投票用当前阈值，执行成功后应用新动态阈值。
 - `snapshot_institution_admins` 在写 `AdminSnapshot` 前拒绝空管理员列表和重复管理员。
-- `create_pending_subject_internal_proposal` 与 `create_pending_subject_internal_proposal_with_snapshot_data` 都要求 Pending 注册创建阈值等于快照管理员人数。
-- `create_internal_proposal_with_threshold_and_data` 只保留给注销关闭等生命周期操作，要求显式阈值等于快照管理员人数。
-- `create_internal_proposal` 与 `create_admin_set_mutation_internal_proposal` 使用长期普通阈值，但必须保证阈值可由本次快照人数达成。
-- 阈值与快照人数不匹配统一返回 `InvalidThresholdSnapshot`，不再复用机构类型错误。
+- 阈值与快照人数不匹配统一返回 `InvalidThresholdSnapshot` 或 `InvalidDynamicThreshold`，不再复用机构类型错误。
 
 ### 5.10 双层 ID 与年份边界
 
@@ -410,7 +416,7 @@ propose 和 callback(`InternalVoteExecutor::try_execute_*_from_callback`)。
 ## 6. Weight 与计费
 ### 6.1 WeightInfo
 模块定义 `WeightInfo`：
-- `create_internal_proposal`
+- `create_general_internal_proposal_with_data` / `create_lifecycle_internal_proposal_with_data` / `create_registered_subject_create_proposal_with_data` / `create_admin_change_internal_proposal_with_data`
 - `internal_vote`
 - `joint_vote`
 - `citizen_vote`
@@ -467,8 +473,8 @@ cargo test --manifest-path citizenchain/Cargo.toml -p internal-vote --lib
 1. `JointVoteResultCallback` 应保证可恢复、可重放，不依赖脆弱临时映射。
 2. 投票引擎在真正终态自动注册 90 天延迟清理，消费模块不得再保留独立提案清理 trait 方法。
 3. 业务模块必须通过 trait 接入提案创建，优先使用 `*_with_data` 变体，避免生成无业务映射的悬空提案或绕过 owner 绑定。
-4. 普通业务模块必须调用 `create_internal_proposal_with_data`；只有 `organization-manage` 创建机构多签/个人多签主体时可调用 `create_pending_subject_internal_proposal_with_data` 或显式快照变体 `create_pending_subject_internal_proposal_with_snapshot_data`。
-5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_set_mutation_internal_proposal_with_data`。
+4. 普通业务模块必须调用 `create_general_internal_proposal_with_data`；注销生命周期业务必须调用 `create_lifecycle_internal_proposal_with_data`；注册个人多签/机构多签必须调用 `create_registered_subject_create_proposal_with_data`。
+5. 管理员集合变更只能由 `admins-change` 调用 `create_admin_change_internal_proposal_with_data`。
 6. 当前生产链已确认无活跃未终态提案，新增互斥存储以空状态启用；若未来在有存量活跃提案的链上升级，需要先补一次性锁重建迁移。
 7. 联合投票客户端必须保证“选中的管理员钱包 = 实际上链签名钱包”，否则会被链上管理员身份或重复投票校验拒绝。
 8. 对生产链建议定期回归 benchmark，避免手工权重与实际执行漂移。

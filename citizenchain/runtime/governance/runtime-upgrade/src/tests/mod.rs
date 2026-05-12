@@ -172,13 +172,6 @@ impl frame_support::traits::UnixTime for TestTimeProvider {
     }
 }
 
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: votingengine::SubjectId) -> Option<u32> {
-        votingengine::types::fixed_governance_pass_threshold(org)
-    }
-}
-
 impl votingengine::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type MaxVoteNonceLength = ConstU32<64>;
@@ -203,7 +196,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = ();
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type InternalAdminCountProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;

@@ -174,7 +174,7 @@ pub mod pallet {
             };
             let mut encoded = Vec::from(crate::MODULE_TAG);
             encoded.extend_from_slice(&action.encode());
-            let proposal_id = T::InternalVoteEngine::create_internal_proposal_with_data(
+            let proposal_id = T::InternalVoteEngine::create_general_internal_proposal_with_data(
                 who.clone(),
                 org,
                 institution,

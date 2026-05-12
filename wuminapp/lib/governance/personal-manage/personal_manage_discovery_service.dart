@@ -209,6 +209,11 @@ class PersonalManageDiscoveryService {
       await isar.writeTxn(() async {
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.personalDuoqianEntitys.put(exists);
+        await PersonalDuoqianLocalState.putStatusInTxn(
+          isar,
+          duoqianAddrHex,
+          PersonalDuoqianLocalState.statusActive,
+        );
       });
       return false;
     }
@@ -230,6 +235,11 @@ class PersonalManageDiscoveryService {
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;
       await isar.personalDuoqianEntitys.put(entity);
+      await PersonalDuoqianLocalState.putStatusInTxn(
+        isar,
+        duoqianAddrHex,
+        PersonalDuoqianLocalState.statusActive,
+      );
     });
     return true;
   }
@@ -238,7 +248,7 @@ class PersonalManageDiscoveryService {
     Isar isar,
     Set<String> scannedAddrs,
   ) async {
-    var orphans = 0;
+    var closed = 0;
     await isar.writeTxn(() async {
       final stalePersonals = await isar.personalDuoqianEntitys
           .filter()
@@ -246,12 +256,18 @@ class PersonalManageDiscoveryService {
           .findAll();
       for (final p in stalePersonals) {
         if (!scannedAddrs.contains(p.duoqianAddress)) {
-          await isar.personalDuoqianEntitys.delete(p.id);
-          orphans++;
+          // 中文注释：链上注销后仍保留本地账户入口，只把状态标成已注销；
+          // 用户在详情页点“删除”时才真正清空本机数据。
+          await PersonalDuoqianLocalState.putStatusInTxn(
+            isar,
+            p.duoqianAddress,
+            PersonalDuoqianLocalState.statusClosed,
+          );
+          closed++;
         }
       }
     });
-    return orphans;
+    return closed;
   }
 
   Future<Set<String>> _readMyPubkeys() async {

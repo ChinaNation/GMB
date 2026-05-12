@@ -102,30 +102,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
     }
 }
 
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        match org {
-            ORG_NRC | ORG_PRC | ORG_PRB | ORG_REN | ORG_PUP | ORG_OTH => {
-                pallet::Pallet::<Test>::active_subject_exists(org, institution)
-            }
-            _ => false,
-        }
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        match org {
-            ORG_NRC | ORG_PRC | ORG_PRB => {
-                votingengine::types::fixed_governance_pass_threshold(org)
-            }
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                pallet::Pallet::<Test>::active_subject_threshold(org, institution)
-            }
-            _ => None,
-        }
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -159,7 +135,6 @@ impl votingengine::Config for Test {
     // 否则内部提案通过后业务执行回调不会触发,端到端测试失败。
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type InternalAdminCountProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
@@ -244,6 +219,12 @@ fn bounded_admins(admins: Vec<AccountId32>) -> AdminsOf<Test> {
         .expect("test admin list should fit MaxAdminsPerInstitution")
 }
 
+fn current_vote_threshold(org: u8, subject: SubjectId) -> u32 {
+    votingengine::types::fixed_governance_pass_threshold(org)
+        .or_else(|| internal_vote::ActiveDynamicThresholds::<Test>::get(org, subject))
+        .unwrap_or(2)
+}
+
 fn propose_admin_set_replacement(
     origin: RuntimeOrigin,
     org: u8,
@@ -257,7 +238,8 @@ fn propose_admin_set_replacement(
         .position(|admin| admin == &old_admin)
         .expect("old admin must exist in test subject");
     admins[old_pos] = new_admin;
-    AdminsChange::propose_admin_set_change(origin, org, subject, bounded_admins(admins))
+    let threshold = current_vote_threshold(org, subject);
+    AdminsChange::propose_admin_set_change(origin, org, subject, bounded_admins(admins), threshold)
 }
 
 fn mark_proposal_passed_without_callback(proposal_id: u64) {

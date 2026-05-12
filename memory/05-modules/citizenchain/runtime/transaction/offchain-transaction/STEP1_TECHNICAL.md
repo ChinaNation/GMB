@@ -114,7 +114,7 @@ Step 2 起增加偿付自动保护:`主账户链上余额 ≥ BankTotalDeposits[
 | 32 | `withdraw(amount)` | 链上资金 0.1% 最低 0.1 元 | 清算行主账户 → 自持 |
 | 33 | `switch_bank(new_bank)` | 付费调用 1 元 | 前置:旧清算行余额为 0 |
 
-费用归类在 `citizenchain/runtime/src/configs/mod.rs::OnchainTxAmountExtractor` 的 `OffchainTransaction` 分支显式分类,不走兜底。
+费用归类在 `citizenchain/runtime/src/configs/mod.rs::RuntimeFeeKindClassifier` 的 `OffchainTransaction` 分支显式分类,不走兜底。
 
 ## 8. 新增 Event(4 个)
 

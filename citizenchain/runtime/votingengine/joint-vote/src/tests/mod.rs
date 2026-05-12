@@ -80,7 +80,6 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = ();
     type InternalAdminProvider = ();
     type InternalAdminCountProvider = ();
-    type InternalThresholdProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = StubTime;
     type WeightInfo = ();

@@ -410,7 +410,7 @@ pub mod pallet {
             encoded.extend_from_slice(&action.encode());
             // 中文注释：创建提案时同步写入 owner/data/meta，禁止后续跨模块覆写业务数据。
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     org,
                     institution,
@@ -491,7 +491,7 @@ pub mod pallet {
             ensure!(free >= required, Error::<T>::SafetyFundInsufficientBalance);
 
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     ORG_NRC,
                     nrc_institution,
@@ -549,7 +549,7 @@ pub mod pallet {
             );
 
             let proposal_id =
-                <T as organization_manage::Config>::InternalVoteEngine::create_internal_proposal_with_data(
+                <T as organization_manage::Config>::InternalVoteEngine::create_general_internal_proposal_with_data(
                     who.clone(),
                     org,
                     institution,

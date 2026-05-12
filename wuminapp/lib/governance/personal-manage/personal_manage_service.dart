@@ -44,6 +44,7 @@ class PersonalManageService {
   Future<({String txHash, int usedNonce})> submitProposeCreatePersonal({
     required Uint8List accountName,
     required List<Uint8List> adminPubkeys,
+    required int regularThreshold,
     required BigInt amountFen,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -52,6 +53,7 @@ class PersonalManageService {
     final callData = buildProposeCreatePersonalCallData(
       accountName: accountName,
       adminPubkeys: adminPubkeys,
+      regularThreshold: regularThreshold,
       amountFen: amountFen,
     );
     return _signAndSubmit(
@@ -67,6 +69,7 @@ class PersonalManageService {
   static Uint8List buildProposeCreatePersonalCallData({
     required Uint8List accountName,
     required List<Uint8List> adminPubkeys,
+    required int regularThreshold,
     required BigInt amountFen,
   }) {
     if (accountName.isEmpty || accountName.length > 128) {
@@ -74,6 +77,12 @@ class PersonalManageService {
     }
     if (adminPubkeys.length < 2 || adminPubkeys.length > 64) {
       throw ArgumentError('个人多签管理员数量需在 2..=64');
+    }
+    final minThreshold = minimumRegularThreshold(adminPubkeys.length);
+    if (regularThreshold < minThreshold ||
+        regularThreshold > adminPubkeys.length) {
+      throw ArgumentError(
+          'regular_threshold 范围必须在 $minThreshold..=${adminPubkeys.length}');
     }
     final seen = <String>{};
     for (final pubkey in adminPubkeys) {
@@ -104,6 +113,9 @@ class PersonalManageService {
     for (final pubkey in adminPubkeys) {
       output.write(pubkey);
     }
+
+    // regular_threshold: u32 little-endian。注册提案阈值仍由链端固定为全员通过。
+    output.write(_u32ToLeBytesStatic(regularThreshold));
 
     // amount: u128 little-endian
     output.write(_u128ToLeBytesStatic(amountFen));
@@ -278,6 +290,21 @@ class PersonalManageService {
 
   static DuoqianStatus _statusFromByte(int statusByte) {
     return statusByte == 1 ? DuoqianStatus.active : DuoqianStatus.pending;
+  }
+
+  /// 普通提案最低阈值：必须严格过半。
+  static int minimumRegularThreshold(int adminCount) {
+    if (adminCount < 2) return 2;
+    return (adminCount ~/ 2) + 1;
+  }
+
+  static Uint8List _u32ToLeBytesStatic(int value) {
+    return Uint8List.fromList([
+      value & 0xFF,
+      (value >> 8) & 0xFF,
+      (value >> 16) & 0xFF,
+      (value >> 24) & 0xFF,
+    ]);
   }
 
   static Uint8List _u128ToLeBytesStatic(BigInt value) {

@@ -24,9 +24,8 @@ use primitives::china::china_cb::CHINA_CB;
 use primitives::china::china_ch::CHINA_CH;
 use sp_runtime::{traits::Hash, traits::IdentityLookup, AccountId32, BuildStorage, DispatchError};
 use votingengine::traits::{
-    InternalAdminProvider, InternalThresholdProvider, InternalVoteEngine,
-    InternalVoteResultCallback, JointVoteEngine, JointVoteResultCallback,
-    PopulationSnapshotVerifier,
+    InternalAdminProvider, InternalVoteEngine, InternalVoteResultCallback, JointVoteEngine,
+    JointVoteResultCallback, PopulationSnapshotVerifier,
 };
 use votingengine::SfidEligibility;
 use votingengine::{
@@ -100,7 +99,6 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = TestInternalVoteResultCallback;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminCountProvider = ();
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
     type WeightInfo = ();
@@ -150,12 +148,6 @@ thread_local! {
     static INTERNAL_TERMINAL_CLEANUP_LOG: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
 }
 thread_local! {
-    static REGISTERED_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(3) };
-}
-thread_local! {
-    static PENDING_DUOQIAN_THRESHOLD: RefCell<u32> = const { RefCell::new(2) };
-}
-thread_local! {
     static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
 }
 
@@ -164,7 +156,6 @@ pub struct TestPopulationSnapshotVerifier;
 pub struct TestJointVoteResultCallback;
 pub struct TestInternalVoteResultCallback;
 pub struct TestInternalAdminProvider;
-pub struct TestInternalThresholdProvider;
 
 fn pending_subject_institution() -> SubjectId {
     [77u8; 48]
@@ -191,11 +182,13 @@ fn registered_subject_admin(index: usize) -> AccountId32 {
 }
 
 fn set_registered_duoqian_threshold(threshold: u32) {
-    REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = threshold);
+    for org in [ORG_REN, ORG_PUP, ORG_OTH] {
+        ActiveDynamicThresholds::<Test>::insert(org, registered_subject_institution(), threshold);
+    }
 }
 
 fn set_pending_duoqian_threshold(threshold: u32) {
-    PENDING_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = threshold);
+    PendingDynamicThresholds::<Test>::insert(ORG_REN, pending_subject_institution(), threshold);
 }
 
 fn set_registered_admin_list_override(admins: Vec<AccountId32>) {
@@ -292,34 +285,6 @@ impl InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
             pending_subject_admin(0),
             pending_subject_admin(1)
         ])
-    }
-}
-
-impl InternalThresholdProvider for TestInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        is_registered_multisig_org(org) && institution == registered_subject_institution()
-    }
-
-    fn is_known_pending_subject(org: u8, institution: SubjectId) -> bool {
-        is_registered_multisig_org(org) && institution == pending_subject_institution()
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if is_registered_multisig_org(org) && institution == registered_subject_institution() {
-            return REGISTERED_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()));
-        }
-        // 中文注释：治理机构返回“毒化阈值”，用于证明治理投票不再依赖动态 Provider。
-        if matches!(org, ORG_NRC | ORG_PRC | ORG_PRB) {
-            return Some(1);
-        }
-        None
-    }
-
-    fn pending_pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if !is_registered_multisig_org(org) || institution != pending_subject_institution() {
-            return None;
-        }
-        PENDING_DUOQIAN_THRESHOLD.with(|value| Some(*value.borrow()))
     }
 }
 
@@ -495,9 +460,9 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
-        REGISTERED_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 3);
-        PENDING_DUOQIAN_THRESHOLD.with(|value| *value.borrow_mut() = 2);
         REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
+        set_registered_duoqian_threshold(3);
+        set_pending_duoqian_threshold(2);
         System::set_block_number(1);
     });
     ext
@@ -741,10 +706,12 @@ fn has_used_vote_nonce(
 }
 
 fn create_internal_proposal_via_engine(who: AccountId32, org: u8, institution: SubjectId) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
         who,
         org,
         institution,
+        b"test",
+        b"payload".to_vec(),
     )
     .expect("internal proposal should be created")
 }
@@ -754,10 +721,14 @@ fn create_pending_subject_proposal_via_engine(
     org: u8,
     institution: SubjectId,
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_pending_subject_internal_proposal(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_registered_subject_create_proposal_with_data(
         who,
         org,
         institution,
+        sp_std::vec![pending_subject_admin(0), pending_subject_admin(1)],
+        PendingDynamicThresholds::<Test>::get(ORG_REN, pending_subject_institution()).unwrap_or(2),
+        b"test",
+        b"payload".to_vec(),
     )
     .expect("pending subject proposal should be created")
 }
@@ -767,10 +738,24 @@ fn create_admin_set_mutation_proposal_via_engine(
     org: u8,
     institution: SubjectId,
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_set_mutation_internal_proposal(
+    let new_threshold = if is_registered_multisig_org(org) {
+        2
+    } else {
+        votingengine::types::fixed_governance_pass_threshold(org).expect("fixed threshold")
+    };
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_admin_change_internal_proposal_with_data(
         who,
         org,
         institution,
+        <TestInternalAdminProvider as InternalAdminProvider<AccountId32>>::get_admin_list(
+            org,
+            institution,
+        )
+        .map(|admins| admins.len() as u32)
+        .unwrap_or(3),
+        new_threshold,
+        b"test",
+        b"payload".to_vec(),
     )
     .expect("admin-set mutation proposal should be created")
 }

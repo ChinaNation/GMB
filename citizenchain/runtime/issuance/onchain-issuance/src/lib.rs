@@ -419,7 +419,7 @@ pub mod pallet {
             //   2. ensure proposer ∈ admins(issuer_subject_id)
             //   3. 字段过黑名单
             //   4. fee::reserve_creation_deposit(&who, proposal_id)
-            //   5. InternalVoteEngine::create_internal_proposal_with_data(MODULE_TAG + ACTION_OAIS + scale-encoded fields)
+            //   5. InternalVoteEngine::create_general_internal_proposal_with_data(MODULE_TAG + ACTION_OAIS + scale-encoded fields)
             Ok(())
         }
 
