@@ -2,6 +2,7 @@
 
 ## open
 
+- `memory/08-tasks/done/20260511-votingengine-boundary-fix.md`
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
@@ -276,3 +277,4 @@
 - `memory/08-tasks/done/20260509-182958-调整国储会详情页-runtime-升级入口-状态升级改为协议升级-并新增独立开发升级按钮.md`
 - `memory/08-tasks/done/20260509-duoqian-transfer-boundary.md`
 - `memory/08-tasks/done/20260509-duoqian-transfer-strict-boundary-cleanup.md`
+- `memory/08-tasks/done/20260511-wuminapp-wumin-duoqian.md`

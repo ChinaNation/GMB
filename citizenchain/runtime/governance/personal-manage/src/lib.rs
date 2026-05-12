@@ -48,7 +48,9 @@ use frame_support::{
 use frame_system::pallet_prelude::*;
 use sp_runtime::traits::Hash;
 use sp_std::prelude::*;
-use votingengine::{InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId};
+use votingengine::{
+    InternalVoteEngine, InternalVoteResultCallback, ProposalExecutionOutcome, SubjectId,
+};
 
 pub(crate) type BalanceOf<T> =
     <<T as pallet::Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
@@ -118,7 +120,8 @@ pub mod pallet {
     /// 个人多签账户配置。key 为 personal_duoqian_address。
     ///
     /// 中文注释:本表统一保存 creator/account_name/created_at/status。
-    /// 管理员集合、管理员数量和普通阈值只允许从 admins-change 读取。
+    /// 管理员集合、管理员数量只允许从 admins-change 读取；
+    /// 普通动态阈值只允许从投票引擎 internal-vote 读取。
     #[pallet::storage]
     #[pallet::getter(fn personal_duoqians)]
     pub type PersonalDuoqians<T: Config> =
@@ -280,10 +283,17 @@ pub mod pallet {
             origin: OriginFor<T>,
             account_name: AccountNameOf<T>,
             duoqian_admins: DuoqianAdminsOf<T>,
+            regular_threshold: u32,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            crate::create::do_propose_create::<T>(who, account_name, duoqian_admins, amount)
+            crate::create::do_propose_create::<T>(
+                who,
+                account_name,
+                duoqian_admins,
+                regular_threshold,
+                amount,
+            )
         }
 
         /// 发起"关闭个人多签账户"提案。
@@ -336,10 +346,11 @@ pub mod pallet {
             <T as frame_system::Config>::SS58Prefix::get().to_le_bytes()
         }
 
-        /// 校验管理员集合并返回链端派生的普通业务阈值。
+        /// 校验管理员集合和用户输入的普通业务动态阈值。
         pub(crate) fn ensure_admin_config(
             who: &T::AccountId,
             duoqian_admins: &DuoqianAdminsOf<T>,
+            regular_threshold: u32,
         ) -> Result<u32, DispatchError> {
             let admin_count = duoqian_admins.len() as u32;
             ensure!(admin_count >= 2, Error::<T>::InvalidAdminCount);
@@ -347,17 +358,18 @@ pub mod pallet {
                 admin_count <= <T as admins_change::Config>::MaxPersonalAccountAdmins::get(),
                 Error::<T>::InvalidAdminCount
             );
+            ensure!(
+                regular_threshold > 0
+                    && regular_threshold <= admin_count
+                    && u64::from(regular_threshold).saturating_mul(2) > u64::from(admin_count),
+                Error::<T>::InvalidThreshold
+            );
             Self::ensure_unique_admins(duoqian_admins)?;
             ensure!(
                 duoqian_admins.iter().any(|admin| admin == who),
                 Error::<T>::PermissionDenied
             );
-            admins_change::derived_threshold(
-                admins_change::AdminSubjectKind::PersonalDuoqian,
-                votingengine::types::ORG_REN,
-                admin_count,
-            )
-            .ok_or(Error::<T>::InvalidThreshold.into())
+            Ok(regular_threshold)
         }
 
         pub(crate) fn ensure_unique_admins(
@@ -477,7 +489,7 @@ impl<T: pallet::Config> traits::PersonalMultisigQuery<T::AccountId> for pallet::
         let org = votingengine::types::ORG_REN;
         let admins = admins_change::Pallet::<T>::active_subject_admins(org, subject)?;
         let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject)?;
-        let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, subject)?;
+        let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, subject)?;
         Some(primitives::types::MultisigConfigSnapshot {
             admins,
             admin_count,

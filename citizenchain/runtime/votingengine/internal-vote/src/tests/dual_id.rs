@@ -11,13 +11,13 @@ use super::*;
 // 这些 storage 在 votingengine 主 crate;dual_id 测试通过 super::* 拿到 votingengine::pallet 的 re-import。
 
 /// 走 `_with_data` 路径触发 `register_proposal_data` 与反向索引写入。
-fn create_internal_proposal_with_data_via_engine(
+fn create_general_internal_proposal_with_data_via_engine(
     who: AccountId32,
     org: u8,
     institution: SubjectId,
     module_tag: &[u8],
 ) -> u64 {
-    <InternalVote as InternalVoteEngine<AccountId32>>::create_internal_proposal_with_data(
+    <InternalVote as InternalVoteEngine<AccountId32>>::create_general_internal_proposal_with_data(
         who,
         org,
         institution,
@@ -89,7 +89,7 @@ fn year_proposal_counter_no_longer_capped_at_one_million() {
 #[test]
 fn reverse_indexes_populated_after_register_proposal_data() {
     new_test_ext().execute_with(|| {
-        let id = create_internal_proposal_with_data_via_engine(
+        let id = create_general_internal_proposal_with_data_via_engine(
             nrc_admin(0),
             ORG_NRC,
             nrc_pid(),
@@ -113,7 +113,7 @@ fn reverse_indexes_populated_after_register_proposal_data() {
 #[test]
 fn final_cleanup_removes_indexes_and_display_id() {
     new_test_ext().execute_with(|| {
-        let id = create_internal_proposal_with_data_via_engine(
+        let id = create_general_internal_proposal_with_data_via_engine(
             nrc_admin(0),
             ORG_NRC,
             nrc_pid(),

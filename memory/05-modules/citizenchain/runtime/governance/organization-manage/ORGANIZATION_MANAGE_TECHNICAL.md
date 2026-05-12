@@ -1,13 +1,13 @@
 # DUOQIAN_TECHNICAL
 
 模块：`organization-manage`  
-最新更新：2026-05-10，admins-change 交互统一为账户级主体 + 机构账户 org。
+最新更新：2026-05-11，动态阈值由用户输入并交 `internal-vote` 保存，业务模块不再传本次投票通过阈值。
 
 ## 1. 当前边界
 
 `organization-manage` 负责链上注册机构和机构账户的创建、激活、关闭提案，以及与内部投票引擎 `ORG_PUP / ORG_OTH` 的对接。
 
-管理员、阈值和管理员人数的长期真源是 `admins-change::Subjects`；本模块只负责机构归属、机构账户、资金和生命周期。
+管理员和管理员人数的长期真源是 `admins-change::Subjects`；动态阈值长期真源是 `internal-vote::ActiveDynamicThresholds`。本模块只负责机构归属、机构账户、资金和生命周期。
 
 ADR-015 后，机构管理按账户级治理：
 
@@ -19,7 +19,7 @@ ADR-015 后，机构管理按账户级治理：
 - 省储行质押账户永远不可操作，不得进入本模块账户治理。
 - 注册机构账户管理员数量范围为 `2..=1989`。
 - 注册机构账户创建和关闭必须由该账户管理员全员投票通过。
-- 动态账户阈值不再由用户自由输入，链端按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
+- 动态账户普通业务阈值由用户在注册或管理员变更时输入，投票引擎统一校验 `threshold * 2 > admin_count && threshold <= admin_count` 并保存。
 
 ## 2. 目录结构
 
@@ -48,7 +48,7 @@ ADR-015 后，机构管理按账户级治理：
 
 核心 storage：
 
-- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`admin_org`、机构状态。ADR-015 后不得作为机构级管理员和阈值真源。
+- `Institutions<sfid_number, InstitutionInfo>`：机构归属、主账户、费用账户、`admin_org`、机构状态。ADR-015 后不得作为机构级管理员真源；动态阈值真源在 `internal-vote`。
 - `InstitutionAccounts<(sfid_number, account_name), InstitutionAccountInfo>`：机构下每个账户名对应的地址、初始余额、状态。
 - `PendingInstitutionCreate<proposal_id, CreateInstitutionAction>`：创建提案 pending 期间的 reserve 资金和账户列表。
 
@@ -60,8 +60,9 @@ ADR-015 后，机构管理按账户级治理：
 - 机构多签创建提案发起时，主账户地址会转换为 `InstitutionAccount(0x05)` 的 `SubjectId`，并按 `admin_org=ORG_PUP/ORG_OTH` 通过 `admins-change::SubjectLifecycle` 写入 `Pending` 主体。
 - 个人多签创建提案发起时，个人多签地址会通过 `admins-change::SubjectLifecycle` 写入 `PersonalDuoqian` 类型的 `Pending` 主体。
 - 创建投票通过后自动执行激活主体；自动执行暂时失败时提案保持 `STATUS_PASSED` 并进入 votingengine retry state，最终 `EXECUTION_FAILED` 时统一清理主体和 pending 数据；多签关闭后关闭主体。
-- 创建机构多签/个人多签时，投票提案必须走 `VotingEngine::create_pending_subject_internal_proposal_with_snapshot_data`，由显式管理员列表和阈值先锁定投票快照，再在同一事务中调用 `SubjectLifecycle::create_pending_subject_for_proposal` 写 Pending 主体、绑定 owner/data/meta。
-- 关闭多签和其他普通业务必须走 `VotingEngine::create_internal_proposal_with_data`，只接受 Active 主体。
+- 创建机构多签时，投票提案必须走 `InternalVoteEngine::create_registered_subject_create_proposal_with_data`，由投票引擎用显式管理员列表锁定全员创建投票快照，并保存用户填写的动态阈值。
+- 关闭多签必须走 `InternalVoteEngine::create_lifecycle_internal_proposal_with_data`，由投票引擎按 Active 管理员快照写全员关闭投票阈值。
+- 其他普通业务必须走 `InternalVoteEngine::create_general_internal_proposal_with_data`，只接受 Active 主体和 active 动态阈值。
 
 ## 5. 机构创建入口
 
@@ -90,7 +91,7 @@ propose_create_institution(
 - `admin_org` 只能是 `ORG_PUP(4)` 或 `ORG_OTH(5)`。
 - 每个账户初始余额都必须 `>= MinCreateAmount`，当前配置语义为最低 1.11 元。
 - 账户名不得重复。
-- 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；阈值由链端派生，不再由用户输入。
+- 管理员数量必须 `>= 2`。ADR-015 后注册机构账户管理员数量必须 `<= 1989`；动态阈值由用户输入，必须严格过半且不得超过管理员数量。
 - 创建者必须在管理员列表中。
 - SFID 登记 nonce 必须未使用，签名必须通过 `SfidInstitutionVerifier`。
 - `SfidInstitutionVerifier` 的注册业务字段只覆盖 `sfid_number / institution_name / account_names[]`。
@@ -135,9 +136,9 @@ propose_create_institution(
 
 runtime 适配：
 
-- `RuntimeInternalAdminProvider / RuntimeInternalThresholdProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
-- 普通业务路径读取 `admins-change` 的 Active-only API。
-- 创建多签主体路径读取 `admins-change` 的 Pending 快照 API。
+- `RuntimeInternalAdminProvider / RuntimeInternalAdminCountProvider` 统一读取 `admins-change`。
+- 普通业务路径读取 `admins-change` 的 Active-only 管理员 API，并从 `internal-vote` 读取动态阈值。
+- 创建多签主体路径把初始管理员列表和动态阈值直接交给 `internal-vote`。
 - `DuoqianSfidAccountQuery::is_admin_of` 通过 `resolve_admin_subject_for_account` 映射到账户级管理员主体，并通过 `resolve_admin_org_for_account` 读取 `ORG_PUP / ORG_OTH`。
 - `DuoqianSfidAccountQuery::is_active` 对 SFID 机构账户读取 `InstitutionAccounts` 的激活状态。
 - `DuoqianSfidAccountQuery::is_clearing_bank_eligible` 不再读取机构类型元数据;SFID 负责 `eligible-search` 候选筛选,链上只确认地址属于已注册且 Active 的 SFID 机构账户。

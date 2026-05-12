@@ -35,27 +35,41 @@ fn mul_perbill_round_handles_u128_max_without_saturating_distortion() {
 }
 
 #[test]
-fn custom_fee_with_tip_handles_all_extract_results() {
+fn custom_fee_with_tip_handles_all_fee_kinds() {
     new_test_ext().execute_with(|| {
         let who = account(1);
         let call = sample_call();
         let info = call.get_dispatch_info();
 
-        // Amount：50_000 * 0.1% = 50 分，+ tip(3) => 53 分
-        let fee_amount =
-            custom_fee_with_tip::<Test, Balances, AmountExtractorAmount>(&who, &call, &info, 3)
-                .expect("amount fee must be computable");
+        // OnchainAmount：50_000 * 0.1% = 50 分，+ tip(3) => 53 分
+        let fee_amount = custom_fee_with_tip::<Test, Balances, FeeKindExtractorOnchainAmount>(
+            &who, &call, &info, 3,
+        )
+        .expect("onchain amount fee must be computable");
         assert_eq!(fee_amount, 53);
 
-        // NoAmount：不收基础费，仅返回 tip
-        let fee_no_amount =
-            custom_fee_with_tip::<Test, Balances, AmountExtractorNoAmount>(&who, &call, &info, 7)
-                .expect("no-amount call must only charge tip");
-        assert_eq!(fee_no_amount, 7);
+        // VoteFlat：投票 / 治理固定 1 元，+ tip(4) => 104 分
+        let fee_vote =
+            custom_fee_with_tip::<Test, Balances, FeeKindExtractorVoteFlat>(&who, &call, &info, 4)
+                .expect("vote flat fee must be computable");
+        assert_eq!(fee_vote, 104);
 
-        // Unknown：拒绝交易，避免漏提取手续费
+        // OffchainFee：清算手续费在清算模块执行，本层仅保留 tip
+        let fee_offchain = custom_fee_with_tip::<Test, Balances, FeeKindExtractorOffchainFee>(
+            &who, &call, &info, 5,
+        )
+        .expect("offchain fee kind must only charge tip here");
+        assert_eq!(fee_offchain, 5);
+
+        // Free：不收基础费，仅返回 tip
+        let fee_free =
+            custom_fee_with_tip::<Test, Balances, FeeKindExtractorFree>(&who, &call, &info, 7)
+                .expect("free call must only charge tip");
+        assert_eq!(fee_free, 7);
+
+        // Unknown：拒绝交易，避免新增调用漏归类
         let unknown_err =
-            custom_fee_with_tip::<Test, Balances, AmountExtractorUnknown>(&who, &call, &info, 0)
+            custom_fee_with_tip::<Test, Balances, FeeKindExtractorUnknown>(&who, &call, &info, 0)
                 .expect_err("unknown extract result should be rejected");
         assert_eq!(unknown_err, InvalidTransaction::Call.into());
     });
@@ -63,7 +77,7 @@ fn custom_fee_with_tip_handles_all_extract_results() {
 
 #[test]
 fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
-    type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorTiny, ()>;
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, ()>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -86,7 +100,8 @@ fn withdraw_and_can_withdraw_use_default_payer_and_min_fee() {
 
 #[test]
 fn withdraw_uses_custom_fee_payer() {
-    type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorTiny, FeePayerAsAccount2>;
+    type Adapter =
+        OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, FeePayerAsAccount2>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -105,7 +120,7 @@ fn withdraw_uses_custom_fee_payer() {
 
 #[test]
 fn withdraw_no_amount_without_tip_returns_none_and_no_fee_paid_event() {
-    type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorNoAmount, ()>;
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorFree, ()>;
 
     new_test_ext().execute_with(|| {
         let who = account(1);
@@ -126,7 +141,7 @@ fn withdraw_no_amount_without_tip_returns_none_and_no_fee_paid_event() {
 
 #[test]
 fn can_withdraw_and_withdraw_fail_when_insufficient_balance() {
-    type Adapter = OnchainChargeAdapter<Balances, (), AmountExtractorTiny, ()>;
+    type Adapter = OnchainChargeAdapter<Balances, (), FeeKindExtractorTinyOnchainAmount, ()>;
 
     new_test_ext().execute_with(|| {
         let poor = account(3);
@@ -583,7 +598,7 @@ fn correct_and_deposit_does_not_refund_overpayment() {
             MockNrcAccountProviderNone,
             MockSafetyFundAccountProvider,
         >,
-        AmountExtractorAmount,
+        FeeKindExtractorOnchainAmount,
         (),
     >;
 
@@ -653,7 +668,7 @@ fn correct_and_deposit_fee_none_is_noop() {
             MockNrcAccountProvider,
             MockSafetyFundAccountProvider,
         >,
-        AmountExtractorAmount,
+        FeeKindExtractorOnchainAmount,
         (),
     >;
 
@@ -692,7 +707,7 @@ fn tip_is_routed_with_fee_using_same_distribution() {
             MockNrcAccountProvider,
             MockSafetyFundAccountProvider,
         >,
-        AmountExtractorTiny,
+        FeeKindExtractorTinyOnchainAmount,
         (),
     >;
 

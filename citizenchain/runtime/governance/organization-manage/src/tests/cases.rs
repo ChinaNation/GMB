@@ -259,7 +259,7 @@ fn create_executes_when_vote_reaches_threshold_with_initial_accounts() {
             signer_pubkey(),
         ));
         let pid = last_proposal_id();
-        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         // 执行成功
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
@@ -309,7 +309,7 @@ fn create_rejected_releases_reserve_and_no_storage_residue() {
         let pid = last_proposal_id();
 
         // 一票否决,创建提案要求全员通过 → 立刻 REJECTED
-        assert_ok!(cast_no_votes(&admin_accounts, 1, pid));
+        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
         assert_eq!(proposal.status, STATUS_REJECTED);
@@ -514,7 +514,11 @@ fn create_and_activate_institution(
         signer_pubkey(),
     ));
     let pid = last_proposal_id();
-    assert_ok!(cast_yes_votes(&admin_accounts, admin_count as usize, pid));
+    assert_ok!(cast_yes_votes(
+        &admin_accounts[1..],
+        admin_count.saturating_sub(1) as usize,
+        pid
+    ));
 
     let main = OrganizationManage::derive_institution_address(
         sfid.as_slice(),
@@ -555,7 +559,7 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
             beneficiary_acc.clone(),
         ));
         let pid = last_proposal_id();
-        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -655,7 +659,7 @@ fn cleanup_rejected_proposal_only_after_engine_rejected() {
         );
 
         // 一票否决进入 REJECTED
-        assert_ok!(cast_no_votes(&admin_accounts, 1, pid));
+        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
         // 调 cleanup 仍应 Ok(虽然 Executor 已经 cleanup 过,这里是幂等再调)
         assert_ok!(OrganizationManage::cleanup_rejected_proposal(
             RuntimeOrigin::signed(admin(0)),
@@ -704,7 +708,7 @@ fn existential_deposit_is_preserved_after_close() {
             beneficiary_acc.clone(),
         ));
         let pid = last_proposal_id();
-        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         // 主账户转空(AllowDeath),beneficiary 拿到 990
         assert_eq!(Balances::free_balance(&main), 0);

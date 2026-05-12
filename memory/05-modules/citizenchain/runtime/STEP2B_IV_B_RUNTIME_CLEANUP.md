@@ -39,9 +39,9 @@ Step 3 再补。
 
 ### 1.2 Runtime configs(`runtime/src/configs/mod.rs`)
 
-- `OnchainTxAmountExtractor` 删除 5 处老分支(`submit_offchain_batch` / `enqueue_offchain_batch`
+- `RuntimeFeeKindClassifier` 删除 5 处老分支(`submit_offchain_batch` / `enqueue_offchain_batch`
   / `process_queued_batch` / 及其引用 `QueuedBatches` 的 `FeePayer` 分支)。老 Call 删了
-  Pattern 永远不命中,但保留的 `_ => Amount(100000)` 兜底仍对未来扩展安全。
+  Pattern 永远不命中；当前新增 Call 必须显式归入五类费用模型，不再保留金额兜底。
 - `RuntimeFeePayerExtractor` 清理后只剩 `submit_offchain_batch_v2 → fee_account_of(institution_main)`
   一条,其余 Call 走 `_ => None` 个人付费。
 - 删除 `impl offchain_transaction::ProtectedSourceChecker for RuntimeProtectedSourceChecker`(ProtectedSourceChecker trait 已从 pallet 移除)。

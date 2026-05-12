@@ -19,17 +19,11 @@ fn nrc_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            1_000,
-            &[],
-            nrc_admin(0),
         ));
 
         // 转账已执行（含手续费 10）
@@ -57,17 +51,11 @@ fn prc_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = prc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &prc_pass_pairs(),
-            prc_pass_count(),
+            &vote_pairs[1..],
+            prc_pass_count().saturating_sub(1),
             pid,
-            ORG_PRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            2_000,
-            &[],
-            prc_admin(0),
         ));
 
         assert_eq!(Balances::free_balance(&inst_account), 7_990);
@@ -93,17 +81,11 @@ fn prb_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = prb_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &prb_pass_pairs(),
-            prb_pass_count(),
+            &vote_pairs[1..],
+            prb_pass_count().saturating_sub(1),
             pid,
-            ORG_PRB,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            3_000,
-            &[],
-            prb_admin(0),
         ));
 
         assert_eq!(Balances::free_balance(&inst_account), 6_990);
@@ -143,13 +125,13 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
                 org: ORG_REN,
                 kind: admins_change::AdminSubjectKind::PersonalDuoqian,
                 admins,
-                threshold: 2,
                 creator: registered_duoqian_admin(0),
                 created_at: 1,
                 updated_at: 1,
                 status: admins_change::AdminSubjectStatus::Active,
             },
         );
+        internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, institution, 2);
         let _ = Balances::deposit_creating(&inst_account, 10_000);
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -162,18 +144,8 @@ fn registered_duoqian_transfer_executes_when_internal_vote_reaches_threshold() {
         ));
         let pid = last_proposal_id();
 
-        assert_ok!(cast_transfer_votes_n(
-            &registered_duoqian_pairs(2),
-            2,
-            pid,
-            ORG_REN,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            1_500,
-            &[],
-            registered_duoqian_admin(0),
-        ));
+        let vote_pairs = registered_duoqian_pairs(2);
+        assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
         assert_eq!(Balances::free_balance(&inst_account), 8_490);
         assert_eq!(Balances::free_balance(&dest), 1_500);
@@ -212,18 +184,8 @@ fn institution_account_subject_transfer_executes_when_internal_vote_reaches_thre
         ));
         let pid = last_proposal_id();
 
-        assert_ok!(cast_transfer_votes_n(
-            &registered_institution_pairs(2),
-            2,
-            pid,
-            ORG_OTH,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            2_000,
-            &[],
-            registered_institution_admin(0),
-        ));
+        let vote_pairs = registered_institution_pairs(2);
+        assert_ok!(cast_transfer_votes_n(&vote_pairs[1..], 1, pid,));
 
         assert_eq!(Balances::free_balance(&inst_account), 7_990);
         assert_eq!(Balances::free_balance(&dest), 2_000);
@@ -389,7 +351,6 @@ fn multiple_proposals_allowed_within_limit() {
 fn executed_transfer_does_not_block_new_proposal() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
         let dest = beneficiary();
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -402,17 +363,11 @@ fn executed_transfer_does_not_block_new_proposal() {
         ));
         let pid1 = last_proposal_id();
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid1,
-            ORG_NRC,
-            institution,
-            inst_account,
-            dest.clone(),
-            100,
-            &[],
-            nrc_admin(0),
         ));
 
         // 转账已执行，可以创建新提案
@@ -489,17 +444,11 @@ fn existential_deposit_is_preserved() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            9_989,
-            &[],
-            nrc_admin(0),
         ));
 
         assert_eq!(Balances::free_balance(&inst_account), 1);
@@ -539,17 +488,11 @@ fn retry_passed_transfer_succeeds_after_failed_auto_execution() {
 
         // 投票达阈值后自动执行,但 try_execute_transfer 因余额不足失败。
         // 提案仍为 PASSED,转账未执行。
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            9_000,
-            &[],
-            nrc_admin(0),
         ));
         assert_eq!(
             votingengine::Pallet::<Test>::proposals(pid)
@@ -626,17 +569,11 @@ fn retry_passed_transfer_rejects_non_admin() {
             frame_support::traits::ExistenceRequirement::KeepAlive,
         ));
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            100,
-            &[],
-            nrc_admin(0),
         ));
 
         // 自动执行失败，补充余额
@@ -656,7 +593,6 @@ fn retry_passed_transfer_rejects_non_admin() {
 fn executed_transfer_cannot_be_executed_again() {
     new_test_ext().execute_with(|| {
         let institution = nrc_pallet_id();
-        let inst_account = institution_account(institution);
         let dest = beneficiary();
 
         assert_ok!(DuoqianTransfer::propose_transfer(
@@ -669,17 +605,11 @@ fn executed_transfer_cannot_be_executed_again() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account,
-            dest,
-            1_000,
-            &[],
-            nrc_admin(0),
         ));
 
         // 自动执行成功，状态变为 EXECUTED
@@ -764,17 +694,11 @@ fn fee_respects_minimum_on_small_amount() {
         ));
         let pid = last_proposal_id();
 
+        let vote_pairs = nrc_pass_pairs();
         assert_ok!(cast_transfer_votes_n(
-            &nrc_pass_pairs(),
-            nrc_pass_count(),
+            &vote_pairs[1..],
+            nrc_pass_count().saturating_sub(1),
             pid,
-            ORG_NRC,
-            institution,
-            inst_account.clone(),
-            dest.clone(),
-            1,
-            &[],
-            nrc_admin(0),
         ));
 
         // 余额 10_000 - 1(转账) - 10(最低手续费) = 9_989

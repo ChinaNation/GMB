@@ -2,8 +2,8 @@
 //!
 //! 第一类是"账户基本信息"——`DuoqianStatus` / `DuoqianAccount`,
 //! 由 `PersonalDuoqians` storage map 引用,只描述个人多签的创建者、
-//! 账户名、创建区块和账户状态。管理员列表和普通阈值的唯一真源是
-//! `admins-change`。
+//! 账户名、创建区块和账户状态。管理员列表的唯一真源是 `admins-change`，
+//! 普通动态阈值的唯一真源是 `internal-vote`。
 //!
 //! 第二类是"提案业务数据"——`CreateDuoqianAction` / `CloseDuoqianAction`,
 //! 在投票引擎 `ProposalData` 里 SCALE 编码存放,投票通过后由

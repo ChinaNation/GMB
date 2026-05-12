@@ -3,21 +3,22 @@
 ## 0. 功能需求
 ### 0.1 核心职责
 `onchain-transaction` 的功能需求是：
-- 对链上交易按"交易金额 + 最低费"规则收取手续费。
+- 按五类费用模型收取交易基础费：投票交易费、链上交易费、链下交易费、免费、未知拒绝。
 - 支持按制度规则把手续费分配给全节点、国储会手续费账户与安全基金账户。
-- 支持代付账户与交易金额提取策略由 runtime 注入。
+- 支持代付账户与交易费用分类策略由 runtime 注入。
 
 ### 0.2 功能边界
 - 本模块是运行时手续费适配 crate，不是独立 pallet，不维护自己的 storage。
-- 本模块不负责识别"哪些交易属于链上交易"，该判断由 runtime 在 `CallAmount` / `CallFeePayer` 中注入。
-- 本模块不负责默认 weight fee、length fee、动态费率调整等 `pallet-transaction-payment` 常规策略，而是覆盖为"按业务金额收费"的制度模型。
+- 本模块不负责识别"哪些交易属于哪类费用"，该判断由 runtime 在 `CallFeeKind` / `CallFeePayer` 中注入。
+- 本模块不负责默认 weight fee、length fee、动态费率调整等 `pallet-transaction-payment` 常规策略，而是覆盖为五类费用制度模型。
 - 本模块不负责执行后退款；一旦扣费成功，最终只做分账，不回退已扣手续费。
 
 ### 0.3 计费规则需求
-- 当 `CallAmount` 返回 `Amount(v)` 时，基础手续费必须按 `v * ONCHAIN_FEE_RATE` 计算，并按"分"四舍五入。
-- 当按比例计算结果低于 `ONCHAIN_MIN_FEE` 时，必须提升到最低费。
-- 当 `CallAmount` 返回 `NoAmount` 时，仅允许收取 tip，不收基础手续费。
-- 当 `CallAmount` 返回 `Unknown` 时，必须拒绝交易，避免制度内应收费交易被漏收。
+- 当 `CallFeeKind` 返回 `VoteFlat` 时，基础手续费必须固定为 `VOTE_FLAT_FEE`（100 分 = 1 元）。
+- 当 `CallFeeKind` 返回 `OnchainAmount(v)` 时，基础手续费必须按 `v * ONCHAIN_FEE_RATE` 计算，并按"分"四舍五入；低于 `ONCHAIN_MIN_FEE` 时提升到最低费。
+- 当 `CallFeeKind` 返回 `OffchainFee(v)` 时，表示链下清算手续费由 `offchain-transaction` 结算执行，本模块不重复收取基础费。
+- 当 `CallFeeKind` 返回 `Free` 时，仅允许收取 tip，不收基础手续费。
+- 当 `CallFeeKind` 返回 `Unknown` 时，必须拒绝交易，避免制度内应收费交易被漏收。
 - 最终扣费金额必须等于 `base_fee + tip`，且 `can_withdraw_fee` 与 `withdraw_fee` 使用完全一致的计算口径。
 
 ### 0.4 分账规则需求
@@ -34,7 +35,7 @@
 - 协议明确不做执行后退款，`correct_and_deposit_fee` 只负责最终分账。
 
 ### 0.6 可配置与可扩展需求
-- Runtime 必须可以替换交易金额提取逻辑（`CallAmount`）。
+- Runtime 必须可以替换交易费用分类逻辑（`CallFeeKind`）。
 - Runtime 必须可以替换代付账户判定逻辑（`CallFeePayer`）。
 - Runtime 必须可以替换 NRC 收款账户来源（`NrcAccountProvider`）。
 - Runtime 必须可以替换安全基金账户来源（`SafetyFundAccountProvider`）。
@@ -57,7 +58,7 @@
 ## 1. 模块定位
 `onchain-transaction` 是运行时手续费适配模块（crate），不是 FRAME pallet。
 它提供两类核心能力：
-- `OnchainChargeAdapter`：实现 `OnChargeTransaction`，负责"按金额收费 + 扣费"。
+- `OnchainChargeAdapter`：实现 `OnChargeTransaction`，负责"五类费用模型 + 扣费"。
 - `OnchainFeeRouter`：实现 `OnUnbalanced`，负责"已扣手续费的分账路由"。
 
 代码位置：
@@ -79,11 +80,13 @@
 入口函数：`custom_fee_with_tip(...)`
 
 计算规则：
-1. 由 `CallAmount` 抽象提取交易金额：
-   - `Amount(v)`：按金额收费
-   - `NoAmount`：仅收 tip
+1. 由 `CallFeeKind` 抽象返回费用类别：
+   - `VoteFlat`：固定 `VOTE_FLAT_FEE`
+   - `OnchainAmount(v)`：按链上金额计算
+   - `OffchainFee(v)`：链下清算费已由清算模块执行，本层基础费为 0
+   - `Free`：基础费为 0
    - `Unknown`：拒绝交易（`InvalidTransaction::Call`）
-2. 将金额转为 `u128` 后调用统一公开函数 `calculate_onchain_fee(amount)`。
+2. `OnchainAmount(v)` 将金额转为 `u128` 后调用统一公开函数 `calculate_onchain_fee(amount)`。
 3. `calculate_onchain_fee` 内部按费率计算基础费：`amount * ONCHAIN_FEE_RATE`，使用四舍五入（`mul_perbill_round`）。
 4. 应用最低费：`max(by_rate, ONCHAIN_MIN_FEE)`。
 5. 最终费用：`base_fee + tip`。
@@ -96,7 +99,7 @@
 说明：`custom_fee_with_tip` 与 `duoqian-*` 预扣逻辑共用 `calculate_onchain_fee`，避免 transaction-payment 实扣规则与业务 pallet 预扣规则漂移。`mul_perbill_round` 会先拆分整分量和尾量，避免直接执行 `amount * parts`；整分量乘法使用 `saturating_mul` 作为防御性保护，实际按 `Perbill` 约束不会改变结果。
 
 `transfer_all` 特殊说明：
-`OnchainTxAmountExtractor` 对 `transfer_all` 按扣费前的 `reducible_balance` 提取金额。这是有意设计——按用户"转出全部"的意图金额收费，实际转出额 = 可用余额 - 手续费。如果改为按扣费后金额收费会产生循环依赖（手续费取决于转出额，转出额取决于手续费）。
+`RuntimeFeeKindClassifier` 对 `transfer_all` 按扣费前的 `reducible_balance` 提取金额。这是有意设计——按用户"转出全部"的意图金额收费，实际转出额 = 可用余额 - 手续费。如果改为按扣费后金额收费会产生循环依赖（手续费取决于转出额，转出额取决于手续费）。
 
 ---
 
@@ -169,7 +172,7 @@
 
 ## 7. 扩展点（Runtime 注入）
 模块通过 trait 注入业务差异：
-- `CallAmount`：交易金额提取策略
+- `CallFeeKind`：交易费用分类策略
 - `CallFeePayer`：可选代付策略
 - `NrcAccountProvider`：NRC 手续费账户来源
 - `SafetyFundAccountProvider`：安全基金账户来源
@@ -177,7 +180,7 @@
 
 这使模块可在不同 runtime 配置下复用。
 
-当前 CitizenChain runtime 的治理类金额提取规则中，`InternalVote::cast(proposal_id, approve)` 返回 `Amount(100_000)`，按固定 1 元/次作为管理员主动投票操作计费。若该票触发内部治理提案达阈值，后续 executor 自动回调仍属于同一笔 extrinsic 的执行路径，不再单独产生第二笔 `CallAmount` 提取。
+当前 CitizenChain runtime 的治理类交易中，`InternalVote::cast(proposal_id, approve)` 返回 `VoteFlat`，按固定 1 元/次作为管理员主动投票操作计费。若该票触发内部治理提案达阈值，后续 executor 自动回调仍属于同一笔 extrinsic 的执行路径，不再单独产生第二笔交易扣费。
 
 ---
 
@@ -196,9 +199,9 @@
 ## 9. 测试覆盖（当前）
 当前单测覆盖 20 项，包含：
 - 费率四舍五入与最低费
-- `Amount/NoAmount/Unknown` 三类金额提取行为
+- `VoteFlat / OnchainAmount / OffchainFee / Free / Unknown` 五类费用行为
 - 默认扣费与自定义代付
-- `NoAmount && tip == 0` 零费用短路，不扣费且不发 `FeePaid`
+- `Free && tip == 0` 零费用短路，不扣费且不发 `FeePaid`
 - 余额不足失败路径
 - Router 正常分配（全节点 + NRC 手续费账户 + 安全基金）
 - 作者未绑定/作者缺失路径及对应 `FeeShareBurnt` 事件

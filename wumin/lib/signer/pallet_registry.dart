@@ -90,8 +90,8 @@ class PalletRegistry {
   // ---- PersonalManage (7) ----
   // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt",
   // ACTION enum 独立命名空间(ACTION_CREATE=0/ACTION_CLOSE=1)。
-  // propose_create(account_name, duoqian_admins, amount):
-  // admin_count 由 admins 长度派生,threshold 由链端 admins-change 动态派生。
+  // propose_create(account_name, duoqian_admins, regular_threshold, amount):
+  // admin_count 由 admins 长度派生,regular_threshold 由用户输入且必须严格过半。
   static const int personalManagePallet = 7;
   static const int proposeCreatePersonalCall = 0;
   static const int proposeClosePersonalCall = 1;

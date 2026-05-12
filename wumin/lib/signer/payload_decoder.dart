@@ -966,7 +966,7 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // PersonalManage(7) / propose_create(0)
-  // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u128 amount]
+  // 格式：[7][0][BoundedVec account_name][BoundedVec<AccountId32> admins][u32 regular_threshold][u128 amount]
   // B 阶段拆分(2026-05-06):个人多签独立 pallet,MODULE_TAG = b"per-mgmt"。
   // 历史 OrganizationManage(17) call=3 已废除(留洞不复用)。
   // ---------------------------------------------------------------------------
@@ -990,10 +990,17 @@ class PayloadDecoder {
     if (adminsLen < 2 || adminsLen > 64) return null;
     if (offset + adminsLen * 32 > bytes.length) return null;
     offset += adminsLen * 32;
-    if (offset + 16 != bytes.length) return null;
 
-    final regularThreshold = _dynamicThreshold(adminsLen);
-    if (regularThreshold == null) return null;
+    if (offset + 4 + 16 != bytes.length) return null;
+    final regularThreshold = bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
+    offset += 4;
+    final minThreshold = _minimumRegularThreshold(adminsLen);
+    if (regularThreshold < minThreshold || regularThreshold > adminsLen) {
+      return null;
+    }
 
     // amount: u128
     final amountFen = _readU128Le(bytes, offset);
@@ -1002,7 +1009,7 @@ class PayloadDecoder {
     return DecodedPayload(
       action: 'propose_create_personal',
       summary:
-          '创建个人多签「$accountName」（$adminsLen 管理员，日常阈值 $regularThreshold，创建全员通过，入金 $amountYuan 元）',
+          '创建个人多签「$accountName」（$adminsLen 管理员，普通阈值 $regularThreshold，注册全员同意，入金 $amountYuan 元）',
       fields: {
         'account_name': accountName,
         'admin_count': adminsLen.toString(),
@@ -1421,10 +1428,8 @@ class PayloadDecoder {
     return value;
   }
 
-  static int? _dynamicThreshold(int adminCount) {
-    if (adminCount < 2) return null;
-    if (adminCount == 2) return 2;
-    return (adminCount + 1) ~/ 2;
+  static int _minimumRegularThreshold(int adminCount) {
+    return (adminCount ~/ 2) + 1;
   }
 
   /// 解码 SCALE Compact<BigInt>，返回 (值, 消耗字节数)。

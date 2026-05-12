@@ -151,6 +151,13 @@ lib/rpc/
   - `future / invalid / dropped / usurped / retracted / finalityTimeout / timeout / error`：交易未能按预期确认，业务页面必须停止“投票中”等待态并给出可操作提示；其中 `timeout` 只表示 60 秒内完全没有收到交易池状态，若已收到 `ready/broadcast` 但尚未出块，则继续交由 nonce 轮询确认
 - 业务层不得把 `txHash` 返回渲染为“投票成功”；链上投票是否生效必须继续读取对应 storage（如 `InternalVote::InternalVotesByAccount`）确认
 
+`ChainRpc.submitExtrinsicAndWaitForInBlock(Uint8List encoded, {TxPoolWatchCallback? onWatchEvent})`
+
+- 走 `author_submitAndWatchExtrinsic` 提交并等待 `inBlock / finalized` 状态
+- 返回本地计算的交易哈希和入块状态中的区块哈希
+- 用于提案创建等必须确认区块事件的业务；调用方拿到区块哈希后必须继续读取 `System.Events`
+- 该方法仍不等价于业务成功，业务成功由具体 pallet 事件决定
+
 ### 6.6 Storage Key 计算
 
 `System.Account` 存储映射的 key 结构：

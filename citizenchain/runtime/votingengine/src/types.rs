@@ -31,7 +31,7 @@ pub const ORG_NRC: u8 = 0;
 pub const ORG_PRC: u8 = 1;
 /// 治理机构:省储行
 pub const ORG_PRB: u8 = 2;
-/// 注册多签:个人多签账户(管理员与阈值由 admins-change 统一主体表提供)
+/// 注册多签:个人多签账户(管理员由 admins-change 提供,动态阈值由 internal-vote 保存)
 pub const ORG_REN: u8 = 3;
 /// 注册多签:公权机构账户(政府/教育/司法/立法/监察)
 pub const ORG_PUP: u8 = 4;

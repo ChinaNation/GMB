@@ -35,8 +35,11 @@
 
 PersonalManage 交易载荷：
 
-- `PersonalManage::propose_create`：pallet `7`，call `0`。
+- `PersonalManage::propose_create`：pallet `7`，call `0`，字段顺序固定为
+  `account_name / duoqian_admins / regular_threshold / amount`。
 - `PersonalManage::propose_close`：pallet `7`，call `1`。
+- `regular_threshold` 为用户输入的普通提案阈值，App 侧校验范围为
+  `floor(admin_count / 2) + 1 ..= admin_count`；注册提案通过阈值固定为全员同意。
 
 PersonalManage ProposalData：
 
@@ -48,6 +51,28 @@ PersonalManage storage：
 
 - `PersonalManage::PersonalDuoqians` 保存 `creator / account_name / created_at / status`。
 - 管理员和阈值真源仍是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
+
+## 3.1 wuminapp 本地注销显示规则
+
+- 账户列表页标题显示为“账户列表”。
+- 已注销个人多签账户继续留在账户列表，状态显示“已注销”，不显示金额。
+- 详情页链上明确查不到 `PersonalManage::PersonalDuoqians` 时，写入本机
+  `PersonalDuoqianLocalState.statusClosed`，页面状态显示“已注销”。
+- 已注销详情页不显示余额，不再从创建提案快照显示旧入金金额，也不显示“未找到”。
+- 已注销详情页右上角三点菜单显示按钮“删除”；确认后删除
+  `PersonalDuoqianEntity`、该账户全部 `PersonalDuoqianProposalEntity` 和本地状态键。
+- 链路异常只显示加载失败，不把网络失败写成已注销。
+- 链上 votingengine 90 天终态提案清理保持不变，wuminapp 不修改链上清理周期。
+
+## 3.2 创建 / 注销阈值 UI
+
+- 新增个人多签页面提供“普通提案阈值”输入框。
+- “阈值规则”右侧浅色文案显示“注册须全员同意”。
+- 注销个人多签页面“阈值规则”右侧浅色文案显示“注销须全员同意”。
+- 扫码添加管理员使用 `assets/icons/scan-line.svg`，不使用二维码图标。
+- 账户列表右上角加号弹窗：
+  - 新增个人多签：副文案“无需身份ID”。
+  - 新增机构多签：副文案“需要身份ID”，图标使用建筑/机构类图标。
 
 ## 4. 与 organization-manage 目录关系
 
@@ -75,4 +100,12 @@ PersonalManage storage：
 cd wuminapp
 flutter analyze
 flutter test test/organization-manage test/personal-manage
+```
+
+2026-05-11 第 1 步验收已执行：
+
+```bash
+cd wuminapp
+flutter analyze
+flutter test test/governance/personal-manage
 ```

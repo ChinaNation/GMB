@@ -53,6 +53,7 @@ class _PersonalManageAccountInfoPageState
 
   DuoqianAccountInfo? _accountInfo;
   List<String> _adminPubkeys = const [];
+  bool _isClosed = false;
 
   /// 账户余额(元):Active 来自链上 free_balance,Pending 来自本机 Isar
   /// PersonalDuoqianProposalEntity.snapshotJson.amount_fen(发起人承诺入金)。
@@ -80,17 +81,29 @@ class _PersonalManageAccountInfoPageState
 
       final accountInfo = results[0] as DuoqianAccountInfo?;
       final admins = results[1] as List<String>;
+      final isClosed = accountInfo == null;
+      final accountStatus = accountInfo?.status;
 
-      // 余额取值规则(bug 4):
+      // 余额取值规则：
       // Active → 链上 free_balance(实时)
-      // Pending / null → 本机 Isar PersonalDuoqianProposalEntity (action='create')
-      //                   snapshot.amount_fen(发起人承诺金额,链上还未到账)
-      final balance = await _resolveBalance(accountInfo?.status);
+      // Pending → 本机创建快照金额(链上还未到账)
+      // Closed → 不显示金额,避免注销账户继续显示旧创建金额。
+      if (isClosed) {
+        await _markLocalStatus(PersonalDuoqianLocalState.statusClosed);
+      } else {
+        await _markLocalStatus(
+          accountStatus == DuoqianStatus.active
+              ? PersonalDuoqianLocalState.statusActive
+              : PersonalDuoqianLocalState.statusPending,
+        );
+      }
+      final balance = isClosed ? null : await _resolveBalance(accountStatus);
 
       if (!mounted) return;
       setState(() {
         _accountInfo = accountInfo;
         _adminPubkeys = admins;
+        _isClosed = isClosed;
         _balanceYuan = balance;
         _loading = false;
       });
@@ -111,7 +124,7 @@ class _PersonalManageAccountInfoPageState
         return null;
       }
     }
-    // Pending / null 态:从本机 Isar PersonalDuoqianProposalEntity 取
+    // Pending 态:从本机 Isar PersonalDuoqianProposalEntity 取
     // (该 multisig 的 create 提案 snapshot 含 amount_fen)。
     try {
       final isar = await WalletIsar.instance.db();
@@ -132,6 +145,17 @@ class _PersonalManageAccountInfoPageState
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> _markLocalStatus(String status) async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await PersonalDuoqianLocalState.putStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+        status,
+      );
+    });
   }
 
   // ──── 关闭 ────
@@ -190,8 +214,9 @@ class _PersonalManageAccountInfoPageState
     }
   }
 
-  /// 是否展示右上角三点菜单；个人多签 Active 显关闭，Pending 显撤销创建。
+  /// 是否展示右上角三点菜单；Active 显关闭，Pending 显撤销创建，Closed 显删除。
   bool _shouldShowMenu() {
+    if (_isClosed) return true;
     final status = _accountInfo?.status;
     if (status == null) return false;
     if (status == DuoqianStatus.active) return true;
@@ -222,7 +247,37 @@ class _PersonalManageAccountInfoPageState
           .filter()
           .personalAddressEqualTo(widget.institution.duoqianAddress)
           .deleteAll();
+      await PersonalDuoqianLocalState.deleteStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+      );
     });
+  }
+
+  Future<void> _confirmDeleteLocal() async {
+    if (!_isClosed) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除'),
+        content: const Text('确认删除该已注销个人多签账户在本机的所有数据？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _removeFromLocal();
+    if (!mounted) return;
+    Navigator.pop(context);
   }
 
   /// 撤销 Pending 阶段的个人多签创建提案(向链上发起反对投票)。
@@ -342,13 +397,29 @@ class _PersonalManageAccountInfoPageState
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
+                if (value == 'delete') _confirmDeleteLocal();
                 if (value == 'close') _showDeleteMenu();
                 if (value == 'revoke_create') _confirmRevokeCreate();
               },
               itemBuilder: (_) {
                 final isActive = _accountInfo?.status == DuoqianStatus.active;
                 return [
-                  if (isActive)
+                  if (_isClosed)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline,
+                              size: 20, color: AppTheme.danger),
+                          SizedBox(width: 8),
+                          Text(
+                            '删除',
+                            style: TextStyle(color: AppTheme.danger),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (isActive)
                     const PopupMenuItem(
                       value: 'close',
                       child: Row(
@@ -418,14 +489,18 @@ class _PersonalManageAccountInfoPageState
   Widget _buildContent() {
     final duoqianSs58 = _hexToSs58(widget.institution.duoqianAddress);
     final info = _accountInfo;
-    final statusLabel = info == null
-        ? '未找到'
-        : info.status == DuoqianStatus.active
-            ? '已激活'
-            : '待激活';
-    final statusColor = info?.status == DuoqianStatus.active
-        ? AppTheme.success
-        : AppTheme.warning;
+    final statusLabel = _isClosed
+        ? '已注销'
+        : info == null
+            ? '已注销'
+            : info.status == DuoqianStatus.active
+                ? '已激活'
+                : '待激活';
+    final statusColor = _isClosed
+        ? AppTheme.textTertiary
+        : info?.status == DuoqianStatus.active
+            ? AppTheme.success
+            : AppTheme.warning;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -472,10 +547,12 @@ class _PersonalManageAccountInfoPageState
                       );
                     },
                   ),
-                  // 账户余额(bug 4):Active 显示链上 free_balance,Pending 显示
-                  // 发起人承诺金额(snapshot.amount_fen)+ "不可用"灰色标签。
-                  const Divider(height: 20),
-                  _buildBalanceRow(info?.status),
+                  if (!_isClosed) ...[
+                    // 账户余额：Active 显示链上 free_balance，Pending 显示
+                    // 发起人承诺金额；注销账户不再显示旧金额。
+                    const Divider(height: 20),
+                    _buildBalanceRow(info?.status),
+                  ],
                   const Divider(height: 20),
                   _buildInfoRow('状态', statusLabel, valueColor: statusColor),
                   // 管理员数量 / 通过阈值 已删除(bug 4):管理员列表卡片
@@ -485,16 +562,18 @@ class _PersonalManageAccountInfoPageState
             ),
           ),
 
-          const SizedBox(height: 16),
-          DuoqianTransferEntryCard(
-            institution: widget.institution,
-            isPersonal: true,
-            enabled: _accountInfo?.status == DuoqianStatus.active,
-            loadAdminWallets: _getAdminWallets,
-            onCreated: _load,
-          ),
-
-          const SizedBox(height: 16),
+          if (!_isClosed) ...[
+            const SizedBox(height: 16),
+            DuoqianTransferEntryCard(
+              institution: widget.institution,
+              isPersonal: true,
+              enabled: _accountInfo?.status == DuoqianStatus.active,
+              loadAdminWallets: _getAdminWallets,
+              onCreated: _load,
+            ),
+            const SizedBox(height: 16),
+          ] else
+            const SizedBox(height: 16),
 
           // 管理员列表(折叠成单行,点击进入子页)
           _buildAdminEntryCard(info),
@@ -520,9 +599,11 @@ class _PersonalManageAccountInfoPageState
   Widget _buildAdminEntryCard(DuoqianAccountInfo? info) {
     final adminCount = _adminPubkeys.length;
     final threshold = info?.threshold;
-    final subtitle = threshold == null
-        ? '$adminCount 人'
-        : '$adminCount 人 · 阈值 $threshold/$adminCount';
+    final subtitle = _isClosed
+        ? '已注销'
+        : threshold == null
+            ? '$adminCount 人'
+            : '$adminCount 人 · 阈值 $threshold/$adminCount';
 
     // bug 2(2026-05-03):卡片高度对齐 institution_detail_page._buildAdminEntry,
     // 用 InkWell + Padding(14,12) + Row(36×36 icon)替代 ListTile 减少视觉高度。
@@ -626,7 +707,7 @@ class _PersonalManageAccountInfoPageState
 
   /// 账户余额行(bug 4):
   /// - Active:链上 free_balance 实时(无标签)
-  /// - Pending / null:发起人承诺金额(snapshot.amount_fen)+ "不可用" 灰色标签
+  /// - Pending:发起人承诺金额(snapshot.amount_fen)+ "不可用" 灰色标签
   Widget _buildBalanceRow(DuoqianStatus? status) {
     final balanceStr =
         _balanceYuan == null ? '—' : AmountFormat.format(_balanceYuan!);

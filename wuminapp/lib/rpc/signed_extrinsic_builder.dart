@@ -136,6 +136,98 @@ class SignedExtrinsicBuilder {
     }
   }
 
+  /// 签名、提交并等待交易进入区块。
+  ///
+  /// 中文注释：提案创建类交易必须用这个入口，避免 txHash 返回后 UI
+  /// 误判成功；真正的业务成功还需要调用方继续核对区块事件。
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      signAndSubmitInBlock({
+    required Uint8List callData,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+    void Function(SignedExtrinsicTrace trace)? onTrace,
+    TxPoolWatchCallback? onWatchEvent,
+  }) async {
+    debugPrint('[$_logLabel] 步骤1: 获取 metadata...');
+    final metadata = await _rpc.fetchMetadata();
+    debugPrint('[$_logLabel] 步骤2: 获取 genesisHash...');
+    final genesisHash = await _rpc.fetchGenesisHash();
+    final registry = metadata.chainInfo.scaleCodec.registry;
+
+    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/nonce...');
+    final results = await Future.wait([
+      _rpc.fetchRuntimeVersion(),
+      NonceManager.instance.getNextNonce(
+        address: fromAddress,
+        fetchChainNonce: _rpc.fetchNonce,
+      ),
+    ]);
+    final runtimeVersion = results[0] as dynamic;
+    final nonce = results[1] as int;
+    debugPrint('[$_logLabel] nonce=$nonce, era=immortal');
+
+    debugPrint('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
+    final signingPayload = buildImmortalSigningPayload(
+      callData: callData,
+      specVersion: runtimeVersion.specVersion as int,
+      transactionVersion: runtimeVersion.transactionVersion as int,
+      genesisHash: genesisHash,
+      nonce: nonce,
+    );
+    final payloadBytes = signingPayload.encode(registry);
+
+    debugPrint('[$_logLabel] 步骤5: 签名 (${payloadBytes.length} bytes)...');
+    final signature = await sign(payloadBytes);
+    debugPrint('[$_logLabel] 签名完成 (${signature.length} bytes)');
+
+    debugPrint('[$_logLabel] 步骤6: 编码 immortal extrinsic...');
+    final extrinsicPayload = buildImmortalExtrinsicPayload(
+      callData: callData,
+      signerPubkey: signerPubkey,
+      signature: signature,
+      nonce: nonce,
+    );
+    final encoded = extrinsicPayload.encode(registry, SignatureType.sr25519);
+    debugPrint('[$_logLabel] extrinsic 编码完成 (${encoded.length} bytes)');
+
+    onTrace?.call(
+      SignedExtrinsicTrace(
+        callData: callData,
+        payloadBytes: payloadBytes,
+        signature: signature,
+        encoded: encoded,
+        signerPubkey: signerPubkey,
+        genesisHash: genesisHash,
+        runtimeVersion: runtimeVersion,
+        registry: registry,
+        nonce: nonce,
+        eraPeriod: immortalEraPeriod,
+        blockNumber: immortalBlockNumber,
+      ),
+    );
+
+    debugPrint('[$_logLabel] 步骤7: 提交到链并等待入块...');
+    debugPrint('[$_logLabel] call data hex: ${hexEncode(callData)}');
+    try {
+      final result = await _rpc.submitExtrinsicAndWaitForInBlock(
+        encoded,
+        onWatchEvent: onWatchEvent,
+      );
+      final blockHashHex = result.included.blockHashHex;
+      if (blockHashHex == null || blockHashHex.isEmpty) {
+        throw StateError('交易已入块，但未返回区块哈希');
+      }
+      final txHashHex = '0x${hexEncode(result.txHash)}';
+      debugPrint('[$_logLabel] 已入块: tx=$txHashHex block=$blockHashHex');
+      return (txHash: txHashHex, usedNonce: nonce, blockHashHex: blockHashHex);
+    } catch (e) {
+      NonceManager.instance.rollback(fromAddress);
+      debugPrint('[$_logLabel] 提交或入块失败，原始错误: $e');
+      rethrow;
+    }
+  }
+
   @visibleForTesting
   static SigningPayload buildImmortalSigningPayload({
     required Uint8List callData,

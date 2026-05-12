@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
@@ -34,6 +35,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
 
   final _nameController = TextEditingController();
   final _amountController = TextEditingController();
+  final _thresholdController = TextEditingController();
 
   final _manageService = PersonalManageService();
 
@@ -53,6 +55,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
   void dispose() {
     _nameController.dispose();
     _amountController.dispose();
+    _thresholdController.dispose();
     super.dispose();
   }
 
@@ -65,6 +68,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       if (wallets.isNotEmpty) {
         _selectedWallet = wallets.first;
         _syncCreatorAdmin(wallets.first);
+        _syncThresholdInput();
       }
     });
   }
@@ -162,21 +166,50 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       );
       return;
     }
-    setState(() => _adminPubkeys.add(hex));
+    setState(() {
+      _adminPubkeys.add(hex);
+      _syncThresholdInput();
+    });
   }
 
   void _removeAdmin(int index) {
     // 创建人不可移除
     if (_adminPubkeys[index] == _creatorPubkey) return;
-    setState(() => _adminPubkeys.removeAt(index));
+    setState(() {
+      _adminPubkeys.removeAt(index);
+      _syncThresholdInput();
+    });
   }
 
-  /// 与链端 admins-change::dynamic_threshold 对齐。
-  int? get _regularThreshold {
+  int? get _minimumRegularThreshold {
     final count = _adminPubkeys.length;
     if (count < 2) return null;
-    if (count == 2) return 2;
-    return (count + 1) ~/ 2;
+    return PersonalManageService.minimumRegularThreshold(count);
+  }
+
+  int? get _regularThreshold {
+    if (_adminPubkeys.length < 2) return null;
+    return int.tryParse(_thresholdController.text.trim());
+  }
+
+  /// 中文注释：管理员数量变化时只把普通阈值拉回合法范围，
+  /// 不把阈值固定死；用户仍可在最低过半到全员之间自由输入。
+  void _syncThresholdInput() {
+    final min = _minimumRegularThreshold;
+    if (min == null) {
+      _thresholdController.clear();
+      return;
+    }
+    final max = _adminPubkeys.length;
+    final current = int.tryParse(_thresholdController.text.trim());
+    final next = current == null
+        ? min
+        : current < min
+            ? min
+            : current > max
+                ? max
+                : current;
+    _thresholdController.text = next.toString();
   }
 
   // ──── 提交 ────
@@ -188,6 +221,17 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     if (_adminPubkeys.length < 2) return '管理员至少 2 人';
     if (_adminPubkeys.length > 64) return '管理员最多 64 人';
     if (_selectedWallet == null) return '请先导入钱包';
+    final minThreshold = _minimumRegularThreshold;
+    final regularThreshold = _regularThreshold;
+    if (minThreshold == null || regularThreshold == null) {
+      return '请输入有效的普通阈值';
+    }
+    if (regularThreshold < minThreshold) {
+      return '普通阈值不能小于 $minThreshold（必须过半）';
+    }
+    if (regularThreshold > _adminPubkeys.length) {
+      return '普通阈值不能超过管理员数量';
+    }
 
     final amount = AmountFormat.tryParse(_amountController.text);
     if (amount == null || amount <= 0) return '请输入有效金额';
@@ -244,7 +288,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
             summary: '发起创建个人多签账户提案',
             fields: [
               // propose_create_personal 链端 fields 与 wumin decoder 对齐：
-              // 日常阈值由管理员数量派生，创建提案阈值为全员通过。
+              // 普通阈值由用户输入，注册提案阈值固定全员通过。
               SignDisplayField(
                   key: 'account_name', label: '名称', value: nameText),
               SignDisplayField(
@@ -253,11 +297,11 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
                   value: _adminPubkeys.length.toString()),
               SignDisplayField(
                   key: 'regular_threshold',
-                  label: '日常阈值',
+                  label: '普通阈值',
                   value: '$regularThreshold/${_adminPubkeys.length}'),
               SignDisplayField(
                   key: 'create_threshold',
-                  label: '创建阈值',
+                  label: '注册阈值',
                   value: '$createThreshold/${_adminPubkeys.length}'),
               SignDisplayField(
                   key: 'amount_yuan',
@@ -290,6 +334,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,
         adminPubkeys: adminPubkeyBytes,
+        regularThreshold: regularThreshold,
         amountFen: amountFen,
         fromAddress: wallet.address,
         signerPubkey: Uint8List.fromList(pubkeyBytes),
@@ -308,6 +353,11 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
             ..creatorAddress = wallet.address
             ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
           await isar.personalDuoqianEntitys.put(entity);
+          await PersonalDuoqianLocalState.putStatusInTxn(
+            isar,
+            addrHex,
+            PersonalDuoqianLocalState.statusPending,
+          );
         });
 
         // 同步记录创建提案到 PersonalDuoqianProposalEntity(req 5 历史保留)
@@ -452,7 +502,15 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
           }),
           OutlinedButton.icon(
             onPressed: _addAdminByQr,
-            icon: const Icon(Icons.qr_code_scanner, size: 18),
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 18,
+              height: 18,
+              colorFilter: const ColorFilter.mode(
+                AppTheme.primaryDark,
+                BlendMode.srcIn,
+              ),
+            ),
             label: const Text('扫码添加管理员'),
             style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryDark,
@@ -460,7 +518,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
                     color: AppTheme.primaryDark.withValues(alpha: 0.3))),
           ),
           const SizedBox(height: 20),
-          _buildSectionTitle('阈值规则'),
+          _buildSectionTitle('阈值规则', note: '注册须全员同意'),
           const SizedBox(height: 8),
           _buildThresholdPreview(),
           const SizedBox(height: 20),
@@ -496,6 +554,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
                   setState(() {
                     _selectedWallet = w;
                     _syncCreatorAdmin(w);
+                    _syncThresholdInput();
                   });
                 }
               },
@@ -533,16 +592,29 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     );
   }
 
-  Widget _buildSectionTitle(String title) => Text(title,
-      style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.primaryDark));
+  Widget _buildSectionTitle(String title, {String? note}) => Row(
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryDark)),
+          if (note != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              note,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+          ],
+        ],
+      );
 
   Widget _buildThresholdPreview() {
     final count = _adminPubkeys.length;
-    final regular = _regularThreshold;
-    final regularText = regular == null ? '至少添加 2 名管理员' : '$regular/$count';
+    final min = _minimumRegularThreshold;
     final createText = count < 2 ? '至少添加 2 名管理员' : '$count/$count';
     return Container(
       padding: const EdgeInsets.all(12),
@@ -552,10 +624,29 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildThresholdRow('日常提案阈值', regularText),
+          TextField(
+            controller: _thresholdController,
+            enabled: count >= 2,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: '普通提案阈值',
+              hintText: min == null ? '至少添加 2 名管理员' : '$min 到 $count',
+              helperText: min == null
+                  ? '至少添加 2 名管理员'
+                  : '可输入 $min/$count 到 $count/$count',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
           const SizedBox(height: 8),
-          _buildThresholdRow('创建通过阈值', createText),
+          _buildThresholdRow('注册提案阈值', createText),
         ],
       ),
     );

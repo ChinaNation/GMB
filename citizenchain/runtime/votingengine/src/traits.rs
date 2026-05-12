@@ -52,19 +52,11 @@ impl<AccountId> JointVoteEngine<AccountId> for () {
 
 /// 事项模块接入内部投票时,统一由投票引擎创建提案并返回真实提案 ID。
 ///
-/// 业务模块通过 `create_internal_proposal` 将普通 Active 主体提案注册到投票引擎,
-/// 仅创建/激活 Pending 主体时使用 `create_pending_subject_internal_proposal`。
-/// 投票动作不经此 trait 转发——所有管理员直接调公开的
-/// `InternalVote::cast(proposal_id, approve)` extrinsic 投票,
-/// 由投票引擎的 `InternalVoteResultCallback` 广播回调业务模块执行业务。
+/// 中文注释：业务模块只能选择“提案语义”，不能传入“本次投票通过阈值”。
+/// 阈值读取、快照、计票、自动赞成票与通过/否决判定全部归属投票引擎。
 pub trait InternalVoteEngine<AccountId> {
-    fn create_internal_proposal(
-        who: AccountId,
-        org: u8,
-        institution: SubjectId,
-    ) -> Result<u64, DispatchError>;
-
-    fn create_internal_proposal_with_data(
+    /// 创建一般内部投票提案。用于转账、销毁、GRANDPA key 更换等普通业务。
+    fn create_general_internal_proposal_with_data(
         who: AccountId,
         org: u8,
         institution: SubjectId,
@@ -72,95 +64,68 @@ pub trait InternalVoteEngine<AccountId> {
         data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError>;
 
-    /// 创建普通内部提案,**显式传 threshold**(不走 InternalThresholdProvider 反查)。
+    /// 创建注册/注销生命周期内部投票提案。用于注销个人多签和机构多签。
     ///
-    /// 用于"主体生命周期"语义的内部提案 —— 比如关闭 REN/PUP/OTH 注册多签账户,
-    /// 业务规则要求**全员通过**(threshold = admins.len()),不是用户自定义 m-of-n。
-    ///
-    /// admins 仍从 active 主体反查(InternalAdminProvider::get_admin_list),
-    /// 仅 threshold 显式传入。
-    fn create_internal_proposal_with_threshold_and_data(
-        _who: AccountId,
-        _org: u8,
-        _institution: SubjectId,
-        _threshold: u32,
-        _module_tag: &[u8],
-        _data: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other(
-            "InternalProposalWithThresholdNotConfigured",
-        ))
-    }
-
-    fn create_pending_subject_internal_proposal(
-        _who: AccountId,
-        _org: u8,
-        _institution: SubjectId,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other(
-            "PendingSubjectVoteEngineNotConfigured",
-        ))
-    }
-
-    fn create_pending_subject_internal_proposal_with_data(
+    /// 中文注释：生命周期投票由投票引擎按 active 管理员快照写入全员通过阈值。
+    fn create_lifecycle_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
         _institution: SubjectId,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other(
-            "PendingSubjectVoteEngineNotConfigured",
-        ))
+        Err(DispatchError::Other("LifecycleVoteEngineNotConfigured"))
     }
 
-    fn create_pending_subject_internal_proposal_with_snapshot_data(
+    /// 创建注册个人多签/机构多签的特别内部投票提案。
+    ///
+    /// `dynamic_threshold` 是注册后普通业务使用的动态阈值配置，不是本次注册投票阈值。
+    /// 本次注册投票阈值由投票引擎按 `admins.len()` 写全员通过快照。
+    fn create_registered_subject_create_proposal_with_data(
         _who: AccountId,
         _org: u8,
         _institution: SubjectId,
         _admins: sp_std::vec::Vec<AccountId>,
-        _threshold: u32,
+        _dynamic_threshold: u32,
         _module_tag: &[u8],
         _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
-            "PendingSubjectSnapshotVoteEngineNotConfigured",
+            "RegisteredSubjectCreateVoteEngineNotConfigured",
         ))
     }
 
-    fn create_admin_set_mutation_internal_proposal(
+    /// 创建管理员集合变更内部投票提案。只允许 admins-change 模块接入。
+    ///
+    /// 中文注释：本次投票仍使用当前 active 阈值；`new_threshold` 只表示变更执行成功后
+    /// 写入投票引擎的下一阶段动态阈值。
+    fn create_admin_change_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
         _institution: SubjectId,
+        _new_admin_count: u32,
+        _new_threshold: u32,
+        _module_tag: &[u8],
+        _data: sp_std::vec::Vec<u8>,
     ) -> Result<u64, DispatchError> {
         Err(DispatchError::Other(
             "AdminSetMutationVoteEngineNotConfigured",
         ))
     }
 
-    fn create_admin_set_mutation_internal_proposal_with_data(
-        _who: AccountId,
-        _org: u8,
-        _institution: SubjectId,
-        _module_tag: &[u8],
-        _data: sp_std::vec::Vec<u8>,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other(
-            "AdminSetMutationVoteEngineNotConfigured",
-        ))
+    /// 读取已激活动态阈值。只用于展示和业务事件，不参与业务模块计票。
+    fn active_dynamic_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
+        None
+    }
+
+    /// 读取 pending 或 active 动态阈值。注册回调在激活前发事件时使用。
+    fn configured_dynamic_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
+        None
     }
 }
 
 impl<AccountId> InternalVoteEngine<AccountId> for () {
-    fn create_internal_proposal(
-        _who: AccountId,
-        _org: u8,
-        _institution: SubjectId,
-    ) -> Result<u64, DispatchError> {
-        Err(DispatchError::Other("InternalVoteEngineNotConfigured"))
-    }
-
-    fn create_internal_proposal_with_data(
+    fn create_general_internal_proposal_with_data(
         _who: AccountId,
         _org: u8,
         _institution: SubjectId,
@@ -622,34 +587,6 @@ impl InternalAdminCountProvider for () {
     }
 }
 
-/// 注册多签账户内部投票阈值提供器。
-/// 中文注释：治理三类机构阈值由固定制度常量提供；本 Provider 只承接 REN/PUP/OTH 账户主体阈值。
-pub trait InternalThresholdProvider {
-    /// 查询 Active 主体是否存在。用于机构合法性判断，不与阈值读取混用。
-    fn is_known_subject(_org: u8, _institution: SubjectId) -> bool {
-        false
-    }
-
-    /// 查询 Pending 主体是否存在。仅供创建/激活该主体的投票入口使用。
-    fn is_known_pending_subject(_org: u8, _institution: SubjectId) -> bool {
-        false
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32>;
-
-    /// Pending 注册多签账户主体创建投票使用的阈值。普通业务不得通过此方法授权。
-    fn pending_pass_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
-        None
-    }
-}
-
-/// 默认实现不提供任何阈值，强制 runtime / mock runtime 显式注入真实 Provider。
-impl InternalThresholdProvider for () {
-    fn pass_threshold(_org: u8, _institution: SubjectId) -> Option<u32> {
-        None
-    }
-}
-
 // ──────────────────────────────────────────────────────────────────
 // 投票引擎核心 → mode pallet 的反向调用 trait
 // votingengine 主 crate 的 finalize / cleanup / on_initialize 路径通过这些
@@ -687,6 +624,21 @@ pub type CleanupChunkResult = (u32, bool);
 /// 自己的 storage(`InternalVotesByAccount` / `InternalTallies` / `InternalThresholdSnapshot`)
 /// 住在 sub-pallet,所以清理动作必须通过本 trait 派发。
 pub trait InternalCleanupHandler {
+    /// 内部提案成功执行后的 mode 侧副作用。
+    ///
+    /// 中文注释：internal-vote 在这里激活/删除动态阈值，核心 votingengine 不解析
+    /// 业务数据，也不把阈值职责交回业务模块。
+    fn on_internal_proposal_executed(_proposal_id: u64) -> DispatchResult {
+        Ok(())
+    }
+
+    /// 内部提案进入终态后的 mode 侧清理。
+    ///
+    /// 中文注释：注册被拒绝或执行失败时，internal-vote 用此入口清掉 pending 阈值。
+    fn on_internal_proposal_terminal(_proposal_id: u64, _status: u8) -> DispatchResult {
+        Ok(())
+    }
+
     /// 分块清理 InternalVotesByAccount。
     /// 返回 `(removed_this_chunk, has_remaining)`。
     fn cleanup_internal_votes_chunk(proposal_id: u64, limit: u32) -> CleanupChunkResult;

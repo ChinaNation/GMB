@@ -25,7 +25,7 @@ Step 2a 只做 **Runtime 新增**,与旧"省储行清算"代码路径**共存**:
 - 新增 trait 方法:`SfidAccountQuery::is_admin_of`
 - 扩展 `on_initialize`:激活到期费率提案
 - runtime 层 `DuoqianSfidAccountQuery` 实现 `is_admin_of`
-- runtime 层 `OnchainTxAmountExtractor` 分类 3 个新 call
+- runtime 层 `RuntimeFeeKindClassifier` 分类 3 个新 call
 
 **明确不做**(留 Step 2b/2c/2d):
 - Node 层接入(Step 2b)

@@ -24,6 +24,7 @@ use crate::pallet::{
 use crate::types::{CloseDuoqianAction, CreateDuoqianAction, DuoqianStatus};
 use crate::BalanceOf;
 use primitives::derive::subject_id_from_account;
+use votingengine::InternalVoteEngine;
 
 /// 执行创建：unreserve + 划转 + 扣手续费 + 激活 PersonalDuoqians。
 ///
@@ -67,7 +68,7 @@ pub(crate) fn execute_create_with_finalizer<T: Config>(
     let org = votingengine::types::ORG_REN;
     let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject)
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, subject)
+    let threshold = <T as Config>::InternalVoteEngine::configured_dynamic_threshold(org, subject)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     PendingPersonalCreate::<T>::remove(proposal_id);
 
@@ -100,7 +101,7 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     let org = votingengine::types::ORG_REN;
     let admin_count = admins_change::Pallet::<T>::active_subject_admin_count(org, subject_id)
         .ok_or(Error::<T>::DuoqianNotFound)?;
-    let threshold = admins_change::Pallet::<T>::active_subject_threshold(org, subject_id)
+    let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, subject_id)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let all_balance = T::Currency::free_balance(&action.duoqian_address);
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/qr/envelope.dart';
@@ -256,11 +257,9 @@ class _InstitutionDuoqianCreatePageState
     if (threshold == null) return '请输入有效的阈值';
 
     final adminCount = _adminPubkeys.length;
-    final minThreshold = (adminCount + 1) ~/ 2;
-    if (minThreshold < 2) {
-      if (threshold < 2) return '阈值不能小于 2';
-    } else if (threshold < minThreshold) {
-      return '阈值不能小于 $minThreshold（管理员数的一半）';
+    final minThreshold = (adminCount ~/ 2) + 1;
+    if (threshold < minThreshold) {
+      return '阈值不能小于 $minThreshold（必须过半）';
     }
     if (threshold > adminCount) return '阈值不能超过管理员数量';
 
@@ -634,7 +633,15 @@ class _InstitutionDuoqianCreatePageState
           }),
           OutlinedButton.icon(
             onPressed: _addAdminByQr,
-            icon: const Icon(Icons.qr_code_scanner, size: 18),
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 18,
+              height: 18,
+              colorFilter: const ColorFilter.mode(
+                AppTheme.primaryDark,
+                BlendMode.srcIn,
+              ),
+            ),
             label: const Text('扫码添加管理员'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.primaryDark,

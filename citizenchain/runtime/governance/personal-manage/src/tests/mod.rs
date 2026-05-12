@@ -160,7 +160,7 @@ impl
 // ── Provider:仅支持 ORG_REN(个人多签),其他 org 返回 None/false ──
 //
 // personal-manage 测试只走个人多签业务,固定治理 (NRC/PRC/PRB) 不参与;
-// 因此 Provider 只需要从 admins-change 读 admins / threshold / count。
+// 因此 Provider 只需要从 admins-change 读 admins / count。
 
 pub struct TestInternalAdminProvider;
 impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvider {
@@ -208,35 +208,6 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
     }
 }
 
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        if org != ORG_REN {
-            return false;
-        }
-        admins_change::Pallet::<Test>::active_subject_exists(org, institution)
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org != ORG_REN {
-            return None;
-        }
-        admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
-    }
-
-    fn is_known_pending_subject(org: u8, institution: SubjectId) -> bool {
-        org == ORG_REN
-            && admins_change::Pallet::<Test>::pending_subject_exists_for_snapshot(org, institution)
-    }
-
-    fn pending_pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        if org != ORG_REN {
-            return None;
-        }
-        admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(org, institution)
-    }
-}
-
 pub struct TestTimeProvider;
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -262,7 +233,6 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminCountProvider = TestInternalAdminCountProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type MaxAdminsPerInstitution = ConstU32<64>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -407,23 +377,19 @@ pub fn seed_active_duoqian(
             status: types::DuoqianStatus::Active,
         },
     );
-    // admins-change 写 Active 主体,让 propose_close 的 is_active_subject_admin 通过
+    // admins-change 写 Active 主体,让 propose_close 的 is_active_subject_admin 通过。
+    // 中文注释：普通业务阈值归 internal-vote 管，不再写入管理员主体。
     let subject = primitives::derive::subject_id_from_account(duoqian_address);
     let admins_ac: admins_change::AdminsOf<Test> =
         BoundedVec::try_from(admins.to_vec()).expect("admins fit ac");
-    let threshold = admins_change::derived_threshold(
-        admins_change::AdminSubjectKind::PersonalDuoqian,
-        ORG_REN,
-        admins.len() as u32,
-    )
-    .expect("derived threshold");
+    let threshold = (admins.len() as u32 / 2).saturating_add(1);
+    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_REN, subject, threshold);
     admins_change::Subjects::<Test>::insert(
         subject,
         admins_change::AdminSubject {
             org: ORG_REN,
             kind: admins_change::AdminSubjectKind::PersonalDuoqian,
             admins: admins_ac,
-            threshold,
             creator: creator.clone(),
             created_at: 1,
             updated_at: 1,

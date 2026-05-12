@@ -164,18 +164,17 @@ pub(crate) fn do_propose_create_institution<T: Config>(
         }
 
         // B 阶段(personal-manage 拆分)起,DuoqianAccounts mirror 已删除;
-        // 机构主账户的 admin/threshold 配置真源在 admins-change::Subjects[main_address 派生主体],
-        // duoqian-transfer 通过 InstitutionMultisigQuery trait 查询。
+        // 机构主账户的管理员配置真源在 admins-change::Subjects[main_address 派生主体]；
+        // 动态阈值真源在 internal-vote，duoqian-transfer 通过查询 trait 合并读取。
 
-        // 中文注释:创建提案需全员管理员通过(2026-05-03 整改)。
-        // admins-change 主体里的普通阈值由链端动态派生，不影响此处投票阈值。
-        let create_threshold = duoqian_admins.len() as u32;
-        let proposal_id = match <T as Config>::InternalVoteEngine::create_pending_subject_internal_proposal_with_snapshot_data(
+        // 中文注释:threshold 是账户激活后的动态阈值配置；
+        // 本次注册投票的全员通过阈值由投票引擎根据管理员快照生成。
+        let proposal_id = match <T as Config>::InternalVoteEngine::create_registered_subject_create_proposal_with_data(
             who.clone(),
             org,
             institution,
             duoqian_admins.iter().cloned().collect(),
-            create_threshold,
+            threshold,
             crate::MODULE_TAG,
             data,
         ) {

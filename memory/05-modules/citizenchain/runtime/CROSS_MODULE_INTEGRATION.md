@@ -24,13 +24,12 @@
 | `JointVoteEngine` | `votingengine` | `votingengine::Pallet<Runtime>` | `resolution-issuance`, `runtime-upgrade` |
 | `InternalAdminProvider` | `votingengine` | `RuntimeInternalAdminProvider` | `votingengine` (Config 注入) |
 | `InternalAdminCountProvider` | `votingengine` | `RuntimeInternalAdminCountProvider` | `votingengine` (Config 注入) |
-| `InternalThresholdProvider` | `votingengine` | `RuntimeInternalThresholdProvider` | `votingengine` (Config 注入) |
 | `InstitutionAsset` | `institution-asset` | `RuntimeInstitutionAsset` | `organization-manage`, `duoqian-transfer`(间接), `offchain-transaction` |
 | `NrcAccountProvider` | `onchain-transaction` | `RuntimeNrcAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `SafetyFundAccountProvider` | `onchain-transaction` | `RuntimeSafetyFundAccountProvider` | `onchain-transaction` (OnchainFeeRouter) |
 | `FeeRouter` (OnUnbalanced) | `frame_support` trait | `TransferFeeRouter` | `organization-manage`, `duoqian-transfer` |
 | `FeePayerExtractor` (CallFeePayer) | `onchain-transaction` | `RuntimeFeePayerExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
-| `AmountExtractor` (CallAmount) | `onchain-transaction` | `OnchainTxAmountExtractor` | `pallet-transaction-payment` (OnChargeTransaction) |
+| `FeeKindClassifier` (CallFeeKind) | `onchain-transaction` | `RuntimeFeeKindClassifier` | `pallet-transaction-payment` (OnChargeTransaction) |
 | `ProtectedSourceChecker` | `organization-manage` / `offchain-transaction` | `RuntimeProtectedSourceChecker` | `organization-manage`, `offchain-transaction` |
 | `SfidEligibility` | `votingengine` | `RuntimeSfidEligibility` (委托 sfid-system) | `votingengine` |
 | `PopulationSnapshotVerifier` | `votingengine` | `RuntimePopulationSnapshotVerifier` | `votingengine` |
@@ -43,7 +42,6 @@
 | 适配器 | 作用 |
 |--------|------|
 | `RuntimeInternalAdminProvider` | 所有内部投票主体统一读 `admins_change::Subjects` |
-| `RuntimeInternalThresholdProvider` | 所有内部投票主体统一读 `admins_change::Subjects.threshold` |
 | `RuntimeInternalAdminCountProvider` | 所有内部投票主体统一读 `admins_change::Subjects.admins.len()` |
 | `RuntimeJointVoteResultCallback` | 按模块路由：先查 `resolution-issuance`，再查 `runtime-upgrade` |
 | `TransferFeeRouter` | 旧 NegativeImbalance -> Credit 转换 -> `OnchainFeeRouter` 80/10/10 分账 |
@@ -55,7 +53,7 @@
 ```
 用户交易 -> pallet-transaction-payment
   -> OnchainChargeAdapter
-    -> OnchainTxAmountExtractor (按 call 类型提取金额)
+    -> RuntimeFeeKindClassifier (按 call 类型归入五类费用模型)
     -> RuntimeFeePayerExtractor (offchain 批次从省储行费用地址扣; 其余由调用者扣)
     -> RuntimeNrcAccountProvider / RuntimeSafetyFundAccountProvider (提供 NRC 与安全基金收款账户)
     -> OnchainFeeRouter (80% 矿工 / 10% NRC / 10% 安全基金)

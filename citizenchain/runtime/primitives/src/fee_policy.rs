@@ -10,22 +10,23 @@
 //! 2. **单一权威源**:全仓库引用费率 / 阈值 / 分账比例时,**只允许**从 `primitives::fee_policy::*`
 //!    路径导入。禁止自行定义重复常量,禁止散落多处 hardcode 数值。
 //! 3. **链上费率与链下费率分离语义**:
-//!    - `ONCHAIN_*` 系列由 `OnchainTxAmountExtractor` + `onchain-transaction` pallet 使用,
-//!      用于链上 extrinsic 计费 + 80/10/10 分账。
+//!    - `ONCHAIN_*` 系列由 `RuntimeFeeKindClassifier` + `onchain-transaction` pallet 使用,
+//!      仅用于链上资金交易计费 + 80/10/10 分账。
 //!    - `OFFCHAIN_*` 系列由 `offchain-transaction` pallet 使用,描述清算行 L2 链下账本扣费规则;
 //!      清算行通过 `propose_l2_fee_rate` 投票设置个体费率,但必须落在 [MIN, MAX] 区间内。
 //! 4. **货币单位**:本文件所有金额常量单位都是 `FEN`(分),`1 GMB = 100 FEN`。
 //!
-//! ## 4 类链上 extrinsic 计费规则(规则定义)
+//! ## 5 类交易费用模型(规则定义)
 //!
 //! | 类别 | 规则 | 实际收费 |
 //! |---|---|---|
 //! | 免费 | 不进费率公式 | 0 |
 //! | 投票/治理 | 固定 `VOTE_FLAT_FEE` | 1 元 |
-//! | 链上交易 | `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)` | 0.1 元起 |
+//! | 链上交易费 | `max(amount × ONCHAIN_FEE_RATE, ONCHAIN_MIN_FEE)` | 0.1 元起 |
+//! | 链下交易费 | 清算模块按 `OFFCHAIN_*` 执行 | 不进入链上分账 |
 //! | 未识别 | 拒绝交易 | 不入块 |
 //!
-//! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::OnchainTxAmountExtractor`
+//! 具体每个 extrinsic 归哪一类由 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`
 //! 决定;新增 extrinsic 必须在该 match 中显式归类。
 
 use sp_runtime::Perbill;
@@ -56,7 +57,7 @@ pub const ONCHAIN_MIN_FEE: u128 = 10;
 ///   retry_passed_proposal / cancel_passed_proposal
 /// - 各业务 pallet 不涉及金额的 propose_X / cleanup_X / register_X / 管理操作
 ///
-/// 详见 `runtime/src/configs/mod.rs::OnchainTxAmountExtractor`。
+/// 详见 `runtime/src/configs/mod.rs::RuntimeFeeKindClassifier`。
 pub const VOTE_FLAT_FEE: u128 = 100;
 
 // =====================================================================

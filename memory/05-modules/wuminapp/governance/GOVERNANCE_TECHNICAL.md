@@ -75,7 +75,7 @@ lib/citizen/
   - NRC：`13`（硬编码）
   - PRC：`6`（硬编码）
   - PRB：`6`（硬编码）
-  - REN/PUP/OTH 动态账户：链上 `admins-change::Subjects.threshold` 动态读取
+  - REN/PUP/OTH 动态账户：链上 `internal-vote::ActiveDynamicThresholds` 动态读取
 - 联合投票权重：
   - NRC：`19`
   - 每个 PRC：`1`
@@ -533,10 +533,10 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | 项目 | 治理机构（NRC/PRC/PRB） | 注册多签账户（REN/PUP/OTH） |
 | --- | --- | --- |
 | 管理员来源 | `admins_change::Subjects`（创世/治理替换） | `admins_change::Subjects`（注册时写入，治理替换后更新） |
-| 阈值来源 | `admins_change::Subjects.threshold`（创世写入 13/6/6） | `admins_change::Subjects.threshold`（链端按管理员数量派生） |
+| 阈值来源 | 投票引擎固定制度常量（13/6/6） | `internal-vote::ActiveDynamicThresholds`（注册或管理员变更时写入） |
 | 管理员存储类型 | `AccountId` | `AccountId` |
 
-通过 `InternalThresholdProvider` trait 和 `InternalAdminProvider` trait，投票引擎动态查询阈值和管理员列表。
+投票引擎通过 `InternalAdminProvider` 查询管理员列表；动态阈值由 `internal-vote` 自己保存和读取。
 
 ### 8.4 Extrinsic
 
@@ -544,22 +544,22 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 | --- | --- | --- | --- |
 | `OrganizationManage::propose_create_institution(..., admin_org, ...)` | 17.5 | 发起 SFID 机构多签账户创建提案；机构账户管理员 org 必须为 `ORG_PUP / ORG_OTH` | 投票引擎 |
 | `OrganizationManage::propose_close(duoqian_address, beneficiary)` | 17.1 | 发起机构多签账户关闭提案 | 投票引擎 |
-| `PersonalManage::propose_create(account_name, duoqian_admins, amount)` | 7.0 | 发起个人多签账户创建提案 | 投票引擎 |
+| `PersonalManage::propose_create(account_name, duoqian_admins, regular_threshold, amount)` | 7.0 | 发起个人多签账户创建提案；普通阈值用户输入且必须过半，注册阈值固定全员同意 | 投票引擎 |
 | `PersonalManage::propose_close(duoqian_address, beneficiary)` | 7.1 | 发起个人多签账户关闭提案 | 投票引擎 |
 | `InternalVote::cast(proposal_id, approve)` | 22.0 | 创建、关闭、转账等内部投票统一入口 | 统一投票入口 |
 
 ### 8.5 创建流程（Pending → Active）
 
 1. 管理员调用对应创建入口 → 写入机构或个人 pending storage + 投票引擎创建提案
-2. 其他管理员调用 `InternalVote::cast` → 投票引擎记票
-3. 达到 threshold → 自动执行：`Currency::transfer` 转入资金 + 对应账户状态改为 Active
+2. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
+3. 创建投票全员同意后自动执行：`Currency::transfer` 转入资金 + 对应账户状态改为 Active
 4. 投票超时/否决 → 清理 pending storage
 
 ### 8.6 关闭流程
 
 1. 管理员调用 `propose_close` → 投票引擎创建提案
-2. 其他管理员调用 `InternalVote::cast` → 投票引擎记票
-3. 达到 threshold → 自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
+2. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
+3. 注销投票全员同意后自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
 
 ### 8.7 多签转账接入边界
 
@@ -623,8 +623,8 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 机构账户转账复用现有提案/投票/执行流程 |
 | `votingengine/internal-vote/src/lib.rs` | 投票引擎（支持 ORG_REN / ORG_PUP / ORG_OTH 动态主体） |
-| `votingengine/src/lib.rs` | InternalThresholdProvider trait |
-| `runtime/src/configs/mod.rs` | RuntimeInternalThresholdProvider + RuntimeInternalAdminProvider |
+| `votingengine/src/traits.rs` | `InternalVoteEngine` 语义化接口 |
+| `runtime/src/configs/mod.rs` | `RuntimeInternalAdminProvider` + `RuntimeInternalAdminCountProvider` |
 
 ## 9. 源码对齐基线
 

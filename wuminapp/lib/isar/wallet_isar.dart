@@ -96,6 +96,67 @@ class AppKvEntity {
   bool? boolValue;
 }
 
+/// 个人多签本地生命周期状态。
+///
+/// 中文注释：链上注销后账户主体可能已经不存在，但用户本机仍要在账户列表
+/// 显示“已注销”，直到用户主动点“删除”清空本地数据。这里复用 AppKvEntity，
+/// 避免把状态散落到多个页面。
+class PersonalDuoqianLocalState {
+  static const statusPending = 'pending';
+  static const statusActive = 'active';
+  static const statusClosed = 'closed';
+
+  static String statusKey(String personalAddressHex) =>
+      'personal_duoqian_status:${_normalizeHex(personalAddressHex)}';
+
+  static Future<Map<String, String>> readStatuses(
+    Isar isar,
+    Iterable<String> personalAddressesHex,
+  ) async {
+    final result = <String, String>{};
+    for (final address in personalAddressesHex) {
+      final normalized = _normalizeHex(address);
+      final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
+      final status = entity?.stringValue;
+      if (status != null && status.isNotEmpty) {
+        result[normalized] = status;
+      }
+    }
+    return result;
+  }
+
+  /// 写入个人多签本地状态；调用方必须处在 Isar writeTxn 内。
+  static Future<void> putStatusInTxn(
+    Isar isar,
+    String personalAddressHex,
+    String status,
+  ) async {
+    final key = statusKey(personalAddressHex);
+    final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+    entity
+      ..key = key
+      ..stringValue = status
+      ..intValue = DateTime.now().millisecondsSinceEpoch;
+    await isar.appKvEntitys.putByKey(entity);
+  }
+
+  /// 删除个人多签本地状态；调用方必须处在 Isar writeTxn 内。
+  static Future<void> deleteStatusInTxn(
+    Isar isar,
+    String personalAddressHex,
+  ) async {
+    await isar.appKvEntitys
+        .where()
+        .keyEqualTo(statusKey(personalAddressHex))
+        .deleteAll();
+  }
+
+  static String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
+  }
+}
+
 /// 用户创建的个人多签账户（本地持久化）。
 @collection
 class PersonalDuoqianEntity {

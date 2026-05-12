@@ -146,12 +146,6 @@ impl votingengine::InternalAdminProvider<AccountId32> for TestInternalAdminProvi
 }
 
 pub struct TestTimeProvider;
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn pass_threshold(org: u8, _institution: SubjectId) -> Option<u32> {
-        votingengine::types::fixed_governance_pass_threshold(org)
-    }
-}
 
 impl frame_support::traits::UnixTime for TestTimeProvider {
     fn now() -> core::time::Duration {
@@ -183,7 +177,6 @@ impl votingengine::Config for Test {
     type JointVoteResultCallback = ();
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type InternalAdminCountProvider = ();
     type MaxAdminsPerInstitution = ConstU32<32>;
     type TimeProvider = TestTimeProvider;
@@ -278,7 +271,8 @@ fn authority_id_from_key(key: [u8; 32]) -> GrandpaAuthorityId {
 }
 
 fn pass_prc_proposal(node_index: usize, proposal_id: u64) {
-    for admin_index in 0..6 {
+    // 中文注释：提案发起人已经由投票引擎自动记一票，这里只补足剩余固定阈值票。
+    for admin_index in 1..6 {
         assert_ok!(cast_vote(
             cb_admin(node_index, admin_index),
             proposal_id,

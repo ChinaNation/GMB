@@ -88,6 +88,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
             RuntimeOrigin::signed(c.clone()),
             name.clone(),
             admins.clone(),
+            2,
             CREATE_AMOUNT,
         ));
 
@@ -102,7 +103,7 @@ fn propose_create_writes_pending_and_reserves_fee() {
         assert_eq!(pending_account.account_name, name);
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
-            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, subject),
             Some(2)
         );
         assert_eq!(
@@ -137,12 +138,13 @@ fn create_executes_when_internal_vote_reaches_threshold() {
             RuntimeOrigin::signed(c.clone()),
             name,
             admins,
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
 
         // 创建提案要求"全员通过"——投票引擎 threshold = admins.len() = 3
-        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         // 提案进入 EXECUTED
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
@@ -153,7 +155,7 @@ fn create_executes_when_internal_vote_reaches_threshold() {
         assert_eq!(dq_state.status, types::DuoqianStatus::Active);
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
-            admins_change::Pallet::<Test>::active_subject_threshold(ORG_REN, subject),
+            internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, subject),
             Some(2)
         );
         assert_eq!(Balances::free_balance(&dq), CREATE_AMOUNT);
@@ -177,12 +179,13 @@ fn create_rejected_cleanup_releases_reserve_and_emits_event() {
             RuntimeOrigin::signed(c.clone()),
             name,
             admins,
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
 
         // 一票否决:全员通过制度下,只要有人反对就立刻进 STATUS_REJECTED
-        assert_ok!(cast_no_votes(&admin_accounts, 1, pid));
+        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_REJECTED);
@@ -210,6 +213,7 @@ fn propose_create_rejects_duplicate_personal_address() {
                 RuntimeOrigin::signed(c),
                 account_name(b"alice-personal"),
                 admins_vec(3),
+                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::PersonalDuoqianAlreadyExists
@@ -217,10 +221,10 @@ fn propose_create_rejects_duplicate_personal_address() {
     });
 }
 
-// ─── 5. 普通业务阈值由链端派生 ───────────────────────────────────────
+// ─── 5. 普通业务阈值由用户传入，投票引擎统一校验保存 ───────────────────
 
 #[test]
-fn propose_create_derives_regular_threshold_and_uses_all_admin_create_threshold() {
+fn propose_create_stores_regular_threshold_and_uses_all_admin_create_threshold() {
     new_test_ext().execute_with(|| {
         let c = setup_creator_balance();
         let dq = proposed_duoqian_address(&c, b"derived-threshold");
@@ -228,12 +232,13 @@ fn propose_create_derives_regular_threshold_and_uses_all_admin_create_threshold(
             RuntimeOrigin::signed(c.clone()),
             account_name(b"derived-threshold"),
             admins_vec(3),
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
-            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, subject),
             Some(2)
         );
         assert_eq!(
@@ -252,12 +257,13 @@ fn two_admin_personal_create_uses_two_of_two_for_regular_and_create_threshold() 
             RuntimeOrigin::signed(c),
             account_name(b"two-admin"),
             admins_vec(2),
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
-            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
+            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, subject),
             Some(2)
         );
         assert_eq!(
@@ -276,13 +282,14 @@ fn sixty_four_admin_personal_create_is_allowed_and_uses_full_create_threshold() 
             RuntimeOrigin::signed(c),
             account_name(b"sixty-four-admins"),
             admins_vec(64),
+            33,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
         let subject = primitives::derive::subject_id_from_account(&dq);
         assert_eq!(
-            admins_change::Pallet::<Test>::pending_subject_threshold_for_snapshot(ORG_REN, subject),
-            Some(32)
+            internal_vote::PendingDynamicThresholds::<Test>::get(ORG_REN, subject),
+            Some(33)
         );
         assert_eq!(
             internal_vote::InternalThresholdSnapshot::<Test>::get(pid),
@@ -313,6 +320,7 @@ fn propose_create_rejects_duplicate_admins() {
                 RuntimeOrigin::signed(c),
                 account_name(b"dup"),
                 dup_admins,
+                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::DuplicateAdmin
@@ -332,6 +340,7 @@ fn propose_create_rejects_below_minimum_amount() {
                 RuntimeOrigin::signed(c),
                 account_name(b"too-small"),
                 admins_vec(3),
+                2,
                 100, // 100 < 111
             ),
             pallet::Error::<Test>::CreateAmountBelowMinimum
@@ -351,6 +360,7 @@ fn propose_create_rejects_reserved_and_protected_addresses() {
                 RuntimeOrigin::signed(c.clone()),
                 account_name(b"protected-target"),
                 admins_vec(3),
+                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::ProtectedSource
@@ -362,6 +372,7 @@ fn propose_create_rejects_reserved_and_protected_addresses() {
                 RuntimeOrigin::signed(c),
                 account_name(b"protected-creator"),
                 admins_vec(3),
+                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::ProtectedSource
@@ -417,7 +428,7 @@ fn close_executes_when_internal_vote_reaches_threshold() {
         let pid = last_proposal_id();
 
         // 关闭提案要求全员通过(3 票)
-        assert_ok!(cast_yes_votes(&admins_acc, 3, pid));
+        assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTED);
@@ -486,6 +497,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
             RuntimeOrigin::signed(c.clone()),
             account_name(b"cleanup-test"),
             admins,
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -497,7 +509,7 @@ fn cleanup_rejected_proposal_only_works_after_engine_rejected() {
         );
 
         // 一票否决进入 REJECTED + Executor 自己已经 cleanup 过
-        assert_ok!(cast_no_votes(&admin_accounts, 1, pid));
+        assert_ok!(cast_no_votes(&admin_accounts[1..], 1, pid));
         assert_eq!(create_rejected_event_count(pid), 1);
 
         // Executor 已经在 callback 里清掉 Pending,这里 cleanup 进来时应继续返回 Ok,
@@ -524,6 +536,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
             RuntimeOrigin::signed(c.clone()),
             account_name(b"exec-fail-create"),
             admins,
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -533,7 +546,7 @@ fn create_execution_failed_terminal_cleans_pending_and_emits_once() {
         // 终态回调随后必须按同一快照清理 Pending 和 reserve。
         overwrite_create_proposal_fee(pid, CREATE_FEE + 1);
 
-        assert_ok!(cast_yes_votes(&admin_accounts, 3, pid));
+        assert_ok!(cast_yes_votes(&admin_accounts[1..], 2, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
@@ -562,7 +575,7 @@ fn close_execution_failed_terminal_keeps_account_and_clears_pending() {
         let pid = last_proposal_id();
         set_institution_can_spend(false);
 
-        assert_ok!(cast_yes_votes(&admins_acc, 3, pid));
+        assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
 
         let proposal = votingengine::Pallet::<Test>::proposals(pid).expect("proposal exists");
         assert_eq!(proposal.status, STATUS_EXECUTION_FAILED);
@@ -604,6 +617,7 @@ fn non_admin_cannot_propose_or_vote() {
                 RuntimeOrigin::signed(c),
                 account_name(b"x"),
                 BoundedVec::try_from(vec![admin(1), admin(2), admin(3)]).expect("fits"),
+                2,
                 CREATE_AMOUNT,
             ),
             pallet::Error::<Test>::PermissionDenied
@@ -617,6 +631,7 @@ fn non_admin_cannot_propose_or_vote() {
             RuntimeOrigin::signed(admin(0)),
             account_name(b"y"),
             admins,
+            2,
             CREATE_AMOUNT,
         ));
         let pid = last_proposal_id();
@@ -645,7 +660,7 @@ fn existential_deposit_is_preserved_after_close() {
             beneficiary_acc.clone(),
         ));
         let pid = last_proposal_id();
-        assert_ok!(cast_yes_votes(&admins_acc, 3, pid));
+        assert_ok!(cast_yes_votes(&admins_acc[1..], 2, pid));
 
         // 多签账户应已被销户(转出后余额 < ED 直接 reap),beneficiary 拿到剩余金额
         assert_eq!(Balances::free_balance(&dq), 0);

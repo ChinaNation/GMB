@@ -271,30 +271,6 @@ impl votingengine::InternalAdminCountProvider for TestInternalAdminCountProvider
     }
 }
 
-pub struct TestInternalThresholdProvider;
-impl votingengine::InternalThresholdProvider for TestInternalThresholdProvider {
-    fn is_known_subject(org: u8, institution: SubjectId) -> bool {
-        match org {
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::active_subject_exists(org, institution)
-            }
-            _ => false,
-        }
-    }
-
-    fn pass_threshold(org: u8, institution: SubjectId) -> Option<u32> {
-        match org {
-            ORG_NRC | ORG_PRC | ORG_PRB => {
-                votingengine::types::fixed_governance_pass_threshold(org)
-            }
-            ORG_REN | ORG_PUP | ORG_OTH => {
-                admins_change::Pallet::<Test>::active_subject_threshold(org, institution)
-            }
-            _ => None,
-        }
-    }
-}
-
 thread_local! {
     static PROTECTED_ADDRESS: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
     static DENIED_SPEND_SOURCE: core::cell::RefCell<Option<AccountId32>> = core::cell::RefCell::new(None);
@@ -338,7 +314,6 @@ impl votingengine::Config for Test {
     type InternalVoteResultCallback = crate::InternalVoteExecutor<Test>;
     type InternalAdminProvider = TestInternalAdminProvider;
     type InternalAdminCountProvider = TestInternalAdminCountProvider;
-    type InternalThresholdProvider = TestInternalThresholdProvider;
     type MaxAdminsPerInstitution = ConstU32<64>;
     type MaxProposalDataLen = ConstU32<1024>;
     type MaxProposalObjectLen = ConstU32<{ 10 * 1024 }>;
@@ -411,7 +386,7 @@ impl pallet::Config for Test {
     type MaxRemarkLen = ConstU32<256>;
     type FeeRouter = ();
     // 中文注释:测试 mock 把个人多签生命周期灌进 personal-manage，
-    // 管理员和阈值灌进 admins-change；PersonalQuery 负责合并读取;
+    // 管理员灌进 admins-change，动态阈值灌进 internal-vote；PersonalQuery 负责合并读取。
     // InstitutionQuery 走 organization-manage,用于覆盖 0x05 InstitutionAccount 账户级主体。
     type PersonalQuery = personal_manage::Pallet<Test>;
     type InstitutionQuery = organization_manage::Pallet<Test>;
@@ -578,13 +553,13 @@ fn insert_active_registered_institution_account(
             org: ORG_OTH,
             kind: admins_change::AdminSubjectKind::InstitutionAccount,
             admins,
-            threshold: 2,
             creator: registered_institution_admin(0),
             created_at: 1,
             updated_at: 1,
             status: admins_change::AdminSubjectStatus::Active,
         },
     );
+    internal_vote::ActiveDynamicThresholds::<Test>::insert(ORG_OTH, subject, 2);
 }
 
 /// 收款人：使用一个不是管理员也不是机构的普通地址
@@ -640,24 +615,14 @@ fn prb_pass_pairs() -> Vec<(AccountId32, sr25519::Pair)> {
     prb_pairs(primitives::count_const::PRB_INTERNAL_THRESHOLD as u8)
 }
 
-/// Phase 2 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
+/// 测试辅助:走投票引擎公开 `internal_vote` extrinsic,
 /// 让 `pairs` 前 `n` 个成员各投一张赞成票。
 ///
-/// 替代旧的聚合签名 helper——业务模块不再持有独立 finalize call,
-/// 通过后由 [`InternalVoteExecutor`] 自动触发 `try_execute_transfer`。
-/// 多余参数(`_org` / `_institution` / `_from` / `_to` /
-/// `_amount` / `_remark` / `_proposer`)保留占位,让调用端旧语义透明迁移。
+/// 中文注释：发起人已在创建提案事务中自动赞成，调用方只传剩余补票人。
 fn cast_transfer_votes_n(
     pairs: &[(AccountId32, sr25519::Pair)],
     n: usize,
     pid: u64,
-    _org: u8,
-    _institution: SubjectId,
-    _from: AccountId32,
-    _to: AccountId32,
-    _amount: Balance,
-    _remark: &[u8],
-    _proposer: AccountId32,
 ) -> frame_support::dispatch::DispatchResult {
     for (admin, _pair) in pairs.iter().take(n) {
         <internal_vote::Pallet<Test>>::do_internal_vote(admin.clone(), pid, true)?;
@@ -707,7 +672,8 @@ fn new_test_ext() -> sp_io::TestExternalities {
         set_extra_admins(ORG_NRC, nrc, nrc_accts);
         set_extra_admins(ORG_PRC, prc, prc_accts);
         set_extra_admins(ORG_PRB, prb, prb_accts);
-        // ORG_REN/ORG_PUP/ORG_OTH 的 admin / threshold 直接从 admins-change 读；
+        // ORG_REN/ORG_PUP/ORG_OTH 的 admin 从 admins-change 读；
+        // 中文注释：动态阈值真源在 internal-vote::ActiveDynamicThresholds。
         // personal-manage / organization-manage 只保存账户生命周期状态和 org 归属。
         // 测试需要时显式写入 PersonalDuoqians + admins-change Subjects。
         let _ = dq;

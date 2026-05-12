@@ -13,6 +13,7 @@ use pallet_transaction_payment::{Config as TxPaymentConfig, OnChargeTransaction,
 use sp_runtime::{
     traits::{DispatchInfoOf, PostDispatchInfoOf, SaturatedConversion, Saturating, Zero},
     transaction_validity::InvalidTransaction,
+    RuntimeDebug,
 };
 use sp_std::{marker::PhantomData, prelude::*};
 
@@ -97,21 +98,26 @@ pub struct OnchainFeeRouter<T, Currency, AuthorFinder, NrcProvider, SafetyFundPr
     PhantomData<(T, Currency, AuthorFinder, NrcProvider, SafetyFundProvider)>,
 );
 
-/// 金额提取分类结果：
-/// - Amount: 确认是"有金额交易"，并返回金额
-/// - NoAmount: 确认是"无金额交易"
-/// - Unknown: 无法确认（按制度应拒绝，避免漏提取）
-pub enum AmountExtractResult<Balance> {
-    Amount(Balance),
-    NoAmount,
+/// 交易收费分类：
+/// - VoteFlat: 投票 / 治理操作固定 1 元
+/// - OnchainAmount: 链上资金交易，按交易金额 × 0.1%，最低 0.1 元
+/// - OffchainFee: 链下清算手续费，手续费金额由清算模块执行，不进入链上分账
+/// - Free: 系统调用 / 自动化调用免费
+/// - Unknown: 未归入上述四类，直接拒绝，避免隐性漏收费
+#[derive(Clone, Copy, Eq, PartialEq, RuntimeDebug)]
+pub enum FeeChargeKind<Balance> {
+    VoteFlat,
+    OnchainAmount(Balance),
+    OffchainFee(Balance),
+    Free,
     Unknown,
 }
 
-/// 统一抽象：由 Runtime 提供"交易金额提取器"。
-pub trait CallAmount<AccountId, Call, Balance> {
-    /// 从具体交易中抽取"制度定义的交易金额"。
+/// 统一抽象：由 Runtime 提供"交易费用分类器"。
+pub trait CallFeeKind<AccountId, Call, Balance> {
+    /// 将具体交易显式归入五类费用模型。
     /// 这里故意不和 weight fee/length fee 绑定，避免 runtime 规则被默认手续费模型覆盖。
-    fn amount(who: &AccountId, call: &Call) -> AmountExtractResult<Balance>;
+    fn fee_kind(who: &AccountId, call: &Call) -> FeeChargeKind<Balance>;
 }
 
 /// 可选扣费来源：
@@ -149,22 +155,23 @@ pub trait SafetyFundAccountProvider<AccountId> {
     fn safety_fund_account() -> AccountId;
 }
 
-/// 链上手续费收取适配器：
-/// - 手续费按交易金额 `ONCHAIN_FEE_RATE` 计算
-/// - 单笔最低 `ONCHAIN_MIN_FEE`
-/// - 具体分配交给 `OnchainFeeRouter`
-pub struct OnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>(
-    PhantomData<(Currency, Router, AmountExtractor, FeePayerExtractor)>,
+/// 统一手续费收取适配器：
+/// - 投票 / 治理操作固定 `VOTE_FLAT_FEE`
+/// - 链上资金交易按 `ONCHAIN_FEE_RATE` 和 `ONCHAIN_MIN_FEE` 计算
+/// - 链下清算手续费由清算模块执行，不重复进入链上手续费分账
+/// - 免费调用不扣基础费
+pub struct OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>(
+    PhantomData<(Currency, Router, FeeKindExtractor, FeePayerExtractor)>,
 );
 
-impl<T, Currency, Router, AmountExtractor, FeePayerExtractor> OnChargeTransaction<T>
-    for OnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>
+impl<T, Currency, Router, FeeKindExtractor, FeePayerExtractor> OnChargeTransaction<T>
+    for OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>
 where
     T: TxPaymentConfig + fullnode_issuance::Config + pallet::Config,
     Currency: Balanced<T::AccountId> + 'static,
     Router: OnUnbalanced<Credit<T::AccountId, Currency>>,
-    AmountExtractor:
-        CallAmount<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
+    FeeKindExtractor:
+        CallFeeKind<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
     FeePayerExtractor: CallFeePayer<T::AccountId, T::RuntimeCall>,
     T::AccountId: Clone,
 {
@@ -182,9 +189,9 @@ where
         tip: Self::Balance,
     ) -> Result<Self::LiquidityInfo, TransactionValidityError> {
         // 中文注释：这里完全忽略 pallet-transaction-payment 传入的 _fee_with_tip，
-        // 改为执行本模块自定义的"按业务金额收费"规则。
+        // 改为执行本模块自定义的五类费用模型。
         let fee_with_tip =
-            custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
+            custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
             return Ok(None);
         }
@@ -224,7 +231,7 @@ where
         // 中文注释：预检查与正式扣费保持同一套金额计算逻辑，
         // 否则容易出现"预检查能过、正式扣费失败"的行为偏差。
         let fee_with_tip =
-            custom_fee_with_tip::<T, Currency, AmountExtractor>(who, call, dispatch_info, tip)?;
+            custom_fee_with_tip::<T, Currency, FeeKindExtractor>(who, call, dispatch_info, tip)?;
         if fee_with_tip.is_zero() {
             return Ok(());
         }
@@ -244,7 +251,7 @@ where
         liquidity_info: Self::LiquidityInfo,
     ) -> Result<(), TransactionValidityError> {
         // PROTOCOL: no post-dispatch refund.
-        // 中文注释：本制度按交易金额固定收费，协议上明确"不做执行后退款"。
+        // 中文注释：本制度按五类费用模型固定收费，协议上明确"不做执行后退款"。
         // `_corrected_fee_with_tip` 和 `_tip` 仅来自 transaction-payment 标准接口，
         // 本实现只对 `withdraw_fee` 已扣出的 credit 做最终分账。
         if let Some((fee_credit, tip_credit)) = liquidity_info {
@@ -264,8 +271,8 @@ where
     }
 }
 
-impl<T, Currency, Router, AmountExtractor, FeePayerExtractor> TxCreditHold<T>
-    for OnchainChargeAdapter<Currency, Router, AmountExtractor, FeePayerExtractor>
+impl<T, Currency, Router, FeeKindExtractor, FeePayerExtractor> TxCreditHold<T>
+    for OnchainChargeAdapter<Currency, Router, FeeKindExtractor, FeePayerExtractor>
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId> + 'static,
@@ -398,7 +405,7 @@ fn emit_fee_share_burn<T: pallet::Config>(reason: pallet::BurnReason, amount: u1
     pallet::Pallet::<T>::deposit_event(pallet::Event::FeeShareBurnt { reason, amount });
 }
 
-fn custom_fee_with_tip<T, Currency, AmountExtractor>(
+fn custom_fee_with_tip<T, Currency, FeeKindExtractor>(
     who: &T::AccountId,
     call: &T::RuntimeCall,
     _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
@@ -407,19 +414,27 @@ fn custom_fee_with_tip<T, Currency, AmountExtractor>(
 where
     T: TxPaymentConfig,
     Currency: Balanced<T::AccountId>,
-    AmountExtractor:
-        CallAmount<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
+    FeeKindExtractor:
+        CallFeeKind<T::AccountId, T::RuntimeCall, <Currency as Inspect<T::AccountId>>::Balance>,
 {
-    // 中文注释：有金额交易必须提取金额收费；无金额交易放行不收费；无法判断则拒绝，防止漏提取。
-    let amount = match AmountExtractor::amount(who, call) {
-        AmountExtractResult::Amount(v) => v,
-        AmountExtractResult::NoAmount => return Ok(tip),
-        AmountExtractResult::Unknown => return Err(InvalidTransaction::Call.into()),
+    // 中文注释：Runtime 必须把每个调用显式归入五类费用模型；
+    // Unknown 直接拒绝，防止新增交易绕过收费制度。
+    let base_fee_u128 = match FeeKindExtractor::fee_kind(who, call) {
+        FeeChargeKind::VoteFlat => primitives::fee_policy::VOTE_FLAT_FEE,
+        FeeChargeKind::OnchainAmount(amount) => {
+            // 中文注释：链上资金交易才按金额套 0.1% 费率。
+            let amount_u128: u128 = amount.saturated_into();
+            calculate_onchain_fee(amount_u128)
+        }
+        FeeChargeKind::OffchainFee(_fee) => {
+            // 中文注释：链下清算手续费已经在 offchain-transaction 结算执行时转账，
+            // 这里不再进入链上手续费 80/10/10 分账，避免重复扣费和错分账。
+            0
+        }
+        FeeChargeKind::Free => 0,
+        FeeChargeKind::Unknown => return Err(InvalidTransaction::Call.into()),
     };
-    // 中文注释：统一先转成 u128 做费率计算，避免不同 Balance 类型下重复实现乘法与舍入逻辑。
-    let amount_u128: u128 = amount.saturated_into();
-    let base_fee: <Currency as Inspect<T::AccountId>>::Balance =
-        calculate_onchain_fee(amount_u128).saturated_into();
+    let base_fee: <Currency as Inspect<T::AccountId>>::Balance = base_fee_u128.saturated_into();
     Ok(base_fee.saturating_add(tip))
 }
 

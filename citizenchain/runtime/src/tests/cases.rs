@@ -31,8 +31,8 @@ fn fee_payer_returns_none_for_transfer() {
         remark: BoundedVec::default(),
     });
     let signer = AccountId::new([1u8; 32]);
-    // 机构转账提案/投票为 NoAmount（免费），手续费在 pallet 内部扣取，
-    // RuntimeFeePayerExtractor 不再参与。
+    // 中文注释：机构转账提案交易本身由提交者按投票统一价付费；
+    // 真正转账手续费在 pallet 执行阶段从机构账户内部扣取，FeePayerExtractor 不代付。
     let payer = RuntimeFeePayerExtractor::fee_payer(&signer, &call);
     assert!(
         payer.is_none(),
@@ -235,7 +235,7 @@ fn resolution_destro_internal_vote_flow_executes_destroy_and_reduces_issuance() 
 }
 
 #[test]
-fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
+fn runtime_fee_kind_classifier_covers_free_onchain_vote_and_unknown_paths() {
     new_test_ext().execute_with(|| {
         let who = AccountId::new([1u8; 32]);
         let recipient = AccountId::new([2u8; 32]);
@@ -243,52 +243,72 @@ fn onchain_tx_amount_extractor_covers_noamount_amount_and_unknown_paths() {
         let system_call = RuntimeCall::System(frame_system::Call::remark {
             remark: b"x".to_vec(),
         });
-        let no_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+        let free = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::amount(&who, &system_call);
-        assert!(matches!(
-            no_amount,
-            onchain_transaction::AmountExtractResult::NoAmount
-        ));
+        >>::fee_kind(&who, &system_call);
+        assert_eq!(free, onchain_transaction::FeeChargeKind::Free);
 
         let transfer_call = RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
             dest: sp_runtime::MultiAddress::Id(recipient),
             value: 123,
         });
-        let amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+        let amount = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::amount(&who, &transfer_call);
-        match amount {
-            onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 123),
-            _ => panic!("expected amount path"),
-        }
+        >>::fee_kind(&who, &transfer_call);
+        assert_eq!(
+            amount,
+            onchain_transaction::FeeChargeKind::OnchainAmount(123)
+        );
 
         let internal_vote_call = RuntimeCall::InternalVote(internal_vote::pallet::Call::cast {
             proposal_id: 1,
             approve: true,
         });
-        let vote_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+        let vote_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::amount(&who, &internal_vote_call);
-        match vote_amount {
-            // 中文注释：internal_vote 达阈值时会同步触发业务 executor,
-            // 因此投票 extrinsic 本身按治理用户操作固定 1 元计费 = VOTE_FLAT_FEE。
-            onchain_transaction::AmountExtractResult::Amount(v) => {
-                assert_eq!(v, primitives::fee_policy::VOTE_FLAT_FEE)
-            }
-            _ => panic!("expected internal_vote amount"),
-        }
+        >>::fee_kind(&who, &internal_vote_call);
+        // 中文注释：投票 extrinsic 本身按治理用户操作固定 1 元计费，不再套 0.1%。
+        assert_eq!(vote_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+
+        let nrc_institution = subject_id_from_sfid_number(CHINA_CB[0].sfid_number)
+            .expect("nrc institution id must be valid");
+        let resolution_destro_call =
+            RuntimeCall::ResolutionDestro(resolution_destro::pallet::Call::propose_destroy {
+                org: votingengine::types::ORG_NRC,
+                institution: nrc_institution,
+                amount: 456,
+            });
+        let resolution_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+            AccountId,
+            RuntimeCall,
+            Balance,
+        >>::fee_kind(&who, &resolution_destro_call);
+        assert_eq!(
+            resolution_kind,
+            onchain_transaction::FeeChargeKind::VoteFlat
+        );
+
+        let unknown_balances_call =
+            RuntimeCall::Balances(pallet_balances::Call::upgrade_accounts {
+                who: vec![AccountId::new([9u8; 32])],
+            });
+        let unknown = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+            AccountId,
+            RuntimeCall,
+            Balance,
+        >>::fee_kind(&who, &unknown_balances_call);
+        assert_eq!(unknown, onchain_transaction::FeeChargeKind::Unknown);
     });
 }
 
 #[test]
-fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
+fn runtime_fee_kind_classifier_treats_governance_proposals_as_vote_flat() {
     new_test_ext().execute_with(|| {
         let (p1, _) = sr25519::Pair::generate();
         let (p2, _) = sr25519::Pair::generate();
@@ -302,9 +322,9 @@ fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
             vec![who.clone(), admin2.clone()]
                 .try_into()
                 .expect("admins should fit");
-        // 中文注释:propose_create 单账户机构入口已于 2026-05-03 删除;
+        // 中文注释：propose_create 单账户机构入口已于 2026-05-03 删除；
         // propose_create_personal 已于 B 阶段拆分迁至 PersonalManage(2026-05-06)。
-        // 本测试改用 PersonalManage::propose_create 验证"按 amount 字段计费"规则。
+        // 本测试验证提案交易本身按投票统一价，而不是按提案金额套链上费率。
         let account_name: personal_manage::pallet::AccountNameOf<Runtime> =
             b"runtime-test-personal"
                 .to_vec()
@@ -315,17 +335,15 @@ fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
             RuntimeCall::PersonalManage(personal_manage::pallet::Call::propose_create {
                 account_name,
                 duoqian_admins: admins.clone(),
+                regular_threshold: 2,
                 amount: 1_000,
             });
-        let create_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+        let create_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::amount(&who, &create_call);
-        match create_amount {
-            onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 1_000),
-            _ => panic!("expected create amount"),
-        }
+        >>::fee_kind(&who, &create_call);
+        assert_eq!(create_kind, onchain_transaction::FeeChargeKind::VoteFlat);
 
         let _ = Balances::deposit_creating(&duoqian_address, 777);
         let close_call =
@@ -333,15 +351,30 @@ fn onchain_tx_amount_extractor_covers_duoqian_propose_create_and_close() {
                 duoqian_address,
                 beneficiary,
             });
-        let close_amount = <OnchainTxAmountExtractor as onchain_transaction::CallAmount<
+        let close_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
             AccountId,
             RuntimeCall,
             Balance,
-        >>::amount(&who, &close_call);
-        match close_amount {
-            onchain_transaction::AmountExtractResult::Amount(v) => assert_eq!(v, 777),
-            _ => panic!("expected close amount"),
-        }
+        >>::fee_kind(&who, &close_call);
+        assert_eq!(close_kind, onchain_transaction::FeeChargeKind::VoteFlat);
+
+        let institution =
+            subject_id_from_sfid_number(primitives::china::china_cb::CHINA_CB[0].sfid_number)
+                .expect("NRC sfid_number must be valid");
+        let transfer_call =
+            RuntimeCall::DuoqianTransfer(duoqian_transfer::pallet::Call::propose_transfer {
+                org: 0,
+                institution,
+                beneficiary: AccountId::new([79u8; 32]),
+                amount: 88_888,
+                remark: frame_support::BoundedVec::default(),
+            });
+        let transfer_kind = <RuntimeFeeKindClassifier as onchain_transaction::CallFeeKind<
+            AccountId,
+            RuntimeCall,
+            Balance,
+        >>::fee_kind(&who, &transfer_call);
+        assert_eq!(transfer_kind, onchain_transaction::FeeChargeKind::VoteFlat);
     });
 }
 

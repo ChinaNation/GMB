@@ -36,6 +36,13 @@
 - **交易签名**是两端协作(热端发起 → 冷端签名 → 热端广播)
 - **用户码/联系人/收款/多签**是 wuminapp 热钱包专属能力
 
+2026-05-11 个人多签创建交易口径：
+
+- wuminapp 生产 `PersonalManage(7).propose_create(0)` 时只使用
+  `account_name / duoqian_admins / regular_threshold / amount` 新载荷。
+- wumin 冷钱包只解析上述新载荷；缺少 `regular_threshold` 的旧个人多签创建载荷直接拒绝。
+- `regular_threshold` 必须在 `floor(admin_count / 2) + 1 ..= admin_count` 范围内。
+
 ## 实现约束
 
 1. **wuminapp 禁止出现任何登录二维码生成代码**(`login_challenge` / `login_receipt`)。如果历史上有,按协议统一任务一并删除。

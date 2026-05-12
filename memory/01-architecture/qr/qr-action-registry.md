@@ -22,7 +22,7 @@
 
 | action | call_index | call | fields(顺序固定) | 签发方 |
 |---|---|---|---|---|
-| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admin_count`, `threshold`, `amount_yuan` | wuminapp |
+| `propose_create_personal` | 0 | `propose_create` | `account_name`, `admin_count`, `regular_threshold`, `create_threshold`, `amount_yuan` | wuminapp |
 | `propose_close_personal` | 1 | `propose_close` | `duoqian_address`, `beneficiary` | wuminapp |
 | `cleanup_rejected_personal_proposal` | 2 | `cleanup_rejected_proposal` | `proposal_id` | wuminapp |
 

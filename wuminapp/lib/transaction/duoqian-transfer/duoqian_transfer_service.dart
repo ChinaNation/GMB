@@ -46,12 +46,21 @@ class DuoqianTransferService {
   /// propose_sweep_to_main call_index=2。
   static const _proposeSweepCallIndex = 2;
 
+  /// DuoqianTransfer::TransferProposed event_index=0。
+  static const _transferProposedEventIndex = 0;
+
   // ──── Extrinsic 提交 ────
 
   /// 提交 propose_transfer extrinsic。
   ///
-  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
-  Future<({String txHash, int usedNonce})> submitProposeTransfer({
+  /// 返回真实创建出的 proposal_id、交易哈希、nonce 和入块哈希。
+  Future<
+      ({
+        String txHash,
+        int usedNonce,
+        int proposalId,
+        String blockHashHex,
+      })> submitProposeTransfer({
     required InstitutionInfo institution,
     required String beneficiaryAddress,
     required double amountYuan,
@@ -61,18 +70,40 @@ class DuoqianTransferService {
     required Future<Uint8List> Function(Uint8List payload) sign,
   }) async {
     final identity = AdminSubjectIdentity.fromInstitution(institution);
+    final amountFen = BigInt.from((amountYuan * 100).round());
+    final institutionBytes =
+        _institutionIdentityToFixed48(institution.sfidNumber);
+    final beneficiaryPubkey =
+        Uint8List.fromList(Keyring().decodeAddress(beneficiaryAddress));
+    final fromPubkey =
+        Uint8List.fromList(Keyring().decodeAddress(institution.mainAddress));
     final callData = _buildProposeTransferCall(
       org: identity.org,
       institutionIdentity: institution.sfidNumber,
       beneficiaryAddress: beneficiaryAddress,
-      amountFen: BigInt.from((amountYuan * 100).round()),
+      amountFen: amountFen,
       remark: remark,
     );
-    return _signAndSubmit(
+    final submitResult = await _signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+    );
+    final proposalId = await _confirmTransferProposedEvent(
+      blockHashHex: submitResult.blockHashHex,
+      org: identity.org,
+      institutionBytes: institutionBytes,
+      proposerPubkey: signerPubkey,
+      fromPubkey: fromPubkey,
+      beneficiaryPubkey: beneficiaryPubkey,
+      amountFen: amountFen,
+    );
+    return (
+      txHash: submitResult.txHash,
+      usedNonce: submitResult.usedNonce,
+      proposalId: proposalId,
+      blockHashHex: submitResult.blockHashHex,
     );
   }
 
@@ -1171,6 +1202,156 @@ class DuoqianTransferService {
     );
   }
 
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      _signAndSubmitInBlock({
+    required Uint8List callData,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'TransferProposal',
+    ).signAndSubmitInBlock(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+      onTrace: _logSignedExtrinsicTrace,
+    );
+  }
+
+  Future<int> _confirmTransferProposedEvent({
+    required String blockHashHex,
+    required int org,
+    required Uint8List institutionBytes,
+    required Uint8List proposerPubkey,
+    required Uint8List fromPubkey,
+    required Uint8List beneficiaryPubkey,
+    required BigInt amountFen,
+  }) async {
+    final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
+    if (events == null || events.isEmpty) {
+      throw StateError('交易已入块，但未读取到 System.Events，不能确认提案创建成功');
+    }
+    final proposalId = _findTransferProposedProposalId(
+      events,
+      org: org,
+      institutionBytes: institutionBytes,
+      proposerPubkey: proposerPubkey,
+      fromPubkey: fromPubkey,
+      beneficiaryPubkey: beneficiaryPubkey,
+      amountFen: amountFen,
+    );
+    if (proposalId == null) {
+      throw StateError(
+        '交易已入块，但未找到 DuoqianTransfer.TransferProposed 事件，提案创建失败',
+      );
+    }
+    return proposalId;
+  }
+
+  int? _findTransferProposedProposalId(
+    Uint8List data, {
+    required int org,
+    required Uint8List institutionBytes,
+    required Uint8List proposerPubkey,
+    required Uint8List fromPubkey,
+    required Uint8List beneficiaryPubkey,
+    required BigInt amountFen,
+  }) {
+    final (_, countSize) = _decodeCompact(data, 0);
+    if (countSize <= 0) return null;
+    for (var scanOffset = countSize; scanOffset < data.length; scanOffset++) {
+      var offset = scanOffset;
+      final phase = data[offset];
+      offset += 1;
+      if (phase == 0x00) {
+        if (offset + 4 > data.length) continue;
+        offset += 4;
+      } else if (phase != 0x01 && phase != 0x02) {
+        continue;
+      }
+
+      if (offset + 2 > data.length) continue;
+      final palletIndex = data[offset];
+      final eventIndex = data[offset + 1];
+      offset += 2;
+
+      if (palletIndex == _palletIndex &&
+          eventIndex == _transferProposedEventIndex) {
+        final decoded = _decodeTransferProposedEvent(
+          data,
+          offset,
+          org: org,
+          institutionBytes: institutionBytes,
+          proposerPubkey: proposerPubkey,
+          fromPubkey: fromPubkey,
+          beneficiaryPubkey: beneficiaryPubkey,
+          amountFen: amountFen,
+        );
+        if (decoded == null) continue;
+        if (decoded.matches) return decoded.proposalId;
+      }
+    }
+    return null;
+  }
+
+  ({
+    int proposalId,
+    bool matches,
+  })? _decodeTransferProposedEvent(
+    Uint8List data,
+    int offset, {
+    required int org,
+    required Uint8List institutionBytes,
+    required Uint8List proposerPubkey,
+    required Uint8List fromPubkey,
+    required Uint8List beneficiaryPubkey,
+    required BigInt amountFen,
+  }) {
+    // 中文注释：TransferProposed 事件字段顺序必须与 runtime Event enum 完全一致。
+    const fixedBytes = 8 + 1 + 48 + 32 + 32 + 32 + 16;
+    if (offset + fixedBytes > data.length) return null;
+    var pos = offset;
+    final proposalId = _readU64LE(data, pos);
+    pos += 8;
+    final eventOrg = data[pos];
+    pos += 1;
+    final eventInstitution = Uint8List.fromList(data.sublist(pos, pos + 48));
+    pos += 48;
+    final eventProposer = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventFrom = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventBeneficiary = Uint8List.fromList(data.sublist(pos, pos + 32));
+    pos += 32;
+    final eventAmount = _readU128LE(data, pos);
+    pos += 16;
+
+    final (remarkLen, remarkLenSize) = _decodeCompact(data, pos);
+    if (remarkLenSize <= 0 || pos + remarkLenSize + remarkLen > data.length) {
+      return null;
+    }
+    pos += remarkLenSize + remarkLen;
+
+    // runtime BlockNumber = u32，expires_at 紧跟 remark 之后。
+    if (pos + 4 > data.length) return null;
+    pos += 4;
+
+    if (_skipTopics(data, pos) == null) return null;
+    final matches = eventOrg == org &&
+        _bytesEqual(eventInstitution, institutionBytes) &&
+        _bytesEqual(eventProposer, proposerPubkey) &&
+        _bytesEqual(eventFrom, fromPubkey) &&
+        _bytesEqual(eventBeneficiary, beneficiaryPubkey) &&
+        eventAmount == amountFen;
+    return (
+      proposalId: proposalId,
+      matches: matches,
+    );
+  }
+
   void _logSignedExtrinsicTrace(SignedExtrinsicTrace trace) {
     debugPrint('[TransferProposal] ════════ EXTRINSIC 诊断 ════════');
     debugPrint(
@@ -1327,9 +1508,30 @@ class DuoqianTransferService {
     return bd.getUint64(0, Endian.little);
   }
 
+  int _readU64LE(Uint8List data, int offset) {
+    final bd = ByteData.sublistView(data, offset, offset + 8);
+    return bd.getUint64(0, Endian.little);
+  }
+
+  BigInt _readU128LE(Uint8List data, int offset) {
+    var value = BigInt.zero;
+    for (var i = 15; i >= 0; i--) {
+      value = (value << 8) | BigInt.from(data[offset + i]);
+    }
+    return value;
+  }
+
   int _decodeU32(Uint8List data, int offset) {
     final bd = ByteData.sublistView(data);
     return bd.getUint32(offset, Endian.little);
+  }
+
+  int? _skipTopics(Uint8List data, int offset) {
+    if (offset >= data.length) return null;
+    final (count, size) = _decodeCompact(data, offset);
+    if (size <= 0) return null;
+    final next = offset + size + count * 32;
+    return next <= data.length ? next : null;
   }
 
   static String _hexEncode(Uint8List bytes) {

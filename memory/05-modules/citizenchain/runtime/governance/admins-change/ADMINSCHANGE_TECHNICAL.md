@@ -1,6 +1,6 @@
 # ADMINS_CHANGE Technical Notes
 
-最新更新：2026-05-10，管理员主体与 org 边界已收口：`ORG_REN` 只用于个人多签，`ORG_PUP / ORG_OTH` 用于机构账户，`SfidInstitution` 不再允许作为新增管理员主体。
+最新更新：2026-05-11，投票阈值职责已从 `admins-change` 移出；本模块只维护管理员集合和生命周期，动态阈值由 `votingengine/internal-vote` 校验、保存和更新。
 
 ## 1. 模块定位
 
@@ -11,17 +11,16 @@
 - 维护 `Subjects<SubjectId, AdminSubject>`。
 - 为治理机构写入创世固定管理员集合。
 - 为个人账户、机构账户提供 Pending / Active / Closed 生命周期写入口。
-- 提供统一动态阈值工具。
 - 创建并执行管理员集合变更提案。
 
 账户级口径来自 `memory/04-decisions/ADR-015-account-admin-internal-vote.md`：
 
 - 省储行质押账户永远不可操作，不进入内部投票主体。
-- 治理机构全部可操作账户共享固定管理员集合和固定阈值，只允许等长更换。
+- 治理机构全部可操作账户共享固定管理员集合和固定阈值，只允许等长更换；固定阈值由投票引擎读取制度常量。
 - 注册个人账户独立持有管理员集合，管理员数量范围为 `2..=64`。
 - 注册机构账户独立持有管理员集合，管理员数量范围为 `2..=1989`。
-- 动态账户阈值按管理员数量派生：`2 -> 2`，`>=3 -> ceil(admin_count / 2)`。
-- 创建和注销提案使用全员阈值，由投票引擎快照保存，不改变 `Subjects.threshold` 的动态规则。
+- 动态账户普通业务阈值由注册或管理员变更时的用户输入决定，投票引擎按 `threshold * 2 > admin_count && threshold <= admin_count` 校验后保存。
+- 创建和注销提案使用全员阈值，由投票引擎按管理员快照生成。
 
 代码位置：
 
@@ -34,7 +33,7 @@
 `AdminSubjectKind` 当前值：
 
 - `BuiltinInstitution`：NRC / PRC / PRB 等内置治理主体。
-- `SfidInstitution`：仅保留 SCALE ABI 兼容和 SFID 机构归属/检索语义；新增、变更和生命周期写入路径一律拒绝作为管理员主体。
+- `SfidInstitution`：历史枚举值，新增、变更和生命周期写入路径一律拒绝作为管理员主体。
 - `PersonalDuoqian`：注册个人账户主体。
 - `InstitutionAccount`：注册机构某个具体账户的账户级主体。
 
@@ -48,8 +47,7 @@
 
 ## 3. 存储模型
 
-`STORAGE_VERSION = 2`(链未启动+即将重新创世,旧 v1→v2 `Institutions`→`Subjects`
-move_prefix migration 已于 2026-05-08 删除,fresh genesis 直接写 `Subjects`)。
+`STORAGE_VERSION = 3`。管理员主体只保存管理员集合和生命周期；阈值存储已移交 `internal-vote`。
 
 核心存储：
 
@@ -62,7 +60,6 @@ Subjects<SubjectId, AdminSubject>
 - `org`：内部投票组织类型，含 `ORG_NRC / ORG_PRC / ORG_PRB / ORG_REN / ORG_PUP / ORG_OTH`。
 - `kind`：管理员主体类型。
 - `admins`：当前管理员完整列表。
-- `threshold`：当前普通业务阈值。动态账户由 `derived_threshold` 计算后写入，不能由用户自由指定。
 - `creator`：主体创建者。
 - `created_at / updated_at`：生命周期时间。
 - `status`：`Pending / Active / Closed`。
@@ -73,27 +70,18 @@ Subjects<SubjectId, AdminSubject>
 - 从 `CHINA_CH` 写入省储行主体。
 - 创世主体均为 `BuiltinInstitution + Active`。
 
-## 4. 阈值工具
+## 4. 阈值职责边界
 
-统一工具函数：
-
-- `dynamic_threshold(admin_count)`
-- `derived_threshold(kind, org, admin_count)`
+本模块不再提供、派生、保存或更新投票阈值。
 
 规则：
 
-- `admin_count < 2` 返回 `None`。
-- `admin_count == 2` 返回 `Some(2)`。
-- `admin_count >= 3` 返回 `Some(ceil(admin_count / 2))`。
-- `BuiltinInstitution` 只接受固定管理员数量，并返回固定制度阈值。
-
-写入规则：
-
-- `do_create_pending_subject` 不接收外部阈值，链上写入时统一调用 `derived_threshold`。
-- `SubjectLifecycle::create_pending_subject_for_proposal` 不接收外部阈值，调用方只能传入管理员集合。
-- 管理员集合变更执行成功后，按新管理员数量重新推导并写回 `threshold`。
-- 创建/注销的全员阈值是投票提案快照语义，由业务模块调用投票引擎时显式传入，不写成长期普通阈值。
-- 第 2 步后，投票引擎会拒绝与管理员快照人数不匹配的全员生命周期阈值，避免业务模块误传普通动态阈值完成注册创建或注销关闭。
+- 创建个人多签和机构多签时，业务模块把用户填写的动态阈值提交给 `internal-vote`。
+- 管理员集合变更时，本模块只把完整目标管理员集合、新管理员数量和新动态阈值提交给 `internal-vote`。
+- `internal-vote` 负责校验 `threshold * 2 > admin_count && threshold <= admin_count`。
+- 注册通过后，`internal-vote` 把 pending 动态阈值激活为 active 动态阈值。
+- 注销执行成功后，`internal-vote` 删除 active 动态阈值。
+- 管理员变更执行成功后，`internal-vote` 用提案里暂存的新阈值更新 active 动态阈值。
 
 ## 5. 管理员集合校验
 
@@ -143,7 +131,6 @@ Active-only 公共业务 API：
 - `is_active_subject_admin(org, subject, who)`
 - `active_subject_exists(org, subject)`
 - `active_subject_admins(org, subject)`
-- `active_subject_threshold(org, subject)`
 - `active_subject_admin_count(org, subject)`
 
 Pending 快照专用 API：
@@ -151,31 +138,30 @@ Pending 快照专用 API：
 - `is_pending_subject_admin_for_snapshot(org, subject, who)`
 - `pending_subject_exists_for_snapshot(org, subject)`
 - `pending_subject_admins_for_snapshot(org, subject)`
-- `pending_subject_threshold_for_snapshot(org, subject)`
 - `pending_subject_admin_count_for_snapshot(org, subject)`
 
 规则：
 
 - 普通业务授权、普通内部提案创建和长期管理员真源读取只能使用 Active-only API。
-- Pending 快照 API 只供创建/激活该主体时锁定管理员和阈值快照。
-- `Closed` 主体不返回管理员、阈值或人数。
+- Pending 快照 API 只供创建/激活该主体时锁定管理员快照。
+- `Closed` 主体不返回管理员或人数。
 
 ## 8. 管理员集合变更流程
 
 入口：
 
 ```text
-propose_admin_set_change(org, subject, new_admins)
+propose_admin_set_change(org, subject, new_admins, new_threshold)
 ```
 
 语义：
 
 - 输入完整目标管理员集合。
-- 链端对比当前集合与目标集合，不再拆分增加、删除、更换、改阈值四类提案。
+- 链端对比当前集合与目标集合，不再拆分增加、删除、更换四类提案。
 - 发起人必须是当前 Active 主体管理员。
 - 目标集合必须通过统一管理员集合校验。
 - 目标集合不能与当前集合完全一致。
-- 在同一事务内调用 `create_admin_set_mutation_internal_proposal_with_data` 创建提案、写入 owner/data，并登记同主体管理员集合变更独占锁。
+- 在同一事务内调用 `create_admin_change_internal_proposal_with_data` 创建提案、写入 owner/data，并登记同主体管理员集合变更独占锁。
 
 提案数据：
 
@@ -183,6 +169,7 @@ propose_admin_set_change(org, subject, new_admins)
 - `ProposalData = AdminSetChangeAction<AdminsOf<T>>(SCALE)`。
 - `AdminSetChangeAction.subject` 是目标主体。
 - `AdminSetChangeAction.new_admins` 是完整目标管理员集合。
+- `AdminSetChangeAction.new_threshold` 是变更执行成功后由投票引擎写入的动态阈值；固定治理机构必须等于制度固定阈值。
 
 执行：
 
@@ -191,7 +178,6 @@ propose_admin_set_change(org, subject, new_admins)
 - 执行前校验提案 kind/stage/status、`internal_institution`、`internal_org`、独占锁 owner。
 - 再次校验目标管理员集合。
 - 写回 `Subjects[subject].admins`。
-- 按新管理员数量推导并写回 `Subjects[subject].threshold`。
 - 更新 `updated_at`。
 
 失败：
@@ -206,7 +192,6 @@ propose_admin_set_change(org, subject, new_admins)
 - `admins_change::Config::MaxAdminsPerInstitution = 1989`。
 - `admins_change::Config::MaxPersonalAccountAdmins = 64`。
 - `RuntimeInternalAdminProvider` 统一读取 `admins-change` Active / Pending API。
-- `RuntimeInternalThresholdProvider` 对治理机构返回固定制度阈值，对 `ORG_REN / ORG_PUP / ORG_OTH` 返回 `admins-change` 中的 Active / Pending 阈值。
 - `RuntimeInternalAdminCountProvider` 从 `active_subject_admin_count` 读取。
 
 ## 10. 事件
@@ -237,10 +222,9 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 覆盖重点：
 
-- 动态阈值工具。
 - `0x05 InstitutionAccount` 派生与解析。
 - NRC / PRC / PRB 固定人数、固定阈值、等长管理员更换。
-- 动态主体通过统一管理员集合变更提案增加、删除、更换管理员，并自动重算阈值。
+- 动态主体通过统一管理员集合变更提案增加、删除、更换管理员，并把新动态阈值交给投票引擎更新。
 - 管理员集合未变化、重复管理员、无效主体等错误路径。
 - Pending 主体不会暴露给 Active 业务 API，但可通过 Pending 快照 API 读取。
 - Pending 主体清理不存在时返回 `InvalidInstitution`，非 Pending 状态返回 `SubjectNotPending`。
@@ -248,7 +232,6 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 - 生命周期 trait 拒绝脱离 votingengine 提案上下文的激活/关闭调用。
 - 管理员集合变更提案与普通内部提案互斥。
 - 自动执行成功/失败都由投票引擎统一推进终态并释放互斥锁。
-- `InstitutionAccount` kind 独立单测覆盖最小 2 人、ceil(n/2) 阈值阶梯、< 2 拒绝、
-  `ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
-- `SfidInstitution` 新写入路径拒绝，`derived_threshold` 返回 `None`。
+- `InstitutionAccount` kind 独立单测覆盖最小 2 人、`ORG_PUP / ORG_OTH` 成功、`ORG_REN` 拒绝、`MaxAdminsPerInstitution` 上界。
+- `SfidInstitution` 新写入路径拒绝。
 - 历史脏数据读侧拦截：`InstitutionAccount + ORG_REN`、`SfidInstitution + ORG_PUP` 不再通过 Active/Pending 业务 API 返回。
