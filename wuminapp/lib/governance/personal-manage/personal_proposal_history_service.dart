@@ -16,7 +16,7 @@ import 'package:isar/isar.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_query_service.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 
 /// 提案动作类型常量(对齐 Isar entity action 字段)。

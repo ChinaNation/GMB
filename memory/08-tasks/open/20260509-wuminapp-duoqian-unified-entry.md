@@ -9,13 +9,13 @@
 ## 影响范围
 
 - `wuminapp/lib/governance/duoqian_account_list_page.dart`(新建,统一壳子)
-- `wuminapp/lib/ui/transaction_tab_page.dart`(2 入口改 1 入口)
+- `wuminapp/lib/transaction/transaction_tab_page.dart`(2 入口改 1 入口)
 - `wuminapp/lib/governance/organization-manage/duoqian_account_list_page.dart`(删除)
 - `wuminapp/lib/governance/personal-manage/personal_manage_account_list_page.dart`(删除)
 
 ## 风险点
 
-- 两个原 list page 外部引用只有 `transaction_tab_page.dart` 一处(已 grep 确认),删除安全。
+- 两个原 list page 外部引用只有 `transaction/transaction_tab_page.dart` 一处(已 grep 确认),删除安全。
 - 详情页(`*AccountInfoPage`)、create page、service、discovery、Isar entity、storage codec 全部保留,后端 0 改动。
 - runtime / 链端 0 改动。
 - 新统一页面要并行驱动 `DuoqianDiscoveryService` 与 `PersonalManageDiscoveryService`,2 套 Isar collection 并行查询。
@@ -23,7 +23,7 @@
 ## 执行状态
 
 - [x] 新建 `governance/duoqian_account_list_page.dart`(统一壳子,2 套数据源合并展示 + "+"两选项 ActionSheet)
-- [x] 改 `transaction_tab_page.dart`(2 个 `_TransactionEntryRow` → 1 个 `'多签交易'`,删 `personal-manage` import)
+- [x] 改 `transaction/transaction_tab_page.dart`(2 个 `_TransactionEntryRow` → 1 个 `'多签交易'`,删 `personal-manage` import)
 - [x] git rm `governance/organization-manage/duoqian_account_list_page.dart`
 - [x] git rm `governance/personal-manage/personal_manage_account_list_page.dart`
 - [x] `flutter analyze` 通过(No issues found,1.5s)

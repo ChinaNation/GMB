@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
-import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_query_service.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage, QrScanTransferResult;

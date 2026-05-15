@@ -12,12 +12,12 @@ import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_admin_list_page.dart';
-import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_cache.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/governance/governance_proposals_page.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 

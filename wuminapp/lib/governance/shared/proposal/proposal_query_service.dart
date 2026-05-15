@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_query_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 

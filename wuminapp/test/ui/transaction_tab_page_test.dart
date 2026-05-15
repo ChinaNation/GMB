@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/ui/transaction_tab_page.dart';
+import 'package:wuminapp_mobile/transaction/transaction_tab_page.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
 void main() {

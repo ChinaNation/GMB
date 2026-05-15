@@ -1,5 +1,5 @@
 import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_models.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 
 /// 提案内存缓存。
 ///

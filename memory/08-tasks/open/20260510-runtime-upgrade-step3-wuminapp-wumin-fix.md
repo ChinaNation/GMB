@@ -39,7 +39,7 @@
 
 ## 验证记录
 
-- `flutter analyze lib/governance/runtime-upgrade lib/governance/governance_proposals_page.dart lib/vote/vote_view.dart lib/common/proposal/proposal_models.dart lib/common/proposal/proposal_cache.dart lib/governance/organization-manage/institution_detail_page.dart`：通过。
+- `flutter analyze lib/governance/runtime-upgrade lib/governance/governance_proposals_page.dart lib/citizen/vote/vote_view.dart lib/governance/shared/proposal/proposal_models.dart lib/governance/shared/proposal/proposal_cache.dart lib/governance/organization-manage/institution_detail_page.dart`：通过。
 - `flutter test test/governance/runtime-upgrade/runtime_upgrade_service_test.dart`：通过。
 - `flutter analyze lib/signer test/signer/payload_decoder_test.dart`：通过。
 - `flutter test test/signer/payload_decoder_test.dart`：通过。

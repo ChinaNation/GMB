@@ -15,7 +15,7 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-import 'package:wuminapp_mobile/common/admin_institution_codec.dart';
+import 'package:wuminapp_mobile/governance/shared/admin_institution_codec.dart';
 import 'duoqian_manage_service.dart';
 import 'duoqian_storage_codec.dart';
 

@@ -12,11 +12,11 @@
 - `duoqian_transfer_entry.dart`：多签转账入口卡片和页面跳转。
 - `duoqian_transfer_proposal_adapter.dart`：给机构页、投票页和账户页使用的列表展示、详情跳转、缓存清理和数据源适配。
 
-提案通用元数据、上下文、缓存放在 `wuminapp/lib/common/proposal/`；投票引擎共享能力放在 `wuminapp/lib/votingengine/internal-vote/`。多签转账业务详情通过 `ProposalWithDetail.businessDetails` 的不透明键值挂载，键名由本模块定义。
+提案通用元数据、上下文、缓存放在 `wuminapp/lib/governance/shared/proposal/`；投票引擎共享能力放在 `wuminapp/lib/votingengine/internal-vote/`。多签转账业务详情通过 `ProposalWithDetail.businessDetails` 的不透明键值挂载，键名由本模块定义。
 
 `wuminapp/lib/governance/organization-manage/` 不再实现多签转账按钮和跳转；多签账户详情页只允许挂载 `duoqian-transfer` 提供的 `DuoqianTransferEntryCard`，入口自身逻辑在 `duoqian-transfer` 内部。
 
-`wuminapp/lib/governance/` 和 `wuminapp/lib/vote/` 只允许调用 `DuoqianTransferProposalAdapter` / `DuoqianTransferProposalFeed`，不得直接判断 `TransferProposalInfo`、`SafetyFundProposalInfo`、`SweepProposalInfo`，也不得直接打开 `DuoqianTransferDetailPage`。
+`wuminapp/lib/governance/` 和 `wuminapp/lib/citizen/vote/` 只允许调用 `DuoqianTransferProposalAdapter` / `DuoqianTransferProposalFeed`，不得直接判断 `TransferProposalInfo`、`SafetyFundProposalInfo`、`SweepProposalInfo`，也不得直接打开 `DuoqianTransferDetailPage`。
 
 ## 费用规则
 

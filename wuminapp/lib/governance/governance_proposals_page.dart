@@ -4,10 +4,10 @@ import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
 
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/pages/admin_set_change_page.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_limit_service.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_limit_service.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_page.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_page.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/safety_fund_transfer_page.dart';

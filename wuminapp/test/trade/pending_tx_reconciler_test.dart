@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/trade/pending_tx_reconciler.dart';
+import 'package:wuminapp_mobile/transaction/shared/pending_tx_reconciler.dart';
 
 void main() {
   const lostThreshold = Duration(minutes: 10);

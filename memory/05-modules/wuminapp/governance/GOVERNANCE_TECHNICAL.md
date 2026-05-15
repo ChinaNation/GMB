@@ -13,23 +13,26 @@
 - 本文档定义的是“链上字段/格式/标准/流程”。
 - 当前 App 已接入 runtime 升级、转账等主要治理路径，本文同时作为现有实现与后续扩展的对齐基线。
 
-当前实现目录已经按公民域重排：
+当前实现目录已经按公民、治理共享与投票引擎边界重排：
 
 ```text
 lib/citizen/
   citizen_tab_page.dart
+  public/
   vote/
-  governance/
-  institution/
+lib/governance/
+  admins-change/
+  organization-manage/
+  personal-manage/
+  runtime-upgrade/
   shared/
-  proposal/
-    shared/
-    transfer/
-    runtime_upgrade/
-    admin_change/
-    resolution_issuance/
-    resolution_destroy/
-    grandpakey_change/
+    admin_institution_codec.dart
+    institution_info.dart
+    proposal/
+lib/votingengine/
+  internal-vote/
+  joint-vote/
+  citizen-vote/
 ```
 
 `organization-manage` 代表注册机构多签账户的多签管理能力，归属 `lib/governance/organization-manage/`，不作为公民提案三级目录预留。
@@ -489,18 +492,15 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/citizen/governance/all_proposals_view.dart` | 全局提案列表（分页 + 缓存 + WebSocket + 红点通知） |
-| `lib/citizen/governance/proposal_cache.dart` | 提案内存缓存（Meta + Transfer Detail + Runtime Upgrade Detail） |
 | `lib/citizen/citizen_tab_page.dart` | 公民 Tab 二级导航入口（投票 / 治理 / 机构） |
-| `lib/vote/vote_view.dart` | 投票二级页，全局治理提案列表与待投票红点 |
+| `lib/citizen/vote/vote_view.dart` | 投票二级页，全局治理提案列表与待投票红点 |
 | `lib/rpc/chain_event_subscription.dart` | WebSocket 链事件订阅（新区块通知 + 自动重连） |
-| `lib/common/institution_info.dart + lib/organization-manage/institution_registry.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
-| `lib/institution/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
-| `lib/institution/institution_list_page.dart` | 机构分类列表（国储会 / 省储会 / 省储行） |
+| `lib/governance/shared/institution_info.dart + lib/governance/organization-manage/institution_registry.dart` | 87 个机构静态注册表 + `findInstitutionByPalletId` 反查 + `formatProposalId` 格式化 |
+| `lib/governance/organization-manage/governance_institution_registry.generated.dart` | 从 runtime primitives 生成的治理机构身份 ID 与制度账户地址 |
 | `lib/governance/admins-change/services/institution_admin_service.dart` | 管理员查询门面（委托 `AdminSubjectService` 读取 `AdminsChange::Subjects`） |
 | `lib/governance/organization-manage/institution_detail_page.dart` | 机构详情页（管理员检测 + 账户信息内联展开 + 条件 UI + 投票事件列表） |
-| `lib/common/proposal/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
-| `lib/common/proposal/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
+| `lib/governance/shared/proposal/proposal_context.dart` | 用户与提案关系解析（管理员 / 公民 / 查看者） |
+| `lib/governance/shared/proposal/proposal_models.dart` | 多提案共用模型（ProposalMeta / ProposalWithDetail 等） |
 | `lib/votingengine/internal-vote/internal_vote_service.dart` | 多提案共用内部投票提交服务 |
 | `lib/votingengine/internal-vote/pending_vote_store.dart` | 多提案共用待确认投票记录 |
 | `lib/votingengine/internal-vote/proposal_vote_widgets.dart` | 多提案共用投票 UI 组件 |
@@ -578,7 +578,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - `机构多签`：只读取 `DuoqianInstitutionEntity`，右上角提供“创建机构多签账户”和链上自动发现/刷新入口。
 - `个人多签`：只读取 `PersonalDuoqianEntity`，右上角提供“创建个人多签账户”和链上自动发现/刷新入口。
 
-旧的 `lib/trade/duoqian/duoqian_trade_page.dart` 聚合页已删除。发起转账提案不删除，
+旧的多签聚合页已删除。发起转账提案不删除，
 入口由 `lib/transaction/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
 具体页面和链上构造仍归 `lib/transaction/duoqian-transfer/`。
 
@@ -628,7 +628,7 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 
 ## 9. 源码对齐基线
 
-- `lib/common/institution_info.dart + lib/organization-manage/institution_registry.dart`
+- `lib/governance/shared/institution_info.dart + lib/governance/organization-manage/institution_registry.dart`
 - `lib/governance/admins-change/services/institution_admin_service.dart`
 - `lib/governance/organization-manage/institution_detail_page.dart`
 - `lib/governance/governance_proposals_page.dart`

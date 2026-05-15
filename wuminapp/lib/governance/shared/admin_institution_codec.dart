@@ -16,8 +16,8 @@
 // - [admins-change/src/lib.rs::AdminInstitution]
 // - [admins-change/src/lib.rs::AdminSubjectKind] (Builtin=0 / Sfid=1 / Personal=2 / InstitutionAccount=3)
 //
-// 中文注释：本文件由 `lib/organization-manage/shared/admin_institution_codec.dart`
-// 迁入 `lib/common/`（2026-05-09 模块边界整改），机构多签和个人多签都直接复用。
+// 中文注释：本文件统一放在 `lib/governance/shared/`，供机构多签、个人多签
+// 和治理提案展示复用；业务模块不得各自复制 Subject 解码逻辑。
 
 import 'dart:typed_data';
 
