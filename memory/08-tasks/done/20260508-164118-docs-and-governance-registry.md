@@ -2,7 +2,7 @@
 
 ## 任务需求
 
-- 将 `docs/《白皮书》.md` 与 `docs/《公民宪法》.md` 固定为白皮书和公民宪法唯一真源。
+- 将白皮书和公民宪法固定为唯一真源；后续公民宪法已从 docs Markdown 迁入 runtime HTML 真源。
 - 桌面端三端安装包必须在构建时内置最新文档，并保留原白皮书/公民宪法显示样式。
 - 清理旧 `GMB_WHITEPAPER.md`、`GMB_README.html`、`FRC_README.html`、GitHub raw 文档读取链路。
 - wuminapp 治理机构静态写死机构名称、身份 ID 和各制度账户地址。
@@ -21,7 +21,7 @@
 ## 执行原则
 
 - 不修改与本任务无关的既有未提交文件。
-- 文档正文唯一真源只保留 `docs/《白皮书》.md` 与 `docs/《公民宪法》.md`。
+- 文档正文唯一真源当时保留为白皮书 Markdown 与公民宪法 Markdown；后续公民宪法已迁入 runtime HTML 真源。
 - 机构账户地址静态生成；管理员和阈值动态读链。
 
 ## 验收项
@@ -35,7 +35,7 @@
 ## 完成记录
 
 - 已删除旧 `docs/GMB_README.html`、`docs/FRC_README.html`、`docs/index.html`；`memory/00-vision/GMB_WHITEPAPER.md` 保持删除状态。
-- 已新增桌面端构建前文档生成脚本，白皮书与公民宪法从 `docs/《白皮书》.md`、`docs/《公民宪法》.md` 生成到本地 bundle。
+- 已新增桌面端构建前文档生成脚本；该历史实现后来已调整为白皮书进入本地 bundle、公民宪法从 runtime 读取。
 - 已把 other-tabs 协议从 iframe URL 改为本地 document key，前端用 `LocalDocViewer` 渲染并保留原文档显示风格。
 - 已从 runtime primitives 生成 87 个治理机构的名称、身份 ID、主账户、费用账户、安全基金账户、质押账户静态表。
 - 已新增机构详情顶部信息区与更多账户展示；管理员列表与阈值继续动态读取链上 `AdminsChange::Subjects`。

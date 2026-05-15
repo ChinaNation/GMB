@@ -9377,6 +9377,7 @@ dependencies = [
  "hex-literal",
  "parity-scale-codec",
  "scale-info",
+ "sp-api",
  "sp-core",
  "sp-runtime",
  "sp-std",

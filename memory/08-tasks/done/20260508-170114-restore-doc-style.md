@@ -4,7 +4,7 @@
 
 - 认真对照旧版 `docs/GMB_README.html` 与 `docs/FRC_README.html` 的结构、CSS 和渲染行为。
 - 在不恢复旧 HTML 真源、不恢复 iframe/静态 HTML 入口的前提下，把旧版文档显示样式迁移到新的 React 本地 Markdown 渲染实现。
-- 保持 `docs/《白皮书》.md` 与 `docs/《公民宪法》.md` 作为唯一正文真源。
+- 该任务当时保持白皮书与公民宪法 Markdown 真源；后续公民宪法已收口到 runtime HTML 真源。
 
 ## 影响范围
 

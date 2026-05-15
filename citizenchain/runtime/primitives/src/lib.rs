@@ -6,6 +6,7 @@
 #[path = "../china/mod.rs"]
 pub mod china; // 机构常量
 pub mod citizen_const; // 公民发行常量
+pub mod citizen_constitution; // 公民宪法 HTML 真源
 pub mod core_const; // 核心常量
 pub mod count_const; // 投票治理常量
 pub mod derive; // 治理主体 ID 派生函数(subject_id_from_account / subject_id_from_sfid_number)

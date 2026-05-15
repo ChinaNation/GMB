@@ -89,7 +89,8 @@
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
 | `website/` | 官网 | website | GMB 官网前端工程 |
-| `docs/` | 文库 | docs | 白皮书与公民宪法唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
+| `docs/` | 文库 | docs | 白皮书唯一真源、展示图片和项目资料；系统规则仍以 `memory/` 为准 |
+| `citizenchain/runtime/primitives/src/CitizenConstitution.html` | 公民宪法真源 | citizen-constitution-source | 公民宪法 HTML 唯一真源，编入 runtime WASM，修改后必须通过 runtime 升级生效 |
 | `tools/` | 工具 | tools | 仓库级脚本工具 |
 | `scripts/` | 脚本 | scripts | 仓库级自动化脚本 |
 
