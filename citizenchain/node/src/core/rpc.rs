@@ -13,6 +13,7 @@ use std::{
 use citizenchain::{self as runtime, opaque::Block, AccountId, Balance, Nonce};
 use codec::{Decode, Encode};
 use jsonrpsee::RpcModule;
+use primitives::citizen_constitution::CitizenConstitutionApi as _;
 use sc_client_api::StorageProvider;
 use sc_transaction_pool_api::{TransactionPool, TransactionSource};
 use sp_api::Core as CoreApi;
@@ -215,6 +216,7 @@ where
     C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
     C::Api: BlockBuilder<Block>,
     C::Api: CoreApi<Block>,
+    C::Api: primitives::citizen_constitution::CitizenConstitutionApi<Block>,
     P: TransactionPool<Block = Block> + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
@@ -245,6 +247,47 @@ where
 
     module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
     module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
+
+    // 公民宪法 RPC：从当前链上 runtime 读取 HTML 真源。
+    // 该内容编入 runtime WASM，修改后必须通过 runtime 升级生效。
+    {
+        let client = client.clone();
+        module.register_method("constitution_getDocument", move |_params, _, _| {
+            use jsonrpsee::types::error::ErrorObject;
+
+            let best_hash = client.info().best_hash;
+            let html_bytes = client
+                .runtime_api()
+                .citizen_constitution_html(best_hash)
+                .map_err(|e| {
+                    ErrorObject::owned(-1, format!("读取 runtime 公民宪法失败: {e}"), None::<()>)
+                })?;
+            let blake2_256 = client
+                .runtime_api()
+                .citizen_constitution_blake2_256(best_hash)
+                .map_err(|e| {
+                    ErrorObject::owned(
+                        -1,
+                        format!("读取 runtime 公民宪法摘要失败: {e}"),
+                        None::<()>,
+                    )
+                })?;
+            let html = String::from_utf8(html_bytes).map_err(|e| {
+                ErrorObject::owned(
+                    -1,
+                    format!("runtime 公民宪法不是有效 UTF-8: {e}"),
+                    None::<()>,
+                )
+            })?;
+
+            Ok::<serde_json::Value, jsonrpsee::types::ErrorObjectOwned>(serde_json::json!({
+                "html": html,
+                "blake2_256": format!("0x{}", hex::encode(blake2_256)),
+                "source": "runtime",
+            }))
+        })?;
+    }
+
     // sync_state_genSyncSpec: 返回包含 lightSyncState 的 chainspec 快照，
     // 供 smoldot 轻节点跳过历史区块头验证。
     // 标准 sc-sync-state-rpc 依赖 BABE，citizenchain 用 PoW 没有 BABE，

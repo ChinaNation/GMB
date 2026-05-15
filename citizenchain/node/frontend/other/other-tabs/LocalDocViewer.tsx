@@ -109,70 +109,17 @@ function stripHorizontalRules(rootEl: HTMLElement) {
   });
 }
 
-function stripSeparatorBetweenTitleAndChapter(rootEl: HTMLElement) {
-  const normalize = (value: string | null) => (value ?? '').replace(/\s+/g, '');
-  const isChapterText = (value: string | null) =>
-    /第[一二三四五六七八九十百千万零〇两0-9]+章/.test(normalize(value));
-  const title = rootEl.querySelector('h1');
-  const firstChapter = Array.from(rootEl.querySelectorAll('h1, h2, h3')).find((el) =>
-    isChapterText(el.textContent),
-  );
-  if (!title || !firstChapter) return;
-
-  let node = title.nextSibling;
-  while (node && node !== firstChapter) {
-    const nextNode = node.nextSibling;
-    let shouldRemove = false;
-    if (node.nodeType === Node.TEXT_NODE) {
-      shouldRemove = /^[-*\s]+$/.test(node.textContent ?? '');
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as HTMLElement;
-      if (el.tagName === 'HR') {
-        shouldRemove = true;
-      } else if (el.tagName === 'P') {
-        shouldRemove = /^[-*\s]+$/.test(el.textContent ?? '');
-      } else if (el.tagName === 'UL' || el.tagName === 'OL') {
-        const items = Array.from(el.querySelectorAll(':scope > li'));
-        shouldRemove = items.length > 0 && items.every((li) => /^[-*\s]+$/.test(li.textContent ?? ''));
-      }
-    }
-    if (shouldRemove) node.remove();
-    node = nextNode;
-  }
-}
-
 function normalizeDocHeading(value: string | null) {
   return (value ?? '')
     .replace(/\s+/g, '')
     .replace(/[《》<>「」『』【】\[\]()]/g, '');
 }
 
-function applyDocSpecificClasses(rootEl: HTMLElement, doc: LocalDoc) {
-  if (doc.key === 'whitepaper') {
-    rootEl.querySelectorAll('h1').forEach((heading) => {
-      const normalized = normalizeDocHeading(heading.textContent);
-      if (normalized.includes('白皮书')) {
-        heading.classList.add('paper-main-title');
-      }
-    });
-    return;
-  }
-
-  const mainTitle = Array.from(rootEl.querySelectorAll('h1, h2')).find((el) => {
-    const normalized = normalizeDocHeading(el.textContent);
-    return normalized === '公民宪法' || normalized === '公民治理宪法';
-  });
-  mainTitle?.classList.add('constitution-main-title');
-
-  const chapterPattern = /第[一二三四五六七八九十百千万零〇两0-9]+章/;
-  const sectionPattern = /第[一二三四五六七八九十百千万零〇两0-9]+节/;
-  rootEl.querySelectorAll('h1, h2, h3').forEach((heading) => {
+function applyDocSpecificClasses(rootEl: HTMLElement) {
+  rootEl.querySelectorAll('h1').forEach((heading) => {
     const normalized = normalizeDocHeading(heading.textContent);
-    if (chapterPattern.test(normalized)) {
-      heading.classList.add('constitution-chapter-title');
-    }
-    if (sectionPattern.test(normalized)) {
-      heading.classList.add('constitution-section-title');
+    if (normalized.includes('白皮书')) {
+      heading.classList.add('paper-main-title');
     }
   });
 }
@@ -224,9 +171,6 @@ function shouldSkipTocHeading(text: string, doc: LocalDoc) {
   const normalized = normalizeDocHeading(text);
   if (normalized === '目录') return true;
   if (doc.key === 'whitepaper' && normalized.includes('白皮书')) return true;
-  if (doc.key === 'constitution' && (normalized === '公民宪法' || normalized === '公民治理宪法')) {
-    return true;
-  }
   return false;
 }
 
@@ -367,10 +311,7 @@ export function LocalDocViewer({ doc }: Props) {
     upgradeTableCodeBlocks(article);
     stripInlineToc(article);
     stripHorizontalRules(article);
-    if (doc.key === 'constitution') {
-      stripSeparatorBetweenTitleAndChapter(article);
-    }
-    applyDocSpecificClasses(article, doc);
+    applyDocSpecificClasses(article);
 
     const { roots, flat } = buildTocFromDom(article, doc);
     setTocItems(roots);
@@ -404,8 +345,8 @@ export function LocalDocViewer({ doc }: Props) {
     };
   }, [doc, html]);
 
-  const displayTitle = doc.key === 'whitepaper' ? '公民区块链白皮书' : '公民宪法';
-  const eyebrow = doc.key === 'whitepaper' ? 'CitizenChain Whitepaper' : 'Citizen Constitution';
+  const displayTitle = '公民区块链白皮书';
+  const eyebrow = 'CitizenChain Whitepaper';
 
   const jumpToHeading = (id: string) => {
     const heading = document.getElementById(id);

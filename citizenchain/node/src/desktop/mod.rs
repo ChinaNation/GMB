@@ -42,6 +42,7 @@ pub fn run_desktop() {
             mining::dashboard::get_mining_dashboard,
             mining::network_overview::get_network_overview,
             other::other_tabs::get_other_tabs_content,
+            other::other_tabs::get_runtime_constitution_document,
             governance::get_governance_overview,
             governance::get_institution_detail,
             governance::balance_watch::start_governance_balance_watch,

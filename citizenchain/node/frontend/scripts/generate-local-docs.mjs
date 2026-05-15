@@ -13,12 +13,7 @@ const sources = [
     key: 'whitepaper',
     title: '白皮书',
     sourcePath: 'docs/《白皮书》.md',
-  },
-  {
-    key: 'constitution',
-    title: '公民宪法',
-    sourcePath: 'docs/《公民宪法》.md',
-  },
+  }
 ];
 
 const docs = sources.map((item) => {
@@ -36,9 +31,9 @@ fs.writeFileSync(
   outputPath,
   [
     '// 本文件由 scripts/generate-local-docs.mjs 自动生成。',
-    '// 中文注释：白皮书和公民宪法唯一真源位于仓库根目录 docs/，构建前会内置到桌面端 bundle。',
+    '// 中文注释：本文件只内置白皮书；公民宪法由链上 runtime API 返回。',
     '',
-    'export type LocalDocKey = "whitepaper" | "constitution";',
+    'export type LocalDocKey = "whitepaper";',
     '',
     'export type LocalDoc = {',
     '  key: LocalDocKey;',

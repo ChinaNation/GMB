@@ -5,8 +5,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [react()],
-  // 中文注释：文档由 scripts/generate-local-docs.mjs 内置进 bundle；
-  // 不再把仓库 docs/ 当静态目录复制，避免旧 HTML 与真源 Markdown 并存。
+  // 中文注释：白皮书由 scripts/generate-local-docs.mjs 内置进 bundle；
+  // 公民宪法改由链上 runtime API 返回，不再复制仓库 docs/ 静态目录。
   publicDir: false,
   clearScreen: false,
   server: {

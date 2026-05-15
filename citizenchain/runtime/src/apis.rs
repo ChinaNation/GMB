@@ -284,6 +284,20 @@ impl_runtime_apis! {
         }
     }
 
+    impl primitives::citizen_constitution::CitizenConstitutionApi<Block> for Runtime {
+        fn citizen_constitution_html() -> Vec<u8> {
+            primitives::citizen_constitution::CITIZEN_CONSTITUTION_HTML
+                .as_bytes()
+                .to_vec()
+        }
+
+        fn citizen_constitution_blake2_256() -> [u8; 32] {
+            sp_io::hashing::blake2_256(
+                primitives::citizen_constitution::CITIZEN_CONSTITUTION_HTML.as_bytes(),
+            )
+        }
+    }
+
     impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
         fn build_state(config: Vec<u8>) -> sp_genesis_builder::Result {
             build_state::<RuntimeGenesisConfig>(config)
