@@ -20,9 +20,7 @@ class AdminSubjectCodec {
           AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    if (offset + 4 + 32 + 4 + 4 + 1 > data.length) return null;
-    final threshold = _readU32(data, offset);
-    offset += 4;
+    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     final creatorHex =
         AdminSubjectIdCodec.hexEncode(data.sublist(offset, offset + 32));
     offset += 32;
@@ -36,7 +34,9 @@ class AdminSubjectCodec {
       org: org,
       kind: kind,
       admins: admins,
-      threshold: threshold,
+      // 中文注释：runtime 的 `AdminsChange::Subjects` 已不再保存阈值；
+      // 调用方必须从 internal-vote 动态阈值 storage 或治理固定常量补齐。
+      threshold: 0,
       creatorHex: creatorHex,
       createdAt: createdAt,
       updatedAt: updatedAt,

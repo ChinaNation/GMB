@@ -102,7 +102,7 @@ lib/signer/
 | DuoqianTransfer(19) / propose_transfer(0) | `propose_transfer` | 提案转账 |
 | InternalVote(22) / cast(0) | `internal_vote` | 内部投票(管理员一人一票,统一入口) |
 | JointVote(23) / cast_admin(0) | `joint_vote` | 联合投票管理员阶段 |
-| JointVote(23) / cast_referendum(1) | `citizen_vote` | 联合公投全民兜底(原 citizen_vote) |
+| JointVote(23) / cast_referendum(1) | `cast_referendum` | 联合投票第二阶段的联合公投，不属于独立 citizen-vote |
 | RuntimeUpgrade(13) / propose(0) | `propose_runtime_upgrade` | 协议升级提案（大 WASM 哈希直签例外，不做 SCALE 展开） |
 | RuntimeUpgrade(13) / developer(2) | `developer_direct_upgrade` | 开发期协议直升（大 WASM 哈希直签例外，不做 SCALE 展开） |
 | OffchainTransaction(21) / bind(30) | `bind_clearing_bank` | 绑定清算行 |
@@ -113,6 +113,14 @@ lib/signer/
 | OffchainTransaction(21) / update_endpoint(51) | `update_clearing_bank_endpoint` | 更新清算行节点端点 |
 | OffchainTransaction(21) / unregister(52) | `unregister_clearing_bank` | 注销清算行节点 |
 | `GMB_DECRYPT_V1` 内层 payload | `decrypt_admin` | 管理员解密清算密钥挑战签名 |
+
+AdminsChange(12) / `propose_admin_set_change(0)` 当前只接受新载荷：
+
+```text
+[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32][new_threshold:u32_le]
+```
+
+冷钱包必须拒绝缺少 `new_threshold` 的旧载荷，也必须拒绝解码后仍有尾部多余字节。display 字段固定为 `org / subject / new_admins / new_threshold`，与 wuminapp 逐字比对。
 
 交叉验证三态（`DisplayMatchStatus`）：
 

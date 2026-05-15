@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
@@ -47,7 +48,6 @@ void main() {
   Uint8List adminSubjectBytes({
     required int org,
     required int kind,
-    required int threshold,
     required List<int> admin,
   }) {
     return Uint8List.fromList([
@@ -55,7 +55,6 @@ void main() {
       kind,
       (1 << 2) & 0xff,
       ...admin,
-      ...u32Le(threshold),
       ...List<int>.filled(32, 0xcc),
       ...u32Le(1),
       ...u32Le(2),
@@ -63,23 +62,55 @@ void main() {
     ]);
   }
 
+  Uint8List blake2128Concat(Uint8List data) {
+    final hash = Hasher.blake2b128.hash(data);
+    final result = Uint8List(hash.length + data.length);
+    result.setAll(0, hash);
+    result.setAll(hash.length, data);
+    return result;
+  }
+
+  String dynamicThresholdKey({
+    required String storageName,
+    required int org,
+    required Uint8List subjectId,
+  }) {
+    final palletHash = Hasher.twoxx128.hashString('InternalVote');
+    final storageHash = Hasher.twoxx128.hashString(storageName);
+    final orgKey = blake2128Concat(Uint8List.fromList([org]));
+    final subjectKey = blake2128Concat(subjectId);
+    final bytes = <int>[
+      ...palletHash,
+      ...storageHash,
+      ...orgKey,
+      ...subjectKey,
+    ];
+    return '0x${hexOf(bytes)}';
+  }
+
   test('registered institution account routes to institution-account subject',
       () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '11' * 32;
+    final subjectId = AdminSubjectIdCodec.fromAccountHex(
+      AdminSubjectIdCodec.institutionAccount,
+      address,
+    );
     final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
-      AdminSubjectIdCodec.fromAccountHex(
-        AdminSubjectIdCodec.institutionAccount,
-        address,
-      ),
+      subjectId,
     ))}';
+    final thresholdKey = dynamicThresholdKey(
+      storageName: 'ActiveDynamicThresholds',
+      org: 5,
+      subjectId: subjectId,
+    );
     rpc.responses[subjectKey] = adminSubjectBytes(
       org: 5,
       kind: 3,
-      threshold: 2,
       admin: List<int>.filled(32, 0xaa),
     );
+    rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
     final identity = AdminSubjectIdentity.institutionAccount(
       accountHex: address,
@@ -91,25 +122,31 @@ void main() {
 
     expect(admins, ['aa' * 32]);
     expect(threshold, 2);
-    expect(rpc.requestedKeys, [subjectKey]);
+    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
   });
 
   test('personal institution routes directly to personal subject', () async {
     final rpc = FakeChainRpc();
     final service = InstitutionAdminService(chainRpc: rpc);
     final address = '22' * 32;
+    final subjectId = AdminSubjectIdCodec.fromAccountHex(
+      AdminSubjectIdCodec.personalDuoqian,
+      address,
+    );
     final subjectKey = '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(
-      AdminSubjectIdCodec.fromAccountHex(
-        AdminSubjectIdCodec.personalDuoqian,
-        address,
-      ),
+      subjectId,
     ))}';
+    final thresholdKey = dynamicThresholdKey(
+      storageName: 'ActiveDynamicThresholds',
+      org: 3,
+      subjectId: subjectId,
+    );
     rpc.responses[subjectKey] = adminSubjectBytes(
       org: 3,
       kind: 2,
-      threshold: 2,
       admin: List<int>.filled(32, 0xbb),
     );
+    rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
     final identity = AdminSubjectIdentity.personalDuoqian(
       accountHex: address,
@@ -120,7 +157,7 @@ void main() {
 
     expect(admins, ['bb' * 32]);
     expect(threshold, 2);
-    expect(rpc.requestedKeys, [subjectKey]);
+    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
   });
 
   test('subject service cache is keyed by subject id', () async {
@@ -132,20 +169,30 @@ void main() {
     );
     final subjectKey =
         '0x${hexOf(AdminSubjectIdCodec.adminSubjectStorageKey(subjectId))}';
+    final thresholdKey = dynamicThresholdKey(
+      storageName: 'ActiveDynamicThresholds',
+      org: 3,
+      subjectId: subjectId,
+    );
     rpc.responses[subjectKey] = adminSubjectBytes(
       org: 3,
       kind: 2,
-      threshold: 2,
       admin: List<int>.filled(32, 0xdd),
     );
+    rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
     await service.fetchBySubjectId(subjectId);
     await service.fetchBySubjectId(subjectId);
-    expect(rpc.requestedKeys, [subjectKey]);
+    expect(rpc.requestedKeys, [subjectKey, thresholdKey]);
 
     service.clearSubjectCache(AdminSubjectIdCodec.hexEncode(subjectId));
     await service.fetchBySubjectId(subjectId);
-    expect(rpc.requestedKeys, [subjectKey, subjectKey]);
+    expect(rpc.requestedKeys, [
+      subjectKey,
+      thresholdKey,
+      subjectKey,
+      thresholdKey,
+    ]);
   });
 
   test('institution info resolves to explicit admins-change identity', () {

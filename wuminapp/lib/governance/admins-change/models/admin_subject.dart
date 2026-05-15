@@ -157,6 +157,20 @@ class AdminSubjectState {
 
   bool get isActive => status == 1;
 
+  AdminSubjectState copyWith({int? threshold}) {
+    return AdminSubjectState(
+      subjectIdHex: subjectIdHex,
+      org: org,
+      kind: kind,
+      admins: admins,
+      threshold: threshold ?? this.threshold,
+      creatorHex: creatorHex,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      status: status,
+    );
+  }
+
   String get kindLabel => switch (kind) {
         0 => '内置治理机构',
         1 => 'SFID机构归属',

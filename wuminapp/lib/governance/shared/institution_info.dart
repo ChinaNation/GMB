@@ -110,8 +110,8 @@ class InstitutionInfo {
 
   /// 制度账户集合。
   ///
-  /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户旧入口传入
-  /// `duoqianAddress` 时会被视为 `mainAddress`。
+  /// 中文注释：治理机构使用生成的完整账户集合；个人多签/机构账户使用
+  /// 主账户地址作为多签账户地址。
   final InstitutionAccounts? accounts;
 
   final String? _legacyMainAddress;
@@ -119,7 +119,7 @@ class InstitutionInfo {
   /// 主账户地址 hex（32 字节，不含 0x）。
   String get mainAddress => accounts?.mainAddress ?? _legacyMainAddress!;
 
-  /// 兼容个人多签/注册机构旧调用；治理机构新代码不得再使用这个语义。
+  /// 个人多签/注册机构账户的多签地址；内置治理机构不得使用这个语义。
   String get duoqianAddress => mainAddress;
 
   /// 机构账户的动态阈值覆盖。

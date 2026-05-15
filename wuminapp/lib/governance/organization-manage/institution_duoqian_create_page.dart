@@ -94,6 +94,7 @@ class _InstitutionDuoqianCreatePageState
     _creatorPubkey = pubkey;
     _adminPubkeys.remove(pubkey);
     _adminPubkeys.insert(0, pubkey);
+    _syncThresholdInput();
   }
 
   @override
@@ -224,12 +225,32 @@ class _InstitutionDuoqianCreatePageState
       );
       return;
     }
-    setState(() => _adminPubkeys.add(hex));
+    setState(() {
+      _adminPubkeys.add(hex);
+      _syncThresholdInput();
+    });
   }
 
   void _removeAdmin(int index) {
     if (_adminPubkeys[index] == _creatorPubkey) return;
-    setState(() => _adminPubkeys.removeAt(index));
+    setState(() {
+      _adminPubkeys.removeAt(index);
+      _syncThresholdInput();
+    });
+  }
+
+  void _syncThresholdInput() {
+    if (_adminPubkeys.isEmpty) {
+      _thresholdController.clear();
+      return;
+    }
+    final minThreshold = (_adminPubkeys.length ~/ 2) + 1;
+    final current = int.tryParse(_thresholdController.text.trim());
+    if (current == null ||
+        current < minThreshold ||
+        current > _adminPubkeys.length) {
+      _thresholdController.text = minThreshold.toString();
+    }
   }
 
   // ──── 提交 ────
@@ -653,7 +674,7 @@ class _InstitutionDuoqianCreatePageState
           const SizedBox(height: 20),
 
           // 阈值
-          _buildSectionTitle('通过阈值'),
+          _buildSectionTitle('阈值规则', note: '注册须全员同意'),
           const SizedBox(height: 8),
           TextField(
             controller: _thresholdController,
@@ -743,14 +764,28 @@ class _InstitutionDuoqianCreatePageState
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: AppTheme.primaryDark,
-      ),
+  Widget _buildSectionTitle(String title, {String? note}) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.primaryDark,
+          ),
+        ),
+        if (note != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            note,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

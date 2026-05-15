@@ -100,7 +100,7 @@ lib/votingengine/
 | --- | --- | --- | --- | --- |
 | 决议发行 | `propose_resolution_issuance` | `reason, total_amount, allocations[]` | 国储会 + 43 个省储会管理员 | 联合+公民 |
 | 协议升级 | `propose_runtime_upgrade` | `reason, code` | 国储会 + 43 个省储会管理员 | 联合+公民 |
-| 管理员集合变更 | `propose_admin_set_change` | `org, subject, new_admins[]` | 目标账户当前管理员 | 内部 |
+| 管理员集合变更 | `propose_admin_set_change` | `org, subject, new_admins[], new_threshold` | 目标账户当前管理员 | 内部 |
 | 决议销毁 | `propose_destroy` | `org, institution, amount` | 目标省级管理员 | 内部 |
 | GRANDPA 密钥更换 | `propose_replace_grandpa_key` | `institution, new_key(32B)` | NRC/PRC 省级管理员 | 内部 |
 | 省储行业务治理(已下线) | ~~`propose_institution_rate / propose_verify_key / propose_sweep_to_main / propose_relay_submitters`~~ | Step 2b-iv-b 随老省储行清算 pallet 一起从 runtime 删除 | — | — |
@@ -346,16 +346,19 @@ message = blake2_256(SCALE.encode(payload))
 2. 通过 `state_getStorage` 查询链上 `AdminsChange::Subjects(subject_id)` 存储。
 3. Storage key 格式：`twox_128("AdminsChange") + twox_128("Subjects") + blake2_128(subject_id) + subject_id`。
 4. `subject_id` 按主体类型派生：内置治理机构为 `0x01 + sfid_number`，个人多签为 `0x03 + AccountId32`，机构账户为 `0x05 + AccountId32`；`0x02 SfidInstitution` 只用于归属/检索，不进入管理员更换。
-5. 返回 SCALE 编码的 `AdminSubject { org, kind, admins, threshold, creator, created_at, updated_at, status }`。
-6. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在 `admins` 中，确定管理员身份。
-7. 查询结果以内存 `subjectIdHex` 缓存；提交管理员更换、投票执行返回、下拉刷新时清除缓存重新查询。
+5. 返回 SCALE 编码的 `AdminSubject { org, kind, admins, creator, created_at, updated_at, status }`。
+6. 阈值不再来自 `AdminsChange.Subjects`；治理机构用固定制度阈值，个人多签/机构账户从 `InternalVote.ActiveDynamicThresholds` 读取。
+7. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在 `admins` 中，确定管理员身份。
+8. 查询结果以内存 `subjectIdHex` 缓存；提交管理员更换、投票执行返回、下拉刷新时清除缓存重新查询。
 
 ### 7.1.1 管理员更换手机端协议
 
 - 目录边界：手机端管理员更换只在 `lib/governance/admins-change/` 内实现；机构/个人注册、注销仍归 `organization-manage` / `personal-manage`。
 - 主体规则：`PersonalDuoqian` 必须使用 `ORG_REN`，`InstitutionAccount` 必须使用 `ORG_PUP / ORG_OTH`，`SfidInstitution` 不能作为管理员更换主体。
-- QR call data：`[AdminsChange=12][call=0][org:u8][subject_id:48][new_admins:Compact<Vec<AccountId32>>]`。
-- QR display 字段必须与 wumin 冷钱包 decoder 严格一致：`org`、`subject`、`new_admins`，其中 `subject/new_admins` 均使用 `0x` 小写 hex。
+- QR call data：`[AdminsChange=12][call=0][org:u8][subject_id:48][new_admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]`。
+- 内置治理机构只读展示固定阈值，不展示输入框；提交管理员更换提案时 `new_threshold` 必须等于制度固定阈值。
+- 个人多签和机构账户展示动态阈值输入框，校验公式为 `threshold * 2 > admin_count && threshold <= admin_count`。
+- QR display 字段必须与 wumin 冷钱包 decoder 严格一致：`org`、`subject`、`new_admins`、`new_threshold`，其中 `subject/new_admins` 均使用 `0x` 小写 hex。
 - 提交成功后必须按 `subjectIdHex` 清理 `AdminSubjectService` 缓存，避免页面继续展示旧管理员集合。
 
 ### 7.2 机构详情页结构
@@ -560,6 +563,7 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 1. 管理员调用 `propose_close` → 投票引擎创建提案
 2. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
 3. 注销投票全员同意后自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
+4. wuminapp 本地继续在统一账户列表展示已注销账户，状态显示“已注销”，不显示余额；用户在详情页点击右上角“删除”后才清理本机数据。
 
 ### 8.7 多签转账接入边界
 
@@ -572,13 +576,13 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 ### 8.8 手机端入口分流
 
-2026-04-30 起，`wuminapp` 将多签账户入口从“我的”页迁入交易页，并拆成
-两个单类型入口：
+2026-05-09 起，`wuminapp` 将多签账户入口收口为交易页的单入口“多签交易”，进入后显示统一“账户列表”：
 
-- `机构多签`：只读取 `DuoqianInstitutionEntity`，右上角提供“创建机构多签账户”和链上自动发现/刷新入口。
-- `个人多签`：只读取 `PersonalDuoqianEntity`，右上角提供“创建个人多签账户”和链上自动发现/刷新入口。
+- 个人多签读取 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`。
+- 机构多签读取 `DuoqianInstitutionEntity` 和 `InstitutionDuoqianLocalState`。
+- 右上角加号提供“新增个人多签 / 新增机构多签”两个入口。
 
-旧的多签聚合页已删除。发起转账提案不删除，
+发起转账提案不删除，
 入口由 `lib/transaction/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
 具体页面和链上构造仍归 `lib/transaction/duoqian-transfer/`。
 
@@ -602,7 +606,7 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 
 | 文件 | 说明 |
 | --- | --- |
-| `lib/governance/organization-manage/duoqian_account_list_page.dart` | 机构多签账户列表页 |
+| `lib/governance/duoqian_account_list_page.dart` | 个人 + 机构多签统一账户列表页 |
 | `lib/governance/organization-manage/duoqian_account_info_page.dart` | 机构多签账户详情页 |
 | `lib/governance/organization-manage/duoqian_discovery_service.dart` | 机构多签反向索引发现服务 |
 | `lib/governance/organization-manage/duoqian_manage_models.dart` | 机构关闭提案模型与机构账户状态模型 |

@@ -366,7 +366,8 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
           proposalId: predictedProposalId,
           action: PersonalProposalAction.create,
           status: PersonalProposalStatus.voting,
-          yesVotes: 0,
+          // 中文注释：runtime 投票引擎创建提案后会在同一事务自动给发起人记一票赞成。
+          yesVotes: 1,
           noVotes: 0,
           snapshot: {
             'name': nameText,

@@ -13,9 +13,13 @@ class AdminSetChangeCallCodec {
     required int org,
     required Uint8List subjectId,
     required List<String> newAdmins,
+    required int newThreshold,
   }) {
     if (subjectId.length != 48) {
       throw ArgumentError('subjectId 必须为 48 字节');
+    }
+    if (newThreshold <= 0) {
+      throw ArgumentError('newThreshold 必须大于 0');
     }
     final output = ByteOutput();
     output.pushByte(palletIndex);
@@ -31,6 +35,10 @@ class AdminSetChangeCallCodec {
       }
       output.write(bytes);
     }
+    final thresholdBytes = Uint8List(4);
+    ByteData.sublistView(thresholdBytes)
+        .setUint32(0, newThreshold, Endian.little);
+    output.write(thresholdBytes);
     return output.toBytes();
   }
 }

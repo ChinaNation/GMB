@@ -202,7 +202,8 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
         proposalId: predictedProposalId,
         action: PersonalProposalAction.close,
         status: PersonalProposalStatus.voting,
-        yesVotes: 0,
+        // 中文注释：发起关闭提案签名成功后，投票引擎已自动记录发起人的赞成票。
+        yesVotes: 1,
         noVotes: 0,
         snapshot: {
           'beneficiary': beneficiary,
