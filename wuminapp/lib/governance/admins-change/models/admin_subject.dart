@@ -1,4 +1,4 @@
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
 
 enum AdminSubjectIdentityType {

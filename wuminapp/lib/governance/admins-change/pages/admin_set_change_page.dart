@@ -11,7 +11,7 @@ import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_chang
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_diff_card.dart';
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_set_editor.dart';
 import 'package:wuminapp_mobile/governance/admins-change/widgets/admin_subject_card.dart';
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';

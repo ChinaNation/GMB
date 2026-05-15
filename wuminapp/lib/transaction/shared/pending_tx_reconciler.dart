@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 
 /// 单条 pending 记录对账后的处置结果。
 enum ReconcileOutcome {

@@ -11,8 +11,8 @@
 以下能力不属于 `lib/transaction/onchain-transaction/`，不迁入本目录：
 
 - `lib/rpc/`：链上通信、metadata、nonce、extrinsic 编码与提交公共底座
-- `lib/trade/local_tx_store.dart`：本地交易记录共用存储
-- `lib/trade/pending_tx_reconciler.dart`：pending 交易共用对账
+- `lib/transaction/shared/local_tx_store.dart`：本地交易记录共用存储
+- `lib/transaction/shared/pending_tx_reconciler.dart`：pending 交易共用对账
 - `lib/wallet/`：钱包档案、密钥读取、生物识别守卫
 - `lib/signer/` 与 `lib/qr/`：热钱包/冷钱包签名协议与扫码会话
 - `lib/organization-manage/`：机构多签与多签聚合入口
@@ -31,12 +31,12 @@ wuminapp/lib/transaction/onchain-transaction/
 相关共用能力：
 
 ```text
-wuminapp/lib/trade/
+wuminapp/lib/transaction/shared/
 ├── local_tx_store.dart
 └── pending_tx_reconciler.dart
 ```
 
-`lib/trade/` 不提供功能聚合入口；它只保留历史交易记录与 pending 对账这类共用底座。
+`lib/transaction/shared/` 不提供功能聚合入口；它只保留历史交易记录与 pending 对账这类共用底座。
 
 ## 3. 关键流程
 
@@ -73,7 +73,7 @@ wuminapp/lib/trade/
 - `usedNonce = result.usedNonce`
 - `feeYuan = OnchainRpc.estimateTransferFeeYuan(amount)`
 
-`LocalTxStore` 和 `PendingTxReconciler` 留在 `lib/trade/`，因为它们服务于交易记录展示与对账，不属于 onchain 支付目录私有实现。
+`LocalTxStore` 和 `PendingTxReconciler` 留在 `lib/transaction/shared/`，因为它们服务于交易记录展示与对账，不属于 onchain 支付目录私有实现。
 
 ## 6. 签名边界
 
@@ -98,7 +98,7 @@ fee = max(amount_fen * 0.001, 10 fen)
 
 ## 8. 边界规则
 
-- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/ui/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付/多签入口；onchain 模块自身不 import `offchain` 或 `duoqian`
+- `OnchainPaymentPanel.extraEntriesBuilder` 只提供 UI 插槽，供 `lib/transaction/transaction_tab_page.dart` 在链状态提示下方、链上支付表单上方插入扫码支付/多签入口；onchain 模块自身不 import `offchain` 或 `duoqian`
 - `lib/transaction/onchain-transaction/` 不放治理提案、投票、多签、链下支付、清算行、钱包密钥管理、二维码协议底座，也不提供“交易/金融”聚合入口
 - 新增普通链上支付 UI / model / service 时才进入 `lib/transaction/onchain-transaction/`
 - 若新增能力需要 pallet index / call index，必须先确认是否仍属于“普通链上支付”；否则放回对应业务模块

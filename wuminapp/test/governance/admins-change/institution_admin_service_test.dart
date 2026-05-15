@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/admins-change/codec/subject_id_codec.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';

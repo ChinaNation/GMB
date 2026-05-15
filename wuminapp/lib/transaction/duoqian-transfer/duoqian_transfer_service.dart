@@ -13,11 +13,11 @@ import 'package:wuminapp_mobile/governance/personal-manage/personal_manage_servi
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_cache.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_cache.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
 

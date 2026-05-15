@@ -9,7 +9,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:wuminapp_mobile/common/admin_institution_codec.dart';
+import 'package:wuminapp_mobile/governance/shared/admin_institution_codec.dart';
 
 void main() {
   group('tryDecode', () {

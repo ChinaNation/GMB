@@ -7,7 +7,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/signed_extrinsic_builder.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 
 /// 协议升级提案链上交互服务。
 ///

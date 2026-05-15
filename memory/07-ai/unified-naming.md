@@ -262,24 +262,26 @@
 
 | 路径 | 中文名称 | English name | 简介 |
 |---|---|---|---|
-| `wuminapp/lib/organization-manage/` | 机构多签管理 | organization-manage | wuminapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
-| `wuminapp/lib/personal-manage/` | 个人多签管理 | personal-manage | wuminapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
+| `wuminapp/lib/citizen/` | 公民 | citizen | wuminapp 底部“公民”Tab 入口、公民投票页和公共页 |
+| `wuminapp/lib/governance/organization-manage/` | 机构多签管理 | organization-manage | wuminapp 机构多签创建、关闭、机构账户入口、机构 storage codec 和 OrganizationManage 链上交互；不得承载 personal-manage 个人主业务 |
+| `wuminapp/lib/governance/personal-manage/` | 个人多签管理 | personal-manage | wuminapp 个人多签创建、关闭、查询、提案历史、待激活和 PersonalManage 链上编解码 |
+| `wuminapp/lib/governance/shared/` | 治理共享 | shared | 治理提案通用模型、上下文、查询、缓存、机构信息和 Subject 解码 |
 | `wuminapp/lib/transaction/duoqian-transfer/` | 多签转账 | duoqian-transfer | wuminapp 多签转账提案、详情、投票、余额提示和转账入口 |
 | `wuminapp/lib/governance/` | 治理 | governance | 治理提案和投票业务 |
-| `wuminapp/lib/institution/` | 机构 | institution | 机构相关移动端业务 |
 | `wuminapp/lib/isar/` | 本地数据库 | isar | Isar 本地持久化实体、schema 和数据库入口 |
 | `wuminapp/lib/transaction/offchain-transaction/` | 链下 | offchain | 链下请求和链下业务辅助 |
 | `wuminapp/lib/transaction/onchain-transaction/` | 链上 | onchain | 链上交易和链上状态辅助 |
-| `wuminapp/lib/public/` | 公共 | public | 公共页面和公开能力 |
+| `wuminapp/lib/transaction/shared/` | 交易共享 | shared | 本地交易记录与 pending 对账等交易共享底座 |
 | `wuminapp/lib/qr/` | QR | qr | 扫码、二维码和签名请求 |
 | `wuminapp/lib/rpc/` | RPC | rpc | RPC 客户端、轻节点和 extrinsic 构造 |
 | `wuminapp/lib/security/` | 安全 | security | 移动端安全策略和工具 |
 | `wuminapp/lib/signer/` | 签名 | signer | 移动端签名辅助 |
-| `wuminapp/lib/trade/` | 交易 | trade | 交易流程和交易页面 |
+| `wuminapp/lib/transaction/` | 交易 | transaction | 交易 Tab、链上支付、链下支付、多签转账与交易共享能力 |
 | `wuminapp/lib/ui/` | UI | ui | 移动端通用 UI |
-| `wuminapp/lib/user/` | 用户 | user | 用户身份和账户 |
-| `wuminapp/lib/util/` | 工具 | util | 通用工具函数 |
-| `wuminapp/lib/vote/` | 投票 | vote | 投票业务 |
+| `wuminapp/lib/my/` | 我的 | my | 我的页、电子护照、用户身份和个人工具 |
+| `wuminapp/lib/votingengine/internal-vote/` | 内部投票 | internal-vote | wuminapp 内部投票查询、提交、待确认和投票 UI |
+| `wuminapp/lib/votingengine/joint-vote/` | 联合投票 | joint-vote | wuminapp 联合投票客户端预留目录 |
+| `wuminapp/lib/votingengine/citizen-vote/` | 公民投票 | citizen-vote | wuminapp 公民投票客户端预留目录 |
 | `wuminapp/lib/wallet/` | 钱包 | wallet | 钱包账户和资产 |
 
 ## 12b. citizenchain node 治理功能目录命名登记

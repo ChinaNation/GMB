@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:wuminapp_mobile/governance/governance_list_page.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
-import 'package:wuminapp_mobile/public/public_page.dart';
+import 'package:wuminapp_mobile/citizen/public/public_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
-import 'package:wuminapp_mobile/vote/vote_view.dart';
+import 'package:wuminapp_mobile/citizen/vote/vote_view.dart';
 
 /// 底部“公民”Tab 的总入口。
 ///

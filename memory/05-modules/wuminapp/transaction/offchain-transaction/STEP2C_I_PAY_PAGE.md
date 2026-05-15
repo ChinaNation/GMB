@@ -2,7 +2,7 @@
 
 - **日期**:2026-04-20；2026-04-29 补齐 Step 3 跨行与清算行目录
 - **目录更新**:2026-04-30 起,wuminapp 链下扫码支付业务统一收口到
-  `wuminapp/lib/transaction/offchain-transaction/`,不再使用 `wuminapp/lib/trade/offchain/`。
+  `wuminapp/lib/transaction/offchain-transaction/`。
 - **范围**:wuminapp 扫码付款页重写;对接清算行节点
   `offchain_submitPayment` RPC、清算行目录查询、绑定缓存与跨行收款方主导支付。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`

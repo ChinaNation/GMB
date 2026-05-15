@@ -12,8 +12,8 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:wuminapp_mobile/common/institution_info.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/governance/duoqian_manage_detail_page.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';

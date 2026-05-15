@@ -9,7 +9,7 @@ import 'chain_event_subscription.dart';
 import 'chain_rpc.dart';
 import 'smoldot_client.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 
 /// 链上交易监控服务（余额变化触发模式）。
 ///
@@ -336,7 +336,8 @@ class ChainTxMonitor {
       ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
       ..confirmedAtMillis = DateTime.now().millisecondsSinceEpoch;
     await LocalTxStore.insert(entity);
-    debugPrint('[TxMonitor] 写入交易 $txType $direction $amountYuan 元 (block $blockNumber)');
+    debugPrint(
+        '[TxMonitor] 写入交易 $txType $direction $amountYuan 元 (block $blockNumber)');
   }
 
   // ──── 工具方法 ────

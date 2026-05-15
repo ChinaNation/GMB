@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
-import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 
 class TransactionHistoryPage extends StatefulWidget {

@@ -5,12 +5,12 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/common/institution_info.dart';
+import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
-import 'package:wuminapp_mobile/common/proposal/proposal_models.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';

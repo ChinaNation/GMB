@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
-import 'package:wuminapp_mobile/trade/local_tx_store.dart';
+import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/my/user/user_service.dart'
     show UserProfileService;
