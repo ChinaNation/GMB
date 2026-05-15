@@ -4,7 +4,6 @@
 //   org: u8                                       (1B)
 //   kind: AdminSubjectKind                         (1B,Enum 0/1/2/3)
 //   admins: BoundedVec<AccountId, MaxAdmins>       (Compact<u32> + N×AccountId(32B))
-//   threshold: u32                                 (4B)
 //   creator: AccountId                             (32B)
 //   created_at: BlockNumber(u64)                   (8B)
 //   updated_at: BlockNumber(u64)                   (8B)

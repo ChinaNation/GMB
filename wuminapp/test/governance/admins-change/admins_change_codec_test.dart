@@ -38,7 +38,6 @@ void main() {
         0x08,
         ...List<int>.filled(32, 0xaa),
         ...List<int>.filled(32, 0xbb),
-        ...u32Le(13),
         ...List<int>.filled(32, 0xcc),
         ...u32Le(7),
         ...u32Le(9),
@@ -47,7 +46,7 @@ void main() {
 
       final decoded = AdminSubjectCodec.decode(subjectId, data)!;
       expect(decoded.admins, ['aa' * 32, 'bb' * 32]);
-      expect(decoded.threshold, 13);
+      expect(decoded.threshold, 0);
       expect(decoded.creatorHex, 'cc' * 32);
       expect(decoded.statusLabel, '已激活');
     });
@@ -58,6 +57,7 @@ void main() {
         org: 0,
         subjectId: subjectId,
         newAdmins: ['22' * 32, '33' * 32],
+        newThreshold: 13,
       );
 
       expect(call[0], AdminSetChangeCallCodec.palletIndex);
@@ -65,7 +65,8 @@ void main() {
       expect(call[2], 0);
       expect(call.sublist(3, 51), List<int>.filled(48, 0x11));
       expect(call[51], 0x08);
-      expect(call.length, 2 + 1 + 48 + 1 + 64);
+      expect(call.sublist(call.length - 4), u32Le(13));
+      expect(call.length, 2 + 1 + 48 + 1 + 64 + 4);
     });
 
     test('validates proposer and changed admin set', () {
@@ -85,13 +86,16 @@ void main() {
         subject: subject,
         proposerPubkeyHex: '0x${'aa' * 32}',
         newAdmins: ['0x${'aa' * 32}', '0x${'cc' * 32}'],
+        newThreshold: 2,
       );
-      expect(normalized, ['aa' * 32, 'cc' * 32]);
+      expect(normalized.admins, ['aa' * 32, 'cc' * 32]);
+      expect(normalized.threshold, 2);
       expect(
         () => AdminSetValidation.validate(
           subject: subject,
           proposerPubkeyHex: '0x${'aa' * 32}',
           newAdmins: ['aa' * 32, 'bb' * 32],
+          newThreshold: 2,
         ),
         throwsStateError,
       );
@@ -117,6 +121,7 @@ void main() {
           subject: subject(org: 4, kind: 1),
           proposerPubkeyHex: 'aa' * 32,
           newAdmins: ['aa' * 32, 'cc' * 32],
+          newThreshold: 2,
         ),
         throwsStateError,
       );
@@ -125,6 +130,7 @@ void main() {
           subject: subject(org: 4, kind: 2),
           proposerPubkeyHex: 'aa' * 32,
           newAdmins: ['aa' * 32, 'cc' * 32],
+          newThreshold: 2,
         ),
         throwsStateError,
       );
@@ -133,6 +139,7 @@ void main() {
           subject: subject(org: 3, kind: 3),
           proposerPubkeyHex: 'aa' * 32,
           newAdmins: ['aa' * 32, 'cc' * 32],
+          newThreshold: 2,
         ),
         throwsStateError,
       );
@@ -141,7 +148,8 @@ void main() {
           subject: subject(org: 5, kind: 3),
           proposerPubkeyHex: 'aa' * 32,
           newAdmins: ['aa' * 32, 'cc' * 32],
-        ),
+          newThreshold: 2,
+        ).admins,
         ['aa' * 32, 'cc' * 32],
       );
     });
@@ -162,6 +170,7 @@ void main() {
       final display = AdminSetChangeQrAdapter.buildDisplay(
         subject: subject,
         newAdmins: ['0x${'aa' * 32}', 'cc' * 32],
+        newThreshold: 2,
       );
       final fields = {
         for (final field in display.fields) field.key: field.value
@@ -170,6 +179,7 @@ void main() {
       expect(fields['org'], '其他机构账户');
       expect(fields['subject'], '0x${'11' * 48}');
       expect(fields['new_admins'], '0x${'aa' * 32},0x${'cc' * 32}');
+      expect(fields['new_threshold'], '2/2');
       expect(fields.containsKey('subject_id'), isFalse);
       expect(fields.containsKey('admin_count'), isFalse);
       expect(fields.containsKey('threshold'), isFalse);

@@ -322,6 +322,10 @@ class _InstitutionDuoqianClosePageState
 
           const SizedBox(height: 20),
 
+          _buildSectionTitle('阈值规则', note: '注销须全员同意'),
+
+          const SizedBox(height: 20),
+
           // 受益人地址
           _buildSectionTitle('受益人地址'),
           const SizedBox(height: 8),
@@ -439,14 +443,28 @@ class _InstitutionDuoqianClosePageState
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: AppTheme.primaryDark,
-      ),
+  Widget _buildSectionTitle(String title, {String? note}) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.primaryDark,
+          ),
+        ),
+        if (note != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            note,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

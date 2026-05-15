@@ -546,6 +546,7 @@ void main() {
         0x08, // Compact(2)
         ...admin1,
         ...admin2,
+        ...u32Le(2),
       ]);
 
       final decoded = PayloadDecoder.decode(encodeHex(payload));
@@ -562,7 +563,83 @@ void main() {
           '0x${admin2.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
         ].join(','),
       );
+      expect(decoded.fields['new_threshold'], '2/2');
       expect(decoded.summary, contains('管理员集合变更'));
+    });
+
+    test('rejects legacy propose_admin_set_change without new_threshold', () {
+      final subject = subjectIdFromAccount(
+        0x03,
+        List<int>.generate(32, (i) => 0x80 + i),
+      );
+      final payload = Uint8List.fromList([
+        0x0c,
+        0x00,
+        0x03,
+        ...subject,
+        0x08,
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
+    test('rejects propose_admin_set_change with trailing bytes', () {
+      final subject = subjectIdFromAccount(
+        0x03,
+        List<int>.generate(32, (i) => 0x80 + i),
+      );
+      final payload = Uint8List.fromList([
+        0x0c,
+        0x00,
+        0x03,
+        ...subject,
+        0x08,
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+        ...u32Le(2),
+        0xff,
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
+    test('rejects propose_admin_set_change below majority threshold', () {
+      final subject = subjectIdFromAccount(
+        0x03,
+        List<int>.generate(32, (i) => 0x80 + i),
+      );
+      final payload = Uint8List.fromList([
+        0x0c, 0x00,
+        0x03,
+        ...subject,
+        0x0c, // Compact(3)
+        ...List<int>.filled(32, 0x11),
+        ...List<int>.filled(32, 0x22),
+        ...List<int>.filled(32, 0x33),
+        ...u32Le(1),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
+    });
+
+    test('rejects builtin governance admin change with wrong fixed threshold',
+        () {
+      final subject = subjectIdFromText(
+        0x01,
+        'GFR-LN001-CB0X-944805165-2026',
+      );
+      final payload = Uint8List.fromList([
+        0x0c, 0x00,
+        0x00,
+        ...subject,
+        0x4c, // Compact(19)
+        for (var i = 0; i < 19; i++) ...List<int>.filled(32, i + 1),
+        ...u32Le(12),
+      ]);
+
+      expect(PayloadDecoder.decode(encodeHex(payload)), isNull);
     });
 
     test('decodes subject-level admin activation payload', () {
@@ -630,6 +707,7 @@ void main() {
           0x08,
           ...admin1,
           ...admin2,
+          ...u32Le(2),
         ]);
 
         final decoded = PayloadDecoder.decode(encodeHex(payload));
@@ -665,6 +743,7 @@ void main() {
             0x08,
             ...admin1,
             ...admin2,
+            ...u32Le(2),
           ]);
 
       expect(

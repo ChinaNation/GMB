@@ -2,7 +2,6 @@
 
 ## open
 
-- `memory/08-tasks/done/20260511-votingengine-boundary-fix.md`
 - `memory/08-tasks/open/20260507-173627-账户级内部投票管理员模型第0步设计-所有可操作账户使用内部投票-质押账户永不可操作-治理机构账户共.md`
 - `memory/08-tasks/open/20260507-201558-第4步改造-organization-manage-机构账户级管理员主体.md`
 - `memory/08-tasks/open/20260507-onchain-issuance-plain-ft.md`
@@ -12,6 +11,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260511-votingengine-boundary-fix.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`

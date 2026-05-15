@@ -5,6 +5,7 @@ import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.da
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -67,6 +68,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
       final accountInfo = results[0] as DuoqianAccountInfo?;
       final admins = results[1] as List<String>;
       final balance = await _resolveBalance(accountInfo?.status);
+      await _writeLocalStatus(accountInfo);
 
       if (!mounted) return;
       setState(() {
@@ -91,6 +93,22 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<void> _writeLocalStatus(DuoqianAccountInfo? accountInfo) async {
+    final status = accountInfo == null
+        ? InstitutionDuoqianLocalState.statusClosed
+        : accountInfo.status == DuoqianStatus.active
+            ? InstitutionDuoqianLocalState.statusActive
+            : InstitutionDuoqianLocalState.statusPending;
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await InstitutionDuoqianLocalState.putStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+        status,
+      );
+    });
   }
 
   void _showDeleteMenu() {
@@ -145,7 +163,48 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  bool _shouldShowMenu() => _accountInfo?.status == DuoqianStatus.active;
+  bool get _isClosed => _accountInfo == null;
+
+  bool _shouldShowMenu() =>
+      _accountInfo?.status == DuoqianStatus.active || _isClosed;
+
+  Future<void> _removeFromLocal() async {
+    final isar = await WalletIsar.instance.db();
+    await isar.writeTxn(() async {
+      await isar.duoqianInstitutionEntitys
+          .deleteByDuoqianAddress(widget.institution.duoqianAddress);
+      await InstitutionDuoqianLocalState.deleteStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+      );
+    });
+  }
+
+  Future<void> _confirmDeleteLocal() async {
+    if (!_isClosed) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除'),
+        content: const Text('确认删除该已注销机构多签账户在本机的所有数据？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _removeFromLocal();
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
 
   Future<List<WalletProfile>> _getAdminWallets() async {
     final wm = WalletManager();
@@ -178,25 +237,45 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
                 if (value == 'close') _showDeleteMenu();
+                if (value == 'delete') _confirmDeleteLocal();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'close',
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.delete_outline,
-                        size: 20,
-                        color: AppTheme.danger,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '关闭机构多签',
-                        style: TextStyle(color: AppTheme.danger),
-                      ),
-                    ],
+              itemBuilder: (_) => [
+                if (_accountInfo?.status == DuoqianStatus.active)
+                  const PopupMenuItem(
+                    value: 'close',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 20,
+                          color: AppTheme.danger,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          '关闭机构多签',
+                          style: TextStyle(color: AppTheme.danger),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                if (_isClosed)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline,
+                          size: 20,
+                          color: AppTheme.danger,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          '删除',
+                          style: TextStyle(color: AppTheme.danger),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
         ],
@@ -241,13 +320,15 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     final duoqianSs58 = _hexToSs58(widget.institution.duoqianAddress);
     final info = _accountInfo;
     final statusLabel = info == null
-        ? '未找到'
+        ? '已注销'
         : info.status == DuoqianStatus.active
             ? '已激活'
             : '待激活';
-    final statusColor = info?.status == DuoqianStatus.active
-        ? AppTheme.success
-        : AppTheme.warning;
+    final statusColor = info == null
+        ? AppTheme.textTertiary
+        : info.status == DuoqianStatus.active
+            ? AppTheme.success
+            : AppTheme.warning;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -298,8 +379,10 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
                       );
                     },
                   ),
-                  const Divider(height: 20),
-                  _buildBalanceRow(),
+                  if (!_isClosed) ...[
+                    const Divider(height: 20),
+                    _buildBalanceRow(),
+                  ],
                   const Divider(height: 20),
                   _buildInfoRow('状态', statusLabel, valueColor: statusColor),
                 ],
@@ -307,14 +390,16 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
             ),
           ),
           const SizedBox(height: 16),
-          DuoqianTransferEntryCard(
-            institution: widget.institution,
-            isPersonal: false,
-            enabled: _accountInfo?.status == DuoqianStatus.active,
-            loadAdminWallets: _getAdminWallets,
-            onCreated: _load,
-          ),
-          const SizedBox(height: 16),
+          if (!_isClosed) ...[
+            DuoqianTransferEntryCard(
+              institution: widget.institution,
+              isPersonal: false,
+              enabled: _accountInfo?.status == DuoqianStatus.active,
+              loadAdminWallets: _getAdminWallets,
+              onCreated: _load,
+            ),
+            const SizedBox(height: 16),
+          ],
           _buildAdminEntryCard(info),
         ],
       ),

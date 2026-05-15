@@ -63,7 +63,7 @@ wuminapp/test/governance/admins-change/
    - 机构账户：`0x05 InstitutionAccount + AccountId`。
 3. 读取 `AdminsChange::Subjects` 并解码完整 `AdminSubject`。
 4. 用户选择管理员钱包、编辑完整管理员集合。
-5. `AdminSetValidation` 做端上前置校验。
+5. `AdminSetValidation` 做端上前置校验，同时校验目标阈值。
 6. `AdminSetChangeCallCodec` 构造 `AdminsChange::propose_admin_set_change` call data。
 7. `AdminSetChangeService` 通过 `SignedExtrinsicBuilder` 走热钱包或冷钱包签名并提交。
 
@@ -76,6 +76,23 @@ wuminapp/test/governance/admins-change/
 - `institutionAccount`：机构账户主体，`org=4/5`，`kind=3`。
 
 `/Users/rhett/GMB/wuminapp/lib/governance/admins-change/services/institution_admin_service.dart` 是查询门面，但不再接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminSubjectIdentity`。历史上按单一字符串混用个人、机构、治理主体的入口已删除。
+
+## 管理员更换载荷与阈值
+
+当前 `AdminsChange::propose_admin_set_change` 载荷固定为：
+
+```text
+[12][0][org:u8][subject_id:48][new_admins:Compact<Vec<AccountId32>>][new_threshold:u32_le]
+```
+
+规则：
+
+- 不兼容旧 `[org, subject_id, new_admins]` 载荷。
+- 内置治理机构不是创建/注册对象，wuminapp 只展示；只有进入“换管理员”提案时才构造管理员更换交易。
+- 内置治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6。
+- 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admin_count && threshold <= admin_count`。
+- 阈值真源不在 `AdminsChange::Subjects`；治理固定阈值来自制度常量，动态阈值由 `InternalVote.ActiveDynamicThresholds` 保存。
+- QR display 必须与冷钱包 decoder 字段逐字一致：`org / subject / new_admins / new_threshold`。
 
 ## 管理员激活
 

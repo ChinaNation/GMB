@@ -1125,10 +1125,10 @@ class PayloadDecoder {
 
   // ---------------------------------------------------------------------------
   // AdminsChange(12) / propose_admin_set_change(0)
-  // 格式：[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32]
+  // 格式：[12][0][org:u8][subject:48][Compact<N>][new_admins:N*32][new_threshold:u32_le]
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeAdminSetChange(Uint8List bytes) {
-    if (bytes.length < 52) return null;
+    if (bytes.length < 56) return null;
     var offset = 2;
     final org = bytes[offset];
     offset += 1;
@@ -1148,14 +1148,22 @@ class PayloadDecoder {
       admins.add(_bytesToLowerHex(bytes.sublist(offset, offset + 32)));
       offset += 32;
     }
+    if (offset + 4 != bytes.length) return null;
+    final newThreshold = _readU32Le(bytes, offset);
+    if (!_validAdminChangeThreshold(org, adminCount, newThreshold)) {
+      return null;
+    }
+    final thresholdLabel = '$newThreshold/$adminCount';
 
     return DecodedPayload(
       action: 'propose_admin_set_change',
-      summary: '${_orgName(org)} 管理员集合变更：${subject.label} → $adminCount 人',
+      summary:
+          '${_orgName(org)} 管理员集合变更：${subject.label} → $adminCount 人，阈值 $thresholdLabel',
       fields: {
         'org': _orgName(org),
         'subject': _bytesToLowerHex(subjectBytes),
         'new_admins': admins.join(','),
+        'new_threshold': thresholdLabel,
       },
     );
   }
@@ -1420,6 +1428,13 @@ class PayloadDecoder {
     return value;
   }
 
+  static int _readU32Le(Uint8List bytes, int offset) {
+    return bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
+  }
+
   static BigInt _readU128Le(Uint8List bytes, int offset) {
     var value = BigInt.zero;
     for (var i = 15; i >= 0; i--) {
@@ -1517,6 +1532,48 @@ class PayloadDecoder {
         return subjectKind == _subjectKindInstitutionAccount;
       default:
         return false;
+    }
+  }
+
+  static bool _validAdminChangeThreshold(
+    int org,
+    int adminCount,
+    int threshold,
+  ) {
+    final fixed = _fixedGovernanceThreshold(org);
+    if (fixed != null) {
+      final expectedCount = _fixedGovernanceAdminCount(org);
+      return adminCount == expectedCount && threshold == fixed;
+    }
+    if (org == 3 || org == 4 || org == 5) {
+      return threshold > 0 &&
+          threshold <= adminCount &&
+          threshold * 2 > adminCount;
+    }
+    return false;
+  }
+
+  static int? _fixedGovernanceThreshold(int org) {
+    switch (org) {
+      case 0:
+        return 13;
+      case 1:
+      case 2:
+        return 6;
+      default:
+        return null;
+    }
+  }
+
+  static int _fixedGovernanceAdminCount(int org) {
+    switch (org) {
+      case 0:
+        return 19;
+      case 1:
+      case 2:
+        return 9;
+      default:
+        return 0;
     }
   }
 

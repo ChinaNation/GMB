@@ -50,7 +50,8 @@ PersonalManage ProposalData：
 PersonalManage storage：
 
 - `PersonalManage::PersonalDuoqians` 保存 `creator / account_name / created_at / status`。
-- 管理员和阈值真源仍是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
+- 管理员真源是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
+- 普通业务动态阈值真源是 `InternalVote.ActiveDynamicThresholds`；创建/注销生命周期阈值由投票引擎按管理员快照写成全员同意。
 
 ## 3.1 wuminapp 本地注销显示规则
 
@@ -63,6 +64,7 @@ PersonalManage storage：
   `PersonalDuoqianEntity`、该账户全部 `PersonalDuoqianProposalEntity` 和本地状态键。
 - 链路异常只显示加载失败，不把网络失败写成已注销。
 - 链上 votingengine 90 天终态提案清理保持不变，wuminapp 不修改链上清理周期。
+- 发起创建/注销提案后，runtime 投票引擎会在同一事务自动给发起人记一票赞成；wuminapp 本地提案记录初始 `yesVotes = 1`，不再显示发起人还需要第二次投票。
 
 ## 3.2 创建 / 注销阈值 UI
 

@@ -17,22 +17,26 @@ class AdminSetChangeService {
     required AdminSubjectState subject,
     required String proposerPubkeyHex,
     required List<String> newAdmins,
+    required int newThreshold,
   }) {
     final normalized = AdminSetValidation.validate(
       subject: subject,
       proposerPubkeyHex: proposerPubkeyHex,
       newAdmins: newAdmins,
+      newThreshold: newThreshold,
     );
     return AdminSetChangeCallCodec.build(
       org: subject.org,
       subjectId: AdminSubjectIdCodec.fromHex(subject.subjectIdHex),
-      newAdmins: normalized,
+      newAdmins: normalized.admins,
+      newThreshold: normalized.threshold,
     );
   }
 
   Future<AdminSetChangeSubmitResult> submit({
     required AdminSubjectState subject,
     required List<String> newAdmins,
+    required int newThreshold,
     required String fromAddress,
     required Uint8List signerPubkey,
     required Future<Uint8List> Function(Uint8List payload) sign,
@@ -42,6 +46,7 @@ class AdminSetChangeService {
       subject: subject,
       proposerPubkeyHex: AdminSubjectIdCodec.hexEncode(signerPubkey),
       newAdmins: newAdmins,
+      newThreshold: newThreshold,
     );
     final result = await SignedExtrinsicBuilder(
       chainRpc: _rpc,

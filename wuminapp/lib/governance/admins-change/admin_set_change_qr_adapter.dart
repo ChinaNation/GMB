@@ -8,6 +8,7 @@ class AdminSetChangeQrAdapter {
   static SignDisplay buildDisplay({
     required AdminSubjectState subject,
     required List<String> newAdmins,
+    required int newThreshold,
   }) {
     final normalizedAdmins = newAdmins
         .map((admin) => '0x${AdminSubjectIdCodec.normalizeHex(admin)}')
@@ -22,6 +23,11 @@ class AdminSetChangeQrAdapter {
             key: 'subject', label: '管理员主体', value: '0x${subject.subjectIdHex}'),
         SignDisplayField(
             key: 'new_admins', label: '新管理员', value: normalizedAdmins),
+        SignDisplayField(
+          key: 'new_threshold',
+          label: '新阈值',
+          value: '$newThreshold/${newAdmins.length}',
+        ),
       ],
     );
   }

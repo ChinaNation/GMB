@@ -21,6 +21,8 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 import 'organization-manage/duoqian_account_info_page.dart';
 import 'organization-manage/duoqian_discovery_service.dart';
+import 'organization-manage/duoqian_manage_models.dart' as org_models;
+import 'organization-manage/duoqian_manage_service.dart';
 import 'organization-manage/institution_duoqian_create_page.dart';
 import 'personal-manage/personal_duoqian_create_page.dart';
 import 'personal-manage/personal_manage_account_info_page.dart';
@@ -43,14 +45,15 @@ class _UnifiedItem {
         personal = item,
         institution = null;
 
-  _UnifiedItem.institution(DuoqianInstitutionEntity item)
-      : kind = _DuoqianKind.institution,
+  _UnifiedItem.institution(
+    DuoqianInstitutionEntity item, {
+    required this.localStatus,
+  })  : kind = _DuoqianKind.institution,
         name = item.name,
         duoqianAddress = item.duoqianAddress,
         addedAtMillis = item.addedAtMillis,
         discoveredViaAdmin = item.discoveredViaAdmin,
         matchedAdminCount = item.matchedAdminPubkeys.length,
-        localStatus = null,
         personal = null,
         institution = item;
 
@@ -78,6 +81,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   bool _scanning = false;
   String? _scanProgress;
   final PersonalManageService _personalManageService = PersonalManageService();
+  final DuoqianManageService _duoqianManageService = DuoqianManageService();
 
   @override
   void initState() {
@@ -106,9 +110,14 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final personals = await isar.personalDuoqianEntitys.where().findAll();
     final institutions = await isar.duoqianInstitutionEntitys.where().findAll();
     await _syncPersonalStatuses(isar, personals);
+    await _syncInstitutionStatuses(isar, institutions);
     final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
       isar,
       personals.map((p) => p.duoqianAddress),
+    );
+    final institutionStatuses = await InstitutionDuoqianLocalState.readStatuses(
+      isar,
+      institutions.map((p) => p.duoqianAddress),
     );
     final merged = <_UnifiedItem>[
       ...personals.map(
@@ -117,7 +126,12 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
           localStatus: personalStatuses[_normalizeHex(p.duoqianAddress)],
         ),
       ),
-      ...institutions.map(_UnifiedItem.institution),
+      ...institutions.map(
+        (p) => _UnifiedItem.institution(
+          p,
+          localStatus: institutionStatuses[_normalizeHex(p.duoqianAddress)],
+        ),
+      ),
     ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
     if (!mounted) return;
     setState(() => _items = merged);
@@ -146,6 +160,33 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         });
       } catch (_) {
         // 中文注释：链路异常时不改本地状态，避免把网络失败误判成注销。
+      }
+    }
+  }
+
+  Future<void> _syncInstitutionStatuses(
+    Isar isar,
+    List<DuoqianInstitutionEntity> institutions,
+  ) async {
+    for (final institution in institutions) {
+      try {
+        final info = await _duoqianManageService.fetchDuoqianAccount(
+          institution.duoqianAddress,
+        );
+        final status = info == null
+            ? InstitutionDuoqianLocalState.statusClosed
+            : info.status == org_models.DuoqianStatus.active
+                ? InstitutionDuoqianLocalState.statusActive
+                : InstitutionDuoqianLocalState.statusPending;
+        await isar.writeTxn(() async {
+          await InstitutionDuoqianLocalState.putStatusInTxn(
+            isar,
+            institution.duoqianAddress,
+            status,
+          );
+        });
+      } catch (_) {
+        // 中文注释：网络/轻节点异常不改本地状态，避免把查询失败误判为注销。
       }
     }
   }
@@ -418,7 +459,9 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     final color = isPersonal ? AppTheme.accent : AppTheme.info;
     final iconData = isPersonal ? Icons.person : Icons.business;
     final tag = isPersonal ? '个人' : '机构';
-    final isClosed = item.localStatus == PersonalDuoqianLocalState.statusClosed;
+    final isClosed =
+        item.localStatus == PersonalDuoqianLocalState.statusClosed ||
+            item.localStatus == InstitutionDuoqianLocalState.statusClosed;
     final subtitleParts = <String>[
       _truncateAddress(ss58),
       if (item.discoveredViaAdmin) '我作为 ${item.matchedAdminCount} 位管理员之一参与',

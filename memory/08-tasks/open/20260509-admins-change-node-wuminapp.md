@@ -200,3 +200,14 @@
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/governance/organization-manage lib/common lib/transaction/duoqian-transfer lib/vote test/governance/organization-manage test/governance/admins-change`（`wuminapp`）：通过。
 - `/Users/rhett/flutter/bin/cache/dart-sdk/bin/dart analyze lib/signer test/signer`（`wumin`）：通过。
 - `npx prettier --write ...`：当前环境无本地 prettier，且网络受限无法访问 `registry.npmjs.org`；未执行 prettier，已用 `tsc` 和 `git diff --check` 覆盖本次 TS 变更。
+
+### 2026-05-15 wuminapp + wumin 冷钱包新阈值 ABI 修复记录
+
+- 已将 wuminapp `AdminsChange::propose_admin_set_change` call data 切到最终 ABI：`org / subject_id / new_admins / new_threshold`。
+- 已删除 wuminapp 对 `AdminsChange::Subjects.threshold` 的旧读取口径；管理员主体 storage 只解码 `org/kind/admins/creator/created_at/updated_at/status`，固定阈值走制度常量，动态阈值读取 `InternalVote.ActiveDynamicThresholds / PendingDynamicThresholds`。
+- 已将 wuminapp 管理员更换页面补齐阈值 UI：内置治理机构只读固定阈值，个人多签和机构账户可输入动态阈值并按严格过半公式校验。
+- 已将 wuminapp 管理员更换 QR display 同步为 `org / subject / new_admins / new_threshold`，与冷钱包 decoder 严格比对。
+- 已将 wumin 冷钱包 `propose_admin_set_change` decoder 切到新载荷，缺少 `new_threshold` 的旧载荷和尾部多余字节直接拒签。
+- 已补齐机构多签注销后的本地显示：统一账户列表继续显示“已注销”，详情页不显示余额，右上角显示“删除”，确认后清理本机机构多签数据。
+- 已将个人多签创建/注销提案本地初始票数改为 `yesVotes = 1`，对齐投票引擎发起人自动赞成票。
+- 已同步 `unified-protocols.md`、wuminapp governance/admins-change/personal-manage/signer 文档和 wuminapp-vs-wumin 双端边界文档。
