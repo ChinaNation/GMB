@@ -13,13 +13,12 @@ import {
   type InstitutionDetail,
 } from './api';
 import {
-  generateCpmsInstitutionSfid,
+  generateCpmsInstallQr,
   getCpmsSiteByInstitution,
   type CpmsSiteRow,
 } from '../cpms/api';
 import type { AdminAuth } from '../auth/types';
 import { AccountList } from './AccountList';
-import { CpmsRegisterModal } from '../cpms/CpmsRegisterModal';
 import { CpmsSitePanel } from '../cpms/CpmsSitePanel';
 import { CreateAccountModal } from './CreateAccountModal';
 import { PrivateInstitutionLayout } from './PrivateInstitutionLayout';
@@ -46,7 +45,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
   // ── CPMS 站点状态(仅公安局机构使用) ──
   const [cpmsSite, setCpmsSite] = useState<CpmsSiteRow | null>(null);
   const [cpmsBusy, setCpmsBusy] = useState(false);
-  const [cpmsRegisterOpen, setCpmsRegisterOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -97,15 +95,13 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
     if (!inst) return;
     setCpmsBusy(true);
     try {
-      const result = await generateCpmsInstitutionSfid(auth, {
+      const result = await generateCpmsInstallQr(auth, {
         province: inst.province,
         city: inst.city,
         institution: inst.institution_code,
-        // 公权机构/公安局此路径必然有名称;两步式未命名的私权机构根本走不到本路径
-        institution_name: inst.institution_name ?? '',
       });
       setCpmsSite({
-        site_sfid: result.site_sfid,
+        sfid_number: result.sfid_number,
         install_token_status: 'PENDING',
         status: 'PENDING',
         version: 1,
@@ -118,9 +114,9 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
         created_at: new Date().toISOString(),
       });
       message.success('CPMS 安装二维码已生成');
-      // 首次生成 QR1 会替换机构 sfid_number,需刷新机构详情拿到新号
+      // 中文注释:INSTALL 码直接交给 CPMS 初始化,不再经过中间注册回传。
       load();
-      loadCpms(result.site_sfid);
+      loadCpms(result.sfid_number);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '生成失败');
     } finally {
@@ -165,14 +161,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
                     return (
                       <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
                         生成 CPMS 安装二维码
-                      </Button>
-                    );
-                  }
-                  const tokenOk = cpmsSite.install_token_status !== 'REVOKED';
-                  if (cpmsSite.status === 'PENDING' && tokenOk) {
-                    return (
-                      <Button type="primary" onClick={() => setCpmsRegisterOpen(true)}>
-                        扫描 QR2 注册
                       </Button>
                     );
                   }
@@ -242,16 +230,6 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
                 onCreated={() => {
                   setCreateAccountOpen(false);
                   load();
-                }}
-              />
-
-              <CpmsRegisterModal
-                auth={auth}
-                open={cpmsRegisterOpen}
-                onClose={() => setCpmsRegisterOpen(false)}
-                onRegistered={() => {
-                  setCpmsRegisterOpen(false);
-                  loadCpms(inst.sfid_number);
                 }}
               />
             </>

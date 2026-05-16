@@ -1,4 +1,4 @@
-// 公民档案详情页。左侧公民信息（可编辑），右侧 QR4 二维码（自动生成，仅下载）。
+// 公民档案详情页。左侧公民信息（可编辑），右侧 ARCHIVE 二维码（自动生成，仅下载）。
 // 下方公民资料区域预留给出生纸、证件照等上传。
 
 import { useState, useEffect } from 'react';
@@ -102,9 +102,9 @@ export default function ArchiveDetail() {
     setSaving(false);
   };
 
-  // QR4 下载
-  const handleDownloadQr4 = () => {
-    const svg = document.querySelector('[data-qr4] svg');
+  // ARCHIVE 二维码下载
+  const handleDownloadArchiveQr = () => {
+    const svg = document.querySelector('[data-archive-qr] svg');
     if (!svg) return;
     const svgData = new XMLSerializer().serializeToString(svg);
     const canvas = document.createElement('canvas');
@@ -118,7 +118,7 @@ export default function ArchiveDetail() {
       ctx.drawImage(img, 10, 10, 400, 400);
       const a = document.createElement('a');
       a.href = canvas.toDataURL('image/png');
-      a.download = `qr4-${archive?.archive_no || 'unknown'}.png`;
+      a.download = `archive-${archive?.archive_no || 'unknown'}.png`;
       a.click();
     };
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
@@ -229,18 +229,18 @@ export default function ArchiveDetail() {
             )}
           </div>
 
-          {/* 右侧：QR4 二维码 */}
+          {/* 右侧：ARCHIVE 二维码 */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 200 }}>
-            {archive.qr4_payload ? (
+            {archive.archive_qr_payload ? (
               <>
-                <div data-qr4="" style={{ lineHeight: 0 }}>
-                  <QRCodeSVG value={archive.qr4_payload} size={200} />
+                <div data-archive-qr="" style={{ lineHeight: 0 }}>
+                  <QRCodeSVG value={archive.archive_qr_payload} size={200} />
                 </div>
-                <button className="btn btn--ghost btn--sm" onClick={handleDownloadQr4}>下载二维码</button>
+                <button className="btn btn--ghost btn--sm" onClick={handleDownloadArchiveQr}>下载二维码</button>
               </>
             ) : (
               <div style={{ width: 200, height: 200, background: '#f3f4f6', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-                QR3 未完成
+                签发未就绪
               </div>
             )}
           </div>

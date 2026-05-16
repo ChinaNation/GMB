@@ -33,7 +33,6 @@ fn build_test_state() -> AppState {
         rate_limit_redis: Arc::new(
             redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
         ),
-        cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
         sheng_admin_signing_cache: Arc::new(sheng_admins::signing_cache::ShengSigningCache::new()),
         sharded_store: {
             #[cfg(test)]
@@ -448,16 +447,19 @@ fn cpms_site_scope_must_match_admin_province() {
     let site = CpmsSiteKeys {
         site_sfid: "SFID-SITE-001".to_string(),
         install_token: "test-token".to_string(),
+        install_secret: "0x11".to_string(),
+        install_secret_hash: "0x22".to_string(),
         install_token_status: InstallTokenStatus::Pending,
         status: CpmsSiteStatus::Active,
         version: 1,
         province_code: "GZ".to_string(),
         admin_province: "贵州省".to_string(),
         city_name: "贵阳市".to_string(),
+        city_code: "001".to_string(),
         institution_code: "ZF".to_string(),
         institution_name: "贵阳市政府".to_string(),
         qr1_payload: String::new(),
-        qr3_payload: None,
+        cpms_pubkey_hash: None,
         created_by: "0xSUPER".to_string(),
         created_at: Utc::now(),
         updated_by: None,

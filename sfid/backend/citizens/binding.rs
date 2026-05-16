@@ -180,78 +180,24 @@ pub(crate) async fn citizen_bind(
                 Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
             };
             if qr4.r#type != "ARCHIVE" {
-                return api_error(
-                    StatusCode::BAD_REQUEST,
-                    1001,
-                    "qr_type must be CPMS_ARCHIVE",
-                );
+                return api_error(StatusCode::BAD_REQUEST, 1001, "type must be ARCHIVE");
             }
 
-            // 验证 anon_cert + archive_sig（复用 archive_import 的逻辑）
-            let sfid_sig_bytes = match hex::decode(qr4.cert.sig.trim().trim_start_matches("0x")) {
-                Ok(v) => v,
-                Err(_) => {
-                    return api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "anon_cert.sfid_sig hex decode failed",
-                    )
-                }
-            };
-            let msg_randomizer = qr4
-                .cert
-                .mr
-                .as_deref()
-                .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
-            let cert_valid = match crate::cpms::rsa_blind::verify_anon_cert(
-                &qr4.cert.prov,
-                &qr4.cert.pk,
-                &sfid_sig_bytes,
-                msg_randomizer.as_deref(),
-            ) {
-                Ok(v) => v,
-                Err(e) => {
-                    return api_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        1004,
-                        &format!("verify error: {e}"),
-                    )
-                }
-            };
-            if !cert_valid {
-                return api_error(StatusCode::UNAUTHORIZED, 2004, "anon_cert.sfid_sig invalid");
-            }
-            if qr4.cert.prov != qr4.prov {
-                return api_error(StatusCode::BAD_REQUEST, 1001, "province_code mismatch");
-            }
-            // 验 archive_sig
-            let archive_sign_source = format!(
-                "sfid-cpms-v1|archive|{}|{}|{}|{}",
-                qr4.prov, qr4.ano, qr4.cs, qr4.ve
-            );
-            let anon_pk = match crate::login::parse_sr25519_pubkey_bytes(&qr4.cert.pk) {
-                Some(v) => v,
-                None => {
-                    return api_error(StatusCode::BAD_REQUEST, 1001, "anon_pubkey format invalid")
-                }
-            };
-            let archive_sig = match hex::decode(qr4.sig.trim().trim_start_matches("0x")) {
-                Ok(v) => v,
-                Err(_) => {
-                    return api_error(
-                        StatusCode::BAD_REQUEST,
-                        1001,
-                        "archive_sig hex decode failed",
-                    )
-                }
-            };
-            if !crate::cpms::verify_sr25519_signature(&anon_pk, &archive_sign_source, &archive_sig)
+            // 中文注释:两码方案下统一复用 CPMS 模块的 ARCHIVE 验真逻辑,
+            // SFID 通过 geo_seal 解出 sfid_number 后再派生省市归属。
+            let verified = match crate::cpms::verify_cpms_archive_qr(
+                &state,
+                &qr4,
+                ctx.admin_province.as_deref(),
+            )
+            .await
             {
-                return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
-            }
-
-            let province_code = qr4.cert.prov.clone();
-            let archive_no = qr4.ano.clone();
+                Ok(v) => v,
+                Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
+            };
+            let province_code = verified.province_code.clone();
+            let city_code = verified.city_code.clone();
+            let archive_no = verified.archive_no.clone();
 
             // 写入(写锁内做 SFID 生成 + 1000 次碰撞重试,避免 lock-free 阶段读到陈旧的 sfid_code map)
             let mut store = match store_write_or_500(&state) {
@@ -325,6 +271,7 @@ pub(crate) async fn citizen_bind(
                     record.archive_no = Some(archive_no.clone());
                     record.sfid_code = Some(sfid_result.clone());
                     record.province_code = Some(province_code.clone());
+                    record.city_code = Some(city_code.clone());
                     record.chain_confirmed = false;
                     record.bound_at = Some(Utc::now());
                     record.bound_by = Some(ctx.admin_pubkey.clone());
@@ -341,6 +288,7 @@ pub(crate) async fn citizen_bind(
                     archive_no: record.archive_no.clone(),
                     sfid_code: record.sfid_code.clone(),
                     province_code: record.province_code.clone(),
+                    city_code: record.city_code.clone(),
                     status: record.status(),
                 };
                 drop(store);
@@ -365,6 +313,7 @@ pub(crate) async fn citizen_bind(
                 sfid_code: Some(sfid_result.clone()),
                 sfid_signature: None,
                 province_code: Some(province_code.clone()),
+                city_code: Some(city_code.clone()),
                 chain_confirmed: false,
                 bound_at: Some(Utc::now()),
                 bound_by: Some(ctx.admin_pubkey.clone()),
@@ -377,6 +326,7 @@ pub(crate) async fn citizen_bind(
                 archive_no: record.archive_no.clone(),
                 sfid_code: record.sfid_code.clone(),
                 province_code: record.province_code.clone(),
+                city_code: record.city_code.clone(),
                 status: record.status(),
             };
             store.citizen_records.insert(cid, record);
@@ -467,6 +417,7 @@ pub(crate) async fn citizen_bind(
                 archive_no: target.archive_no.clone(),
                 sfid_code: target.sfid_code.clone(),
                 province_code: target.province_code.clone(),
+                city_code: target.city_code.clone(),
                 status: target.status(),
             };
             // 删除原 PENDING 记录,更新索引指向 target
@@ -585,6 +536,7 @@ pub(crate) async fn citizen_unbind(
         archive_no: record.archive_no.clone(),
         sfid_code: record.sfid_code.clone(),
         province_code: record.province_code.clone(),
+        city_code: record.city_code.clone(),
         status: record.status(),
     };
     drop(store);

@@ -41,24 +41,9 @@ export interface Archive {
   status: string;
   citizen_status: string;
   voting_eligible: boolean;
-  qr4_payload: string;
+  archive_qr_payload: string;
   created_at: number;
   updated_at: number;
-}
-
-export interface QrPayload {
-  ver: string;
-  issuer_id: string;
-  site_sfid: string;
-  sign_key_id: string;
-  archive_no: string;
-  citizen_status: string;
-  voting_eligible: boolean;
-  issued_at: number;
-  expire_at: number;
-  qr_id: string;
-  sig_alg: string;
-  signature: string;
 }
 
 export interface QrPrintRecord {
@@ -72,14 +57,14 @@ export interface QrPrintRecord {
 
 export interface InstallStatus {
   initialized: boolean;
-  site_sfid: string | null;
+  sfid_number: string | null;
+  province_code: string | null;
+  city_code: string | null;
   province_name: string | null;
   city_name: string | null;
-  institution_name: string | null;
   super_admin_bound_count: number;
-  qr2_ready: boolean;
-  qr2_payload: string | null;
-  anon_cert_done: boolean;
+  archive_signing_ready: boolean;
+  cpms_pubkey: string | null;
 }
 
 export interface ChallengeData {

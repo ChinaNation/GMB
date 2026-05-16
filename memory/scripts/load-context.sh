@@ -107,7 +107,7 @@ case "$MODULE" in
     print_if_exists "citizenchain/runtime/README.md"
     print_if_exists "memory/05-modules/citizenchain/runtime/issuance/resolution-issuance/RESOLUTIONISSUANCE_TECHNICAL.md"
     ;;
-  citizenchain/runtime/votingengine|votingengine|voting-engine)
+  citizenchain/runtime/votingengine|votingengine)
     print_base_context
     print_if_exists "memory/01-architecture/citizenchain-target-structure.md"
     print_if_exists "memory/07-ai/ci-path-routing.md"

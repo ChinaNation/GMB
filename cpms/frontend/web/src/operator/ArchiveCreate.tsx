@@ -1,4 +1,4 @@
-// 新建公民档案。省份和城市从 QR1 初始化信息自动获取，不可修改。
+// 新建公民档案。省份和城市从 INSTALL 初始化信息自动获取，不可修改。
 // 镇和村/路从后端地址 API 加载，联动选择。具体地址文本输入（最长 100 字符）。
 
 import { useState, useEffect } from 'react';
@@ -25,16 +25,11 @@ export default function ArchiveCreate() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 从 install_status 获取省市信息
+  // 中文注释：省市只来自 CPMS 安装授权，前端不允许手工指定归属。
   useEffect(() => {
     api.installStatus().then(res => {
-      if (res.data?.site_sfid) {
-        const parts = res.data.site_sfid.split('-');
-        if (parts.length === 5) {
-          setProvinceCode(parts[1].slice(0, 2));
-          setCityCode(parts[1].slice(2));
-        }
-      }
+      if (res.data?.province_code) setProvinceCode(res.data.province_code);
+      if (res.data?.city_code) setCityCode(res.data.city_code);
       if (res.data?.province_name) setProvinceName(res.data.province_name);
       if (res.data?.city_name) setCityName(res.data.city_name);
     }).catch(() => {});
@@ -67,8 +62,6 @@ export default function ArchiveCreate() {
     setLoading(true);
     try {
       const body = {
-        province_code: provinceCode,
-        city_code: cityCode,
         town_code: selectedTown,
         village_id: selectedVillage,
         address: addressText.trim() || undefined,

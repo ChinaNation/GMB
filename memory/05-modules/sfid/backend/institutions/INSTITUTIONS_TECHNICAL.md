@@ -1,8 +1,8 @@
 # institutions/ — SFID 机构与账户名称模型
 
-> 中文注释(2026-05-02):`institutions` 只保留机构身份、账户名称、资料库和
-> 机构对区块链/钱包提供查询的能力。匿名证书 RSA 盲签名已经归入
-> `sfid/backend/cpms/rsa_blind.rs`,不再挂在机构模块下。
+> 中文注释(2026-05-16):`institutions` 只保留机构身份、账户名称、资料库和
+> 机构对区块链/钱包提供查询的能力。CPMS 安装授权、ARCHIVE 档案验真和
+> 授权状态治理归 `sfid/backend/cpms/`,不挂在机构模块下。
 
 ## 定位
 

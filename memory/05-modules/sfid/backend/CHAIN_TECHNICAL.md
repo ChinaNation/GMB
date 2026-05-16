@@ -30,7 +30,7 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 需要和区块链交互时,才允许在 `sfid/backend/sheng_admins/` 下新增
 `chain_replace_admin.rs`。
 
-CPMS 系统安装、QR2 注册、QR3 匿名证书、站点状态治理归
+CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
 `sfid/backend/cpms/handler.rs`,不属于省管理员链交互。
 
 ## 2. 目录铁律

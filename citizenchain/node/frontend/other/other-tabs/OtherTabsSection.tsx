@@ -13,8 +13,13 @@ type Props = {
 export function OtherTabsSection({ activeKey }: Props) {
   const [payload, setPayload] = useState<OtherTabsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const whitepaperDoc = activeKey === 'whitepaper' ? LOCAL_DOCS.find((doc) => doc.key === 'whitepaper') : null;
 
   useEffect(() => {
+    if (whitepaperDoc) {
+      return undefined;
+    }
+
     let cancelled = false;
     void api
       .getOtherTabsContent()
@@ -30,7 +35,16 @@ export function OtherTabsSection({ activeKey }: Props) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [whitepaperDoc]);
+
+  // 中文注释：白皮书是本地内置文档，不能被 Tauri/RPC 状态阻塞；公民宪法仍由 runtime API 读取。
+  if (whitepaperDoc) {
+    return (
+      <section className="section other-tab-section" key={whitepaperDoc.key}>
+        <LocalDocViewer doc={whitepaperDoc} />
+      </section>
+    );
+  }
 
   if (error) {
     return <pre className="error">{error}</pre>;

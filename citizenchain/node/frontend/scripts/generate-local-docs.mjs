@@ -16,9 +16,51 @@ const sources = [
   }
 ];
 
+const mimeTypes = new Map([
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.webp', 'image/webp'],
+  ['.gif', 'image/gif'],
+  ['.svg', 'image/svg+xml'],
+]);
+
+function toDataUri(absPath) {
+  const ext = path.extname(absPath).toLowerCase();
+  const mime = mimeTypes.get(ext);
+  if (!mime || !fs.existsSync(absPath)) return null;
+  return `data:${mime};base64,${fs.readFileSync(absPath).toString('base64')}`;
+}
+
+function resolveRelativeAsset(sourceAbs, assetPath) {
+  if (/^(?:[a-z]+:|#|\/)/i.test(assetPath)) return null;
+  const decodedPath = decodeURIComponent(assetPath);
+  return path.resolve(path.dirname(sourceAbs), decodedPath);
+}
+
+function embedLocalImages(markdown, sourceAbs) {
+  const htmlImgPattern = /(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi;
+  const markdownImgPattern = /(!\[[^\]]*\]\()([^)]+)(\))/g;
+
+  // 中文注释：白皮书会被内置进前端 bundle，相对图片必须转成 data URI 才能在桌面端显示。
+  return markdown
+    .replace(htmlImgPattern, (match, prefix, assetPath, suffix) => {
+      const absAssetPath = resolveRelativeAsset(sourceAbs, assetPath);
+      if (!absAssetPath) return match;
+      const dataUri = toDataUri(absAssetPath);
+      return dataUri ? `${prefix}${dataUri}${suffix}` : match;
+    })
+    .replace(markdownImgPattern, (match, prefix, assetPath, suffix) => {
+      const absAssetPath = resolveRelativeAsset(sourceAbs, assetPath.trim());
+      if (!absAssetPath) return match;
+      const dataUri = toDataUri(absAssetPath);
+      return dataUri ? `${prefix}${dataUri}${suffix}` : match;
+    });
+}
+
 const docs = sources.map((item) => {
   const abs = path.resolve(repoRoot, item.sourcePath);
-  const markdown = fs.readFileSync(abs, 'utf8');
+  const markdown = embedLocalImages(fs.readFileSync(abs, 'utf8'), abs);
   return {
     ...item,
     markdown,

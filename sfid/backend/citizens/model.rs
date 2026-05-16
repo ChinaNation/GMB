@@ -15,10 +15,20 @@ pub(crate) enum CitizenStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ImportedArchive {
     pub(crate) archive_no: String,
-    /// 以验签通过后的 anon_cert.province_code 为准。
+    /// 以 SFID 解开并验真的 `geo_seal.province_code` 为准。
     pub(crate) province_code: String,
-    /// 匿名证书 SHA-256 摘要，用于审计。
-    pub(crate) anon_cert_hash: String,
+    /// SFID 从签发机构 sfid_number 解码得到的市代码,不从档案号明文推导。
+    #[serde(default)]
+    pub(crate) city_code: String,
+    /// 签发该档案二维码的市公安局机构 SFID 号。
+    #[serde(default)]
+    pub(crate) sfid_number: String,
+    /// CPMS 本机签发公钥摘要,避免公开暴露签发公钥。
+    #[serde(default)]
+    pub(crate) cpms_pubkey_hash: String,
+    /// `geo_seal` 摘要,用于审计密文是否被替换。
+    #[serde(default)]
+    pub(crate) geo_seal_hash: String,
     pub(crate) imported_at: DateTime<Utc>,
     #[serde(default = "default_archive_import_status")]
     pub(crate) status: ArchiveImportStatus,
@@ -66,6 +76,8 @@ pub(crate) struct CitizenRecord {
     pub(crate) sfid_code: Option<String>,
     pub(crate) sfid_signature: Option<String>,
     pub(crate) province_code: Option<String>,
+    #[serde(default)]
+    pub(crate) city_code: Option<String>,
     /// 链上绑定是否已确认（bind_sfid extrinsic InBestBlock）。
     #[serde(default)]
     pub(crate) chain_confirmed: bool,
@@ -147,6 +159,7 @@ pub(crate) struct CitizenBindOutput {
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
     pub(crate) province_code: Option<String>,
+    pub(crate) city_code: Option<String>,
     pub(crate) status: CitizenBindStatus,
 }
 
@@ -188,6 +201,7 @@ pub(crate) struct CitizenRow {
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
     pub(crate) province_code: Option<String>,
+    pub(crate) city_code: Option<String>,
     pub(crate) status: CitizenBindStatus,
 }
 

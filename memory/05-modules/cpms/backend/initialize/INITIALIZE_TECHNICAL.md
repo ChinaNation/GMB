@@ -1,34 +1,56 @@
 # CPMS Initialize 模块技术文档
 
 ## 1. 模块定位
-`backend/src/initialize/` 负责 CPMS 安装初始化全流程。
+`backend/src/initialize/` 负责 CPMS 安装初始化、安装授权材料入库、ARCHIVE 签发密钥生成和超级管理员绑定。
 
-该模块统一承载“首次安装引导、安装码验签、初始化数据入库、省级管理员绑定”能力。
+本模块只消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码，不再维护旧中间注册状态。
+CPMS 是离线系统，初始化阶段不要求外置验签公钥；档案码真实性由 SFID 在 ARCHIVE 验真阶段闭环确认。
 
 ## 2. 负责范围
-- 安装引导状态查询：`/api/v1/install/status`
-- 使用 SFID 初始化二维码执行首次初始化：`/api/v1/install/initialize`
-- 省级管理员绑定：`/api/v1/install/super-admin/bind`
-- 初始化密钥材料生成（固定 3 把二维码签名密钥：`K1/K2/K3`）
-- 初始化阶段省级管理员固定映射（`K1/K2/K3 -> u_super_admin_01/02/03`）
+- 安装状态查询：`GET /api/v1/install/status`
+- 使用 SFID 安装码初始化：`POST /api/v1/install/initialize`
+- 超级管理员绑定：`POST /api/v1/install/super-admin/bind`
+- 生成 CPMS 本机 ARCHIVE 签发密钥：`qr_sign_keys.key_id = ARCHIVE`
+- 解密运行时需要的 `install_secret`，供 `dangan` 构造 `geo_seal`
 
-## 3. 数据落库（PostgreSQL）
-- `system_install`：安装状态与 `site_sfid`
-- `qr_sign_keys`：机构二维码签名密钥（含用途、状态、公钥、私钥材料）
-- `admin_users`：超级管理员绑定结果
+## 3. INSTALL 输入
+`install/initialize` 接收 `sfid_init_qr_content`，内容支持 JSON 或 Base64(JSON)，载荷必须是：
 
-## 4. 安全约束
-- CPMS 为离线系统，初始化时不验 QR1 签名（无 SFID 公钥）
-- `system_install.site_sfid` 已存在时拒绝重复初始化
-- 超级管理员绑定数量上限为 1
-- `admin_pubkey` 不允许重复绑定
-- QR2 生成和 QR3 盲化需要 SUPER_ADMIN 认证（登录后操作）
+```json
+{
+  "proto": "SFID_CPMS_V1",
+  "type": "INSTALL",
+  "sfid_number": "GFR-GD001-ZG0X-123456789-2026",
+  "province_name": "广东省",
+  "city_name": "广州市",
+  "install_secret": "0x...",
+  "sig": "0x..."
+}
+```
 
-## 5. 模块边界
-- 初始化相关路由与辅助算法全部集中在 `initialize` 模块
-- 登录认证在 `login` 模块
-- 权限校验在 `authz` 模块
-- 业务管理在 `super_admin` / `operator_admin` 模块
+字段名固定使用 `sfid_number`，不得新增同义字段。INSTALL 签名原文固定为：
 
-## 6. 与主程序关系
-主程序只做路由装配、数据库连接池与迁移初始化；初始化能力通过 `initialize::router()` 统一挂载。
+```text
+sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_hash}
+```
+
+`install_secret_hash = blake2b_256(install_secret)`。CPMS 离线保存安装材料，不依赖外置 SFID 公钥完成初始化。
+
+## 4. 数据落库
+- `system_install`：保存 `sfid_number / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
+- `qr_sign_keys`：保存本机 `ARCHIVE` 签发密钥。
+- `admin_users`：保存超级管理员和操作员账号。
+
+`install_secret` 与 ARCHIVE 私钥使用 `CPMS_KEY_ENCRYPT_SECRET` 派生密钥加密存储；开发环境未配置时允许明文落库并打印警告。
+
+## 5. 安全约束
+- `proto` 必须为 `SFID_CPMS_V1`，`type` 必须为 `INSTALL`。
+- `sfid_number` 必须能解析出省市代码；CPMS 不维护本地省市真源。
+- `system_install.sfid_number` 已存在时拒绝重复初始化；本阶段按清库重装处理，不提供旧库迁移兼容。
+- 超级管理员只允许绑定 1 个，`admin_pubkey` 不允许重复。
+
+## 6. 模块边界
+- 初始化相关路由与本机安装材料读取集中在 `initialize`。
+- 登录认证在 `login`。
+- 权限校验在 `authz`。
+- 档案号、`geo_seal` 和 ARCHIVE 签名在 `dangan`。

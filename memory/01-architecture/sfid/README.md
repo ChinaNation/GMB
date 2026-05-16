@@ -152,35 +152,14 @@ curl http://127.0.0.1:8899/api/v1/health
 
 说明：CPMS 是完全离线独立系统，与 SFID 无在线接口直连。
 
-## CPMS 二维码约定（v1）
-- 档案号 `archive_no` 作为唯一用户标识。
-- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYY)`。
-- 省市代码来源：与 CPMS 同步使用 `sheng_cities` 数据。
-- 校验位算法与 SFID `sfid_code` 一致：`BLAKE2b` 摘要字节和 `mod 10`。
-- `issuer_id` 固定为 `cpms`。
-- 签名算法固定 `sr25519`。
-- 机构初始化必须先由 SFID 省级管理员在机构页生成机构身份识别码（`site_sfid`）及 SFID 签名初始化二维码。
-- CPMS 使用该初始化二维码完成首次安装初始化，再生成机构公钥登记二维码（含 `site_sfid + 3把公钥 + init_qr_payload + checksum_or_signature`）。
-- SFID 省级管理员扫码录入公钥登记二维码后，该机构公钥才生效（会校验是否由 SFID 签发二维码初始化得到）。
-- 可信闭环成立条件：`SFID 初始化二维码签发 -> CPMS 初始化 -> SFID 录入机构公钥成功(ACTIVE)`；闭环完成后，该机构后续出具的公民档案二维码与状态二维码才被 SFID 接受。
-- 拒绝语义：若验签失败、机构未登记、机构非 `ACTIVE`、或 `init_qr_payload` 链路不一致，SFID 必须拒绝对应 CPMS 二维码。
-- 公民档案二维码包含 `sign_key_id + signature`，由该机构 `sign_key_id` 对应私钥生成。
-- CPMS 不保存 SFID 公钥（当前版本）。
-- 用户投票资格状态由 CPMS 二维码提供：`NORMAL` 可投票，`ABNORMAL` 不可投票。
-
-## CPMS 联调脚本（开发）
-- 生成公民绑定二维码（含初始状态）：
-```bash
-./backend/scripts/gen_cpms_qr_dev.py citizen --site-sfid SITE001 --archive-no ARCHIVE001 --sign-pubkey DEMO_PUBKEY_A --status NORMAL
-```
-- 生成状态变更二维码（供市级管理员扫码）：
-```bash
-./backend/scripts/gen_cpms_qr_dev.py status --site-sfid SITE001 --archive-no ARCHIVE001 --status ABNORMAL --sign-pubkey DEMO_PUBKEY_A
-```
-- 生成机构公钥登记二维码：
-```bash
-./backend/scripts/gen_cpms_qr_dev.py register --site-sfid SITE001 --pubkey-1 DEMO_PUBKEY_A --pubkey-2 DEMO_PUBKEY_B --pubkey-3 DEMO_PUBKEY_C
-```
+## CPMS 二维码约定（SFID_CPMS_V1）
+- SFID 生成 `INSTALL` 安装码,交给市公安局 CPMS 初始化。
+- CPMS 生成 `ARCHIVE` 档案码,交给 SFID 验真和档案录入。
+- 对外机构字段固定为 `sfid_number`。
+- 档案号 `ano` 是全局唯一用户档案标识,本体不得编码省、市、机构或日期。
+- SFID 通过 `geo_seal` 解出省、市和签发公安局机构归属。
+- 用户投票资格状态由 ARCHIVE 业务字段提供:`NORMAL` 可投票,`ABNORMAL` 不可投票。
+- 详细协议见 `memory/05-modules/sfid/SFID-CPMS-QR-v1.md`。
 
 ## 区块链自动接口（无管理员参与）
 - `GET /api/v1/chain/voters/count`：查询当前可投票公民数（仅统计 `NORMAL` 且绑定有效用户）。

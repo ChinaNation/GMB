@@ -1,10 +1,10 @@
-// CPMS 站点管理面板 —— 按站点状态显示不同的二维码和操作按钮。
+// CPMS 安装授权管理面板 —— 两码方案下只展示 INSTALL 安装码和授权状态。
 //
 // 状态对应:
-//   PENDING  → 显示 QR1(安装码),按钮:扫描 QR2 注册(由父组件 Card.extra 提供)
-//   ACTIVE   → 显示 QR3(匿名证书),按钮:禁用、吊销、下载
-//   DISABLED → 显示 QR3 灰显+禁用图标,按钮:启用、吊销
-//   REVOKED  → 灰色二维码+红色禁止图标,按钮:重发令牌
+//   PENDING  → 显示 INSTALL 安装码
+//   ACTIVE   → 已经绑定 CPMS 本机签发公钥,不再展示安装码
+//   DISABLED → 暂停接收该授权签发的档案二维码
+//   REVOKED  → 不再接收该授权签发的档案二维码
 
 import React, { useRef, useState } from 'react';
 import { Button, Input, message, Modal, Popconfirm, QRCode, Tag, Typography } from 'antd';
@@ -45,7 +45,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onReissue = async () => {
     setBusy(true);
     try {
-      await reissueInstallToken(auth, site.site_sfid);
+      await reissueInstallToken(auth, site.sfid_number);
       message.success('已重发安装令牌');
       onChanged();
     } catch (err) {
@@ -54,11 +54,11 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   };
 
   const onDisable = async () => {
-    const reason = await askReason('请输入禁用原因(可选)');
+      const reason = await askReason('请输入禁用原因(可选)');
     if (reason === null) return;
     setBusy(true);
     try {
-      await disableCpmsKeys(auth, site.site_sfid, reason || undefined);
+      await disableCpmsKeys(auth, site.sfid_number, reason || undefined);
       message.success('已禁用');
       onChanged();
     } catch (err) {
@@ -69,7 +69,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   const onEnable = async () => {
     setBusy(true);
     try {
-      await enableCpmsKeys(auth, site.site_sfid);
+      await enableCpmsKeys(auth, site.sfid_number);
       message.success('已启用');
       onChanged();
     } catch (err) {
@@ -82,7 +82,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     if (reason === null) return;
     setBusy(true);
     try {
-      await revokeCpmsKeys(auth, site.site_sfid, reason || undefined);
+      await revokeCpmsKeys(auth, site.sfid_number, reason || undefined);
       message.success('已吊销');
       onChanged();
     } catch (err) {
@@ -91,17 +91,17 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
   };
 
   const onDownload = () => {
-    const label = status === 'PENDING' ? 'qr1' : 'qr3';
+    const label = status === 'PENDING' ? 'install' : 'cpms';
     downloadQr({
       container: qrRef.current,
-      filename: `cpms-${label}-${site.site_sfid}`,
+      filename: `cpms-${label}-${site.sfid_number}`,
       onError: (msg) => message.error(msg),
     });
   };
 
   // 决定显示哪个二维码
-  const qrPayload = status === 'PENDING' ? site.qr1_payload : site.qr3_payload;
-  const qrLabel = status === 'PENDING' ? '安装码' : '匿名证书';
+  const qrPayload = status === 'PENDING' ? site.qr1_payload : undefined;
+  const qrLabel = status === 'PENDING' ? '安装码' : '无需展示二维码';
   const isDisabledOrRevoked = status === 'DISABLED' || status === 'REVOKED';
 
   return (
@@ -110,10 +110,12 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
         {/* 左列:状态 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>站点状态</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>授权状态</Typography.Text>
             {siteStatusTag(status)}
           </div>
-          <Typography.Text type="secondary" style={{ fontSize: 11 }}>{qrLabel}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+            {site.cpms_pubkey_bound ? '签发公钥已绑定' : qrLabel}
+          </Typography.Text>
         </div>
 
         {/* 右列:二维码 + 按钮 */}
@@ -126,7 +128,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
               ...(isDisabledOrRevoked ? { filter: 'grayscale(1)', opacity: 0.5 } : {}),
             }}
           >
-            {qrPayload ? (
+            {qrPayload && status === 'PENDING' ? (
               <QRCode value={qrPayload} size={160} bordered={false} />
             ) : (
               <div style={{ width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0', borderRadius: 4 }}>

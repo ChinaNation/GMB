@@ -94,7 +94,6 @@ pub(crate) struct GlobalShard {
 
     // ── 全局幂等池 ──
     pub(crate) consumed_qr_ids: HashMap<String, DateTime<Utc>>,
-    pub(crate) consumed_cpms_register_tokens: HashMap<String, DateTime<Utc>>,
 
     // ── 审计日志(大表,将来可能迁 ClickHouse)──
     pub(crate) audit_logs: Vec<AuditLogEntry>,
@@ -102,9 +101,6 @@ pub(crate) struct GlobalShard {
     // ── 链请求幂等 ──
     pub(crate) chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     pub(crate) chain_nonce_seen: HashMap<String, DateTime<Utc>>,
-
-    /// RSABSSA 匿名证书签发 RSA 私钥 PEM(启动时自动生成并持久化)。
-    pub(crate) anon_rsa_private_key_pem: Option<String>,
 
     // ── 清理时间戳 ──
     pub(crate) chain_auth_last_cleanup_at: Option<DateTime<Utc>>,

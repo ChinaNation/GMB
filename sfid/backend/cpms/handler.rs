@@ -1,3 +1,7 @@
+use aes_gcm::{
+    aead::{Aead, KeyInit, Payload},
+    Aes256Gcm, Nonce,
+};
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -19,6 +23,7 @@ const MAX_CITY_CHARS: usize = 100;
 const MAX_INSTITUTION_CHARS: usize = 100;
 const MAX_PROVINCE_CHARS: usize = 100;
 const MAX_STATUS_REASON_CHARS: usize = 500;
+const GEO_SEAL_PREFIX: &str = "g1";
 
 // 中文注释:Phase 2 Day 3 Round 2 迁移 cpms_site_keys 到 sharded_store。
 // 根据 site_sfid 定位所在省份分片:
@@ -80,14 +85,14 @@ fn append_cpms_audit_log_best_effort(
     }
 }
 
-/// 生成机构 SFID + QR1 安装授权二维码。
+/// 生成 `SFID_CPMS_V1 / INSTALL` 安装授权二维码。
 ///
-/// SFID-CPMS QR v1 协议：生成 site_sfid 和 install_token，
-/// 用 SFID 主密钥签名，返回 QR1 payload。
-pub(crate) async fn generate_cpms_institution_sfid_qr(
+/// 中文注释:两码方案下 INSTALL 只携带 `sfid_number / province_name / city_name / install_secret / sig`。
+/// 省市代码由 SFID 从 sfid_number 解码,不作为二维码字段重复携带。
+pub(crate) async fn generate_cpms_install_qr(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<GenerateCpmsInstitutionSfidInput>,
+    Json(input): Json<GenerateCpmsInstallInput>,
 ) -> impl IntoResponse {
     let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
@@ -135,27 +140,7 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     if institution.chars().count() > MAX_INSTITUTION_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "institution too long");
     }
-    let institution_name = input
-        .institution_name
-        .as_deref()
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    if institution_name.is_empty() {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "institution_name is required",
-        );
-    }
-    if institution_name.chars().count() > 30 {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "institution_name too long (max 30)",
-        );
-    }
-    // ── 查找已有机构,直接读机构当前 sfid_number,无第二阶段 ──
+    // ── 查找已有机构,直接读机构当前 sfid_number；二维码不重复携带省市码。 ──
     let site_sfid = match state.store.read() {
         Ok(store) => {
             let found = store.multisig_institutions.values().find(|i| {
@@ -182,41 +167,36 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         Err(msg) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, msg),
     };
     let province_code = extract_province_code_from_sfid(&site_sfid);
+    let city_code = extract_city_code_from_sfid(&site_sfid);
 
-    // 生成一次性安装令牌
-    let install_token = Uuid::new_v4().to_string().replace('-', "");
-
-    // 用 SFID 主密钥签名 QR1
-    let sign_source = format!("sfid-cpms-v1|install|{}|{}", site_sfid, install_token);
-    let signature = match sign_with_main_key(&state, &sign_source) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
-    };
-
-    // 获取 RSA 公钥 PEM
-    let rsa_pubkey_pem = match crate::cpms::rsa_blind::get_public_key_pem() {
+    let install_secret = match generate_install_secret() {
         Ok(v) => v,
         Err(_) => {
             return api_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 1004,
-                "RSA public key not available",
+                "generate install_secret failed",
             )
         }
     };
+    let install_secret_hash = install_secret_hash(install_secret.as_str());
+
+    // 用 SFID 主密钥签名 INSTALL 精简字段。
+    let sign_source = build_install_sign_source(&site_sfid, &province, &city, &install_secret_hash);
+    let signature = match sign_with_main_key(&state, &sign_source) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
+    };
 
     // 构造 QR1 payload
-    let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
-        "sfid": site_sfid,
-        "token": install_token,
-        "rsa": rsa_raw,
-        "sig": signature,
+        "sfid_number": site_sfid,
         "province_name": province,
         "city_name": city,
-        "institution_name": institution_name,
+        "install_secret": install_secret,
+        "sig": signature,
     });
     let qr1_payload = match serde_json::to_string(&qr1) {
         Ok(v) => v,
@@ -234,17 +214,20 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
     let site_sfid_key = site_sfid.clone();
     let new_site = CpmsSiteKeys {
         site_sfid: site_sfid.clone(),
-        install_token: install_token.clone(),
+        install_token: String::new(),
+        install_secret: install_secret.clone(),
+        install_secret_hash: install_secret_hash.clone(),
         install_token_status: InstallTokenStatus::Pending,
         status: CpmsSiteStatus::Pending,
         version: 1,
         province_code: province_code.clone(),
         admin_province: province.clone(),
         city_name: city.clone(),
+        city_code: city_code.clone(),
         institution_code: institution.clone(),
-        institution_name: institution_name.clone(),
+        institution_name: String::new(),
         qr1_payload: qr1_payload.clone(),
-        qr3_payload: None,
+        cpms_pubkey_hash: None,
         created_by: ctx.admin_pubkey.clone(),
         created_at,
         updated_by: Some(ctx.admin_pubkey.clone()),
@@ -299,187 +282,24 @@ pub(crate) async fn generate_cpms_institution_sfid_qr(
         None,
         "SUCCESS",
         format!(
-            "site_sfid={} province={} city={} institution={} province_code={}",
-            site_sfid, province, city, institution, province_code,
+            "sfid_number={} province={} city={} city_code={} institution={}",
+            site_sfid, province, city, city_code, institution,
         ),
     );
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: GenerateCpmsInstallOutput {
-            site_sfid,
+            sfid_number: site_sfid,
             qr1_payload,
         },
     })
     .into_response()
 }
 
-/// 处理 QR2 注册请求，返回 QR3 匿名证书。
-///
-/// SFID-CPMS QR v1 协议：校验 install_token，执行 RSABSSA 盲签名，
-/// 返回 QR3 payload 供 CPMS 解盲。
-pub(crate) async fn register_cpms(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(input): Json<CpmsRegisterInput>,
-) -> impl IntoResponse {
-    let ctx = match require_sheng_admin(&state, &headers) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-    // 解析 QR2
-    let qr2: CpmsRegisterReqPayload = match serde_json::from_str(input.qr_payload.trim()) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR2 payload"),
-    };
-    if qr2.r#type != "REGISTER" {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "type must be REGISTER");
-    }
-    if qr2.blind.trim().is_empty() {
-        return api_error(StatusCode::BAD_REQUEST, 1001, "blind is required");
-    }
-
-    // Phase 2 Day 3 Round 2 迁移 cpms_site_keys 到 sharded_store:先定位省,再写分片
-    let sfid_trimmed = qr2.sfid.trim().to_string();
-    let province =
-        match resolve_site_province_via_shard(&state, &sfid_trimmed, ctx.admin_province.as_deref())
-            .await
-        {
-            Ok(v) => v,
-            Err((code, msg)) => return api_error(code, 1004, msg),
-        };
-    let token_expected = qr2.token.trim().to_string();
-    let actor_pubkey = ctx.admin_pubkey.clone();
-    let sfid_trimmed_for_legacy = sfid_trimmed.clone();
-    let write_result = state
-        .sharded_store
-        .write_province(&province, move |shard| {
-            let site = match shard.cpms_site_keys.get_mut(sfid_trimmed.as_str()) {
-                Some(v) => v,
-                None => return Err((StatusCode::NOT_FOUND, 1004, "sfid not found")),
-            };
-            if site.install_token_status != InstallTokenStatus::Pending {
-                return Err((StatusCode::CONFLICT, 1007, "token already used or revoked"));
-            }
-            if site.install_token != token_expected {
-                return Err((StatusCode::UNAUTHORIZED, 2004, "token mismatch"));
-            }
-            site.install_token_status = InstallTokenStatus::Used;
-            site.status = CpmsSiteStatus::Active;
-            site.version += 1;
-            site.updated_by = Some(actor_pubkey.clone());
-            site.updated_at = Some(Utc::now());
-            Ok(site.province_code.clone())
-        })
-        .await;
-    let province_code = match write_result {
-        Ok(Ok(pc)) => pc,
-        Ok(Err((code, biz, msg))) => return api_error(code, biz, msg),
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "shard write failed",
-            )
-        }
-    };
-
-    // 双写过渡期:sharded_store + legacy store 同步写
-    {
-        match state.store.write() {
-            Ok(mut store) => {
-                if let Some(site) = store.cpms_site_keys.get_mut(&sfid_trimmed_for_legacy) {
-                    site.install_token_status = InstallTokenStatus::Used;
-                    site.status = CpmsSiteStatus::Active;
-                    site.version += 1;
-                    site.updated_by = Some(ctx.admin_pubkey.clone());
-                    site.updated_at = Some(Utc::now());
-                }
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms register, shard already committed)");
-            }
-        }
-    }
-
-    append_cpms_audit_log_best_effort(
-        &state,
-        "CPMS_REGISTER",
-        &ctx.admin_pubkey,
-        Some(qr2.sfid.clone()),
-        None,
-        "SUCCESS",
-        format!("site_sfid={} province_code={}", qr2.sfid, province_code),
-    );
-
-    // 执行 RSABSSA 盲签名
-    let blind_anon_req_bytes = match hex::decode(qr2.blind.trim().trim_start_matches("0x")) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "blind hex decode failed"),
-    };
-    let blind_anon_sig =
-        match crate::cpms::rsa_blind::blind_sign(&blind_anon_req_bytes, &province_code) {
-            Ok(v) => v,
-            Err(e) => {
-                return api_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    1004,
-                    &format!("blind sign failed: {e}"),
-                )
-            }
-        };
-
-    // 构造 QR3
-    let qr3 = serde_json::json!({
-        "proto": "SFID_CPMS_V1",
-        "type": "CERT",
-        "prov": province_code,
-        "bsig": format!("0x{}", hex::encode(&blind_anon_sig)),
-    });
-    let qr3_payload = match serde_json::to_string(&qr3) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "serialize QR3 failed",
-            )
-        }
-    };
-
-    // 持久化 QR3 到 sharded store + legacy store
-    {
-        let sfid_for_qr3 = sfid_trimmed_for_legacy.clone();
-        let qr3_for_shard = qr3_payload.clone();
-        let _ = state
-            .sharded_store
-            .write_province(&province, move |shard| {
-                if let Some(site) = shard.cpms_site_keys.get_mut(sfid_for_qr3.as_str()) {
-                    site.qr3_payload = Some(qr3_for_shard);
-                }
-            })
-            .await;
-        if let Ok(mut store) = state.store.write() {
-            if let Some(site) = store
-                .cpms_site_keys
-                .get_mut(sfid_trimmed_for_legacy.as_str())
-            {
-                site.qr3_payload = Some(qr3_payload.clone());
-            }
-        }
-    }
-
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: CpmsRegisterOutput { qr3_payload },
-    })
-    .into_response()
-}
-
 /// 处理 QR4 档案业务二维码，验证并录入档案。
 ///
-/// SFID-CPMS QR v1 协议：验证 anon_cert 签名、archive_sig，
+/// SFID_CPMS_V1 两码方案：解 `geo_seal` 得到省市归属,再验证 CPMS 本机签名,
 /// 去重后录入 imported_archives。
 pub(crate) async fn archive_import(
     State(state): State<AppState>,
@@ -496,108 +316,33 @@ pub(crate) async fn archive_import(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
     };
     if qr4.r#type != "ARCHIVE" {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "qr_type must be CPMS_ARCHIVE",
-        );
+        return api_error(StatusCode::BAD_REQUEST, 1001, "type must be ARCHIVE");
     }
 
-    // 1. 验证 anon_cert.sfid_sig（RSA 盲签名验签）
-    let sfid_sig_bytes = match hex::decode(qr4.cert.sig.trim().trim_start_matches("0x")) {
+    let verified = match verify_cpms_archive_qr(&state, &qr4, ctx.admin_province.as_deref()).await {
         Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "anon_cert.sfid_sig hex decode failed",
-            )
-        }
+        Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
     };
-    let msg_randomizer = qr4
-        .cert
-        .mr
-        .as_deref()
-        .and_then(|r| hex::decode(r.trim().trim_start_matches("0x")).ok());
-    let cert_valid = match crate::cpms::rsa_blind::verify_anon_cert(
-        &qr4.cert.prov,
-        &qr4.cert.pk,
-        &sfid_sig_bytes,
-        msg_randomizer.as_deref(),
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                &format!("anon_cert verify error: {e}"),
-            )
-        }
-    };
-    if !cert_valid {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "anon_cert.sfid_sig invalid");
-    }
-
-    // 2. 验证 province_code 一致性
-    if qr4.cert.prov != qr4.prov {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "province_code mismatch between anon_cert and QR4",
-        );
-    }
-
-    // 3. 验证 archive_sig（sr25519）
-    let archive_sign_source = format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}",
-        qr4.prov, qr4.ano, qr4.cs, qr4.ve
-    );
-    let anon_pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&qr4.cert.pk) {
-        Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "anon_pubkey format invalid"),
-    };
-    let archive_sig_bytes = match hex::decode(qr4.sig.trim().trim_start_matches("0x")) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "archive_sig hex decode failed",
-            )
-        }
-    };
-    if !verify_sr25519_signature(&anon_pubkey_bytes, &archive_sign_source, &archive_sig_bytes) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "archive_sig invalid");
-    }
-
-    // 4. 去重 + 录入
-    let anon_cert_json = match serde_json::to_string(&qr4.cert) {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "serialize anon_cert failed",
-            )
-        }
-    };
-    let anon_cert_hash = hex::encode(Blake2b256::digest(anon_cert_json.as_bytes()));
-    // 以 anon_cert.province_code 为准落库
-    let province_code = qr4.cert.prov.clone();
 
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if store.imported_archives.contains_key(qr4.ano.as_str()) {
+    if store
+        .imported_archives
+        .contains_key(verified.archive_no.as_str())
+    {
         return api_error(StatusCode::CONFLICT, 1007, "archive_no already imported");
     }
     store.imported_archives.insert(
-        qr4.ano.clone(),
+        verified.archive_no.clone(),
         ImportedArchive {
-            archive_no: qr4.ano.clone(),
-            province_code: province_code.clone(),
-            anon_cert_hash,
+            archive_no: verified.archive_no.clone(),
+            province_code: verified.province_code.clone(),
+            city_code: verified.city_code.clone(),
+            sfid_number: verified.sfid_number.clone(),
+            cpms_pubkey_hash: verified.cpms_pubkey_hash.clone(),
+            geo_seal_hash: verified.geo_seal_hash.clone(),
             imported_at: Utc::now(),
             status: ArchiveImportStatus::Active,
         },
@@ -606,12 +351,17 @@ pub(crate) async fn archive_import(
         &mut store,
         "CPMS_ARCHIVE_IMPORT",
         &ctx.admin_pubkey,
-        Some(qr4.ano.clone()),
+        Some(verified.archive_no.clone()),
         None,
         "SUCCESS",
         format!(
-            "archive_no={} province_code={} citizen_status={} voting_eligible={}",
-            qr4.ano, province_code, qr4.cs, qr4.ve
+            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={} voting_eligible={}",
+            verified.archive_no,
+            verified.province_code,
+            verified.city_code,
+            verified.sfid_number,
+            qr4.cs,
+            qr4.ve
         ),
     );
     drop(store);
@@ -620,8 +370,10 @@ pub(crate) async fn archive_import(
         code: 0,
         message: "ok".to_string(),
         data: CpmsArchiveImportOutput {
-            archive_no: qr4.ano,
-            province_code,
+            archive_no: verified.archive_no,
+            province_code: verified.province_code,
+            city_code: verified.city_code,
+            sfid_number: verified.sfid_number,
             status: "ACTIVE",
         },
     })
@@ -715,24 +467,6 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    let new_token = Uuid::new_v4().to_string().replace('-', "");
-    let sign_source = format!("sfid-cpms-v1|install|{}|{}", site_sfid_validated, new_token);
-    let signature = match sign_with_main_key(&state, &sign_source) {
-        Ok(v) => v,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
-    };
-    let rsa_pubkey_pem = match crate::cpms::rsa_blind::get_public_key_pem() {
-        Ok(v) => v,
-        Err(_) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1004,
-                "RSA public key not available",
-            )
-        }
-    };
-    let rsa_raw = strip_pem_envelope(&rsa_pubkey_pem);
-
     // 先定位省份，再读站点元数据用于 QR1 名称字段
     let province = match resolve_site_province_via_shard(
         &state,
@@ -752,26 +486,55 @@ pub(crate) async fn reissue_install_token(
                 (
                     s.admin_province.clone(),
                     s.city_name.clone(),
+                    s.city_code.clone(),
                     s.institution_name.clone(),
+                    s.province_code.clone(),
                 )
             })
         })
         .await
         .ok()
         .flatten();
-    let (prov_name, city_name, inst_name) =
-        site_meta.unwrap_or_else(|| (province.clone(), String::new(), String::new()));
+    let (prov_name, city_name, _city_code, _inst_name, _province_code) =
+        site_meta.unwrap_or_else(|| {
+            (
+                province.clone(),
+                String::new(),
+                extract_city_code_from_sfid(&site_sfid_validated),
+                String::new(),
+                extract_province_code_from_sfid(&site_sfid_validated),
+            )
+        });
+    let install_secret = match generate_install_secret() {
+        Ok(v) => v,
+        Err(_) => {
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "generate install_secret failed",
+            )
+        }
+    };
+    let install_secret_hash = install_secret_hash(install_secret.as_str());
+    let sign_source = build_install_sign_source(
+        &site_sfid_validated,
+        &prov_name,
+        &city_name,
+        &install_secret_hash,
+    );
+    let signature = match sign_with_main_key(&state, &sign_source) {
+        Ok(v) => v,
+        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, "sign QR1 failed"),
+    };
 
     let qr1 = serde_json::json!({
         "proto": "SFID_CPMS_V1",
         "type": "INSTALL",
-        "sfid": site_sfid_validated,
-        "token": new_token,
-        "rsa": rsa_raw,
-        "sig": signature,
+        "sfid_number": site_sfid_validated,
         "province_name": prov_name,
         "city_name": city_name,
-        "institution_name": inst_name,
+        "install_secret": install_secret,
+        "sig": signature,
     });
     let qr1_payload = match serde_json::to_string(&qr1) {
         Ok(v) => v,
@@ -785,7 +548,8 @@ pub(crate) async fn reissue_install_token(
     };
     let actor_pubkey = ctx.admin_pubkey.clone();
     let sfid_for_closure = site_sfid_validated.clone();
-    let new_token_clone = new_token.clone();
+    let install_secret_clone = install_secret.clone();
+    let install_secret_hash_clone = install_secret_hash.clone();
     let qr1_payload_clone = qr1_payload.clone();
     let write_result = state
         .sharded_store
@@ -794,11 +558,18 @@ pub(crate) async fn reissue_install_token(
                 Some(v) => v,
                 None => return Err("site_sfid not found"),
             };
-            site.install_token = new_token_clone;
+            if site.status != CpmsSiteStatus::Revoked
+                && site.install_token_status != InstallTokenStatus::Revoked
+            {
+                return Err("only revoked cpms install authorization can be reissued");
+            }
+            site.install_token = String::new();
+            site.install_secret = install_secret_clone;
+            site.install_secret_hash = install_secret_hash_clone;
             site.install_token_status = InstallTokenStatus::Pending;
             site.status = CpmsSiteStatus::Pending;
             site.qr1_payload = qr1_payload_clone;
-            site.qr3_payload = None; // 重发令牌清除旧 QR3
+            site.cpms_pubkey_hash = None;
             site.version += 1;
             site.updated_by = Some(actor_pubkey.clone());
             site.updated_at = Some(Utc::now());
@@ -808,10 +579,10 @@ pub(crate) async fn reissue_install_token(
     match write_result {
         Ok(Ok(())) => {}
         Ok(Err(msg)) => {
-            let code = if msg.contains("pending") {
-                StatusCode::CONFLICT
-            } else {
+            let code = if msg.contains("not found") {
                 StatusCode::NOT_FOUND
+            } else {
+                StatusCode::CONFLICT
             };
             return api_error(code, 1004, msg);
         }
@@ -823,11 +594,13 @@ pub(crate) async fn reissue_install_token(
         match state.store.write() {
             Ok(mut store) => {
                 if let Some(site) = store.cpms_site_keys.get_mut(&site_sfid_validated) {
-                    site.install_token = new_token.clone();
+                    site.install_token = String::new();
+                    site.install_secret = install_secret.clone();
+                    site.install_secret_hash = install_secret_hash.clone();
                     site.install_token_status = InstallTokenStatus::Pending;
                     site.status = CpmsSiteStatus::Pending;
                     site.qr1_payload = qr1_payload.clone();
-                    site.qr3_payload = None;
+                    site.cpms_pubkey_hash = None;
                     site.version += 1;
                     site.updated_by = Some(ctx.admin_pubkey.clone());
                     site.updated_at = Some(Utc::now());
@@ -846,14 +619,14 @@ pub(crate) async fn reissue_install_token(
         Some(site_sfid_validated.clone()),
         None,
         "SUCCESS",
-        format!("site_sfid={}", site_sfid_validated),
+        format!("sfid_number={}", site_sfid_validated),
     );
 
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: GenerateCpmsInstallOutput {
-            site_sfid: site_sfid_validated,
+            sfid_number: site_sfid_validated,
             qr1_payload,
         },
     })
@@ -1051,7 +824,7 @@ pub(crate) async fn list_cpms_keys(
         .map(|site| cpms_site_keys_to_list_row(site, &store))
         .collect();
     drop(store);
-    rows.sort_by(|a, b| a.site_sfid.cmp(&b.site_sfid));
+    rows.sort_by(|a, b| a.sfid_number.cmp(&b.sfid_number));
     let total = rows.len();
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let offset = query.offset.unwrap_or(0);
@@ -1076,10 +849,9 @@ pub(crate) async fn list_cpms_keys(
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
 /// 按市公安局机构 sfid_number 反查其 CPMS 站点(`cpms_site_keys`)。
 ///
-/// 中文注释:`multisig_institutions.sfid_number` 和 `cpms_site_keys.site_sfid`
-/// **不是同一个值**(CPMS 站点的 site_sfid 是生成安装二维码时随机派生的),
-/// 所以用 `(admin_province, city_name, institution_code)` 元组匹配——公安局
-/// 每市唯一,元组保证一一对应。返回 `null` 表示该公安局尚未生成过 CPMS 站点。
+/// 中文注释:对外一律使用公安局机构 `sfid_number`。`cpms_site_keys` 的内部
+/// 历史字段保存同一个值,这里仍用 `(admin_province, city_name, institution_code)`
+/// 做一次机构详情页反查,确保每市公安局只挂自己的 CPMS 授权。
 pub(crate) async fn get_cpms_site_by_institution(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1285,17 +1057,18 @@ async fn update_cpms_site_status(
 fn cpms_site_keys_to_list_row(site: &CpmsSiteKeys, store: &Store) -> CpmsSiteKeysListRow {
     let created_by_name = resolve_admin_display_name(store, &site.created_by);
     CpmsSiteKeysListRow {
-        site_sfid: site.site_sfid.clone(),
+        sfid_number: site.site_sfid.clone(),
         install_token_status: site.install_token_status.clone(),
         status: site.status.clone(),
         version: site.version,
         province_code: site.province_code.clone(),
         admin_province: site.admin_province.clone(),
         city_name: site.city_name.clone(),
+        city_code: site.city_code.clone(),
         institution_code: site.institution_code.clone(),
         institution_name: site.institution_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
-        qr3_payload: site.qr3_payload.clone(),
+        cpms_pubkey_bound: site.cpms_pubkey_hash.is_some(),
         created_by: site.created_by.clone(),
         created_by_name,
         created_at: site.created_at,
@@ -1309,17 +1082,18 @@ fn cpms_site_keys_to_list_row_simple(
     created_by_name: String,
 ) -> CpmsSiteKeysListRow {
     CpmsSiteKeysListRow {
-        site_sfid: site.site_sfid.clone(),
+        sfid_number: site.site_sfid.clone(),
         install_token_status: site.install_token_status.clone(),
         status: site.status.clone(),
         version: site.version,
         province_code: site.province_code.clone(),
         admin_province: site.admin_province.clone(),
         city_name: site.city_name.clone(),
+        city_code: site.city_code.clone(),
         institution_code: site.institution_code.clone(),
         institution_name: site.institution_name.clone(),
         qr1_payload: site.qr1_payload.clone(),
-        qr3_payload: site.qr3_payload.clone(),
+        cpms_pubkey_bound: site.cpms_pubkey_hash.is_some(),
         created_by: site.created_by.clone(),
         created_by_name,
         created_at: site.created_at,
@@ -1328,11 +1102,339 @@ fn cpms_site_keys_to_list_row_simple(
     }
 }
 
-fn strip_pem_envelope(pem: &str) -> String {
-    pem.lines()
-        .filter(|line| !line.starts_with("-----"))
-        .collect::<Vec<_>>()
-        .join("")
+/// 验证 `SFID_CPMS_V1 / ARCHIVE` 档案二维码。
+///
+/// 中文注释:本函数是两码方案的 SFID 侧核心验收点。它不会信任二维码明文省市,
+/// 只用安装授权中保存的 `install_secret` 尝试解开 `geo_seal`,再校验 CPMS 本机签名。
+pub(crate) async fn verify_cpms_archive_qr(
+    state: &AppState,
+    qr4: &CpmsArchiveQrPayload,
+    admin_province_scope: Option<&str>,
+) -> Result<VerifiedCpmsArchive, (StatusCode, u32, String)> {
+    if qr4.proto != "SFID_CPMS_V1" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "proto must be SFID_CPMS_V1".to_string(),
+        ));
+    }
+    if qr4.r#type != "ARCHIVE" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "type must be ARCHIVE".to_string(),
+        ));
+    }
+    if qr4.ano.trim().is_empty()
+        || qr4.cs.trim().is_empty()
+        || qr4.cpms_pubkey.trim().is_empty()
+        || qr4.geo_seal.trim().is_empty()
+        || qr4.sig.trim().is_empty()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive QR fields are required".to_string(),
+        ));
+    }
+    let (province_name, site, seal) = find_site_by_geo_seal(
+        state,
+        qr4.geo_seal.as_str(),
+        qr4.ano.as_str(),
+        qr4.cpms_pubkey.as_str(),
+        admin_province_scope,
+    )
+    .await?;
+
+    validate_geo_seal_against_site(&site, &seal)?;
+
+    if matches!(
+        site.status,
+        CpmsSiteStatus::Disabled | CpmsSiteStatus::Revoked
+    ) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            1003,
+            "CPMS install authorization is not active".to_string(),
+        ));
+    }
+    if site.install_token_status == InstallTokenStatus::Revoked {
+        return Err((
+            StatusCode::FORBIDDEN,
+            1003,
+            "CPMS install authorization is revoked".to_string(),
+        ));
+    }
+
+    let cpms_pubkey =
+        crate::login::parse_sr25519_pubkey_bytes(qr4.cpms_pubkey.as_str()).ok_or((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "cpms_pubkey format invalid".to_string(),
+        ))?;
+    let archive_sig = hex::decode(qr4.sig.trim().trim_start_matches("0x")).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            1001,
+            "archive sig hex decode failed".to_string(),
+        )
+    })?;
+    let geo_seal_hash = hash_hex(qr4.geo_seal.as_bytes());
+    let archive_sign_source = build_archive_sign_source(
+        qr4.ano.as_str(),
+        qr4.cs.as_str(),
+        qr4.ve,
+        qr4.cpms_pubkey.as_str(),
+        geo_seal_hash.as_str(),
+    );
+    if !verify_sr25519_signature(&cpms_pubkey, &archive_sign_source, &archive_sig) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            2004,
+            "archive signature invalid".to_string(),
+        ));
+    }
+    let cpms_pubkey_hash = hash_hex(qr4.cpms_pubkey.as_bytes());
+    bind_cpms_pubkey_if_needed(
+        state,
+        &province_name,
+        site.site_sfid.as_str(),
+        cpms_pubkey_hash.as_str(),
+    )
+    .await?;
+
+    Ok(VerifiedCpmsArchive {
+        archive_no: qr4.ano.clone(),
+        province_code: extract_province_code_from_sfid(seal.sfid_number.as_str()),
+        city_code: extract_city_code_from_sfid(seal.sfid_number.as_str()),
+        sfid_number: seal.sfid_number,
+        cpms_pubkey_hash,
+        geo_seal_hash,
+    })
+}
+
+async fn find_site_by_geo_seal(
+    state: &AppState,
+    geo_seal: &str,
+    archive_no: &str,
+    cpms_pubkey: &str,
+    admin_province_scope: Option<&str>,
+) -> Result<(String, CpmsSiteKeys, CpmsGeoSealClaims), (StatusCode, u32, String)> {
+    if let Some(province) = admin_province_scope {
+        let found = state
+            .sharded_store
+            .read_province(province, |shard| {
+                find_site_in_shard_by_geo_seal(geo_seal, archive_no, cpms_pubkey, shard)
+            })
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    1004,
+                    "shard read failed".to_string(),
+                )
+            })?;
+        return found
+            .map(|(site, seal)| (province.to_string(), site, seal))
+            .ok_or((
+                StatusCode::UNAUTHORIZED,
+                2004,
+                "geo_seal cannot be decrypted".to_string(),
+            ));
+    }
+
+    let mut found: Option<(String, CpmsSiteKeys, CpmsGeoSealClaims)> = None;
+    state
+        .sharded_store
+        .for_each_province(|province, shard| {
+            if found.is_some() {
+                return;
+            }
+            if let Some((site, seal)) =
+                find_site_in_shard_by_geo_seal(geo_seal, archive_no, cpms_pubkey, shard)
+            {
+                found = Some((province.to_string(), site, seal));
+            }
+        })
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "shard scan failed".to_string(),
+            )
+        })?;
+    found.ok_or((
+        StatusCode::UNAUTHORIZED,
+        2004,
+        "geo_seal cannot be decrypted".to_string(),
+    ))
+}
+
+fn find_site_in_shard_by_geo_seal(
+    geo_seal: &str,
+    archive_no: &str,
+    cpms_pubkey: &str,
+    shard: &crate::store_shards::StoreShard,
+) -> Option<(CpmsSiteKeys, CpmsGeoSealClaims)> {
+    for site in shard.cpms_site_keys.values() {
+        if site.install_secret.trim().is_empty() {
+            continue;
+        }
+        if let Ok(seal) = decrypt_geo_seal(
+            site.install_secret.as_str(),
+            geo_seal,
+            archive_no,
+            cpms_pubkey,
+        ) {
+            return Some((site.clone(), seal));
+        }
+    }
+    None
+}
+
+fn validate_geo_seal_against_site(
+    site: &CpmsSiteKeys,
+    seal: &CpmsGeoSealClaims,
+) -> Result<(), (StatusCode, u32, String)> {
+    if seal.sfid_number != site.site_sfid {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            2004,
+            "geo_seal install scope mismatch".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+async fn bind_cpms_pubkey_if_needed(
+    state: &AppState,
+    province: &str,
+    sfid_number: &str,
+    cpms_pubkey_hash: &str,
+) -> Result<(), (StatusCode, u32, String)> {
+    let sfid_key = sfid_number.to_string();
+    let hash = cpms_pubkey_hash.to_string();
+    let result = state
+        .sharded_store
+        .write_province(province, move |shard| {
+            let Some(site) = shard.cpms_site_keys.get_mut(sfid_key.as_str()) else {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    1004,
+                    "cpms install authorization not found",
+                ));
+            };
+            if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
+                if existing != hash {
+                    return Err((
+                        StatusCode::UNAUTHORIZED,
+                        2004,
+                        "cpms_pubkey does not match installed CPMS",
+                    ));
+                }
+            } else {
+                site.cpms_pubkey_hash = Some(hash.clone());
+            }
+            if site.status == CpmsSiteStatus::Pending {
+                site.status = CpmsSiteStatus::Active;
+                site.install_token_status = InstallTokenStatus::Used;
+            }
+            site.version += 1;
+            site.updated_at = Some(Utc::now());
+            Ok(())
+        })
+        .await;
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err((status, code, msg))) => Err((status, code, msg.to_string())),
+        Err(_) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            1004,
+            "shard write failed".to_string(),
+        )),
+    }
+}
+
+fn decrypt_geo_seal(
+    install_secret: &str,
+    geo_seal: &str,
+    archive_no: &str,
+    cpms_pubkey: &str,
+) -> Result<CpmsGeoSealClaims, String> {
+    let parts: Vec<&str> = geo_seal.split('.').collect();
+    if parts.len() != 3 || parts[0] != GEO_SEAL_PREFIX {
+        return Err("geo_seal format invalid".to_string());
+    }
+    let nonce_bytes =
+        hex::decode(parts[1]).map_err(|_| "geo_seal nonce hex invalid".to_string())?;
+    if nonce_bytes.len() != 12 {
+        return Err("geo_seal nonce length invalid".to_string());
+    }
+    let cipher_bytes =
+        hex::decode(parts[2]).map_err(|_| "geo_seal cipher hex invalid".to_string())?;
+    let key = derive_geo_seal_key(install_secret);
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "geo_seal key invalid".to_string())?;
+    let plain = cipher
+        .decrypt(
+            Nonce::from_slice(&nonce_bytes),
+            Payload {
+                msg: cipher_bytes.as_ref(),
+                aad: geo_seal_aad(archive_no, cpms_pubkey).as_bytes(),
+            },
+        )
+        .map_err(|_| "geo_seal decrypt failed".to_string())?;
+    serde_json::from_slice(&plain).map_err(|_| "geo_seal json invalid".to_string())
+}
+
+fn derive_geo_seal_key(install_secret: &str) -> [u8; 32] {
+    let digest = Blake2b256::digest(install_secret.as_bytes());
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&digest[..32]);
+    key
+}
+
+fn generate_install_secret() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(format!("0x{}", hex::encode(bytes)))
+}
+
+fn install_secret_hash(install_secret: &str) -> String {
+    hash_hex(install_secret.as_bytes())
+}
+
+fn hash_hex(bytes: &[u8]) -> String {
+    format!("0x{}", hex::encode(Blake2b256::digest(bytes)))
+}
+
+fn geo_seal_aad(archive_no: &str, cpms_pubkey: &str) -> String {
+    format!("sfid-cpms-v1|geo-seal|{}|{}", archive_no, cpms_pubkey)
+}
+
+fn build_install_sign_source(
+    sfid_number: &str,
+    province_name: &str,
+    city_name: &str,
+    install_secret_hash: &str,
+) -> String {
+    format!(
+        "sfid-cpms-v1|install|{}|{}|{}|{}",
+        sfid_number, province_name, city_name, install_secret_hash
+    )
+}
+
+fn build_archive_sign_source(
+    archive_no: &str,
+    citizen_status: &str,
+    voting_eligible: bool,
+    cpms_pubkey: &str,
+    geo_seal_hash: &str,
+) -> String {
+    format!(
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}",
+        archive_no, citizen_status, voting_eligible, cpms_pubkey, geo_seal_hash
+    )
 }
 
 fn resolve_admin_display_name(store: &Store, pubkey: &str) -> String {
@@ -1402,10 +1504,20 @@ pub(super) fn extract_province_code_from_sfid(site_sfid: &str) -> String {
     }
 }
 
+/// 从 site_sfid 的 r5 段提取三位城市代码。
+pub(super) fn extract_city_code_from_sfid(site_sfid: &str) -> String {
+    let segments: Vec<&str> = site_sfid.split('-').collect();
+    if segments.len() >= 2 && segments[1].len() >= 5 {
+        segments[1][2..5].to_string()
+    } else {
+        String::new()
+    }
+}
+
 /// 用 SFID 主密钥（sr25519）对消息签名，返回 hex 编码签名。
 ///
 /// ADR-008 Phase 23e:AppState 不再持有 signing seed,改从 SFID_SIGNING_SEED_HEX
-/// 环境变量按需加载。本函数只在 `generate_cpms_institution_sfid_qr` 路径上签发
+/// 环境变量按需加载。本函数只在 `generate_cpms_install_qr` 路径上签发
 /// 二维码完整性签名,与省管理员 3-tier signing pubkey 无关。
 fn sign_with_main_key(_state: &AppState, message: &str) -> Result<String, String> {
     use sp_core::Pair;

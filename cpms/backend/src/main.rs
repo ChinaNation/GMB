@@ -16,7 +16,6 @@ mod initialize;
 mod login;
 mod operator_admin;
 mod qr;
-mod rsa_blind_client;
 mod ss58;
 mod super_admin;
 
@@ -56,7 +55,7 @@ struct Archive {
     status: String,
     citizen_status: String,
     voting_eligible: bool,
-    qr4_payload: String,
+    archive_qr_payload: String,
     created_at: i64,
     updated_at: i64,
 }
@@ -320,7 +319,7 @@ fn err(status: StatusCode, code: i32, message: &str) -> (StatusCode, Json<ApiErr
 #[cfg(test)]
 mod tests {
     use super::{
-        dangan::{archive_checksum_digit_v4, sign_qr_payload_with_secret, validate_citizen_status},
+        dangan::{archive_no_checksum, sign_archive_payload_with_secret, validate_citizen_status},
         login::verify_challenge_signature,
     };
     use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -369,35 +368,34 @@ mod tests {
 
     #[test]
     fn qr_signature_can_be_verified() {
-        let payload = "cpms-qr-v1|site|archive_no|NORMAL|true|1700000000|qr_1";
+        let payload =
+            "sfid-cpms-v1|archive|ABCDEFGHIJKLMNOPQRSTUVWXY2-Z7|NORMAL|true|0x1234|0xabcd";
         let secret = [9u8; 32];
-        let sig_hex = match sign_qr_payload_with_secret(&secret, payload) {
+        let sig_hex = match sign_archive_payload_with_secret(&secret, payload) {
             Ok(v) => v,
             Err(_) => panic!("sign failed"),
         };
-        let sig_bytes = hex::decode(sig_hex).expect("decode signature");
+        let sig_bytes = hex::decode(sig_hex.trim_start_matches("0x")).expect("decode signature");
         let sig = Signature::from_bytes(&sig_bytes).expect("signature bytes");
 
         let mini = MiniSecretKey::from_bytes(&secret).expect("mini secret key");
         let keypair = mini.expand_to_keypair(ExpansionMode::Ed25519);
         let pk = PublicKey::from_bytes(&keypair.public.to_bytes()).expect("public key bytes");
         let verify_result = pk.verify(
-            signing_context(b"CPMS-QR-SIGN-V1").bytes(payload.as_bytes()),
+            signing_context(b"substrate").bytes(payload.as_bytes()),
             &sig,
         );
         assert!(verify_result.is_ok());
     }
 
     #[test]
-    fn archive_no_v4_format_is_stable() {
-        let province = "GD";
-        let random8 = "12345678";
-        let year = "2026";
-        let check = archive_checksum_digit_v4(province, random8, year);
-        let archive_no = format!("{}{}{}{}", province, check, random8, year);
-        assert_eq!(archive_no.len(), 15);
-        assert!(archive_no.starts_with("GD"));
-        assert!(archive_no.ends_with("2026"));
+    fn archive_no_checksum_uses_public_base32_chars() {
+        let body = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let check = archive_no_checksum(body);
+        let archive_no = format!("{}-{}", body, check);
+        assert_eq!(check.len(), 2);
+        assert_eq!(archive_no.len(), 29);
+        assert_eq!(archive_no.split('-').count(), 2);
     }
 
     fn build_signed_payload(payload: &str) -> (String, String) {

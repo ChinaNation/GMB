@@ -31,7 +31,7 @@
 - 普通用户：不登录管理员后台，但可使用公开查询页查询档案号、身份识别码、公钥地址。
 
 ## 3.1 区块链五项能力模块归属（对齐口径）
-1. 机构 SFID 登记（多签创建前置）：`sheng-admins` 模块（`sfid_number` 对应内部 `site_sfid`）。
+1. 机构 SFID 登记（多签创建前置）：`institutions` 模块，字段统一为 `sfid_number`。
 2. 公民身份绑定凭证：`chain` 模块（`/api/v1/bind/result`）。
 3. 公民投票凭证：`chain` 模块（`/api/v1/vote/verify`）。
 4. 联合投票人口快照：`chain` 模块（按 Runtime payload 输出 `eligible_total + snapshot_nonce + signature`，`who` 必入签名）。
@@ -165,8 +165,8 @@
 
 ### 7.3 签名与密钥
 - 当前版本按业务目录管理签名密钥与验签流程：省管理员三槽签名密钥在 `sheng_admins`，机构登记与机构链交互在 `institutions`，公民绑定/投票凭证在 `citizens`。
-- CPMS 机构密钥方案：每个市级机构（`site_sfid`）维护 3 套二维码签名密钥。
-- SFID 信任库存储维度：`site_sfid + key_id + pubkey`，按机构隔离验签。
+- CPMS 授权方案：每个市公安局机构 `sfid_number` 对应一个 INSTALL 授权。
+- SFID 信任库存储维度：`sfid_number + install_secret_hash + cpms_pubkey_hash`，按机构隔离验真。
 - 密钥分期：
 1. v1.0：国家级单签名私钥。
 2. v2.0：Root + 省级分层密钥。
@@ -368,28 +368,22 @@
 
 ## 11. CPMS 二维码规范（v1 冻结）
 ### 11.1 公民档案二维码字段定义
-- `ver`：二维码协议版本，固定 `1`。
-- `issuer_id`：签发方标识，固定 `cpms`。
-- `site_sfid`：SFID 下发的机构唯一号。
-- `sign_key_id`：机构签名密钥标识（`K1/K2/K3`）。
-- `archive_no`：档案号（全局唯一用户标识）。
-- `issued_at`：签发时间（Unix 时间戳）。
-- `expire_at`：过期时间（Unix 时间戳）。
-- `qr_id`：二维码唯一流水号（防重放）。
-- `sig_alg`：签名算法，固定 `sr25519`。
-- `citizen_status`：用户状态，`NORMAL` 或 `ABNORMAL`。
-- `voting_eligible`：是否具备投票资格（由 `citizen_status` 映射）。
-- `signature`：CPMS 私钥对二维码原文签名后的结果值。
+- `proto`：固定 `SFID_CPMS_V1`。
+- `type`：固定 `ARCHIVE`。
+- `ano`：档案号（全局唯一用户标识）。
+- `cs`：用户状态，`NORMAL` 或 `ABNORMAL`。
+- `ve`：是否具备投票资格。
+- `cpms_pubkey`：CPMS 本机档案签发公钥。
+- `geo_seal`：只有 SFID 可解开的归属密文，明文只包含 `sfid_number`。
+- `sig`：CPMS 本机私钥对档案核心字段签名后的结果值。
 
 ### 11.2 明确约束
-- 二维码中不包含 CPMS 公钥本体。
-- 每个 CPMS 机构实例必须先输入 `site_sfid` 再初始化生成本机构 3 套签名密钥。
-- SFID 按 `site_sfid + sign_key_id` 维护该机构受信任公钥并用于验签。
-- 当前版本是单向验签：CPMS 签、SFID 验；CPMS 不需要保存 SFID 公钥。
-- `archive_no` 作为唯一用户标识，不再引入额外用户 ID 字段。
-- `archive_no` 结构固定：`省2 + 市3 + 校验1 + 随机9 + 日期8(YYYY)`（日期为档案号创建时间）。
-- `archive_no` 的省市代码来源与 CPMS 同步使用 `sheng_cities` 数据。
-- `archive_no` 不承载年龄与状态语义，SFID 不得从 `archive_no` 推导投票资格。
+- 二维码明文不暴露签发城市和公安局机构。
+- 每个 CPMS 实例必须先扫描 SFID 签发的 INSTALL 安装码。
+- SFID 按 `sfid_number + install_secret_hash + cpms_pubkey_hash` 维护该 CPMS 授权。
+- 当前版本是单向验真：CPMS 签发 ARCHIVE，SFID 解 `geo_seal` 后验签。
+- `ano` 作为唯一用户标识，不再引入额外用户 ID 字段。
+- `ano` 不承载省、市、机构、日期与状态语义，SFID 不得从 `ano` 推导投票资格。
 
 ## 12. WUMINAPP 扫码登录协议规范（统一口径）
 
@@ -447,45 +441,43 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 11.3 验签规则
 1. 解析二维码并校验必填字段完整性。
-2. 校验 `issuer_id=cpms`、`sig_alg=sr25519`。
-3. 校验 `expire_at` 未过期、`qr_id` 未被消费。
-4. 以 `site_sfid + sign_key_id` 定位机构公钥并验签 `signature`。
-5. 验签通过后返回 `qr_id + archive_no + citizen_status`，仅允许进入绑定确认；失败直接拒绝。
-6. 绑定确认必须提交 `qr_id`，且 `qr_id` 对应的 `archive_no` 必须与本次绑定档案号一致。
+2. 校验 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
+3. 用 SFID 保存的 `install_secret` 解 `geo_seal`。
+4. 校验 `geo_seal.sfid_number`、CPMS 本机签名和授权状态。
+5. 验签通过后返回 `ano + province_code + city_code + sfid_number`；失败直接拒绝。
+6. 绑定确认必须使用同一 ARCHIVE 验真结果,不得从档案号明文推导归属。
 
-### 11.4 公钥登记二维码（机构初始化）
-- 用途：CPMS 新安装机构向 SFID 登记本机构 3 把签名公钥。
-- SFID 初始化二维码字段（由 SFID 生成）：`ver`, `issuer_id=sfid`, `purpose=cpms_init`, `site_sfid`, `a3=GFR`, `p1=0`, `province`, `city`, `institution`, `issued_at`, `expire_at=0`, `qr_id`, `sig_alg=sr25519`, `key_id`, `key_version`, `public_key`, `signature`。
-- CPMS 公钥登记二维码字段（由 CPMS 生成）：`site_sfid`, `pubkey_1`, `pubkey_2`, `pubkey_3`, `issued_at`, `init_qr_payload`, `checksum_or_signature`。
+### 11.4 INSTALL 安装码（机构初始化）
+- 用途：SFID 为市公安局 CPMS 签发安装授权。
+- INSTALL 字段（由 SFID 生成）：`proto`, `type`, `sfid_number`, `province_name`, `city_name`, `install_secret`, `sig`。
+- CPMS 初始化后生成本机档案签发密钥,首次 ARCHIVE 验真成功时由 SFID 绑定 `cpms_pubkey_hash`。
 - 流程：
-1. SFID 省级管理员先在机构管理页生成机构身份识别码（`site_sfid`）和 SFID 签名初始化二维码，机构记录状态为 `PENDING`。
-2. CPMS 使用该初始化二维码完成安装初始化并生成 3 把机构公钥登记二维码。
-3. SFID 省级管理员扫码录入 CPMS 公钥登记二维码。
-4. SFID 校验该登记二维码是否绑定了 SFID 侧签发的 `init_qr_payload`，并校验 `init_qr_payload` 签名可信。
-5. 校验通过后机构状态由 `PENDING` 变为 `ACTIVE`，3 把公钥生效。
-6. 录入完成前，SFID 不认可该机构出具的公民档案二维码与状态变更二维码。
-7. 只有完成上述链路并处于 `ACTIVE` 的机构，后续出具的“公民档案号二维码/状态变更二维码”才被 SFID 视为可信输入。
+1. SFID 省级管理员在公安局机构详情页生成 INSTALL 安装码。
+2. CPMS 使用 INSTALL 完成离线安装初始化并保存授权材料。
+3. CPMS 生成 ARCHIVE 档案码。
+4. SFID 首次验真成功后将授权状态由 `PENDING` 改为 `ACTIVE`。
+5. 未完成验真或授权状态不可用时,SFID 不认可该 CPMS 出具的档案码。
 
 ### 11.5 CPMS 对齐清单（执行项）
-- 初始化口径：CPMS 必须使用 SFID 签发的初始化二维码完成首装初始化，不得本地自生成机构号。
-- 绑定校验口径：SFID 在机构录入时必须校验 CPMS 二维码绑定的 `init_qr_payload` 与 SFID 侧该 `site_sfid` 生成记录一致。
-- 可信链路口径：只有“SFID 签发初始化二维码 -> CPMS 初始化 -> SFID 扫码录入机构公钥”闭环完成，CPMS 该机构二维码才进入受信集合。
-- 机构密钥口径：每个 `site_sfid` 固定维护 3 把签名密钥；轮换前需先完成 SFID 信任库更新。
-- 绑定二维码字段：`ver, issuer_id, site_sfid, sign_key_id, archive_no, citizen_status, voting_eligible, issued_at, expire_at, qr_id, sig_alg, signature`。
-- 状态变更二维码字段：`ver, issuer_id, site_sfid, sign_key_id, archive_no, citizen_status, voting_eligible, issued_at, expire_at, qr_id, sig_alg, signature`。
+- 初始化口径：CPMS 必须使用 SFID 签发的 INSTALL 完成首装初始化，不得本地自生成机构号。
+- 绑定校验口径：SFID 在 ARCHIVE 验真时必须校验 `geo_seal` 与 SFID 侧授权记录一致。
+- 可信链路口径：只有“SFID 签发 INSTALL -> CPMS 初始化 -> SFID 验真 ARCHIVE”闭环完成，CPMS 该机构二维码才进入受信集合。
+- 机构密钥口径：每个 `sfid_number` 授权只允许绑定一个 `cpms_pubkey_hash`。
+- 绑定二维码字段：`proto, type, ano, cs, ve, cpms_pubkey, geo_seal, sig`。
+- 状态变更二维码字段继续按 CPMS 状态扫码接口单独维护,不得混入 ARCHIVE 档案码。
 - 状态值口径：`NORMAL` 可投票，`ABNORMAL` 不可投票；CPMS 输出状态即业务最终状态源。
-- 签名原文口径：按 11.3/11.4 固定顺序拼接，严禁字段重排、空格填充、编码漂移。
-- 重放口径：同一 `qr_id` 只能使用一次；CPMS 不得重复出具同 `qr_id` 的二维码。
+- 签名原文口径：按 `SFID_CPMS_V1` 文档固定顺序拼接，严禁字段重排、空格填充、编码漂移。
+- 重放口径：同一 `ano` 只能录入一次；CPMS 不得重复出具同一档案号。
 - 失败语义对齐：SFID 返回“站点未登记/签名失败/二维码过期/二维码已消费”时，CPMS 按同义错误码落日志并触发补发流程。
 - 拒绝语义口径：验签失败、机构未登记、机构非 `ACTIVE`、初始化链路不一致时，SFID 必须拒绝该 CPMS 公民档案号二维码/状态变更二维码。
 - 联调顺序：先登记机构公钥二维码，再联调公民绑定二维码，最后联调状态变更二维码。
 
-### 11.6 机构管理页面冻结口径（2026-03）
-- 机构列表中“机构号”统一为“身份识别码”，展示 `site_sfid`。
+### 11.6 机构管理页面冻结口径（2026-05）
+- 机构列表中“机构号”统一为“身份识别码”，展示 `sfid_number`。
 - 生成身份识别码弹窗不输入公钥；弹窗内 `A3` 固定公法人（`GFR`）、`P1` 固定非盈利（`0`）。
 - 省级管理员账号有省份约束时，省份默认并锁定；可选市与机构类型（机构类型受 `GFR` 约束）。
-- 生成后主按钮显示“完成”，点击返回列表并展示该 `site_sfid`；次按钮为“下载”二维码，不显示 JSON 文本框。
-- 列表每条身份识别码后显示小二维码按钮；点击弹出该 `site_sfid` 对应二维码并支持再次下载。
+- 生成后主按钮显示“完成”，点击返回列表并展示该 `sfid_number`；次按钮为“下载”二维码，不显示 JSON 文本框。
+- 列表每条身份识别码后显示小二维码按钮；点击弹出该 `sfid_number` 对应二维码并支持再次下载。
 - 身份识别码二维码长期有效，不展示“有效期至”文案。
 - 机构页操作按钮为“禁用、删除、扫码”；不显示“撤销”按钮与“扫码录入机构”顶栏按钮。
 - 每个机构公钥列分别展示”更新”按钮；”登记人”列显示”`{省名}省级管理员`”。
@@ -632,7 +624,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 验收标准：非管理员公钥拒绝登录；市级管理员访问管理员管理接口返回 403。
 
 ### 16.4 里程碑 3：绑定/解绑主流程（3 天）
-- 完成 CPMS 机构公钥登记流程：扫码录入 `site_sfid + keys[key_id,pubkey]`。
+- 完成 CPMS 授权验真流程：INSTALL 初始化后首次 ARCHIVE 验真绑定 `sfid_number + cpms_pubkey_hash`。
 - 完成公民二维码验签：`issuer_id`、`sig_alg`、`expire_at`、`qr_id`、3 把公钥任意一把验签通过。
 - 实现绑定确认：写入 `archive_no + account_pubkey`，状态置 `ACTIVE`，并发幂等。
 - 实现解绑流程：管理员填写原因，状态置 `UNBOUND`，完整审计。

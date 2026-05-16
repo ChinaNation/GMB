@@ -16,7 +16,7 @@
 - 市管理员 CRUD、启用/停用、删除。
 - 43 省内置主管理员公钥与省份归属基线。
 
-CPMS 系统安装、QR2 注册、QR3 匿名证书、站点状态治理已经迁到
+CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理已经迁到
 `sfid/backend/cpms/`。不得再把 CPMS handler 放回 `sheng_admins`。
 
 省管理员当前没有活跃 `chain_*.rs` 文件。后续只有“更换省管理员/主备交换”

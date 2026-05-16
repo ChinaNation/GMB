@@ -1,77 +1,106 @@
-# CPMS 技术开发文档（当前实现基线）
+# CPMS 技术开发文档（SFID_CPMS_V1 两码基线）
 
-## 1. 文档目的
-- 固化 CPMS 当前代码实现的技术基线，作为开发、联调、测试、验收的唯一参考。
-- 明确模块边界：登录、初始化、权限、省级管理员、市级管理员、档案算法相互解耦。
-- 统一跨端口径：CPMS 与 wuminapp/SFID 的扫码协议、签名原文、字段顺序保持一致。
+## 1. 系统定位
+CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保留两个 SFID/CPMS 业务二维码：
 
-## 2. 系统定位与业务范围
-- CPMS 是离线运行的管理系统，当前实现聚焦“管理员体系 + 档案录入 + 档案二维码签发/打印”。
-- 管理员仅两类角色：
-  - `SHENG_ADMIN`（省级管理员）：管理市级管理员、管理档案状态、生成机构公钥登记二维码。
-  - `SHI_ADMIN`（市级管理员）：录入档案、查询档案、生成并打印档案二维码。
-- 业务主线：
-  - 省级管理员通过初始化绑定产生（最多 3 个，固定映射 `K1/K2/K3`）。
-  - 市级管理员由省级管理员维护。
-  - 市级管理员录入档案后生成二维码，交给外部系统（SFID）使用。
+- `INSTALL`：SFID 签发给 CPMS，用于安装初始化。
+- `ARCHIVE`：CPMS 签发给 SFID，用于档案录入、公民绑定和省市归档。
 
-## 3. 后端模块架构（`cpms/backend/src`）
+协议名固定为 `SFID_CPMS_V1`。机构 SFID 字段固定为 `sfid_number`。
 
-### 3.1 模块目录
-- `main.rs`：应用启动、PostgreSQL 连接池与迁移、通用错误响应、审计写入。
-- `initialize/`：安装初始化与省级管理员绑定。
-- `login/`：管理员登录（普通 challenge + 扫码 challenge）。
+## 2. 后端模块
+- `main.rs`：应用启动、PostgreSQL 连接池、迁移、通用响应与审计。
+- `initialize/`：消费 INSTALL 安装码、保存安装授权材料、生成 ARCHIVE 签发密钥、绑定超级管理员。
+- `login/`：管理员 challenge 登录和扫码登录。
 - `authz/`：Bearer token 鉴权与角色校验。
-- `super_admin/`：省级管理员接口（操作员管理、档案状态管理、公钥登记二维码）。
-- `operator_admin/`：市级管理员接口（档案录入、查询、二维码生成与打印）。
-- `dangan/`：档案号与二维码算法（含 `province_codes.rs` 省市代码数据）。
+- `super_admin/`：操作员管理和档案状态管理。
+- `operator_admin/`：档案创建、查询、ARCHIVE 生成和打印记录。
+- `dangan/`：档案号生成、`geo_seal` 加密、ARCHIVE 签名。
+- `address.rs`：镇、村/路地址维护。
 
-### 3.2 模块边界
-- `login` 只负责登录流程，不承担业务授权和业务操作。
-- `authz` 只负责“是否登录 + 角色匹配”判定。
-- `super_admin`（省级管理员）与 `operator_admin`（市级管理员）承担业务入口与权限分层。
-- `dangan` 只提供算法和载荷构建能力，被业务模块调用。
-- `initialize` 统一承载安装引导与初始化安全链路。
+## 3. 初始化流程
+1. CPMS 扫描或粘贴 SFID 生成的 `SFID_CPMS_V1 / INSTALL`。
+2. 后端校验 `proto/type`、`sfid_number`、省市名称和 `install_secret`，离线保存 INSTALL 安装材料。
+3. 后端写入 `system_install`：
+   - `sfid_number`
+   - `install_secret`
+   - `install_secret_hash`
+   - `province_name / city_name`
+   - `cpms_pubkey`
+4. 后端生成一把本机 ARCHIVE 签发密钥，写入 `qr_sign_keys.key_id = ARCHIVE`。
+5. 绑定 1 个超级管理员。
+6. CPMS 可直接创建档案并生成 ARCHIVE 档案二维码。
 
-## 4. 角色与权限模型
+本阶段不提供旧库迁移兼容；旧数据库可清空后按新基准结构启动。
 
-### 4.1 角色定义
-- `SHENG_ADMIN`（省级管理员）
-  - 来源：安装后通过 `wuminapp` 绑定。
-  - 上限：固定 3 个，对应 `K1/K2/K3`。
-  - 关键能力：操作员管理、档案状态更新、机构公钥登记二维码生成。
-- `SHI_ADMIN`（市级管理员）
-  - 来源：由省级管理员创建。
-  - 关键能力：档案创建/查询、档案二维码生成与打印。
+## 4. 角色模型
+- `SUPER_ADMIN`：绑定产生，负责操作员管理、地址维护、档案状态维护。
+- `OPERATOR_ADMIN`：由超级管理员创建，负责档案录入、查询和二维码打印。
 
-### 4.2 权限校验实现
-- 权限入口在 `authz::require_role(...)`，从 `Authorization: Bearer <token>` 读取会话。
-- 会话过期或 token 无效返回 `401`，角色不匹配返回 `403(code=2008)`。
-- 所有管理与业务接口均由后端强制校验，不依赖前端按钮隐藏。
+所有业务接口均由后端校验角色，不依赖前端按钮隐藏。
 
-## 5. 初始化模块（`initialize/`）
+## 5. ARCHIVE 档案号
+- 格式：`<26位Base32>-<2位Base32校验>`。
+- 不编码省、市、机构、日期。
+- 不使用固定业务前缀，避免把示例前缀固化成协议含义。
+- 生成输入包含 `install_secret`、安全随机数、本机序列、终端 ID、管理员公钥。
+- CPMS 本机用唯一索引避免重复；SFID 录入时以 `ano` 做全局唯一最终校验。
 
-### 5.1 路由
+## 6. ARCHIVE 二维码
+
+```json
+{
+  "proto": "SFID_CPMS_V1",
+  "type": "ARCHIVE",
+  "ano": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
+  "cs": "NORMAL",
+  "ve": true,
+  "cpms_pubkey": "0x...",
+  "geo_seal": "g1.<nonce_hex>.<cipher_hex>",
+  "sig": "0x..."
+}
+```
+
+明文字段不包含省、市、CPMS 机构号。归属信息只存在于 `geo_seal`：
+
+- `sfid_number`
+
+`geo_seal` 使用 AES-256-GCM，加密密钥为 `blake2b_256(install_secret)`。
+`geo_seal` AAD 固定为 `sfid-cpms-v1|geo-seal|{ano}|{cpms_pubkey}`，用于绑定档案号和 CPMS 本机公钥。
+
+ARCHIVE 签名原文：
+
+```text
+sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
+```
+
+签名上下文：`substrate`。
+
+## 7. 数据库表
+- `system_install`：单行安装授权状态。
+- `qr_sign_keys`：本机 ARCHIVE 签发密钥。
+- `admin_users`：管理员账号。
+- `sessions`：登录会话。
+- `login_challenges`：登录挑战。
+- `qr_login_results`：扫码登录结果。
+- `archives`：公民档案和 `archive_qr_payload`。
+- `sequence_counters`：本机序列。
+- `qr_print_records`：打印记录。
+- `address_towns` / `address_villages`：地址维护。
+- `audit_logs`：审计日志。
+
+## 8. 环境变量
+- `CPMS_DATABASE_URL`：PostgreSQL 连接串。
+- `CPMS_BIND`：监听地址。
+- `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
+
+## 8. API 总览
+初始化：
 - `GET /api/v1/install/status`
 - `POST /api/v1/install/initialize`
 - `POST /api/v1/install/super-admin/bind`
 
-### 5.2 初始化流程
-1. `install/initialize` 接收 `sfid_init_qr_content`（支持 JSON 或 Base64(JSON)）。
-2. 校验 `type=INSTALL`（`SFID_CPMS_V1` 协议），CPMS 为离线系统不验签名。
-3. 初始化成功后写入 PostgreSQL：
-   - `system_install.site_sfid`、`rsa_public_key_pem`
-   - `qr_sign_keys`（1 把：`K1`）
-4. `install/super-admin/bind` 接收 `admin_pubkey`（从手机 `WUMIN_QR_V1` 名片扫码获取）绑定超管。
-5. 超级管理员登录后，在管理后台完成 QR2 生成和 QR3 盲化。
-
-### 5.3 安全约束
-- `system_install.site_sfid` 已存在时拒绝重复初始化。
-- 超级管理员只允许绑定 1 个，`admin_pubkey` 不可重复。
-
-## 6. 登录模块（`login/`）
-
-### 6.1 路由
+登录：
 - `POST /api/v1/admin/auth/identify`
 - `POST /api/v1/admin/auth/challenge`
 - `POST /api/v1/admin/auth/verify`
@@ -80,182 +109,34 @@
 - `GET /api/v1/admin/auth/qr/result`
 - `POST /api/v1/admin/auth/logout`
 
-### 6.2 登录形态
-- 普通 challenge 登录：`challenge -> signature -> token`。
-- 扫码登录：后端生成挑战二维码，手机签名后回传，后端验签并落登录结果，页面轮询拿 token。
-
-### 6.3 与 wuminapp 对齐口径（当前）
-- 协议：`WUMIN_QR_V1`
-- 挑战字段：`proto/system/challenge/issued_at/expires_at/sys_pubkey/sys_sig`
-- 签名原文固定：
-
-```text
-WUMIN_QR_V1|system|challenge|expires_at
-```
-
-- `origin` 不参与移动端扫码验签，可仅作为网页侧上下文保留。
-- `sys_pubkey`：CPMS 当前登录系统公钥。
-- `sys_sig`：CPMS 对挑战原文的签名。
-- 登录协议仅用于 `sfid/cpms` 登录，不用于链上转账、投票或治理签名。
-- 手机先验 `sys_pubkey + sys_sig` 确认二维码由 CPMS 私钥签发，再由管理员钱包完成第二层登录签名。
-
-### 6.4 安全约束
-- challenge 有效期固定 90 秒。
-- challenge 一次性消费，防重放。
-- 登录会话默认有效期 30 分钟。
-- 管理员状态必须是 `ACTIVE`。
-
-## 7. 省级管理员模块（`super_admin/`）
-
-### 7.1 路由（均要求 `SHENG_ADMIN`）
+超级管理员：
 - `GET /api/v1/admin/operators`
 - `POST /api/v1/admin/operators`
 - `PUT /api/v1/admin/operators/:id`
 - `DELETE /api/v1/admin/operators/:id`
 - `PUT /api/v1/admin/operators/:id/status`
 - `PUT /api/v1/archives/:archive_id/citizen-status`
-- `POST /api/v1/admin/generate-qr2`（生成 QR2 注册二维码，需认证）
-- `POST /api/v1/admin/anon-cert`（扫描 QR3 完成匿名证书注册，需认证）
+- 地址管理 API：`/api/v1/address/*`
 
-### 7.2 关键行为
-- 市级管理员增删改查与状态更新。
-- 生成 QR2 注册二维码（`SFID_CPMS_V1` 协议 `REGISTER` 类型）。
-- 扫描 QR3 完成匿名证书盲化解密。
-- 更新档案 `citizen_status`（`NORMAL/ABNORMAL`），并派生 `voting_eligible`。
-
-## 8. 市级管理员模块（`operator_admin/`）
-
-### 8.1 路由（均要求 `SHI_ADMIN`）
+操作员：
 - `POST /api/v1/archives`
 - `GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`
 - `POST /api/v1/archives/:archive_id/qr/generate`
 - `POST /api/v1/archives/:archive_id/qr/print`
 
-### 8.2 关键行为
-- 创建档案时校验省市代码、出生日期、性别、公民状态。
-- 档案号由后端算法生成，前端不可覆盖。
-- 支持分页与按姓名模糊查询。
-- 二维码生成与打印均记录审计（打印还落 `qr_print_records`）。
+## 9. 安全边界
+- 未经 SFID 签发 INSTALL 的 CPMS 无法产生可被 SFID 验证通过的 ARCHIVE。
+- 伪 CPMS 即使仿造 ARCHIVE 明文字段，也无法构造正确 `geo_seal / sig`。
+- 其他 CPMS 和普通扫码方不能从 ARCHIVE 明文字段看出档案号属于哪个市。
+- CPMS 不直接连接 SFID 在线接口，不直接对接区块链。
 
-## 9. 档案号与二维码算法（`dangan/`）
-
-### 9.1 档案号规则（v3）
-- 格式：`省2 + 市3 + 校验1 + 随机9 + 日期8`
-- 总长度：23
-- 日期：`YYYY`
-- 市级真实代码统一从 `001` 起排；`000` 为 SFID 省级占位码，不用于 CPMS 档案号。
-
-### 9.2 校验位算法
-- 输入串：`cpms-archive-v3|{province2}{city3}{random9}{created_date8}`
-- 算法：`BLAKE2b` 摘要后做字节和，再 `mod 10` 得 1 位数字。
-
-### 9.3 随机 9 位生成
-- 输入因子：`timestamp_ms + terminal_id + admin_pubkey + nonce`
-- 通过哈希后 `mod 1_000_000_000`，左补零到 9 位。
-- 冲突重试：最多 20 次。
-
-### 9.4 业务二维码签名
-- 档案二维码签名原文：
-
-```text
-cpms-qr-v1|site_sfid|sign_key_id|archive_no|citizen_status|voting_eligible|issued_at|qr_id
-```
-
-- 签名算法：`sr25519`，上下文 `CPMS-QR-SIGN-V1`。
-
-## 10. 数据模型与持久化
-
-### 10.1 当前持久化形态
-- 当前实现已完全切换为 PostgreSQL 持久化（无 JSON 运行时快照）。
-- 启动时自动执行迁移：`backend/db/migrations/0001_init_cpms_pg.sql`。
-
-### 10.2 核心表
-- `system_install`
-- `qr_sign_keys`
-- `admin_users`
-- `sessions`
-- `login_challenges`
-- `qr_login_results`
-- `archives`
-- `sequence_counters`
-- `qr_print_records`
-- `audit_logs`
-
-### 10.3 审计落库时机
-- 初始化、登录、管理员管理、档案创建、二维码生成、二维码打印等关键动作均实时写入 `audit_logs`。
-
-## 11. API 总览（当前实现）
-
-### 11.1 健康检查
-- `GET /api/v1/health`
-
-### 11.2 初始化
-- `GET /api/v1/install/status`
-- `POST /api/v1/install/initialize`
-- `POST /api/v1/install/super-admin/bind`
-
-### 11.3 登录
-- `POST /api/v1/admin/auth/identify`
-- `POST /api/v1/admin/auth/challenge`
-- `POST /api/v1/admin/auth/verify`
-- `POST /api/v1/admin/auth/qr/challenge`
-- `POST /api/v1/admin/auth/qr/complete`
-- `GET /api/v1/admin/auth/qr/result`
-- `POST /api/v1/admin/auth/logout`
-
-### 11.4 省级管理员
-- `GET /api/v1/admin/operators`
-- `POST /api/v1/admin/operators`
-- `PUT /api/v1/admin/operators/:id`
-- `DELETE /api/v1/admin/operators/:id`
-- `PUT /api/v1/admin/operators/:id/status`
-- `POST /api/v1/admin/generate-qr2`
-- `POST /api/v1/admin/anon-cert`
-- `PUT /api/v1/archives/:archive_id/citizen-status`
-
-### 11.5 市级管理员
-- `POST /api/v1/archives`
-- `GET /api/v1/archives`
-- `GET /api/v1/archives/:archive_id`
-- `POST /api/v1/archives/:archive_id/qr/generate`
-- `POST /api/v1/archives/:archive_id/qr/print`
-
-## 12. 配置项（环境变量）
+## 10. 配置项
 - `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。
-- `CPMS_DATABASE_URL`：PostgreSQL 连接串（优先级高于 `DATABASE_URL`）。
+- `CPMS_DATABASE_URL`：PostgreSQL 连接串，优先级高于 `DATABASE_URL`。
 - `DATABASE_URL`：PostgreSQL 连接串兜底配置。
-- `CPMS_KEY_ENCRYPT_SECRET`：QR 签名私钥加密主密钥（32 字节 hex）。
+- `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
 
-## 13. 错误码口径（摘要）
-- `1001`：请求参数非法或字段缺失。
-- `2001`：token 缺失或无效。
-- `2002`：管理员不存在或非 ACTIVE。
-- `2003`：challenge 不存在。
-- `2004`：challenge 与请求上下文不匹配。
-- `2005`：challenge 已消费。
-- `2006`：challenge 已过期。
-- `2007`：签名校验失败。
-- `2008`：权限不足。
-- `2009`：token 过期。
-- `3001~3005`：管理员/档案业务冲突与不存在等业务错误。
-- `4001~4005`：初始化冲突或初始化链路错误。
-- `5001+`：服务内部错误。
-
-## 14. 与 wuminapp / SFID 联调要点
-- wuminapp 扫码登录使用 `WUMIN_QR_V1` 协议。
-- CPMS 初始化扫描 SFID 签发的 QR1（`SFID_CPMS_V1` 协议 `INSTALL` 类型），CPMS 不验签（离线系统无 SFID 公钥）。
-- 超级管理员绑定通过扫描手机 `WUMIN_QR_V1` 名片获取公钥。
-- QR2/QR3/QR4 使用 `SFID_CPMS_V1` 协议（`REGISTER`/`CERT`/`ARCHIVE` 类型）。
-- 业务二维码与机构公钥体系分离于管理员登录公钥体系，不可混用。
-- 登录信任链固定为：区块链持有 SFID 当前公钥 -> SFID 背书 CPMS 登录公钥 -> CPMS 签发登录挑战。
-
-## 15. 模块文档索引
-- `backend/src/initialize/INITIALIZE_TECHNICAL.md`
-- `backend/src/login/LOGIN_TECHNICAL.md`
-- `backend/src/dangan/DANGAN_TECHNICAL.md`
-- `backend/src/super_admin/mod.rs`
-- `backend/src/operator_admin/mod.rs`
-- `backend/src/authz/mod.rs`
-
-本文件描述的是“当前实现基线”。若接口、字段、签名串、角色边界、持久化方案发生变更，必须同步更新本文件与对应模块技术文档。
+## 11. 验证命令
+- `cd cpms/backend && cargo fmt && cargo check && cargo test`
+- `cd cpms/frontend/web && npm run build`

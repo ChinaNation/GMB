@@ -405,14 +405,12 @@ mod tests {
         let store = new_store();
         store
             .write_global(|g| {
-                g.anon_rsa_private_key_pem = Some("pem-data".into());
+                g.chain_auth_last_cleanup_at = Some(chrono::Utc::now());
             })
             .await
             .unwrap();
-        let pem = store
-            .read_global(|g| g.anon_rsa_private_key_pem.clone())
-            .unwrap();
-        assert_eq!(pem.as_deref(), Some("pem-data"));
+        let cleanup_at = store.read_global(|g| g.chain_auth_last_cleanup_at).unwrap();
+        assert!(cleanup_at.is_some());
     }
 
     #[tokio::test]

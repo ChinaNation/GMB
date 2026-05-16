@@ -112,6 +112,7 @@ pub(crate) async fn app_vote_account_register(
         sfid_code: None,
         sfid_signature: None,
         province_code: None,
+        city_code: None,
         chain_confirmed: false,
         bound_at: None,
         bound_by: None,
