@@ -503,16 +503,8 @@ class _OffchainClearingPayPageState extends State<OffchainClearingPayPage> {
     return neg ? '-$s' : s;
   }
 
-  /// QR 里的 `toAddress` 既可能是 SS58,也可能是 `0x` hex pubkey,两种都兼容。
+  /// QR 里的 `toAddress` 是用户展示/扫码边界，只允许 SS58。
   Uint8List _decodeAccount(String address) {
-    final t = address.trim();
-    if (t.startsWith('0x')) {
-      final bytes = hexToBytes(t);
-      if (bytes.length != 32) {
-        throw Exception('hex 地址长度必须 32 字节,实际 ${bytes.length}');
-      }
-      return bytes;
-    }
-    return _ss58ToBytes(t);
+    return _ss58ToBytes(address.trim());
   }
 }

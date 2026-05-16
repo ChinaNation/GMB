@@ -191,9 +191,27 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       ),
     );
     if (!mounted || contact == null) return;
+    late final String contactSs58;
+    try {
+      contactSs58 = _accountHexToSs58(contact.accountPubkeyHex);
+    } on FormatException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
     setState(() {
-      _toController.text = contact.accountPubkeyHex;
+      // 中文注释：通讯录内部保存 AccountId hex；转账输入框只接收 SS58。
+      _toController.text = contactSs58;
     });
+  }
+
+  String _accountHexToSs58(String accountHex) {
+    final bytes = _hexToBytes(accountHex);
+    if (bytes.length != 32) {
+      throw const FormatException('联系人账户地址无效');
+    }
+    return Keyring().encodeAddress(Uint8List.fromList(bytes), _ss58Prefix);
   }
 
   Future<void> _submit() async {

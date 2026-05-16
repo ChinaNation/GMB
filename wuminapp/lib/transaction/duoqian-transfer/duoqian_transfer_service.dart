@@ -74,9 +74,10 @@ class DuoqianTransferService {
     final institutionBytes =
         _institutionIdentityToFixed48(institution.sfidNumber);
     final beneficiaryPubkey =
-        Uint8List.fromList(Keyring().decodeAddress(beneficiaryAddress));
-    final fromPubkey =
-        Uint8List.fromList(Keyring().decodeAddress(institution.mainAddress));
+        _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
+    // 中文注释：InstitutionInfo.mainAddress 是 App 内部 AccountId hex，
+    // 不能按 SS58/Base58 解码，否则 hex 中的 0 会被当成非法 Base58 字符。
+    final fromPubkey = _accountHexToAccountId(institution.mainAddress, '转出主账户');
     final callData = _buildProposeTransferCall(
       org: identity.org,
       institutionIdentity: institution.sfidNumber,
@@ -1038,7 +1039,7 @@ class DuoqianTransferService {
     output.write(_institutionIdentityToFixed48(institutionIdentity));
 
     // beneficiary: AccountId32 = 32 bytes（不是 MultiAddress，无 0x00 前缀）
-    final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
+    final beneficiaryId = _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     output.write(beneficiaryId);
 
     // amount: u128 little-endian（16 字节，非 Compact）
@@ -1090,7 +1091,7 @@ class DuoqianTransferService {
     output.pushByte(_proposeSafetyFundCallIndex);
 
     // beneficiary: 32 bytes
-    final beneficiaryId = Keyring().decodeAddress(beneficiaryAddress);
+    final beneficiaryId = _ss58AddressToAccountId(beneficiaryAddress, '收款地址');
     output.write(beneficiaryId);
 
     // amount: u128 LE
@@ -1545,6 +1546,22 @@ class DuoqianTransferService {
       result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
     }
     return result;
+  }
+
+  Uint8List _accountHexToAccountId(String hex, String fieldName) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    if (clean.length != 64 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(clean)) {
+      throw FormatException('$fieldName必须是32字节账户hex');
+    }
+    return _hexDecode(clean);
+  }
+
+  Uint8List _ss58AddressToAccountId(String address, String fieldName) {
+    try {
+      return Uint8List.fromList(Keyring().decodeAddress(address));
+    } catch (_) {
+      throw FormatException('$fieldName必须是SS58地址');
+    }
   }
 
   // ──── 内部：哈希（直接使用 polkadart Hasher）────

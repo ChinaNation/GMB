@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/my/myid/myid_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -1143,10 +1144,19 @@ class _ContactDetailPage extends StatelessWidget {
                     backgroundColor: AppTheme.primary,
                   ),
                   onPressed: () {
+                    late final String contactSs58;
+                    try {
+                      contactSs58 = _accountHexToSs58(contact.accountPubkeyHex);
+                    } on FormatException catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(e.message)),
+                      );
+                      return;
+                    }
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => OnchainPaymentPage(
-                          initialToAddress: contact.accountPubkeyHex,
+                          initialToAddress: contactSs58,
                         ),
                       ),
                     );
@@ -1586,4 +1596,17 @@ class _HollowQrPainter extends CustomPainter {
   bool shouldRepaint(_HollowQrPainter oldDelegate) {
     return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
+}
+
+String _accountHexToSs58(String accountHex) {
+  final clean =
+      accountHex.startsWith('0x') ? accountHex.substring(2) : accountHex;
+  if (clean.length != 64 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(clean)) {
+    throw const FormatException('联系人账户地址无效');
+  }
+  final bytes = Uint8List(32);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
+  }
+  return Keyring().encodeAddress(bytes, 2027);
 }
