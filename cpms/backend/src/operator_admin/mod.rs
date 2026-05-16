@@ -1,6 +1,6 @@
 //! # 操作员管理模块 (operator_admin)
 //!
-//! 档案创建/查询、QR 码生成/打印。仅 OPERATOR_ADMIN 角色可访问。
+//! 档案创建/查询、ARCHIVE 二维码生成/打印。仅 OPERATOR_ADMIN 角色可访问。
 
 use axum::{
     extract::{Path, Query, State},
@@ -14,14 +14,12 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    authz, dangan, err, find_admin_by_user_id, ok, write_audit, ApiError, ApiResponse, AppState,
-    Archive,
+    authz, dangan, err, find_admin_by_user_id, initialize, ok, write_audit, ApiError, ApiResponse,
+    AppState, Archive,
 };
 
 #[derive(Deserialize)]
 struct CreateArchiveRequest {
-    province_code: String,
-    city_code: String,
     full_name: String,
     birth_date: String,
     gender_code: String,
@@ -56,7 +54,7 @@ struct ListQuery {
 
 #[derive(Serialize)]
 struct QrGenerateData {
-    qr_payload: crate::dangan::QrPayload,
+    qr_payload: crate::dangan::ArchiveQrPayload,
     qr_content: String,
 }
 
@@ -108,16 +106,8 @@ async fn create_archive(
 ) -> Result<Json<ApiResponse<CreateArchiveData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_auth(&state, &headers).await?;
     let admin = find_admin_by_user_id(&state, &ctx.user_id).await?;
+    let install = initialize::load_cpms_install_runtime(&state).await?;
 
-    if !crate::dangan::province_codes::is_valid_province_code(&req.province_code) {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid province_code"));
-    }
-    if !crate::dangan::province_codes::is_valid_city_code_for_province(
-        &req.province_code,
-        &req.city_code,
-    ) {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid city_code"));
-    }
     if req.gender_code != "M" && req.gender_code != "W" {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid gender_code"));
     }
@@ -131,7 +121,7 @@ async fn create_archive(
     dangan::validate_citizen_status(&citizen_status)?;
     let archive_no = dangan::generate_archive_no_with_retry(
         &state,
-        &req.province_code,
+        install.install_secret.as_str(),
         terminal_id,
         &admin.admin_pubkey,
     )
@@ -152,8 +142,8 @@ async fn create_archive(
     let mut archive = Archive {
         archive_id: format!("ar_{}", Uuid::new_v4().simple()),
         archive_no: archive_no.clone(),
-        province_code: req.province_code,
-        city_code: req.city_code,
+        province_code: install.province_code,
+        city_code: install.city_code,
         full_name: req.full_name,
         birth_date: req.birth_date,
         gender_code: req.gender_code,
@@ -165,23 +155,23 @@ async fn create_archive(
         status: "ACTIVE".to_string(),
         citizen_status,
         voting_eligible: voting,
-        qr4_payload: String::new(),
+        archive_qr_payload: String::new(),
         created_at: now_ts,
         updated_at: now_ts,
     };
 
-    // 自动生成 QR4 payload
-    match dangan::build_qr4_payload(&state, &archive).await {
-        Ok(qr4) => {
-            if let Ok(json) = serde_json::to_string(&qr4) {
-                archive.qr4_payload = json;
-            }
-        }
-        Err(_) => { /* QR3 未完成时无法生成 QR4，留空 */ }
-    }
+    // 中文注释：档案创建成功前即生成 ARCHIVE payload，避免出现无签发码档案。
+    let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
+    archive.archive_qr_payload = serde_json::to_string(&archive_qr).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "archive qr encode failed",
+        )
+    })?;
 
     sqlx::query(
-        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, qr4_payload, created_at, updated_at)
+        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, archive_qr_payload, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
     )
     .bind(&archive.archive_id)
@@ -199,7 +189,7 @@ async fn create_archive(
     .bind(&archive.status)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
-    .bind(&archive.qr4_payload)
+    .bind(&archive.archive_qr_payload)
     .bind(archive.created_at)
     .bind(archive.updated_at)
     .execute(&state.db)
@@ -253,7 +243,7 @@ async fn list_archives(
                 })?;
 
         let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(qr4_payload,'') AS qr4_payload, created_at, updated_at
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
              FROM archives
              WHERE full_name LIKE $1
              ORDER BY archive_id
@@ -280,7 +270,7 @@ async fn list_archives(
             })?;
 
         let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(qr4_payload,'') AS qr4_payload, created_at, updated_at
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
              FROM archives
              ORDER BY archive_id
              LIMIT $1 OFFSET $2",
@@ -315,7 +305,7 @@ async fn get_archive(
     Ok(Json(ok(archive)))
 }
 
-/// 编辑公民档案。修改后自动重新生成 QR4。
+/// 编辑公民档案。修改后自动重新生成 ARCHIVE 二维码。
 async fn update_archive(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -363,18 +353,18 @@ async fn update_archive(
 
     archive.updated_at = Utc::now().timestamp();
 
-    // 自动重新生成 QR4
-    match dangan::build_qr4_payload(&state, &archive).await {
-        Ok(qr4) => {
-            if let Ok(json) = serde_json::to_string(&qr4) {
-                archive.qr4_payload = json;
-            }
-        }
-        Err(_) => { /* QR3 未完成时无法生成 */ }
-    }
+    // 中文注释：状态或选举资格变化会改变签名原文，必须重新生成 ARCHIVE payload。
+    let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
+    archive.archive_qr_payload = serde_json::to_string(&archive_qr).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "archive qr encode failed",
+        )
+    })?;
 
     sqlx::query(
-        "UPDATE archives SET full_name=$1, birth_date=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, qr4_payload=$10, updated_at=$11 WHERE archive_id=$12",
+        "UPDATE archives SET full_name=$1, birth_date=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, archive_qr_payload=$10, updated_at=$11 WHERE archive_id=$12",
     )
     .bind(&archive.full_name)
     .bind(&archive.birth_date)
@@ -385,7 +375,7 @@ async fn update_archive(
     .bind(&archive.address)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
-    .bind(&archive.qr4_payload)
+    .bind(&archive.archive_qr_payload)
     .bind(archive.updated_at)
     .bind(&archive_id)
     .execute(&state.db)
@@ -403,7 +393,7 @@ async fn generate_archive_qr(
     let ctx = authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
 
-    let qr_payload = dangan::build_qr_payload(&state, &archive).await?;
+    let qr_payload = dangan::build_archive_qr_payload(&state, &archive).await?;
     let qr_content = serde_json::to_string(&qr_payload)
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
 
@@ -412,14 +402,14 @@ async fn generate_archive_qr(
         Some(ctx.user_id),
         "GENERATE_ARCHIVE_QR",
         "QR",
-        Some(qr_payload.qr_id.clone()),
+        Some(qr_payload.ano.clone()),
         "SUCCESS",
         serde_json::json!({
             "archive_id": archive_id,
-            "archive_no": qr_payload.archive_no,
-            "citizen_status": qr_payload.citizen_status,
-            "voting_eligible": qr_payload.voting_eligible,
-            "sign_key_id": qr_payload.sign_key_id
+            "archive_no": qr_payload.ano,
+            "citizen_status": qr_payload.cs,
+            "voting_eligible": qr_payload.ve,
+            "cpms_pubkey": qr_payload.cpms_pubkey
         }),
     )
     .await?;
@@ -438,14 +428,14 @@ async fn print_archive_qr(
     let ctx = authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
     let archive = fetch_archive_by_id(&state, &archive_id).await?;
 
-    let qr_payload = dangan::build_qr_payload(&state, &archive).await?;
+    let qr_payload = dangan::build_archive_qr_payload(&state, &archive).await?;
 
     let record = QrPrintData {
         print_id: format!("qpr_{}", Uuid::new_v4().simple()),
         archive_id: archive.archive_id,
-        archive_no: qr_payload.archive_no.clone(),
-        citizen_status: qr_payload.citizen_status.clone(),
-        voting_eligible: qr_payload.voting_eligible,
+        archive_no: qr_payload.ano.clone(),
+        citizen_status: qr_payload.cs.clone(),
+        voting_eligible: qr_payload.ve,
         printed_at: Utc::now().timestamp(),
     };
 
@@ -475,7 +465,7 @@ async fn print_archive_qr(
             "archive_no": record.archive_no,
             "citizen_status": record.citizen_status,
             "voting_eligible": record.voting_eligible,
-            "sign_key_id": qr_payload.sign_key_id
+            "cpms_pubkey": qr_payload.cpms_pubkey
         }),
     )
     .await?;
@@ -488,7 +478,7 @@ async fn fetch_archive_by_id(
     archive_id: &str,
 ) -> Result<Archive, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(qr4_payload,'') AS qr4_payload, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -518,7 +508,7 @@ fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
         status: row.get("status"),
         citizen_status: row.get("citizen_status"),
         voting_eligible: row.try_get("voting_eligible").unwrap_or(true),
-        qr4_payload: row.try_get("qr4_payload").unwrap_or_default(),
+        archive_qr_payload: row.try_get("archive_qr_payload").unwrap_or_default(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }

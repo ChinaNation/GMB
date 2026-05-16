@@ -27,7 +27,7 @@ sfid/backend/citizens/model.rs
   # 公民身份、绑定状态机、绑定/解绑 DTO、投票账户 DTO、扫码 QR 载荷
 
 sfid/backend/cpms/model.rs
-  # CPMS 站点、安装 token、QR1/QR2/QR3/QR4、匿名证书 DTO
+  # CPMS 安装授权、INSTALL/ARCHIVE DTO、档案验真结果
 
 sfid/backend/sfid/model.rs
   # SFID 管理页元信息 DTO

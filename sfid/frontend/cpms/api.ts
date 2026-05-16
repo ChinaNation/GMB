@@ -1,27 +1,28 @@
 // 中文注释:CPMS 系统管理前端 API。
 // 后端对应:backend/cpms/handler.rs。CPMS 站点挂在公安局机构详情页中展示,
-// 但安装、注册、匿名证书、站点状态治理属于 CPMS 系统管理功能。
+// SFID 侧只负责 INSTALL 安装授权、ARCHIVE 档案验收和站点状态治理。
 
 import type { AdminAuth } from '../auth/types';
 import { adminRequest } from '../utils/http';
 
-export type GenerateCpmsInstitutionSfidResult = {
-  site_sfid: string;
+export type GenerateCpmsInstallResult = {
+  sfid_number: string;
   qr1_payload: string;
 };
 
 export type CpmsSiteRow = {
-  site_sfid: string;
+  sfid_number: string;
   install_token_status: 'PENDING' | 'USED' | 'REVOKED';
   status?: 'PENDING' | 'ACTIVE' | 'DISABLED' | 'REVOKED';
   version?: number;
   province_code?: string;
   admin_province?: string;
   city_name?: string;
+  city_code?: string;
   institution_code?: string;
   institution_name?: string;
   qr1_payload?: string;
-  qr3_payload?: string | null;
+  cpms_pubkey_bound?: boolean;
   created_by: string;
   created_by_name?: string;
   created_at: string;
@@ -29,13 +30,11 @@ export type CpmsSiteRow = {
   updated_at?: string | null;
 };
 
-export type CpmsRegisterResult = {
-  qr3_payload: string;
-};
-
 export type CpmsArchiveImportResult = {
   archive_no: string;
   province_code: string;
+  city_code: string;
+  sfid_number: string;
   status: string;
 };
 
@@ -55,23 +54,11 @@ export async function getCpmsSiteByInstitution(
 }
 
 /** 生成公安局 CPMS 站点 SFID 和安装 QR1。 */
-export async function generateCpmsInstitutionSfid(
+export async function generateCpmsInstallQr(
   auth: AdminAuth,
-  payload: { province?: string; city: string; institution: string; institution_name: string },
-): Promise<GenerateCpmsInstitutionSfidResult> {
-  return adminRequest<GenerateCpmsInstitutionSfidResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
-/** 扫 CPMS 设备返回的 QR2,完成站点匿名证书注册并返回 QR3。 */
-export async function registerCpms(
-  auth: AdminAuth,
-  payload: { qr_payload: string },
-): Promise<CpmsRegisterResult> {
-  return adminRequest<CpmsRegisterResult>('/api/v1/admin/cpms/register', auth, {
+  payload: { province?: string; city: string; institution: string },
+): Promise<GenerateCpmsInstallResult> {
+  return adminRequest<GenerateCpmsInstallResult>('/api/v1/admin/cpms-keys/sfid/generate', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
@@ -91,9 +78,9 @@ export async function importArchive(
 }
 
 /** 注销未使用安装令牌。 */
-export async function revokeInstallToken(auth: AdminAuth, siteSfid: string): Promise<string> {
+export async function revokeInstallToken(auth: AdminAuth, sfidNumber: string): Promise<string> {
   return adminRequest<string>(
-    `/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/revoke-token`,
+    `/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/revoke-token`,
     auth,
     { method: 'POST' },
   );
@@ -102,10 +89,10 @@ export async function revokeInstallToken(auth: AdminAuth, siteSfid: string): Pro
 /** 重发安装令牌,用于 PENDING/REVOKED 后重新生成 QR1。 */
 export async function reissueInstallToken(
   auth: AdminAuth,
-  siteSfid: string,
-): Promise<GenerateCpmsInstitutionSfidResult> {
-  return adminRequest<GenerateCpmsInstitutionSfidResult>(
-    `/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/reissue`,
+  sfidNumber: string,
+): Promise<GenerateCpmsInstallResult> {
+  return adminRequest<GenerateCpmsInstallResult>(
+    `/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/reissue`,
     auth,
     { method: 'POST' },
   );
@@ -124,10 +111,10 @@ export async function listCpmsSites(auth: AdminAuth): Promise<CpmsSiteRow[]> {
 /** 禁用 CPMS 站点密钥。 */
 export async function disableCpmsKeys(
   auth: AdminAuth,
-  siteSfid: string,
+  sfidNumber: string,
   reason?: string,
 ): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/disable`, auth, {
+  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/disable`, auth, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ reason }),
@@ -135,8 +122,8 @@ export async function disableCpmsKeys(
 }
 
 /** 启用已禁用的 CPMS 站点密钥。 */
-export async function enableCpmsKeys(auth: AdminAuth, siteSfid: string): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/enable`, auth, {
+export async function enableCpmsKeys(auth: AdminAuth, sfidNumber: string): Promise<CpmsSiteRow> {
+  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/enable`, auth, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({}),
@@ -146,10 +133,10 @@ export async function enableCpmsKeys(auth: AdminAuth, siteSfid: string): Promise
 /** 吊销 CPMS 站点密钥。 */
 export async function revokeCpmsKeys(
   auth: AdminAuth,
-  siteSfid: string,
+  sfidNumber: string,
   reason?: string,
 ): Promise<CpmsSiteRow> {
-  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}/revoke`, auth, {
+  return adminRequest<CpmsSiteRow>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}/revoke`, auth, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ reason }),
@@ -157,8 +144,8 @@ export async function revokeCpmsKeys(
 }
 
 /** 删除 CPMS 站点密钥记录。 */
-export async function deleteCpmsKeys(auth: AdminAuth, siteSfid: string): Promise<string> {
-  return adminRequest<string>(`/api/v1/admin/cpms-keys/${encodeURIComponent(siteSfid)}`, auth, {
+export async function deleteCpmsKeys(auth: AdminAuth, sfidNumber: string): Promise<string> {
+  return adminRequest<string>(`/api/v1/admin/cpms-keys/${encodeURIComponent(sfidNumber)}`, auth, {
     method: 'DELETE',
   });
 }

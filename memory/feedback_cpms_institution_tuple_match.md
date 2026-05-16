@@ -1,48 +1,32 @@
-# CPMS 站点与机构关联的元组匹配铁律
+# CPMS 授权与公安局机构关联铁律
 
 ## 背景
 
-sfid 后端存在两个看起来都叫 `sfid_number` 的东西,**但它们不是同一个值**:
+SFID 侧 CPMS 两码方案已经改为直接使用公安局机构 `sfid_number` 作为对外机构标识。
 
-1. **`multisig_institutions.sfid_number`** — 任务卡 2 两层机构模型的主键,由
-   `generate_sfid_code` 按 `(a3, p1, province, city, institution, account_pubkey)`
-   派生,account_pubkey 来自创建机构时指定的多签地址种子。
+一个市公安局机构对应一个 CPMS 安装授权:
 
-2. **`cpms_site_keys.site_sfid`** — 生成 QR1 CPMS 安装二维码时,由
-   `generate_cpms_institution_sfid_qr` 使用 `Uuid::new_v4()` 作为
-   account_pubkey 派生。每次生成都是新值,与机构主键无关。
+- `multisig_institutions.sfid_number` 是公安局机构主键。
+- CPMS 授权记录内部保存的机构号内容必须等于对外 `sfid_number`。
+- 对外 API、协议和前端类型统一使用 `sfid_number`。
 
 ## 关联方式
 
-**只能通过 `(admin_province, city_name, institution_code)` 三元组匹配**。
+`GET /api/v1/admin/cpms-keys/by-institution/:sfid_number` 传入公安局机构
+`sfid_number`,后端读取该机构所在省分片,再用公安局机构的省、市和机构代码匹配
+对应 CPMS 授权记录。
 
-公安局 category (`ZF + institution_name == "公民安全局"`) 下每个市唯一一个机构,
-所以三元组足以保证一一对应。其他 category 理论上可能冲突,但目前 CPMS 功能
-只服务公安局,无歧义风险。
-
-## 涉及接口
-
-- `GET /api/v1/admin/cpms-keys/by-institution/:sfid_number`
-  传入 `multisig_institutions.sfid_number`,后端读机构拿三元组,扫描
-  `cpms_site_keys.values()` 返回首条匹配记录。
-
-- `cleanup_orphan_cpms_sites` 启动钩子
-  构建 `multisig_institutions` 全部三元组集合,硬删
-  `cpms_site_keys` 中三元组不在集合的孤儿站点。
+该匹配只用于机构详情页反查授权记录;协议载荷本身已经携带 `sfid_number`。
 
 ## 铁律
 
-- **永远不要把 `multisig_institutions.sfid_number` 当作 `site_sfid` 去查
-  `cpms_site_keys`**,会查不到。
-- **永远不要反向**:把 `site_sfid` 当作机构主键去查 `multisig_institutions`。
-- 前端 `CpmsSitePanel` Props 接收机构 sfid_number 命名为 `institutionSfidNumber`,
-  与 `site_sfid` 区分明确,避免混淆。
-- 如果未来引入"CPMS 站点挂到非公安局机构"的需求,必须给 `cpms_site_keys`
-  加一个显式的 `institution_sfid_number: Option<String>` 字段作为外键,
-  不再依赖元组匹配。
+- 对外协议字段只能叫 `sfid_number`。
+- INSTALL 安装码必须携带公安局机构 `sfid_number`。
+- ARCHIVE 的 `geo_seal` 必须绑定同一个 `sfid_number`。
+- 不得让档案号 `ano` 自身编码省、市或机构信息。
 
 ## 参考
 
-- 任务卡 `20260408-sfid-public-security-cpms-embed`
-- `sfid/backend/sheng_admins/institutions.rs::get_cpms_site_by_institution`
+- `memory/05-modules/sfid/SFID-CPMS-QR-v1.md`
+- `sfid/backend/cpms/handler.rs::generate_cpms_install_qr`
 - `sfid/backend/app_core/runtime_ops.rs::cleanup_orphan_cpms_sites`

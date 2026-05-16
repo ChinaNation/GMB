@@ -6,6 +6,7 @@ import type { LocalDoc } from '../../generated/local-docs.generated';
 type TocItem = {
   id: string;
   text: string;
+  subtitle: string;
   level: number;
   parentId: string | null;
   children: TocItem[];
@@ -71,9 +72,10 @@ function upgradeTableCodeBlocks(rootEl: HTMLElement) {
     const preEl = block.closest('pre');
     if (!preEl) return;
     const wrapper = document.createElement('div');
+    wrapper.className = 'table-code-block';
     wrapper.innerHTML = tableHtml;
     if (wrapper.firstElementChild) {
-      preEl.replaceWith(wrapper.firstElementChild);
+      preEl.replaceWith(wrapper);
     }
   });
 }
@@ -120,6 +122,30 @@ function applyDocSpecificClasses(rootEl: HTMLElement) {
     const normalized = normalizeDocHeading(heading.textContent);
     if (normalized.includes('白皮书')) {
       heading.classList.add('paper-main-title');
+    }
+  });
+}
+
+function moveWhitepaperHeadingSubtitles(rootEl: HTMLElement) {
+  rootEl.querySelectorAll('h1, h2, h3, h4').forEach((heading) => {
+    const nextEl = heading.nextElementSibling;
+    if (!nextEl) return;
+
+    const subtitleSelector = '.whitepaper-title-en, .whitepaper-heading-en';
+    const directSubtitle = nextEl.matches(subtitleSelector) ? nextEl : null;
+    const wrappedSubtitle =
+      nextEl.tagName === 'P' &&
+      nextEl.children.length === 1 &&
+      nextEl.firstElementChild?.matches(subtitleSelector)
+        ? nextEl.firstElementChild
+        : null;
+    const subtitle = directSubtitle ?? wrappedSubtitle;
+    if (!subtitle) return;
+
+    // 中文注释：英文标题副文本属于同一个标题，移动到标题内后，下划线会落在中英文整体下面。
+    heading.appendChild(subtitle);
+    if (nextEl !== subtitle && !nextEl.textContent?.trim() && nextEl.children.length === 0) {
+      nextEl.remove();
     }
   });
 }
@@ -174,11 +200,28 @@ function shouldSkipTocHeading(text: string, doc: LocalDoc) {
   return false;
 }
 
+function getTocHeadingText(heading: Element, doc: LocalDoc) {
+  const subtitleEl =
+    doc.key === 'whitepaper'
+      ? Array.from(heading.children).find(
+          (child) =>
+            child.classList.contains('whitepaper-title-en') ||
+            child.classList.contains('whitepaper-heading-en'),
+        )
+      : null;
+  const clone = heading.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('.whitepaper-title-en, .whitepaper-heading-en').forEach((el) => el.remove());
+  return {
+    text: (clone.textContent ?? '').trim(),
+    subtitle: (subtitleEl?.textContent ?? '').trim(),
+  };
+}
+
 function buildTocFromDom(rootEl: HTMLElement, doc: LocalDoc) {
   const used = new Map<string, number>();
   const items: TocItem[] = [];
   rootEl.querySelectorAll('h1, h2, h3').forEach((heading) => {
-    const text = (heading.textContent ?? '').trim();
+    const { text, subtitle } = getTocHeadingText(heading, doc);
     if (!text || shouldSkipTocHeading(text, doc)) return;
     const id = slugify(text, used);
     heading.id = id;
@@ -186,6 +229,7 @@ function buildTocFromDom(rootEl: HTMLElement, doc: LocalDoc) {
     items.push({
       id,
       text,
+      subtitle,
       level: inferTocLevel(text, tagLevel),
       parentId: null,
       children: [],
@@ -254,7 +298,10 @@ function TocNode({
       {hasChildren ? (
         <button className={rowClass} data-id={item.id} type="button" onClick={() => onToggle(item.id)}>
           <span className="toc-caret">▸</span>
-          <span className="toc-text">{item.text}</span>
+          <span className="toc-text">
+            <span className="toc-text-main">{item.text}</span>
+            {item.subtitle ? <span className="toc-text-en">{item.subtitle}</span> : null}
+          </span>
         </button>
       ) : (
         <a
@@ -267,7 +314,10 @@ function TocNode({
           }}
         >
           <span className="toc-caret">•</span>
-          <span className="toc-text">{item.text}</span>
+          <span className="toc-text">
+            <span className="toc-text-main">{item.text}</span>
+            {item.subtitle ? <span className="toc-text-en">{item.subtitle}</span> : null}
+          </span>
         </a>
       )}
 
@@ -312,6 +362,9 @@ export function LocalDocViewer({ doc }: Props) {
     stripInlineToc(article);
     stripHorizontalRules(article);
     applyDocSpecificClasses(article);
+    if (doc.key === 'whitepaper') {
+      moveWhitepaperHeadingSubtitles(article);
+    }
 
     const { roots, flat } = buildTocFromDom(article, doc);
     setTocItems(roots);
@@ -376,7 +429,10 @@ export function LocalDocViewer({ doc }: Props) {
 
       <div className="layout">
         <aside className="toc" aria-label={`${displayTitle}目录`}>
-          <h2>页面目录</h2>
+          <h2>
+            <span className="toc-title-main">目录</span>
+            <span className="toc-title-en">Table of Contents</span>
+          </h2>
           <nav id="toc-nav">
             {tocItems.length ? (
               tocItems.map((item) => (

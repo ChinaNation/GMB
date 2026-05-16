@@ -1,36 +1,54 @@
 # CPMS Dangan 模块技术文档
 
 ## 1. 模块定位
-`backend/src/dangan/` 负责档案号生成与档案二维码构建相关能力。
+`backend/src/dangan/` 负责档案号生成、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验。
 
-该模块是档案数据标准化与二维码签发的核心算法模块。
+本模块不保存实名归属判断逻辑；省市归属来自 `initialize` 保存的 INSTALL 授权材料，并只写入加密 `geo_seal`。
 
 ## 2. 负责范围
-- 省市代码校验（`province_codes`）
-- 档案号生成与冲突重试
-- 档案号校验位算法
-- 档案业务二维码载荷构建与签名
-- 机构公钥登记二维码载荷构建与签名
-- 公民状态（`citizen_status`）合法性校验
+- `generate_archive_no_with_retry(...)`：生成不暴露省市和机构号的档案号。
+- `build_archive_qr_payload(...)`：构造 ARCHIVE 二维码。
+- `validate_citizen_status(...)`：校验 `NORMAL / ABNORMAL`。
 
-## 3. 核心接口
-- `generate_archive_no_with_retry(...)`
-- `build_qr_payload(...)`
-- `build_site_key_registration_payload(...)`
-- `validate_citizen_status(...)`
+## 3. 档案号规则
+- 格式：`<26位Base32>-<2位Base32校验>`。
+- 示例：`K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H`。
+- 明文不包含省、市、CPMS 机构号、日期。
+- 不使用固定业务前缀，避免把示例前缀固化成协议含义。
+- 生成输入包含 `install_secret`、安全随机数、本机序列、终端 ID、管理员公钥。
+- 本机 `archives.archive_no` 唯一索引兜底拒绝重复；SFID 录入时仍做全局唯一最终校验。
 
-## 4. 关键数据结构
-- `ArchiveQr4Payload`（QR4 档案业务二维码，`SFID_CPMS_V1` 协议 `ARCHIVE` 类型）
+## 4. ARCHIVE 载荷
 
-## 5. 安全与一致性规则
-- 档案号冲突时按 nonce 递增重试，避免重复档案号
-- 校验位使用 `cpms-archive-v3` 固定串 + BLAKE2b 字节和 mod 10
-- 二维码签名统一使用 `sr25519`
-- 机构公钥登记二维码签名串采用固定字段顺序，避免跨系统验签串不一致
-- 公民状态仅允许 `NORMAL` / `ABNORMAL`
-- CPMS 建档只接受真实市码；SFID 预留的省级占位码 `000` 不进入档案号生成。
+```json
+{
+  "proto": "SFID_CPMS_V1",
+  "type": "ARCHIVE",
+  "ano": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
+  "cs": "NORMAL",
+  "ve": true,
+  "cpms_pubkey": "0x...",
+  "geo_seal": "g1.<nonce_hex>.<cipher_hex>",
+  "sig": "0x..."
+}
+```
+
+二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
+
+## 5. 签名与加密
+- `geo_seal` 使用 AES-256-GCM。
+- `geo_seal` 密钥：`blake2b_256(install_secret)`。
+- `geo_seal` AAD：`sfid-cpms-v1|geo-seal|{ano}|{cpms_pubkey}`。
+
+- ARCHIVE 签名原文：
+
+```text
+sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
+```
+
+- ARCHIVE 签名上下文：`substrate`。
 
 ## 6. 模块边界
-- 本模块只提供档案号与二维码算法，不承载登录与权限逻辑
-- 由 `operator_admin` 与 `super_admin` 模块调用本模块能力
-- 主程序 `main.rs` 仅做模块装配与通用底座
+- 本模块只提供档案号和 ARCHIVE 算法。
+- 安装材料读取由 `initialize` 提供。
+- 业务权限和请求校验由 `operator_admin` / `authz` 负责。

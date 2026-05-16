@@ -71,13 +71,13 @@ WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
 CPMS 登录二维码中的 `sys_cert` 对应以下固定原文：
 
 ```text
-CPMS_CERT_V1|cpms_pubkey|site_sfid|issued_at|expires_at
+CPMS_CERT_V1|cpms_pubkey|sfid_number|issued_at|expires_at
 ```
 
 要求：
 
 - `cpms_pubkey` 必须等于挑战码中的 `sys_pubkey`
-- `site_sfid` 为当前 CPMS 实例绑定的机构编号
+- `sfid_number` 为当前 CPMS 实例绑定的机构编号
 - `sys_cert` 由 SFID 当前有效私钥签发
 - WuminApp 使用区块链当前 SFID 公钥验证 `sys_cert`
 

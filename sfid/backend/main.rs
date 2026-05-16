@@ -52,8 +52,6 @@ pub(crate) use sfid::model::*;
 struct AppState {
     store: StoreHandle,
     rate_limit_redis: Arc<RedisClient>,
-    #[allow(dead_code)]
-    cpms_register_inflight: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// 中文注释:省管理员 3-tier 签名 keypair 进程内缓存(ADR-008 Phase 23e)。
     /// 缓存按 (province, admin_pubkey) 二级 key 持有 3 把独立 keypair,
     /// seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
@@ -642,7 +640,6 @@ fn main() {
     let state = AppState {
         store,
         rate_limit_redis: Arc::new(redis_client),
-        cpms_register_inflight: Arc::new(Mutex::new(HashMap::new())),
         sheng_admin_signing_cache,
         sharded_store,
     };
@@ -652,49 +649,11 @@ fn main() {
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
 
-    // ── SFID-CPMS QR v1: 初始化 RSA 匿名证书密钥对 ──
-    // 注意：store.write() 需要 tokio runtime，因此仅在此处做 read + init，
-    // 如果需要生成新密钥则在 runtime 启动后再 write + persist。
-    {
-        let existing_pem = state
-            .store
-            .read()
-            .ok()
-            .and_then(|s| s.anon_rsa_private_key_pem.clone());
-        if existing_pem
-            .as_deref()
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false)
-        {
-            // 已有密钥，直接加载（不需要 tokio runtime）
-            match crate::cpms::rsa_blind::init_from_pem(existing_pem.as_deref().unwrap()) {
-                Ok(()) => info!("loaded existing RSA anon cert keypair from store"),
-                Err(e) => warn!("RSA anon cert keypair load failed: {e}"),
-            }
-        } else {
-            info!("no existing RSA anon cert keypair, will generate after runtime start");
-        }
-    }
-
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
-        // ── RSA 密钥生成（需要 tokio runtime 才能 store.write）──
-        if crate::cpms::rsa_blind::get_public_key_pem().is_err() {
-            info!("generating RSA anon cert keypair...");
-            match crate::cpms::rsa_blind::generate_keypair_pem() {
-                Ok(new_pem) => {
-                    if let Ok(mut store) = state.store.write() {
-                        store.anon_rsa_private_key_pem = Some(new_pem);
-                    }
-                    info!("generated and persisted new RSA anon cert keypair");
-                }
-                Err(e) => warn!("RSA keypair generation failed: {e}"),
-            }
-        }
-
         // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
         // 1) 从 legacy store 快照执行一次幂等迁移(空库首次启动才真正写入)
         // 2) 加载 GlobalShard
@@ -792,35 +751,34 @@ fn main() {
             )
             .route(
                 "/api/v1/admin/cpms-keys/sfid/generate",
-                post(cpms::generate_cpms_institution_sfid_qr),
+                post(cpms::generate_cpms_install_qr),
             )
-            .route("/api/v1/admin/cpms/register", post(cpms::register_cpms))
             .route(
                 "/api/v1/admin/cpms/archive/import",
                 post(cpms::archive_import),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid",
+                "/api/v1/admin/cpms-keys/:sfid_number",
                 delete(cpms::delete_cpms_keys),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid/revoke-token",
+                "/api/v1/admin/cpms-keys/:sfid_number/revoke-token",
                 post(cpms::revoke_install_token),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid/reissue",
+                "/api/v1/admin/cpms-keys/:sfid_number/reissue",
                 post(cpms::reissue_install_token),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid/disable",
+                "/api/v1/admin/cpms-keys/:sfid_number/disable",
                 put(cpms::disable_cpms_keys),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid/enable",
+                "/api/v1/admin/cpms-keys/:sfid_number/enable",
                 put(cpms::enable_cpms_keys),
             )
             .route(
-                "/api/v1/admin/cpms-keys/:site_sfid/revoke",
+                "/api/v1/admin/cpms-keys/:sfid_number/revoke",
                 put(cpms::revoke_cpms_keys),
             )
             // ADR-008 Phase 23e:`/api/v1/admin/chain/balance` 已下架(chain/balance 整目录删)。

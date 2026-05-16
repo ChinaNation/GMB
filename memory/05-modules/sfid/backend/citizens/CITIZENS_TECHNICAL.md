@@ -79,6 +79,6 @@
 | `CITIZEN_BIND` | 管理员确认绑定 | account_pubkey, archive_no |
 | `CITIZEN_UNBIND` | 管理员解绑 | account_pubkey, archive_no |
 | `CITIZEN_PUSH_CHAIN_*` | 推链 extrinsic 状态 | block_hash, ext_index |
-| `CPMS_STATUS_SCAN` | CPMS 站点扫公民状态 | site_sfid, qr_id, new_status |
+| `CPMS_STATUS_SCAN` | CPMS 站点扫公民状态 | sfid_number, qr_id, new_status |
 | `CPMS_STATUS_SCAN_META` | 状态扫码元数据 | request_id, actor_ip |
 | `APP_VOTE_ACCOUNT_REGISTER` | wuminapp 注册投票账户 | account_pubkey, archive_no |

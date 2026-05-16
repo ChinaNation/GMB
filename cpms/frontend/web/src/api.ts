@@ -43,13 +43,9 @@ function del<T>(url: string) { return request<ApiResponse<T>>(url, { method: 'DE
 // ── 系统初始化 ──
 export const installStatus = () => get<InstallStatus>('/api/v1/install/status');
 export const installInitialize = (sfid_init_qr_content: string) =>
-  post<{ site_sfid: string }>('/api/v1/install/initialize', { sfid_init_qr_content });
+  post<{ sfid_number: string }>('/api/v1/install/initialize', { sfid_init_qr_content });
 export const bindSuperAdmin = (admin_pubkey: string) =>
   post<AdminUser>('/api/v1/install/super-admin/bind', { admin_pubkey });
-export const adminGenerateQr2 = () =>
-  post<{ qr2_payload: string }>('/api/v1/admin/generate-qr2');
-export const adminProcessAnonCert = (sfid_anon_cert_qr_content: string) =>
-  post<string>('/api/v1/admin/anon-cert', { sfid_anon_cert_qr_content });
 
 // ── 认证 ──
 export const authIdentify = (admin_pubkey: string) =>
@@ -95,8 +91,7 @@ export const deleteVillage = (id: string) => del<null>(`/api/v1/address/villages
 
 // ── 操作员 ──
 export const createArchive = (body: {
-  province_code: string; city_code: string; full_name: string;
-  birth_date: string; gender_code: string; height_cm?: number;
+  full_name: string; birth_date: string; gender_code: string; height_cm?: number;
   town_code?: string; village_id?: string; address?: string;
   citizen_status?: string; voting_eligible?: boolean;
 }) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);

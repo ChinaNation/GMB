@@ -3,7 +3,7 @@
 - 版本:`WUMIN_QR_V1`
 - 创建日期:2026-04-09
 - 状态:当前详细事实源,由 `memory/07-ai/unified-protocols.md` 统一管辖
-- 范围:全仓库所有二维码(CPMS 安装 4 码 QR1/QR2/QR3/QR4 除外)
+- 范围:全仓库所有二维码(CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 除外)
 
 ## 1. 设计铁律
 

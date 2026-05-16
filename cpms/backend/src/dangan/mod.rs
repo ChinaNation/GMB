@@ -1,60 +1,63 @@
 //! # 档案管理模块 (dangan)
 //!
-//! 档案号生成（V3 格式）、QR 载荷构造与签名、公民状态校验、站点密钥注册载荷构造。
+//! 档案号生成、ARCHIVE 二维码载荷构造与签名、公民状态校验。
 
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
+use aes_gcm::{
+    aead::{Aead, KeyInit, Payload},
+    Aes256Gcm, Nonce,
 };
-
 use axum::{http::StatusCode, Json};
-use chrono::Utc;
+use blake2::digest::consts::U32;
+use blake2::{Blake2b, Digest};
+use rand::{rngs::OsRng, RngCore};
 use schnorrkel::{signing_context, MiniSecretKey};
 use serde::Serialize;
-use sqlx::Row;
-use uuid::Uuid;
 
 use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
 
-pub(crate) mod province_codes;
+type Blake2b256 = Blake2b<U32>;
 
 const ARCHIVE_NO_MAX_RETRY: u32 = 20;
-const QR_EXPIRES_SECONDS: i64 = 24 * 60 * 60;
+const ARCHIVE_SIGN_KEY_ID: &str = "ARCHIVE";
+const ARCHIVE_NO_BODY_BYTES: usize = 16;
+const GEO_SEAL_PREFIX: &str = "g1";
+const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-#[derive(Serialize)]
-pub(crate) struct QrPayload {
-    pub(crate) ver: String,
-    pub(crate) issuer_id: String,
-    pub(crate) site_sfid: String,
-    pub(crate) sign_key_id: String,
-    pub(crate) archive_no: String,
-    pub(crate) citizen_status: String,
-    pub(crate) voting_eligible: bool,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-    pub(crate) qr_id: String,
-    pub(crate) sig_alg: String,
-    pub(crate) signature: String,
+/// SFID_CPMS_V1 / ARCHIVE 档案二维码载荷。
+#[derive(Clone, Serialize)]
+pub(crate) struct ArchiveQrPayload {
+    pub(crate) proto: String,
+    pub(crate) r#type: String,
+    pub(crate) ano: String,
+    pub(crate) cs: String,
+    pub(crate) ve: bool,
+    pub(crate) cpms_pubkey: String,
+    pub(crate) geo_seal: String,
+    pub(crate) sig: String,
 }
 
-/// 档案号 V4 格式：{省代码2}{校验位1}{随机8}{年份4} = 15 位
-/// 市代码统一用 000（省辖市），不编码具体城市，保护地理隐私。
+#[derive(Serialize)]
+struct GeoSealClaims {
+    /// 中文注释：归属密文只放机构 SFID 号；省市由 SFID 从 sfid_number 解码。
+    sfid_number: String,
+}
+
+/// 生成不暴露省市和机构号的档案号。
+///
+/// 中文注释：`install_secret` 参与哈希域隔离，安全随机数提供全局碰撞强度，
+/// DB 唯一索引负责兜底拒绝本机重复；SFID 录入时再做全局唯一最终校验。
 pub(crate) async fn generate_archive_no_with_retry(
     state: &AppState,
-    province_code: &str,
+    install_secret: &str,
     terminal_id: &str,
     admin_pubkey: &str,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    let year = Utc::now().format("%Y").to_string();
-    let seq_key = format!("{}|{}", province_code, year);
-
-    let mut nonce: i64 = sqlx::query_scalar(
+    let mut counter: i64 = sqlx::query_scalar(
         "INSERT INTO sequence_counters (seq_key, next_seq)
-         VALUES ($1, 2)
+         VALUES ('archive_no', 2)
          ON CONFLICT (seq_key) DO UPDATE SET next_seq = sequence_counters.next_seq + 1
          RETURNING next_seq - 1",
     )
-    .bind(&seq_key)
     .fetch_one(&state.db)
     .await
     .map_err(|_| {
@@ -66,9 +69,18 @@ pub(crate) async fn generate_archive_no_with_retry(
     })?;
 
     for _ in 0..ARCHIVE_NO_MAX_RETRY {
-        let random8 = generate_random8(terminal_id, admin_pubkey, nonce as u32);
-        let check_digit = archive_checksum_digit_v4(province_code, &random8, &year);
-        let archive_no = format!("{}{}{}{}", province_code, check_digit, random8, year);
+        let mut random = [0u8; 32];
+        OsRng.fill_bytes(&mut random);
+        let body = archive_no_body(
+            install_secret,
+            terminal_id,
+            admin_pubkey,
+            counter,
+            random.as_slice(),
+        );
+        let checksum = archive_no_checksum(&body);
+        // 中文注释：档案号不携带协议前缀，避免把示例前缀固化成业务含义。
+        let archive_no = format!("{}-{}", body, checksum);
 
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
@@ -86,7 +98,7 @@ pub(crate) async fn generate_archive_no_with_retry(
         if !exists {
             return Ok(archive_no);
         }
-        nonce += 1;
+        counter += 1;
     }
 
     Err(err(
@@ -96,203 +108,190 @@ pub(crate) async fn generate_archive_no_with_retry(
     ))
 }
 
-fn generate_random8(terminal_id: &str, admin_pubkey: &str, nonce: u32) -> String {
-    let ts = Utc::now().timestamp_millis();
-    let source = format!("{}|{}|{}|{}", ts, terminal_id, admin_pubkey, nonce);
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    let n = hasher.finish() % 100_000_000;
-    format!("{:08}", n)
+fn archive_no_body(
+    install_secret: &str,
+    terminal_id: &str,
+    admin_pubkey: &str,
+    counter: i64,
+    random: &[u8],
+) -> String {
+    let mut hasher = Blake2b256::new();
+    hasher.update(b"sfid-cpms-v1|archive-no|");
+    hasher.update(install_secret.as_bytes());
+    hasher.update(b"|");
+    hasher.update(terminal_id.as_bytes());
+    hasher.update(b"|");
+    hasher.update(admin_pubkey.as_bytes());
+    hasher.update(b"|");
+    hasher.update(counter.to_string().as_bytes());
+    hasher.update(b"|");
+    hasher.update(random);
+    let digest = hasher.finalize();
+    base32_no_padding(&digest[..ARCHIVE_NO_BODY_BYTES])
 }
 
-// ── SFID-CPMS QR v1: QR4 档案业务二维码构造 ──────────────────────────
-
-/// QR4 档案业务二维码载荷。
-#[derive(Serialize)]
-pub(crate) struct ArchiveQr4Payload {
-    pub(crate) proto: String,
-    pub(crate) r#type: String,
-    pub(crate) prov: String,
-    pub(crate) ano: String,
-    pub(crate) cs: String,
-    pub(crate) ve: bool,
-    pub(crate) cert: serde_json::Value,
-    pub(crate) sig: String,
+pub(crate) fn archive_no_checksum(body: &str) -> String {
+    let mut hasher = Blake2b256::new();
+    hasher.update(b"sfid-cpms-v1|ano-check|");
+    hasher.update(body.as_bytes());
+    let digest = hasher.finalize();
+    base32_no_padding(&digest[..4]).chars().take(2).collect()
 }
 
-/// 构造 QR4 载荷（SFID-CPMS QR v1 协议）。
+fn base32_no_padding(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    let mut buffer: u32 = 0;
+    let mut bits_left: u8 = 0;
+    for byte in bytes {
+        buffer = (buffer << 8) | (*byte as u32);
+        bits_left += 8;
+        while bits_left >= 5 {
+            let idx = ((buffer >> (bits_left - 5)) & 0x1f) as usize;
+            out.push(BASE32_ALPHABET[idx] as char);
+            bits_left -= 5;
+        }
+    }
+    if bits_left > 0 {
+        let idx = ((buffer << (5 - bits_left)) & 0x1f) as usize;
+        out.push(BASE32_ALPHABET[idx] as char);
+    }
+    out
+}
+
+/// 构造 ARCHIVE 载荷（SFID_CPMS_V1）。
 ///
-/// 使用本机匿名私钥签名，嵌入匿名证书。
-pub(crate) async fn build_qr4_payload(
-    state: &AppState,
-    archive: &crate::Archive,
-) -> Result<ArchiveQr4Payload, (StatusCode, Json<ApiError>)> {
-    // 读取匿名证书和匿名私钥
-    let row = sqlx::query(
-        "SELECT anon_cert, anon_key_encrypted, anon_pubkey FROM system_install WHERE id = 1",
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "query anon_cert failed",
-        )
-    })?
-    .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
-
-    let anon_cert_json: Option<String> = row.get("anon_cert");
-    let anon_cert_json = anon_cert_json.ok_or_else(|| {
-        err(
-            StatusCode::CONFLICT,
-            4003,
-            "anon_cert not found, complete QR3 first",
-        )
-    })?;
-    let anon_cert: serde_json::Value = serde_json::from_str(&anon_cert_json).map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "parse anon_cert failed",
-        )
-    })?;
-
-    let province_code = anon_cert
-        .get("prov")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "cert missing prov"))?
-        .to_string();
-
-    // 解密匿名私钥
-    let anon_secret_stored: Option<String> = row.get("anon_key_encrypted");
-    let anon_secret_stored =
-        anon_secret_stored.ok_or_else(|| err(StatusCode::CONFLICT, 4003, "anon_key not found"))?;
-    let anon_secret_bytes = crate::initialize::decrypt_secret_public("ANON", &anon_secret_stored)
-        .ok_or_else(|| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5003,
-            "decrypt anon key failed",
-        )
-    })?;
-
-    let voting_eligible = archive.citizen_status == "NORMAL";
-
-    // 签名原文：sfid-cpms-v1|archive|{province_code}|{archive_no}|{citizen_status}|{voting_eligible}
-    let sign_source = format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}",
-        province_code, archive.archive_no, archive.citizen_status, voting_eligible
-    );
-    let archive_sig = sign_qr_payload_with_secret(&anon_secret_bytes, &sign_source)?;
-
-    Ok(ArchiveQr4Payload {
-        proto: "SFID_CPMS_V1".to_string(),
-        r#type: "ARCHIVE".to_string(),
-        prov: province_code,
-        ano: archive.archive_no.clone(),
-        cs: archive.citizen_status.clone(),
-        ve: voting_eligible,
-        cert: anon_cert,
-        sig: archive_sig,
-    })
-}
-
-/// V4 校验位：blake2b_256("cpms-archive-v4|{省代码}{随机8}{年份4}") 字节之和 mod 10
-pub(crate) fn archive_checksum_digit_v4(province_code: &str, random8: &str, year: &str) -> char {
-    let payload = format!("cpms-archive-v4|{}{}{}", province_code, random8, year);
-    use blake2::digest::consts::U32;
-    use blake2::{Blake2b, Digest};
-    type Blake2b256 = Blake2b<U32>;
-    let digest = Blake2b256::digest(payload.as_bytes());
-    let sum: u32 = digest.iter().map(|&b| b as u32).sum();
-    let n = (sum % 10) as u8;
-    char::from(b'0' + n)
-}
-
-pub(crate) async fn build_qr_payload(
+/// 中文注释：二维码明文字段不放省、市、CPMS 机构号；归属只放入 `geo_seal`，
+/// SFID 使用安装授权中的 install_secret 才能解开。
+pub(crate) async fn build_archive_qr_payload(
     state: &AppState,
     archive: &Archive,
-) -> Result<QrPayload, (StatusCode, Json<ApiError>)> {
-    let (site_sfid, sign_key) = active_qr_sign_key(state).await?;
-    let issued_at = Utc::now().timestamp();
-    let expire_at = issued_at + QR_EXPIRES_SECONDS;
-    let qr_id = format!("qr_{}", Uuid::new_v4().simple());
-    let voting_eligible = archive.citizen_status == "NORMAL";
-    let sign_source = format!(
-        "cpms-qr-v1|{}|{}|{}|{}|{}|{}|{}",
-        &site_sfid,
-        sign_key.key_id,
-        archive.archive_no,
-        archive.citizen_status,
-        voting_eligible,
-        issued_at,
-        qr_id
-    );
-    let signature = sign_qr_payload_with_secret(&sign_key.secret_bytes, &sign_source)?;
-
-    Ok(QrPayload {
-        ver: "1".to_string(),
-        issuer_id: "cpms".to_string(),
-        site_sfid: site_sfid.clone(),
-        sign_key_id: sign_key.key_id,
-        archive_no: archive.archive_no.clone(),
-        citizen_status: archive.citizen_status.clone(),
-        voting_eligible,
-        issued_at,
-        expire_at,
-        qr_id,
-        sig_alg: "sr25519".to_string(),
-        signature,
-    })
-}
-
-async fn install_snapshot(
-    state: &AppState,
-) -> Result<(String, Vec<QrSignKeyRuntime>), (StatusCode, Json<ApiError>)> {
-    let site_row = sqlx::query("SELECT site_sfid FROM system_install WHERE id = 1")
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "query install failed",
-            )
-        })?;
-
-    let site_sfid = site_row
-        .and_then(|r| r.try_get::<Option<String>, _>("site_sfid").ok().flatten())
-        .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "cpms not initialized"))?;
-
-    let keys = crate::initialize::load_qr_sign_keys(state).await?;
-    if keys.is_empty() {
+) -> Result<ArchiveQrPayload, (StatusCode, Json<ApiError>)> {
+    let install = crate::initialize::load_cpms_install_runtime(state).await?;
+    let sign_key = active_archive_sign_key(state).await?;
+    if sign_key.pubkey != install.cpms_pubkey {
         return Err(err(
-            StatusCode::CONFLICT,
-            4005,
-            "missing qr sign keys after initialization",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "archive sign key does not match install cpms_pubkey",
         ));
     }
 
-    Ok((site_sfid, keys))
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let claims = GeoSealClaims {
+        sfid_number: install.sfid_number,
+    };
+    let geo_seal = encrypt_geo_seal(
+        install.install_secret.as_str(),
+        &nonce_bytes,
+        &claims,
+        archive.archive_no.as_str(),
+        install.cpms_pubkey.as_str(),
+    )?;
+    let geo_seal_hash = hash_hex(geo_seal.as_bytes());
+    let sign_source = build_archive_sign_source(
+        archive.archive_no.as_str(),
+        archive.citizen_status.as_str(),
+        archive.voting_eligible,
+        sign_key.pubkey.as_str(),
+        geo_seal_hash.as_str(),
+    );
+    let sig = sign_archive_payload_with_secret(&sign_key.secret_bytes, &sign_source)?;
+
+    Ok(ArchiveQrPayload {
+        proto: "SFID_CPMS_V1".to_string(),
+        r#type: "ARCHIVE".to_string(),
+        ano: archive.archive_no.clone(),
+        cs: archive.citizen_status.clone(),
+        ve: archive.voting_eligible,
+        cpms_pubkey: sign_key.pubkey,
+        geo_seal,
+        sig,
+    })
 }
 
-async fn active_qr_sign_key(
+async fn active_archive_sign_key(
     state: &AppState,
-) -> Result<(String, QrSignKeyRuntime), (StatusCode, Json<ApiError>)> {
-    let (site_sfid, keys) = install_snapshot(state).await?;
-    let sign_key = keys
-        .iter()
-        .find(|k| k.status == "ACTIVE")
-        .cloned()
+) -> Result<QrSignKeyRuntime, (StatusCode, Json<ApiError>)> {
+    let keys = crate::initialize::load_qr_sign_keys(state).await?;
+    keys.into_iter()
+        .find(|k| k.key_id == ARCHIVE_SIGN_KEY_ID && k.status == "ACTIVE")
         .ok_or_else(|| {
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5002,
-                "missing active qr sign key",
+                "missing active archive sign key",
+            )
+        })
+}
+
+fn encrypt_geo_seal(
+    install_secret: &str,
+    nonce_bytes: &[u8; 12],
+    claims: &GeoSealClaims,
+    archive_no: &str,
+    cpms_pubkey: &str,
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let key = derive_geo_seal_key(install_secret);
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "geo_seal key invalid",
+        )
+    })?;
+    let plain = serde_json::to_vec(claims).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "geo_seal json failed",
+        )
+    })?;
+    let cipher_text = cipher
+        .encrypt(
+            Nonce::from_slice(nonce_bytes),
+            Payload {
+                msg: plain.as_ref(),
+                aad: geo_seal_aad(archive_no, cpms_pubkey).as_bytes(),
+            },
+        )
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5003,
+                "geo_seal encrypt failed",
             )
         })?;
-    Ok((site_sfid, sign_key))
+    Ok(format!(
+        "{}.{}.{}",
+        GEO_SEAL_PREFIX,
+        hex::encode(nonce_bytes),
+        hex::encode(cipher_text)
+    ))
+}
+
+fn derive_geo_seal_key(install_secret: &str) -> [u8; 32] {
+    let digest = Blake2b256::digest(install_secret.as_bytes());
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&digest[..32]);
+    key
+}
+
+fn build_archive_sign_source(
+    archive_no: &str,
+    citizen_status: &str,
+    voting_eligible: bool,
+    cpms_pubkey: &str,
+    geo_seal_hash: &str,
+) -> String {
+    format!(
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}",
+        archive_no, citizen_status, voting_eligible, cpms_pubkey, geo_seal_hash
+    )
+}
+
+fn geo_seal_aad(archive_no: &str, cpms_pubkey: &str) -> String {
+    format!("sfid-cpms-v1|geo-seal|{}|{}", archive_no, cpms_pubkey)
 }
 
 pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
@@ -302,7 +301,7 @@ pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, J
     }
 }
 
-pub(crate) fn sign_qr_payload_with_secret(
+pub(crate) fn sign_archive_payload_with_secret(
     secret_bytes: &[u8],
     payload: &str,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
@@ -310,7 +309,7 @@ pub(crate) fn sign_qr_payload_with_secret(
         return Err(err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid qr sign secret length",
+            "invalid archive sign secret length",
         ));
     }
 
@@ -318,10 +317,14 @@ pub(crate) fn sign_qr_payload_with_secret(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5003,
-            "invalid qr sign secret key",
+            "invalid archive sign secret key",
         )
     })?;
     let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
-    let sig = keypair.sign(signing_context(b"CPMS-QR-SIGN-V1").bytes(payload.as_bytes()));
-    Ok(hex::encode(sig.to_bytes()))
+    let sig = keypair.sign(signing_context(b"substrate").bytes(payload.as_bytes()));
+    Ok(format!("0x{}", hex::encode(sig.to_bytes())))
+}
+
+fn hash_hex(bytes: &[u8]) -> String {
+    format!("0x{}", hex::encode(Blake2b256::digest(bytes)))
 }

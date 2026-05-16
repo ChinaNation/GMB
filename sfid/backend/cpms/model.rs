@@ -1,4 +1,4 @@
-//! 中文注释:CPMS 站点凭证、安装 token、QR1/QR2/QR3/QR4 载荷以及匿名证书 DTO。
+//! 中文注释:CPMS 安装授权、INSTALL 安装码、ARCHIVE 档案二维码和省市归属 DTO。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -34,9 +34,14 @@ fn default_install_token_status() -> InstallTokenStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CpmsSiteKeys {
+    /// CPMS 机构的 SFID 号。历史内部字段仍叫 site_sfid,外部协议统一输出 sfid_number。
     pub(crate) site_sfid: String,
     #[serde(default)]
     pub(crate) install_token: String,
+    #[serde(default)]
+    pub(crate) install_secret: String,
+    #[serde(default)]
+    pub(crate) install_secret_hash: String,
     #[serde(default = "default_install_token_status")]
     pub(crate) install_token_status: InstallTokenStatus,
     #[serde(default = "default_cpms_site_status")]
@@ -49,14 +54,15 @@ pub(crate) struct CpmsSiteKeys {
     #[serde(default)]
     pub(crate) city_name: String,
     #[serde(default)]
+    pub(crate) city_code: String,
+    #[serde(default)]
     pub(crate) institution_code: String,
     #[serde(default)]
     pub(crate) institution_name: String,
     #[serde(default)]
     pub(crate) qr1_payload: String,
-    /// QR3 匿名证书载荷(QR2 注册成功后持久化,吊销/重发时清除)
     #[serde(default)]
-    pub(crate) qr3_payload: Option<String>,
+    pub(crate) cpms_pubkey_hash: Option<String>,
     pub(crate) created_by: String,
     pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
@@ -66,24 +72,10 @@ pub(crate) struct CpmsSiteKeys {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct CpmsRegisterScanInput {
-    pub(crate) qr_payload: String,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct GenerateCpmsInstitutionSfidInput {
+pub(crate) struct GenerateCpmsInstallInput {
     pub(crate) province: Option<String>,
     pub(crate) city: String,
     pub(crate) institution: String,
-    #[serde(default)]
-    pub(crate) institution_name: Option<String>,
-}
-
-/// QR2 注册请求输入。
-#[derive(Deserialize)]
-pub(crate) struct CpmsRegisterInput {
-    pub(crate) qr_payload: String,
 }
 
 /// QR4 档案录入输入。
@@ -107,36 +99,23 @@ pub(crate) struct CpmsKeysListOutput {
 
 #[derive(Serialize)]
 pub(crate) struct CpmsSiteKeysListRow {
-    pub(crate) site_sfid: String,
+    pub(crate) sfid_number: String,
     pub(crate) install_token_status: InstallTokenStatus,
     pub(crate) status: CpmsSiteStatus,
     pub(crate) version: u64,
     pub(crate) province_code: String,
     pub(crate) admin_province: String,
     pub(crate) city_name: String,
+    pub(crate) city_code: String,
     pub(crate) institution_code: String,
     pub(crate) institution_name: String,
     pub(crate) qr1_payload: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) qr3_payload: Option<String>,
+    pub(crate) cpms_pubkey_bound: bool,
     pub(crate) created_by: String,
     pub(crate) created_by_name: String,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) updated_by: Option<String>,
     pub(crate) updated_at: Option<DateTime<Utc>>,
-}
-
-/// QR2 解析后的注册请求（SFID_CPMS_V1）。
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct CpmsRegisterReqPayload {
-    #[serde(default)]
-    pub(crate) proto: String,
-    #[serde(alias = "qr_type")]
-    pub(crate) r#type: String,
-    pub(crate) sfid: String,
-    pub(crate) token: String,
-    pub(crate) blind: String,
 }
 
 /// QR4 解析后的档案业务载荷（SFID_CPMS_V1）。
@@ -145,37 +124,38 @@ pub(crate) struct CpmsRegisterReqPayload {
 pub(crate) struct CpmsArchiveQrPayload {
     #[serde(default)]
     pub(crate) proto: String,
-    #[serde(alias = "qr_type")]
     pub(crate) r#type: String,
-    pub(crate) prov: String,
     pub(crate) ano: String,
     pub(crate) cs: String,
     pub(crate) ve: bool,
-    pub(crate) cert: AnonCert,
+    pub(crate) cpms_pubkey: String,
+    pub(crate) geo_seal: String,
     pub(crate) sig: String,
 }
 
-/// 匿名证书。
+/// CPMS 档案二维码中只允许 SFID 解开的归属密文内容。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct AnonCert {
-    pub(crate) prov: String,
-    pub(crate) pk: String,
-    pub(crate) sig: String,
-    #[serde(default)]
-    pub(crate) mr: Option<String>,
+pub(crate) struct CpmsGeoSealClaims {
+    /// 中文注释：归属密文只放机构 SFID 号；省市由 SFID 从 sfid_number 解码。
+    pub(crate) sfid_number: String,
+}
+
+/// SFID 验证 CPMS 档案二维码后的可信结果。
+#[derive(Debug, Clone)]
+pub(crate) struct VerifiedCpmsArchive {
+    pub(crate) archive_no: String,
+    pub(crate) province_code: String,
+    pub(crate) city_code: String,
+    pub(crate) sfid_number: String,
+    pub(crate) cpms_pubkey_hash: String,
+    pub(crate) geo_seal_hash: String,
 }
 
 /// 生成 SFID + QR1 的输出。
 #[derive(Serialize)]
 pub(crate) struct GenerateCpmsInstallOutput {
-    pub(crate) site_sfid: String,
+    pub(crate) sfid_number: String,
     pub(crate) qr1_payload: String,
-}
-
-/// 处理 QR2 注册请求后返回 QR3。
-#[derive(Serialize)]
-pub(crate) struct CpmsRegisterOutput {
-    pub(crate) qr3_payload: String,
 }
 
 /// 档案录入结果。
@@ -183,6 +163,8 @@ pub(crate) struct CpmsRegisterOutput {
 pub(crate) struct CpmsArchiveImportOutput {
     pub(crate) archive_no: String,
     pub(crate) province_code: String,
+    pub(crate) city_code: String,
+    pub(crate) sfid_number: String,
     pub(crate) status: &'static str,
 }
 

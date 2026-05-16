@@ -106,14 +106,10 @@ pub(crate) struct Store {
     pub(crate) cpms_site_keys: HashMap<String, CpmsSiteKeys>,
     /// 已录入的档案记录，key = archive_no。
     pub(crate) imported_archives: HashMap<String, ImportedArchive>,
-    pub(crate) consumed_cpms_register_tokens: HashMap<String, DateTime<Utc>>,
     pub(crate) consumed_qr_ids: HashMap<String, DateTime<Utc>>,
     pub(crate) pending_status_by_archive_no: HashMap<String, CitizenStatus>,
     pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
     pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,
-    /// RSABSSA 匿名证书签发 RSA 私钥 PEM（自动生成，持久化）。
-    #[serde(default)]
-    pub(crate) anon_rsa_private_key_pem: Option<String>,
     pub(crate) audit_logs: Vec<AuditLogEntry>,
     pub(crate) chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     pub(crate) chain_nonce_seen: HashMap<String, DateTime<Utc>>,

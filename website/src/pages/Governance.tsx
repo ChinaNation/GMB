@@ -5,7 +5,7 @@ const votingTiers = [
   {
     tier: '第一级',
     name: '内部投票',
-    scope: '国储会 / 省储会 / 省储行',
+    scope: '国储会 / 省储会 / 省储行 / 机构多签 / 个人多签',
     desc: '各级机构内部的管理决策投票，由该机构管理员或董事参与',
     voters: '机构内管理员',
     threshold: '多签门槛通过',
@@ -19,7 +19,7 @@ const votingTiers = [
     desc: '涉及全网治理的重大决策，需国储会（19票）、省储会（43票）、省储行（43票）联合投票',
     voters: '105 票总计',
     threshold: '全票立即通过',
-    extraTag: '非全票则公民投票',
+    extraTag: '非全票则联合公投',
     color: 'gold',
   },
   {
@@ -78,7 +78,7 @@ const proposalTypes = [
   { name: '货币销毁提案', desc: '经治理投票通过后销毁指定数量的公民币' },
   { name: 'GRANDPA 密钥轮换', desc: '权威节点 GRANDPA 终局性验证密钥的更新与轮换' },
   { name: '管理员变更', desc: '各级储备委员会管理员的增减与替换' },
-  { name: '运行时升级', desc: '通过链上 setCode 进行 WASM 运行时无分叉升级' },
+  { name: '协议升级', desc: '通过链上 setCode 进行 WASM 运行时无分叉升级区块链协议' },
   { name: '参数调整', desc: '交易费率、出块奖励、难度参数等链上参数调整' },
 ]
 

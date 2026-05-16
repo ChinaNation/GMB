@@ -7,8 +7,8 @@ import type { UserContactBody } from '../qr/wuminQr';
 import { ScanIcon } from '../components/ScanIcon';
 
 // CPMS 初始化页面。
-// 三个事实状态步骤：1.扫 QR1  2.绑定管理员  3.完成（前往登录）
-// CPMS 是离线系统，不判断授权是否失效——只有 SFID 侧能判断。
+// 三个事实状态步骤：1.扫描 INSTALL 安装码  2.绑定管理员  3.完成（可直接签发 ARCHIVE）
+// CPMS 安装码由 SFID 签发；安装后不再生成中间注册码。
 
 export default function InstallPage() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
@@ -133,7 +133,7 @@ export default function InstallPage() {
     try {
       const res = await api.installInitialize(qrContent);
       if (res.data) {
-        setMsg(`站点 SFID: ${res.data.site_sfid}`);
+        setMsg(`机构 SFID: ${res.data.sfid_number}`);
       }
       await load();
     } catch (e) {
@@ -162,7 +162,7 @@ export default function InstallPage() {
           {msg && <div style={{ color: 'var(--color-success)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{msg}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, justifyContent: 'center' }}>
-            {['扫描QR1码', '绑定管理员', '完成'].map((label, i) => (
+            {['扫描安装码', '绑定管理员', '完成'].map((label, i) => (
               <div key={i} style={{
                 padding: '4px 12px',
                 borderRadius: 6,
@@ -178,7 +178,7 @@ export default function InstallPage() {
 
           {currentStep === 1 && (
             <div className="card" style={{ boxShadow: 'none', border: '1px solid var(--color-border)' }}>
-              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>扫描 SFID 安装授权二维码（QR1）</div>
+              <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>扫描 SFID 安装授权二维码</div>
               <div style={{
                 width: '80%',
                 maxWidth: 280,
@@ -281,10 +281,10 @@ export default function InstallPage() {
                 初始化完成
               </div>
               <div style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 4 }}>
-                站点 SFID: <strong>{status?.site_sfid}</strong>
+                机构 SFID: <strong>{status?.sfid_number}</strong>
               </div>
               <div style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 20 }}>
-                请登录系统完成后续配置（生成 QR2、扫描 QR3）
+                请登录系统创建档案并签发 ARCHIVE 档案二维码
               </div>
               <a href="/login" className="btn btn--primary">前往登录</a>
             </div>

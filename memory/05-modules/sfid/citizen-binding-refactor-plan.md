@@ -53,9 +53,9 @@ struct CitizenRecord {
 
 1. 列表中有一条只有公钥的记录
 2. 点击"绑定"→ 打开扫码弹窗
-3. 扫描 CPMS 档案二维码（QR4）
-4. 后端验证 QR4（anon_cert 签名 + archive_sig）
-5. 从 QR4 提取 archive_no + province_code
+3. 扫描 CPMS ARCHIVE 档案二维码
+4. 后端复用 `cpms::verify_cpms_archive_qr` 验证 ARCHIVE 档案码
+5. 从验真结果提取 archive_no + province_code + city_code
 6. SFID 生成 challenge
 7. 用户用该公钥对 challenge 签名（wumin 冷钱包扫码签名）
 8. 后端验签，确认公钥持有者同意绑定
@@ -132,7 +132,7 @@ POST /api/v1/admin/citizen/bind
   // 模式 1：有公钥绑档案（扫码后提交）
   "mode": "bind_archive",
   "account_pubkey": "0x...",
-  "qr4_payload": "...",          // QR4 二维码内容
+  "qr_payload": "...",           // ARCHIVE 二维码内容
   "challenge_id": "...",
   "signature": "..."             // 公钥对 challenge 的签名
 
@@ -167,10 +167,10 @@ POST /api/v1/admin/citizen/bind
 当前 `admin_generate_sfid` 是独立端点。改造后 SFID 生成内嵌到绑定流程中：
 
 绑定模式 1（有公钥绑档案）时：
-1. 验证 QR4
+1. 验证 ARCHIVE 档案码
 2. 验证公钥签名
 3. 提取 archive_no + province_code
-4. 调用 `generate_sfid_code(a3="GMR", province=从QR4取, ...)` 生成 SFID 码
+4. 调用 `generate_sfid_code(a3="GMR", province=从 ARCHIVE 验真结果取, ...)` 生成 SFID 码
 5. 写入 CitizenRecord
 
 不再作为独立操作暴露。
@@ -218,7 +218,7 @@ export type CitizenRow = {
 **绑定弹窗（两种模式）：**
 
 模式 1（有公钥绑档案）：
-- 扫码区域（扫 QR4）
+- 扫码区域（扫 ARCHIVE）
 - 扫码后自动填充 archive_no + province_code
 - 显示 challenge 二维码 → 用户用 wumin 钱包签名 → 扫回签名
 - 提交绑定

@@ -79,11 +79,10 @@ sfid / cpms 前端只是扫码 UI 宿主:
 | `sfid/frontend` | `user_contact` / `login_receipt` | 管理员账户绑定(扫 wuminapp 用户码)、登录(显示 challenge 给 wumin 扫) |
 | `cpms/frontend`(登录部分) | `login_receipt` | 登录(显示 challenge 给 wumin 扫) |
 
-**注意**:CPMS 安装 4 码(QR1/QR2/QR3/QR4)是**另一套完全独立的协议**,与 `WUMIN_QR_V1` 无关,永远不合并。相关代码位于:
+**注意**:CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `WUMIN_QR_V1` 无关,永远不合并。相关代码位于:
 - `cpms/backend/src/initialize/mod.rs`
 - `cpms/backend/src/dangan/mod.rs`
 - `cpms/frontend/web/src/install/`
-- `cpms/frontend/web/src/admin/Qr2Generate.tsx`
-- `cpms/frontend/web/src/admin/AnonCertScan.tsx`
+- `cpms/frontend/web/src/admin/`
 
 这些目录在协议统一任务的零命中 grep 扫描中**被排除**。

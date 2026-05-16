@@ -28,6 +28,7 @@ export default function Footer() {
               <li><Link to="/technology" className="text-slate-400 no-underline transition-colors hover:text-white">区块链技术</Link></li>
               <li><Link to="/tokenomics" className="text-slate-400 no-underline transition-colors hover:text-white">公民币经济</Link></li>
               <li><Link to="/governance" className="text-slate-400 no-underline transition-colors hover:text-white">治理体系</Link></li>
+              <li><Link to="/whitepaper" className="text-slate-400 no-underline transition-colors hover:text-white">白皮书</Link></li>
             </ul>
           </div>
 

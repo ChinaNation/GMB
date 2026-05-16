@@ -2,12 +2,18 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS system_install (
   id SMALLINT PRIMARY KEY CHECK (id = 1),
-  site_sfid TEXT,
+  sfid_number TEXT,
+  install_secret TEXT,
+  install_secret_hash TEXT,
+  install_sig TEXT,
+  province_name TEXT,
+  city_name TEXT,
+  cpms_pubkey TEXT,
   initialized_at BIGINT
 );
 
-INSERT INTO system_install (id, site_sfid, initialized_at)
-VALUES (1, NULL, NULL)
+INSERT INTO system_install (id)
+VALUES (1)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS qr_sign_keys (
@@ -23,6 +29,7 @@ CREATE TABLE IF NOT EXISTS qr_sign_keys (
 CREATE TABLE IF NOT EXISTS admin_users (
   user_id TEXT PRIMARY KEY,
   admin_pubkey TEXT NOT NULL UNIQUE,
+  admin_name TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
   status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED')),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
@@ -79,8 +86,13 @@ CREATE TABLE IF NOT EXISTS archives (
   gender_code TEXT NOT NULL CHECK (gender_code IN ('M', 'W')),
   height_cm REAL,
   passport_no TEXT NOT NULL,
+  town_code TEXT NOT NULL DEFAULT '',
+  village_id TEXT NOT NULL DEFAULT '',
+  address TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
   citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'ABNORMAL')),
+  voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+  archive_qr_payload TEXT NOT NULL DEFAULT '',
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
@@ -103,6 +115,17 @@ CREATE TABLE IF NOT EXISTS qr_print_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_qr_print_records_archive_id ON qr_print_records (archive_id);
+
+CREATE TABLE IF NOT EXISTS address_towns (
+  town_code TEXT PRIMARY KEY,
+  town_name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS address_villages (
+  village_id TEXT PRIMARY KEY,
+  town_code TEXT NOT NULL REFERENCES address_towns(town_code) ON DELETE CASCADE,
+  village_name TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   log_id TEXT PRIMARY KEY,

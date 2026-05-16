@@ -32,7 +32,7 @@ sfid/backend/
 ├── app_core/                  # 跨业务底层工具,含 HTTP 安全、运行期工具、chain_* 通用链工具
 ├── audit.rs                   # 审计日志查询 handler
 ├── citizens/                  # 公民身份模型、查询、绑定、投票凭证、CPMS 状态扫码
-├── cpms/                      # CPMS 模型、安装、注册、匿名证书 rsa_blind、站点状态治理
+├── cpms/                      # CPMS 安装授权、ARCHIVE 验真、档案导入、站点状态治理
 ├── crypto/                    # sr25519 派生、公钥规范化等低层加密辅助
 ├── indexer/                   # 链事件解析与索引 worker
 ├── institutions/              # 机构创建、机构资料、账户名称、机构链查询 chain_duoqian_info.rs

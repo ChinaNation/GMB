@@ -6,6 +6,7 @@ const navItems = [
   { path: '/technology', label: '区块链技术' },
   { path: '/tokenomics', label: '公民币经济' },
   { path: '/governance', label: '治理体系' },
+  { path: '/whitepaper', label: '白皮书' },
   { path: '/about', label: '关于我们' },
   { path: '/ecosystem', label: '生态系统' },
 ]
@@ -22,7 +23,7 @@ export default function Header() {
             G
           </div>
           <div className="hidden sm:block">
-            <div className="text-sm font-semibold tracking-wide text-white">公民币区块链</div>
+            <div className="text-base font-semibold tracking-wide text-white">公民区块链</div>
             <div className="text-[10px] tracking-wider text-gold-400">CITIZENCHAIN</div>
           </div>
         </Link>

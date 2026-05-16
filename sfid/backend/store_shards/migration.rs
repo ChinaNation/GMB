@@ -289,11 +289,9 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
     global.qr_login_results = store.qr_login_results.clone();
     global.admin_sessions = store.admin_sessions.clone();
     global.consumed_qr_ids = store.consumed_qr_ids.clone();
-    global.consumed_cpms_register_tokens = store.consumed_cpms_register_tokens.clone();
     global.audit_logs = store.audit_logs.clone();
     global.chain_requests_by_key = store.chain_requests_by_key.clone();
     global.chain_nonce_seen = store.chain_nonce_seen.clone();
-    global.anon_rsa_private_key_pem = store.anon_rsa_private_key_pem.clone();
     global.chain_auth_last_cleanup_at = store.chain_auth_last_cleanup_at;
     global.pending_bind_last_cleanup_at = store.pending_bind_last_cleanup_at;
     global.metrics = store.metrics.clone();
