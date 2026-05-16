@@ -189,7 +189,7 @@ weight：
 - `src/weights.rs` 当前仍是旧代码路径生成的产物，proof 注释仍引用已删除的旧存储名（如 `UsedCredentialNonce`、`SfidToAccount`、`AccountToSfid`、`CredentialNoncesByExpiry`）。
 - 当前文件只能视为待重生的历史 benchmark 结果，不能当作完全贴合现状的存储访问说明。
 
-### 5.2 `unbind_sfid(origin, target)`（call index = 1）— 管理员代解绑
+### 5.2 `unbind_sfid(origin, target)`（call index = 1）— 治理 Origin 解绑
 校验：
 1. `origin` 必须满足 runtime 注入的 `T::UnbindOrigin`。
 2. `target` 必须当前已绑定（`NotBound`）。
@@ -197,9 +197,9 @@ weight：
 状态变更：
 1. 删除 `target` 的 `AccountToBindingId` 与 `BindingIdToAccount`。
 2. `BoundCount -= 1`（`saturating_sub`）。
-3. 发事件 `SfidUnbound { admin, who, binding_id }`。
+3. 发事件 `SfidUnbound { who, binding_id }`。
 
-权限说明：用户不允许自行解绑，必须由 SFID 管理员发起。
+权限说明：用户不允许自行解绑，必须由 runtime 配置的治理 Origin 发起。当前生产配置为 Root，链上无法获得真实管理员账户，因此事件不得伪造 `admin` 字段。
 
 ### 5.3 省管理员 4 个 unsigned extrinsic（call index = 2..5）
 

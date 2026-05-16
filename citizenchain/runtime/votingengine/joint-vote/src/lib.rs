@@ -75,7 +75,7 @@ pub fn is_jointreferendum_vote_passed(yes_votes: u64, eligible_total: u64) -> bo
     if eligible_total == 0 {
         return false;
     }
-    yes_votes.saturating_mul(100) > eligible_total.saturating_mul(50)
+    (yes_votes as u128).saturating_mul(100) > (eligible_total as u128).saturating_mul(50)
 }
 
 /// 联合公投否决判定:反对票 ≥ 50% 即否决。
@@ -83,7 +83,7 @@ pub fn is_jointreferendum_vote_rejected(no_votes: u64, eligible_total: u64) -> b
     if eligible_total == 0 {
         return false;
     }
-    no_votes.saturating_mul(100) >= eligible_total.saturating_mul(50)
+    (no_votes as u128).saturating_mul(100) >= (eligible_total as u128).saturating_mul(50)
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -231,6 +231,8 @@ pub mod pallet {
         InvalidPopulationSnapshot,
         /// 发起联合提案前尚未准备人口快照。
         PopulationSnapshotNotPrepared,
+        /// 人口快照不是当前区块准备的快照,不能代表提案发起时刻的公民分母。
+        PopulationSnapshotNotCurrent,
         /// SFID 资格校验未通过(binding_id 未绑定或不匹配)。
         SfidNotEligible,
         /// SFID 投票凭证验签失败或已被消费。

@@ -225,6 +225,10 @@ fn unbind_by_root_origin_succeeds() {
         assert!(AccountToBindingId::<Test>::get(1).is_none());
         assert!(BindingIdToAccount::<Test>::get(bid).is_none());
         assert_eq!(BoundCount::<Test>::get(), 0);
+        System::assert_last_event(RuntimeEvent::SfidSystem(Event::SfidUnbound {
+            who: 1,
+            binding_id: bid,
+        }));
     });
 }
 

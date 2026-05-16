@@ -15,7 +15,8 @@ use frame_system as system;
 use votingengine::pallet::{
     CleanupQueue, CurrentProposalYear, ExecutionRetryDeadlines, NextProposalId,
     PendingExecutionRetryExpirations, PendingExpiryBucket, PendingProposalCleanups,
-    ProposalDisplayId, ProposalExecutionRetryStates, Proposals, ProposalsByExpiry,
+    PendingTerminalCleanups, ProposalDisplayId, ProposalExecutionRetryStates, Proposals,
+    ProposalsByExpiry,
     ProposalsByInstitution, ProposalsByOrg, ProposalsByOwner, ProposalsByYear, YearProposalCounter,
 };
 use votingengine::types::{ORG_OTH, ORG_PUP, ORG_REN};
@@ -146,6 +147,9 @@ thread_local! {
 }
 thread_local! {
     static INTERNAL_TERMINAL_CLEANUP_LOG: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+}
+thread_local! {
+    static INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL: RefCell<bool> = const { RefCell::new(false) };
 }
 thread_local! {
     static REGISTERED_ADMIN_LIST_OVERRIDE: RefCell<Option<Vec<AccountId32>>> = const { RefCell::new(None) };
@@ -441,6 +445,9 @@ impl InternalVoteResultCallback for TestInternalVoteResultCallback {
     }
 
     fn on_execution_failed_terminal(proposal_id: u64) -> DispatchResult {
+        if INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow()) {
+            return Err(DispatchError::Other("internal terminal cleanup failed"));
+        }
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().push(proposal_id));
         Ok(())
     }
@@ -460,6 +467,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
         INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
         INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
+        INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = false);
         REGISTERED_ADMIN_LIST_OVERRIDE.with(|value| *value.borrow_mut() = None);
         set_registered_duoqian_threshold(3);
         set_pending_duoqian_threshold(2);
@@ -677,6 +685,10 @@ fn set_joint_callback_override_status(status: Option<u8>) {
 
 fn set_internal_callback_override_status(status: Option<u8>) {
     INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = status);
+}
+
+fn set_internal_terminal_cleanup_should_fail(should_fail: bool) {
+    INTERNAL_TERMINAL_CLEANUP_SHOULD_FAIL.with(|flag| *flag.borrow_mut() = should_fail);
 }
 
 fn set_test_now_secs(secs: u64) {

@@ -202,8 +202,12 @@ impl<T: Config> Pallet<T> {
             .ok_or(votingengine::Error::<T>::NoPermission)?;
         let prepared = PendingPopulationSnapshots::<T>::get(&who)
             .ok_or(Error::<T>::PopulationSnapshotNotPrepared)?;
-        let eligible_total = prepared.eligible_total;
         let now = <frame_system::Pallet<T>>::block_number();
+        if prepared.prepared_at != now {
+            PendingPopulationSnapshots::<T>::remove(&who);
+            return Err(Error::<T>::PopulationSnapshotNotCurrent.into());
+        }
+        let eligible_total = prepared.eligible_total;
         let end = now.saturating_add(Self::joint_stage_duration());
 
         let proposal = Proposal {
