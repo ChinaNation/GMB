@@ -709,6 +709,25 @@ fn joint_proposal_requires_prepared_population_snapshot() {
 }
 
 #[test]
+fn joint_proposal_rejects_stale_population_snapshot() {
+    new_test_ext().execute_with(|| {
+        let nonce = snapshot_nonce_ok();
+        prepare_population_snapshot_for(nrc_admin(0), 10, nonce);
+
+        // 中文注释：人口快照只代表准备快照所在区块的公民分母；
+        // 隔块创建提案必须拒绝并删除过期缓存。
+        System::set_block_number(2);
+        assert_eq!(
+            <JointVote as JointVoteEngine<AccountId32>>::create_joint_proposal(nrc_admin(0)),
+            Err(joint_vote::Error::<Test>::PopulationSnapshotNotCurrent.into())
+        );
+        assert!(!joint_vote::pallet::PendingPopulationSnapshots::<Test>::contains_key(
+            nrc_admin(0)
+        ));
+    });
+}
+
+#[test]
 fn joint_vote_requires_current_institution_admin() {
     new_test_ext().execute_with(|| {
         let nonce = snapshot_nonce_ok();
@@ -1216,6 +1235,17 @@ fn citizen_pass_threshold_function_boundaries_are_correct() {
     assert!(!joint_vote::is_jointreferendum_vote_passed(0, 0));
     assert!(!joint_vote::is_jointreferendum_vote_passed(5, 10));
     assert!(joint_vote::is_jointreferendum_vote_passed(6, 10));
+
+    // 中文注释：极端大数不能因为 u64 乘法饱和把刚过半误判为未通过。
+    let eligible = u64::MAX;
+    assert!(!joint_vote::is_jointreferendum_vote_passed(
+        eligible / 2,
+        eligible
+    ));
+    assert!(joint_vote::is_jointreferendum_vote_passed(
+        eligible / 2 + 1,
+        eligible
+    ));
 }
 
 #[test]
@@ -1228,6 +1258,17 @@ fn citizen_reject_threshold_function_boundaries_are_correct() {
     assert!(joint_vote::is_jointreferendum_vote_rejected(5, 10));
     // 反对 6/10 = 60% → 否决
     assert!(joint_vote::is_jointreferendum_vote_rejected(6, 10));
+
+    // 中文注释：极端大数不能因为 u64 乘法饱和把刚过半误判为未否决。
+    let eligible = u64::MAX;
+    assert!(!joint_vote::is_jointreferendum_vote_rejected(
+        eligible / 2,
+        eligible
+    ));
+    assert!(joint_vote::is_jointreferendum_vote_rejected(
+        eligible / 2 + 1,
+        eligible
+    ));
 }
 
 #[test]
@@ -1749,6 +1790,7 @@ fn reset_internal_callback_state() {
     INTERNAL_CALLBACK_OVERRIDE_STATUS.with(|value| *value.borrow_mut() = None);
     INTERNAL_CALLBACK_LOG.with(|log| log.borrow_mut().clear());
     INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow_mut().clear());
+    set_internal_terminal_cleanup_should_fail(false);
 }
 
 #[test]
@@ -2036,6 +2078,44 @@ fn automatic_fatal_failed_runs_execution_failed_terminal_hook() {
         );
         let cleanup_log = INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow().clone());
         assert_eq!(cleanup_log, vec![proposal_id]);
+    });
+}
+
+#[test]
+fn execution_failed_terminal_cleanup_error_is_queued_and_retried() {
+    new_test_ext().execute_with(|| {
+        reset_internal_callback_state();
+        set_internal_callback_override_status(Some(STATUS_EXECUTION_FAILED));
+        set_internal_terminal_cleanup_should_fail(true);
+        let proposal_id = create_internal_proposal_via_engine(nrc_admin(0), ORG_NRC, nrc_pid());
+
+        // 中文注释：终态可以成立，但业务侧执行失败清理通知失败时必须留下重试入口。
+        assert_ok!(VotingEngine::set_status_and_emit(
+            proposal_id,
+            STATUS_PASSED
+        ));
+        assert_eq!(
+            VotingEngine::proposals(proposal_id)
+                .expect("proposal exists")
+                .status,
+            STATUS_EXECUTION_FAILED
+        );
+        assert!(PendingTerminalCleanups::<Test>::contains_key(proposal_id));
+        assert!(INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow().is_empty()));
+
+        set_internal_terminal_cleanup_should_fail(false);
+        System::set_block_number(2);
+        <VotingEngine as Hooks<u64>>::on_initialize(2);
+
+        assert!(!PendingTerminalCleanups::<Test>::contains_key(proposal_id));
+        let cleanup_log = INTERNAL_TERMINAL_CLEANUP_LOG.with(|log| log.borrow().clone());
+        assert_eq!(cleanup_log, vec![proposal_id]);
+        assert!(System::events().into_iter().any(|record| matches!(
+            record.event,
+            RuntimeEvent::VotingEngine(votingengine::Event::ProposalTerminalCleanupCompleted {
+                proposal_id: event_id
+            }) if event_id == proposal_id
+        )));
     });
 }
 

@@ -293,9 +293,9 @@ pub mod pallet {
             binding_id: T::Hash,
             bind_nonce_hash: T::Hash,
         },
-        /// 中文注释:管理员代为解绑用户 SFID,记录管理员、被解绑用户和 binding_id。
+        /// 中文注释:受治理 origin 授权解绑用户 SFID,记录被解绑用户和 binding_id。
+        /// 当前 runtime 使用 Root origin,没有可审计的管理员账户,所以事件不得伪造 admin 字段。
         SfidUnbound {
-            admin: T::AccountId,
             who: T::AccountId,
             binding_id: T::Hash,
         },
@@ -440,11 +440,7 @@ pub mod pallet {
             BindingIdToAccount::<T>::remove(binding_id);
             BoundCount::<T>::mutate(|v| *v = v.saturating_sub(1));
 
-            Self::deposit_event(Event::<T>::SfidUnbound {
-                admin: target.clone(),
-                who: target,
-                binding_id,
-            });
+            Self::deposit_event(Event::<T>::SfidUnbound { who: target, binding_id });
             Ok(())
         }
 

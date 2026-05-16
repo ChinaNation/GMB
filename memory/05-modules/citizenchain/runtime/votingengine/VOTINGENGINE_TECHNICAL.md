@@ -127,13 +127,14 @@ any → unknown
 - `JointVotesByInstitution` / `JointTallies`
 - `CitizenVotesByBindingId` / `CitizenTallies`
 - `UsedPopulationSnapshotNonce`：人口快照 nonce 防重放
-- `PendingPopulationSnapshots`：已验签的人口快照缓存，按发起管理员账户暂存，创建联合提案时消费并删除
+- `PendingPopulationSnapshots`：已验签的人口快照缓存，按发起管理员账户暂存，仅允许在准备快照的同一区块创建联合提案时消费并删除；过期快照创建提案时返回 `PopulationSnapshotNotCurrent` 并删除缓存。
 - `ProposalData`：提案摘要层存储（默认上限 100KB）
 - `ProposalOwner`：`proposal_id -> MODULE_TAG`，标记业务 owner。创建提案时原子写入，后续生产路径不再允许业务模块改写 data/object。
 - `ProposalObjectMeta` / `ProposalObject`：提案对象层存储（默认上限 10MB）
 - `ProposalExecutionRetryStates`：自动执行失败后的可重试状态，记录手动失败次数、首次失败区块、重试截止区块和最近手动尝试区块。
 - `ExecutionRetryDeadlines`：按区块索引待过期的 retry proposal，用于 `on_initialize` 到期转 `STATUS_EXECUTION_FAILED`。
 - `PendingExecutionRetryExpirations`：retry deadline 重排失败时的兜底队列。若目标 deadline 附近所有桶都满，提案不会丢失过期入口，而是在后续 `on_initialize` 中按配置额度转 `STATUS_EXECUTION_FAILED`。
+- `PendingTerminalCleanups`：执行失败终态通知业务模块失败后的待处理队列。提案可以进入 `STATUS_EXECUTION_FAILED`，但释放业务 pending 锁等终态清理通知会由后续 `on_initialize` 有界重试，不能被静默吞掉。
 - `CallbackExecutionScopes`：回调执行临时作用域，用于保护测试和回调路径的作用域校验；生产业务模块通过 callback 返回 `ProposalExecutionOutcome`。
 - `ActiveProposalsByInstitution`：每机构当前活跃提案 ID 列表，容量由 `MaxActiveProposals` 配置，生产 runtime 当前为 10。
 - `InternalProposalMutexes`：同一治理主体 `(org, institution)` 的内部提案互斥状态。
@@ -173,7 +174,7 @@ any → unknown
 ### 3.2 联合提案
 1. 联合提案发起管理员先调用 `prepare_joint_population_snapshot`，由投票引擎校验人口快照、签名、nonce、防重放和发起权限，并写入 `PendingPopulationSnapshots`。
 2. 业务模块通过 `JointVoteEngine::create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object` 创建提案，只提交业务摘要或对象。
-3. `do_create_joint_proposal` 消费发起管理员账户下的 `PendingPopulationSnapshots`，把 `eligible_total` 固化到提案主表，阶段为 `STAGE_JOINT`，并为所有参与机构登记 `Regular` 锁。缺少已准备快照时返回 `PopulationSnapshotNotPrepared`。
+3. `do_create_joint_proposal` 消费发起管理员账户下的 `PendingPopulationSnapshots`，只接受 `prepared_at` 等于当前区块的快照，把“提案发起当刻拥有投票权的公民数”固化到提案主表，阶段为 `STAGE_JOINT`，并为所有参与机构登记 `Regular` 锁。缺少已准备快照时返回 `PopulationSnapshotNotPrepared`，快照不是当前区块准备时返回 `PopulationSnapshotNotCurrent` 并删除过期缓存。
 4. `joint_vote` 由提案管理员快照中的机构管理员个人钱包直接上链投票：
    - `proposal_id + institution + who` 只能投一次
    - 仅允许当前机构管理员投票
@@ -193,7 +194,7 @@ any → unknown
 1. `citizen_vote` 入口参数为：`(proposal_id, binding_id, nonce, signature, approve)`。
 2. `do_citizen_vote` 校验阶段、资格、凭证、去重后计票。
 3. 公民投票链路仅接收 `binding_id`，Runtime 不再接收/处理 SFID 明文字段。
-4. 赞成票超过 50%（严格大于）时立即 `Passed`。
+4. 赞成票超过 50%（严格大于）时立即 `Passed`；反对票达到 50% 时立即 `Rejected`。阈值比较使用 `u128` 中间值，避免 `u64` 极端大数乘法饱和导致误判。
 5. 未达阈值且到期后，`on_initialize` 自动走 `do_finalize_citizen_timeout`，按阈值判定 `Passed/Rejected`（未达阈值即 `Rejected`）。
 
 ### 3.4 自动超时结算
@@ -219,7 +220,7 @@ any → unknown
 2. callback 返回 `Executed` 时，状态转 `STATUS_EXECUTED` 并注册 90 天终态清理。
 3. internal callback 返回 `RetryableFailed` 时，状态保持 `STATUS_PASSED`，写入 `ProposalExecutionRetryStates`，并按 `ExecutionRetryGraceBlocks` 注册过期索引；若 retry deadline 初次登记或重排时目标窗口已满，写入 `PendingExecutionRetryExpirations` 兜底队列，后续区块主动转执行失败终态。
 4. joint callback 返回 `RetryableFailed` 时不进入 retry state，直接转 `STATUS_EXECUTION_FAILED`。
-5. callback 返回 `FatalFailed` 时，状态转 `STATUS_EXECUTION_FAILED` 并触发执行失败终态 hook 后注册终态清理。
+5. callback 返回 `FatalFailed` 时，状态转 `STATUS_EXECUTION_FAILED`，先注册 90 天链上终态清理，再通知业务模块执行失败终态。
 6. callback 返回错误时，整个投票判定回滚，过期桶保留重试入口。
 
 手动执行流程：
@@ -325,6 +326,14 @@ any → unknown
 
 后续 `retry_passed_proposal` 成功会转 `STATUS_EXECUTED`；失败会累计 `manual_attempts`。达到 `MaxManualExecutionAttempts`（当前 runtime 配置为 3）或 `retry_deadline` 到期，统一转 `STATUS_EXECUTION_FAILED`。若 retry deadline 重排时目标窗口已满，`PendingExecutionRetryExpirations` 会按 `MaxPendingRetryExpirationsPerBlock` 在后续区块兜底处理，避免 `STATUS_PASSED` 提案失去 deadline 引用。
 
+### 5.7.2 执行失败终态清理重试
+`STATUS_EXECUTION_FAILED` 是终态，但业务模块仍可能需要释放 pending 锁、清理临时状态或记录失败闭环：
+
+- 投票引擎先登记链上 90 天终态清理，再调用 `on_execution_failed_terminal`，避免业务侧副作用先发生、链上清理登记再失败。
+- `on_execution_failed_terminal` 返回错误时，不回滚已经成立的执行失败终态；投票引擎把 `proposal_id` 写入 `PendingTerminalCleanups`。
+- 后续 `on_initialize` 按 `MaxPendingRetryExpirationsPerBlock` 有界处理 `PendingTerminalCleanups`，成功后删除待处理项并发 `ProposalTerminalCleanupCompleted`。
+- 若提案已被清理或状态不再是 `STATUS_EXECUTION_FAILED`，待处理项会被删除，避免永久残留。
+
 ### 5.8 到期桶有界化
 `ProposalsByExpiry` 已改为 `BoundedVec`，由 `MaxProposalsPerExpiry` 限制单个 expiry 桶大小：
 - 避免同一过期区块下的提案 ID 列表无界膨胀。
@@ -344,7 +353,7 @@ any → unknown
 - 业务模块不得在自己的 extrinsic、DTO、ProposalData 或测试 mock 中接收 `eligible_total`、`snapshot_nonce`、`signature`、`province`、`signer_admin_pubkey`。
 - 业务模块只能调用 `JointVoteEngine::create_joint_proposal_with_data` 或 `create_joint_proposal_with_data_and_object`，提交业务摘要和可选对象。
 - `joint-vote` 的 `prepare_joint_population_snapshot` 是唯一快照准备入口；它完成验签、防重放和暂存。
-- `do_create_joint_proposal` 是唯一快照消费入口；它把 `eligible_total` 写入 `Proposals.citizen_eligible_total`，并删除对应暂存快照。
+- `do_create_joint_proposal` 是唯一快照消费入口；它只接受与提案创建同一区块准备的快照，把 `eligible_total` 写入 `Proposals.citizen_eligible_total`，并删除对应暂存快照。提案创建后，即使 SFID 公民人数变化，也不再刷新该提案的公民投票分母。
 - 未准备快照时拒绝创建联合提案，不保留任何旧签名或兼容入口。
 
 ### 5.9.2 治理固定阈值与注册多签动态阈值边界

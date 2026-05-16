@@ -281,6 +281,14 @@ pub mod pallet {
     pub type PendingExecutionRetryExpirations<T: Config> =
         StorageMap<_, Blake2_128Concat, u64, BlockNumberFor<T>, OptionQuery>;
 
+    /// 执行失败终态通知失败后的待处理队列。
+    ///
+    /// 中文注释：提案已经进入 EXECUTION_FAILED 终态时，业务模块释放 pending 锁等
+    /// 清理通知不能被静默吞掉；失败后保留 proposal_id，后续 on_initialize 有界重试。
+    #[pallet::storage]
+    pub type PendingTerminalCleanups<T: Config> =
+        StorageMap<_, Blake2_128Concat, u64, (), OptionQuery>;
+
     /// 执行重试超时队列：retry_deadline → proposal_id 列表。
     #[pallet::storage]
     #[pallet::getter(fn execution_retry_deadlines)]
@@ -432,6 +440,10 @@ pub mod pallet {
             proposal_id: u64,
             retry_deadline: BlockNumberFor<T>,
         },
+        /// 中文注释：执行失败终态通知业务模块失败，已进入待处理重试队列。
+        ProposalTerminalCleanupQueued { proposal_id: u64 },
+        /// 中文注释：待处理的执行失败终态通知已补偿完成。
+        ProposalTerminalCleanupCompleted { proposal_id: u64 },
         /// 中文注释：管理员取消 PASSED 可重试提案，转入执行失败终态。
         ProposalExecutionCancelled { proposal_id: u64 },
     }
@@ -540,6 +552,8 @@ pub mod pallet {
             weight = weight.saturating_add(Self::process_pending_execution_retry_expirations(n));
 
             weight = weight.saturating_add(Self::process_execution_retry_deadlines(n));
+
+            weight = weight.saturating_add(Self::process_pending_terminal_cleanups());
 
             weight = weight.saturating_add(Self::process_pending_cleanup_steps());
 
@@ -811,13 +825,13 @@ pub mod pallet {
             cleanup::schedule_cleanup::<T>(proposal_id, now)?;
             ProposalExecutionRetryStates::<T>::remove(proposal_id);
             PendingExecutionRetryExpirations::<T>::remove(proposal_id);
+            PendingTerminalCleanups::<T>::remove(proposal_id);
             if status == STATUS_EXECUTION_FAILED {
                 if let Some(proposal) = Proposals::<T>::get(proposal_id) {
                     // 中文注释：清理登记成功后再通知业务模块释放 pending 锁，
-                    // 避免先产生业务侧副作用、再发现链上清理无法登记。
-                    let _ = Self::with_callback_execution_scope(proposal_id, || {
-                        Self::notify_execution_failed_terminal(proposal_id, proposal.kind)
-                    });
+                    // 避免先产生业务侧副作用、再发现链上清理无法登记。通知失败
+                    // 不再吞掉，而是进入有界重试队列。
+                    Self::notify_execution_failed_terminal_or_queue(proposal_id, proposal.kind);
                 }
             }
             if let Some(proposal) = Proposals::<T>::get(proposal_id) {
@@ -934,6 +948,60 @@ pub mod pallet {
                 }
                 _ => Err(Error::<T>::InvalidProposalKind.into()),
             }
+        }
+
+        fn queue_terminal_cleanup(proposal_id: u64) {
+            let already_pending = PendingTerminalCleanups::<T>::contains_key(proposal_id);
+            PendingTerminalCleanups::<T>::insert(proposal_id, ());
+            if !already_pending {
+                Self::deposit_event(Event::<T>::ProposalTerminalCleanupQueued { proposal_id });
+            }
+        }
+
+        fn notify_execution_failed_terminal_or_queue(proposal_id: u64, kind: u8) {
+            let result = Self::with_callback_execution_scope(proposal_id, || {
+                Self::notify_execution_failed_terminal(proposal_id, kind)
+            });
+            if result.is_ok() {
+                PendingTerminalCleanups::<T>::remove(proposal_id);
+                return;
+            }
+            Self::queue_terminal_cleanup(proposal_id);
+        }
+
+        fn process_pending_terminal_cleanups() -> Weight {
+            let db_weight = T::DbWeight::get();
+            let mut weight = db_weight.reads(1);
+            let max = T::MaxPendingRetryExpirationsPerBlock::get() as usize;
+            if max == 0 {
+                return weight;
+            }
+
+            let pending: Vec<u64> = PendingTerminalCleanups::<T>::iter()
+                .take(max)
+                .map(|(proposal_id, _)| proposal_id)
+                .collect();
+            for proposal_id in pending {
+                weight = weight.saturating_add(db_weight.reads_writes(2, 3));
+                let Some(proposal) = Proposals::<T>::get(proposal_id) else {
+                    PendingTerminalCleanups::<T>::remove(proposal_id);
+                    continue;
+                };
+                if proposal.status != STATUS_EXECUTION_FAILED {
+                    PendingTerminalCleanups::<T>::remove(proposal_id);
+                    continue;
+                }
+                let result = Self::with_callback_execution_scope(proposal_id, || {
+                    Self::notify_execution_failed_terminal(proposal_id, proposal.kind)
+                });
+                if result.is_ok() {
+                    PendingTerminalCleanups::<T>::remove(proposal_id);
+                    Self::deposit_event(Event::<T>::ProposalTerminalCleanupCompleted {
+                        proposal_id,
+                    });
+                }
+            }
+            weight
         }
 
         fn schedule_execution_retry(proposal_id: u64) -> DispatchResult {
