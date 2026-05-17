@@ -68,3 +68,32 @@ wuminapp
 - `cd wuminapp && flutter test test/governance/personal-manage test/governance/organization-manage`：通过。
 - `git diff --check`：通过。
 - `cd wuminapp && flutter build apk --debug`：通过。
+
+2026-05-17 补充执行记录：
+- 已确认链上旧问题不是余额未清空：关闭执行会扣手续费并把剩余余额转入用户提供的收款地址。
+- 已修复 `admins-change` 动态主体关闭逻辑：个人/机构多签注销成功后删除 `Subjects[subject]` 当前状态，不再保留 `Closed` 墓碑。
+- 已新增 `admins-change` storage v4 迁移：升级时清理旧链上遗留的 Closed 动态主体；历史事件和提案不删除。
+- 已在个人多签关闭执行阶段复核 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
+- 已在机构账户关闭成功后清理 `InstitutionAccounts`、`SfidRegisteredAddress`、`AddressRegisteredSfid` 和管理员主体当前状态，与个人多签关闭口径对齐。
+- 已在 wuminapp `ChainRpc` 增加 `System.ExtrinsicFailed` 模块错误解析，个人/机构创建确认在找成功事件前先显示真实链上失败原因。
+- 已更新 runtime 与 wuminapp 技术文档，并补充测试覆盖。
+
+2026-05-17 补充验证记录：
+- `cargo test --manifest-path citizenchain/Cargo.toml -p admins-change --lib`：通过，44 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib`：通过，23 passed。
+- `cargo test --manifest-path citizenchain/Cargo.toml -p organization-manage --lib`：通过，24 passed。
+- `cd wuminapp && flutter test test/governance/personal-manage test/governance/organization-manage`：通过。
+- `cd wuminapp && dart analyze lib test`：通过。
+- `cd wuminapp && flutter test test/governance/personal-manage/personal_manage_service_test.dart test/governance/organization-manage/duoqian_manage_service_test.dart`：通过。
+- `git diff --check`：通过。
+
+2026-05-17 阈值显示补充执行记录：
+- 已修复个人/机构多签详情读取管理员主体时错把 `AdminsChange::Subjects` 中 creator 字段解成 threshold 的问题。
+- 个人/机构多签当前账户详情现在只从 `AdminsChange::Subjects` 读取 org 和管理员列表，普通动态阈值改从 `InternalVote.ActiveDynamicThresholds[(org, subject)]` 读取，查不到 active 时再查 pending。
+- `DuoqianAccountInfo.threshold` 改为可空；阈值查询不到时 UI 只显示管理员人数，不再显示错位大数字。
+- 已补充个人/机构 storage codec 和 service 测试，覆盖 `AdminsChange::Subjects` 不再携带 threshold 的布局。
+
+2026-05-17 阈值显示补充验证记录：
+- `cd wuminapp && dart analyze lib test`：通过。
+- `cd wuminapp && flutter test test/governance/personal-manage/personal_manage_service_test.dart test/governance/personal-manage/personal_manage_storage_codec_test.dart test/governance/organization-manage/duoqian_manage_storage_test.dart test/governance/organization-manage/duoqian_storage_codec_test.dart`：通过。
+- `cd wuminapp && flutter test test/governance/personal-manage test/governance/organization-manage`：通过。

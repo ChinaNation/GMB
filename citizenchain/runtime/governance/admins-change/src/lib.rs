@@ -162,7 +162,8 @@ pub trait SubjectLifecycle<AccountId> {
 
 /// admins-change pallet on-chain storage 版本。
 /// v3:管理员主体只保存管理员集合和生命周期，阈值归属 internal-vote。
-const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
+/// v4:动态多签主体关闭后删除当前状态记录，并迁移清理旧 Closed 动态主体。
+const STORAGE_VERSION: StorageVersion = StorageVersion::new(4);
 
 fn nrc_subject_id() -> Option<SubjectId> {
     // 中文注释：国储会ID统一从常量数组读取并转码。
@@ -284,6 +285,34 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_runtime_upgrade() -> Weight {
+            let db = T::DbWeight::get();
+            let on_chain = StorageVersion::get::<Pallet<T>>();
+            if on_chain >= STORAGE_VERSION {
+                return db.reads(1);
+            }
+
+            let mut reads: u64 = 1;
+            let mut closed_dynamic_subjects = Vec::new();
+            for (subject_id, subject) in Subjects::<T>::iter() {
+                reads = reads.saturating_add(1);
+                if subject.status == AdminSubjectStatus::Closed
+                    && !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution)
+                {
+                    closed_dynamic_subjects.push(subject_id);
+                }
+            }
+
+            let removed = closed_dynamic_subjects.len() as u64;
+            for subject_id in closed_dynamic_subjects {
+                // 中文注释：只删除当前状态墓碑；历史区块、事件和提案仍由链历史保留。
+                Subjects::<T>::remove(subject_id);
+            }
+
+            STORAGE_VERSION.put::<Pallet<T>>();
+            db.reads_writes(reads, removed.saturating_add(1))
+        }
+
         fn integrity_test() {
             let required = NRC_ADMIN_COUNT.max(PRC_ADMIN_COUNT).max(PRB_ADMIN_COUNT);
             assert!(
@@ -691,22 +720,20 @@ pub mod pallet {
 
         /// 关闭已激活管理员主体。
         pub(crate) fn do_close_subject(institution: SubjectId) -> DispatchResult {
-            let org =
-                Subjects::<T>::try_mutate(institution, |maybe| -> Result<u8, DispatchError> {
-                    let subject = maybe.as_mut().ok_or(Error::<T>::InvalidInstitution)?;
-                    ensure!(
-                        subject.status == AdminSubjectStatus::Active,
-                        Error::<T>::SubjectNotActive
-                    );
-                    // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能进入 Closed。
-                    ensure!(
-                        !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
-                        Error::<T>::BuiltinSubjectCannotClose
-                    );
-                    subject.status = AdminSubjectStatus::Closed;
-                    subject.updated_at = frame_system::Pallet::<T>::block_number();
-                    Ok(subject.org)
-                })?;
+            let subject = Subjects::<T>::get(institution).ok_or(Error::<T>::InvalidInstitution)?;
+            ensure!(
+                subject.status == AdminSubjectStatus::Active,
+                Error::<T>::SubjectNotActive
+            );
+            // 中文注释：NRC/PRC/PRB 是制度内置治理主体，生命周期不能被删除。
+            ensure!(
+                !matches!(subject.kind, AdminSubjectKind::BuiltinInstitution),
+                Error::<T>::BuiltinSubjectCannotClose
+            );
+            let org = subject.org;
+            // 中文注释：动态多签注销完成后不保留 Closed 当前状态墓碑；
+            // 同名确定性地址可在资金清空后重新走全新的注册流程。
+            Subjects::<T>::remove(institution);
             Self::deposit_event(Event::<T>::AdminSubjectClosed {
                 subject: institution,
                 org,

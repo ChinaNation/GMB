@@ -549,9 +549,11 @@ fn propose_close_writes_pending() {
 #[test]
 fn close_executes_when_vote_reaches_threshold_returns_balance() {
     new_test_ext().execute_with(|| {
-        let (_sfid, main) = create_and_activate_institution(b"SFID-CL-2", 3);
+        let (sfid, main) = create_and_activate_institution(b"SFID-CL-2", 3);
         let admin_accounts: alloc::vec::Vec<AccountId32> = (0..3u8).map(|i| admin(i)).collect();
         let beneficiary_acc = beneficiary();
+        let main_name = account_name(RESERVED_NAME_MAIN);
+        let subject = primitives::derive::subject_id_from_institution_account(&main);
 
         assert_ok!(OrganizationManage::propose_close(
             RuntimeOrigin::signed(admin(0)),
@@ -566,9 +568,19 @@ fn close_executes_when_vote_reaches_threshold_returns_balance() {
 
         // ACCT_AMOUNT=1000 → fee = max(1, 10) = 10,beneficiary 收 990
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
+        assert_eq!(Balances::free_balance(&main), 0);
         assert!(!pallet::InstitutionPendingClose::<Test>::contains_key(
             &main
         ));
+        assert!(!pallet::InstitutionAccounts::<Test>::contains_key(
+            &sfid, &main_name
+        ));
+        assert!(!pallet::SfidRegisteredAddress::<Test>::contains_key(
+            &sfid, &main_name
+        ));
+        assert!(!pallet::AddressRegisteredSfid::<Test>::contains_key(&main));
+        assert!(admins_change::Subjects::<Test>::get(subject).is_none());
+        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_OTH, subject).is_none());
     });
 }
 

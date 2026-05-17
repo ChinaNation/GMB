@@ -1,6 +1,6 @@
 # ADMINS_CHANGE Technical Notes
 
-最新更新：2026-05-11，投票阈值职责已从 `admins-change` 移出；本模块只维护管理员集合和生命周期，动态阈值由 `votingengine/internal-vote` 校验、保存和更新。
+最新更新：2026-05-17，投票阈值职责已从 `admins-change` 移出；本模块只维护管理员集合和生命周期，动态阈值由 `votingengine/internal-vote` 校验、保存和更新。动态多签主体关闭成功后删除当前状态记录，不保留 Closed 墓碑。
 
 ## 1. 模块定位
 
@@ -10,7 +10,7 @@
 
 - 维护 `Subjects<SubjectId, AdminSubject>`。
 - 为治理机构写入创世固定管理员集合。
-- 为个人账户、机构账户提供 Pending / Active / Closed 生命周期写入口。
+- 为个人账户、机构账户提供 Pending / Active 生命周期写入口；关闭成功后删除当前状态记录。
 - 创建并执行管理员集合变更提案。
 
 账户级口径来自 `memory/04-decisions/ADR-015-account-admin-internal-vote.md`：
@@ -47,7 +47,12 @@
 
 ## 3. 存储模型
 
-`STORAGE_VERSION = 3`。管理员主体只保存管理员集合和生命周期；阈值存储已移交 `internal-vote`。
+`STORAGE_VERSION = 4`。管理员主体只保存管理员集合和生命周期；阈值存储已移交 `internal-vote`。
+
+版本语义：
+
+- v3：动态主体关闭后曾保留 `Closed` 当前状态记录。
+- v4：动态主体关闭后直接删除 `Subjects[subject]` 当前状态；runtime upgrade 会清理旧链上遗留的 Closed 动态主体。历史区块、事件和投票提案仍保留在链历史中。
 
 核心存储：
 
@@ -62,7 +67,7 @@ Subjects<SubjectId, AdminSubject>
 - `admins`：当前管理员完整列表。
 - `creator`：主体创建者。
 - `created_at / updated_at`：生命周期时间。
-- `status`：`Pending / Active / Closed`。
+- `status`：`Pending / Active / Closed`。新逻辑下 `Closed` 只代表历史兼容枚举值；动态多签关闭完成后不会再作为当前状态留存。
 
 创世构建：
 
@@ -122,7 +127,8 @@ validate_admin_set_for_subject(kind, org, admins)
 - `activate_subject_for_proposal` 与 `close_subject_for_proposal` 要求提案为 `STATUS_PASSED`，且处于 votingengine callback 执行作用域。
 - `remove_pending_subject_for_proposal` 仅接受 `STATUS_REJECTED / STATUS_EXECUTION_FAILED`。
 - `do_remove_pending_subject` 要求主体必须存在且处于 `Pending`；不存在返回 `InvalidInstitution`，非 Pending 返回 `SubjectNotPending`。
-- `BuiltinInstitution` 永远不能关闭。
+- `close_subject_for_proposal` 关闭动态主体时删除 `Subjects[subject]` 当前状态；同一确定性地址在资金清空后可以重新注册为全新主体。
+- `BuiltinInstitution` 永远不能关闭或删除。
 
 ## 7. 读取 API
 
@@ -144,7 +150,7 @@ Pending 快照专用 API：
 
 - 普通业务授权、普通内部提案创建和长期管理员真源读取只能使用 Active-only API。
 - Pending 快照 API 只供创建/激活该主体时锁定管理员快照。
-- `Closed` 主体不返回管理员或人数。
+- 关闭完成的动态主体不保留当前状态；升级前遗留的 `Closed` 动态主体会被 v4 迁移删除。
 
 ## 8. 管理员集合变更流程
 
@@ -217,7 +223,7 @@ cargo test --manifest-path citizenchain/Cargo.toml -p primitives --lib
 
 当前结果：
 
-- `admins-change`：43 passed(新增读侧旧脏主体拦截测试，覆盖 Active/Pending 查询 API 不再暴露非法 kind/org 组合,2026-05-10)。
+- `admins-change`：44 passed(新增动态主体关闭删除当前状态和 v4 迁移清理 Closed 动态主体测试,2026-05-17)。
 - `primitives`：24 passed。
 
 覆盖重点：

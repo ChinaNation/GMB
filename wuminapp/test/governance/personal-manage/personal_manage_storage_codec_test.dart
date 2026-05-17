@@ -45,5 +45,27 @@ void main() {
       expect(decoded.createdAt, 101);
       expect(decoded.statusByte, 1);
     });
+
+    test('decodes admin subject without reading threshold from subject', () {
+      final admin1 = List<int>.filled(32, 0xaa);
+      final admin2 = List<int>.filled(32, 0xbb);
+      final data = Uint8List.fromList([
+        3,
+        2,
+        (2 << 2) & 0xff,
+        ...admin1,
+        ...admin2,
+        ...List<int>.filled(32, 0x44),
+        ...u32Le(100),
+        ...u32Le(101),
+        1,
+      ]);
+
+      final decoded = PersonalManageStorageCodec.decodeAdminSubject(data)!;
+
+      expect(decoded.org, 3);
+      expect(decoded.adminCount, 2);
+      expect(decoded.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+    });
   });
 }

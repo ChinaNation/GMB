@@ -421,12 +421,36 @@ class DuoqianManageService {
     if (adminData == null) return null;
     final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
     if (admin == null) return null;
+    final threshold = await _fetchInstitutionDynamicThreshold(
+      org: admin.org,
+      subjectId: subjectId,
+    );
     return DuoqianAccountInfo(
       adminCount: admin.adminCount,
-      threshold: admin.threshold,
+      threshold: threshold,
       adminPubkeys: admin.adminPubkeys,
       status: _statusFromByte(account.statusByte),
     );
+  }
+
+  Future<int?> _fetchInstitutionDynamicThreshold({
+    required int org,
+    required Uint8List subjectId,
+  }) async {
+    for (final storageName in const [
+      'ActiveDynamicThresholds',
+      'PendingDynamicThresholds',
+    ]) {
+      final key = DuoqianStorageCodec.dynamicThresholdKey(
+        storageName: storageName,
+        org: org,
+        subjectId: subjectId,
+      );
+      final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+      final threshold = DuoqianStorageCodec.decodeDynamicThreshold(data);
+      if (threshold != null) return threshold;
+    }
+    return null;
   }
 
   /// 从 ProposalData 解码机构多签管理提案。
@@ -512,6 +536,10 @@ class DuoqianManageService {
     if (events == null || events.isEmpty) {
       throw StateError('交易已入块，但未读取到 System.Events，不能确认机构多签创建提案');
     }
+    final failure = _rpc.findExtrinsicFailureInEvents(events);
+    if (failure != null) {
+      throw StateError(failure.description);
+    }
     final found = _findInstitutionCreateProposedEvent(
       events,
       sfidNumber: sfidNumber,
@@ -526,7 +554,7 @@ class DuoqianManageService {
     );
     if (found == null) {
       throw StateError(
-        '交易已入块，但未找到 OrganizationManage.InstitutionCreateProposed 事件，机构多签创建失败',
+        '交易已入块，但未确认 OrganizationManage.InstitutionCreateProposed，也未检测到链上失败事件，请检查当前区块事件',
       );
     }
     return found;

@@ -53,6 +53,9 @@ PersonalManage storage：
 - `PersonalManage::PersonalDuoqians` 保存 `creator / account_name / created_at / status`。
 - 管理员真源是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
 - 普通业务动态阈值真源是 `InternalVote.ActiveDynamicThresholds`；创建/注销生命周期阈值由投票引擎按管理员快照写成全员同意。
+- 详情页和管理员列表不得从 `AdminsChange::Subjects` 后续字段解阈值；该 storage
+  的管理员列表后面是 `creator / created_at / updated_at / status`，错位读取会出现
+  类似 `1478971204/2` 的异常阈值显示。
 
 个人多签创建提交规则：
 
@@ -62,6 +65,9 @@ PersonalManage storage：
 - `author_submitExtrinsic` 返回的 txHash 只代表交易已提交到节点，不代表创建提案成功。
 - `personal_manage_service.dart` 必须使用 `signAndSubmitInBlock()` 等待入块，并从
   `System.Events` 确认 `PersonalManage.PersonalDuoqianProposed(event_index=0)`。
+- 如果入块区块包含 `System.ExtrinsicFailed`，必须优先显示真实模块错误，例如
+  `PersonalManage.InsufficientAmount` 或 `AdminsChange.InstitutionAlreadyExists`，
+  不能只提示“未找到 PersonalDuoqianProposed 事件”。
 - 本地 `PersonalDuoqianEntity` 和 `PersonalDuoqianProposalEntity` 只能在确认事件后写入，
   `proposalId` 必须来自链上事件，不允许预测 `VotingEngine.NextProposalId`。
 
@@ -75,6 +81,8 @@ PersonalManage storage：
 - 已注销详情页右上角三点菜单显示按钮“删除”；确认后删除
   `PersonalDuoqianEntity`、该账户全部 `PersonalDuoqianProposalEntity` 和本地状态键。
 - 链路异常只显示加载失败，不把网络失败写成已注销。
+- 链上注销成功后 runtime 会清空多签账户余额并删除个人多签当前状态；同一钱包地址 +
+  同一账户名再次创建仍派生同一地址，但会作为全新的当前账户注册。
 - 链上 votingengine 90 天终态提案清理保持不变，wuminapp 不修改链上清理周期。
 - 发起创建/注销提案后，runtime 投票引擎会在同一事务自动给发起人记一票赞成；wuminapp 本地提案记录初始 `yesVotes = 1`，不再显示发起人还需要第二次投票。
 - 若旧版本已写入“本地 create 提案仍为 voting，但链上 Proposals[id] 不存在”的记录，

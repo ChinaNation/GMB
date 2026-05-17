@@ -104,6 +104,11 @@ pub(crate) fn execute_close_with_finalizer<T: Config>(
     let threshold = <T as Config>::InternalVoteEngine::active_dynamic_threshold(org, subject_id)
         .ok_or(Error::<T>::DuoqianNotFound)?;
     let all_balance = T::Currency::free_balance(&action.duoqian_address);
+    // 中文注释：注销执行前再次确认没有 reserved 余额，避免提案后新增锁定资金导致销户不彻底。
+    ensure!(
+        T::Currency::reserved_balance(&action.duoqian_address).is_zero(),
+        Error::<T>::ReservedBalanceRemaining
+    );
 
     let balance_u128: u128 = all_balance.saturated_into();
     let fee_u128 = onchain_transaction::calculate_onchain_fee(balance_u128);

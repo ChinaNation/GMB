@@ -20,14 +20,16 @@ class RegisteredInstitutionRef {
 /// 管理员与阈值快照。
 class DuoqianAdminSnapshot {
   const DuoqianAdminSnapshot({
+    required this.org,
     required this.adminCount,
     required this.threshold,
     required this.adminPubkeys,
     required this.statusByte,
   });
 
+  final int org;
   final int adminCount;
-  final int threshold;
+  final int? threshold;
   final List<String> adminPubkeys;
   final int statusByte;
 }
@@ -70,6 +72,19 @@ class DuoqianStorageCodec {
 
   static Uint8List adminSubjectKey(Uint8List subjectId) {
     return storageMapKey('AdminsChange', 'Subjects', subjectId);
+  }
+
+  static Uint8List dynamicThresholdKey({
+    required String storageName,
+    required int org,
+    required Uint8List subjectId,
+  }) {
+    return storageDoubleMapKey(
+      'InternalVote',
+      storageName,
+      Uint8List.fromList([org]),
+      subjectId,
+    );
   }
 
   static Uint8List addressRegisteredSfidKey(String duoqianAddressHex) {
@@ -155,7 +170,9 @@ class DuoqianStorageCodec {
 
   static DuoqianAdminSnapshot? decodeAdminSubject(Uint8List data) {
     if (data.length <= 2) return null;
-    var offset = 2; // org + AdminSubjectKind
+    var offset = 0;
+    final org = data[offset++];
+    offset++; // AdminSubjectKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
     final admins = <String>[];
@@ -164,11 +181,13 @@ class DuoqianStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    if (offset + 4 > data.length) return null;
-    final threshold = readU32Le(data, offset);
+    // 中文注释：AdminsChange::Subjects 后续字段是 creator/时间/status，
+    // 动态阈值不在这里保存，必须按 org + subject 从 InternalVote 查询。
+    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return DuoqianAdminSnapshot(
+      org: org,
       adminCount: count,
-      threshold: threshold,
+      threshold: null,
       adminPubkeys: admins,
       statusByte: 0,
     );
@@ -198,6 +217,7 @@ class DuoqianStorageCodec {
     }
     if (offset + 32 + 4 + 1 > data.length) {
       return DuoqianAdminSnapshot(
+        org: 0,
         adminCount: adminCount,
         threshold: threshold,
         adminPubkeys: admins,
@@ -208,6 +228,7 @@ class DuoqianStorageCodec {
     offset += 4; // created_at: BlockNumber(u32)
     final statusByte = data[offset];
     return DuoqianAdminSnapshot(
+      org: 0,
       adminCount: adminCount,
       threshold: threshold,
       adminPubkeys: admins,
@@ -223,6 +244,11 @@ class DuoqianStorageCodec {
       addressHex: addressHex,
       statusByte: statusByte,
     );
+  }
+
+  static int? decodeDynamicThreshold(Uint8List? data) {
+    if (data == null || data.length < 4) return null;
+    return readU32Le(data, 0);
   }
 
   static Uint8List blake2128Concat(Uint8List data) {

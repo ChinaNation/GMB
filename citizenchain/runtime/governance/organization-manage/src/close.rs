@@ -28,7 +28,7 @@ use sp_runtime::{
 use crate::institution::types::{CloseInstitutionAction, InstitutionLifecycleStatus};
 use crate::pallet::{
     AddressRegisteredSfid, Config, Error, Event, InstitutionAccounts, InstitutionPendingClose,
-    Pallet, ACTION_CLOSE,
+    Pallet, SfidRegisteredAddress, ACTION_CLOSE,
 };
 use crate::traits::{
     DuoqianAddressValidator, DuoqianReservedAddressChecker, ProtectedSourceChecker,
@@ -165,6 +165,11 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         .ok_or(Error::<T>::DuoqianNotFound)?;
 
     let all_balance = T::Currency::free_balance(&action.duoqian_address);
+    // 中文注释：执行阶段也复核 reserved，保证注销完成后账户能被彻底清空和复用。
+    ensure!(
+        T::Currency::reserved_balance(&action.duoqian_address).is_zero(),
+        Error::<T>::ReservedBalanceRemaining
+    );
     let balance_u128: u128 = all_balance.saturated_into();
     let fee_u128 = onchain_transaction::calculate_onchain_fee(balance_u128);
     let fee: BalanceOf<T> = fee_u128.saturated_into();
@@ -198,8 +203,10 @@ pub(crate) fn execute_institution_close_with_finalizer<T: Config>(
         .map_err(|_| Error::<T>::TransferFailed)?;
     }
 
-    // 删 InstitutionAccounts entry(标记 Closed 状态后整体删除该 entry)。
+    // 中文注释：机构账户注销成功后必须删除账户当前索引；历史事件/提案仍保留在链历史中。
     InstitutionAccounts::<T>::remove(&registered.sfid_number, &registered.account_name);
+    SfidRegisteredAddress::<T>::remove(&registered.sfid_number, &registered.account_name);
+    AddressRegisteredSfid::<T>::remove(&action.duoqian_address);
     Pallet::<T>::close_admin_subject(proposal_id, subject_id)?;
     InstitutionPendingClose::<T>::remove(&action.duoqian_address);
 
