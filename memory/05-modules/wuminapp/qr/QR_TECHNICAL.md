@@ -178,18 +178,20 @@ WUMIN_QR_V1|system|challenge|expires_at
 | L1401 | `biometricUnavailable` | 生物识别不可用 |
 | L1402 | `biometricRejected` | 生物识别被拒绝 |
 
-## 6. 收款码协议（WUMIN_QR_V1（purpose=transfer））
+## 6. 收款码协议（WUMIN_QR_V1 / kind=user_transfer）
 
 ### 6.1 字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `proto` | string | 是 | 固定 `WUMIN_QR_V1（purpose=transfer）` |
-| `to` | string | 是 | 收款地址（SS58 格式） |
-| `amount` | string | 否 | 金额（字符串避免浮点精度） |
-| `symbol` | string | 否 | 币种，默认 `GMB` |
-| `memo` | string | 否 | 备注（展示用） |
-| `bank` | string | 否 | 清算省储行标识（预留，链下支付用） |
+| `proto` | string | 是 | 固定 `WUMIN_QR_V1` |
+| `kind` | string | 是 | 固定 `user_transfer` |
+| `body.address` | string | 是 | 收款地址（SS58 格式） |
+| `body.name` | string | 是 | 收款方昵称，允许空串 |
+| `body.amount` | string | 是 | 金额（字符串避免浮点精度），空串表示付款方输入 |
+| `body.symbol` | string | 是 | 币种，默认 `GMB` |
+| `body.memo` | string | 是 | 备注（展示用），允许空串 |
+| `body.bank` | string | 是 | 清算省储行标识，允许空串 |
 
 ### 6.2 使用流程
 
@@ -197,42 +199,30 @@ WUMIN_QR_V1|system|challenge|expires_at
 2. 付款方扫码后自动填入转账表单
 3. 金额为空时由付款方手动输入
 
-### 6.3 向后兼容
+### 6.3 裸地址兜底
 
 扫码页同时支持：
 
-- `WUMIN_QR_V1（purpose=transfer）` JSON 格式 → 完整解析
+- `WUMIN_QR_V1 / kind=user_transfer` JSON 格式 → 完整解析
 - `gmb://account/<address>` 格式 → 仅填充收款地址
 - 裸 SS58 地址 → 仅填充收款地址
 
 ## 7. 用户码协议（WUMIN_QR_V1）
 
-### 7.1 新版字段
+### 7.1 当前字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `proto` | string | 是 | 固定 `WUMIN_QR_V1` |
-| `address` | string | 是 | 链上地址（SS58 格式） |
-| `name` | string | 是 | 用户昵称 |
+| `kind` | string | 是 | 固定 `user_contact` |
+| `body.address` | string | 是 | 链上地址（SS58 格式） |
+| `body.name` | string | 是 | 用户昵称 |
 
-### 7.2 旧版兼容（WUMINAPP_USER_CARD_V1）
+### 7.2 地址边界说明
 
-旧版字段映射：
-
-| 旧版字段 | 新版字段 |
-| --- | --- |
-| `type` | `proto` |
-| `account_pubkey` | `address` |
-| `nickname` | `name` |
-
-解析时自动识别旧版格式并映射为新版模型。
-
-### 7.3 设计变更说明
-
-- 旧版使用 `account_pubkey`（裸公钥 hex），新版使用 `address`（SS58 地址）
+- 用户码、通讯录和链上交易收款栏统一使用 `address`（SS58 地址）
 - SS58 地址包含链标识（ss58 = 2027），更安全且用户可读
-- 生成二维码统一使用新版 `WUMIN_QR_V1` 格式
-- 解析二维码同时兼容新旧两版
+- 通讯录不得把 `address` 当作内部 AccountId hex 再转换
 
 ## 8. 统一扫码页面
 

@@ -15,7 +15,6 @@ import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
-import 'package:wuminapp_mobile/citizen/vote/constitution_quote.dart';
 
 /// 全局治理提案列表:展示 NRC / PRC / PRB 三类机构所有提案,按 ID 倒序。
 ///
@@ -265,21 +264,7 @@ class _VoteViewState extends State<VoteView> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // 公民宪法引言水印,始终若隐若现做底层背景。
-        const Positioned.fill(
-          child: IgnorePointer(
-            child: Opacity(
-              opacity: 0.20,
-              child: ConstitutionQuote(),
-            ),
-          ),
-        ),
-        // 前景:加载/错误/列表/空态(空态时水印自然透出)。
-        Positioned.fill(child: _buildForeground()),
-      ],
-    );
+    return _buildForeground();
   }
 
   Widget _buildForeground() {

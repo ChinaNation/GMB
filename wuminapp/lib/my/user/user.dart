@@ -10,7 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:saver_gallery/saver_gallery.dart';
-import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/my/myid/myid_page.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -103,7 +102,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ContactBookPage(
-          selfAccountPubkeyHex: _communicationAddress,
+          selfAddress: _communicationAddress,
         ),
       ),
     );
@@ -707,11 +706,11 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 class ContactBookPage extends StatefulWidget {
   const ContactBookPage({
     super.key,
-    required this.selfAccountPubkeyHex,
+    required this.selfAddress,
     this.selectForTrade = false,
   });
 
-  final String selfAccountPubkeyHex;
+  final String selfAddress;
 
   /// 为 true 时，点击联系人直接返回该联系人（而非弹窗修改昵称）。
   final bool selectForTrade;
@@ -741,7 +740,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
       MaterialPageRoute(
         builder: (_) => QrScanPage(
           mode: QrScanMode.contact,
-          selfAccountPubkeyHex: widget.selfAccountPubkeyHex,
+          selfAddress: widget.selfAddress,
         ),
       ),
     );
@@ -786,7 +785,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
             ),
             const SizedBox(height: 10),
             const Text(
-              '扫描其他用户的二维码后，会把对方的昵称和公钥加入通讯录。',
+              '扫描其他用户的二维码后，会把对方的昵称和地址加入通讯录。',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
             ),
@@ -852,7 +851,7 @@ class _ContactBookPageState extends State<ContactBookPage> {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Text(
-                  contact.accountPubkeyHex,
+                  contact.address,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -1030,7 +1029,7 @@ class _ContactDetailPage extends StatelessWidget {
       issuedAt: null,
       expiresAt: null,
       body: UserContactBody(
-        address: contact.accountPubkeyHex,
+        address: contact.address,
         name: contact.displayNickname,
       ),
     ).toRawJson();
@@ -1093,7 +1092,7 @@ class _ContactDetailPage extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    contact.accountPubkeyHex,
+                    contact.address,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
@@ -1108,8 +1107,7 @@ class _ContactDetailPage extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   iconSize: 18,
                   onPressed: () {
-                    Clipboard.setData(
-                        ClipboardData(text: contact.accountPubkeyHex));
+                    Clipboard.setData(ClipboardData(text: contact.address));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('地址已复制')),
                     );
@@ -1145,19 +1143,10 @@ class _ContactDetailPage extends StatelessWidget {
                     backgroundColor: AppTheme.primary,
                   ),
                   onPressed: () {
-                    late final String contactSs58;
-                    try {
-                      contactSs58 = _accountHexToSs58(contact.accountPubkeyHex);
-                    } on FormatException catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.message)),
-                      );
-                      return;
-                    }
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => OnchainPaymentPage(
-                          initialToAddress: contactSs58,
+                          initialToAddress: contact.address,
                         ),
                       ),
                     );
@@ -1667,17 +1656,4 @@ class _HollowQrPainter extends CustomPainter {
   bool shouldRepaint(_HollowQrPainter oldDelegate) {
     return oldDelegate.data != data || oldDelegate.hollowSize != hollowSize;
   }
-}
-
-String _accountHexToSs58(String accountHex) {
-  final clean =
-      accountHex.startsWith('0x') ? accountHex.substring(2) : accountHex;
-  if (clean.length != 64 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(clean)) {
-    throw const FormatException('联系人账户地址无效');
-  }
-  final bytes = Uint8List(32);
-  for (var i = 0; i < bytes.length; i++) {
-    bytes[i] = int.parse(clean.substring(i * 2, i * 2 + 2), radix: 16);
-  }
-  return Keyring().encodeAddress(bytes, 2027);
 }

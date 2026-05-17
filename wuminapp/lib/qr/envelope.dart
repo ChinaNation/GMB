@@ -14,7 +14,7 @@ import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
 /// ```
 /// {
 ///   "proto": "WUMIN_QR_V1",
-///   "kind":  "<7 选 1>",
+///   "kind":  "<6 选 1>",
 ///   "id":    "<临时码必填,固定码省略>",
 ///   "issued_at":  <临时码必填,固定码省略>,
 ///   "expires_at": <临时码必填,固定码省略>,

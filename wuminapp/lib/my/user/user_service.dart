@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProfileState {
@@ -79,14 +80,15 @@ class UserProfileState {
 
 class UserContact {
   const UserContact({
-    required this.accountPubkeyHex,
+    required this.address,
     required this.sourceNickname,
     required this.addedAtMillis,
     required this.updatedAtMillis,
     this.localNickname,
   });
 
-  final String accountPubkeyHex;
+  /// 联系人链上地址。通讯录/二维码/转账输入边界统一使用 SS58。
+  final String address;
   final String sourceNickname;
   final int addedAtMillis;
   final int updatedAtMillis;
@@ -101,14 +103,14 @@ class UserContact {
   }
 
   UserContact copyWith({
-    String? accountPubkeyHex,
+    String? address,
     String? sourceNickname,
     int? addedAtMillis,
     int? updatedAtMillis,
     Object? localNickname = _sentinel,
   }) {
     return UserContact(
-      accountPubkeyHex: accountPubkeyHex ?? this.accountPubkeyHex,
+      address: address ?? this.address,
       sourceNickname: sourceNickname ?? this.sourceNickname,
       addedAtMillis: addedAtMillis ?? this.addedAtMillis,
       updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
@@ -120,7 +122,7 @@ class UserContact {
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'account_pubkey': accountPubkeyHex,
+      'address': address,
       'source_nickname': sourceNickname,
       'local_nickname': localNickname,
       'added_at': addedAtMillis,
@@ -129,9 +131,9 @@ class UserContact {
   }
 
   static UserContact fromJson(Map<String, dynamic> json) {
-    final account = (json['account_pubkey']?.toString().trim()) ?? '';
-    if (account.isEmpty) {
-      throw const FormatException('通讯录账号为空');
+    final address = (json['address']?.toString().trim()) ?? '';
+    if (address.isEmpty) {
+      throw const FormatException('通讯录地址为空');
     }
 
     final sourceNickname = json['source_nickname']?.toString().trim() ?? '';
@@ -140,7 +142,7 @@ class UserContact {
     }
 
     return UserContact(
-      accountPubkeyHex: account,
+      address: address,
       sourceNickname: sourceNickname,
       localNickname: _normalizeOptionalString(json['local_nickname']),
       addedAtMillis: _normalizeInt(json['added_at']),
@@ -221,7 +223,8 @@ class UserProfileService {
 }
 
 class UserContactService {
-  static const String _kContacts = 'user.contacts.items.v1';
+  static const String _kContacts = 'user.contacts.items.v2';
+  static const int _ss58Prefix = 2027;
 
   Future<List<UserContact>> getContacts() async {
     final prefs = await SharedPreferences.getInstance();
@@ -252,19 +255,19 @@ class UserContactService {
     required String name,
     String? selfAddress,
   }) async {
-    final incomingAccount = address.trim();
-    if (incomingAccount.isEmpty || name.trim().isEmpty) {
+    final incomingAddress = normalizeAddress(address);
+    if (incomingAddress.isEmpty || name.trim().isEmpty) {
       throw const FormatException('地址或名称为空');
     }
     final self = selfAddress?.trim() ?? '';
-    if (self.isNotEmpty && incomingAccount == self) {
+    if (self.isNotEmpty && incomingAddress == normalizeAddress(self)) {
       throw const FormatException('不能把自己加入通讯录');
     }
 
     final contacts = (await getContacts()).toList(growable: true);
     final now = DateTime.now().millisecondsSinceEpoch;
     final index =
-        contacts.indexWhere((item) => item.accountPubkeyHex == incomingAccount);
+        contacts.indexWhere((item) => item.address == incomingAddress);
     if (index >= 0) {
       final updated = contacts[index].copyWith(
         sourceNickname: name.trim(),
@@ -276,7 +279,7 @@ class UserContactService {
     }
 
     final created = UserContact(
-      accountPubkeyHex: incomingAccount,
+      address: incomingAddress,
       sourceNickname: name.trim(),
       addedAtMillis: now,
       updatedAtMillis: now,
@@ -287,13 +290,13 @@ class UserContactService {
   }
 
   Future<List<UserContact>> renameContact(
-    String accountPubkeyHex,
+    String address,
     String localNickname,
   ) async {
-    final normalizedAccount = normalizePubkeyHex(accountPubkeyHex);
+    final normalizedAddress = normalizeAddress(address);
     final contacts = (await getContacts()).toList(growable: true);
-    final index = contacts
-        .indexWhere((item) => item.accountPubkeyHex == normalizedAccount);
+    final index =
+        contacts.indexWhere((item) => item.address == normalizedAddress);
     if (index < 0) {
       throw Exception('未找到联系人');
     }
@@ -315,19 +318,21 @@ class UserContactService {
     await prefs.setString(_kContacts, jsonEncode(payload));
   }
 
-  static String normalizePubkeyHex(String value) {
-    var normalized = value.trim().toLowerCase();
+  static String normalizeAddress(String value) {
+    final normalized = value.trim();
     if (normalized.isEmpty) {
       return '';
     }
-    if (!normalized.startsWith('0x')) {
-      normalized = '0x$normalized';
+    try {
+      final decoded = Keyring().decodeAddress(normalized);
+      final reEncoded = Keyring().encodeAddress(decoded, _ss58Prefix);
+      if (reEncoded != normalized) {
+        throw const FormatException('联系人地址不是本链 SS58 地址');
+      }
+      return normalized;
+    } catch (_) {
+      throw const FormatException('联系人地址不是本链 SS58 地址');
     }
-    final body = normalized.substring(2);
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(body)) {
-      throw const FormatException('公钥格式错误');
-    }
-    return normalized;
   }
 }
 
