@@ -33,9 +33,9 @@ home/
 ## 开发脚本语义
 
 当前约定：
-1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，会保留现有 `node-data`，但仍使用 `dev-chain` feature 拉起 `--chain dev`，并把启动所用 WASM 固定保存到 `citizenchain/target/wasm/`
-2. `citizenchain/scripts/clean-dev.sh` 负责“清库后启动开发链”，会先删除应用数据目录，再使用 `dev-chain` feature 启动全新创世的开发链
-3. 两个脚本都属于开发用途，区别只在于是否先删除本地应用数据目录，而不是是否使用开发链
+1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，会保留现有 `node-data`，启动时使用当前源码构建 runtime，不从 GitHub CI 下载 wasm 产物
+2. `citizenchain/scripts/clean-run.sh` 负责“保留节点身份和密钥、只清区块数据库后重新创世启动”，fresh genesis 的 runtime code 来自当前源码，不从 GitHub CI 下载 wasm 产物
+3. runtime 正式升级只走链上 `System.set_code`，本地开发启动脚本不承担下载或内置最新 CI wasm 的职责
 
 WASM CI 版本规则：
 - `citizenchain-wasm.yml` 编译前必须查询链上 `state_getRuntimeVersion.specVersion`

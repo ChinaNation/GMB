@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# 杀进程 + 下载最新 CI WASM + 生成 fresh genesis + 清链数据 + 启动本机新链
+# 杀进程 + 生成 fresh genesis + 清链数据 + 启动本机新链
 set -euo pipefail
 
 APP_DATA_DIR="$HOME/Library/Application Support/org.chinanation.citizenchain.desktop"
-REPO="ChinaNation/GMB"
-WORKFLOW="CitizenChain WASM"
-ARTIFACT_NAME="citizenchain-wasm"
 
 cleanup() {
     echo ""
@@ -24,35 +21,14 @@ lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 1
 echo "    已清理"
 
-# ── 2. 下载最新 CI WASM（必须成功）──
+# ── 2. 准备本地源码 fresh genesis ──
 CHAIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WASM_DIR="$CHAIN_ROOT/target/ci-wasm"
 FRESH_SPEC_DIR="$CHAIN_ROOT/target/fresh-genesis"
 FRESH_SPEC="$FRESH_SPEC_DIR/citizenchain.fresh.raw.json"
-echo "==> 查询最新成功的 WASM CI..."
-RUN_ID=$(gh run list \
-    --repo "$REPO" \
-    --workflow "$WORKFLOW" \
-    --status success \
-    --limit 1 \
-    --json databaseId \
-    --jq '.[0].databaseId')
-if [[ -z "${RUN_ID:-}" || "$RUN_ID" == "null" ]]; then
-    echo "错误：未找到成功的 $WORKFLOW 运行"
-    exit 1
-fi
-echo "    最新成功 run: $RUN_ID"
-
-echo "==> 下载最新 WASM..."
-rm -rf "$WASM_DIR"
-mkdir -p "$WASM_DIR"
-if ! gh run download "$RUN_ID" --name "$ARTIFACT_NAME" --dir "$WASM_DIR" -R "$REPO"; then
-    echo "错误：无法下载 WASM。gh auth login 后重试。"
-    exit 1
-fi
-export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
-[ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
-echo "    WASM: $WASM_FILE"
+# 本地 clean-run 只使用当前源码生成创世 runtime code。
+# runtime 正式升级走链上 setCode，不从 GitHub CI 下载 wasm 产物。
+unset WASM_FILE
+echo "==> 使用本地源码生成 fresh genesis，不下载 GitHub CI WASM..."
 
 # ── 3. 彻底清除所有编译缓存 ──
 echo "==> 清除编译缓存..."
@@ -69,14 +45,12 @@ echo "==> 生成 fresh genesis raw chainspec..."
 mkdir -p "$FRESH_SPEC_DIR"
 FROZEN_SPEC="$CHAIN_ROOT/node/chainspecs/citizenchain.raw.json"
 cargo run -- export-chain-spec --chain citizenchain-fresh --raw > "$FRESH_SPEC.tmp"
-python3 - "$WASM_FILE" "$FRESH_SPEC.tmp" "$FROZEN_SPEC" <<'PY'
+python3 - "$FRESH_SPEC.tmp" "$FROZEN_SPEC" <<'PY'
 import hashlib
 import json
 import sys
 
-wasm_file, spec_file, frozen_file = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(wasm_file, "rb") as fh:
-    wasm = fh.read()
+spec_file, frozen_file = sys.argv[1], sys.argv[2]
 with open(spec_file, "r", encoding="utf-8") as fh:
     spec = json.load(fh)
 with open(frozen_file, "r", encoding="utf-8") as fh:
@@ -104,16 +78,10 @@ code_hex = top.get("0x3a636f6465")
 if not code_hex:
     raise SystemExit("错误：fresh chainspec 缺少 genesis :code")
 code = bytes.fromhex(code_hex[2:] if code_hex.startswith("0x") else code_hex)
-if code != wasm:
-    raise SystemExit(
-        "错误：fresh chainspec 的 genesis :code 与最新 CI WASM 不一致\n"
-        f"  wasm blake2_256=0x{hashlib.blake2b(wasm, digest_size=32).hexdigest()}\n"
-        f"  code blake2_256=0x{hashlib.blake2b(code, digest_size=32).hexdigest()}"
-    )
 
 print(f"    bootNodes={len(bootnodes)} (沿用冻结 spec)")
-print(f"    wasm/code size={len(code)}")
-print(f"    wasm/code blake2_256=0x{hashlib.blake2b(code, digest_size=32).hexdigest()}")
+print(f"    runtime code size={len(code)}")
+print(f"    runtime code blake2_256=0x{hashlib.blake2b(code, digest_size=32).hexdigest()}")
 PY
 mv "$FRESH_SPEC.tmp" "$FRESH_SPEC"
 echo "    fresh chainspec: $FRESH_SPEC"

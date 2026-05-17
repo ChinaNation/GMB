@@ -21,16 +21,15 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
 
 ### 2.2 node 桌面安装包
 
-- workflow：
-  - `.github/workflows/citizenchain-linux.yml`
-  - `.github/workflows/citizenchain-macos.yml`
-  - `.github/workflows/citizenchain-windows.yml`
+- workflow：`.github/workflows/citizenchain.yml`
 - 主要命中目录：
-  - 三端打包 workflow 只允许手动触发，不再由 `CitizenChain WASM` 成功后自动触发
+  - 桌面端 workflow 只允许手动触发，不再由 `CitizenChain WASM` 成功后自动触发
+  - 单个 workflow 通过 matrix 同时构建 Linux / Windows / macOS，三端使用同一个桌面端版本号
   - 三端安装包不下载、不内置最新 `citizenchain-wasm` artifact；现有链运行 runtime 以链上 `System.set_code` 为准
-  - 本地重新创世、开发启动或 runtime 升级需要使用最新 WASM 时，由对应脚本或升级入口显式下载/选择 WASM
-  - Linux CI 成功上传本次 `公民链-linux` artifact 后，顺序滚动部署同一个 deb 到 6 台固定服务器；部署失败时保留当前 run 和 artifact 供排查
-  - macOS/Windows CI 成功上传新产物后删除同 workflow 的上一条已完成 CI run；Linux CI 必须在 6 台服务器全部部署成功后才删除上一条 Linux CI run
+  - 本地开发启动和重新创世脚本使用当前源码构建 runtime，不从 GitHub CI 下载 WASM
+  - CI 成功后上传三端 artifact，并发布到 GitHub Release，供桌面端自动更新链路使用
+  - Linux 产物继续包含 `公民链.deb`，成功上传本次 `公民链-linux` artifact 后顺序滚动部署同一个 deb 到 6 台固定服务器；部署失败时保留当前 run 和 artifact 供排查
+  - 三端发布与 Linux 服务器部署都成功后，删除上一条 `citizenchain.yml` 已完成 CI run
 - 代码目录：
   - `citizenchain/node/**`
   - `citizenchain/node/frontend/**`

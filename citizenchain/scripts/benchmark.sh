@@ -9,33 +9,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHAIN_ROOT="$(dirname "$SCRIPT_DIR")"
-WASM_DIR="$CHAIN_ROOT/target/ci-wasm"
 
-# ── 1. 下载最新 CI WASM（必须成功）──
-echo "==> 下载最新 WASM..."
-rm -rf "$WASM_DIR"
-mkdir -p "$WASM_DIR"
-if ! gh run download --name citizenchain-wasm --dir "$WASM_DIR" -R ChinaNation/GMB; then
-    echo "错误：无法下载 WASM。gh auth login 后重试。"
-    exit 1
-fi
-export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
-[ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
-echo "    WASM: $WASM_FILE"
+# benchmark 必须基于当前源码生成 weights，不从 GitHub CI 下载 wasm。
+# runtime 正式升级走链上 setCode，CI wasm 只供链上升级流程显式使用。
+unset WASM_FILE
+echo "==> 使用本地源码构建 benchmark runtime，不下载 GitHub CI WASM..."
 
-# ── 2. 清除 runtime 缓存，用 CI WASM 编译 ──
+# ── 1. 清除 runtime 缓存，用当前源码编译 ──
 echo "==> 清除 runtime 缓存..."
 find "$CHAIN_ROOT/target" -maxdepth 3 -type d -name "citizenchain-*" -path "*/build/*" -exec rm -rf {} + 2>/dev/null || true
 find "$CHAIN_ROOT/target" -maxdepth 2 -type d -name "citizenchain" -path "*/wbuild/*" -exec rm -rf {} + 2>/dev/null || true
 echo "    已清除"
 
-# ── 3. 编译带 benchmark feature 的 node ──
+# ── 2. 编译带 benchmark feature 的 node ──
 echo "==> 编译 benchmark node（release）..."
 cd "$CHAIN_ROOT"
 cargo build --release --features runtime-benchmarks
 echo "    编译完成"
 
-# ── 4. 跑 benchmark ──
+# ── 3. 跑 benchmark ──
 PALLETS=(
     "shengbank_interest:runtime/issuance/shengbank-interest/src/weights.rs"
     "fullnode_issuance:runtime/issuance/fullnode-issuance/src/weights.rs"

@@ -1,0 +1,354 @@
+name: CitizenChain
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: citizenchain-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CITIZENCHAIN_DESKTOP_VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  build-desktop:
+    name: 打包公民链桌面端 (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            name: Linux
+            os: ubuntu-latest
+            artifact: 公民链-linux
+            cache_key: citizenchain-linux
+          - platform: windows
+            name: Windows
+            os: windows-latest
+            artifact: 公民链-windows
+            cache_key: citizenchain-windows
+          - platform: macos
+            name: macOS
+            os: macos-latest
+            artifact: 公民链-macos
+            cache_key: citizenchain-macos
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@1.94.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: citizenchain/node/frontend/package-lock.json
+
+      - name: 同步桌面端版本
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const version = process.env.CITIZENCHAIN_DESKTOP_VERSION;
+
+          const cargoPath = 'citizenchain/Cargo.toml';
+          let cargo = fs.readFileSync(cargoPath, 'utf8');
+          cargo = cargo.replace(
+            /(\[workspace\.package\][\s\S]*?\nversion\s*=\s*")[^"]+(")/,
+            `$1${version}$2`
+          );
+          fs.writeFileSync(cargoPath, cargo);
+
+          const tauriPath = 'citizenchain/node/tauri.conf.json';
+          const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+          tauri.version = version;
+          fs.writeFileSync(tauriPath, `${JSON.stringify(tauri, null, 2)}\n`);
+
+          console.log(`桌面端本次发布版本: ${version}`);
+          NODE
+
+      - name: 安装 Linux 构建依赖
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            llvm \
+            llvm-dev \
+            libclang-dev \
+            protobuf-compiler \
+            libpam0g-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: 配置 Linux libclang 环境变量
+        if: matrix.platform == 'linux'
+        run: |
+          echo "LLVM_CONFIG_PATH=$(command -v llvm-config)" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+          echo "PROTOC=$(command -v protoc)" >> "$GITHUB_ENV"
+
+      - name: 安装 macOS 构建依赖
+        if: matrix.platform == 'macos'
+        run: brew install protobuf llvm
+
+      - name: 配置 macOS LLVM 环境变量
+        if: matrix.platform == 'macos'
+        run: |
+          echo "LLVM_CONFIG_PATH=$(brew --prefix llvm)/bin/llvm-config" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
+      - name: 安装 Windows 构建依赖
+        if: matrix.platform == 'windows'
+        run: |
+          choco install protoc -y
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
+
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.cache_key }}
+          workspaces: citizenchain -> target
+
+      - name: 安装前端依赖并构建
+        run: |
+          npm --prefix citizenchain/node/frontend ci
+          npm --prefix citizenchain/node/frontend run build
+
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Tauri 打包
+        working-directory: citizenchain/node
+        run: cargo tauri build --ci
+
+      - name: 整理 Linux 产物
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p citizenchain-release
+
+          deb_file="$(find citizenchain/target/release/bundle/deb -name '*.deb' | head -1)"
+          if [ -z "$deb_file" ]; then
+            echo "::error::未找到 Linux deb 安装包。"
+            exit 1
+          fi
+          cp "$deb_file" "citizenchain-release/公民链.deb"
+
+          appimage_file=""
+          if [ -d citizenchain/target/release/bundle/appimage ]; then
+            appimage_file="$(find citizenchain/target/release/bundle/appimage -name '*.AppImage' | head -1)"
+          fi
+          if [ -n "$appimage_file" ]; then
+            cp "$appimage_file" "citizenchain-release/公民链.AppImage"
+          fi
+
+          ls -lh citizenchain-release
+
+      - name: 整理 macOS 产物
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p citizenchain-release
+
+          dmg_file="$(find citizenchain/target/release/bundle/dmg -name '*.dmg' | head -1)"
+          if [ -z "$dmg_file" ]; then
+            echo "::error::未找到 macOS dmg 安装包。"
+            exit 1
+          fi
+          cp "$dmg_file" "citizenchain-release/公民链.dmg"
+
+          ls -lh citizenchain-release
+
+      - name: 整理 Windows 产物
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force citizenchain-release | Out-Null
+
+          $exe = Get-ChildItem -Path "citizenchain/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          if ($null -eq $exe) {
+            Write-Error "未找到 Windows exe 安装包。"
+            exit 1
+          }
+
+          Copy-Item $exe.FullName "citizenchain-release/公民链.exe"
+          Get-ChildItem citizenchain-release | Format-Table Name, Length
+
+      - name: 上传桌面端产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: citizenchain-release/*
+          retention-days: 30
+          overwrite: true
+
+  publish-github-release:
+    name: 发布桌面端 GitHub Release
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载三平台产物
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: 发布到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DESKTOP_VERSION: ${{ env.CITIZENCHAIN_DESKTOP_VERSION }}
+        run: |
+          set -euo pipefail
+
+          tag="citizenchain-v${DESKTOP_VERSION}"
+          title="CitizenChain ${DESKTOP_VERSION}"
+          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布只包含 Linux、Windows、macOS 桌面端安装包，runtime WASM 继续走链上 setCode 协议升级。"
+
+          mapfile -t assets < <(find release-artifacts -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "::error::没有找到可发布的桌面端产物。"
+            exit 1
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+          else
+            gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+          fi
+
+  deploy-linux-servers:
+    name: 部署公民链.deb 到 6 台服务器
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    env:
+      CITIZENCHAIN_DEPLOY_USER: ${{ secrets.CITIZENCHAIN_DEPLOY_USER || vars.CITIZENCHAIN_DEPLOY_USER || 'ubuntu' }}
+      CITIZENCHAIN_DEPLOY_SSH_KEY: ${{ secrets.CITIZENCHAIN_DEPLOY_SSH_KEY || secrets.SFID_DEPLOY_SSH_KEY || secrets.CITIZENCHAIN_SSH_KEY }}
+      CITIZENCHAIN_DEPLOY_SERVERS: |
+        147.224.14.117
+        64.181.239.233
+        158.180.91.13
+        168.110.119.55
+        140.83.56.145
+        217.142.255.172
+    steps:
+      - name: 拉取部署配置
+        uses: actions/checkout@v4
+
+      - name: 下载本次 Linux 安装包
+        uses: actions/download-artifact@v4
+        with:
+          name: 公民链-linux
+          path: linux-package
+
+      - name: 滚动部署到服务器
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CITIZENCHAIN_DEPLOY_SSH_KEY:-}" ]; then
+            echo "::error::缺少 CITIZENCHAIN_DEPLOY_SSH_KEY、SFID_DEPLOY_SSH_KEY 或 CITIZENCHAIN_SSH_KEY，无法部署服务器。"
+            exit 1
+          fi
+
+          deb_file="$(find linux-package -name '*.deb' | head -1)"
+          if [ -z "$deb_file" ]; then
+            echo "::error::未找到本次 Linux CI 产出的 deb 安装包。"
+            exit 1
+          fi
+
+          ssh_dir="$RUNNER_TEMP/citizenchain-linux-deploy-ssh"
+          mkdir -p "$ssh_dir"
+          key_file="$ssh_dir/id_ed25519"
+          known_hosts_file="$ssh_dir/known_hosts"
+          printf '%s\n' "$CITIZENCHAIN_DEPLOY_SSH_KEY" | tr -d '\r' > "$key_file"
+          chmod 600 "$key_file"
+          : > "$known_hosts_file"
+
+          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
+            ssh-keyscan -H "$server_ip" >> "$known_hosts_file"
+          done
+
+          # 中文注释：6 台服务器必须顺序滚动部署，避免同时重启导致链服务整体抖动。
+          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
+            ssh_target="$CITIZENCHAIN_DEPLOY_USER@$server_ip"
+            echo "::group::部署 $ssh_target"
+
+            ssh_opts=(
+              -i "$key_file"
+              -o BatchMode=yes
+              -o StrictHostKeyChecking=yes
+              -o UserKnownHostsFile="$known_hosts_file"
+              -o ConnectTimeout=30
+              -o ServerAliveInterval=10
+              -o ServerAliveCountMax=6
+            )
+
+            ssh "${ssh_opts[@]}" "$ssh_target" "
+              set -e
+              sudo useradd --system --no-create-home --shell /usr/sbin/nologin citizenchain 2>/dev/null || true
+              sudo mkdir -p /opt/citizenchain/data
+              sudo chown -R citizenchain:citizenchain /opt/citizenchain
+              sudo iptables -C INPUT -p tcp --dport 30333 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT -p tcp --dport 30333 -j ACCEPT
+              sudo sh -c 'iptables-save > /etc/iptables/rules.v4' 2>/dev/null || true
+            "
+
+            scp "${ssh_opts[@]}" citizenchain/scripts/citizenchain-node.service "$ssh_target:/tmp/citizenchain-node.service"
+            ssh "${ssh_opts[@]}" "$ssh_target" "
+              set -e
+              sudo mv /tmp/citizenchain-node.service /etc/systemd/system/citizenchain-node.service
+              sudo systemctl daemon-reload
+              sudo systemctl enable citizenchain-node
+              sudo systemctl stop citizenchain-node 2>/dev/null || true
+            "
+
+            scp "${ssh_opts[@]}" "$deb_file" "$ssh_target:/tmp/citizenchain.deb"
+            ssh "${ssh_opts[@]}" "$ssh_target" "
+              set -e
+              sudo dpkg -i /tmp/citizenchain.deb || sudo apt-get install -f -y
+              rm -f /tmp/citizenchain.deb
+              sudo systemctl start citizenchain-node
+              sleep 5
+              sudo systemctl is-active --quiet citizenchain-node
+            "
+
+            echo "部署完成: $ssh_target"
+            echo "::endgroup::"
+          done
+
+  cleanup-old-runs:
+    name: 删除上一次 CitizenChain CI
+    needs:
+      - publish-github-release
+      - deploy-linux-servers
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除上一次 CI 记录
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_FILE: citizenchain.yml
+        run: |
+          previous_run_id="$(
+            gh api "repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILE/runs?branch=main&status=completed&per_page=10" \
+              --jq '.workflow_runs[0].id // empty'
+          )"
+          if [ -z "$previous_run_id" ]; then
+            echo "没有可删除的上一条 CitizenChain CI"
+            exit 0
+          fi
+          echo "删除上一条 CitizenChain CI run: $previous_run_id"
+          gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$previous_run_id"

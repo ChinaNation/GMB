@@ -16,26 +16,15 @@ trap cleanup EXIT INT TERM HUP
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 TARGET_DIR="$REPO_ROOT/target"
-WASM_DIR="$TARGET_DIR/wasm"
 
-# ── 1. 清空 target/wasm/ 下所有文件 ──
-echo "==> 清空 target/wasm/..."
-rm -rf "$WASM_DIR"/*
-
-# ── 2. 下载最新 CI WASM 到 target/wasm ──
-echo "==> 下载最新 WASM..."
-mkdir -p "$WASM_DIR"
-if ! gh run download --name citizenchain-wasm --dir "$WASM_DIR" -R ChinaNation/GMB; then
-    echo "错误：无法下载 WASM。gh auth login 后重试。"
-    exit 1
-fi
-export WASM_FILE="$WASM_DIR/citizenchain.compact.compressed.wasm"
-[ -f "$WASM_FILE" ] || { echo "错误：WASM 文件不存在"; exit 1; }
-echo "    WASM: $WASM_FILE"
+# 本地启动脚本只使用当前源码构建 runtime WASM。
+# runtime 正式升级走链上 setCode，桌面端启动不再从 GitHub CI 下载 wasm 产物。
+unset WASM_FILE
+mkdir -p "$TARGET_DIR"
+echo "==> 使用本地源码构建 runtime WASM，不下载 GitHub CI WASM..."
 echo "    节点启动产物目录: $TARGET_DIR"
 
-
-# ── 3. 启动 ──
+# ── 启动 ──
 cd "$REPO_ROOT/node"
 echo "==> 启动公民链..."
 cargo tauri dev
