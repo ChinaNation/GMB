@@ -50,6 +50,16 @@ void main() {
     return out;
   }
 
+  Uint8List extrinsicFailedEvent(int moduleIndex, int errorIndex) {
+    return Uint8List.fromList([
+      0x04, // Vec<EventRecord> 长度 = 1
+      0x00, 0, 0, 0, 0, // Phase::ApplyExtrinsic(0)
+      0x00, 0x01, // System::ExtrinsicFailed
+      0x03, moduleIndex, errorIndex, 0, 0, 0, // DispatchError::Module
+      0, 0, 0, 0, // DispatchInfo 余量，解析失败原因不依赖这些字段
+    ]);
+  }
+
   Uint8List personalAccountBytes() {
     return Uint8List.fromList([
       ...List<int>.filled(32, 0xc2),
@@ -64,12 +74,15 @@ void main() {
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
-      3,
-      PersonalManageStorageCodec.subjectKindPersonalDuoqian,
+      3, // ORG_REN
+      2, // AdminSubjectKind::PersonalDuoqian
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
-      ...u32Le(2),
+      ...List<int>.filled(32, 0x44), // creator
+      ...u32Le(100), // created_at
+      ...u32Le(101), // updated_at
+      1, // Active
     ]);
   }
 
@@ -151,18 +164,46 @@ void main() {
       final adminKey = '0x${hexOf(PersonalManageStorageCodec.adminSubjectKey(
         PersonalManageStorageCodec.subjectIdFromAccountHex(address),
       ))}';
+      final thresholdKey =
+          '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
+        storageName: 'ActiveDynamicThresholds',
+        org: 3,
+        subjectId: PersonalManageStorageCodec.subjectIdFromAccountHex(address),
+      ))}';
       rpc.responses[personalKey] = personalAccountBytes();
       rpc.responses[adminKey] = adminSubjectBytes(
         admin1: List<int>.filled(32, 0xcc),
         admin2: List<int>.filled(32, 0xdd),
       );
+      rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
       final info = await service.fetchPersonalAccount(address);
 
       expect(info, isNotNull);
       expect(info!.adminPubkeys, ['cc' * 32, 'dd' * 32]);
+      expect(info.threshold, 2);
       expect(info.status, DuoqianStatus.active);
-      expect(rpc.requestedKeys, [personalKey, adminKey]);
+      expect(rpc.requestedKeys, [personalKey, adminKey, thresholdKey]);
+    });
+
+    test('describes in-block PersonalManage dispatch failure', () {
+      final failure =
+          ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(7, 5));
+
+      expect(failure, isNotNull);
+      expect(
+          failure!.description, contains('PersonalManage.InsufficientAmount'));
+      expect(failure.description, contains('余额不足'));
+    });
+
+    test('describes stale AdminsChange subject failure', () {
+      final failure =
+          ChainRpc().findExtrinsicFailureInEvents(extrinsicFailedEvent(12, 11));
+
+      expect(failure, isNotNull);
+      expect(failure!.description,
+          contains('AdminsChange.InstitutionAlreadyExists'));
+      expect(failure.description, contains('当前状态'));
     });
   });
 }

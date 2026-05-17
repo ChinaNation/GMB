@@ -6,7 +6,7 @@ import 'package:polkadart/polkadart.dart' show Hasher;
 /// 个人多签账户生命周期快照。
 ///
 /// `PersonalManage::PersonalDuoqians` 只保存个人账户生命周期元数据；
-/// 管理员和阈值真源仍在 `AdminsChange::Subjects`。
+/// 管理员真源在 `AdminsChange::Subjects`，动态阈值真源在 `InternalVote`。
 class PersonalManageAccountSnapshot {
   const PersonalManageAccountSnapshot({
     required this.creatorHex,
@@ -24,13 +24,13 @@ class PersonalManageAccountSnapshot {
 /// 管理员与阈值快照。
 class PersonalManageAdminSnapshot {
   const PersonalManageAdminSnapshot({
+    required this.org,
     required this.adminCount,
-    required this.threshold,
     required this.adminPubkeys,
   });
 
+  final int org;
   final int adminCount;
-  final int threshold;
   final List<String> adminPubkeys;
 }
 
@@ -63,6 +63,19 @@ class PersonalManageStorageCodec {
     return storageMapKey('AdminsChange', 'Subjects', subjectId);
   }
 
+  static Uint8List dynamicThresholdKey({
+    required String storageName,
+    required int org,
+    required Uint8List subjectId,
+  }) {
+    return storageDoubleMapKey(
+      'InternalVote',
+      storageName,
+      Uint8List.fromList([org]),
+      subjectId,
+    );
+  }
+
   static PersonalManageAccountSnapshot? decodePersonalDuoqian(
     Uint8List data,
   ) {
@@ -87,7 +100,9 @@ class PersonalManageStorageCodec {
 
   static PersonalManageAdminSnapshot? decodeAdminSubject(Uint8List data) {
     if (data.length <= 2) return null;
-    var offset = 2; // org + AdminSubjectKind
+    var offset = 0;
+    final org = data[offset++];
+    offset++; // AdminSubjectKind
     final (count, lenSize) = readCompactU32(data, offset);
     offset += lenSize;
     final admins = <String>[];
@@ -96,13 +111,19 @@ class PersonalManageStorageCodec {
       admins.add(hexEncode(data.sublist(offset, offset + 32)));
       offset += 32;
     }
-    if (offset + 4 > data.length) return null;
-    final threshold = readU32Le(data, offset);
+    // 中文注释：AdminsChange::Subjects 已不保存 threshold；
+    // 后续字段是 creator/created_at/updated_at/status，阈值必须另查 InternalVote。
+    if (offset + 32 + 4 + 4 + 1 > data.length) return null;
     return PersonalManageAdminSnapshot(
+      org: org,
       adminCount: count,
-      threshold: threshold,
       adminPubkeys: admins,
     );
+  }
+
+  static int? decodeDynamicThreshold(Uint8List? data) {
+    if (data == null || data.length < 4) return null;
+    return readU32Le(data, 0);
   }
 
   static Uint8List storageMapKey(
@@ -121,6 +142,33 @@ class PersonalManageStorageCodec {
     result.setAll(offset, storageHash);
     offset += storageHash.length;
     result.setAll(offset, keyHash);
+    return result;
+  }
+
+  static Uint8List storageDoubleMapKey(
+    String palletName,
+    String storageName,
+    Uint8List key1Data,
+    Uint8List key2Data,
+  ) {
+    final palletHash = Hasher.twoxx128.hashString(palletName);
+    final storageHash = Hasher.twoxx128.hashString(storageName);
+    final key1Hash = blake2128Concat(key1Data);
+    final key2Hash = blake2128Concat(key2Data);
+    final result = Uint8List(
+      palletHash.length +
+          storageHash.length +
+          key1Hash.length +
+          key2Hash.length,
+    );
+    var offset = 0;
+    result.setAll(offset, palletHash);
+    offset += palletHash.length;
+    result.setAll(offset, storageHash);
+    offset += storageHash.length;
+    result.setAll(offset, key1Hash);
+    offset += key1Hash.length;
+    result.setAll(offset, key2Hash);
     return result;
   }
 

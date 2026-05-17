@@ -206,12 +206,36 @@ class PersonalManageService {
     if (adminData == null) return null;
     final admin = PersonalManageStorageCodec.decodeAdminSubject(adminData);
     if (admin == null) return null;
+    final threshold = await _fetchPersonalDynamicThreshold(
+      org: admin.org,
+      subjectId: subjectId,
+    );
     return DuoqianAccountInfo(
       adminCount: admin.adminCount,
-      threshold: admin.threshold,
+      threshold: threshold,
       adminPubkeys: admin.adminPubkeys,
       status: _statusFromByte(personal.statusByte),
     );
+  }
+
+  Future<int?> _fetchPersonalDynamicThreshold({
+    required int org,
+    required Uint8List subjectId,
+  }) async {
+    for (final storageName in const [
+      'ActiveDynamicThresholds',
+      'PendingDynamicThresholds',
+    ]) {
+      final key = PersonalManageStorageCodec.dynamicThresholdKey(
+        storageName: storageName,
+        org: org,
+        subjectId: subjectId,
+      );
+      final data = await _rpc.fetchStorage('0x${_hexEncode(key)}');
+      final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(data);
+      if (threshold != null) return threshold;
+    }
+    return null;
   }
 
   /// 从 ProposalData 解码 PersonalManage 创建或关闭提案。
@@ -309,6 +333,10 @@ class PersonalManageService {
     if (events == null || events.isEmpty) {
       throw StateError('交易已入块，但未读取到 System.Events，不能确认个人多签创建提案');
     }
+    final failure = _rpc.findExtrinsicFailureInEvents(events);
+    if (failure != null) {
+      throw StateError(failure.description);
+    }
     final found = _findPersonalDuoqianProposedEvent(
       events,
       accountName: accountName,
@@ -319,7 +347,7 @@ class PersonalManageService {
     );
     if (found == null) {
       throw StateError(
-        '交易已入块，但未找到 PersonalManage.PersonalDuoqianProposed 事件，个人多签创建失败',
+        '交易已入块，但未确认 PersonalManage.PersonalDuoqianProposed，也未检测到链上失败事件，请检查当前区块事件',
       );
     }
     return found;

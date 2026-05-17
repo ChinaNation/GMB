@@ -410,10 +410,10 @@ fn dynamic_subjects_can_be_closed() {
             assert_ok!(AdminsChange::do_activate_subject(institution));
             assert_ok!(AdminsChange::do_close_subject(institution));
 
-            let subject =
-                Subjects::<Test>::get(institution).expect("dynamic subject should remain stored");
-            assert_eq!(subject.kind, kind);
-            assert_eq!(subject.status, AdminSubjectStatus::Closed);
+            assert!(
+                Subjects::<Test>::get(institution).is_none(),
+                "dynamic subject should be removed after close"
+            );
             assert!(!AdminsChange::is_active_subject_admin(
                 org,
                 institution,
@@ -421,6 +421,42 @@ fn dynamic_subjects_can_be_closed() {
             ));
             assert!(AdminsChange::active_subject_admins(org, institution).is_none());
         }
+    });
+}
+
+#[test]
+fn runtime_upgrade_removes_legacy_closed_dynamic_subjects() {
+    new_test_ext().execute_with(|| {
+        let dynamic = pending_subject_id();
+        let builtin = nrc_pallet_id();
+        let admin_a = AccountId32::new([241u8; 32]);
+        let admin_b = AccountId32::new([242u8; 32]);
+
+        assert_ok!(AdminsChange::do_create_pending_subject(
+            dynamic,
+            ORG_REN,
+            AdminSubjectKind::PersonalDuoqian,
+            vec![admin_a.clone(), admin_b],
+            admin_a,
+        ));
+        Subjects::<Test>::mutate(dynamic, |maybe| {
+            let subject = maybe.as_mut().expect("dynamic subject should exist");
+            subject.status = AdminSubjectStatus::Closed;
+        });
+        Subjects::<Test>::mutate(builtin, |maybe| {
+            let subject = maybe.as_mut().expect("builtin subject should exist");
+            subject.status = AdminSubjectStatus::Closed;
+        });
+        frame_support::traits::StorageVersion::new(3).put::<AdminsChange>();
+
+        let _ = AdminsChange::on_runtime_upgrade();
+
+        assert!(Subjects::<Test>::get(dynamic).is_none());
+        assert!(Subjects::<Test>::get(builtin).is_some());
+        assert_eq!(
+            frame_support::traits::StorageVersion::get::<AdminsChange>(),
+            frame_support::traits::StorageVersion::new(4)
+        );
     });
 }
 

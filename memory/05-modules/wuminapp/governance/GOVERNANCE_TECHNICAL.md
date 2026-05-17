@@ -355,6 +355,7 @@ message = blake2_256(SCALE.encode(payload))
 4. `subject_id` 按主体类型派生：内置治理机构为 `0x01 + sfid_number`，个人多签为 `0x03 + AccountId32`，机构账户为 `0x05 + AccountId32`；`0x02 SfidInstitution` 只用于归属/检索，不进入管理员更换。
 5. 返回 SCALE 编码的 `AdminSubject { org, kind, admins, creator, created_at, updated_at, status }`。
 6. 阈值不再来自 `AdminsChange.Subjects`；治理机构用固定制度阈值，个人多签/机构账户从 `InternalVote.ActiveDynamicThresholds` 读取。
+   `AdminsChange.Subjects` 的管理员列表后续字段是创建者和生命周期信息，不得作为阈值解码。
 7. 比对当前钱包 `pubkeyHex`（去 0x 前缀、小写）是否在 `admins` 中，确定管理员身份。
 8. 查询结果以内存 `subjectIdHex` 缓存；提交管理员更换、投票执行返回、下拉刷新时清除缓存重新查询。
 
@@ -576,8 +577,8 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 1. 管理员调用 `propose_close` → 投票引擎创建提案
 2. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
-3. 注销投票全员同意后自动执行：`Currency::transfer` 转出全部余额 + 关闭对应机构或个人多签账户
-4. wuminapp 本地继续在统一账户列表展示已注销账户，状态显示“已注销”，不显示余额；用户在详情页点击右上角“删除”后才清理本机数据。
+3. 注销投票全员同意后自动执行：扣链上手续费，把剩余 free 余额转入用户提供的收款地址，并删除对应个人/机构多签当前状态
+4. 链上历史事件和历史提案不删除；wuminapp 本地继续在统一账户列表展示已注销账户，状态显示“已注销”，不显示余额；用户在详情页点击右上角“删除”后才清理本机数据。
 
 ### 8.7 多签转账接入边界
 
@@ -617,6 +618,11 @@ QR 协议、Isar schema、钱包流水、治理聚合页、机构通用服务和
 PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage codec
 统一放入 `lib/governance/personal-manage/`。`lib/governance/organization-manage/` 不再承载这些个人主业务；
 目前仅保留机构多签能力和 `AdminInstitutionCodec` 这类个人/机构都要读取的底层 Subject 解码能力。
+
+2026-05-17 起，个人/机构多签创建类交易在入块后统一检查 `System.Events`：
+先解析 `System.ExtrinsicFailed` 的 runtime 模块错误，再确认对应成功事件。
+因此余额不足、管理员主体残留、机构账户索引占用等链上拒绝会显示真实
+`PersonalManage / AdminsChange / OrganizationManage` 错误，不再落到“未找到成功事件”的泛化提示。
 
 ### 8.9 关键文件
 

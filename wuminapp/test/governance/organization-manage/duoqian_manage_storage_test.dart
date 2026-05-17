@@ -49,12 +49,15 @@ void main() {
     required List<int> admin2,
   }) {
     return Uint8List.fromList([
-      3,
-      DuoqianStorageCodec.subjectKindInstitutionAccount,
+      5, // ORG_OTH
+      3, // AdminSubjectKind::InstitutionAccount
       (2 << 2) & 0xff,
       ...admin1,
       ...admin2,
-      ...u32Le(2),
+      ...List<int>.filled(32, 0x44), // creator
+      ...u32Le(100), // created_at
+      ...u32Le(101), // updated_at
+      1, // Active
     ]);
   }
 
@@ -75,6 +78,13 @@ void main() {
     final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
       DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
     ))}';
+    final thresholdKey = '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
+      storageName: 'ActiveDynamicThresholds',
+      org: 5,
+      subjectId: DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+        address,
+      ),
+    ))}';
     rpc.responses[refKey] = Uint8List.fromList([
       ...compactVec('SFR-AH001-20260507'),
       ...compactVec('主账户'),
@@ -90,6 +100,7 @@ void main() {
       1,
       ...u32Le(100),
     ]);
+    rpc.responses[thresholdKey] = Uint8List.fromList(u32Le(2));
 
     final info = await service.fetchDuoqianAccount(address);
 
@@ -98,6 +109,6 @@ void main() {
     expect(info.threshold, 2);
     expect(info.adminPubkeys, ['aa' * 32, 'bb' * 32]);
     expect(info.status, DuoqianStatus.active);
-    expect(rpc.requestedKeys, [refKey, accountKey, adminKey]);
+    expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
   });
 }

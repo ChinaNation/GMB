@@ -435,8 +435,20 @@ fn close_executes_when_internal_vote_reaches_threshold() {
 
         // amount 1000 → fee = max(1, 10) = 10,beneficiary 收 990
         assert_eq!(Balances::free_balance(&beneficiary_acc), 990);
+        assert_eq!(Balances::free_balance(&dq), 0);
+        let subject = primitives::derive::subject_id_from_account(&dq);
         assert!(!pallet::PersonalDuoqians::<Test>::contains_key(&dq));
         assert!(!pallet::PendingCloseProposal::<Test>::contains_key(&dq));
+        assert!(admins_change::Subjects::<Test>::get(subject).is_none());
+        assert!(internal_vote::ActiveDynamicThresholds::<Test>::get(ORG_REN, subject).is_none());
+
+        assert_ok!(PersonalManage::propose_create(
+            RuntimeOrigin::signed(c),
+            account_name(b"close-active"),
+            admins_vec(3),
+            2,
+            CREATE_AMOUNT,
+        ));
     });
 }
 

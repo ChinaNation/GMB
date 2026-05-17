@@ -65,6 +65,18 @@ class TxPoolWatchEvent {
       kind == TxPoolWatchKind.inBlock || kind == TxPoolWatchKind.finalized;
 }
 
+class ChainExtrinsicFailure {
+  const ChainExtrinsicFailure({
+    required this.moduleIndex,
+    required this.errorIndex,
+    required this.description,
+  });
+
+  final int moduleIndex;
+  final int errorIndex;
+  final String description;
+}
+
 typedef TxPoolWatchCallback = void Function(TxPoolWatchEvent event);
 
 /// citizenchain RPC 客户端。
@@ -523,6 +535,45 @@ class ChainRpc {
     return _hexDecode(_stripHexPrefix(valueHex));
   }
 
+  /// 从 `System.Events` 中提取本区块的 `System.ExtrinsicFailed` 模块错误。
+  ///
+  /// 中文注释：创建类交易已经入块但业务事件缺失时，必须优先回显真实
+  /// DispatchError，不能再把“未找到成功事件”误报成原因。
+  ChainExtrinsicFailure? findExtrinsicFailureInEvents(Uint8List data) {
+    final (_, countSize) = _decodeCompact(data, 0);
+    if (countSize <= 0 || countSize >= data.length) return null;
+
+    for (var offset = countSize; offset + 9 <= data.length; offset++) {
+      final phase = data[offset];
+      var eventOffset = -1;
+      if (phase == 0x00) {
+        // Phase::ApplyExtrinsic(u32)
+        eventOffset = offset + 5;
+      } else if (phase == 0x01 || phase == 0x02) {
+        // Phase::Finalization / Initialization
+        eventOffset = offset + 1;
+      }
+      if (eventOffset < 0 || eventOffset + 8 > data.length) continue;
+      final palletIndex = data[eventOffset];
+      final eventIndex = data[eventOffset + 1];
+      if (palletIndex != 0 || eventIndex != 1) continue;
+
+      final payloadOffset = eventOffset + 2;
+      // DispatchError::Module = 0x03 + pallet_index + [error; 4]
+      if (payloadOffset + 6 > data.length || data[payloadOffset] != 0x03) {
+        continue;
+      }
+      final moduleIndex = data[payloadOffset + 1];
+      final errorIndex = data[payloadOffset + 2];
+      return ChainExtrinsicFailure(
+        moduleIndex: moduleIndex,
+        errorIndex: errorIndex,
+        description: _describeRuntimeModuleError(moduleIndex, errorIndex),
+      );
+    }
+    return null;
+  }
+
   /// 查询链上已打包的 nonce（不含交易池），账户不存在返回 0。
   Future<int> fetchConfirmedNonce(String pubkeyHex) async {
     // 中文注释：轻节点模式优先走原生 `System.Account` 快照，避免 Dart 层继续拼 storage RPC。
@@ -686,6 +737,184 @@ class ChainRpc {
     _cachedCurrentSfidMainPubkeyHex = pubkeyHex;
     return pubkeyHex;
   }
+
+  static (BigInt value, int size) _decodeCompact(Uint8List data, int offset) {
+    if (offset >= data.length) return (BigInt.zero, 0);
+    final first = data[offset];
+    final mode = first & 0x03;
+    if (mode == 0) {
+      return (BigInt.from(first >> 2), 1);
+    }
+    if (mode == 1) {
+      if (offset + 2 > data.length) return (BigInt.zero, 0);
+      final raw = data[offset] | (data[offset + 1] << 8);
+      return (BigInt.from(raw >> 2), 2);
+    }
+    if (mode == 2) {
+      if (offset + 4 > data.length) return (BigInt.zero, 0);
+      var raw = 0;
+      for (var i = 0; i < 4; i++) {
+        raw |= data[offset + i] << (8 * i);
+      }
+      return (BigInt.from(raw >> 2), 4);
+    }
+    final byteLen = (first >> 2) + 4;
+    if (offset + 1 + byteLen > data.length) return (BigInt.zero, 0);
+    var value = BigInt.zero;
+    for (var i = 0; i < byteLen; i++) {
+      value += BigInt.from(data[offset + 1 + i]) << (8 * i);
+    }
+    return (value, 1 + byteLen);
+  }
+
+  static String _describeRuntimeModuleError(int moduleIndex, int errorIndex) {
+    final moduleName = switch (moduleIndex) {
+      7 => 'PersonalManage',
+      12 => 'AdminsChange',
+      17 => 'OrganizationManage',
+      _ => 'Module($moduleIndex)',
+    };
+    final errorName = switch (moduleIndex) {
+      7 => _personalManageErrorName(errorIndex),
+      12 => _adminsChangeErrorName(errorIndex),
+      17 => _organizationManageErrorName(errorIndex),
+      _ => null,
+    };
+    final hint = switch (moduleIndex) {
+      7 => _personalManageErrorHint(errorIndex),
+      12 => _adminsChangeErrorHint(errorIndex),
+      17 => _organizationManageErrorHint(errorIndex),
+      _ => null,
+    };
+    final code = errorName == null
+        ? '$moduleName.error_$errorIndex'
+        : '$moduleName.$errorName';
+    return hint == null ? '链上执行失败：$code' : '链上执行失败：$code，$hint';
+  }
+
+  static String? _personalManageErrorName(int index) => switch (index) {
+        0 => 'IncompleteParameters',
+        1 => 'InvalidAddress',
+        2 => 'AddressReserved',
+        3 => 'DuplicateAdmin',
+        4 => 'InvalidThreshold',
+        5 => 'InsufficientAmount',
+        6 => 'CreateAmountBelowMinimum',
+        7 => 'CloseBalanceBelowMinimum',
+        8 => 'PermissionDenied',
+        9 => 'InvalidAdminCount',
+        16 => 'ReservedBalanceRemaining',
+        20 => 'EmptyPersonalName',
+        21 => 'PersonalDuoqianAlreadyExists',
+        22 => 'CloseAlreadyPending',
+        24 => 'ReserveFailed',
+        26 => 'FeeWithdrawFailed',
+        27 => 'CloseTransferBelowED',
+        28 => 'NotPersonalDuoqian',
+        _ => null,
+      };
+
+  static String? _personalManageErrorHint(int index) => switch (index) {
+        4 => '普通提案阈值必须严格过半且不能超过管理员数量',
+        5 => '发起钱包余额不足，不能覆盖初始资金和链上手续费',
+        6 => '初始资金低于链上最低创建金额',
+        8 => '发起人不是该多签账户管理员',
+        9 => '管理员数量不符合链上规则',
+        16 => '账户仍有保留余额，不能注销',
+        20 => '账户名称不能为空',
+        21 => '个人多签账户当前已存在',
+        22 => '该账户已有注销提案正在进行',
+        24 => '创建资金锁定失败，通常是可用余额不足',
+        26 => '链上手续费扣除失败',
+        27 => '注销转出金额低于链上最小存活余额',
+        _ => null,
+      };
+
+  static String? _adminsChangeErrorName(int index) => switch (index) {
+        0 => 'InvalidInstitution',
+        1 => 'InstitutionOrgMismatch',
+        2 => 'InvalidAdminCount',
+        3 => 'UnauthorizedAdmin',
+        4 => 'AdminSetUnchanged',
+        10 => 'ProposalOrgMismatch',
+        11 => 'InstitutionAlreadyExists',
+        12 => 'SubjectNotPending',
+        13 => 'SubjectNotActive',
+        14 => 'BuiltinSubjectCannotClose',
+        15 => 'InvalidSubjectKind',
+        16 => 'InvalidThreshold',
+        17 => 'DuplicateAdmin',
+        18 => 'InvalidSubjectLifecycleScope',
+        _ => null,
+      };
+
+  static String? _adminsChangeErrorHint(int index) => switch (index) {
+        11 => '管理员主体当前状态已存在；如果是已注销账户，说明链上当前状态还没有完成清理',
+        12 => '管理员主体不是待激活状态',
+        13 => '管理员主体不是激活状态',
+        15 => '管理员主体类型和组织类型不匹配',
+        16 => '动态阈值必须严格过半且不能超过管理员数量',
+        17 => '管理员列表存在重复账户',
+        _ => null,
+      };
+
+  static String? _organizationManageErrorName(int index) => switch (index) {
+        0 => 'IncompleteParameters',
+        1 => 'InvalidAddress',
+        2 => 'AddressReserved',
+        3 => 'AddressAlreadyExists',
+        4 => 'DuplicateAdmin',
+        5 => 'InvalidThreshold',
+        6 => 'InsufficientAmount',
+        7 => 'CreateAmountBelowMinimum',
+        8 => 'AccountInitialAmountBelowMinimum',
+        9 => 'CloseBalanceBelowMinimum',
+        10 => 'PermissionDenied',
+        11 => 'InvalidAdminCount',
+        13 => 'InvalidAdminOrg',
+        14 => 'DuoqianNotFound',
+        15 => 'DuoqianNotActive',
+        16 => 'InvalidBeneficiary',
+        18 => 'InstitutionNotRegistered',
+        20 => 'SfidAlreadyRegistered',
+        21 => 'EmptySfidNumber',
+        22 => 'RegisterNonceAlreadyUsed',
+        25 => 'ReservedBalanceRemaining',
+        30 => 'TransferFailed',
+        32 => 'EmptyAccountName',
+        33 => 'MissingMainAccount',
+        34 => 'MissingFeeAccount',
+        35 => 'DuplicateAccountName',
+        36 => 'InstitutionAlreadyExists',
+        37 => 'NotInstitutionDuoqian',
+        38 => 'EmptyInstitutionAccounts',
+        39 => 'TooManyInstitutionAccounts',
+        40 => 'InitialAmountOverflow',
+        41 => 'ReserveFailed',
+        42 => 'ReserveReleaseFailed',
+        _ => null,
+      };
+
+  static String? _organizationManageErrorHint(int index) => switch (index) {
+        3 => '机构账户地址当前已存在',
+        5 => '普通提案阈值必须严格过半且不能超过管理员数量',
+        6 => '发起钱包余额不足，不能覆盖初始资金和链上手续费',
+        7 => '初始资金低于链上最低创建金额',
+        8 => '机构账户初始余额低于链上最低金额',
+        10 => '发起人不是该机构账户管理员',
+        11 => '管理员数量不符合链上规则',
+        13 => '机构账户管理员组织只能是 ORG_PUP 或 ORG_OTH',
+        18 => 'SFID 机构尚未登记',
+        20 => '该 SFID 账户名已登记',
+        25 => '账户仍有保留余额，不能注销',
+        32 => '账户名称不能为空',
+        33 => '机构创建必须包含主账户',
+        34 => '机构创建必须包含费用账户',
+        35 => '机构账户名称重复',
+        36 => '机构当前已存在',
+        41 => '创建资金锁定失败，通常是可用余额不足',
+        _ => null,
+      };
 
   static Uint8List _buildStorageValueKey(
       String palletName, String storageName) {

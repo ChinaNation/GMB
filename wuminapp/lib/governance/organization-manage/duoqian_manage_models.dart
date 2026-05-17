@@ -63,7 +63,7 @@ enum DuoqianStatus {
 /// 多签账户链上信息。
 ///
 /// 机构状态来自 `OrganizationManage::InstitutionAccounts`，
-/// 管理员和阈值来自 `AdminsChange::Subjects`。
+/// 管理员来自 `AdminsChange::Subjects`，动态阈值来自 `InternalVote`。
 class DuoqianAccountInfo {
   const DuoqianAccountInfo({
     required this.adminCount,
@@ -73,7 +73,7 @@ class DuoqianAccountInfo {
   });
 
   final int adminCount;
-  final int threshold;
+  final int? threshold;
 
   /// 管理员公钥列表（hex，不含 0x 前缀）。
   final List<String> adminPubkeys;

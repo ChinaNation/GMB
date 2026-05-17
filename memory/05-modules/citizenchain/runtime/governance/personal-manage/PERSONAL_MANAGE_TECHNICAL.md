@@ -5,7 +5,7 @@
 - crate 路径:`citizenchain/runtime/governance/personal-manage/`
 - MODULE_TAG:`b"per-mgmt"`(8 字节)
 - 创建日期:2026-05-06(任务卡 B 拆分)
-- 最新更新:2026-05-11(动态阈值由用户输入并交投票引擎保存)
+- 最新更新:2026-05-17(注销成功后清空资金并删除当前状态，可用相同 creator + account_name 重新注册)
 - 关联 ADR:ADR-009(personal-manage 拆分)、ADR-010(SubjectId 协议)、ADR-015(账户级内部投票管理员模型)
 
 ## 模块定位
@@ -97,6 +97,7 @@ personal_duoqian_address = Blake2b_256(
 ```
 
 地址只依赖 `creator + account_name`,与管理员列表无关 — 换管理员地址不变。
+注销不会改变派生公式；同一创建者使用同一账户名再次注册时仍得到同一地址。
 
 ## 治理主体 ID(SubjectId)
 
@@ -122,10 +123,12 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 
 - wuminapp `lib/personal-manage/*` 直接调 pallet=7 的 propose_create/propose_close。
 - wuminapp `PersonalManageService.submitProposeCreatePersonal` 编码：
-  `0x07 0x00 + account_name + duoqian_admins + amount`。
+  `0x07 0x00 + account_name + duoqian_admins + regular_threshold + amount`。
 - wuminapp 查询个人多签时，状态读 `PersonalManage::PersonalDuoqians`，
-  `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员和阈值读 `AdminsChange::Subjects`。
+  `creator/account_name` 也读 `PersonalManage::PersonalDuoqians`，管理员读
+  `AdminsChange::Subjects`，普通动态阈值读 `InternalVote.ActiveDynamicThresholds`。
 - wuminapp 解码 `PersonalManage::CreateDuoqianAction` 时必须读取 `amount + fee` 两个 u128 字段。
+- 创建类交易入块后若未找到成功事件，客户端必须先解析 `System.ExtrinsicFailed` 并显示真实 `PersonalManage / AdminsChange` 模块错误，不能只提示“未找到成功事件”。
 - wumin `pallet_registry.dart` 注册 `personalManagePallet=7` + 3 call_index。
 - wumin `payload_decoder.dart` 解析 PersonalManage(7) 新编码，并拒绝旧
   `admin_count + threshold` 交易载荷。
@@ -138,7 +141,7 @@ subject_id = primitives::derive::subject_id_from_account(personal_address)
 cargo test --manifest-path citizenchain/Cargo.toml -p personal-manage --lib
 ```
 
-重新创世前总审计修复后已回归通过：23 passed。
+2026-05-17 注销当前状态清理修复后已回归通过：23 passed。
 
 联动回归：
 
@@ -154,7 +157,7 @@ flutter test test/signer/payload_decoder_test.dart
 当前结果：
 
 - `personal-manage`:23 passed。
-- `admins-change`:39 passed。
+- `admins-change`:44 passed。
 - `internal-vote`:86 passed。
 - `duoqian-transfer`:22 passed。
 - `organization-manage`:24 passed。
