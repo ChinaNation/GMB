@@ -15,4 +15,5 @@ export const settingsApi = {
     invoke<GrandpaKey>('set_grandpa_key', { key, unlockPassword }),
   getGenesisBootnodeOptions: () =>
     invoke<BootnodeOption[]>('get_genesis_bootnode_options'),
+  prepareDesktopUpdate: () => invoke<void>('prepare_desktop_update'),
 };
