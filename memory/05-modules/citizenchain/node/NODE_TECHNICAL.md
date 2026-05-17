@@ -159,7 +159,20 @@
   - `push main` 只构建检查并上传 run artifact
   - GitHub 手动 `Run workflow` 才生成 updater 签名产物、发布 GitHub Release、部署服务器
 
-## 9. 文件索引
+## 9. 桌面同步守护边界
+
+2026-05-17 起，桌面端新增本机同步守护 `src/home/sync_guard.rs`，用于恢复“底层 P2P 已连接、交易能广播，但 block sync peer 表为空，本机区块不同步”的进程内脱钩状态。
+
+守护边界：
+- 只采样本机 `127.0.0.1` RPC，不常规请求公网参考节点，不把引导节点当成持续依赖。
+- 不以区块高度增长作为重启条件。当前出块策略会在交易池为空时跳过挖矿，网络无交易时高度停滞是正常状态。
+- 不清链、不删除数据库、不改 `ws/wss`，只通过节点生命周期锁受控重启进程内 Substrate 服务。
+- 重启前抓取本机 pending extrinsics，重启后按限额重提交；已入块、过期或重复交易的失败只记日志。
+- 10 分钟窗口内最多自动重启 2 次，超过后进入降级状态，避免自动重启风暴。
+
+准确触发条件以 `home/HOME_TECHNICAL.md` 为准，核心是 `system_health.peers == 0`、`system_peers == []`，同时 `system_unstable_networkState.connectedPeers` 仍存在带版本和 ping 的已识别 peer。
+
+## 10. 文件索引
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
@@ -171,11 +184,12 @@
 | `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
-| `src/desktop/mod.rs` | 138 | 桌面端 Tauri 入口、插件与命令注册 |
+| `src/desktop/mod.rs` | 141 | 桌面端 Tauri 入口、插件与命令注册 |
 | `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
+| `src/home/sync_guard.rs` | 531 | 本机同步守护，检测 raw P2P 已连但 block sync peer 表为空并受控重启 |
 | `src/home/transaction/mod.rs` | 339 | 首页交易、冷钱包、本地钱包与转账提交 |
 | `src/main.rs` | 70 | CLI / 桌面入口分发,release 走 windows subsystem 不弹控制台 |
 | `vendor/` | ~13,854 | sc-consensus-grandpa v0.40.0（GPL-3.0） |
@@ -196,9 +210,9 @@
 - 各功能目录自持 `api.ts` 与 `types.ts`；根层不再保留全局 `api.ts`、`types.ts`、`format.ts`，避免新功能继续污染前端根层。
 - 前端构建脚本使用 `tsc --noEmit && vite build`；`vite.config.ts` 由主 `tsconfig.json` 直接类型检查，不再通过 `tsconfig.node.json` 产出 `vite.config.js` / `vite.config.d.ts` 或 `*.tsbuildinfo`。
 
-## 10. 安全风险（已知）
+## 11. 安全风险（已知）
 
-### 10.1 奖励钱包 RPC 代签无鉴权
+### 11.1 奖励钱包 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
 - **当前缓解**：桌面内嵌节点只面向本机端口使用，奖励钱包 RPC 不转移余额。
 - **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
@@ -206,7 +220,7 @@
 
 矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 
-### 10.2 空块策略仍与 runtime panic 耦合
+### 11.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：
 - `pre_digest` 中放入矿工 `sr25519` 公钥
 - `seal` 中附带 `(nonce, 签名)`
@@ -217,9 +231,9 @@
 - **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
 - **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。
 
-## 11. 已知限制
+## 12. 已知限制
 
 1. `target_block_time_ms` 仅启动时读取一次，链上迁移修改后需重启节点生效。
-2. 节点层无单元测试（Substrate 节点模板通病，功能验证依赖集成测试）。
+2. 节点层已有 `home::sync_guard` 判定单元测试；Substrate 服务级功能验证仍主要依赖集成测试。
 3. `BuildSpec` 子命令已标注废弃（2026-04-01 后移除），使用 `ExportChainSpec` 替代。
 4. `fee_blockFees` RPC 已修复为同时累加 `FeePaid.fee`（base_fee）和 `TransactionFeePaid.tip`。

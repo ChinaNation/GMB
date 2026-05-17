@@ -8,6 +8,7 @@ home/
 ├── process/mod.rs      # 进程生命周期管理（启动、停止、检测、二进制校验）
 ├── rpc/mod.rs          # 节点 RPC 调用（链状态、指纹验证、genesis hash）
 ├── identity/mod.rs     # 节点身份管理（名称、PeerId、运行状态）
+├── sync_guard.rs       # 本机同步守护（检测 P2P 已连但 sync peer 表为空的脱钩状态）
 ├── transaction/mod.rs  # 首页交易、冷钱包、矿工热钱包与转账提交
 └── HOME_TECHNICAL.md   # 本文档
 ```
@@ -81,6 +82,35 @@ Linux 端备注：UI 模式只用于桌面打包（.deb），服务器场景走 
 RPC 暴露说明：
 - `node_runner` 启动参数固定 `--rpc-methods Unsafe --rpc-cors all`，仅监听本机 `--rpc-port`
 - 当前定位：单机家用场景，节点不对外暴露。如后续部署公网，需改 `--rpc-methods Safe` 并限制 CORS
+
+## sync_guard.rs
+
+同步守护用于处理一种本机进程内异常：底层 libp2p 仍有连接，交易/投票可以通过网络广播到其他节点，但 Substrate block sync 侧 `system_peers` 为空，导致本机不继续导入新区块。
+
+设计边界：
+- 只访问本机 `127.0.0.1` RPC，不定时请求公网参考节点，也不依赖引导节点可用性。
+- 不用区块高度是否增长作为故障条件。CitizenChain 在无交易时不会持续空出块，按高度停滞判定会把正常无交易网络误判成故障。
+- 不清链、不删除数据库、不切换 `ws/wss`，恢复动作只是在进程内受控重启当前 Substrate 服务。
+
+触发条件必须同时满足并持续多次采样：
+- `system_health.shouldHavePeers == true`
+- `system_health.peers == 0`
+- `system_peers` 返回空数组
+- `system_health.isSyncing == false`
+- `system_unstable_networkState.connectedPeers` 中存在已识别 peer，且 peer 有 `versionString` 与 `latestPingTime`
+
+上述条件刻画的是“raw network 已经连上，sync service 没有把连接纳入 block sync peer 表”的脱钩状态；它不会因为公网没交易、区块高度不增长而触发。
+
+恢复流程：
+1. 守护线程在 App 启动后常驻，节点刚启动时先等待启动宽限期。
+2. 命中脱钩条件达到阈值后，先通过 `author_pendingExtrinsics` 抓取本机交易池待处理 extrinsics。
+3. 调用 `process::restart_node_for_sync_guard`，复用原节点生命周期锁和 `start_node_sync` 路径停止旧服务并启动新服务。
+4. 重启后按数量和总字节数限额调用 `author_submitExtrinsic` 重提交 pending extrinsics；已经入块、过期或重复的交易失败只写日志，不阻断节点恢复。
+5. 10 分钟窗口内最多自动重启 2 次，超过后进入 `degraded` 状态，避免反复重启风暴。
+
+诊断入口：
+- Tauri command：`home::sync_guard::get_sync_guard_status`
+- 审计动作：`sync_guard`，状态包括 `restart_attempt`、`restart_success`、`restart_failed`、`degraded`
 
 ## rpc/mod.rs
 
