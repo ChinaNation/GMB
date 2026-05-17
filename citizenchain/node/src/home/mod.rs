@@ -4,6 +4,7 @@
 pub(crate) mod identity;
 pub(crate) mod process;
 pub(crate) mod rpc;
+pub(crate) mod sync_guard;
 
 // 公共类型与 Tauri 命令（Tauri command 注册在 desktop.rs 中使用子模块全路径）。
 pub(crate) use process::{cleanup_on_exit, cleanup_on_startup, AppState, RuntimeState};

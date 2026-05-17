@@ -29,6 +29,7 @@ pub fn run_desktop() {
         .manage(AppState(Mutex::new(RuntimeState::default())))
         .invoke_handler(tauri::generate_handler![
             home::identity::get_node_status,
+            home::sync_guard::get_sync_guard_status,
             settings::desktop_update::prepare_desktop_update,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
@@ -113,6 +114,8 @@ pub fn run_desktop() {
         ])
         .setup(|app| {
             cleanup_on_startup(app.handle());
+            // 中文注释：同步守护只读本机 RPC，等待节点启动后再按本机状态自检。
+            home::sync_guard::start_sync_guard(app.handle().clone());
 
             // 自动启动节点。在后台线程跑，避免阻塞 setup 让窗口慢出现。
             // start_node_blocking 内部带 5s + 2s 等待，前端通过 get_node_status 轮询自然刷新。

@@ -63,6 +63,8 @@ pub(crate) fn cleanup_on_startup(app: &AppHandle) {
 /// 句柄 drop 内部会发送 shutdown 信号 + join 后台线程，
 /// 等待 RocksDB LOCK 真正释放后才返回。
 pub(crate) fn cleanup_on_exit(app: &AppHandle) {
+    // 中文注释：先停同步守护，避免退出时守护线程同时触发节点重启。
+    super::sync_guard::stop_sync_guard();
     let _lifecycle_guard = lock_node_lifecycle();
     // 先把 handle 取出再 drop，避免在持有 state 锁期间 join 线程。
     let old_handle = match app.state::<AppState>().0.lock() {
@@ -196,6 +198,11 @@ fn stop_node_sync(app: AppHandle) -> Result<NodeStatus, String> {
 /// 启动节点（同步阻塞调用）。供 `desktop::run_desktop` 的 setup 自动启动以及
 /// 设置页 `set_grandpa_key` / `set_bootnode_key` 的"保存即重启"复用。
 pub(crate) fn start_node_blocking(app: AppHandle) -> Result<NodeStatus, String> {
+    start_node_sync(app)
+}
+
+/// 同步守护专用重启入口：复用节点生命周期锁和原有启动路径，不清库、不改链数据。
+pub(super) fn restart_node_for_sync_guard(app: AppHandle) -> Result<NodeStatus, String> {
     start_node_sync(app)
 }
 
