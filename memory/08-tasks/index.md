@@ -8,6 +8,8 @@
 - `memory/08-tasks/open/20260508-clean-run-fresh-genesis.md`
 - `memory/08-tasks/open/20260509-admins-change-node-wuminapp.md`
 - `memory/08-tasks/open/20260509-org-manage-split.md`
+- `memory/08-tasks/open/20260517-node-constitution-csp.md`
+- `memory/08-tasks/open/20260517-node-nsis-installer-icon.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done

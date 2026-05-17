@@ -203,6 +203,9 @@ jobs:
     needs: build-desktop
     runs-on: ubuntu-latest
     steps:
+      - name: 拉取发布上下文
+        uses: actions/checkout@v4
+
       - name: 下载三平台产物
         uses: actions/download-artifact@v4
         with:
@@ -212,6 +215,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DESKTOP_VERSION: ${{ env.CITIZENCHAIN_DESKTOP_VERSION }}
+          CURRENT_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -225,10 +229,10 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${assets[@]}" --clobber
+          if gh release view "$tag" --repo "$CURRENT_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber --repo "$CURRENT_REPOSITORY"
           else
-            gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+            gh release create "$tag" "${assets[@]}" --repo "$CURRENT_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes"
           fi
 
   deploy-linux-servers:
@@ -282,20 +286,28 @@ jobs:
             ssh-keyscan -H "$server_ip" >> "$known_hosts_file"
           done
 
-          # 中文注释：6 台服务器必须顺序滚动部署，避免同时重启导致链服务整体抖动。
+          ssh_opts=(
+            -i "$key_file"
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$known_hosts_file"
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=10
+            -o ServerAliveCountMax=6
+          )
+
+          # 中文注释：先确认 6 台服务器都认可同一把部署密钥，避免前几台已升级、后几台因 SSH 失败留下半部署状态。
+          for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
+            ssh_target="$CITIZENCHAIN_DEPLOY_USER@$server_ip"
+            echo "::group::预检查 $ssh_target"
+            ssh "${ssh_opts[@]}" "$ssh_target" "echo deploy-ready:\$(hostname):\$(whoami)"
+            echo "::endgroup::"
+          done
+
+          # 中文注释：预检查全部通过后，再顺序滚动部署，避免同时重启导致链服务整体抖动。
           for server_ip in $CITIZENCHAIN_DEPLOY_SERVERS; do
             ssh_target="$CITIZENCHAIN_DEPLOY_USER@$server_ip"
             echo "::group::部署 $ssh_target"
-
-            ssh_opts=(
-              -i "$key_file"
-              -o BatchMode=yes
-              -o StrictHostKeyChecking=yes
-              -o UserKnownHostsFile="$known_hosts_file"
-              -o ConnectTimeout=30
-              -o ServerAliveInterval=10
-              -o ServerAliveCountMax=6
-            )
 
             ssh "${ssh_opts[@]}" "$ssh_target" "
               set -e
