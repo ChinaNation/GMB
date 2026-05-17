@@ -101,8 +101,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         : accountInfo.status == DuoqianStatus.active
             ? InstitutionDuoqianLocalState.statusActive
             : InstitutionDuoqianLocalState.statusPending;
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await InstitutionDuoqianLocalState.putStatusInTxn(
         isar,
         widget.institution.duoqianAddress,
@@ -169,8 +168,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
       _accountInfo?.status == DuoqianStatus.active || _isClosed;
 
   Future<void> _removeFromLocal() async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await isar.duoqianInstitutionEntitys
           .deleteByDuoqianAddress(widget.institution.duoqianAddress);
       await InstitutionDuoqianLocalState.deleteStatusInTxn(

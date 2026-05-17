@@ -46,8 +46,7 @@ class WalletTypeService {
       next[normalized] = entry.roleName.trim();
     }
 
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await isar.adminRoleCacheEntitys.clear();
       if (next.isNotEmpty) {
         final rows = next.entries
@@ -93,8 +92,9 @@ class WalletTypeService {
       return inMemory;
     }
 
-    final isar = await WalletIsar.instance.db();
-    final rows = await isar.adminRoleCacheEntitys.where().anyId().findAll();
+    final rows = await WalletIsar.instance.read((isar) {
+      return isar.adminRoleCacheEntitys.where().anyId().findAll();
+    });
     final out = <String, String>{};
     for (final row in rows) {
       out[row.pubkeyHex] = row.roleName;
@@ -109,9 +109,9 @@ class WalletTypeService {
       return inMemory;
     }
 
-    final isar = await WalletIsar.instance.db();
-    final kv =
-        await isar.appKvEntitys.where().keyEqualTo(_kUpdatedAtKey).findFirst();
+    final kv = await WalletIsar.instance.read((isar) {
+      return isar.appKvEntitys.where().keyEqualTo(_kUpdatedAtKey).findFirst();
+    });
     _memoryUpdatedAt = kv?.intValue;
     return _memoryUpdatedAt;
   }

@@ -53,6 +53,9 @@ class DuoqianManageService {
   /// OrganizationManage::propose_close call_index=1(机构关闭)。
   static const _proposeCloseCallIndex = 1;
 
+  /// OrganizationManage::InstitutionCreateProposed event_index=4。
+  static const _institutionCreateProposedEventIndex = 4;
+
   /// ProposalData 中的 action 类型前缀。
   /// OrganizationManage(b"org-mgmt") 命名空间:ACTION_CLOSE=2。
   static const actionClose = 2;
@@ -65,7 +68,14 @@ class DuoqianManageService {
   /// [0x11][0x05] + sfid_number + institution_name + accounts + admin_org + admin_count
   ///   + duoqian_admins + threshold + register_nonce + signature
   ///   + province + signer_admin_pubkey。
-  Future<({String txHash, int usedNonce})> submitProposeCreateInstitution({
+  Future<
+      ({
+        String txHash,
+        int usedNonce,
+        int proposalId,
+        String mainAddressHex,
+        String blockHashHex,
+      })> submitProposeCreateInstitution({
     required String sfidNumber,
     required String institutionName,
     required List<InstitutionInitialAccountInput> accounts,
@@ -94,11 +104,34 @@ class DuoqianManageService {
       province: province,
       signerAdminPubkeyHex: signerAdminPubkeyHex,
     );
-    return _signAndSubmit(
+    final submitResult = await _signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+    );
+    final initialTotalFen = accounts.fold<BigInt>(
+      BigInt.zero,
+      (sum, item) => sum + item.amountFen,
+    );
+    final event = await _confirmInstitutionCreateProposedEvent(
+      blockHashHex: submitResult.blockHashHex,
+      sfidNumber: sfidNumber,
+      institutionName: institutionName,
+      accounts: accounts,
+      adminOrg: adminOrg,
+      adminCount: adminCount,
+      adminPubkeys: adminPubkeys,
+      threshold: threshold,
+      initialTotalFen: initialTotalFen,
+      proposerPubkey: signerPubkey,
+    );
+    return (
+      txHash: submitResult.txHash,
+      usedNonce: submitResult.usedNonce,
+      proposalId: event.proposalId,
+      mainAddressHex: event.mainAddressHex,
+      blockHashHex: submitResult.blockHashHex,
     );
   }
 
@@ -462,6 +495,189 @@ class DuoqianManageService {
     );
   }
 
+  Future<({int proposalId, String mainAddressHex})>
+      _confirmInstitutionCreateProposedEvent({
+    required String blockHashHex,
+    required String sfidNumber,
+    required String institutionName,
+    required List<InstitutionInitialAccountInput> accounts,
+    required int adminOrg,
+    required int adminCount,
+    required List<Uint8List> adminPubkeys,
+    required int threshold,
+    required BigInt initialTotalFen,
+    required Uint8List proposerPubkey,
+  }) async {
+    final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
+    if (events == null || events.isEmpty) {
+      throw StateError('交易已入块，但未读取到 System.Events，不能确认机构多签创建提案');
+    }
+    final found = _findInstitutionCreateProposedEvent(
+      events,
+      sfidNumber: sfidNumber,
+      institutionName: institutionName,
+      accounts: accounts,
+      adminOrg: adminOrg,
+      adminCount: adminCount,
+      adminPubkeys: adminPubkeys,
+      threshold: threshold,
+      initialTotalFen: initialTotalFen,
+      proposerPubkey: proposerPubkey,
+    );
+    if (found == null) {
+      throw StateError(
+        '交易已入块，但未找到 OrganizationManage.InstitutionCreateProposed 事件，机构多签创建失败',
+      );
+    }
+    return found;
+  }
+
+  ({int proposalId, String mainAddressHex})?
+      _findInstitutionCreateProposedEvent(
+    Uint8List data, {
+    required String sfidNumber,
+    required String institutionName,
+    required List<InstitutionInitialAccountInput> accounts,
+    required int adminOrg,
+    required int adminCount,
+    required List<Uint8List> adminPubkeys,
+    required int threshold,
+    required BigInt initialTotalFen,
+    required Uint8List proposerPubkey,
+  }) {
+    final (_, countSize) = _decodeCompact(data, 0);
+    if (countSize <= 0) return null;
+    for (var scanOffset = countSize; scanOffset < data.length; scanOffset++) {
+      try {
+        var offset = scanOffset;
+        final phase = data[offset];
+        offset += 1;
+        if (phase == 0x00) {
+          if (offset + 4 > data.length) continue;
+          offset += 4;
+        } else if (phase != 0x01 && phase != 0x02) {
+          continue;
+        }
+
+        if (offset + 2 > data.length) continue;
+        final palletIndex = data[offset];
+        final eventIndex = data[offset + 1];
+        offset += 2;
+
+        if (palletIndex == _palletIndex &&
+            eventIndex == _institutionCreateProposedEventIndex) {
+          final decoded = _decodeInstitutionCreateProposedEvent(
+            data,
+            offset,
+            sfidNumber: sfidNumber,
+            institutionName: institutionName,
+            accounts: accounts,
+            adminOrg: adminOrg,
+            adminCount: adminCount,
+            adminPubkeys: adminPubkeys,
+            threshold: threshold,
+            initialTotalFen: initialTotalFen,
+            proposerPubkey: proposerPubkey,
+          );
+          if (decoded != null) return decoded;
+        }
+      } catch (_) {
+        // 中文注释：System.Events 逐字节扫描时会遇到其他事件，失败继续向后找。
+      }
+    }
+    return null;
+  }
+
+  ({int proposalId, String mainAddressHex})?
+      _decodeInstitutionCreateProposedEvent(
+    Uint8List data,
+    int offset, {
+    required String sfidNumber,
+    required String institutionName,
+    required List<InstitutionInitialAccountInput> accounts,
+    required int adminOrg,
+    required int adminCount,
+    required List<Uint8List> adminPubkeys,
+    required int threshold,
+    required BigInt initialTotalFen,
+    required Uint8List proposerPubkey,
+  }) {
+    try {
+      var pos = offset;
+      if (pos + 8 > data.length) return null;
+      final proposalId = _readU64Le(data, pos);
+      pos += 8;
+
+      final sfidRead = _readCompactBytes(data, pos);
+      if (sfidRead == null) return null;
+      pos = sfidRead.nextOffset;
+      final nameRead = _readCompactBytes(data, pos);
+      if (nameRead == null) return null;
+      pos = nameRead.nextOffset;
+      if (pos + 32 + 32 > data.length) return null;
+      final mainAddress = Uint8List.fromList(data.sublist(pos, pos + 32));
+      pos += 32;
+      final proposer = Uint8List.fromList(data.sublist(pos, pos + 32));
+      pos += 32;
+
+      final (accountsLen, accountsLenBytes) = _decodeCompact(data, pos);
+      pos += accountsLenBytes;
+      if (accountsLen != accounts.length) return null;
+      for (var i = 0; i < accountsLen; i++) {
+        final accountNameRead = _readCompactBytes(data, pos);
+        if (accountNameRead == null) return null;
+        pos = accountNameRead.nextOffset;
+        if (pos + 32 + 16 + 1 > data.length) return null;
+        pos += 32; // address
+        final eventAmount = _readU128Le(data.sublist(pos, pos + 16));
+        pos += 16;
+        pos += 1; // is_default
+        final expectedName =
+            Uint8List.fromList(utf8.encode(accounts[i].accountName.trim()));
+        if (!_bytesEqual(accountNameRead.bytes, expectedName) ||
+            eventAmount != accounts[i].amountFen) {
+          return null;
+        }
+      }
+
+      final (adminsLen, adminsLenBytes) = _decodeCompact(data, pos);
+      pos += adminsLenBytes;
+      if (adminsLen < 0 || pos + adminsLen * 32 > data.length) return null;
+      final eventAdmins = <Uint8List>[];
+      for (var i = 0; i < adminsLen; i++) {
+        eventAdmins.add(Uint8List.fromList(data.sublist(pos, pos + 32)));
+        pos += 32;
+      }
+      if (pos + 1 + 4 + 4 + 16 + 16 > data.length) return null;
+      final eventAdminOrg = data[pos];
+      pos += 1;
+      final eventAdminCount = _readU32Le(data, pos);
+      pos += 4;
+      final eventThreshold = _readU32Le(data, pos);
+      pos += 4;
+      final eventInitialTotal = _readU128Le(data.sublist(pos, pos + 16));
+
+      final expectedSfid = Uint8List.fromList(utf8.encode(sfidNumber.trim()));
+      final expectedName =
+          Uint8List.fromList(utf8.encode(institutionName.trim()));
+      final matches = _bytesEqual(sfidRead.bytes, expectedSfid) &&
+          _bytesEqual(nameRead.bytes, expectedName) &&
+          _bytesEqual(proposer, proposerPubkey) &&
+          eventAdminOrg == adminOrg &&
+          eventAdminCount == adminCount &&
+          eventThreshold == threshold &&
+          eventInitialTotal == initialTotalFen &&
+          _adminListsEqual(eventAdmins, adminPubkeys);
+      if (!matches) return null;
+      return (
+        proposalId: proposalId,
+        mainAddressHex: _hexEncode(mainAddress),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ──── 内部：签名提交 ────
 
   Future<({String txHash, int usedNonce})> _signAndSubmit({
@@ -474,6 +690,24 @@ class DuoqianManageService {
       chainRpc: _rpc,
       logLabel: 'OrganizationManage',
     ).signAndSubmit(
+      callData: callData,
+      fromAddress: fromAddress,
+      signerPubkey: signerPubkey,
+      sign: sign,
+    );
+  }
+
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      _signAndSubmitInBlock({
+    required Uint8List callData,
+    required String fromAddress,
+    required Uint8List signerPubkey,
+    required Future<Uint8List> Function(Uint8List payload) sign,
+  }) async {
+    return SignedExtrinsicBuilder(
+      chainRpc: _rpc,
+      logLabel: 'OrganizationManage',
+    ).signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
@@ -598,6 +832,63 @@ class DuoqianManageService {
       }
       return (val, 1 + lenBytes);
     }
+  }
+
+  int _readU64Le(Uint8List data, int offset) {
+    var value = 0;
+    for (var i = 7; i >= 0; i--) {
+      value = (value << 8) | data[offset + i];
+    }
+    return value;
+  }
+
+  int _readU32Le(Uint8List data, int offset) {
+    return data[offset] |
+        (data[offset + 1] << 8) |
+        (data[offset + 2] << 16) |
+        (data[offset + 3] << 24);
+  }
+
+  BigInt _readU128Le(Uint8List bytes) {
+    var value = BigInt.zero;
+    for (var i = bytes.length - 1; i >= 0; i--) {
+      value = (value << 8) | BigInt.from(bytes[i]);
+    }
+    return value;
+  }
+
+  ({Uint8List bytes, int nextOffset})? _readCompactBytes(
+    Uint8List data,
+    int offset,
+  ) {
+    if (offset >= data.length) return null;
+    final (length, lengthBytes) = _decodeCompact(data, offset);
+    final start = offset + lengthBytes;
+    final end = start + length;
+    if (length < 0 || start > data.length || end > data.length) return null;
+    return (
+      bytes: Uint8List.fromList(data.sublist(start, end)),
+      nextOffset: end,
+    );
+  }
+
+  bool _adminListsEqual(
+    List<Uint8List> left,
+    List<Uint8List> right,
+  ) {
+    if (left.length != right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+      if (!_bytesEqual(left[i], right[i])) return false;
+    }
+    return true;
+  }
+
+  bool _bytesEqual(Uint8List left, Uint8List right) {
+    if (left.length != right.length) return false;
+    for (var i = 0; i < left.length; i++) {
+      if (left[i] != right[i]) return false;
+    }
+    return true;
   }
 
   static String _hexEncode(Uint8List bytes) {

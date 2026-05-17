@@ -104,18 +104,29 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   Future<void> _bootstrap() async {
     await _reloadWallet();
     await _loadLocalRecords();
-    // 触发全局对账；Reconciler 内部有并发保护，多次触发安全。
-    unawaited(_runReconcileAndReload());
+    // 中文注释：交易页是默认首屏，对账延后执行，避免和钱包首读/治理首读抢 Isar。
+    unawaited(Future<void>.delayed(const Duration(seconds: 20), () {
+      if (!mounted || WalletIsar.instance.hasActiveOperation) {
+        return;
+      }
+      unawaited(_runReconcileAndReload());
+    }));
   }
 
   /// 触发全局对账并在完成后刷新本地列表。
   Future<void> _runReconcileAndReload() async {
+    if (WalletIsar.instance.hasActiveOperation) {
+      return;
+    }
     try {
       final updated = await PendingTxReconciler.instance.reconcileAll();
       if (updated > 0 && mounted) {
         await _loadLocalRecords();
       }
     } catch (e) {
+      if (WalletIsar.instance.isBusyError(e)) {
+        return;
+      }
       debugPrint('[交易记录] 对账失败: $e');
     }
   }
@@ -138,6 +149,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         });
       }
     } catch (e) {
+      if (WalletIsar.instance.isBusyError(e)) {
+        return;
+      }
       debugPrint('[链上交易] 加载本地记录失败: $e');
     }
   }
@@ -160,7 +174,14 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   }
 
   Future<void> _reloadWallet() async {
-    final wallet = await _paymentService.getCurrentWallet();
+    WalletProfile? wallet;
+    try {
+      wallet = await _paymentService.getCurrentWallet();
+    } catch (e, st) {
+      if (!WalletIsar.instance.isBusyError(e)) {
+        debugPrint('[链上交易] 当前钱包加载失败: $e\n$st');
+      }
+    }
     if (!mounted) {
       return;
     }
@@ -481,6 +502,9 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           return;
         }
       } catch (e) {
+        if (WalletIsar.instance.isBusyError(e)) {
+          continue;
+        }
         debugPrint('[交易记录] 快速确认失败: $e');
       }
     }

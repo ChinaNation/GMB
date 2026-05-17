@@ -98,8 +98,7 @@ class WalletManager {
   static final LocalAuthentication _localAuth = LocalAuthentication();
 
   /// 中文注释：拖拽排序首次迁移 flag。设置后不再重复填充 sortOrder。
-  static const String _kSortOrderInitialized =
-      'wallet_sort_order_initialized';
+  static const String _kSortOrderInitialized = 'wallet_sort_order_initialized';
 
   // ---------------------------------------------------------------------------
   // 查询
@@ -110,13 +109,14 @@ class WalletManager {
   ///   通过 SharedPreferences flag 保证只做一次。
   /// - 排序规则：sortOrder 升序优先，相同则回退 walletIndex 兜底（保证稳定）。
   Future<List<WalletProfile>> getWallets() async {
-    final isar = await WalletIsar.instance.db();
-    await _ensureSortOrderInitialized(isar);
-    final rows = await isar.walletProfileEntitys
-        .where()
-        .sortBySortOrder()
-        .thenByWalletIndex()
-        .findAll();
+    await _ensureSortOrderInitialized();
+    final rows = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys
+          .where()
+          .sortBySortOrder()
+          .thenByWalletIndex()
+          .findAll();
+    });
     return rows.map(_toProfile).toList(growable: false);
   }
 
@@ -124,31 +124,28 @@ class WalletManager {
   /// - 通过 SharedPreferences flag 幂等保护，只在首次执行时按 walletIndex
   ///   升序把 sortOrder 写成 0..N-1，保留旧顺序。
   /// - 没有钱包也写 flag，避免每次进入都重新检测。
-  Future<void> _ensureSortOrderInitialized(Isar isar) async {
+  Future<void> _ensureSortOrderInitialized() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_kSortOrderInitialized) ?? false) {
       return;
     }
-    final wallets = await isar.walletProfileEntitys
-        .where()
-        .sortByWalletIndex()
-        .findAll();
-    if (wallets.isNotEmpty) {
-      await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final wallets =
+          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
+      if (wallets.isNotEmpty) {
         for (var i = 0; i < wallets.length; i++) {
           wallets[i].sortOrder = i;
           await isar.walletProfileEntitys.put(wallets[i]);
         }
-      });
-    }
+      }
+    });
     await prefs.setBool(_kSortOrderInitialized, true);
   }
 
   /// 中文注释：按传入的 walletIndex 顺序写入新的 sortOrder。
   /// 在一次 Isar 事务里完成，失败回滚。
   Future<void> reorderWallets(List<int> walletIndexes) async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       for (var i = 0; i < walletIndexes.length; i++) {
         final entity = await isar.walletProfileEntitys
             .filter()
@@ -163,26 +160,33 @@ class WalletManager {
   }
 
   Future<WalletProfile?> getWallet() async {
-    final isar = await WalletIsar.instance.db();
-    final wallets =
-        await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
-    if (wallets.isEmpty) {
+    final snapshot = await WalletIsar.instance.read((isar) async {
+      final wallets =
+          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
+      if (wallets.isEmpty) {
+        return null;
+      }
+      final settings = await isar.walletSettingsEntitys.get(0);
+      return (
+        wallets: wallets,
+        activeIndex: settings?.activeWalletIndex,
+      );
+    });
+    if (snapshot == null) {
       return null;
     }
 
-    final settings = await _getSettings(isar);
-    final activeIndex = settings.activeWalletIndex;
-
-    WalletProfileEntity selected = wallets.last;
-    if (activeIndex != null) {
-      for (final wallet in wallets) {
-        if (wallet.walletIndex == activeIndex) {
+    WalletProfileEntity selected = snapshot.wallets.last;
+    if (snapshot.activeIndex != null) {
+      for (final wallet in snapshot.wallets) {
+        if (wallet.walletIndex == snapshot.activeIndex) {
           selected = wallet;
           break;
         }
       }
     } else {
-      await isar.writeTxn(() async {
+      await WalletIsar.instance.writeTxn((isar) async {
+        final settings = await _getSettingsInTxn(isar);
         settings.activeWalletIndex = selected.walletIndex;
         settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
         await isar.walletSettingsEntitys.put(settings);
@@ -193,11 +197,12 @@ class WalletManager {
   }
 
   Future<WalletProfile?> getWalletByIndex(int walletIndex) async {
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
+    final row = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+    });
     if (row == null) {
       return null;
     }
@@ -225,23 +230,22 @@ class WalletManager {
   }
 
   Future<int?> getActiveWalletIndex() async {
-    final isar = await WalletIsar.instance.db();
-    final settings = await _getSettings(isar);
-    return settings.activeWalletIndex;
+    return WalletIsar.instance.read((isar) async {
+      final settings = await isar.walletSettingsEntitys.get(0);
+      return settings?.activeWalletIndex;
+    });
   }
 
   Future<void> setActiveWallet(int walletIndex) async {
-    final isar = await WalletIsar.instance.db();
-    final exists = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (exists == null) {
-      throw Exception('未找到指定钱包');
-    }
-
-    final settings = await _getSettings(isar);
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final exists = await isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+      if (exists == null) {
+        throw Exception('未找到指定钱包');
+      }
+      final settings = await _getSettingsInTxn(isar);
       settings.activeWalletIndex = walletIndex;
       settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.walletSettingsEntitys.put(settings);
@@ -254,11 +258,12 @@ class WalletManager {
   @Deprecated(
       'Use signWithWallet() instead — seed should not leave WalletManager')
   Future<WalletSecret?> getWalletSecretByIndex(int walletIndex) async {
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
+    final row = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+    });
     if (row == null) {
       return null;
     }
@@ -297,7 +302,13 @@ class WalletManager {
       seedHex: _toHex(seed),
       source: 'created',
     );
-    await _writeMnemonic(profile.walletIndex, mnemonic);
+    try {
+      await _writeMnemonic(profile.walletIndex, mnemonic);
+      await _verifyWalletPersisted(profile);
+    } catch (_) {
+      await _rollbackWalletCreation(profile.walletIndex);
+      rethrow;
+    }
     return WalletCreationResult(profile: profile, mnemonic: mnemonic);
   }
 
@@ -321,7 +332,13 @@ class WalletManager {
       seedHex: _toHex(seed),
       source: 'imported',
     );
-    await _writeMnemonic(profile.walletIndex, trimmed);
+    try {
+      await _writeMnemonic(profile.walletIndex, trimmed);
+      await _verifyWalletPersisted(profile);
+    } catch (_) {
+      await _rollbackWalletCreation(profile.walletIndex);
+      rethrow;
+    }
     return profile;
   }
 
@@ -383,43 +400,47 @@ class WalletManager {
   // ---------------------------------------------------------------------------
 
   Future<void> clearWallet() async {
-    final isar = await WalletIsar.instance.db();
-    final wallets = await isar.walletProfileEntitys.where().findAll();
+    final wallets = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys.where().findAll();
+    });
+    await WalletIsar.instance.writeTxn((isar) async {
+      await isar.walletProfileEntitys.clear();
+      final settings = await _getSettingsInTxn(isar);
+      settings.activeWalletIndex = null;
+      settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+      await isar.walletSettingsEntitys.put(settings);
+    });
+
     for (final row in wallets) {
       if (row.signMode == 'local') {
         await _deleteSeedHex(row.walletIndex);
         await _deleteMnemonic(row.walletIndex);
       }
     }
-
-    await isar.writeTxn(() async {
-      await isar.walletProfileEntitys.clear();
-      final settings = await _getSettings(isar);
-      settings.activeWalletIndex = null;
-      settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
-      await isar.walletSettingsEntitys.put(settings);
-    });
   }
 
   Future<void> deleteWallet(int walletIndex) async {
-    final isar = await WalletIsar.instance.db();
-    final target = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
+    final target = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+    });
     if (target == null) {
       throw Exception('未找到钱包');
     }
 
-    if (target.signMode == 'local') {
-      await _deleteSeedHex(walletIndex);
-      await _deleteMnemonic(walletIndex);
-    }
+    await WalletIsar.instance.writeTxn((isar) async {
+      final current = await isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+      if (current == null) {
+        throw Exception('未找到钱包');
+      }
+      await isar.walletProfileEntitys.delete(current.id);
 
-    await isar.writeTxn(() async {
-      await isar.walletProfileEntitys.delete(target.id);
-
-      final settings = await _getSettings(isar);
+      final settings = await _getSettingsInTxn(isar);
       if (settings.activeWalletIndex == walletIndex) {
         final remains = await isar.walletProfileEntitys
             .where()
@@ -431,6 +452,11 @@ class WalletManager {
         await isar.walletSettingsEntitys.put(settings);
       }
     });
+
+    if (target.signMode == 'local') {
+      await _deleteSeedHex(walletIndex);
+      await _deleteMnemonic(walletIndex);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -458,16 +484,14 @@ class WalletManager {
       throw Exception('钱包图标不能为空');
     }
 
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (row == null) {
-      throw Exception('未找到钱包');
-    }
-
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+      if (row == null) {
+        throw Exception('未找到钱包');
+      }
       if (nextName != null) {
         row.walletName = nextName;
       }
@@ -479,16 +503,14 @@ class WalletManager {
   }
 
   Future<void> setWalletBalance(int walletIndex, double balance) async {
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (row == null) {
-      throw Exception('未找到钱包');
-    }
-
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+      if (row == null) {
+        throw Exception('未找到钱包');
+      }
       row.balance = balance;
       await isar.walletProfileEntitys.put(row);
     });
@@ -564,18 +586,7 @@ class WalletManager {
   /// 签名（跳过认证，调用方需确保已调用 authenticateForSigning）。
   Future<Uint8List> signWithWalletNoAuth(
       int walletIndex, Uint8List payload) async {
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (row == null) {
-      throw const WalletAuthException('未找到指定钱包');
-    }
-    final profile = _toProfile(row);
-    if (profile.isColdWallet) {
-      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
-    }
+    final profile = await _requireHotWalletProfile(walletIndex);
     final seedHex = await _readSeedHexRaw(walletIndex);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
@@ -596,18 +607,7 @@ class WalletManager {
 
   Future<Uint8List> signWithWallet(int walletIndex, Uint8List payload) async {
     await _authenticateIfSupported();
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (row == null) {
-      throw const WalletAuthException('未找到指定钱包');
-    }
-    final profile = _toProfile(row);
-    if (profile.isColdWallet) {
-      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
-    }
+    final profile = await _requireHotWalletProfile(walletIndex);
     final seedHex = await _readSeedHexRaw(walletIndex);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
@@ -636,18 +636,7 @@ class WalletManager {
     String message,
   ) async {
     await _authenticateIfSupported();
-    final isar = await WalletIsar.instance.db();
-    final row = await isar.walletProfileEntitys
-        .filter()
-        .walletIndexEqualTo(walletIndex)
-        .findFirst();
-    if (row == null) {
-      throw const WalletAuthException('未找到指定钱包');
-    }
-    final profile = _toProfile(row);
-    if (profile.isColdWallet) {
-      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
-    }
+    final profile = await _requireHotWalletProfile(walletIndex);
     final seedHex = await _readSeedHexRaw(walletIndex);
     if (seedHex == null) {
       throw const WalletAuthException('密钥不可用，请重新导入钱包');
@@ -773,8 +762,9 @@ class WalletManager {
   /// 检查公钥是否已存在，重复则抛出异常。
   Future<void> _checkDuplicatePubkey(String pubkeyHex) async {
     final normalized = pubkeyHex.toLowerCase();
-    final isar = await WalletIsar.instance.db();
-    final rows = await isar.walletProfileEntitys.where().findAll();
+    final rows = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys.where().findAll();
+    });
     for (final row in rows) {
       if (row.pubkeyHex.toLowerCase() == normalized) {
         throw Exception('该钱包已存在（${row.walletName}），无需重复导入');
@@ -790,19 +780,17 @@ class WalletManager {
     required String seedHex,
     required String source,
   }) async {
-    final isar = await WalletIsar.instance.db();
-
     late int walletIndex;
-    await isar.writeTxn(() async {
-      final rows = await isar.walletProfileEntitys
-          .where()
-          .sortByWalletIndex()
-          .findAll();
+    late int createdAtMillis;
+    await WalletIsar.instance.writeTxn((isar) async {
+      final rows =
+          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
       final used = rows.map((e) => e.walletIndex).toSet();
       walletIndex = 1;
       while (used.contains(walletIndex)) {
         walletIndex++;
       }
+      createdAtMillis = DateTime.now().millisecondsSinceEpoch;
 
       final entity = WalletProfileEntity()
         ..walletIndex = walletIndex
@@ -813,20 +801,18 @@ class WalletManager {
         ..pubkeyHex = pubkeyHex
         ..alg = 'sr25519'
         ..ss58 = _ss58Format
-        ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
+        ..createdAtMillis = createdAtMillis
         ..source = source
         ..signMode = 'local';
       await isar.walletProfileEntitys.put(entity);
 
-      final settings = await _getSettings(isar);
+      final settings = await _getSettingsInTxn(isar);
       settings.activeWalletIndex = walletIndex;
       settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.walletSettingsEntitys.put(settings);
     });
 
-    await _writeSeedHex(walletIndex, seedHex);
-
-    return WalletProfile(
+    final profile = WalletProfile(
       walletIndex: walletIndex,
       walletName: _defaultWalletName(walletIndex),
       walletIcon: _defaultWalletIcon(),
@@ -835,10 +821,18 @@ class WalletManager {
       pubkeyHex: pubkeyHex,
       alg: 'sr25519',
       ss58: _ss58Format,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      createdAtMillis: createdAtMillis,
       source: source,
       signMode: 'local',
     );
+    try {
+      await _writeSeedHex(walletIndex, seedHex);
+      await _verifyWalletPersisted(profile);
+    } catch (_) {
+      await _rollbackWalletCreation(walletIndex);
+      rethrow;
+    }
+    return profile;
   }
 
   /// 原子化创建冷钱包：在同一个事务中分配 walletIndex 并写入数据库。
@@ -846,19 +840,17 @@ class WalletManager {
     required String address,
     required String pubkeyHex,
   }) async {
-    final isar = await WalletIsar.instance.db();
-
     late int walletIndex;
-    await isar.writeTxn(() async {
-      final rows = await isar.walletProfileEntitys
-          .where()
-          .sortByWalletIndex()
-          .findAll();
+    late int createdAtMillis;
+    await WalletIsar.instance.writeTxn((isar) async {
+      final rows =
+          await isar.walletProfileEntitys.where().sortByWalletIndex().findAll();
       final used = rows.map((e) => e.walletIndex).toSet();
       walletIndex = 1;
       while (used.contains(walletIndex)) {
         walletIndex++;
       }
+      createdAtMillis = DateTime.now().millisecondsSinceEpoch;
 
       final entity = WalletProfileEntity()
         ..walletIndex = walletIndex
@@ -869,18 +861,18 @@ class WalletManager {
         ..pubkeyHex = pubkeyHex
         ..alg = 'sr25519'
         ..ss58 = _ss58Format
-        ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
+        ..createdAtMillis = createdAtMillis
         ..source = 'imported'
         ..signMode = 'external';
       await isar.walletProfileEntitys.put(entity);
 
-      final settings = await _getSettings(isar);
+      final settings = await _getSettingsInTxn(isar);
       settings.activeWalletIndex = walletIndex;
       settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
       await isar.walletSettingsEntitys.put(settings);
     });
 
-    return WalletProfile(
+    final profile = WalletProfile(
       walletIndex: walletIndex,
       walletName: _defaultWalletName(walletIndex),
       walletIcon: _defaultWalletIcon(),
@@ -889,25 +881,83 @@ class WalletManager {
       pubkeyHex: pubkeyHex,
       alg: 'sr25519',
       ss58: _ss58Format,
-      createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+      createdAtMillis: createdAtMillis,
       source: 'imported',
       signMode: 'external',
     );
+    await _verifyWalletPersisted(profile);
+    return profile;
   }
 
-  Future<WalletSettingsEntity> _getSettings(Isar isar) async {
+  /// 中文注释：只能在已经进入写事务时调用；这里绝不再开启嵌套 writeTxn。
+  Future<WalletSettingsEntity> _getSettingsInTxn(Isar isar) async {
     final row = await isar.walletSettingsEntitys.get(0);
     if (row != null) {
       return row;
     }
-
     final created = WalletSettingsEntity()
       ..id = 0
       ..updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
-    await isar.writeTxn(() async {
-      await isar.walletSettingsEntitys.put(created);
-    });
+    await isar.walletSettingsEntitys.put(created);
     return created;
+  }
+
+  Future<WalletProfile> _requireHotWalletProfile(int walletIndex) async {
+    final row = await WalletIsar.instance.read((isar) {
+      return isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+    });
+    if (row == null) {
+      throw const WalletAuthException('未找到指定钱包');
+    }
+    final profile = _toProfile(row);
+    if (profile.isColdWallet) {
+      throw const WalletAuthException('当前钱包为冷钱包，请使用扫码签名');
+    }
+    return profile;
+  }
+
+  /// 中文注释：创建/导入完成后立即复读本地库，防止 UI 已展示助记词但
+  /// 钱包索引没有真正落库；失败时上层会回滚并提示用户重试。
+  Future<void> _verifyWalletPersisted(WalletProfile profile) async {
+    final persisted = await getWalletByIndex(profile.walletIndex);
+    if (persisted == null ||
+        persisted.pubkeyHex.toLowerCase() != profile.pubkeyHex.toLowerCase()) {
+      throw Exception('钱包写入后校验失败，请重试');
+    }
+    if (profile.isHotWallet) {
+      final seedHex = await _readSeedHexRaw(profile.walletIndex);
+      if (seedHex == null || seedHex.isEmpty) {
+        throw Exception('钱包密钥写入后校验失败，请重试');
+      }
+    }
+  }
+
+  Future<void> _rollbackWalletCreation(int walletIndex) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.walletProfileEntitys
+          .filter()
+          .walletIndexEqualTo(walletIndex)
+          .findFirst();
+      if (row != null) {
+        await isar.walletProfileEntitys.delete(row.id);
+      }
+      final settings = await _getSettingsInTxn(isar);
+      if (settings.activeWalletIndex == walletIndex) {
+        final remains = await isar.walletProfileEntitys
+            .where()
+            .sortByWalletIndex()
+            .findAll();
+        settings.activeWalletIndex =
+            remains.isEmpty ? null : remains.last.walletIndex;
+        settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
+        await isar.walletSettingsEntitys.put(settings);
+      }
+    });
+    await _deleteSeedHex(walletIndex);
+    await _deleteMnemonic(walletIndex);
   }
 
   String _toHex(List<int> bytes) {
@@ -958,7 +1008,6 @@ class WalletManager {
       sortOrder: row.sortOrder,
     );
   }
-
 }
 
 class _DerivedWallet {

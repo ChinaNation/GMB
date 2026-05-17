@@ -6,7 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
-import 'package:wuminapp_mobile/my/myid/myid_service.dart';
+import 'package:wuminapp_mobile/governance/duoqian_account_list_page.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
@@ -14,6 +15,8 @@ import 'package:wuminapp_mobile/transaction/transaction_tab_page.dart';
 import 'package:wuminapp_mobile/my/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/transaction/shared/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/my/user/user.dart';
+import 'package:wuminapp_mobile/security/app_permission_gate.dart';
+import 'package:wuminapp_mobile/update/app_update.dart';
 
 import 'ui/app_theme.dart';
 
@@ -114,9 +117,22 @@ class _AppLockGateState extends State<_AppLockGate>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkLock();
-    // 冷启动延迟 3 秒触发首次对账，等 smoldot 同步上来。
+  }
+
+  @override
+  void dispose() {
+    _stopReconcileTimers();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _startReconcileTimers() {
+    if (_initialReconcileTimer != null || _reconcileTimer != null) {
+      return;
+    }
+    // 中文注释：等主界面完成解锁和首屏钱包读取后再对账，避免冷启动抢 Isar。
     _initialReconcileTimer = Timer(
-      const Duration(seconds: 3),
+      const Duration(seconds: 15),
       _triggerReconcile,
     );
     _reconcileTimer = Timer.periodic(
@@ -125,20 +141,28 @@ class _AppLockGateState extends State<_AppLockGate>
     );
   }
 
-  @override
-  void dispose() {
+  void _stopReconcileTimers() {
     _initialReconcileTimer?.cancel();
     _reconcileTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
+    _initialReconcileTimer = null;
+    _reconcileTimer = null;
   }
 
   void _triggerReconcile() {
+    if (!_authenticated || WalletIsar.instance.hasActiveOperation) {
+      return;
+    }
     // Reconciler 内部有并发保护，重复触发安全。
-    PendingTxReconciler.instance.reconcileAll().catchError((e) {
-      debugPrint('[main] 对账触发失败: $e');
-      return 0;
-    });
+    unawaited(() async {
+      try {
+        await PendingTxReconciler.instance.reconcileAll();
+      } catch (e, st) {
+        if (WalletIsar.instance.isBusyError(e)) {
+          return;
+        }
+        debugPrint('[main] 对账触发失败: $e\n$st');
+      }
+    }());
   }
 
   @override
@@ -155,6 +179,7 @@ class _AppLockGateState extends State<_AppLockGate>
           _checking = true;
           _showDeviceLock = false;
         });
+        _stopReconcileTimers();
         _checkLock();
       }
       _pausedAt = null;
@@ -193,6 +218,7 @@ class _AppLockGateState extends State<_AppLockGate>
       _authenticated = true;
       _checking = false;
     });
+    _startReconcileTimers();
   }
 
   Future<void> _showPinVerify() async {
@@ -205,6 +231,7 @@ class _AppLockGateState extends State<_AppLockGate>
     if (!mounted) return;
     if (result == true) {
       setState(() => _authenticated = true);
+      _startReconcileTimers();
     }
   }
 
@@ -220,6 +247,7 @@ class _AppLockGateState extends State<_AppLockGate>
       if (!mounted) return;
       if (success) {
         setState(() => _authenticated = true);
+        _startReconcileTimers();
       }
     } catch (_) {
       // 认证失败，保持锁定状态
@@ -244,7 +272,7 @@ class _AppLockGateState extends State<_AppLockGate>
     }
 
     if (_authenticated) {
-      return const AppShell();
+      return const AppPermissionGate(child: AppShell());
     }
 
     if (_showDeviceLock) {
@@ -338,11 +366,14 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 2;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
+  bool _duoqianTabLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _checkRootStatus();
+    // 中文注释：启动后异步检查正式 Release 更新，只更新设置页状态，不阻塞主界面进入。
+    AppUpdateController.instance.check();
   }
 
   Future<void> _checkRootStatus() async {
@@ -351,16 +382,22 @@ class _AppShellState extends State<AppShell> {
     setState(() => _isRooted = rooted);
   }
 
-  late final List<Widget> _pages = [
-    CitizenTabPage(onPendingVoteCountChanged: (count) {
-      if (mounted && count != _pendingVoteCount) {
-        setState(() => _pendingVoteCount = count);
-      }
-    }),
-    const MessagePage(),
-    const TransactionTabPage(),
-    const ProfilePage(),
-  ];
+  late final Widget _citizenPage =
+      CitizenTabPage(onPendingVoteCountChanged: (count) {
+    if (mounted && count != _pendingVoteCount) {
+      setState(() => _pendingVoteCount = count);
+    }
+  });
+
+  // 中文注释：多签列表涉及本地账户发现，等用户真正点击多签 Tab 后再构建。
+  List<Widget> get _pages => [
+        _citizenPage,
+        _duoqianTabLoaded
+            ? const DuoqianAccountListPage()
+            : const SizedBox.shrink(),
+        const TransactionTabPage(),
+        const ProfilePage(),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +450,9 @@ class _AppShellState extends State<AppShell> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (index) {
             setState(() {
+              if (index == 1) {
+                _duoqianTabLoaded = true;
+              }
               _currentIndex = index;
             });
           },
@@ -431,26 +471,10 @@ class _AppShellState extends State<AppShell> {
                   child: const Icon(Icons.how_to_vote),
                 ),
                 label: '公民'),
-            NavigationDestination(
-              icon: SvgPicture.asset(
-                'assets/icons/message-square-text.svg',
-                width: 22,
-                height: 22,
-                colorFilter: const ColorFilter.mode(
-                  AppTheme.textTertiary,
-                  BlendMode.srcIn,
-                ),
-              ),
-              selectedIcon: SvgPicture.asset(
-                'assets/icons/message-square-text.svg',
-                width: 22,
-                height: 22,
-                colorFilter: const ColorFilter.mode(
-                  AppTheme.primary,
-                  BlendMode.srcIn,
-                ),
-              ),
-              label: '消息',
+            const NavigationDestination(
+              icon: Icon(Icons.account_tree_outlined),
+              selectedIcon: Icon(Icons.account_tree),
+              label: '多签',
             ),
             NavigationDestination(
               icon: SvgPicture.asset(
@@ -520,128 +544,6 @@ class _HomePageState extends State<HomePage> {
                   SizedBox(height: 12),
                   Text(
                     '广场页面（开发中）',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class MessagePage extends StatefulWidget {
-  const MessagePage({super.key});
-
-  @override
-  State<MessagePage> createState() => _MessagePageState();
-}
-
-class _MessagePageState extends State<MessagePage> {
-  final MyIdService _myIdService = MyIdService();
-  String _selfAccountPubkeyHex = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSelfAccount();
-  }
-
-  Future<void> _loadSelfAccount() async {
-    final state = await _myIdService.getState();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selfAccountPubkeyHex = state.walletPubkeyHex?.trim() ?? '';
-    });
-  }
-
-  Future<void> _openContactsPage() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            ContactBookPage(selfAccountPubkeyHex: _selfAccountPubkeyHex),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: _openContactsPage,
-                  icon: SvgPicture.asset(
-                    'assets/icons/contact-round.svg',
-                    width: 22,
-                    height: 22,
-                    colorFilter: const ColorFilter.mode(
-                      AppTheme.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                ),
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      '消息',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceMuted,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(color: AppTheme.border),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.search_rounded,
-                      color: AppTheme.textTertiary, size: 20),
-                  SizedBox(width: 10),
-                  Text('搜索',
-                      style: TextStyle(
-                        color: AppTheme.textTertiary,
-                        fontSize: 15,
-                      )),
-                ],
-              ),
-            ),
-          ),
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.chat_bubble_outline_rounded,
-                      size: 48, color: AppTheme.textTertiary),
-                  SizedBox(height: 12),
-                  Text(
-                    '消息页面（开发中）',
                     style: TextStyle(
                       fontSize: 16,
                       color: AppTheme.textSecondary,

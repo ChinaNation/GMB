@@ -15,6 +15,12 @@
 
 ## done
 
+- `memory/08-tasks/done/20260517-wuminapp-isar-read-queue-wallet-governance.md`
+- `memory/08-tasks/done/20260517-wuminapp-isar-wallet-chain-status.md`
+- `memory/08-tasks/done/20260517-wuminapp-smoldot-android-abi.md`
+- `memory/08-tasks/done/20260517-wuminapp-duoqian-tab.md`
+- `memory/08-tasks/done/20260517-wuminapp-android-app-update.md`
+- `memory/08-tasks/done/20260517-wuminapp-android-release-signing.md`
 - `memory/08-tasks/done/20260516-runtime-audit-fixes-vote-sfid.md`
 - `memory/08-tasks/done/20260511-votingengine-boundary-fix.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`

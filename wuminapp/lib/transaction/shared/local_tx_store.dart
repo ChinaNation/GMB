@@ -5,8 +5,7 @@ import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 class LocalTxStore {
   /// 写入一条交易记录。
   static Future<void> insert(LocalTxEntity entity) async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await isar.localTxEntitys.put(entity);
     });
   }
@@ -17,14 +16,15 @@ class LocalTxStore {
     int limit = 20,
     int offset = 0,
   }) async {
-    final isar = await WalletIsar.instance.db();
-    return isar.localTxEntitys
-        .where()
-        .walletAddressEqualTo(walletAddress)
-        .sortByCreatedAtMillisDesc()
-        .offset(offset)
-        .limit(limit)
-        .findAll();
+    return WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys
+          .where()
+          .walletAddressEqualTo(walletAddress)
+          .sortByCreatedAtMillisDesc()
+          .offset(offset)
+          .limit(limit)
+          .findAll();
+    });
   }
 
   /// 查询某个钱包最近 N 条记录。
@@ -37,12 +37,9 @@ class LocalTxStore {
 
   /// 按 txId 更新状态。
   static Future<void> updateStatus(String txId, String status) async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
-      final entity = await isar.localTxEntitys
-          .where()
-          .txIdEqualTo(txId)
-          .findFirst();
+    await WalletIsar.instance.writeTxn((isar) async {
+      final entity =
+          await isar.localTxEntitys.where().txIdEqualTo(txId).findFirst();
       if (entity != null) {
         entity.status = status;
         entity.confirmedAtMillis = DateTime.now().millisecondsSinceEpoch;
@@ -53,19 +50,18 @@ class LocalTxStore {
 
   /// 按 txId 查询单条记录（防重复用）。
   static Future<LocalTxEntity?> queryByTxId(String txId) async {
-    final isar = await WalletIsar.instance.db();
-    return isar.localTxEntitys
-        .where()
-        .txIdEqualTo(txId)
-        .findFirst();
+    return WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys.where().txIdEqualTo(txId).findFirst();
+    });
   }
 
   /// 查询某个钱包的交易总数。
   static Future<int> countByWallet(String walletAddress) async {
-    final isar = await WalletIsar.instance.db();
-    return isar.localTxEntitys
-        .where()
-        .walletAddressEqualTo(walletAddress)
-        .count();
+    return WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys
+          .where()
+          .walletAddressEqualTo(walletAddress)
+          .count();
+    });
   }
 }

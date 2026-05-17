@@ -1,4 +1,4 @@
-// 多签交易统一账户列表页(个人 + 机构 混合视图)。
+// 多签统一账户列表页(个人 + 机构 混合视图)。
 //
 // 设计要点:
 // - 后端按 governance/personal-manage 与 governance/organization-manage 分开;
@@ -29,6 +29,7 @@ import 'personal-manage/personal_manage_account_info_page.dart';
 import 'personal-manage/personal_manage_discovery_service.dart';
 import 'personal-manage/personal_manage_models.dart';
 import 'personal-manage/personal_manage_service.dart';
+import 'personal-manage/personal_proposal_history_service.dart';
 
 enum _DuoqianKind { personal, institution }
 
@@ -81,6 +82,8 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   bool _scanning = false;
   String? _scanProgress;
   final PersonalManageService _personalManageService = PersonalManageService();
+  final PersonalProposalHistoryService _personalProposalHistoryService =
+      PersonalProposalHistoryService();
   final DuoqianManageService _duoqianManageService = DuoqianManageService();
 
   @override
@@ -106,30 +109,47 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   }
 
   Future<void> _readFromIsar() async {
-    final isar = await WalletIsar.instance.db();
-    final personals = await isar.personalDuoqianEntitys.where().findAll();
-    final institutions = await isar.duoqianInstitutionEntitys.where().findAll();
-    await _syncPersonalStatuses(isar, personals);
-    await _syncInstitutionStatuses(isar, institutions);
-    final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
-      isar,
-      personals.map((p) => p.duoqianAddress),
-    );
-    final institutionStatuses = await InstitutionDuoqianLocalState.readStatuses(
-      isar,
-      institutions.map((p) => p.duoqianAddress),
-    );
+    final initial = await WalletIsar.instance.read((isar) async {
+      final personals = await isar.personalDuoqianEntitys.where().findAll();
+      final institutions =
+          await isar.duoqianInstitutionEntitys.where().findAll();
+      return (personals: personals, institutions: institutions);
+    });
+    await _syncPersonalStatuses(initial.personals);
+    await _syncInstitutionStatuses(initial.institutions);
+    final snapshot = await WalletIsar.instance.read((isar) async {
+      final personals = await isar.personalDuoqianEntitys.where().findAll();
+      final institutions =
+          await isar.duoqianInstitutionEntitys.where().findAll();
+      final personalStatuses = await PersonalDuoqianLocalState.readStatuses(
+        isar,
+        personals.map((p) => p.duoqianAddress),
+      );
+      final institutionStatuses =
+          await InstitutionDuoqianLocalState.readStatuses(
+        isar,
+        institutions.map((p) => p.duoqianAddress),
+      );
+      return (
+        personals: personals,
+        institutions: institutions,
+        personalStatuses: personalStatuses,
+        institutionStatuses: institutionStatuses,
+      );
+    });
     final merged = <_UnifiedItem>[
-      ...personals.map(
+      ...snapshot.personals.map(
         (p) => _UnifiedItem.personal(
           p,
-          localStatus: personalStatuses[_normalizeHex(p.duoqianAddress)],
+          localStatus:
+              snapshot.personalStatuses[_normalizeHex(p.duoqianAddress)],
         ),
       ),
-      ...institutions.map(
+      ...snapshot.institutions.map(
         (p) => _UnifiedItem.institution(
           p,
-          localStatus: institutionStatuses[_normalizeHex(p.duoqianAddress)],
+          localStatus:
+              snapshot.institutionStatuses[_normalizeHex(p.duoqianAddress)],
         ),
       ),
     ]..sort((a, b) => b.addedAtMillis.compareTo(a.addedAtMillis));
@@ -138,20 +158,24 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   }
 
   Future<void> _syncPersonalStatuses(
-    Isar isar,
-    List<PersonalDuoqianEntity> personals,
-  ) async {
+      List<PersonalDuoqianEntity> personals) async {
     for (final personal in personals) {
       try {
         final info = await _personalManageService.fetchPersonalAccount(
           personal.duoqianAddress,
         );
+        if (info == null &&
+            await _personalProposalHistoryService
+                .hasUnchainedVotingCreateProposal(personal.duoqianAddress)) {
+          await _deletePersonalGhost(personal.duoqianAddress);
+          continue;
+        }
         final status = info == null
             ? PersonalDuoqianLocalState.statusClosed
             : info.status == DuoqianStatus.active
                 ? PersonalDuoqianLocalState.statusActive
                 : PersonalDuoqianLocalState.statusPending;
-        await isar.writeTxn(() async {
+        await WalletIsar.instance.writeTxn((isar) async {
           await PersonalDuoqianLocalState.putStatusInTxn(
             isar,
             personal.duoqianAddress,
@@ -164,8 +188,26 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     }
   }
 
+  Future<void> _deletePersonalGhost(String personalAddressHex) async {
+    await WalletIsar.instance.writeTxn((isar) async {
+      // 中文注释：旧版本曾在 txHash 返回后提前写入本地多签；若链上没有账户
+      // 且创建提案也不存在，说明它从未上链，不能展示为“已注销”。
+      await isar.personalDuoqianEntitys
+          .where()
+          .duoqianAddressEqualTo(personalAddressHex)
+          .deleteAll();
+      await isar.personalDuoqianProposalEntitys
+          .filter()
+          .personalAddressEqualTo(personalAddressHex)
+          .deleteAll();
+      await PersonalDuoqianLocalState.deleteStatusInTxn(
+        isar,
+        personalAddressHex,
+      );
+    });
+  }
+
   Future<void> _syncInstitutionStatuses(
-    Isar isar,
     List<DuoqianInstitutionEntity> institutions,
   ) async {
     for (final institution in institutions) {
@@ -178,7 +220,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             : info.status == org_models.DuoqianStatus.active
                 ? InstitutionDuoqianLocalState.statusActive
                 : InstitutionDuoqianLocalState.statusPending;
-        await isar.writeTxn(() async {
+        await WalletIsar.instance.writeTxn((isar) async {
           await InstitutionDuoqianLocalState.putStatusInTxn(
             isar,
             institution.duoqianAddress,
@@ -356,7 +398,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          '账户列表',
+          '多签',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
         ),
         centerTitle: true,

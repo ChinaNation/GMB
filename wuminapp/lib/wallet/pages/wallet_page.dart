@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
@@ -56,6 +58,29 @@ List<WalletProfile> reorderWalletProfiles(
   return next;
 }
 
+/// 中文注释：本地 Isar/MDBX 繁忙属于钱包数据库问题，不能提示成区块链网络异常。
+bool _isWalletLocalStoreError(Object? error) {
+  final raw = error.toString().toLowerCase();
+  return raw.contains('isar') ||
+      raw.contains('mdbx') ||
+      raw.contains('active transaction') ||
+      raw.contains('database');
+}
+
+String _walletLocalStoreErrorMessage(Object? error) {
+  if (_isWalletLocalStoreError(error)) {
+    return '本地钱包数据库繁忙，请稍后重试';
+  }
+  return '本地钱包读取失败：$error';
+}
+
+String _walletOperationErrorMessage(Object error) {
+  if (_isWalletLocalStoreError(error)) {
+    return _walletLocalStoreErrorMessage(error);
+  }
+  return '$error';
+}
+
 /// v6 改版（2026-04-24）：
 /// - 卡片样式抄 wumin/lib/ui/home_page.dart 的钱包卡片，单列横向布局；
 /// - 无 active 视觉，点击卡片直接进详情(已删「当前」小标签)；
@@ -72,33 +97,61 @@ class _MyWalletPageState extends State<MyWalletPage> {
   List<WalletProfile>? _wallets;
   bool _walletsLoading = true;
   bool _balanceRefreshing = false;
+  DateTime? _lastWalletStoreSnackAt;
 
   bool get _isSelectionMode => widget.selectForTrade || widget.selectForBind;
 
   @override
   void initState() {
     super.initState();
-    _loadWallets();
-    if (!_isSelectionMode) {
-      _refreshBalancesFromChain();
+    unawaited(_reload());
+  }
+
+  Future<List<WalletProfile>?> _loadWallets({bool showSnack = true}) async {
+    try {
+      final list = await _walletService.getWallets();
+      if (!mounted) return null;
+      setState(() {
+        _wallets = list;
+        _walletsLoading = false;
+      });
+      return list;
+    } catch (e, st) {
+      if (!WalletIsar.instance.isBusyError(e)) {
+        debugPrint('wallet local load failed: $e\n$st');
+      }
+      if (!mounted) return null;
+      setState(() {
+        _wallets ??= const [];
+        _walletsLoading = false;
+      });
+      if (showSnack) _showWalletStoreErrorOnce(e);
+      return null;
     }
   }
 
-  Future<void> _loadWallets() async {
-    final list = await _walletService.getWallets();
-    if (!mounted) return;
-    setState(() {
-      _wallets = list;
-      _walletsLoading = false;
-    });
+  Future<void> _reload() async {
+    final wallets = await _loadWallets();
+    if (!_isSelectionMode) {
+      await _refreshBalancesFromChain(wallets: wallets);
+    }
   }
 
-  void _reload() {
-    _loadWallets();
-    _refreshBalancesFromChain();
+  void _showWalletStoreErrorOnce(Object? error) {
+    final now = DateTime.now();
+    final last = _lastWalletStoreSnackAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 8)) {
+      return;
+    }
+    _lastWalletStoreSnackAt = now;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(_walletLocalStoreErrorMessage(error))),
+    );
   }
 
-  Future<void> _refreshBalancesFromChain() async {
+  Future<void> _refreshBalancesFromChain({
+    List<WalletProfile>? wallets,
+  }) async {
     if (_balanceRefreshing) return;
     setState(() {
       _balanceRefreshing = true;
@@ -108,18 +161,31 @@ class _MyWalletPageState extends State<MyWalletPage> {
       // 诊断：打印轻节点状态，帮助定位链路问题
       await SmoldotClientManager.instance.printDiagnostics();
 
-      final wallets = await _walletService.getWallets();
+      var targetWallets = wallets ?? const <WalletProfile>[];
       bool updated = false;
       bool hasError = false;
+      if (wallets == null) {
+        try {
+          targetWallets = await _walletService.getWallets();
+        } catch (e, st) {
+          if (!WalletIsar.instance.isBusyError(e)) {
+            debugPrint(
+              'wallet local read before balance refresh failed: $e\n$st',
+            );
+          }
+          refreshError = e;
+          hasError = true;
+        }
+      }
 
-      if (wallets.isEmpty) {
+      if (targetWallets.isEmpty) {
         // 无钱包，跳过
       } else {
         try {
           // 批量查询所有钱包余额（一次网络请求）
-          final pubkeys = wallets.map((w) => w.pubkeyHex).toList();
+          final pubkeys = targetWallets.map((w) => w.pubkeyHex).toList();
           final balances = await _chainRpc.fetchBalances(pubkeys);
-          for (final wallet in wallets) {
+          for (final wallet in targetWallets) {
             final balance = balances[wallet.pubkeyHex] ?? 0.0;
             if (balance != wallet.balance) {
               await _walletService.setWalletBalance(
@@ -135,15 +201,20 @@ class _MyWalletPageState extends State<MyWalletPage> {
       }
       if (!mounted) return;
       if (updated) {
-        await _loadWallets();
+        await _loadWallets(showSnack: false);
         if (!mounted) return;
       }
       if (hasError) {
-        final msg =
-            SmoldotClientManager.instance.buildUserFacingError(refreshError);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
+        final msg = _isWalletLocalStoreError(refreshError)
+            ? _walletLocalStoreErrorMessage(refreshError)
+            : SmoldotClientManager.instance.buildUserFacingError(refreshError);
+        if (_isWalletLocalStoreError(refreshError)) {
+          _showWalletStoreErrorOnce(refreshError);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        }
       }
     } finally {
       if (mounted) {
@@ -178,8 +249,10 @@ class _MyWalletPageState extends State<MyWalletPage> {
     try {
       await _walletService.deleteWallet(wallet.walletIndex);
       if (!mounted) return;
-      _reload();
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      await _reload();
+      if (!mounted) return;
+      messenger.showSnackBar(
         SnackBar(content: Text('已删除「${wallet.walletName}」')),
       );
     } catch (e) {
@@ -263,7 +336,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
       MaterialPageRoute(builder: (_) => const CreateWalletPage()),
     );
     if (created == true) {
-      _reload();
+      await _reload();
     }
   }
 
@@ -272,7 +345,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
       MaterialPageRoute(builder: (_) => const ImportWalletPage()),
     );
     if (imported == true) {
-      _reload();
+      await _reload();
     }
   }
 
@@ -281,7 +354,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
       MaterialPageRoute(builder: (_) => const ImportColdWalletPage()),
     );
     if (imported == true) {
-      _reload();
+      await _reload();
     }
   }
 
@@ -331,7 +404,7 @@ class _MyWalletPageState extends State<MyWalletPage> {
       MaterialPageRoute(builder: (_) => WalletDetailPage(wallet: wallet)),
     );
     if (changed == true) {
-      _reload();
+      await _reload();
     }
   }
 
@@ -1182,6 +1255,12 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
         return;
       }
       Navigator.of(context).pop(true);
+    } catch (e, st) {
+      debugPrint('wallet create failed: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_walletOperationErrorMessage(e))),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1255,8 +1334,9 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
       }
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = _walletOperationErrorMessage(e);
       });
     } finally {
       if (mounted) {
@@ -1326,8 +1406,9 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = _walletOperationErrorMessage(e);
       });
     } finally {
       if (mounted) {

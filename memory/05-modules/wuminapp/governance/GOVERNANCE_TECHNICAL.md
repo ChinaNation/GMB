@@ -37,6 +37,13 @@ lib/votingengine/
 
 `organization-manage` 代表注册机构多签账户的多签管理能力，归属 `lib/governance/organization-manage/`，不作为公民提案三级目录预留。
 
+治理页本地状态边界：
+
+- 治理机构、提案、管理员列表等链上信息不能因为本机钱包库短暂 busy 而整页“加载失败”。
+- `ProposalContextResolver` 读取本地钱包失败时返回空管理员钱包列表，并保留链上机构/提案内容展示。
+- 机构详情页单独读取冷钱包管理员匹配关系；该读取失败只影响“当前用户是否管理员”的本地提示，不影响机构余额、管理员名单和提案列表。
+- 所有治理模块读写 Isar 必须走 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()`，不得直接取 `WalletIsar.instance.db()`。
+
 ## 2. 链上入口与权限边界
 
 ### 2.1 关键约束（必须遵守）
@@ -553,10 +560,17 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 ### 8.5 创建流程（Pending → Active）
 
-1. 管理员调用对应创建入口 → 写入机构或个人 pending storage + 投票引擎创建提案
-2. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
-3. 创建投票全员同意后自动执行：`Currency::transfer` 转入资金 + 对应账户状态改为 Active
-4. 投票超时/否决 → 清理 pending storage
+1. App 创建前按链端口径校验发起钱包 free 余额覆盖 `初始资金 + 创建手续费 + ED`；
+   创建手续费为 `max(初始资金 * 0.1%, 0.10 元)`，ED 当前为 `1.11 元`。
+2. 管理员调用对应创建入口 → 写入机构或个人 pending storage + 投票引擎创建提案
+3. App 不能把 txHash 当创建成功；必须等待交易入块，并在同一区块确认
+   `PersonalManage.PersonalDuoqianProposed` 或
+   `OrganizationManage.InstitutionCreateProposed` 后，才写本地记录。
+4. 本地提案编号必须使用事件中的 `proposal_id`，不得预测
+   `VotingEngine.NextProposalId`。
+5. 发起人已自动记一票赞成，其他管理员调用 `InternalVote::cast` 补票
+6. 创建投票全员同意后自动执行：`Currency::transfer` 转入资金 + 对应账户状态改为 Active
+7. 投票超时/否决 → 清理 pending storage
 
 ### 8.6 关闭流程
 
@@ -576,11 +590,13 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 
 ### 8.8 手机端入口分流
 
-2026-05-09 起，`wuminapp` 将多签账户入口收口为交易页的单入口“多签交易”，进入后显示统一“账户列表”：
+2026-05-17 起，`wuminapp` 将多签账户入口从交易页迁入底部第 2 个 `多签` Tab，点击后直接显示统一多签账户列表，顶部标题为“多签”：
 
 - 个人多签读取 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`。
 - 机构多签读取 `DuoqianInstitutionEntity` 和 `InstitutionDuoqianLocalState`。
+- 多签列表在首次点击 `多签` Tab 后构建，防止应用启动时提前触发多签账户发现。
 - 右上角加号提供“新增个人多签 / 新增机构多签”两个入口。
+- 原交易页中的多签入口删除，交易页只保留普通链上支付和扫码支付。
 
 发起转账提案不删除，
 入口由 `lib/transaction/duoqian-transfer/duoqian_transfer_entry.dart` 提供，
@@ -617,7 +633,6 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 | `lib/governance/personal-manage/personal_duoqian_create_page.dart` | 个人多签创建表单 |
 | `lib/governance/personal-manage/personal_duoqian_close_page.dart` | 个人多签关闭表单 |
 | `lib/governance/personal-manage/personal_admin_list_page.dart` | 个人多签管理员激活列表 |
-| `lib/governance/personal-manage/personal_manage_account_list_page.dart` | 个人多签账户列表页 |
 | `lib/governance/personal-manage/personal_manage_account_info_page.dart` | 个人多签账户详情页 |
 | `lib/governance/personal-manage/personal_manage_discovery_service.dart` | 个人多签反向索引发现服务 |
 | `lib/governance/personal-manage/personal_manage_service.dart` | PersonalManage 个人多签链上交互服务 |
@@ -637,7 +652,6 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 - `lib/governance/organization-manage/institution_detail_page.dart`
 - `lib/governance/governance_proposals_page.dart`
 - `lib/governance/organization-manage/institution_admin_list_page.dart`
-- `lib/governance/organization-manage/duoqian_account_list_page.dart`
 - `lib/governance/organization-manage/duoqian_account_info_page.dart`
 - `lib/governance/organization-manage/duoqian_discovery_service.dart`
 - `lib/governance/organization-manage/duoqian_manage_models.dart`
@@ -648,7 +662,6 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 - `lib/governance/personal-manage/personal_duoqian_create_page.dart`
 - `lib/governance/personal-manage/personal_duoqian_close_page.dart`
 - `lib/governance/personal-manage/personal_admin_list_page.dart`
-- `lib/governance/personal-manage/personal_manage_account_list_page.dart`
 - `lib/governance/personal-manage/personal_manage_account_info_page.dart`
 - `lib/governance/personal-manage/personal_manage_discovery_service.dart`
 - `lib/governance/personal-manage/personal_manage_service.dart`

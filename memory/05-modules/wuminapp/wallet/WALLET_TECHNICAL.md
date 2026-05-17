@@ -15,7 +15,8 @@
 
 本地 Android 启动产物约定：`wuminapp/scripts/wuminapp-run.sh` 运行后把 APK 复制到
 `wuminapp/target/公民.apk`；`wumin/scripts/wumin-run.sh` 运行后把冷钱包 APK 复制到
-`wumin/target/公民钱包.apk`。
+`wumin/target/公民钱包.apk`。该本地产物只用于开发启动；正式分发包以手动
+`wuminapp-ci.yml` 注入 release keystore 后生成的正式签名 `公民.apk` 为准。
 
 ## 2. 目录结构
 
@@ -67,6 +68,7 @@ lib/
 - `Isar/wallet_isar.dart`
   - Isar 集合定义与启动迁移
   - 开发阶段直接覆盖，schema 版本 `v1`
+  - 提供 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 作为全 App 业务读写唯一入口；余额刷新、对账、多签扫描、钱包导入等并发读写必须排队执行
 - `wallet_secure_keys.dart`
   - 机密 key 命名规范（`wallet.secret.<id>.seed_hex.v1`）
 
@@ -111,17 +113,19 @@ lib/
 1. 生成 `bip39` 助记词
 2. 派生 mini-secret：`mnemonic → entropy → PBKDF2(substrate_bip39) → 64 字节 → 前 32 字节`
 3. 用 `Keyring.sr25519.fromSeed(miniSecret)` 派生 SS58(2027) 地址与公钥
-4. seed（32 字节 hex）写入 secure storage
-5. 钱包元信息写入 Isar（`signMode: 'local'`）
-6. 助记词一次性展示给用户，不持久化
+4. 钱包元信息通过 `WalletIsar.instance.writeTxn()` 写入 Isar（`signMode: 'local'`）
+5. seed（32 字节 hex）写入 secure storage
+6. 创建流程立即复读 Isar 与 secure storage；校验失败必须回滚钱包记录和机密材料，不能展示助记词后留下空钱包列表
+7. 助记词一次性展示给用户
 
 ### 4.2 导入热钱包
 
 1. 校验助记词合法性
 2. 派生 seed → 地址/公钥
-3. seed 写入 secure storage
-4. 钱包元信息写入 Isar（`signMode: 'local'`）
-5. 设为当前激活钱包
+3. 钱包元信息通过 `WalletIsar.instance.writeTxn()` 写入 Isar（`signMode: 'local'`），并在同一事务内分配 `walletIndex` 与更新当前激活钱包
+4. seed 写入 secure storage
+5. 导入流程立即复读 Isar 与 secure storage；校验失败必须回滚钱包记录和机密材料
+6. 设为当前激活钱包
 
 ### 4.3 创建冷钱包
 
@@ -139,11 +143,12 @@ lib/
 ### 4.5 余额查询
 
 1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
-2. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchBalances(pubkeys)` 批量读取 `System.Account`
-3. 轻节点先等待同步完成；若轻节点未初始化、同步失败或链路降级，直接向上抛出真实错误
-4. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元
-5. 若余额有变化，更新 Isar 中的 `WalletProfileEntity.balance`
-6. 刷新 UI 显示；若轻节点不可用，则页面显示统一提示，而不是把失败误判为 0 余额
+2. 页面先通过 `_loadWallets()` 读取一次本地钱包列表，再把同一份列表传给余额刷新，避免首屏加载和余额刷新并发读取 Isar
+3. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchBalances(pubkeys)` 批量读取 `System.Account`
+4. 轻节点先等待同步完成；若轻节点未初始化、同步失败或链路降级，直接向上抛出真实错误
+5. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元
+6. 若余额有变化，通过统一写队列更新 Isar 中的 `WalletProfileEntity.balance`
+7. 刷新 UI 显示；若轻节点不可用，则页面显示统一提示，而不是把失败误判为 0 余额；若本地库短暂繁忙，只显示“本地钱包数据库繁忙”且保留已有列表
 
 ### 4.5.1 钱包卡片拖拽排序
 
@@ -211,6 +216,14 @@ lib/
   - `requestId, expiresAt`
 - `AppKvEntity`
   - `key, stringValue, intValue, boolValue`
+
+写库约束：
+
+- 钱包模块和其他业务模块不得直接调用 `WalletIsar.instance.db()` 后读写 collection，也不得直接调用 `isar.writeTxn()`；统一使用 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()`，避免 Android 真机上多个异步任务同时读写 MDBX 时出现 `MdbxError (11): Try again`。
+- 钱包 settings 行的创建不得在已有写事务中再次开启写事务；事务内只能调用 `_getSettingsInTxn()` 这类明确带 `InTxn` 后缀的方法。
+- 钱包创建/导入必须在返回 UI 前完成落库校验；任何一个落库或机密写入步骤失败，都必须回滚同一 `walletIndex` 的 Isar 记录、seed 和助记词。
+- `WalletManager.createWallet()` / `importWallet()` / `importColdWallet()` 的钱包元数据写入和当前钱包切换在同一事务内完成，避免钱包索引重复、激活钱包丢失或嵌套事务。
+- 钱包页展示错误时，本地 Isar/MDBX 错误统一提示为本地钱包数据库繁忙，不再显示为轻节点或区块链连接失败。
 
 ### 5.3 其他 SharedPreferences（尚未迁移）
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -382,7 +383,26 @@ class WalletIsar {
 
   Isar? _isar;
   Future<Isar>? _opening;
+  Future<void> _operationTail = Future<void>.value();
+  bool _operationActive = false;
   Future<void>? _testCoreInit;
+
+  static const List<Duration> _busyRetryDelays = [
+    Duration(milliseconds: 80),
+    Duration(milliseconds: 160),
+    Duration(milliseconds: 320),
+    Duration(milliseconds: 640),
+    Duration(milliseconds: 1200),
+    Duration(milliseconds: 2400),
+    Duration(milliseconds: 3600),
+    Duration(milliseconds: 5000),
+  ];
+
+  /// 中文注释：给低优先级后台任务判断是否让路；前台读写仍应直接排队执行。
+  bool get hasActiveOperation => _operationActive;
+
+  /// 中文注释：业务调度层用它识别 MDBX 短暂繁忙，并选择跳过低优先级后台任务。
+  bool isBusyError(Object error) => _isBusyError(error);
 
   Future<Isar> db() async {
     final current = _isar;
@@ -406,6 +426,72 @@ class WalletIsar {
     }
   }
 
+  /// 中文注释：低端 Android 的 MDBX 在读写窗口重叠时可能短暂返回 EAGAIN。
+  /// 对这类 busy 错误做小间隔重试，避免后台对账或余额刷新把瞬时竞争暴露给 UI。
+  Future<T> runWithBusyRetry<T>(Future<T> Function() action) async {
+    for (var attempt = 0; attempt <= _busyRetryDelays.length; attempt++) {
+      try {
+        return await action();
+      } catch (error) {
+        if (!_isBusyError(error) || attempt == _busyRetryDelays.length) {
+          rethrow;
+        }
+        await Future<void>.delayed(_busyRetryDelays[attempt]);
+      }
+    }
+    throw StateError('unreachable');
+  }
+
+  Future<T> _enqueue<T>(Future<T> Function() action) {
+    final previous = _operationTail;
+    final completer = Completer<T>();
+    _operationTail = completer.future.then<void>(
+      (_) {},
+      onError: (_) {},
+    );
+
+    () async {
+      try {
+        await previous.catchError((_) {});
+        _operationActive = true;
+        final result = await runWithBusyRetry(action);
+        completer.complete(result);
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        _operationActive = false;
+      }
+    }();
+
+    return completer.future;
+  }
+
+  Future<T> read<T>(Future<T> Function(Isar isar) action) {
+    return _enqueue(() async {
+      final isar = await db();
+      return action(isar);
+    });
+  }
+
+  bool _isBusyError(Object error) {
+    final raw = error.toString().toLowerCase();
+    return raw.contains('mdbxerror (11)') ||
+        raw.contains('try again') ||
+        raw.contains('active transaction');
+  }
+
+  /// 中文注释：全 App 共用的 Isar 写事务入口。
+  ///
+  /// Android 低端机上后台对账、余额刷新、多签扫描和钱包导入可能同时读写库，
+  /// MDBX 会返回 `MdbxError(11): Try again`。所有业务读写统一排队到这里，
+  /// 保证同一进程内任何时刻只有一个 Isar 业务操作在运行。
+  Future<T> writeTxn<T>(Future<T> Function(Isar isar) action) {
+    return _enqueue(() async {
+      final isar = await db();
+      return isar.writeTxn<T>(() => action(isar));
+    });
+  }
+
   Future<Isar> _openAndMigrate() async {
     await ensureTestCoreInitialized();
 
@@ -414,7 +500,7 @@ class WalletIsar {
     final existing = Isar.getInstance('wuminapp_wallet');
     if (existing != null && existing.isOpen) {
       try {
-        // 尝试访问 LocalTxEntity collection��如果成功说明 schema 完整
+        // 尝试访问 LocalTxEntity collection，如果成功说明 schema 完整。
         existing.localTxEntitys;
         return existing;
       } catch (_) {
@@ -483,6 +569,28 @@ class WalletIsar {
     }
     _isar = null;
     _opening = null;
+    _operationTail = Future<void>.value();
+    _operationActive = false;
+  }
+
+  /// 中文注释：应用锁触发清空数据时使用，同样走队列等待前序读写结束。
+  Future<void> closeAndDeleteFromDisk() {
+    return _enqueue(() async {
+      final opening = _opening;
+      if (opening != null) {
+        try {
+          await opening;
+        } catch (_) {
+          // 打开失败时继续尝试关闭已注册实例。
+        }
+      }
+      final current = _isar ?? Isar.getInstance('wuminapp_wallet');
+      if (current != null && current.isOpen) {
+        await current.close(deleteFromDisk: true);
+      }
+      _isar = null;
+      _opening = null;
+    });
   }
 
   Future<String> _resolveDirectory() async {

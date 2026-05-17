@@ -56,3 +56,8 @@ citizenchain/node/frontend/dist/
 # Flutter Android local/generated files
 **/android/.gradle/
 **/android/local.properties
+
+# Android signing secrets
+wuminapp/android/key.properties
+wuminapp/android/app/*.jks
+wuminapp/android/app/*.keystore

@@ -100,11 +100,10 @@ class PendingVoteStore {
 
   /// 保存一条待确认投票记录。
   Future<void> save(PendingVoteRecord record) async {
-    final isar = await WalletIsar.instance.db();
     final entity = AppKvEntity()
       ..key = _key(record.proposalType, record.proposalId, record.walletPubkey)
       ..stringValue = jsonEncode(record.toJson());
-    await isar.writeTxn(() => isar.appKvEntitys.put(entity));
+    await WalletIsar.instance.writeTxn((isar) => isar.appKvEntitys.put(entity));
   }
 
   /// 查询指定提案的所有待确认投票。
@@ -114,10 +113,10 @@ class PendingVoteStore {
     String proposalType,
     int proposalId,
   ) async {
-    final isar = await WalletIsar.instance.db();
     final keyPrefix = '$_prefix:$proposalType:$proposalId:';
-    final rows =
-        await isar.appKvEntitys.filter().keyStartsWith(keyPrefix).findAll();
+    final rows = await WalletIsar.instance.read((isar) {
+      return isar.appKvEntitys.filter().keyStartsWith(keyPrefix).findAll();
+    });
     return rows
         .where((r) => r.stringValue != null)
         .map((r) => PendingVoteRecord.fromJson(
@@ -128,12 +127,13 @@ class PendingVoteStore {
   /// 删除一条待确认记录（已确认或已丢失）。
   Future<void> remove(
       String proposalType, int proposalId, String pubkey) async {
-    final isar = await WalletIsar.instance.db();
     final key = _key(proposalType, proposalId, pubkey);
-    final row = await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
-    if (row != null) {
-      await isar.writeTxn(() => isar.appKvEntitys.delete(row.id));
-    }
+    await WalletIsar.instance.writeTxn((isar) async {
+      final row = await isar.appKvEntitys.filter().keyEqualTo(key).findFirst();
+      if (row != null) {
+        await isar.appKvEntitys.delete(row.id);
+      }
+    });
   }
 
   /// 批量检查链上确认状态，自动清除已确认 / 已丢失的记录。

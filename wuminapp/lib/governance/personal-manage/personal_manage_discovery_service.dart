@@ -148,7 +148,6 @@ class PersonalManageDiscoveryService {
       onProgress?.call(allKeys.length, allKeys.length, matchedCount);
     }
 
-    final isar = await WalletIsar.instance.db();
     final scannedAddrs = <String>{};
     var newlyAdded = 0;
 
@@ -158,7 +157,6 @@ class PersonalManageDiscoveryService {
       if (meta == null) continue;
       scannedAddrs.add(addr);
       final added = await _upsertPersonal(
-        isar: isar,
         duoqianAddrHex: addr,
         name: meta.accountName,
         creatorAddrHex: meta.creatorAddressHex,
@@ -167,7 +165,7 @@ class PersonalManageDiscoveryService {
       if (added) newlyAdded++;
     }
 
-    final orphans = await _reverseValidateAndDelete(isar, scannedAddrs);
+    final orphans = await _reverseValidateAndDelete(scannedAddrs);
     await _writeLastDiscoveryAt(DateTime.now());
 
     return PersonalManageDiscoveryStats(
@@ -193,31 +191,11 @@ class PersonalManageDiscoveryService {
   }
 
   Future<bool> _upsertPersonal({
-    required Isar isar,
     required String duoqianAddrHex,
     required String name,
     required String creatorAddrHex,
     required List<String> matchedAdmins,
   }) async {
-    final exists = await isar.personalDuoqianEntitys
-        .filter()
-        .duoqianAddressEqualTo(duoqianAddrHex)
-        .findFirst();
-
-    if (exists != null) {
-      if (!exists.discoveredViaAdmin) return false;
-      await isar.writeTxn(() async {
-        exists.matchedAdminPubkeys = matchedAdmins;
-        await isar.personalDuoqianEntitys.put(exists);
-        await PersonalDuoqianLocalState.putStatusInTxn(
-          isar,
-          duoqianAddrHex,
-          PersonalDuoqianLocalState.statusActive,
-        );
-      });
-      return false;
-    }
-
     String creatorSs58;
     try {
       creatorSs58 = Keyring()
@@ -226,7 +204,24 @@ class PersonalManageDiscoveryService {
       creatorSs58 = '';
     }
 
-    await isar.writeTxn(() async {
+    return WalletIsar.instance.writeTxn((isar) async {
+      final exists = await isar.personalDuoqianEntitys
+          .filter()
+          .duoqianAddressEqualTo(duoqianAddrHex)
+          .findFirst();
+
+      if (exists != null) {
+        if (!exists.discoveredViaAdmin) return false;
+        exists.matchedAdminPubkeys = matchedAdmins;
+        await isar.personalDuoqianEntitys.put(exists);
+        await PersonalDuoqianLocalState.putStatusInTxn(
+          isar,
+          duoqianAddrHex,
+          PersonalDuoqianLocalState.statusActive,
+        );
+        return false;
+      }
+
       final entity = PersonalDuoqianEntity()
         ..duoqianAddress = duoqianAddrHex
         ..name = name
@@ -240,16 +235,13 @@ class PersonalManageDiscoveryService {
         duoqianAddrHex,
         PersonalDuoqianLocalState.statusActive,
       );
+      return true;
     });
-    return true;
   }
 
-  Future<int> _reverseValidateAndDelete(
-    Isar isar,
-    Set<String> scannedAddrs,
-  ) async {
+  Future<int> _reverseValidateAndDelete(Set<String> scannedAddrs) async {
     var closed = 0;
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       final stalePersonals = await isar.personalDuoqianEntitys
           .filter()
           .discoveredViaAdminEqualTo(true)

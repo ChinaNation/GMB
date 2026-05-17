@@ -74,8 +74,7 @@ class AppLockService {
       }
 
       // 锁定 24 小时
-      final lockUntil =
-          DateTime.now().add(lockDuration).millisecondsSinceEpoch;
+      final lockUntil = DateTime.now().add(lockDuration).millisecondsSinceEpoch;
       await _secure.write(key: _keyLockUntil, value: lockUntil.toString());
     }
 
@@ -134,8 +133,7 @@ class AppLockService {
   static Future<void> wipeAllData() async {
     // 1. 关闭并删除 Isar 数据库
     try {
-      final isar = await WalletIsar.instance.db();
-      await isar.close(deleteFromDisk: true);
+      await WalletIsar.instance.closeAndDeleteFromDisk();
     } catch (_) {
       // 数据库可能未初始化
     }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:wuminapp_mobile/governance/duoqian_account_list_page.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/services/offchain_scan_flow.dart';
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_page.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
@@ -9,7 +8,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 /// 交易 Tab 页面。
 ///
 /// 中文注释：本页只负责交易页入口编排；链上支付主体仍由 onchain 模块渲染，
-/// 扫码支付、多签内部业务仍留在各自功能域。
+/// 扫码支付内部业务仍留在链下支付功能域。
 class TransactionTabPage extends StatelessWidget {
   const TransactionTabPage({super.key});
 
@@ -20,25 +19,11 @@ class TransactionTabPage extends StatelessWidget {
     await openOffchainScanPaymentFlow(context: context, wallet: wallet);
   }
 
-  void _push(BuildContext context, Widget page) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
-  }
-
   @override
   Widget build(BuildContext context) {
     return OnchainPaymentPanel(
       title: '交易',
       extraEntriesBuilder: (context, wallet) => [
-        _TransactionEntryRow(
-          icon: const Icon(
-            Icons.account_tree_outlined,
-            size: 18,
-            color: AppTheme.primary,
-          ),
-          title: '多签交易',
-          onTap: () => _push(context, const DuoqianAccountListPage()),
-        ),
-        const SizedBox(height: 12),
         _TransactionEntryRow(
           icon: SvgPicture.asset(
             'assets/icons/scan-line.svg',

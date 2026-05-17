@@ -21,6 +21,7 @@ import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/my/user/user_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/update/app_update.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 
@@ -1273,6 +1274,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   static const String _deviceLockKey = 'device_lock_enabled';
   static const FlutterSecureStorage _secure = FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
+  final AppUpdateController _updateController = AppUpdateController.instance;
   bool _deviceLockEnabled = false;
   bool _pinLockEnabled = false;
   bool _loading = true;
@@ -1280,7 +1282,20 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _updateController.addListener(_handleUpdateStateChanged);
     _loadSettings();
+    _updateController.check();
+  }
+
+  @override
+  void dispose() {
+    _updateController.removeListener(_handleUpdateStateChanged);
+    super.dispose();
+  }
+
+  void _handleUpdateStateChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadSettings() async {
@@ -1354,6 +1369,23 @@ class _SettingsPageState extends State<_SettingsPage> {
         setState(() => _pinLockEnabled = false);
       }
     }
+  }
+
+  Future<void> _installUpdate() async {
+    final started = await _updateController.downloadAndInstall();
+    if (!mounted) return;
+
+    final error = _updateController.state.errorMessage;
+    if (!started && error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已打开系统安装器，请按系统提示完成更新')),
+    );
   }
 
   @override
@@ -1461,8 +1493,10 @@ class _SettingsPageState extends State<_SettingsPage> {
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16)),
                           const Spacer(),
-                          const Text('v1.0.0',
-                              style: TextStyle(
+                          _buildUpdateButton(),
+                          const SizedBox(width: 8),
+                          Text(_updateController.state.versionLabel,
+                              style: const TextStyle(
                                   color: AppTheme.textTertiary, fontSize: 13)),
                         ],
                       ),
@@ -1542,6 +1576,43 @@ class _SettingsPageState extends State<_SettingsPage> {
             onChanged: onChanged,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUpdateButton() {
+    final state = _updateController.state;
+    if (!state.hasUpdate) {
+      return const SizedBox.shrink();
+    }
+
+    final downloading = state.status == AppUpdateStatus.downloading;
+    final installing = state.status == AppUpdateStatus.installing;
+    final disabled = downloading || installing;
+    final progress = (state.progress * 100).clamp(0, 99).round();
+    final label = downloading
+        ? '$progress%'
+        : installing
+            ? '安装'
+            : '更新';
+
+    return SizedBox(
+      height: 30,
+      child: FilledButton.icon(
+        onPressed: disabled ? null : _installUpdate,
+        icon: downloading
+            ? const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.system_update_alt_rounded, size: 14),
+        label: Text(label),
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          visualDensity: VisualDensity.compact,
+        ),
       ),
     );
   }

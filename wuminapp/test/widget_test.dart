@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wuminapp_mobile/main.dart';
+import 'package:wuminapp_mobile/security/app_permission_bootstrap.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +12,10 @@ void main() {
   const localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({
+      AppPermissionBootstrap.guideSeenKey: true,
+    });
+
     // Mock secure storage — return null for all reads (no PIN set, no device lock).
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, (call) async {
@@ -53,12 +59,25 @@ void main() {
         .setMockMethodCallHandler(localAuthChannel, null);
   });
 
+  testWidgets('first run shows permission guide', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(const WuminApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('权限设置'), findsOneWidget);
+    expect(find.text('开启通知并继续'), findsOneWidget);
+    expect(find.text('稍后再说'), findsOneWidget);
+  });
+
   testWidgets('app bootstraps', (tester) async {
     await tester.pumpWidget(const WuminApp());
     // 等待异步锁检查完成并渲染主界面。
     await tester.pumpAndSettle();
 
-    // 中文注释：目录拆分不改变底部导航文案，第 3 个按钮仍叫“交易”。
+    // 中文注释：底部导航第 2 项已从消息改为多签，第 3 项仍叫交易。
+    expect(find.text('多签'), findsWidgets);
     expect(find.text('交易'), findsWidgets);
+    expect(find.text('消息'), findsNothing);
   });
 }

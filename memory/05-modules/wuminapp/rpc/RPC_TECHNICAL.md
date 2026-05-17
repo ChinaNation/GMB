@@ -22,6 +22,7 @@
 - 当前 `smoldot` Dart 绑定已从 pub.dev 依赖切换为仓库内本地 fork：`wuminapp/third_party/smoldot-dart`
 - 当前 `smoldot-light` Rust 内核通过 Git submodule 位于：`wuminapp/third_party/smoldot-pow`
 - 这两层收编的目的，是为后续 PoW 专用 typed capability 改造建立可控演进入口
+- Android 真机 ABI 只支持 `arm64-v8a` 与 `armeabi-v7a`。`scripts/build-smoldot-native.sh android` 必须同时构建 `aarch64-linux-android` 与 `armv7-linux-androideabi`，并分别写入 `android/app/src/main/jniLibs/arm64-v8a/libsmoldot.so` 与 `android/app/src/main/jniLibs/armeabi-v7a/libsmoldot.so`；APK 构建入口必须显式传入 `--target-platform android-arm,android-arm64`，避免生成未适配 smoldot 的 x86 / x86_64 包内容。
 
 ## 2. 目录结构
 
@@ -65,6 +66,7 @@ lib/rpc/
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
+- `ChainProgressBanner` 只展示轻节点状态快照（peer / best / finalized / syncing），文案必须使用“轻节点状态/轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
 - 当前代码已继续下沉原生能力，且已完成 **异步 FFI 迁移**：
   - `smoldot_get_status_snapshot_async`
   - `smoldot_get_system_account_async`
