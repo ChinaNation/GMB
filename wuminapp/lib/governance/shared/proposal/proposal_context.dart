@@ -1,11 +1,12 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/admin_activation_service.dart';
 import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_query_service.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -269,7 +270,15 @@ class ProposalContextResolver {
   // ---------------------------------------------------------------------------
 
   Future<List<WalletProfile>> _getWallets() async {
-    _wallets ??= await _walletManager.getWallets();
+    try {
+      _wallets ??= await _walletManager.getWallets();
+    } catch (e, st) {
+      // 中文注释：治理页的链上内容不能因为本地钱包库短暂繁忙而整体加载失败。
+      if (!WalletIsar.instance.isBusyError(e)) {
+        debugPrint('[ProposalContext] local wallet load failed: $e\n$st');
+      }
+      _wallets = const [];
+    }
     return _wallets!;
   }
 

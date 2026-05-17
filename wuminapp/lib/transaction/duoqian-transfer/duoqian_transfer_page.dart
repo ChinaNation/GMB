@@ -352,11 +352,12 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
     required double amountYuan,
   }) async {
     try {
-      final isar = await WalletIsar.instance.db();
-      final personal = await isar.personalDuoqianEntitys
-          .filter()
-          .duoqianAddressEqualTo(widget.institution.mainAddress)
-          .findFirst();
+      final personal = await WalletIsar.instance.read((isar) {
+        return isar.personalDuoqianEntitys
+            .filter()
+            .duoqianAddressEqualTo(widget.institution.mainAddress)
+            .findFirst();
+      });
       if (personal == null) return; // 非个人多签,跳过
 
       await PersonalProposalHistoryService().recordOrUpdate(

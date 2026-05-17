@@ -127,12 +127,13 @@ class _PersonalManageAccountInfoPageState
     // Pending 态:从本机 Isar PersonalDuoqianProposalEntity 取
     // (该 multisig 的 create 提案 snapshot 含 amount_fen)。
     try {
-      final isar = await WalletIsar.instance.db();
-      final entity = await isar.personalDuoqianProposalEntitys
-          .filter()
-          .personalAddressEqualTo(widget.institution.duoqianAddress)
-          .actionEqualTo('create')
-          .findFirst();
+      final entity = await WalletIsar.instance.read((isar) {
+        return isar.personalDuoqianProposalEntitys
+            .filter()
+            .personalAddressEqualTo(widget.institution.duoqianAddress)
+            .actionEqualTo('create')
+            .findFirst();
+      });
       if (entity?.snapshotJson == null || entity!.snapshotJson!.isEmpty) {
         return null;
       }
@@ -148,8 +149,7 @@ class _PersonalManageAccountInfoPageState
   }
 
   Future<void> _markLocalStatus(String status) async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await PersonalDuoqianLocalState.putStatusInTxn(
         isar,
         widget.institution.duoqianAddress,
@@ -235,8 +235,7 @@ class _PersonalManageAccountInfoPageState
   }
 
   Future<void> _removeFromLocal() async {
-    final isar = await WalletIsar.instance.db();
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await isar.personalDuoqianEntitys
           .where()
           .duoqianAddressEqualTo(widget.institution.duoqianAddress)
@@ -688,11 +687,12 @@ class _PersonalManageAccountInfoPageState
   /// (届时所有 admin 都按"非创建者"渲染,语义略损但不阻塞主流程)。
   Future<String?> _resolvePersonalCreatorPubkeyHex() async {
     try {
-      final isar = await WalletIsar.instance.db();
-      final entity = await isar.personalDuoqianEntitys
-          .filter()
-          .duoqianAddressEqualTo(widget.institution.duoqianAddress)
-          .findFirst();
+      final entity = await WalletIsar.instance.read((isar) {
+        return isar.personalDuoqianEntitys
+            .filter()
+            .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+            .findFirst();
+      });
       if (entity == null) return null;
       // creatorAddress 是 SS58,转 pubkey hex(小写,无 0x)。
       final pair = Keyring().decodeAddress(entity.creatorAddress);

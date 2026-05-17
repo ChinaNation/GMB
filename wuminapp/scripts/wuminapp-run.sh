@@ -30,6 +30,7 @@ fi
 
 # 构造 dart-define 参数
 DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
+ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
 # ── chainspec.json 已在创世时冻结，严禁自动重新生成 ──
@@ -140,7 +141,7 @@ sync_android_artifact() {
 if [[ "$DEVICE_LINE" == "android" ]]; then
   # 中文注释：启动脚本固定把本地 APK 产物沉淀到项目根 target/，便于离线安装和回滚。
   echo "==> 生成 Android 产物..."
-  flutter build apk --debug "${DART_DEFINES[@]}"
+  flutter build apk --debug "${ANDROID_TARGET_PLATFORMS[@]}" "${DART_DEFINES[@]}"
   sync_android_artifact
 fi
 

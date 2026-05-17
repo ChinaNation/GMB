@@ -12,7 +12,7 @@
 
 - 个人多签创建页面：`personal_duoqian_create_page.dart`
 - 个人多签关闭页面：`personal_duoqian_close_page.dart`
-- 个人多签账户列表页：`personal_manage_account_list_page.dart`
+- 个人多签列表展示：统一由 `wuminapp/lib/governance/duoqian_account_list_page.dart` 与机构多签合并展示
 - 个人多签账户详情页：`personal_manage_account_info_page.dart`
 - 个人多签反向索引发现服务：`personal_manage_discovery_service.dart`
 - 个人多签管理员激活列表：`personal_admin_list_page.dart`
@@ -28,6 +28,7 @@
 - 机构多签创建、关闭、SFID 机构账户查询：继续由 `wuminapp/lib/governance/organization-manage/` 机构路径处理。
 - 多签转账：唯一实现目录仍是 `wuminapp/lib/transaction/duoqian-transfer/`。
 - Isar schema 定义：仍在 `wuminapp/lib/isar/`，本模块只使用既有实体。
+- Isar 读写队列：由 `wuminapp/lib/isar/wallet_isar.dart` 统一提供，本模块不得直接打开 DB 实例。
 - 通用投票、签名、RPC：仍使用 `proposal/shared`、`signer`、`rpc` 等共用能力。
 - 个人/机构多签管理提案投票详情页：共用入口位于 `wuminapp/lib/governance/duoqian_manage_detail_page.dart`，本模块只提供 PersonalManage 解码服务。
 
@@ -53,9 +54,20 @@ PersonalManage storage：
 - 管理员真源是 `AdminsChange::Subjects`，SubjectKind 使用 `0x03 PersonalDuoqian`。
 - 普通业务动态阈值真源是 `InternalVote.ActiveDynamicThresholds`；创建/注销生命周期阈值由投票引擎按管理员快照写成全员同意。
 
+个人多签创建提交规则：
+
+- 创建前必须校验发起钱包 free 余额覆盖 `amount + fee + ED`。
+- `fee` 使用链上 `onchain_transaction::calculate_onchain_fee` 同口径：
+  `max(amount * 0.1%, 0.10 元)`；`ED` 当前为 `1.11 元`。
+- `author_submitExtrinsic` 返回的 txHash 只代表交易已提交到节点，不代表创建提案成功。
+- `personal_manage_service.dart` 必须使用 `signAndSubmitInBlock()` 等待入块，并从
+  `System.Events` 确认 `PersonalManage.PersonalDuoqianProposed(event_index=0)`。
+- 本地 `PersonalDuoqianEntity` 和 `PersonalDuoqianProposalEntity` 只能在确认事件后写入，
+  `proposalId` 必须来自链上事件，不允许预测 `VotingEngine.NextProposalId`。
+
 ## 3.1 wuminapp 本地注销显示规则
 
-- 账户列表页标题显示为“账户列表”。
+- 底部 `多签` Tab 标题显示为“多签”，统一展示个人多签与机构多签。
 - 已注销个人多签账户继续留在账户列表，状态显示“已注销”，不显示金额。
 - 详情页链上明确查不到 `PersonalManage::PersonalDuoqians` 时，写入本机
   `PersonalDuoqianLocalState.statusClosed`，页面状态显示“已注销”。
@@ -65,6 +77,10 @@ PersonalManage storage：
 - 链路异常只显示加载失败，不把网络失败写成已注销。
 - 链上 votingengine 90 天终态提案清理保持不变，wuminapp 不修改链上清理周期。
 - 发起创建/注销提案后，runtime 投票引擎会在同一事务自动给发起人记一票赞成；wuminapp 本地提案记录初始 `yesVotes = 1`，不再显示发起人还需要第二次投票。
+- 若旧版本已写入“本地 create 提案仍为 voting，但链上 Proposals[id] 不存在”的记录，
+  该记录视为未上链幽灵数据，列表同步时删除本地多签和提案快照，不显示为“已注销/未知提案”。
+- 个人多签历史、待激活创建提案反查、反向索引发现和本地状态更新全部通过
+  `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 进入统一队列，避免与钱包创建/导入、余额刷新和后台对账抢 MDBX 锁。
 
 ## 3.2 创建 / 注销阈值 UI
 
@@ -83,7 +99,8 @@ PersonalManage storage：
 - 机构多签 OrganizationManage 服务与机构 storage codec。
 - `AdminInstitutionCodec` 等跨个人/机构都需要读取的底层 Subject 解码能力。
 
-个人账户列表、账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `organization-manage`。
+个人账户详情、反向索引发现、创建、关闭、管理员激活和提案历史均不得回流到 `organization-manage`。
+个人多签列表入口只允许通过 `lib/governance/duoqian_account_list_page.dart` 统一呈现。
 `AdminInstitutionCodec` 只属于底层 Subject 解码能力，不承载 PersonalManage 主业务。
 
 ## 5. 测试

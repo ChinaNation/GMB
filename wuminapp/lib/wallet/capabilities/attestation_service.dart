@@ -42,20 +42,27 @@ class AttestationService {
   static const _kRenewThresholdMillis = 2 * 60 * 1000; // renew before expire
 
   Future<AttestationState> getState() async {
-    final isar = await WalletIsar.instance.db();
     final token = await _secureStorage.read(key: _tokenKey());
-    final expiresAtMillis = await _getKvInt(isar, _kMetaExpiresAtMillis);
-    final policy = await _getKvString(isar, _kMetaPolicy) ??
-        'DEFAULT_DERIVATION_PATH_ONLY';
-    final payload = await _getKvString(isar, _kMetaLastPayload);
-    final hasToken =
-        token != null && token.trim().isNotEmpty && expiresAtMillis != null;
+    final local = await WalletIsar.instance.read((isar) async {
+      final expiresAtMillis = await _getKvInt(isar, _kMetaExpiresAtMillis);
+      final policy = await _getKvString(isar, _kMetaPolicy) ??
+          'DEFAULT_DERIVATION_PATH_ONLY';
+      final payload = await _getKvString(isar, _kMetaLastPayload);
+      return (
+        expiresAtMillis: expiresAtMillis,
+        policy: policy,
+        payload: payload,
+      );
+    });
+    final hasToken = token != null &&
+        token.trim().isNotEmpty &&
+        local.expiresAtMillis != null;
     return AttestationState(
       hasToken: hasToken,
       token: token?.trim(),
-      expiresAtMillis: expiresAtMillis,
-      policy: policy,
-      lastRequestPayload: payload,
+      expiresAtMillis: local.expiresAtMillis,
+      policy: local.policy,
+      lastRequestPayload: local.payload,
     );
   }
 
@@ -75,9 +82,8 @@ class AttestationService {
     final payload = _buildPayload(wallet);
     final token = _issueToken();
     final expiresAt = DateTime.now().millisecondsSinceEpoch + _kTokenTtlMillis;
-    final isar = await WalletIsar.instance.db();
     await _secureStorage.write(key: _tokenKey(), value: token);
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await _putKvInt(isar, _kMetaExpiresAtMillis, expiresAt);
       await _putKvString(isar, _kMetaPolicy, walletServicePolicy(wallet));
       await _putKvString(isar, _kMetaLastPayload, payload);
@@ -86,9 +92,8 @@ class AttestationService {
   }
 
   Future<void> clearToken() async {
-    final isar = await WalletIsar.instance.db();
     await _secureStorage.delete(key: _tokenKey());
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       await _deleteKv(isar, _kMetaExpiresAtMillis);
       await _deleteKv(isar, _kMetaPolicy);
       await _deleteKv(isar, _kMetaLastPayload);

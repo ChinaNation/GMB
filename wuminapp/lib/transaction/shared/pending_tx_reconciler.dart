@@ -117,15 +117,12 @@ class PendingTxReconciler {
   }
 
   Future<int> _runReconcileAll() async {
-    final isar = await WalletIsar.instance.db();
-
     // 预热 walletAddress → pubkeyHex 映射，供 nonce 路径使用。
-    await _preloadPubkeyCache(isar);
+    await WalletIsar.instance.read(_preloadPubkeyCache);
 
-    final List<LocalTxEntity> pending = await isar.localTxEntitys
-        .filter()
-        .statusEqualTo('pending')
-        .findAll();
+    final List<LocalTxEntity> pending = await WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys.filter().statusEqualTo('pending').findAll();
+    });
 
     if (pending.isEmpty) {
       return 0;
@@ -135,7 +132,7 @@ class PendingTxReconciler {
 
     // 一次性迁移：历史数据里 blockNumber 字段可能塞的是 usedNonce，
     // 且 usedNonce 字段为空。先把它归位到 usedNonce，让后续判定逻辑统一。
-    await _migrateLegacyBlockNumberIfNeeded(isar, pending);
+    await _migrateLegacyBlockNumberIfNeeded(pending);
 
     int updated = 0;
     for (final record in pending) {
@@ -151,14 +148,14 @@ class PendingTxReconciler {
 
   /// 对单条 pending 记录执行对账。用于刚提交交易后的快速路径。
   Future<ReconcileOutcome> reconcileSingle(String txId) async {
-    final isar = await WalletIsar.instance.db();
-    final record =
-        await isar.localTxEntitys.filter().txIdEqualTo(txId).findFirst();
+    final record = await WalletIsar.instance.read((isar) {
+      return isar.localTxEntitys.filter().txIdEqualTo(txId).findFirst();
+    });
     if (record == null || record.status != 'pending') {
       return ReconcileOutcome.stillPending;
     }
     if (!_pubkeyCache.containsKey(record.walletAddress)) {
-      await _preloadPubkeyCache(isar);
+      await WalletIsar.instance.read(_preloadPubkeyCache);
     }
     return _reconcileOne(record, shallow: true);
   }
@@ -227,8 +224,7 @@ class PendingTxReconciler {
     int? realBlockNumber,
   }) async {
     if (realBlockNumber != null) {
-      final isar = await WalletIsar.instance.db();
-      await isar.writeTxn(() async {
+      await WalletIsar.instance.writeTxn((isar) async {
         final fresh = await isar.localTxEntitys
             .where()
             .txIdEqualTo(record.txId)
@@ -270,7 +266,6 @@ class PendingTxReconciler {
   /// 一次性数据迁移：旧版本 LocalTxEntity 把 usedNonce 存在 blockNumber 里。
   /// 当 usedNonce 为空且 status 为 pending 时，把 blockNumber 搬过去。
   Future<void> _migrateLegacyBlockNumberIfNeeded(
-    Isar isar,
     List<LocalTxEntity> pending,
   ) async {
     final toMigrate = pending
@@ -280,14 +275,14 @@ class PendingTxReconciler {
             r.status == 'pending')
         .toList();
     if (toMigrate.isEmpty) return;
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       for (final r in toMigrate) {
         r.usedNonce = r.blockNumber;
         r.blockNumber = null;
         await isar.localTxEntitys.put(r);
       }
     });
-    debugPrint('[Reconciler] 迁移 ${toMigrate.length} 条历史 pending 记录 blockNumber → usedNonce');
+    debugPrint(
+        '[Reconciler] 迁移 ${toMigrate.length} 条历史 pending 记录 blockNumber → usedNonce');
   }
 }
-

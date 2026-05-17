@@ -91,8 +91,10 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
 
   void _scheduleNextPoll({LightClientStatusSnapshot? progress}) {
     final current = progress ?? _progress;
-    final shouldPoll =
-        current == null || !current.hasPeers || current.isSyncing || _error != null;
+    final shouldPoll = current == null ||
+        !current.hasPeers ||
+        current.isSyncing ||
+        _error != null;
     if (!shouldPoll) return;
     _pollTimer = Timer(widget.pollInterval, () {
       if (!mounted) return;
@@ -113,12 +115,12 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
     if (progress == null && error == null) {
       color = AppTheme.info;
       icon = Icons.sync;
-      title = '正在读取区块链状态';
+      title = '正在读取轻节点状态';
       subtitle = '正在获取 peer、best、finalized 等链路信息';
     } else if (error != null && progress == null) {
       color = AppTheme.danger;
       icon = Icons.error_outline;
-      title = '区块链状态读取失败';
+      title = '轻节点状态读取失败';
       subtitle = error;
     } else if (progress != null) {
       if (!progress.hasPeers) {
@@ -132,7 +134,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
       } else {
         color = AppTheme.success;
         icon = Icons.check_circle_outline;
-        title = '区块链已就绪';
+        title = '轻节点已就绪';
       }
       final best = progress.bestBlockNumber != null
           ? '#${progress.bestBlockNumber}'

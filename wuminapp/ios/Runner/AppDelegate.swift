@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -28,6 +29,36 @@ import UIKit
           result(nil)
         case "isDeviceRooted":
           result(AppDelegate.checkJailbreak())
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
+      let permissionsChannel = FlutterMethodChannel(
+        name: "org.chinanation.citizen/permissions",
+        binaryMessenger: controller.binaryMessenger
+      )
+      permissionsChannel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "requestNotificationPermission":
+          // 中文注释：iOS 通知授权必须由 App 主动发起，拒绝后不阻塞进入主界面。
+          UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            DispatchQueue.main.async {
+              if let error = error {
+                result(FlutterError(code: "NOTIFICATION_PERMISSION_FAILED", message: error.localizedDescription, details: nil))
+              } else {
+                result(granted)
+              }
+            }
+          }
+        case "getNotificationPermissionStatus":
+          UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let granted = settings.authorizationStatus == .authorized ||
+              settings.authorizationStatus == .provisional
+            DispatchQueue.main.async {
+              result(granted)
+            }
+          }
         default:
           result(FlutterMethodNotImplemented)
         }

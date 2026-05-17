@@ -173,7 +173,6 @@ class DuoqianDiscoveryService {
       onProgress?.call(allKeys.length, allKeys.length, matchedCount);
     }
 
-    final isar = await WalletIsar.instance.db();
     final scannedDuoqianAddrs = <String>{};
     var matchedSfidAccountsCount = 0;
     var newlyAdded = 0;
@@ -196,7 +195,6 @@ class DuoqianDiscoveryService {
 
       scannedDuoqianAddrs.add(duoqianAddrHex);
       final added = await _upsertInstitution(
-        isar: isar,
         duoqianAddrHex: duoqianAddrHex,
         name: ref.accountNameText,
         sfidNumberUtf8: ref.sfidNumberText,
@@ -207,7 +205,7 @@ class DuoqianDiscoveryService {
       matchedSfidAccountsCount++;
     }
 
-    final orphans = await _reverseValidateAndDelete(isar, scannedDuoqianAddrs);
+    final orphans = await _reverseValidateAndDelete(scannedDuoqianAddrs);
     await _writeLastDiscoveryAt(DateTime.now());
 
     return DiscoveryStats(
@@ -225,29 +223,26 @@ class DuoqianDiscoveryService {
   Future<DateTime?> lastDiscoveryAt() => _readLastDiscoveryAt();
 
   Future<bool> _upsertInstitution({
-    required Isar isar,
     required String duoqianAddrHex,
     required String name,
     required String sfidNumberUtf8,
     required int? adminSubjectOrg,
     required List<String> matchedAdmins,
   }) async {
-    final exists = await isar.duoqianInstitutionEntitys
-        .filter()
-        .duoqianAddressEqualTo(duoqianAddrHex)
-        .findFirst();
+    return WalletIsar.instance.writeTxn((isar) async {
+      final exists = await isar.duoqianInstitutionEntitys
+          .filter()
+          .duoqianAddressEqualTo(duoqianAddrHex)
+          .findFirst();
 
-    if (exists != null) {
-      if (!exists.discoveredViaAdmin) return false;
-      await isar.writeTxn(() async {
+      if (exists != null) {
+        if (!exists.discoveredViaAdmin) return false;
         exists.adminSubjectOrg = adminSubjectOrg;
         exists.matchedAdminPubkeys = matchedAdmins;
         await isar.duoqianInstitutionEntitys.put(exists);
-      });
-      return false;
-    }
+        return false;
+      }
 
-    await isar.writeTxn(() async {
       final entity = DuoqianInstitutionEntity()
         ..duoqianAddress = duoqianAddrHex
         ..sfidNumber = sfidNumberUtf8
@@ -257,19 +252,16 @@ class DuoqianDiscoveryService {
         ..discoveredViaAdmin = true
         ..matchedAdminPubkeys = matchedAdmins;
       await isar.duoqianInstitutionEntitys.put(entity);
+      return true;
     });
-    return true;
   }
 
   /// 反向校验:删除 Isar 中 discoveredViaAdmin=true 但本次扫描未命中的机构 entity。
   /// 用户 discoveredViaAdmin=false 的 entity(本机创建)永不被删除。
-  Future<int> _reverseValidateAndDelete(
-    Isar isar,
-    Set<String> scannedAddrs,
-  ) async {
+  Future<int> _reverseValidateAndDelete(Set<String> scannedAddrs) async {
     var orphans = 0;
 
-    await isar.writeTxn(() async {
+    await WalletIsar.instance.writeTxn((isar) async {
       final staleInstitutions = await isar.duoqianInstitutionEntitys
           .filter()
           .discoveredViaAdminEqualTo(true)

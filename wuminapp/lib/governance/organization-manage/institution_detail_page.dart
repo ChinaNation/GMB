@@ -15,6 +15,7 @@ import 'package:wuminapp_mobile/governance/organization-manage/institution_admin
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/governance/governance_proposals_page.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
@@ -126,16 +127,22 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       // 已激活公钥集合
       final activatedPks = activated.map((a) => a.pubkeyHex).toSet();
 
-      // 计算用户已导入的冷钱包公钥中，属于本机构链上管理员的集合
-      final allWallets = await _walletManager.getWallets();
       final coldPubkeys = <String>{};
-      for (final w in allWallets) {
-        if (w.isColdWallet) {
-          var pk = w.pubkeyHex.toLowerCase();
-          if (pk.startsWith('0x')) pk = pk.substring(2);
-          if (admins.contains(pk)) {
-            coldPubkeys.add(pk);
+      try {
+        // 中文注释：本地钱包库只影响管理员身份提示，不能让机构链上信息整体加载失败。
+        final allWallets = await _walletManager.getWallets();
+        for (final w in allWallets) {
+          if (w.isColdWallet) {
+            var pk = w.pubkeyHex.toLowerCase();
+            if (pk.startsWith('0x')) pk = pk.substring(2);
+            if (admins.contains(pk)) {
+              coldPubkeys.add(pk);
+            }
           }
+        }
+      } catch (e, st) {
+        if (!WalletIsar.instance.isBusyError(e)) {
+          debugPrint('[InstitutionDetail] local wallet load failed: $e\n$st');
         }
       }
 

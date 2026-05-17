@@ -6,13 +6,14 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
+import 'package:wuminapp_mobile/governance/shared/duoqian_create_amount_rules.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
@@ -240,6 +241,22 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
     return null;
   }
 
+  Future<String?> _checkCreatorBalance({
+    required WalletProfile wallet,
+    required BigInt initialAmountFen,
+  }) async {
+    final balanceYuan = await ChainRpc().fetchBalance(wallet.pubkeyHex);
+    final balanceFen = DuoqianCreateAmountRules.yuanToFen(balanceYuan);
+    final requiredFen =
+        DuoqianCreateAmountRules.requiredBalanceFen(initialAmountFen);
+    if (balanceFen >= requiredFen) return null;
+    return DuoqianCreateAmountRules.insufficientBalanceMessage(
+      actionLabel: '创建个人多签',
+      balanceYuan: balanceYuan,
+      initialAmountFen: initialAmountFen,
+    );
+  }
+
   Future<void> _submit() async {
     final error = _validate();
     if (error != null) {
@@ -258,6 +275,18 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
       final createThreshold = _adminPubkeys.length;
       final amountYuan = AmountFormat.tryParse(_amountController.text) ?? 0;
       final amountFen = BigInt.from((amountYuan * 100).round());
+      final balanceError = await _checkCreatorBalance(
+        wallet: wallet,
+        initialAmountFen: amountFen,
+      );
+      if (balanceError != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(balanceError), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
 
       final adminPubkeyBytes = _adminPubkeys
           .map((hex) => Uint8List.fromList(_hexDecode(hex)))
@@ -325,12 +354,6 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         return Uint8List.fromList(_hexDecode(response.body.signature));
       }
 
-      // 提前查链上 NextProposalId,作为本次创建提案的预测 ID。
-      // 写入 Isar `PersonalDuoqianProposalEntity` 时使用,后续详情页打开
-      // 通过 PersonalProposalHistoryService 同步链上状态时按此 ID 校准。
-      final predictedProposalId =
-          await ProposalQueryService().fetchNextProposalId();
-
       final result = await _manageService.submitProposeCreatePersonal(
         accountName: nameBytes,
         adminPubkeys: adminPubkeyBytes,
@@ -341,48 +364,45 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
         sign: signCallback,
       );
 
-      // 存入本地 Isar
-      final previewAddr = _previewAddress();
-      if (previewAddr != null) {
-        final addrHex = _toHex(Keyring().decodeAddress(previewAddr));
-        final isar = await WalletIsar.instance.db();
-        await isar.writeTxn(() async {
-          final entity = PersonalDuoqianEntity()
-            ..duoqianAddress = addrHex
-            ..name = nameText
-            ..creatorAddress = wallet.address
-            ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
-          await isar.personalDuoqianEntitys.put(entity);
-          await PersonalDuoqianLocalState.putStatusInTxn(
-            isar,
-            addrHex,
-            PersonalDuoqianLocalState.statusPending,
-          );
-        });
-
-        // 同步记录创建提案到 PersonalDuoqianProposalEntity(req 5 历史保留)
-        await PersonalProposalHistoryService().recordOrUpdate(
-          personalAddressHex: addrHex,
-          proposalId: predictedProposalId,
-          action: PersonalProposalAction.create,
-          status: PersonalProposalStatus.voting,
-          // 中文注释：runtime 投票引擎创建提案后会在同一事务自动给发起人记一票赞成。
-          yesVotes: 1,
-          noVotes: 0,
-          snapshot: {
-            'name': nameText,
-            'admin_count': _adminPubkeys.length,
-            'regular_threshold': regularThreshold,
-            'create_threshold': createThreshold,
-            'amount_fen': amountFen.toString(),
-          },
+      final addrHex = result.duoqianAddressHex;
+      await WalletIsar.instance.writeTxn((isar) async {
+        final entity = PersonalDuoqianEntity()
+          ..duoqianAddress = addrHex
+          ..name = nameText
+          ..creatorAddress = wallet.address
+          ..addedAtMillis = DateTime.now().millisecondsSinceEpoch;
+        await isar.personalDuoqianEntitys.put(entity);
+        await PersonalDuoqianLocalState.putStatusInTxn(
+          isar,
+          addrHex,
+          PersonalDuoqianLocalState.statusPending,
         );
-      }
+      });
+
+      // 中文注释：只有入块并确认 PersonalDuoqianProposed 事件后，才写本地
+      // 创建提案；proposalId 使用链上事件返回值，不能再预测 NextProposalId。
+      await PersonalProposalHistoryService().recordOrUpdate(
+        personalAddressHex: addrHex,
+        proposalId: result.proposalId,
+        action: PersonalProposalAction.create,
+        status: PersonalProposalStatus.voting,
+        // 中文注释：runtime 投票引擎创建提案后会在同一事务自动给发起人记一票赞成。
+        yesVotes: 1,
+        noVotes: 0,
+        snapshot: {
+          'name': nameText,
+          'admin_count': _adminPubkeys.length,
+          'regular_threshold': regularThreshold,
+          'create_threshold': createThreshold,
+          'amount_fen': amountFen.toString(),
+        },
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
+          content: Text(
+              '提案已确认 #${result.proposalId}：${_truncateAddress(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );

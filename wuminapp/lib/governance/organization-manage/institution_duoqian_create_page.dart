@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
+import 'package:wuminapp_mobile/governance/shared/duoqian_create_amount_rules.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
@@ -12,6 +13,7 @@ import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/signer/qr_signer.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/ui/widgets/chain_progress_banner.dart';
@@ -297,6 +299,22 @@ class _InstitutionDuoqianCreatePageState
     return null;
   }
 
+  Future<String?> _checkCreatorBalance({
+    required WalletProfile wallet,
+    required BigInt initialTotalFen,
+  }) async {
+    final balanceYuan = await ChainRpc().fetchBalance(wallet.pubkeyHex);
+    final balanceFen = DuoqianCreateAmountRules.yuanToFen(balanceYuan);
+    final requiredFen =
+        DuoqianCreateAmountRules.requiredBalanceFen(initialTotalFen);
+    if (balanceFen >= requiredFen) return null;
+    return DuoqianCreateAmountRules.insufficientBalanceMessage(
+      actionLabel: '创建机构多签',
+      balanceYuan: balanceYuan,
+      initialAmountFen: initialTotalFen,
+    );
+  }
+
   Future<void> _submit() async {
     final blockedReason = _submitBlockedReason;
     if (blockedReason != null) {
@@ -342,11 +360,24 @@ class _InstitutionDuoqianCreatePageState
         totalAmountFen += amountFen;
       }
 
+      final wallet = _selectedWallet;
+      final balanceError = await _checkCreatorBalance(
+        wallet: wallet,
+        initialTotalFen: totalAmountFen,
+      );
+      if (balanceError != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(balanceError), backgroundColor: AppTheme.danger),
+        );
+        return;
+      }
+
       final adminPubkeyBytes = _adminPubkeys
           .map((hex) => Uint8List.fromList(_hexDecode(hex)))
           .toList();
 
-      final wallet = _selectedWallet;
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
 
       // 热钱包：先认证，后续用本地签名；冷钱包：走 QR 签名。
@@ -447,7 +478,8 @@ class _InstitutionDuoqianCreatePageState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('提案已提交：${_truncateAddress(result.txHash)}'),
+          content: Text(
+              '提案已确认 #${result.proposalId}：${_truncateAddress(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
