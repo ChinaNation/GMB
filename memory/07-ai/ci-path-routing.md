@@ -28,7 +28,7 @@ GMB 的 GitHub Actions 采用“按改动目录精确触发”的策略，避免
   - 三端安装包不下载、不内置最新 `citizenchain-wasm` artifact；现有链运行 runtime 以链上 `System.set_code` 为准
   - 本地开发启动和重新创世脚本使用当前源码构建 runtime，不从 GitHub CI 下载 WASM
   - CI 成功后上传三端 artifact，并发布到 GitHub Release，供桌面端自动更新链路使用
-  - Linux 产物继续包含 `公民链.deb`，成功上传本次 `公民链-linux` artifact 后顺序滚动部署同一个 deb 到 6 台固定服务器；部署失败时保留当前 run 和 artifact 供排查
+  - Linux 产物继续包含 `公民链.deb`，成功上传本次 `公民链-linux` artifact 后先预检查 6 台服务器 SSH 登录，全部通过后再顺序滚动部署同一个 deb；部署失败时保留当前 run 和 artifact 供排查
   - 三端发布与 Linux 服务器部署都成功后，删除上一条 `citizenchain.yml` 已完成 CI run
 - 代码目录：
   - `citizenchain/node/**`

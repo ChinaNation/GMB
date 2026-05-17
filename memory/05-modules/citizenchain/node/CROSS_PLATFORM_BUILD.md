@@ -15,6 +15,8 @@
 
 - `citizenchain/.cargo/config.toml` —— Windows MSVC `+crt-static`，静态链接 C++ 运行时
 - `citizenchain/node/tauri.conf.json` `bundle` 段 —— targets / macOS minSysVer / NSIS 中文 / WebView2 离线打包
+- `citizenchain/node/tauri.conf.json` `bundle.windows.nsis.installerIcon` —— Windows 安装包
+  `setup.exe` 文件自身图标；安装后的应用/桌面图标仍由 `bundle.icon` 图标列表控制。
 
 ## 3. 构建机器约束（Tauri 不能跨平台 build）
 
@@ -79,10 +81,12 @@ cargo tauri build --release
 ### 5.1 Windows（Win10 + Win11 各一次）
 
 - [ ] 干净虚拟机（**未装** VC++ Redistributable、**未装** WebView2）双击 setup.exe
+- [ ] `setup.exe` 文件自身在资源管理器中显示 `icons/icon.ico` 对应图标，与 macOS 应用图标同源
 - [ ] 安装界面**全程简体中文**
 - [ ] 不弹语言选择框
 - [ ] 装完后双击 citizenchain 启动，**不再报 MSVCP140.dll 错误**
 - [ ] 主窗口标题显示「公民链」，WebView 渲染正常
+- [ ] “公民宪法” tab 样式正常，标题与目录不粘连，目录展开/高亮/回到顶部交互可用
 - [ ] 节点 RPC 监听 `127.0.0.1:9944`
 - [ ] 控制面板可正常卸载
 
@@ -120,6 +124,8 @@ dumpbin /dependents citizenchain.exe
 |---|---|---|
 | Windows 启动报 `MSVCP140.dll 缺失` | `+crt-static` 没生效 / 构建未从 `citizenchain/` 目录跑 | 检查产物 `dumpbin /dependents`，确认 `.cargo/config.toml` 路径 |
 | Windows 安装界面是英文 | `nsis.languages` 没生效 | 确认 `tauri.conf.json` 的 `bundle.windows.nsis.languages = ["SimpChinese"]` |
+| Windows 安装包文件自身图标不对 | NSIS 没显式指定 `installerIcon` / Windows 图标缓存未刷新 | 确认 `bundle.windows.nsis.installerIcon = "icons/icon.ico"`；重新生成安装包后换目录或清理资源管理器图标缓存再看 |
+| Windows 公民宪法 tab 目录和中英文标题粘连 | WebView2 CSP 拦截 runtime 宪法 HTML 内联 `<style>` / `<script>` | 确认 `style-src-elem` 与 `script-src-elem` 允许元素级内联，且 iframe 保持 `sandbox=\"allow-scripts\"` |
 | Windows 装机时联网下载 WebView2 | `webviewInstallMode` 默认是 `downloadBootstrapper` | 确认改成 `offlineInstaller` |
 | Linux AppImage 启动报缺 webkit | AppImage 打包时未把 webkit 一同打入 | 确认在 Ubuntu 22.04 上构建（旧版本 webkit ABI 不兼容） |
 | macOS 启动闪退 | 系统版本低于 10.15 | 升级或换机器 |
