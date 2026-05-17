@@ -52,8 +52,7 @@ void main() {
   group('UserContactService', () {
     test('imports contact via addContact and supports local rename', () async {
       final service = UserContactService();
-      const address =
-          '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      const address = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
 
       final created = await service.addContact(
         address: address,
@@ -63,7 +62,7 @@ void main() {
       expect(created.contact.displayNickname, '轻节点A');
 
       final contacts = await service.renameContact(
-        created.contact.accountPubkeyHex,
+        created.contact.address,
         '本地备注',
       );
 
@@ -73,13 +72,12 @@ void main() {
 
     test('re-adding updates source nickname but keeps local alias', () async {
       final service = UserContactService();
-      const account =
-          '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd';
-      await service.addContact(address: account, name: '旧昵称');
-      await service.renameContact(account, '本地昵称');
+      const address = 'w5BdS7eTPBdtPHq22ViUGARtNnHUszX9A7f4369bufEtoejq6';
+      await service.addContact(address: address, name: '旧昵称');
+      await service.renameContact(address, '本地昵称');
 
       final updated = await service.addContact(
-        address: account,
+        address: address,
         name: '新昵称',
       );
 
@@ -90,8 +88,7 @@ void main() {
 
     test('rejects adding self to contact book', () async {
       final service = UserContactService();
-      const address =
-          '0x1111111111111111111111111111111111111111111111111111111111111111';
+      const address = 'w5BekTimvtfYZvFpkDzy7ypqUntPgTbjRFCt9weR8vMgf7o8E';
 
       await expectLater(
         service.addContact(

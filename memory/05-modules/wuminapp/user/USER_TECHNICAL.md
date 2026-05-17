@@ -55,7 +55,7 @@
 - 用户在钱包页改通信钱包名称 = 自动同步到用户资料
 - 头像和背景图只保存本机文件路径
 
-### 3.2 用户二维码 `UserQrPayload`
+### 3.2 用户二维码 `UserContactBody`
 
 协议号：
 
@@ -64,15 +64,15 @@
 字段：
 
 - `proto` — 协议标识（固定 `WUMIN_QR_V1`）
-- `address` — 通信账户 SS58 地址
-- `purpose` — 用途（contact / transfer）
-- `name` — 用户昵称（= 通信钱包名称）
+- `kind` — 固定 `user_contact`
+- `body.address` — 通信账户 SS58 地址
+- `body.name` — 用户昵称（= 通信钱包名称）
 
 ### 3.3 通讯录 `UserContact`
 
 字段：
 
-- `accountPubkeyHex` — 对方地址（SS58）
+- `address` — 对方 SS58 地址（当前链 `ss58 = 2027`）
 - `sourceNickname` — 对方二维码里的原始昵称
 - `localNickname` — 本机自定义显示昵称
 - `addedAtMillis` / `updatedAtMillis` — 时间戳
@@ -128,7 +128,7 @@
 
 - 支持扫码添加（`QrScanMode.contact`）
 - 支持修改本机昵称
-- 交易页通讯录（`selectForTrade=true`）：点击联系人返回地址填入收款栏
+- 交易页通讯录（`selectForTrade=true`）：点击联系人返回 SS58 地址填入收款栏，不做 AccountId hex 转换
 
 ## 6. 依赖
 

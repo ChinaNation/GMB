@@ -45,7 +45,7 @@ class QrScanPage extends StatefulWidget {
   const QrScanPage({
     super.key,
     required this.mode,
-    this.selfAccountPubkeyHex,
+    this.selfAddress,
     this.initialCode,
     this.customTitle,
   });
@@ -53,8 +53,8 @@ class QrScanPage extends StatefulWidget {
   /// 扫码模式。
   final QrScanMode mode;
 
-  /// 当前用户公钥（通讯录防自加用）。
-  final String? selfAccountPubkeyHex;
+  /// 当前用户 SS58 地址（通讯录防自加用）。
+  final String? selfAddress;
 
   /// 如果已扫码，可直接传入原始字符串跳过扫码步骤。
   final String? initialCode;
@@ -247,7 +247,7 @@ class _QrScanPageState extends State<QrScanPage> {
       final contactResult = await _contactService.addContact(
         address: body.address,
         name: name,
-        selfAddress: widget.selfAccountPubkeyHex,
+        selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -289,7 +289,7 @@ class _QrScanPageState extends State<QrScanPage> {
       final addResult = await _contactService.addContact(
         address: body.address,
         name: body.name,
-        selfAddress: widget.selfAccountPubkeyHex,
+        selfAddress: widget.selfAddress,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

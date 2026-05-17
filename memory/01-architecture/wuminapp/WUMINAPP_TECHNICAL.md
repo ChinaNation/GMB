@@ -136,7 +136,7 @@ wuminapp/
 │   ├── organization-manage/← 机构多签管理
 │   ├── personal-manage/    ← 个人多签管理
 │   ├── admins-change/      ← 管理员更换一级业务模块
-│   ├── citizen/            ← 公民 Tab：投票 / 治理 / 机构 / 提案
+│   ├── citizen/            ← 公民 Tab：公权 / 广场 / 治理
 │   ├── qr/                 ← 二维码统一模块（登录/收款/用户码）
 │   ├── signer/
 │   ├── user/
@@ -165,8 +165,8 @@ wuminapp/
 
 `lib/citizen/` 是底部“公民”Tab 的入口与公民展示域：
 
-- `citizen/citizen_tab_page.dart`：公民 Tab 二级导航（投票 / 治理 / 公共）
-- `citizen/vote/`：投票页，当前保留原公民宪法引言占位，后续扩展公民投票聚合能力
+- `citizen/citizen_tab_page.dart`：公民 Tab 二级导航（公权 / 广场 / 治理）
+- `citizen/vote/`：广场页，展示全局治理提案列表；不再保留公民宪法引言背景水印
 - `citizen/public/`：公共页占位
 - `governance/`：治理域，与链端 `runtime/governance/` 对齐，包含 4 个 pallet 子模块（`admins-change/` / `organization-manage/` / `personal-manage/` / `runtime-upgrade/`）+ 治理列表入口 `governance_list_page.dart` + 治理提案聚合页 `governance_proposals_page.dart` + 跨子模块多签管理详情 `duoqian_manage_detail_page.dart`
 
@@ -442,6 +442,7 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 - 链上账户：runtime 内部是 `AccountId32` / `[u8; 32]`，extrinsic call data 写入原始 32 字节。
 - App 内部账户标识：`mainAddress` / `duoqianAddress` / `pubkeyHex` 等字段统一使用 64 位 hex，不带 `0x`。
 - 用户展示和输入：地址统一显示、扫码和输入为 SS58 字符串（当前链 `ss58 = 2027`）。
+- 通讯录联系人地址归属用户展示 / 输入边界，必须保存 SS58；不得把通讯录地址当成内部 `AccountId` hex 转换。
 - RPC/JSON 边界：仅在具体接口要求时临时添加 `0x`，不得把内部 hex 当 SS58 传给 `decodeAddress`。
 - 机构 ID：链上 `[u8; 48]`，App 统一使用 `0x` + 96 hex 表达。
 - 签名算法：统一 `sr25519`。

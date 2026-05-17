@@ -20,7 +20,7 @@ class CitizenTabPage extends StatefulWidget {
 
 class _CitizenTabPageState extends State<CitizenTabPage> {
   int _selectedTab = 1;
-  static const List<String> _tabs = ['公权', '投票', '治理'];
+  static const List<String> _tabs = ['公权', '广场', '治理'];
 
   @override
   Widget build(BuildContext context) {
