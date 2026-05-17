@@ -149,9 +149,7 @@ SFID 前后端都直接以各自根目录为代码根,按业务功能展开。
 GMB 的自动化已经改为“每个系统 / 模块一个 workflow”：
 
 - `citizenchain/node`
-  - `.github/workflows/citizenchain-linux.yml`
-  - `.github/workflows/citizenchain-macos.yml`
-  - `.github/workflows/citizenchain-windows.yml`
+  - `.github/workflows/citizenchain.yml`
 - `citizenchain/runtime/governance`
   - `.github/workflows/citizenchain-runtime-governance.yml`
 - `citizenchain/runtime/issuance`
