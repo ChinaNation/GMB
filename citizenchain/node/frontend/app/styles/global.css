@@ -172,6 +172,29 @@ body {
   font-family: monospace;
 }
 
+.settings-version-value-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-update-button {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 24px;
+  color: #111827;
+  background: #fbbf24;
+}
+
+.settings-update-button:hover:not(:disabled) {
+  background: #f59e0b;
+}
+
 .settings-nodekey-section {
   margin-top: 12px;
   padding-top: 0;

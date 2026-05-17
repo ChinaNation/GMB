@@ -4,7 +4,9 @@
 // 2026-05-09 Runtime 升级入口回归国储会详情页：协议升级与开发升级分开。
 //   - 删除"网络"顶级 tab（内容 3×2 卡片布局下沉到挖矿页"资源监控"与"出块记录"之间）。
 // 2026-04-27(ADR-007 Step 2 阶段 C):新增"清算行"顶级 tab,介于"省储行"与"白皮书"之间。
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { NrcSection } from '../governance/NrcSection';
 import { PrcSection } from '../governance/PrcSection';
 import { PrbSection } from '../governance/PrbSection';
@@ -13,7 +15,9 @@ import { HomeNodeSection } from '../home';
 import { TransactionPanel } from '../transaction/onchain-transaction/TransactionPanel';
 import { MiningDashboardSection } from '../mining';
 import { OtherTabsSection } from '../other/other-tabs';
+import { settingsApi } from '../settings/api';
 import { SettingsSection } from '../settings/settings-panel';
+import type { DesktopUpdateInfo } from '../settings/types';
 
 type TabKey =
   | 'home'
@@ -28,6 +32,56 @@ type TabKey =
 
 export default function App() {
   const [tab, setTab] = useState<TabKey>('home');
+  const [desktopUpdate, setDesktopUpdate] = useState<Update | null>(null);
+  const [desktopUpdateInfo, setDesktopUpdateInfo] = useState<DesktopUpdateInfo>({
+    status: 'checking',
+    currentVersion: null,
+    latestVersion: null,
+    error: null,
+  });
+
+  const checkDesktopUpdate = useCallback(async () => {
+    setDesktopUpdateInfo((prev) => ({ ...prev, status: 'checking', error: null }));
+    try {
+      // 中文注释：App 打开后只检查 GitHub Release 元数据，不下载、不安装，等待用户在设置页主动点击。
+      const update = await check();
+      setDesktopUpdate(update);
+      setDesktopUpdateInfo({
+        status: update ? 'available' : 'unavailable',
+        currentVersion: update?.currentVersion ?? null,
+        latestVersion: update?.version ?? null,
+        error: null,
+      });
+    } catch (error) {
+      setDesktopUpdate(null);
+      setDesktopUpdateInfo({
+        status: 'error',
+        currentVersion: null,
+        latestVersion: null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkDesktopUpdate();
+  }, [checkDesktopUpdate]);
+
+  const installDesktopUpdate = useCallback(async () => {
+    if (!desktopUpdate) return;
+    setDesktopUpdateInfo((prev) => ({ ...prev, status: 'installing', error: null }));
+    try {
+      await settingsApi.prepareDesktopUpdate();
+      await desktopUpdate.downloadAndInstall();
+      await relaunch();
+    } catch (error) {
+      setDesktopUpdateInfo((prev) => ({
+        ...prev,
+        status: 'available',
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }, [desktopUpdate]);
 
   return (
     <div className="page">
@@ -60,7 +114,10 @@ export default function App() {
         <main className="app">
           <section className="content">
             {tab === 'settings' ? (
-              <SettingsSection />
+              <SettingsSection
+                desktopUpdateInfo={desktopUpdateInfo}
+                onInstallDesktopUpdate={installDesktopUpdate}
+              />
             ) : null}
 
             {tab === 'mining' ? (

@@ -19,3 +19,17 @@ export type BootnodeOption = {
   name: string;
   peerId: string;
 };
+
+export type DesktopUpdateStatus =
+  | 'checking'
+  | 'available'
+  | 'unavailable'
+  | 'installing'
+  | 'error';
+
+export type DesktopUpdateInfo = {
+  status: DesktopUpdateStatus;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  error: string | null;
+};

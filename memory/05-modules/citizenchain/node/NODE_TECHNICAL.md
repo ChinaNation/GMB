@@ -138,7 +138,28 @@
   - 第 1 步只调整 node 前后端入口、目录收口和 node 侧开发升级管理员校验。
   - node 端协议升级业务调用只提交 `reason + code`，不获取人口快照、不透传联合签名、不保存投票状态。
 
-## 8. 文件索引
+## 8. 桌面端更新边界
+
+桌面端更新按“打开软件检查、设置页点击安装”执行：
+
+- Tauri 插件：
+  - Rust：`tauri-plugin-updater`、`tauri-plugin-process`
+  - 前端：`@tauri-apps/plugin-updater`、`@tauri-apps/plugin-process`
+- 更新源：
+  - `tauri.conf.json` 的 `plugins.updater.endpoints` 指向 GitHub Release 资产 `citizenchain-latest.json`
+  - 手动发布 CI 生成 `citizenchain-latest.json`，其中包含版本号、各平台下载 URL 和 Tauri 签名
+- 前端行为：
+  - `frontend/app/App.tsx` 在 App 打开后调用 updater `check()`，只检查，不下载、不安装
+  - `frontend/settings/settings-panel/SettingsSection.tsx` 仅在存在新版本时，于“节点程序版本”版本号前显示“更新”按钮
+  - 用户点击“更新”后才调用 `downloadAndInstall()` 和 `relaunch()`
+- 后端协同：
+  - `src/settings/desktop_update.rs` 暴露 `prepare_desktop_update`
+  - 该命令只负责调用 `home::stop_node_blocking` 停止进程内节点，释放 RocksDB LOCK；安装与重启由 Tauri updater/process 插件负责
+- CI 边界：
+  - `push main` 只构建检查并上传 run artifact
+  - GitHub 手动 `Run workflow` 才生成 updater 签名产物、发布 GitHub Release、部署服务器
+
+## 9. 文件索引
 
 | 文件 | 行数 | 说明 |
 |------|------|------|
@@ -150,7 +171,8 @@
 | `src/core/benchmarking.rs` | 180 | Benchmark extrinsic 构建器 |
 | `src/core/cli.rs` | 83 | CLI 参数定义 |
 | `src/core/tls_cert.rs` | 107 | WSS 传输 TLS 证书校验 |
-| `src/desktop/mod.rs` | 120 | 桌面端 Tauri 入口与命令注册 |
+| `src/desktop/mod.rs` | 138 | 桌面端 Tauri 入口、插件与命令注册 |
+| `src/settings/desktop_update.rs` | 15 | 设置页点击更新前的节点停止准备命令 |
 | `src/governance/runtime_upgrade/` | 5 files | 协议升级 node 后端，含 Tauri 命令、签名请求和 call_data 编码 |
 | `frontend/governance/runtime-upgrade/` | 4 files | 协议升级 node 前端，含协议升级、开发升级和专用 API |
 | `src/desktop/node_runner.rs` | 164 | 桌面端进程内节点启动器 |
@@ -174,9 +196,9 @@
 - 各功能目录自持 `api.ts` 与 `types.ts`；根层不再保留全局 `api.ts`、`types.ts`、`format.ts`，避免新功能继续污染前端根层。
 - 前端构建脚本使用 `tsc --noEmit && vite build`；`vite.config.ts` 由主 `tsconfig.json` 直接类型检查，不再通过 `tsconfig.node.json` 产出 `vite.config.js` / `vite.config.d.ts` 或 `*.tsbuildinfo`。
 
-## 9. 安全风险（已知）
+## 10. 安全风险（已知）
 
-### 9.1 奖励钱包 RPC 代签无鉴权
+### 10.1 奖励钱包 RPC 代签无鉴权
 `reward_bindWallet` / `reward_rebindWallet` RPC 收到请求即用本地 `powr` 密钥签名发交易，无额外鉴权。
 - **当前缓解**：桌面内嵌节点只面向本机端口使用，奖励钱包 RPC 不转移余额。
 - **风险场景**：节点桌面端启动时使用 `--unsafe-rpc-external --rpc-methods Unsafe --rpc-cors all`，会将代签 RPC 暴露到外部网络。
@@ -184,7 +206,7 @@
 
 矿工热钱包转账不复用上述裸 RPC 模式：`transaction_submitMinerTransfer` 必须携带进程内一次性令牌，令牌只在设备开机密码校验通过后由 Tauri 命令签发，RPC 调用后立即消费。
 
-### 9.2 空块策略仍与 runtime panic 耦合
+### 10.2 空块策略仍与 runtime panic 耦合
 当前 `service.rs` 已要求：
 - `pre_digest` 中放入矿工 `sr25519` 公钥
 - `seal` 中附带 `(nonce, 签名)`
@@ -195,7 +217,7 @@
 - **当前缓解**：CPU / GPU 矿工都在交易池为空时跳过挖矿，代码中也明确写了“避免触发 runtime 的空块 assert panic”。
 - **建议**：后续应把空块限制从 runtime panic 改成非 panic 的制度约束或完全下沉到节点策略，避免状态机层面承受运营错误。
 
-## 10. 已知限制
+## 11. 已知限制
 
 1. `target_block_time_ms` 仅启动时读取一次，链上迁移修改后需重启节点生效。
 2. 节点层无单元测试（Substrate 节点模板通病，功能验证依赖集成测试）。

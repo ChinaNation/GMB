@@ -5,9 +5,17 @@ import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
 import type { ChainStatus } from '../../home/types';
-import type { BootnodeKey, RewardWallet } from '../types';
+import type { BootnodeKey, DesktopUpdateInfo, RewardWallet } from '../types';
 
-export function SettingsSection() {
+type SettingsSectionProps = {
+  desktopUpdateInfo: DesktopUpdateInfo;
+  onInstallDesktopUpdate: () => Promise<void>;
+};
+
+export function SettingsSection({
+  desktopUpdateInfo,
+  onInstallDesktopUpdate,
+}: SettingsSectionProps) {
   const [wallet, setWallet] = useState<RewardWallet>({ address: null });
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
@@ -50,7 +58,26 @@ export function SettingsSection() {
         <div className="settings-version-section">
           <div className="settings-version-row">
             <span className="settings-version-label">节点程序版本</span>
-            <span className="settings-version-value">{chainStatus.nodeVersion}</span>
+            <span className="settings-version-value-wrap">
+              {desktopUpdateInfo.status === 'available' || desktopUpdateInfo.status === 'installing' ? (
+                <button
+                  type="button"
+                  className="settings-update-button"
+                  disabled={desktopUpdateInfo.status === 'installing'}
+                  title={
+                    desktopUpdateInfo.latestVersion
+                      ? `可更新到 ${desktopUpdateInfo.latestVersion}`
+                      : undefined
+                  }
+                  onClick={() => {
+                    void onInstallDesktopUpdate();
+                  }}
+                >
+                  {desktopUpdateInfo.status === 'installing' ? '更新中' : '更新'}
+                </button>
+              ) : null}
+              <span className="settings-version-value">{chainStatus.nodeVersion}</span>
+            </span>
           </div>
           <div className="settings-version-row">
             <span className="settings-version-label">Runtime 版本</span>

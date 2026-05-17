@@ -45,7 +45,7 @@ WASM CI 版本规则：
 - CI 不自动提交 `spec_version` 回 `main`，源码版本仍由开发者按真实 runtime 变更维护
 - 生成的 `citizenchain-wasm` artifact 只用于显式的开发升级、下载脚本或链上 `System.set_code` 流程；本地启动脚本不下载、不内置该 artifact
 - 三端桌面安装包 CI 不再由 WASM CI 自动触发，也不再下载/内置最新 WASM；现有链要使用最新 runtime 仍必须走 runtime 升级
-- Linux 桌面安装包 CI 成功后，会把本次 `公民链-linux` artifact 中的 deb 按顺序部署到 6 台服务器；服务器部署只替换程序和重启 `citizenchain-node`，不清除 `/opt/citizenchain/data`
+- 只有 GitHub 手动 `Run workflow` 发布成功后，才会把本次 `公民链-linux` artifact 中的 deb 按顺序部署到 6 台服务器；push 构建只打包检查，不部署；服务器部署只替换程序和重启 `citizenchain-node`，不清除 `/opt/citizenchain/data`
 
 ## 白皮书显示规则
 
@@ -59,6 +59,7 @@ WASM CI 版本规则：
 | 用户操作 | 节点行为 | 触发机制 |
 |----------|----------|----------|
 | 打开 App | 自动启动节点 | `desktop::run_desktop` setup 后台线程 spawn `start_node_blocking` |
+| 设置页点击“更新” | 先停止节点，再安装更新并重启 App | `prepare_desktop_update` 调用 `stop_node_blocking`，随后 Tauri updater 执行 `downloadAndInstall` + `relaunch` |
 | 关窗（红 X / Cmd+Q / 菜单 Quit / 系统关闭） | 退出 App + 停止节点 | Tauri 默认行为 → `RunEvent::Exit` → `cleanup_on_exit`（不拦截 `CloseRequested`） |
 | macOS 黄色横线 | 窗口最小化，节点继续运行 | macOS 系统原生 minimize，不触发 `CloseRequested`，无需拦截 |
 
@@ -73,6 +74,7 @@ Linux 端备注：UI 模式只用于桌面打包（.deb），服务器场景走 
 - **进程内运行**：节点不再以子进程 sidecar 方式启动，由 `node_runner::start_node_in_process` 在 Tauri 进程内的后台线程跑 Substrate 服务（`task_manager.future().await`）
 - **生命周期绑定**：句柄 `NodeHandle` 持有 `oneshot::Sender<()>` 和 `JoinHandle<()>`，drop 时发 shutdown 信号 → `tokio::select!` 让 `task_manager.future()` 与 shutdown 任一退出 → 显式 `drop(task_manager)` 释放 Backend → `tokio_runtime.shutdown_timeout(10s)` → `JoinHandle::join()`，**确保 RocksDB LOCK 真正释放**（修复了之前 drop `JoinHandle` 不停线程导致的 `lock hold by current process` bug）
 - **保存即重启**：`set_grandpa_key` / `set_bootnode_key` 仍可在节点运行中调用 `stop_node_blocking` → `start_node_blocking` 让新私钥即时生效，依赖上述真停机制
+- **更新前停节点**：设置页“更新”按钮触发 `settings::desktop_update::prepare_desktop_update`，只执行停止节点，不重新启动；安装完成后由 Tauri updater 重启整个 App
 - **串行化**：`NODE_LIFECYCLE_LOCK` 互斥锁保证同一时刻只允许一个启停操作
 - **状态可见**：`current_status` 单纯读 `state.node_handle.is_some()`，前端通过 `get_node_status` 每 3s 轮询自然刷新；启停期间为避免阻塞 `get_node_status`，`take` handle 后立即释放 state 锁再 drop
 

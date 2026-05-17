@@ -24,9 +24,12 @@ use std::sync::Mutex;
 pub fn run_desktop() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState(Mutex::new(RuntimeState::default())))
         .invoke_handler(tauri::generate_handler![
             home::identity::get_node_status,
+            settings::desktop_update::prepare_desktop_update,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
             settings::fee_address::get_local_miner_address,
