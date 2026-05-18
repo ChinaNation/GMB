@@ -1,6 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_transfer_body.dart';
+import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
+import 'package:wuminapp_mobile/qr/qr_router.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
@@ -79,6 +84,39 @@ String _walletOperationErrorMessage(Object error) {
     return _walletLocalStoreErrorMessage(error);
   }
   return '$error';
+}
+
+final RegExp _coldWalletPubkeyPattern = RegExp(r'^(?:0x)?[0-9a-fA-F]{64}$');
+
+/// 中文注释：导入冷钱包扫码只提取“可作为账户输入”的地址/公钥；
+/// 不在这里触发导入，避免用户还没确认就写入本地钱包库。
+@visibleForTesting
+String? extractColdWalletImportAddress(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) {
+    return null;
+  }
+
+  final result = QrRouter().route(text);
+  switch (result.type) {
+    case QrRouteType.userContact:
+      final body = result.envelope!.body as UserContactBody;
+      return body.address.trim();
+    case QrRouteType.userTransfer:
+      final body = result.envelope!.body as UserTransferBody;
+      return body.address.trim();
+    case QrRouteType.legacyAddress:
+      return result.extractedAddress?.trim();
+    case QrRouteType.loginChallenge:
+    case QrRouteType.signRequest:
+    case QrRouteType.signResponse:
+    case QrRouteType.loginReceipt:
+    case QrRouteType.unknown:
+      if (_coldWalletPubkeyPattern.hasMatch(text)) {
+        return text;
+      }
+      return null;
+  }
 }
 
 /// v6 改版（2026-04-24）：
@@ -1394,6 +1432,36 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
   bool _isImporting = false;
   String? _error;
 
+  Future<void> _scanWalletAddress() async {
+    final raw = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const QrScanPage(
+          mode: QrScanMode.raw,
+          customTitle: '扫描钱包二维码',
+        ),
+      ),
+    );
+    if (!mounted || raw == null || raw.trim().isEmpty) {
+      return;
+    }
+
+    final address = extractColdWalletImportAddress(raw);
+    if (address == null || address.isEmpty) {
+      setState(() {
+        _error = '未识别到可导入的钱包账户地址';
+      });
+      return;
+    }
+
+    setState(() {
+      _addressController.text = address;
+      _addressController.selection = TextSelection.collapsed(
+        offset: address.length,
+      );
+      _error = null;
+    });
+  }
+
   Future<void> _import() async {
     setState(() {
       _error = null;
@@ -1428,7 +1496,20 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('导入冷钱包')),
+      appBar: AppBar(
+        title: const Text('导入冷钱包'),
+        actions: [
+          IconButton(
+            tooltip: '扫码填入地址',
+            onPressed: _isImporting ? null : _scanWalletAddress,
+            icon: SvgPicture.asset(
+              'assets/icons/scan-line.svg',
+              width: 22,
+              height: 22,
+            ),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

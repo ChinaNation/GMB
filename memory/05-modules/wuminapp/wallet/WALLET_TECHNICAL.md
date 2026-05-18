@@ -88,7 +88,7 @@ lib/
 - `wallet_page.dart`
   - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
-  - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`）
+  - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`），导入冷钱包页标题右侧提供扫码图标，复用 `QrScanPage(raw)` 识别钱包二维码并只回填账户地址/公钥输入框
   - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchBalance()` 直连节点）
   - 钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
 - `transaction_history_page.dart`
@@ -136,9 +136,12 @@ lib/
 
 ### 4.4 导入冷钱包
 
-1. 接受 SS58 地址
-2. 解码公钥（`Keyring().decodeAddress()`）
-3. 仅写 Isar（`signMode: 'external'`），不写 secure storage
+1. 接受 SS58 地址或 0x/64 hex 公钥
+2. 页面可点击顶部扫码图标，调用摄像头识别当前钱包二维码
+3. 扫码结果仅提取 `user_contact.body.address`、`user_transfer.body.address`、`gmb://account/<address>`、裸 SS58 地址，或当前输入框已支持的 0x/64 hex 公钥
+4. 扫码后只回填输入框，不自动执行导入
+5. 导入时解码公钥（SS58 走 `Keyring().decodeAddress()`；hex 走严格 32 字节解析）
+6. 仅写 Isar（`signMode: 'external'`），不写 secure storage
 
 ### 4.5 余额查询
 
@@ -234,7 +237,7 @@ lib/
 页面元素（自上而下）：
 
 1. 余额卡片：左上角钱包名称（可点击编辑），居中余额数字+元+GMB
-2. 二维码：`gmb://account/{address}`，下载按钮浮在二维码正中间（半透明圆形背景）
+2. 二维码：`WUMIN_QR_V1 kind=user_contact`，`body.address` 为当前钱包 SS58 地址，下载按钮浮在二维码正中间（半透明圆形背景）
 3. 热钱包额外显示“离线签名”按钮，进入 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表

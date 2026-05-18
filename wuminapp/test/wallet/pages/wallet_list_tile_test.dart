@@ -12,6 +12,31 @@ import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 /// - InkWell 整卡点击触发 onTap
 /// - showActions=false 时隐藏三点菜单
 void main() {
+  group('extractColdWalletImportAddress', () {
+    const address = 'w5Bc7ma8qUcECfQDJmRyQM2wGmga5XSYtz7DvEengQ86xBWrT';
+    const pubkey =
+        '0x1111111111111111111111111111111111111111111111111111111111111111';
+
+    test('从当前钱包二维码 user_contact 提取地址', () {
+      const raw =
+          '{"proto":"WUMIN_QR_V1","kind":"user_contact","body":{"address":"$address","name":"测试钱包"}}';
+
+      expect(extractColdWalletImportAddress(raw), address);
+    });
+
+    test('从 gmb account 二维码提取地址', () {
+      expect(extractColdWalletImportAddress('gmb://account/$address'), address);
+    });
+
+    test('允许当前导入框支持的 0x 公钥二维码', () {
+      expect(extractColdWalletImportAddress(pubkey), pubkey);
+    });
+
+    test('非钱包地址二维码返回 null', () {
+      expect(extractColdWalletImportAddress('not a wallet qr'), isNull);
+    });
+  });
+
   WalletProfile makeWallet({
     required String signMode,
     int walletIndex = 1,
