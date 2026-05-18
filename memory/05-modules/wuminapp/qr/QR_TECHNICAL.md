@@ -233,16 +233,18 @@ WUMIN_QR_V1|system|challenge|expires_at
 - 使用 `mobile_scanner` 扫描二维码
 - 通过 `QrRouter` 路由分发
 - 按类型执行不同处理逻辑
+- `raw` 模式用于调用方自行提取字段，例如导入冷钱包页只拿钱包账户地址回填输入框，不在扫码页内写钱包库
 
 ### 8.2 扫码结果处理
 
-| 路由类型 | 处理方式 |
+| 模式/路由类型 | 处理方式 |
 | --- | --- |
 | `login` | 进入登录回执流程 |
 | `transfer` | 返回 `QrScanTransferResult`（含地址、金额、币种） |
 | `legacyAddress` | 返回 `QrScanTransferResult`（仅地址） |
 | `contact` | 由调用方处理 |
 | `sign` | 提示用户在转账页面发起签名后使用 |
+| `QrScanMode.raw` | 直接返回原始字符串，调用方自行按当前业务边界解析 |
 | `unknown` | 提示错误 |
 
 ### 8.3 登录回执页面
