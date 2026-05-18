@@ -36,7 +36,10 @@ class PendingVoteRecord {
   /// 交易哈希（含 0x 前缀）。
   final String txHash;
 
-  /// 提交时使用的 nonce，用于链上确认检查。
+  /// 提交时使用的 runtime nonce。
+  ///
+  /// 中文注释：该字段只用于日志和问题诊断，不能作为投票成功依据；
+  /// 投票是否成功必须读取 runtime 投票引擎 storage。
   final int usedNonce;
 
   /// 提交时间。
@@ -93,7 +96,7 @@ typedef PendingVoteChainLookup = Future<bool?> Function(
 /// `pending_vote:{proposalType}:{proposalId}:{walletPubkey}`
 ///
 /// 所有投票页面共用：
-/// - 投票提交成功后调 [save]
+/// - 仅在无法立即确认 runtime 投票 storage 时调 [save]
 /// - 页面加载时调 [getPending] 判断是否有待确认投票
 /// - 刷新时调 [confirmAll] 批量检查链上状态，已确认则自动清除
 class PendingVoteStore {
@@ -106,8 +109,8 @@ class PendingVoteStore {
   /// 投票 pending 最长确认窗口。
   ///
   /// 中文注释：GMB 链当前出块可能按分钟级推进，确认窗口必须覆盖多个出块周期。
-  /// 超过窗口仍没有 runtime 投票记录且 nonce 未推进，说明这条本地 pending
-  /// 不能再阻塞用户重投，应清掉并显示可重试状态。
+  /// 超过窗口仍没有 runtime 投票记录，说明这条本地 pending 不能再阻塞
+  /// 用户重投，应清掉并显示可重试状态。
   static const _votePendingTimeout = Duration(minutes: 20);
 
   String _key(String type, int id, String pubkey) =>
@@ -171,8 +174,8 @@ class PendingVoteStore {
 
   /// 批量检查链上确认状态，并返回完整分类结果。
   ///
-  /// 中文注释：详情页需要知道 lost/confirmed 结果来提示用户和重置本地 nonce；
-  /// 旧 confirmAll 仅返回 stillPending，保留给其他页面兼容使用。
+  /// 中文注释：详情页需要知道 lost/confirmed 结果来提示用户；投票结果只读
+  /// runtime 投票引擎 storage，不再用 nonce 推断投票成功。
   Future<PendingVoteConfirmSummary> confirmAllDetailed(
     String proposalType,
     int proposalId,
@@ -191,8 +194,8 @@ class PendingVoteStore {
     for (final record in pending) {
       try {
         // 中文注释：投票是否成功只能以 runtime 投票引擎 storage 为准。
-        // txHash / nonce / 交易池 watch 只能帮助判断是否需要重试，不能直接
-        // 证明管理员已经投票。
+        // txHash / runtime nonce / 交易池 watch 只能用于诊断，不能直接证明
+        // 管理员已经投票。
         final chainVote = await lookup(record);
         if (chainVote != null) {
           confirmed.add(record);
@@ -200,21 +203,11 @@ class PendingVoteStore {
           continue;
         }
 
-        final nonceConsumed = await onchainRpc.isTxConfirmed(
-          pubkeyHex: record.walletPubkey,
-          usedNonce: record.usedNonce,
-        );
         debugPrint(
-            '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} nonceConsumed=$nonceConsumed');
-        if (nonceConsumed) {
-          // nonce 已推进但投票引擎没有记录，说明这笔投票没有被 runtime 接受，
-          // 可能被同 nonce 交易替代或执行失败；清掉 pending 让用户重新提交。
-          lost.add(record);
-          await remove(proposalType, proposalId, record.walletPubkey);
-        } else if (DateTime.now().difference(record.createdAt) >
-            _votePendingTimeout) {
-          // nonce 没推进、runtime 也没有投票记录，且已经超过确认窗口：
-          // 视为本地这次提交没有进入链，清掉 pending，避免 UI 无限“投票中”。
+            '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} runtimeVote=null');
+        if (DateTime.now().difference(record.createdAt) > _votePendingTimeout) {
+          // runtime 没有投票记录且已经超过确认窗口：视为本地这次
+          // 提交没有形成有效投票，清掉 pending，避免 UI 无限“投票中”。
           lost.add(record);
           await remove(proposalType, proposalId, record.walletPubkey);
         } else {

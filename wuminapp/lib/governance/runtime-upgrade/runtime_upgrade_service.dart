@@ -32,8 +32,10 @@ class RuntimeUpgradeService {
 
   /// 提交机构管理员的联合投票。
   ///
-  /// 返回交易哈希 hex（含 0x 前缀）和使用的 nonce。
-  Future<({String txHash, int usedNonce})> submitJointVote({
+  /// 中文注释：联合投票必须等待入块，并回读 runtime JointVote storage。
+  /// txHash 只代表交易提交，不能代表投票已经生效。
+  Future<({String txHash, int usedNonce, String blockHashHex})>
+      submitJointVote({
     required int proposalId,
     required Uint8List institutionId48,
     required bool approve,
@@ -46,12 +48,20 @@ class RuntimeUpgradeService {
       institutionId48: institutionId48,
       approve: approve,
     );
-    return _signAndSubmit(
+    final result = await _signAndSubmit(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
     );
+    await _confirmRuntimeJointVote(
+      proposalId: proposalId,
+      institutionId48: institutionId48,
+      approve: approve,
+      signerPubkey: signerPubkey,
+      blockHashHex: result.blockHashHex,
+    );
+    return result;
   }
 
   // ──── 链上查询 ────
@@ -314,10 +324,10 @@ class RuntimeUpgradeService {
     return output.toBytes();
   }
 
-  /// 签名并提交 extrinsic。
+  /// 签名、提交并等待交易进入区块。
   ///
-  /// 返回交易哈希和使用的 nonce（用于链上确认跟踪）。
-  Future<({String txHash, int usedNonce})> _signAndSubmit({
+  /// 返回交易哈希、runtime nonce 和入块哈希。
+  Future<({String txHash, int usedNonce, String blockHashHex})> _signAndSubmit({
     required Uint8List callData,
     required String fromAddress,
     required Uint8List signerPubkey,
@@ -326,7 +336,7 @@ class RuntimeUpgradeService {
     return SignedExtrinsicBuilder(
       chainRpc: _rpc,
       logLabel: 'ProtocolUpgrade',
-    ).signAndSubmit(
+    ).signAndSubmitInBlock(
       callData: callData,
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
@@ -336,6 +346,39 @@ class RuntimeUpgradeService {
             '[ProtocolUpgrade] encoded extrinsic hex: ${_hexEncode(trace.encoded)}');
       },
     );
+  }
+
+  /// 入块后回读 JointVote storage，确认该管理员投票已经由 runtime 记录。
+  Future<void> _confirmRuntimeJointVote({
+    required int proposalId,
+    required Uint8List institutionId48,
+    required bool approve,
+    required Uint8List signerPubkey,
+    required String blockHashHex,
+  }) async {
+    final pubkeyHex = _hexEncode(signerPubkey);
+    for (var attempt = 0; attempt < 6; attempt++) {
+      final chainVote = await fetchJointAdminVote(
+        proposalId,
+        institutionId48,
+        pubkeyHex,
+      );
+      if (chainVote == approve) return;
+      if (chainVote != null && chainVote != approve) {
+        throw StateError('runtime 联合投票记录与本次投票方向不一致');
+      }
+      if (attempt < 5) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    final events = await _rpc.fetchSystemEventsAtBlock(blockHashHex);
+    final failure =
+        events == null ? null : _rpc.findExtrinsicFailureInEvents(events);
+    if (failure != null) {
+      throw StateError('runtime 拒绝联合投票：${failure.description}');
+    }
+    throw StateError('交易已入块，但 runtime JointVote 未记录该管理员投票');
   }
 
   // ──── 内部：storage key 构造 ────

@@ -5,7 +5,6 @@ import 'package:polkadart/polkadart.dart'
     show ExtrinsicPayload, SignatureType, SigningPayload;
 
 import 'chain_rpc.dart';
-import 'nonce_manager.dart';
 
 /// 已签名 extrinsic 的统一构造结果。
 class SignedExtrinsicTrace {
@@ -41,6 +40,9 @@ class SignedExtrinsicTrace {
 /// P-SIGN-001：Citizenchain PoW 链在线交易统一使用 immortal era。签名 payload
 /// 和最终 extrinsic body 必须同时使用 `era = 0x00`，且 CheckEra 的 additional
 /// signed hash 必须是创世块哈希。
+///
+/// 中文注释：nonce 只能来自 runtime `frame_system::Account.nonce`。
+/// 客户端不得缓存、自增、预占或回滚 nonce；每次签名前都实时读取 runtime nonce。
 class SignedExtrinsicBuilder {
   SignedExtrinsicBuilder({
     required ChainRpc chainRpc,
@@ -68,17 +70,14 @@ class SignedExtrinsicBuilder {
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/nonce...');
+    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
+      _rpc.fetchNonce(fromAddress),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    debugPrint('[$_logLabel] nonce=$nonce, era=immortal');
+    debugPrint('[$_logLabel] runtime nonce=$nonce, era=immortal');
 
     debugPrint('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
     final signingPayload = buildImmortalSigningPayload(
@@ -130,8 +129,7 @@ class SignedExtrinsicBuilder {
       debugPrint('[$_logLabel] 提交成功: 0x${hexEncode(txHash)}');
       return (txHash: '0x${hexEncode(txHash)}', usedNonce: nonce);
     } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[$_logLabel] 提交失败，原始错误: $e');
+      debugPrint('[$_logLabel] 提交失败，未修改 nonce，原始错误: $e');
       rethrow;
     }
   }
@@ -155,17 +153,14 @@ class SignedExtrinsicBuilder {
     final genesisHash = await _rpc.fetchGenesisHash();
     final registry = metadata.chainInfo.scaleCodec.registry;
 
-    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/nonce...');
+    debugPrint('[$_logLabel] 步骤3: 并行获取 runtimeVersion/runtime nonce...');
     final results = await Future.wait([
       _rpc.fetchRuntimeVersion(),
-      NonceManager.instance.getNextNonce(
-        address: fromAddress,
-        fetchChainNonce: _rpc.fetchNonce,
-      ),
+      _rpc.fetchNonce(fromAddress),
     ]);
     final runtimeVersion = results[0] as dynamic;
     final nonce = results[1] as int;
-    debugPrint('[$_logLabel] nonce=$nonce, era=immortal');
+    debugPrint('[$_logLabel] runtime nonce=$nonce, era=immortal');
 
     debugPrint('[$_logLabel] 步骤4: 构造 immortal 签名载荷...');
     final signingPayload = buildImmortalSigningPayload(
@@ -222,8 +217,7 @@ class SignedExtrinsicBuilder {
       debugPrint('[$_logLabel] 已入块: tx=$txHashHex block=$blockHashHex');
       return (txHash: txHashHex, usedNonce: nonce, blockHashHex: blockHashHex);
     } catch (e) {
-      NonceManager.instance.rollback(fromAddress);
-      debugPrint('[$_logLabel] 提交或入块失败，原始错误: $e');
+      debugPrint('[$_logLabel] 提交或入块失败，未修改 nonce，原始错误: $e');
       rethrow;
     }
   }
