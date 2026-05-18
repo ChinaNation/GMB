@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -7,13 +5,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:wuminapp_mobile/citizen/citizen_tab_page.dart';
 import 'package:wuminapp_mobile/governance/duoqian_account_list_page.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/security/app_lock_service.dart';
 import 'package:wuminapp_mobile/security/pin_input_page.dart';
 import 'package:wuminapp_mobile/transaction/transaction_tab_page.dart';
 import 'package:wuminapp_mobile/my/util/screenshot_guard.dart';
-import 'package:wuminapp_mobile/transaction/shared/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/my/user/user.dart';
 import 'package:wuminapp_mobile/security/app_permission_gate.dart';
 import 'package:wuminapp_mobile/update/app_update.dart';
@@ -101,17 +97,6 @@ class _AppLockGateState extends State<_AppLockGate>
   static const Duration _sessionTimeout = Duration(minutes: 5);
   DateTime? _pausedAt;
 
-  /// 周期性 pending 交易对账定时器。
-  Timer? _reconcileTimer;
-
-  /// 冷启动首次对账延迟 timer（必须在 dispose 时取消，否则
-  /// flutter test pumpAndSettle 后 widget 已 dispose 但 timer 仍 pending，
-  /// 触发 "A Timer is still pending" 断言失败 → CI 红 → APK 不产出）。
-  Timer? _initialReconcileTimer;
-
-  /// 周期性对账间隔。
-  static const Duration _reconcileInterval = Duration(seconds: 60);
-
   @override
   void initState() {
     super.initState();
@@ -121,48 +106,8 @@ class _AppLockGateState extends State<_AppLockGate>
 
   @override
   void dispose() {
-    _stopReconcileTimers();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
-  }
-
-  void _startReconcileTimers() {
-    if (_initialReconcileTimer != null || _reconcileTimer != null) {
-      return;
-    }
-    // 中文注释：等主界面完成解锁和首屏钱包读取后再对账，避免冷启动抢 Isar。
-    _initialReconcileTimer = Timer(
-      const Duration(seconds: 15),
-      _triggerReconcile,
-    );
-    _reconcileTimer = Timer.periodic(
-      _reconcileInterval,
-      (_) => _triggerReconcile(),
-    );
-  }
-
-  void _stopReconcileTimers() {
-    _initialReconcileTimer?.cancel();
-    _reconcileTimer?.cancel();
-    _initialReconcileTimer = null;
-    _reconcileTimer = null;
-  }
-
-  void _triggerReconcile() {
-    if (!_authenticated || WalletIsar.instance.hasActiveOperation) {
-      return;
-    }
-    // Reconciler 内部有并发保护，重复触发安全。
-    unawaited(() async {
-      try {
-        await PendingTxReconciler.instance.reconcileAll();
-      } catch (e, st) {
-        if (WalletIsar.instance.isBusyError(e)) {
-          return;
-        }
-        debugPrint('[main] 对账触发失败: $e\n$st');
-      }
-    }());
   }
 
   @override
@@ -179,12 +124,9 @@ class _AppLockGateState extends State<_AppLockGate>
           _checking = true;
           _showDeviceLock = false;
         });
-        _stopReconcileTimers();
         _checkLock();
       }
       _pausedAt = null;
-      // 回到前台时重跑一次对账，处理后台错过的链上确认。
-      _triggerReconcile();
     }
   }
 
@@ -218,7 +160,6 @@ class _AppLockGateState extends State<_AppLockGate>
       _authenticated = true;
       _checking = false;
     });
-    _startReconcileTimers();
   }
 
   Future<void> _showPinVerify() async {
@@ -231,7 +172,6 @@ class _AppLockGateState extends State<_AppLockGate>
     if (!mounted) return;
     if (result == true) {
       setState(() => _authenticated = true);
-      _startReconcileTimers();
     }
   }
 
@@ -247,7 +187,6 @@ class _AppLockGateState extends State<_AppLockGate>
       if (!mounted) return;
       if (success) {
         setState(() => _authenticated = true);
-        _startReconcileTimers();
       }
     } catch (_) {
       // 认证失败，保持锁定状态

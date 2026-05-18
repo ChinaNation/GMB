@@ -324,48 +324,69 @@ class DuoqianInstitutionEntity {
   List<String> matchedAdminPubkeys = const [];
 }
 
-/// 本地交易记录（持久化存储，去中心化设计，不依赖 SFID 服务器）。
+/// 本地钱包余额变化流水（持久化存储，去中心化设计，不依赖 SFID 服务器）。
 @collection
 class LocalTxEntity {
   Id id = Isar.autoIncrement;
 
-  /// 交易唯一标识。
+  /// 单条钱包流水唯一键。
+  ///
+  /// 中文注释：钱包账户由 walletPubkeyHex 唯一，流水记录由 recordKey 唯一。
+  /// confirmed 记录使用 `walletPubkeyHex:blockHash:eventIndex`，pending 记录
+  /// 使用 `walletPubkeyHex:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
   @Index(unique: true, replace: true)
-  late String txId;
+  late String recordKey;
 
   /// 所属钱包地址（SS58）。
   @Index()
   late String walletAddress;
 
-  /// 交易类型：transfer / offchain_pay / proposal_transfer / fee_withdraw / fee_deposit /
-  /// block_reward / bank_interest / gov_issuance / lightnode_reward / duoqian_create / duoqian_close / fund_destroy
-  late String txType;
+  /// 所属钱包公钥 hex（32 字节，不含 0x）。
+  @Index()
+  late String walletPubkeyHex;
 
-  /// 方向：in / out / info
-  late String direction;
+  /// 业务类型：transfer / fee / reward / interest / issuance / burn / duoqian_transfer。
+  late String type;
+
+  /// 该钱包实际余额变化（分），带正负号；正数=增加，负数=减少。
+  ///
+  /// 中文注释：Dart int 在不同平台上不适合承载链上 u128，统一用十进制字符串保存。
+  late String amountDeltaFen;
+
+  /// 转账本金（分），不带正负号。
+  String? transferAmountFen;
+
+  /// 手续费（分），不带正负号；只有本钱包支付手续费时记录。
+  String? feeFen;
+
+  /// 对方地址；余额增加时是来源，余额减少时是去向。
+  String? counterpartyAddress;
 
   String? fromAddress;
   String? toAddress;
 
-  /// 金额（元）。
-  late double amountYuan;
-
-  /// 手续费（元）。
-  double? feeYuan;
-
-  /// 链下交易的清算省储行 sfid_number。
-  String? bankSfidNumber;
-
-  /// 状态：pending / confirmed / onchain
+  /// 状态：pending / confirmed / failed。
   late String status;
+
+  /// 记录来源：local_submit / chain_event / resync。
+  late String source;
 
   /// 链上交易哈希。
   String? txHash;
 
-  /// 链上区块号（仅在状态为 confirmed 后写入真实区块号）。
+  /// 链上区块号。
   int? blockNumber;
 
-  /// 提交交易时使用的 nonce（pending 阶段用于对账）。
+  /// 链上区块哈希。
+  String? blockHash;
+
+  /// 区块内事件序号。
+  int? eventIndex;
+
+  /// 事件所属 extrinsic 序号（如果 phase 为 ApplyExtrinsic）。
+  int? extrinsicIndex;
+
+  /// 提交交易时使用的 nonce（只用于详情辅助展示，不作为流水确认真源）。
   int? usedNonce;
 
   /// 本地创建时间（毫秒时间戳）。
@@ -374,6 +395,28 @@ class LocalTxEntity {
 
   /// 确认时间（毫秒时间戳）。
   int? confirmedAtMillis;
+
+  /// 失败原因。
+  String? failureReason;
+}
+
+/// 钱包交易记录本机同步游标。
+///
+/// 中文注释：wuminapp 不扫描导入前历史。游标只记录该钱包进入本机后，
+/// 本机已经同步到哪个 finalized 区块，离线重开时只补这之后的缺口。
+@collection
+class WalletTxSyncCursorEntity {
+  Id id = Isar.autoIncrement;
+
+  late String walletAddress;
+
+  @Index(unique: true, replace: true)
+  late String walletPubkeyHex;
+
+  late int trackingStartBlock;
+  late int lastSyncedBlock;
+  late int createdAtMillis;
+  late int updatedAtMillis;
 }
 
 class WalletIsar {
@@ -427,7 +470,7 @@ class WalletIsar {
   }
 
   /// 中文注释：低端 Android 的 MDBX 在读写窗口重叠时可能短暂返回 EAGAIN。
-  /// 对这类 busy 错误做小间隔重试，避免后台对账或余额刷新把瞬时竞争暴露给 UI。
+  /// 对这类 busy 错误做小间隔重试，避免交易流水同步或余额刷新把瞬时竞争暴露给 UI。
   Future<T> runWithBusyRetry<T>(Future<T> Function() action) async {
     for (var attempt = 0; attempt <= _busyRetryDelays.length; attempt++) {
       try {
@@ -482,7 +525,7 @@ class WalletIsar {
 
   /// 中文注释：全 App 共用的 Isar 写事务入口。
   ///
-  /// Android 低端机上后台对账、余额刷新、多签扫描和钱包导入可能同时读写库，
+  /// Android 低端机上交易流水同步、余额刷新、多签扫描和钱包导入可能同时读写库，
   /// MDBX 会返回 `MdbxError(11): Try again`。所有业务读写统一排队到这里，
   /// 保证同一进程内任何时刻只有一个 Isar 业务操作在运行。
   Future<T> writeTxn<T>(Future<T> Function(Isar isar) action) {
@@ -521,6 +564,7 @@ class WalletIsar {
       PersonalDuoqianEntitySchema,
       PersonalDuoqianProposalEntitySchema,
       LocalTxEntitySchema,
+      WalletTxSyncCursorEntitySchema,
     ];
     final isar =
         await Isar.open(schemas, name: 'wuminapp_wallet', directory: dir);
@@ -661,7 +705,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 1;
+  static const int currentSchemaVersion = 2;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);

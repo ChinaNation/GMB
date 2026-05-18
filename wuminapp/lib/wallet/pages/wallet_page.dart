@@ -149,6 +149,12 @@ class _MyWalletPageState extends State<MyWalletPage> {
     try {
       final list = await _walletService.getWallets();
       if (!mounted) return null;
+      for (final wallet in list) {
+        ChainTxMonitor.instance.watchWallet(wallet.address, wallet.pubkeyHex);
+      }
+      if (list.isNotEmpty) {
+        unawaited(ChainTxMonitor.instance.start());
+      }
       setState(() {
         _wallets = list;
         _walletsLoading = false;
@@ -850,8 +856,12 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     ChainTxMonitor.instance.onBalanceChanged = (address, newBalance) {
       if (mounted && address == widget.wallet.address) {
         _loadRecentRecords();
-        // 更新本地存储的余额
-        _walletService.setWalletBalance(widget.wallet.walletIndex, newBalance);
+        // 中文注释：交易记录落库和余额刷新是两件事；轻节点余额读取失败时
+        // ChainTxMonitor 会传 NaN，只刷新记录，不把余额误写成 0。
+        if (newBalance.isFinite) {
+          _walletService.setWalletBalance(
+              widget.wallet.walletIndex, newBalance);
+        }
       }
     };
     ChainTxMonitor.instance.start();
@@ -859,8 +869,8 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
 
   Future<void> _loadRecentRecords() async {
     try {
-      final records = await LocalTxStore.queryRecent(
-        widget.wallet.address,
+      final records = await LocalTxStore.queryRecentByWalletPubkey(
+        widget.wallet.pubkeyHex,
         limit: 5,
       );
       if (!mounted) return;
@@ -872,34 +882,24 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  String _localTxTypeLabel(String txType, String direction) {
-    switch (txType) {
+  String _localTxTypeLabel(String type) {
+    switch (type) {
       case 'transfer':
-        return direction == 'out' ? '转账支出' : '转账收入';
-      case 'offchain_pay':
-        return direction == 'out' ? '扫码支付' : '扫码收款';
-      case 'proposal_transfer':
-        return direction == 'out' ? '提案转出' : '提案转入';
-      case 'fee_withdraw':
+        return '转账';
+      case 'fee':
         return '手续费';
-      case 'fee_deposit':
-        return '手续费分成';
-      case 'block_reward':
-        return '出块奖励';
-      case 'bank_interest':
-        return '银行利息';
-      case 'gov_issuance':
-        return '治理增发';
-      case 'lightnode_reward':
-        return '认证奖励';
-      case 'duoqian_create':
-        return '多签出资';
-      case 'duoqian_close':
-        return direction == 'out' ? '多签关闭' : '多签收款';
-      case 'fund_destroy':
+      case 'reward':
+        return '奖励';
+      case 'interest':
+        return '利息';
+      case 'issuance':
+        return '增发';
+      case 'burn':
         return '资金销毁';
+      case 'duoqian_transfer':
+        return '多签转账';
       default:
-        return txType;
+        return type;
     }
   }
 
@@ -1104,6 +1104,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
             MaterialPageRoute(
               builder: (_) => TransactionHistoryPage(
                 walletAddress: widget.wallet.address,
+                walletPubkeyHex: widget.wallet.pubkeyHex,
               ),
             ),
           );
@@ -1139,11 +1140,10 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       else
         ...List.generate(_recentRecords.length, (index) {
           final record = _recentRecords[index];
-          final isOut = record.direction == 'out';
-          final label = _localTxTypeLabel(record.txType, record.direction);
-          final counterparty = isOut
-              ? _shortAddress(record.toAddress)
-              : _shortAddress(record.fromAddress);
+          final amountDeltaYuan = LocalTxStore.fenToYuan(record.amountDeltaFen);
+          final isOut = amountDeltaYuan < 0;
+          final label = _localTxTypeLabel(record.type);
+          final counterparty = _shortAddress(record.counterpartyAddress);
           final dt = DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis)
               .toLocal();
           final timeStr =
@@ -1157,6 +1157,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                     MaterialPageRoute(
                       builder: (_) => TransactionHistoryPage(
                         walletAddress: widget.wallet.address,
+                        walletPubkeyHex: widget.wallet.pubkeyHex,
                       ),
                     ),
                   );
@@ -1183,7 +1184,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 ),
                 isThreeLine: true,
                 trailing: Text(
-                  '${isOut ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: '')}',
+                  '${isOut ? "-" : "+"}${AmountFormat.format(amountDeltaYuan.abs(), symbol: '')}',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1252,6 +1253,10 @@ class _CreateWalletPageState extends State<CreateWalletPage> {
     });
     try {
       final created = await WalletManager().createWallet(wordCount: _wordCount);
+      unawaited(ChainTxMonitor.instance.initBaselineBalance(
+        created.profile.address,
+        created.profile.pubkeyHex,
+      ));
       if (!mounted) {
         return;
       }
@@ -1365,7 +1370,12 @@ class _ImportWalletPageState extends State<ImportWalletPage> {
       _isImporting = true;
     });
     try {
-      await WalletManager().importWallet(_mnemonicController.text);
+      final profile =
+          await WalletManager().importWallet(_mnemonicController.text);
+      unawaited(ChainTxMonitor.instance.initBaselineBalance(
+        profile.address,
+        profile.pubkeyHex,
+      ));
       _mnemonicController.clear();
       if (!mounted) {
         return;
@@ -1468,9 +1478,13 @@ class _ImportColdWalletPageState extends State<ImportColdWalletPage> {
       _isImporting = true;
     });
     try {
-      await WalletManager().importColdWallet(
+      final profile = await WalletManager().importColdWallet(
         address: _addressController.text,
       );
+      unawaited(ChainTxMonitor.instance.initBaselineBalance(
+        profile.address,
+        profile.pubkeyHex,
+      ));
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {

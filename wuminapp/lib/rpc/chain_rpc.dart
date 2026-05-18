@@ -183,8 +183,7 @@ class ChainRpc {
   //
   // 原实现包装 `getBlockExtrinsics`(smoldot `chainHead_v1_body`)逐块拉 body
   // 并用 blake2_256 求每笔 extrinsic 哈希。因触发 substrate block-request
-  // 反滥用 ban 把轻节点打死,已整体下线。交易确认现走 nonce-only,见
-  // `pending_tx_reconciler.dart`。
+  // 反滥用 ban 把轻节点打死,已整体下线。钱包交易流水改由 finalized 事件监听写入。
 
   /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
   Future<RuntimeMetadata> fetchMetadata() async {

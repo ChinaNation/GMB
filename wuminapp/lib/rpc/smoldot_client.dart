@@ -73,11 +73,8 @@ class SmoldotClientManager {
         final msg = e.toString().toLowerCase();
 
         // 中文注释：轻节点固有的"老区块体不可得"是预期边界情况，
-        // 不属于"瞬断"也不应降级健康状态。调用方（如 PendingTxReconciler
-        // 的 findTxInRecentBlocks → fetchBlockExtrinsicHashes）已经
-        // catch 并按 null 处理。否则会出现：reconciler 枚举老区块 →
-        // 每块都 retry 2 次 → 每块都打 "失败" + "瞬断" + degraded，
-        // 整个日志被淹没且健康状态闪烁。
+        // 不属于"瞬断"也不应降级健康状态；上层钱包流水已改为读
+        // finalized 区块事件，不再逐块拉旧区块 body 搜索交易。
         final isLightClientBlockMiss =
             msg.contains('failed to download block body');
         if (isLightClientBlockMiss) {
@@ -526,29 +523,29 @@ class SmoldotClientManager {
     if (_retrySyncRunning) return;
     _retrySyncRunning = true;
     try {
-    for (var i = 0; i < 5; i++) {
-      await Future<void>.delayed(const Duration(seconds: 60));
-      if (_synced || !isReady) return;
-      try {
-        await _chain!.waitUntilSynced(timeout: const Duration(seconds: 30));
-        _synced = true;
-        _healthStatus = ChainHealthStatus.operational;
-        _lastError = null;
-        _syncFuture = null;
-        debugPrint('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
-        unawaited(_saveDatabaseCache());
-        return;
-      } catch (e) {
-        debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
-        unawaited(_saveDatabaseCache());
+      for (var i = 0; i < 5; i++) {
+        await Future<void>.delayed(const Duration(seconds: 60));
+        if (_synced || !isReady) return;
+        try {
+          await _chain!.waitUntilSynced(timeout: const Duration(seconds: 30));
+          _synced = true;
+          _healthStatus = ChainHealthStatus.operational;
+          _lastError = null;
+          _syncFuture = null;
+          debugPrint('[Smoldot] 后台重试同步成功 (第 ${i + 1} 次)');
+          unawaited(_saveDatabaseCache());
+          return;
+        } catch (e) {
+          debugPrint('[Smoldot] 后台重试同步未完成 (第 ${i + 1}/5 次): $e');
+          unawaited(_saveDatabaseCache());
+        }
       }
-    }
-    // 5 次都没成功（共等 5 分钟），标记 degraded
-    if (!_synced) {
-      _healthStatus = ChainHealthStatus.degraded;
-      _lastError = '轻节点长时间未能同步到最新区块';
-      debugPrint('[Smoldot] $_lastError');
-    }
+      // 5 次都没成功（共等 5 分钟），标记 degraded
+      if (!_synced) {
+        _healthStatus = ChainHealthStatus.degraded;
+        _lastError = '轻节点长时间未能同步到最新区块';
+        debugPrint('[Smoldot] $_lastError');
+      }
     } finally {
       _retrySyncRunning = false;
     }
@@ -630,8 +627,8 @@ class SmoldotClientManager {
   // 原用途:交易确认时逐块拉 body 按 extrinsic hash 搜索 txHash。
   // 因 substrate `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用机制会对
   // 同一 (peer+hash+BODY) 请求超过 2 次直接返回空并 ban peer,把轻节点打死,
-  // 上层已切换到 nonce-only 判定。smoldot-dart 层 binding 暂保留,避免触动
-  // 跨 FFI 边界;如后续也无人调用可一并移除。
+  // 上层钱包流水已切换到 finalized 事件监听。smoldot-dart 层 binding 暂保留,
+  // 避免触动跨 FFI 边界;如后续也无人调用可一并移除。
 
   /// 原生提交已编码 extrinsic（必须完整同步）。
   Future<String?> submitExtrinsicHex(String extrinsicHex) async {

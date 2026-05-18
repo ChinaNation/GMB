@@ -12,7 +12,6 @@ import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_service.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
-import 'package:wuminapp_mobile/transaction/shared/pending_tx_reconciler.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
@@ -104,44 +103,28 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   Future<void> _bootstrap() async {
     await _reloadWallet();
     await _loadLocalRecords();
-    // 中文注释：交易页是默认首屏，对账延后执行，避免和钱包首读/治理首读抢 Isar。
-    unawaited(Future<void>.delayed(const Duration(seconds: 20), () {
+    // 中文注释：交易流水确认由 ChainTxMonitor 写入，本页只做一次延迟本地刷新；
+    // 不再发 nonce 轮询确认 RPC，避免增加节点负担。
+    unawaited(Future<void>.delayed(const Duration(seconds: 20), () async {
       if (!mounted || WalletIsar.instance.hasActiveOperation) {
         return;
       }
-      unawaited(_runReconcileAndReload());
+      await _loadLocalRecords();
     }));
-  }
-
-  /// 触发全局对账并在完成后刷新本地列表。
-  Future<void> _runReconcileAndReload() async {
-    if (WalletIsar.instance.hasActiveOperation) {
-      return;
-    }
-    try {
-      final updated = await PendingTxReconciler.instance.reconcileAll();
-      if (updated > 0 && mounted) {
-        await _loadLocalRecords();
-      }
-    } catch (e) {
-      if (WalletIsar.instance.isBusyError(e)) {
-        return;
-      }
-      debugPrint('[交易记录] 对账失败: $e');
-    }
   }
 
   /// 中文注释：从本地 Isar 加载链上转账记录。
   Future<void> _loadLocalRecords() async {
     if (_currentWallet == null) return;
     try {
-      final records = await LocalTxStore.queryByWallet(
-        _currentWallet!.address,
+      final records = await LocalTxStore.queryByWalletPubkey(
+        _currentWallet!.pubkeyHex,
         limit: 100,
       );
-      // 只取 transfer + out 的记录
+      // 中文注释：钱包流水不再保存 direction，支出由 amountDeltaFen 的负号判断。
       final filtered = records
-          .where((r) => r.txType == 'transfer' && r.direction == 'out')
+          .where((r) =>
+              r.type == 'transfer' && BigInt.parse(r.amountDeltaFen).isNegative)
           .toList();
       if (mounted) {
         setState(() {
@@ -408,32 +391,46 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       }
 
       // 交易已成功提交，后续写入本地记录失败不影响交易结果
+      final txHash = result.txHash.toLowerCase();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=${result.txHash}')));
+      ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=$txHash')));
       _toController.clear();
       _amountController.clear();
 
       // 写入本地交易记录（失败不影响交易）
       try {
+        final transferAmountFen = LocalTxStore.fenFromYuan(amount);
+        final feeFen = LocalTxStore.fenFromYuan(estimatedFee);
+        final amountDeltaFen =
+            (-(BigInt.parse(transferAmountFen) + BigInt.parse(feeFen)))
+                .toString();
         final entity = LocalTxEntity()
-          ..txId = result.txHash
+          ..recordKey = LocalTxStore.pendingRecordKey(
+            _currentWallet!.pubkeyHex,
+            txHash,
+          )
           ..walletAddress = _currentWallet!.address
-          ..txType = 'transfer'
-          ..direction = 'out'
+          ..walletPubkeyHex =
+              LocalTxStore.normalizePubkey(_currentWallet!.pubkeyHex)
+          ..type = 'transfer'
+          ..amountDeltaFen = amountDeltaFen
+          ..transferAmountFen = transferAmountFen
+          ..feeFen = feeFen
+          ..counterpartyAddress = toAddress
           ..fromAddress = _currentWallet!.address
           ..toAddress = toAddress
-          ..amountYuan = amount
-          ..feeYuan = estimatedFee
           ..status = 'pending'
-          ..txHash = result.txHash
+          ..source = 'local_submit'
+          ..txHash = txHash
           ..usedNonce = result.usedNonce
           ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await LocalTxStore.insert(entity);
+        await LocalTxStore.upsert(entity);
         if (mounted) await _loadLocalRecords();
 
-        // 交由全局 Reconciler 兜底，不再依赖页面生命周期。
-        unawaited(_quickConfirmAfterSubmit(result.txHash));
+        // 中文注释：本机先展示 pending，confirmed 只由 finalized 事件监听写回；
+        // 这里仅延迟刷新本地列表，不再按 nonce 推断成功。
+        unawaited(_reloadAfterChainEventWindow());
       } catch (e) {
         debugPrint('[交易记录] 写入本地失败: $e');
       }
@@ -471,26 +468,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     }
   }
 
-  /// 提交成功后的快速确认：短轮询 3 次，快速把常见情况推到 confirmed。
-  /// 长尾由全局 Reconciler 在启动/resume/周期调度时兜底。
-  Future<void> _quickConfirmAfterSubmit(String txHash) async {
-    for (var i = 0; i < 3; i++) {
-      await Future.delayed(const Duration(seconds: 2));
-      try {
-        final outcome =
-            await PendingTxReconciler.instance.reconcileSingle(txHash);
-        if (outcome == ReconcileOutcome.confirmed ||
-            outcome == ReconcileOutcome.lost) {
-          if (mounted) await _loadLocalRecords();
-          return;
-        }
-      } catch (e) {
-        if (WalletIsar.instance.isBusyError(e)) {
-          continue;
-        }
-        debugPrint('[交易记录] 快速确认失败: $e');
-      }
+  Future<void> _reloadAfterChainEventWindow() async {
+    await Future<void>.delayed(const Duration(seconds: 20));
+    if (!mounted || WalletIsar.instance.hasActiveOperation) {
+      return;
     }
+    await _loadLocalRecords();
   }
 
   Widget _buildStatusText(String label, int count, Color color) {
@@ -628,6 +611,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                             MaterialPageRoute(
                               builder: (_) => TransactionHistoryPage(
                                 walletAddress: _currentWallet!.address,
+                                walletPubkeyHex: _currentWallet!.pubkeyHex,
                               ),
                             ),
                           );

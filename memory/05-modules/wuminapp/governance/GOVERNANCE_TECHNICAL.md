@@ -496,6 +496,13 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 `lib/institution/governance_institution_registry.generated.dart`。管理员列表与阈值不写入
 静态注册表，必须动态读取链上 `AdminsChange::Subjects`。
 
+治理机构列表页（`lib/governance/governance_list_page.dart`）只负责本机展示顺序：
+国储会直接展示；省储会、省储行默认折叠，标题三角展开后按静态注册表顺序展示。
+用户长按省储会或省储行卡片拖拽时，只能在所属分组内排序；排序以
+`SharedPreferences` 保存 `sfidNumber` 列表到本机，不写链、不跨设备同步。
+本页不得再按管理员机构优先做 `_sorted()` 自动排序；管理员身份只影响卡片高亮，
+不改变展示顺序。
+
 治理机构详情页的账户信息区直接展示身份 ID、主账户和主账户余额；更多制度账户不再
 进入二级页面，而是在当前账户信息卡内点击箭头展开。展开项按机构实际存在的
 `feeAddress / safetyFundAddress / stakeAddress` 懒加载链上余额，分别显示费用账户、

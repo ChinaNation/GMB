@@ -405,6 +405,9 @@ class WalletManager {
     });
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.walletProfileEntitys.clear();
+      // 中文注释：钱包被清空时，本机从钱包进入 App 后记录的交易流水也一并清空。
+      await isar.localTxEntitys.clear();
+      await isar.walletTxSyncCursorEntitys.clear();
       final settings = await _getSettingsInTxn(isar);
       settings.activeWalletIndex = null;
       settings.updatedAtMillis = DateTime.now().millisecondsSinceEpoch;
@@ -439,6 +442,17 @@ class WalletManager {
         throw Exception('未找到钱包');
       }
       await isar.walletProfileEntitys.delete(current.id);
+      // 中文注释：用户明确删除钱包后，本机交易记录周期结束；再次导入同一地址
+      // 会从新的 finalized 区块重新记录，不保留旧本机流水。
+      final pubkey = current.pubkeyHex.toLowerCase().replaceFirst('0x', '');
+      await isar.localTxEntitys
+          .filter()
+          .walletPubkeyHexEqualTo(pubkey)
+          .deleteAll();
+      await isar.walletTxSyncCursorEntitys
+          .filter()
+          .walletPubkeyHexEqualTo(pubkey)
+          .deleteAll();
 
       final settings = await _getSettingsInTxn(isar);
       if (settings.activeWalletIndex == walletIndex) {
