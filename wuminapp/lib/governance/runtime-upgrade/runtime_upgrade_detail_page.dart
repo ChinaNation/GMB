@@ -365,30 +365,40 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         },
       );
 
-      // 持久化待确认投票记录
       final pubkey = _normalizeHex(voteWallet.pubkeyHex);
-      await PendingVoteStore.instance.save(PendingVoteRecord(
-        proposalType: 'runtime_upgrade',
-        proposalId: widget.proposalId,
-        walletPubkey: pubkey,
-        approve: approve,
-        txHash: result.txHash,
-        usedNonce: result.usedNonce,
-        createdAt: DateTime.now(),
-      ));
+      // 中文注释：服务层已经确认 runtime JointVote 记录，新流程不再写 pending。
+      // 这里只清除旧版本可能残留的同管理员 pending 记录。
+      await PendingVoteStore.instance.remove(
+        'runtime_upgrade',
+        widget.proposalId,
+        pubkey,
+      );
 
       if (!mounted) return;
+      setState(() {
+        _adminVotes = {..._adminVotes, pubkey: approve};
+        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
+        _institutionAdminTally = (
+          yes: _institutionAdminTally.yes + (approve ? 1 : 0),
+          no: _institutionAdminTally.no + (approve ? 0 : 1),
+        );
+        _votableWallets = _votableWallets
+            .where((w) => _normalizeHex(w.pubkeyHex) != pubkey)
+            .toList(growable: false);
+        _selectedVoteWallet =
+            _votableWallets.isNotEmpty ? _votableWallets.first : null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('联合投票已提交：${_truncateAddress(result.txHash)}'),
+          content: Text('联合投票已由 runtime 确认：${_truncateAddress(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
 
       _adminService
           .clearCache(AdminSubjectIdentity.fromInstitution(institution));
-      // 中文注释：提交返回 txHash 后立即结束按钮转圈，链上 JointVote 结果由
-      // 后台刷新和 pending 状态机确认，避免整页读取慢导致按钮一直转。
+      // 中文注释：服务层已经等待入块并回读 JointVote storage；这里刷新页面
+      // 只负责同步最新展示状态，投票成功与否不再由 txHash 判断。
       unawaited(_load(showSpinner: false));
     } on WalletAuthException catch (e) {
       if (!mounted) return;

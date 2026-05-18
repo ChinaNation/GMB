@@ -115,7 +115,10 @@ class ChainRpc {
 
   // ──── 转账相关 RPC ────
 
-  /// 查询账户下一个可用 nonce（含交易池中的 pending 交易）。
+  /// 查询 runtime `frame_system::Account.nonce` 给出的账户 nonce。
+  ///
+  /// 中文注释：wuminapp 不缓存、不预占、不自增 nonce；每次签名前都
+  /// 通过原生 runtime call 读取当前 nonce，并把该值交给 signed extrinsic。
   Future<int> fetchNonce(String ss58Address) async {
     // 中文注释：轻节点模式先在 Dart 侧解出 accountId，再交给原生 runtime call，避免继续依赖 legacy `system_accountNextIndex`。
     final accountIdHex = '0x${_hexEncode(_keyring.decodeAddress(ss58Address))}';
@@ -340,8 +343,7 @@ class ChainRpc {
             debugPrint(
                 '[ChainRpc.bgWatch] $txHashHex 60s timeout 未收到任何状态,可能 smoldot 转发失败或全节点静默 drop');
           } else {
-            debugPrint(
-                '[ChainRpc.bgWatch] $txHashHex 60s 后结束后台监听,交易仍交由 nonce 轮询确认');
+            debugPrint('[ChainRpc.bgWatch] $txHashHex 60s 后结束后台监听,后续交由业务真源确认');
           }
           done.complete();
         }

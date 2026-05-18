@@ -16,6 +16,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260517-200620-wuminapp-runtime-nonce-only.md`
 - `memory/08-tasks/done/20260517-wuminapp-isar-read-queue-wallet-governance.md`
 - `memory/08-tasks/done/20260517-wuminapp-isar-wallet-chain-status.md`
 - `memory/08-tasks/done/20260517-wuminapp-smoldot-android-abi.md`

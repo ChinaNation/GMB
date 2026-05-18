@@ -14,8 +14,6 @@ import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_ba
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_service.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
-import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/nonce_manager.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
@@ -136,11 +134,20 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
 
   // 已提交投票但尚未上链确认的管理员公钥集合
   Set<String> _pendingPubkeys = const {};
+  String? _voteNotice;
+  bool _voteNoticeIsError = false;
+  Timer? _pendingPollTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _pendingPollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool showSpinner = true}) async {
@@ -212,6 +219,9 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       // 检查待确认投票：先批量确认，再获取仍在等待的记录。
       // 用 kind 对应的 type key，避免跨类型提案 ID 误判（虽然 ID 全局递增，
       // 但分开归档便于后续清理/迁移）。
+      //
+      // 中文注释：nonce 只由 runtime frame_system 管理；这里仅根据投票引擎
+      // storage 清理 pending 记录，不再重置或回滚客户端本地 nonce。
       final pendingSummary = await PendingVoteStore.instance.confirmAllDetailed(
         _proposalTypeKey,
         widget.proposalId,
@@ -222,6 +232,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       }
       final pendingPks =
           pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
+      final pendingNotice = _pendingSummaryNotice(pendingSummary);
 
       // 筛选出可投票的管理员钱包（未投票且无待确认投票的）
       final votable = <WalletProfile>[];
@@ -246,6 +257,10 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         _pendingPubkeys = pendingPks;
         _votableWallets = votable;
         _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
+        if (pendingNotice != null) {
+          _voteNotice = pendingNotice.$1;
+          _voteNoticeIsError = pendingNotice.$2;
+        }
         _transferInfo = null;
         _safetyFundInfo = null;
         _sweepInfo = null;
@@ -262,6 +277,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         }
         _loading = false;
       });
+      _syncPendingPoll(pendingPks.isNotEmpty && status == _statusVoting);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -296,6 +312,35 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   String _truncateAddress(String address) {
     if (address.length <= 14) return address;
     return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+  }
+
+  String _normalizePubkey(String pubkeyHex) {
+    var pubkey = pubkeyHex.toLowerCase();
+    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
+    return pubkey;
+  }
+
+  (String, bool)? _pendingSummaryNotice(PendingVoteConfirmSummary summary) {
+    if (summary.lost.isNotEmpty) {
+      return ('${summary.lost.length} 笔投票未写入链上投票记录，已清除等待状态，可重新提交。', true);
+    }
+    if (summary.confirmed.isNotEmpty) {
+      return ('${summary.confirmed.length} 笔投票已由链上投票记录确认。', false);
+    }
+    return null;
+  }
+
+  void _syncPendingPoll(bool enabled) {
+    if (!enabled) {
+      _pendingPollTimer?.cancel();
+      _pendingPollTimer = null;
+      return;
+    }
+    if (_pendingPollTimer != null) return;
+    _pendingPollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted || _loading) return;
+      unawaited(_load(showSpinner: false));
+    });
   }
 
   // ──── 投票提交 ────
@@ -348,16 +393,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
 
     try {
       final pubkeyBytes = _hexDecode(wallet.pubkeyHex);
-      var pubkey = wallet.pubkeyHex.toLowerCase();
-      if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-      var pendingSaved = false;
-      var poolFailureHandled = false;
-      TxPoolWatchEvent? earlyPoolFailure;
-      Future<void> handlePoolFailure(TxPoolWatchEvent event) async {
-        if (poolFailureHandled) return;
-        poolFailureHandled = true;
-        await _handleVotePoolFailure(wallet, event);
-      }
+      final pubkey = _normalizePubkey(wallet.pubkeyHex);
 
       // 热钱包：先认证，后续 signCallback 优先走本地签名;冷钱包：fallback QR 签名。
       WalletManager? hotWalletManager;
@@ -421,43 +457,45 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         signerPubkey: Uint8List.fromList(pubkeyBytes),
         sign: signCallback,
         onWatchEvent: (event) {
-          if (!event.isFailure) return;
-          earlyPoolFailure = event;
-          if (pendingSaved) {
-            unawaited(handlePoolFailure(event));
+          if (event.isIncluded) {
+            unawaited(_load(showSpinner: false));
           }
         },
       );
+      debugPrint(
+          '[DuoqianTransferVote] submit 已入块 txHash=${result.txHash} nonce=${result.usedNonce} block=${result.blockHashHex}');
 
-      // 持久化待确认投票记录
-      await PendingVoteStore.instance.save(
-        PendingVoteRecord(
-          proposalType: _proposalTypeKey,
-          proposalId: widget.proposalId,
-          walletPubkey: pubkey,
-          approve: approve,
-          txHash: result.txHash,
-          usedNonce: result.usedNonce,
-          createdAt: DateTime.now(),
-        ),
+      // 中文注释：服务层已经确认 runtime 投票记录，新流程不再写 pending。
+      // 这里只清除旧版本可能残留的同管理员 pending 记录。
+      await PendingVoteStore.instance.remove(
+        _proposalTypeKey,
+        widget.proposalId,
+        pubkey,
       );
-      pendingSaved = true;
 
       if (!mounted) return;
+      setState(() {
+        _adminVotes[pubkey] = approve;
+        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
+        _votableWallets = _votableWallets
+            .where((w) => _normalizePubkey(w.pubkeyHex) != pubkey)
+            .toList(growable: false);
+        _selectedVoteWallet =
+            _votableWallets.isNotEmpty ? _votableWallets.first : null;
+        _voteNotice = '链上已确认该管理员投票。';
+        _voteNoticeIsError = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('投票已提交：${_truncateAddress(result.txHash)}'),
+          content: Text('投票已由 runtime 确认：${_truncateAddress(result.txHash)}'),
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      if (earlyPoolFailure != null) {
-        await handlePoolFailure(earlyPoolFailure!);
-      }
 
       // 刷新数据
       _adminService.clearCache(_subjectIdentity);
-      // 中文注释：提交拿到 txHash 后立即结束按钮转圈，链上投票结果走后台刷新
-      // 和 PendingVoteStore 状态机确认，不能让整页 _load 卡住提交按钮。
+      // 中文注释：服务层已经等待入块并回读 InternalVote storage；这里
+      // 只后台刷新展示状态，不能再把 txHash 当作投票成功依据。
       unawaited(_load(showSpinner: false));
     } catch (e) {
       if (!mounted) return;
@@ -470,98 +508,6 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
-  }
-
-  Future<void> _handleVotePoolFailure(
-    WalletProfile wallet,
-    TxPoolWatchEvent event,
-  ) async {
-    var pubkey = wallet.pubkeyHex.toLowerCase();
-    if (pubkey.startsWith('0x')) pubkey = pubkey.substring(2);
-    final chainVote =
-        await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
-
-    // 中文注释：投票成功只认 runtime 的 InternalVotesByAccount；
-    // watch 超时/回滚等传输层状态不能直接把管理员恢复成未投票。
-    if (chainVote != null) {
-      await PendingVoteStore.instance.remove(
-        _proposalTypeKey,
-        widget.proposalId,
-        pubkey,
-      );
-      if (!mounted) return;
-      setState(() {
-        _adminVotes[pubkey] = chainVote;
-        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('链上已确认该管理员投票。'),
-          backgroundColor: AppTheme.primaryDark,
-        ),
-      );
-      unawaited(_load(showSpinner: false));
-      return;
-    }
-
-    final message = _poolFailureMessage(event);
-    if (_shouldKeepPendingForPoolFailure(event)) {
-      if (!mounted) return;
-      setState(() => _pendingPubkeys = {..._pendingPubkeys, pubkey});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$message 请刷新后以链上投票记录为准。'),
-          backgroundColor: AppTheme.primaryDark,
-        ),
-      );
-      unawaited(_load(showSpinner: false));
-      return;
-    }
-
-    await PendingVoteStore.instance.remove(
-      _proposalTypeKey,
-      widget.proposalId,
-      pubkey,
-    );
-    NonceManager.instance.reset(wallet.address);
-    if (!mounted) return;
-    setState(() {
-      _pendingPubkeys = _pendingPubkeys.difference({pubkey});
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
-    );
-    unawaited(_load(showSpinner: false));
-  }
-
-  bool _shouldKeepPendingForPoolFailure(TxPoolWatchEvent event) {
-    return switch (event.kind) {
-      TxPoolWatchKind.future ||
-      TxPoolWatchKind.retracted ||
-      TxPoolWatchKind.finalityTimeout ||
-      TxPoolWatchKind.timeout ||
-      TxPoolWatchKind.error =>
-        true,
-      TxPoolWatchKind.invalid ||
-      TxPoolWatchKind.dropped ||
-      TxPoolWatchKind.usurped =>
-        false,
-      _ => true,
-    };
-  }
-
-  String _poolFailureMessage(TxPoolWatchEvent event) {
-    return switch (event.kind) {
-      TxPoolWatchKind.future => '投票交易未出块：nonce 偏大，可能前一笔交易尚未确认。',
-      TxPoolWatchKind.invalid => '投票交易无效：可能余额不足、签名错误、nonce 错误或无投票权限。',
-      TxPoolWatchKind.dropped => '投票交易被交易池丢弃，请刷新后重新提交。',
-      TxPoolWatchKind.usurped => '投票交易被同 nonce 的另一笔交易替代，请刷新后确认状态。',
-      TxPoolWatchKind.retracted => '投票交易所在区块被回滚，请刷新后重新确认。',
-      TxPoolWatchKind.finalityTimeout => '投票交易最终化超时，请刷新后确认是否已投票。',
-      TxPoolWatchKind.timeout => '投票交易长时间没有交易池状态，可能未广播成功。',
-      TxPoolWatchKind.error => event.description,
-      _ => '投票交易未能进入区块：${event.description}',
-    };
   }
 
   void _confirmVote(bool approve) {
@@ -662,6 +608,10 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           ProposalStatusBadge(status: _status, proposalId: widget.proposalId),
+          if (_voteNotice != null) ...[
+            const SizedBox(height: 12),
+            _buildVoteNotice(),
+          ],
           const SizedBox(height: 16),
           _buildProposalInfoCard(),
           const SizedBox(height: 16),
@@ -677,6 +627,39 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
             adminVotes: _adminVotes,
             pendingPubkeys: _pendingPubkeys,
             proposerPubkey: _proposerPubkey,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoteNotice() {
+    final color = _voteNoticeIsError ? AppTheme.danger : AppTheme.info;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            _voteNoticeIsError ? Icons.error_outline : Icons.info_outline,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _voteNotice!,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
