@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'chain_event_subscription.dart';
 import 'chain_rpc.dart';
@@ -11,10 +10,11 @@ import 'smoldot_client.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 
-/// 链上交易监控服务（余额变化触发模式）。
+/// 链上交易监控服务（本机增量流水模式）。
 ///
-/// 订阅 finalized 区块，每个新区块仅查一次余额（80 字节），
-/// 余额变化时才查 System.Events 获取交易明细，极大降低全节点负担。
+/// 中文注释：wuminapp 不查询钱包导入前历史，也不让全节点替手机维护交易索引。
+/// 本服务只从钱包进入本机后的游标开始，按 finalized 区块小步同步 System.Events，
+/// 将与本机钱包有关的余额变化写入 Isar，本地页面只读缓存。
 class ChainTxMonitor {
   ChainTxMonitor._();
   static final ChainTxMonitor instance = ChainTxMonitor._();
@@ -22,22 +22,20 @@ class ChainTxMonitor {
   final ChainEventSubscription _subscription = ChainEventSubscription();
   final ChainRpc _chainRpc = ChainRpc();
   StreamSubscription<ChainEvent>? _listener;
+  Future<void>? _syncInflight;
   bool _running = false;
 
-  /// 当前监控的钱包：address → pubkeyHex（小写，不含 0x）。
-  final Map<String, String> _watchedWallets = {};
+  /// 当前监控的钱包：pubkeyHex(小写，不含 0x) → SS58 地址。
+  final Map<String, String> _walletAddressByPubkey = {};
 
   /// 余额变动回调：当检测到余额变化（写入新交易记录后）通知外部刷新。
   void Function(String walletAddress, double newBalance)? onBalanceChanged;
 
-  /// 本地基准余额缓存：pubkeyHex → 最近一次已知余额（yuan）。
-  final Map<String, double> _knownBalances = {};
-
   /// SS58 前缀。
   static const int _ss58Prefix = 2027;
 
-  /// SharedPreferences 键前缀：存储每个钱包的基准余额。
-  static const String _balancePrefix = 'tx_monitor_balance_';
+  /// 每次补同步最多连续处理的区块数，避免手机长时间离线后一次性压节点。
+  static const int _maxBlocksPerRun = 120;
 
   // ──── 已知事件的 pallet_index + event_index ────
 
@@ -61,13 +59,13 @@ class ChainTxMonitor {
 
   /// 添加监控钱包。
   void watchWallet(String address, String pubkeyHex) {
-    final pk = pubkeyHex.toLowerCase().replaceFirst('0x', '');
-    _watchedWallets[address] = pk;
+    final pk = LocalTxStore.normalizePubkey(pubkeyHex);
+    _walletAddressByPubkey[pk] = address;
   }
 
   /// 移除监控钱包。
   void unwatchWallet(String address) {
-    _watchedWallets.remove(address);
+    _walletAddressByPubkey.removeWhere((_, value) => value == address);
   }
 
   /// 启动监控。
@@ -75,12 +73,13 @@ class ChainTxMonitor {
     if (_running) return;
     _running = true;
 
-    // 加载所有监控钱包的基准余额
-    await _loadKnownBalances();
-
     _subscription.connect();
     _listener = _subscription.events.listen(_onEvent);
-    debugPrint('[TxMonitor] 交易监控已启动（余额变化模式），监控 ${_watchedWallets.length} 个钱包');
+    debugPrint('[TxMonitor] 交易监控已启动，监控 ${_walletAddressByPubkey.length} 个钱包');
+
+    // 中文注释：启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
+    // 以当前 finalized 区块为起点，不回扫导入前历史。
+    unawaited(_syncToLatest());
   }
 
   /// 停止监控。
@@ -92,96 +91,114 @@ class ChainTxMonitor {
     debugPrint('[TxMonitor] 交易监控已停止');
   }
 
-  /// 初始化钱包基准余额（导入钱包时调用）。
-  ///
-  /// 查询一次链上余额，存储为基准值。今后只有余额变化时才触发查询。
+  /// 初始化钱包基准游标（导入钱包时可调用）。
   Future<void> initBaselineBalance(String address, String pubkeyHex) async {
-    final pk = pubkeyHex.toLowerCase().replaceFirst('0x', '');
+    watchWallet(address, pubkeyHex);
     try {
-      final balance = await _chainRpc.fetchBalance(pubkeyHex);
-      _knownBalances[pk] = balance;
-      await _saveBalance(address, balance);
-      debugPrint('[TxMonitor] 初始化基准余额: $address → $balance 元');
-    } catch (e) {
-      debugPrint('[TxMonitor] 初始化基准余额失败: $e');
-    }
-  }
-
-  // ──── 内部：余额变化检测 ────
-
-  /// 处理新 finalized 区块事件。
-  Future<void> _onEvent(ChainEvent event) async {
-    if (!_running || _watchedWallets.isEmpty) return;
-    if (event.blockNumber == null) return;
-
-    try {
-      await _checkBalanceChanges(event.blockNumber!);
-    } catch (e) {
-      debugPrint('[TxMonitor] 处理区块 ${event.blockNumber} 失败: $e');
-    }
-  }
-
-  /// 批量查询所有监控钱包的余额，检测变化。
-  Future<void> _checkBalanceChanges(int blockNumber) async {
-    if (_watchedWallets.isEmpty) return;
-
-    // 批量查询当前余额（单次 RPC）
-    final pubkeys = _watchedWallets.values.toList();
-    final Map<String, double> currentBalances;
-    try {
-      currentBalances = await _chainRpc.fetchBalances(pubkeys);
-    } catch (e) {
-      debugPrint('[TxMonitor] 批量余额查询失败: $e');
-      return;
-    }
-
-    // 逐个钱包对比
-    for (final entry in _watchedWallets.entries) {
-      final address = entry.key;
-      final pk = entry.value;
-      final currentBalance = currentBalances[pk] ?? 0.0;
-      final knownBalance = _knownBalances[pk];
-
-      if (knownBalance == null) {
-        // 首次：记录基准余额，不查 Events
-        _knownBalances[pk] = currentBalance;
-        await _saveBalance(address, currentBalance);
-        continue;
-      }
-
-      // 余额未变化：什么都不做
-      if ((currentBalance - knownBalance).abs() < 0.001) continue;
-
-      debugPrint(
-        '[TxMonitor] 余额变化: $address $knownBalance → $currentBalance (block $blockNumber)',
+      final latest = await _chainRpc.fetchLatestBlock();
+      await LocalTxStore.ensureCursor(
+        walletAddress: address,
+        walletPubkeyHex: pubkeyHex,
+        trackingStartBlock: latest.blockNumber,
+        lastSyncedBlock: latest.blockNumber,
       );
-
-      // 余额增加 → 可能有收入，查 Events 获取明细
-      if (currentBalance > knownBalance) {
-        await _queryBlockEvents(blockNumber, address, pk);
-      }
-
-      // 更新基准余额
-      _knownBalances[pk] = currentBalance;
-      await _saveBalance(address, currentBalance);
-
-      // 通知外部余额变动
-      onBalanceChanged?.call(address, currentBalance);
+      debugPrint('[TxMonitor] 初始化交易记录游标: $address @${latest.blockNumber}');
+    } catch (e) {
+      debugPrint('[TxMonitor] 初始化交易记录游标失败，稍后从轻节点就绪块开始: $e');
     }
   }
 
-  // ──── 内部：Events 查询（仅在余额变化时触发） ────
+  // ──── 同步调度 ────
 
-  /// 查询指定区块的 System.Events，提取与目标钱包相关的收入交易。
-  Future<void> _queryBlockEvents(
-    int blockNumber,
-    String walletAddress,
-    String pubkeyHex,
-  ) async {
+  Future<void> _onEvent(ChainEvent event) async {
+    if (!_running || _walletAddressByPubkey.isEmpty) return;
+    final blockNumber = event.blockNumber;
+    if (blockNumber == null) return;
+    await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
+  }
+
+  Future<void> _syncToLatest() async {
+    if (_walletAddressByPubkey.isEmpty) return;
+    try {
+      final latest = await _chainRpc.fetchLatestBlock();
+      await _syncThrough(
+        latest.blockNumber,
+        missingCursorStartsAt: latest.blockNumber,
+      );
+    } catch (e) {
+      debugPrint('[TxMonitor] 启动补同步失败: $e');
+    }
+  }
+
+  Future<void> _syncThrough(
+    int targetBlock, {
+    required int missingCursorStartsAt,
+  }) {
+    final existing = _syncInflight;
+    if (existing != null) return existing;
+
+    final task = _runSyncThrough(
+      targetBlock,
+      missingCursorStartsAt: missingCursorStartsAt,
+    ).whenComplete(() {
+      _syncInflight = null;
+    });
+    _syncInflight = task;
+    return task;
+  }
+
+  Future<void> _runSyncThrough(
+    int targetBlock, {
+    required int missingCursorStartsAt,
+  }) async {
+    if (_walletAddressByPubkey.isEmpty) return;
+
+    final cursors = await LocalTxStore.ensureCursorsForWallets(
+      walletAddressByPubkey: _walletAddressByPubkey,
+      startBlock: missingCursorStartsAt,
+    );
+    final lastByPubkey = {
+      for (final cursor in cursors)
+        cursor.walletPubkeyHex: cursor.lastSyncedBlock,
+    };
+    final startBlock = lastByPubkey.values
+            .fold<int>(targetBlock, (min, value) => value < min ? value : min) +
+        1;
+    if (startBlock > targetBlock) return;
+
+    final endBlock = startBlock + _maxBlocksPerRun - 1 < targetBlock
+        ? startBlock + _maxBlocksPerRun - 1
+        : targetBlock;
+    for (var block = startBlock; block <= endBlock; block++) {
+      if (!_running || _walletAddressByPubkey.isEmpty) return;
+      if (WalletIsar.instance.hasActiveOperation) {
+        // 中文注释：交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
+        // 游标不推进，下一次新区块或启动补同步会继续补缺口。
+        return;
+      }
+
+      final ok = await _processBlock(block);
+      if (!ok) return;
+
+      for (final pubkey in _walletAddressByPubkey.keys) {
+        final last = lastByPubkey[pubkey] ?? missingCursorStartsAt;
+        if (last < block) {
+          await LocalTxStore.markCursorSynced(
+            walletPubkeyHex: pubkey,
+            blockNumber: block,
+          );
+          lastByPubkey[pubkey] = block;
+        }
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+
+  Future<bool> _processBlock(int blockNumber) async {
     try {
       final blockHashHex =
           await SmoldotClientManager.instance.getBlockHash(blockNumber);
-      if (blockHashHex == null) return;
+      if (blockHashHex == null || blockHashHex.isEmpty) return false;
 
       final keyHex = '0x${_hexEncode(_eventsStorageKey)}';
       final result = await SmoldotClientManager.instance.request(
@@ -189,41 +206,45 @@ class ChainTxMonitor {
         [keyHex, blockHashHex],
       );
       final eventsHex = result as String?;
-      if (eventsHex == null) return;
+      if (eventsHex == null) return true;
 
       final eventsBytes = _hexDecode(
         eventsHex.startsWith('0x') ? eventsHex.substring(2) : eventsHex,
       );
-      if (eventsBytes.isEmpty) return;
+      if (eventsBytes.isEmpty) return true;
 
       await _decodeTransferEvents(
         eventsBytes,
         blockNumber,
-        walletAddress,
-        pubkeyHex,
+        blockHashHex,
       );
+      return true;
     } catch (e) {
-      debugPrint('[TxMonitor] 查询区块 $blockNumber Events 失败: $e');
+      debugPrint('[TxMonitor] 同步区块 $blockNumber 失败: $e');
+      return false;
     }
   }
 
-  /// 解码 System.Events，仅提取 Balances::Transfer 收入事件。
+  /// 解码 System.Events，提取与本机钱包相关的 Balances::Transfer 余额变化。
   Future<void> _decodeTransferEvents(
     Uint8List data,
     int blockNumber,
-    String walletAddress,
-    String targetPubkey,
+    String blockHash,
   ) async {
     var offset = 0;
+    var eventRecordIndex = 0;
     if (data.isEmpty) return;
     final (_, countSize) = _decodeCompactU32(data, 0);
     offset += countSize;
 
     while (offset + 4 < data.length) {
+      int? extrinsicIndex;
       final phase = data[offset];
       offset += 1;
       if (phase == 0x00) {
-        offset += 4; // 跳过 ApplyExtrinsic u32
+        if (offset + 4 > data.length) break;
+        extrinsicIndex = _readU32LE(data, offset);
+        offset += 4;
       }
 
       if (offset + 2 > data.length) break;
@@ -241,103 +262,91 @@ class ChainTxMonitor {
 
           final fromHex = _hexEncode(from);
           final toHex = _hexEncode(to);
-          final amountFen = _readU128LE(amountBytes, 0);
-          final amountYuan = amountFen.toDouble() / 100.0;
+          final transferAmountFen = _readU128LE(amountBytes, 0).toString();
 
-          // 收入：目标钱包是收款方
-          if (toHex == targetPubkey) {
-            await _writeTx(
-              walletAddress: walletAddress,
-              txId: 'block-$blockNumber-transfer-$fromHex-$toHex',
-              txType: 'transfer',
-              direction: 'in',
+          if (fromHex != toHex) {
+            await _writeWalletTransferIfMatched(
+              walletPubkeyHex: toHex,
+              blockNumber: blockNumber,
+              blockHash: blockHash,
+              eventRecordIndex: eventRecordIndex,
+              extrinsicIndex: extrinsicIndex,
+              amountDeltaFen: transferAmountFen,
+              transferAmountFen: transferAmountFen,
               fromAddress: _pubkeyToSs58(from),
-              toAddress: walletAddress,
-              amountYuan: amountYuan,
-              blockNumber: blockNumber,
-              status: 'confirmed',
+              toAddress: _walletAddressByPubkey[toHex] ?? _pubkeyToSs58(to),
+              counterpartyAddress: _pubkeyToSs58(from),
             );
-          }
 
-          // 支出：目标钱包是付款方（补充链上确认记录）
-          if (fromHex == targetPubkey) {
-            await _writeTx(
-              walletAddress: walletAddress,
-              txId: 'block-$blockNumber-transfer-$fromHex-$toHex',
-              txType: 'transfer',
-              direction: 'out',
-              fromAddress: walletAddress,
-              toAddress: _pubkeyToSs58(to),
-              amountYuan: amountYuan,
+            await _writeWalletTransferIfMatched(
+              walletPubkeyHex: fromHex,
               blockNumber: blockNumber,
-              status: 'confirmed',
+              blockHash: blockHash,
+              eventRecordIndex: eventRecordIndex,
+              extrinsicIndex: extrinsicIndex,
+              amountDeltaFen: LocalTxStore.negateFen(transferAmountFen),
+              transferAmountFen: transferAmountFen,
+              fromAddress:
+                  _walletAddressByPubkey[fromHex] ?? _pubkeyToSs58(from),
+              toAddress: _pubkeyToSs58(to),
+              counterpartyAddress: _pubkeyToSs58(to),
             );
           }
 
           offset = _skipTopics(data, offset);
+          eventRecordIndex++;
           continue;
         }
       }
 
-      // 未识别事件：尝试跳到下一个 EventRecord
+      // 未识别事件：尝试跳到下一个 EventRecord。
       offset = _skipToNextEvent(data, offset);
+      eventRecordIndex++;
     }
   }
 
-  // ──── 基准余额持久化 ────
-
-  /// 加载所有监控钱包的基准余额。
-  Future<void> _loadKnownBalances() async {
-    final prefs = await SharedPreferences.getInstance();
-    for (final entry in _watchedWallets.entries) {
-      final stored = prefs.getDouble('$_balancePrefix${entry.key}');
-      if (stored != null) {
-        _knownBalances[entry.value] = stored;
-      }
-    }
-  }
-
-  /// 保存单个钱包的基准余额。
-  Future<void> _saveBalance(String address, double balance) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('$_balancePrefix$address', balance);
-  }
-
-  // ──── 写入本地交易记录 ────
-
-  /// 写入本地交易记录（防重复）。
-  Future<void> _writeTx({
-    required String walletAddress,
-    required String txId,
-    required String txType,
-    required String direction,
-    String? fromAddress,
-    String? toAddress,
-    required double amountYuan,
-    double? feeYuan,
-    int? blockNumber,
-    required String status,
+  Future<void> _writeWalletTransferIfMatched({
+    required String walletPubkeyHex,
+    required int blockNumber,
+    required String blockHash,
+    required int eventRecordIndex,
+    required int? extrinsicIndex,
+    required String amountDeltaFen,
+    required String transferAmountFen,
+    required String fromAddress,
+    required String toAddress,
+    required String counterpartyAddress,
   }) async {
-    // 防重复
-    final existing = await LocalTxStore.queryByTxId(txId);
-    if (existing != null) return;
+    final pubkey = LocalTxStore.normalizePubkey(walletPubkeyHex);
+    final walletAddress = _walletAddressByPubkey[pubkey];
+    if (walletAddress == null) return;
 
-    final entity = LocalTxEntity()
-      ..txId = txId
-      ..walletAddress = walletAddress
-      ..txType = txType
-      ..direction = direction
-      ..fromAddress = fromAddress
-      ..toAddress = toAddress
-      ..amountYuan = amountYuan
-      ..feeYuan = feeYuan
-      ..status = status
-      ..blockNumber = blockNumber
-      ..createdAtMillis = DateTime.now().millisecondsSinceEpoch
-      ..confirmedAtMillis = DateTime.now().millisecondsSinceEpoch;
-    await LocalTxStore.insert(entity);
-    debugPrint(
-        '[TxMonitor] 写入交易 $txType $direction $amountYuan 元 (block $blockNumber)');
+    await LocalTxStore.upsertConfirmedTransferEvent(
+      walletAddress: walletAddress,
+      walletPubkeyHex: pubkey,
+      recordKey: LocalTxStore.confirmedRecordKey(
+        pubkey,
+        blockHash,
+        eventRecordIndex,
+      ),
+      amountDeltaFen: amountDeltaFen,
+      transferAmountFen: transferAmountFen,
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      counterpartyAddress: counterpartyAddress,
+      blockNumber: blockNumber,
+      blockHash: blockHash,
+      eventIndex: eventRecordIndex,
+      extrinsicIndex: extrinsicIndex,
+    );
+
+    try {
+      final balance = await _chainRpc.fetchBalance(pubkey);
+      onBalanceChanged?.call(walletAddress, balance);
+    } catch (_) {
+      // 中文注释：交易记录已经落库，余额刷新失败不能把钱包余额误写成 0。
+      onBalanceChanged?.call(walletAddress, double.nan);
+    }
   }
 
   // ──── 工具方法 ────
@@ -360,6 +369,13 @@ class ChainTxMonitor {
       result[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
     }
     return result;
+  }
+
+  static int _readU32LE(Uint8List bytes, int offset) {
+    return bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24);
   }
 
   static BigInt _readU128LE(Uint8List bytes, int offset) {

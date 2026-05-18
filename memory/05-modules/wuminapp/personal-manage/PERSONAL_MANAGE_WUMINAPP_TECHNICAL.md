@@ -88,7 +88,7 @@ PersonalManage storage：
 - 若旧版本已写入“本地 create 提案仍为 voting，但链上 Proposals[id] 不存在”的记录，
   该记录视为未上链幽灵数据，列表同步时删除本地多签和提案快照，不显示为“已注销/未知提案”。
 - 个人多签历史、待激活创建提案反查、反向索引发现和本地状态更新全部通过
-  `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 进入统一队列，避免与钱包创建/导入、余额刷新和后台对账抢 MDBX 锁。
+  `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 进入统一队列，避免与钱包创建/导入、余额刷新和钱包交易流水同步抢 MDBX 锁。
 
 ## 3.2 创建 / 注销阈值 UI
 

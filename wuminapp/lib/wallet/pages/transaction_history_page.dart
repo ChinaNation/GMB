@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wuminapp_mobile/ui/app_theme.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
-import 'package:wuminapp_mobile/isar/wallet_isar.dart';
+import 'package:wuminapp_mobile/ui/app_theme.dart';
 
 class TransactionHistoryPage extends StatefulWidget {
   const TransactionHistoryPage({
     super.key,
     required this.walletAddress,
+    required this.walletPubkeyHex,
   });
 
   final String walletAddress;
+  final String walletPubkeyHex;
 
   @override
   State<TransactionHistoryPage> createState() => _TransactionHistoryPageState();
@@ -53,8 +55,8 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
       _error = null;
     });
     try {
-      final records = await LocalTxStore.queryByWallet(
-        widget.walletAddress,
+      final records = await LocalTxStore.queryByWalletPubkey(
+        widget.walletPubkeyHex,
         limit: _pageSize,
         offset: 0,
       );
@@ -77,8 +79,8 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
     if (_loadingMore || !_hasMore || _records.isEmpty) return;
     setState(() => _loadingMore = true);
     try {
-      final records = await LocalTxStore.queryByWallet(
-        widget.walletAddress,
+      final records = await LocalTxStore.queryByWalletPubkey(
+        widget.walletPubkeyHex,
         limit: _pageSize,
         offset: _records.length,
       );
@@ -88,7 +90,7 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         _hasMore = records.length >= _pageSize;
         _loadingMore = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _loadingMore = false);
     }
@@ -114,9 +116,13 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('加载失败: $_error',
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 12)),
+            Text(
+              '加载失败: $_error',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+            ),
             const SizedBox(height: 8),
             TextButton(onPressed: _loadFirstPage, child: const Text('重试')),
           ],
@@ -158,36 +164,37 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
   }
 }
 
-// ─── 交易类型中文标签 ─────────────────────────────────────────
-
-String _txTypeLabel(String txType, String direction) {
-  switch (txType) {
+String _businessTypeLabel(String type) {
+  switch (type) {
     case 'transfer':
-      return direction == 'out' ? '转账支出' : '转账收入';
-    case 'offchain_pay':
-      return direction == 'out' ? '扫码支付' : '扫码收款';
-    case 'proposal_transfer':
-      return direction == 'out' ? '提案转出' : '提案转入';
-    case 'fee_withdraw':
+      return '转账';
+    case 'fee':
       return '手续费';
-    case 'fee_deposit':
-      return '手续费分成';
-    case 'block_reward':
-      return '出块奖励';
-    case 'bank_interest':
-      return '银行利息';
-    case 'gov_issuance':
-      return '治理增发';
-    case 'lightnode_reward':
-      return '认证奖励';
-    case 'duoqian_create':
-      return '多签出资';
-    case 'duoqian_close':
-      return direction == 'out' ? '多签关闭' : '多签收款';
-    case 'fund_destroy':
+    case 'reward':
+      return '奖励';
+    case 'interest':
+      return '利息';
+    case 'issuance':
+      return '增发';
+    case 'burn':
       return '资金销毁';
+    case 'duoqian_transfer':
+      return '多签转账';
     default:
-      return txType;
+      return type;
+  }
+}
+
+String _sourceLabel(String source) {
+  switch (source) {
+    case 'local_submit':
+      return '本机发起';
+    case 'chain_event':
+      return '链上事件';
+    case 'resync':
+      return '后台补同步';
+    default:
+      return source;
   }
 }
 
@@ -196,9 +203,9 @@ String _statusLabel(String status) {
     case 'pending':
       return '待确认';
     case 'confirmed':
-      return '已支付';
-    case 'onchain':
-      return '已上链';
+      return '已确认';
+    case 'failed':
+      return '失败';
     default:
       return status;
   }
@@ -209,9 +216,9 @@ Color _statusColor(String status) {
     case 'pending':
       return AppTheme.warning;
     case 'confirmed':
-      return AppTheme.accent;
-    case 'onchain':
       return AppTheme.success;
+    case 'failed':
+      return AppTheme.danger;
     default:
       return AppTheme.textTertiary;
   }
@@ -229,6 +236,15 @@ String _formatMillisFull(int millis) {
   return '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}:${_pad(dt.second)}';
 }
 
+String _shortAddress(String? address) {
+  if (address == null || address.length <= 12) return address ?? '-';
+  return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
+}
+
+String _formatFen(String fen, {String symbol = 'GMB'}) {
+  return AmountFormat.format(LocalTxStore.fenToYuan(fen).abs(), symbol: symbol);
+}
+
 // ─── 交易记录列表项 ──────────────────────────────────────────
 
 class _LocalTxRecordTile extends StatelessWidget {
@@ -240,13 +256,9 @@ class _LocalTxRecordTile extends StatelessWidget {
   final LocalTxEntity record;
   final VoidCallback? onTap;
 
-  String _shortAddress(String? address) {
-    if (address == null || address.length <= 12) return address ?? '-';
-    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
-  }
-
-  bool get _isExpense => record.direction == 'out';
-  bool get _isIncome => record.direction == 'in';
+  double get _amountDeltaYuan => LocalTxStore.fenToYuan(record.amountDeltaFen);
+  bool get _isExpense => _amountDeltaYuan < 0;
+  bool get _isIncome => _amountDeltaYuan > 0;
 
   Color get _iconColor {
     if (_isExpense) return AppTheme.danger;
@@ -261,23 +273,19 @@ class _LocalTxRecordTile extends StatelessWidget {
   }
 
   IconData get _icon {
-    switch (record.txType) {
-      case 'block_reward':
+    switch (record.type) {
+      case 'reward':
         return Icons.token;
-      case 'bank_interest':
+      case 'interest':
         return Icons.account_balance;
-      case 'gov_issuance':
+      case 'issuance':
         return Icons.gavel;
-      case 'lightnode_reward':
-        return Icons.verified;
-      case 'fee_withdraw':
+      case 'fee':
         return Icons.receipt_long;
-      case 'fee_deposit':
-        return Icons.receipt_long;
-      case 'fund_destroy':
+      case 'burn':
         return Icons.delete_forever;
-      case 'offchain_pay':
-        return Icons.qr_code_scanner;
+      case 'duoqian_transfer':
+        return Icons.groups_2_outlined;
       default:
         return _isExpense ? Icons.arrow_upward : Icons.arrow_downward;
     }
@@ -285,11 +293,11 @@ class _LocalTxRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = _txTypeLabel(record.txType, record.direction);
-    final counterparty = _isExpense
-        ? _shortAddress(record.toAddress)
-        : _shortAddress(record.fromAddress);
-    final timeStr = _formatMillis(record.createdAtMillis);
+    final label = _businessTypeLabel(record.type);
+    final counterpartyPrefix = _isExpense ? '去向' : '来自';
+    final counterparty = _shortAddress(record.counterpartyAddress);
+    final timeStr =
+        _formatMillis(record.confirmedAtMillis ?? record.createdAtMillis);
 
     return ListTile(
       onTap: onTap,
@@ -304,12 +312,12 @@ class _LocalTxRecordTile extends StatelessWidget {
             label,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
-          if (record.status == 'pending') ...[
+          if (record.status != 'confirmed') ...[
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
-                color: AppTheme.warning.withAlpha(30),
+                color: _statusColor(record.status).withAlpha(30),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -325,12 +333,12 @@ class _LocalTxRecordTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        '$counterparty\n$timeStr',
+        '$counterpartyPrefix：$counterparty\n$timeStr',
         style: const TextStyle(fontSize: 12, height: 1.5),
       ),
       isThreeLine: true,
       trailing: Text(
-        '${_isExpense ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: '')}',
+        '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: '')}',
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
@@ -350,8 +358,9 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
 
   final LocalTxEntity record;
 
-  bool get _isExpense => record.direction == 'out';
-  bool get _isIncome => record.direction == 'in';
+  double get _amountDeltaYuan => LocalTxStore.fenToYuan(record.amountDeltaFen);
+  bool get _isExpense => _amountDeltaYuan < 0;
+  bool get _isIncome => _amountDeltaYuan > 0;
 
   void _copy(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
@@ -372,11 +381,13 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 72,
+            width: 88,
             child: Text(
               label,
-              style:
-                  const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+              ),
             ),
           ),
           Expanded(
@@ -402,8 +413,7 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
         : _isIncome
             ? AppTheme.primaryDark
             : AppTheme.textSecondary;
-
-    final label = _txTypeLabel(record.txType, record.direction);
+    final label = _businessTypeLabel(record.type);
 
     return Scaffold(
       appBar: AppBar(
@@ -415,7 +425,7 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
         children: [
           Center(
             child: Text(
-              '${_isExpense ? "-" : "+"}${AmountFormat.format(record.amountYuan, symbol: 'GMB')}',
+              '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: 'GMB')}',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
@@ -444,27 +454,83 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
           const SizedBox(height: 24),
           const Divider(height: 1),
           _buildRow(context, label: '类型', value: label),
+          _buildRow(
+            context,
+            label: '余额变化',
+            value:
+                '${_isExpense ? "-" : "+"}${AmountFormat.format(_amountDeltaYuan.abs(), symbol: 'GMB')}',
+          ),
+          if (record.transferAmountFen != null)
+            _buildRow(
+              context,
+              label: '转账金额',
+              value: _formatFen(record.transferAmountFen!),
+            ),
+          if (record.feeFen != null)
+            _buildRow(
+              context,
+              label: '手续费',
+              value: _formatFen(record.feeFen!),
+            ),
           if (record.fromAddress != null)
-            _buildRow(context,
-                label: '发送方', value: record.fromAddress!, copyable: true),
+            _buildRow(
+              context,
+              label: '来源地址',
+              value: record.fromAddress!,
+              copyable: true,
+            ),
           if (record.toAddress != null)
-            _buildRow(context,
-                label: '接收方', value: record.toAddress!, copyable: true),
-          _buildRow(context,
-              label: '时间', value: _formatMillisFull(record.createdAtMillis)),
-          if (record.confirmedAtMillis != null)
-            _buildRow(context,
-                label: '确认时间',
-                value: _formatMillisFull(record.confirmedAtMillis!)),
-          if (record.feeYuan != null)
-            _buildRow(context,
-                label: '手续费',
-                value: AmountFormat.format(record.feeYuan!, symbol: 'GMB')),
+            _buildRow(
+              context,
+              label: '去向地址',
+              value: record.toAddress!,
+              copyable: true,
+            ),
+          if (record.counterpartyAddress != null)
+            _buildRow(
+              context,
+              label: '对方地址',
+              value: record.counterpartyAddress!,
+              copyable: true,
+            ),
           if (record.txHash != null)
-            _buildRow(context,
-                label: '交易哈希', value: record.txHash!, copyable: true),
-          if (record.bankSfidNumber != null)
-            _buildRow(context, label: '清算行', value: record.bankSfidNumber!),
+            _buildRow(
+              context,
+              label: '交易哈希',
+              value: record.txHash!,
+              copyable: true,
+            ),
+          if (record.blockNumber != null)
+            _buildRow(context, label: '区块号', value: '${record.blockNumber}'),
+          if (record.blockHash != null)
+            _buildRow(
+              context,
+              label: '区块哈希',
+              value: record.blockHash!,
+              copyable: true,
+            ),
+          if (record.eventIndex != null)
+            _buildRow(context, label: '事件序号', value: '${record.eventIndex}'),
+          if (record.extrinsicIndex != null)
+            _buildRow(
+              context,
+              label: '交易序号',
+              value: '${record.extrinsicIndex}',
+            ),
+          _buildRow(context, label: '记录来源', value: _sourceLabel(record.source)),
+          _buildRow(
+            context,
+            label: '记录时间',
+            value: _formatMillisFull(record.createdAtMillis),
+          ),
+          if (record.confirmedAtMillis != null)
+            _buildRow(
+              context,
+              label: '确认时间',
+              value: _formatMillisFull(record.confirmedAtMillis!),
+            ),
+          if (record.failureReason != null)
+            _buildRow(context, label: '失败原因', value: record.failureReason!),
         ],
       ),
     );

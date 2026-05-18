@@ -37,7 +37,7 @@ wuminapp/lib/transaction/offchain-transaction/
 
 - `lib/qr/` 仍是通用二维码协议底座,继续服务联系人、多签、冷钱包签名等场景。
 - `lib/wallet/` 只保留钱包页入口 UI,不得重新放入链下支付业务实现。
-- `lib/transaction/shared/` 只保留本地交易记录与 pending 对账共用能力，不承载扫码支付、多签或链上支付入口。
+- `lib/transaction/shared/` 只保留本地交易记录共用能力，不承载扫码支付、多签或链上支付入口。
 
 ## 4. 新入口
 

@@ -12,7 +12,6 @@
 
 - `lib/rpc/`：链上通信、metadata、nonce、extrinsic 编码与提交公共底座
 - `lib/transaction/shared/local_tx_store.dart`：本地交易记录共用存储
-- `lib/transaction/shared/pending_tx_reconciler.dart`：pending 交易共用对账
 - `lib/wallet/`：钱包档案、密钥读取、生物识别守卫
 - `lib/signer/` 与 `lib/qr/`：热钱包/冷钱包签名协议与扫码会话
 - `lib/organization-manage/`：机构多签与多签聚合入口
@@ -32,11 +31,10 @@ wuminapp/lib/transaction/onchain-transaction/
 
 ```text
 wuminapp/lib/transaction/shared/
-├── local_tx_store.dart
-└── pending_tx_reconciler.dart
+└── local_tx_store.dart
 ```
 
-`lib/transaction/shared/` 不提供功能聚合入口；它只保留历史交易记录与 pending 对账这类共用底座。
+`lib/transaction/shared/` 不提供功能聚合入口；它只保留本地交易记录这类共用底座。
 
 ## 3. 关键流程
 
@@ -48,8 +46,8 @@ wuminapp/lib/transaction/shared/
    - 冷钱包：构造 `sign_request` 二维码，等待 `sign_response` 回执
 4. 调用 `OnchainPaymentService.submitTransfer()`
 5. 服务调用 `OnchainRpc.transferKeepAlive()` 完成 extrinsic 构造、签名和广播
-6. 广播成功后写入 `LocalTxEntity(status=pending, usedNonce=...)`
-7. `PendingTxReconciler` 通过 nonce 推进把 pending 记录推进到 confirmed
+6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=...)`
+7. `ChainTxMonitor` 监听 finalized 区块事件；命中同一钱包、同发送方、同接收方、同转账本金后把 pending 记录合并为 confirmed
 
 ## 4. 链上转账
 
@@ -67,14 +65,19 @@ wuminapp/lib/transaction/shared/
 
 普通链上支付提交成功后写入 `LocalTxEntity`：
 
-- `txType = transfer`
-- `direction = out`
+- `recordKey = walletPubkeyHex:pending:txHash`
+- `type = transfer`
 - `status = pending`
+- `source = local_submit`
 - `txHash = result.txHash`
 - `usedNonce = result.usedNonce`
-- `feeYuan = OnchainRpc.estimateTransferFeeYuan(amount)`
+- `transferAmountFen = 转账本金`
+- `feeFen = OnchainRpc.estimateTransferFeeYuan(amount)` 换算后的分值
+- `amountDeltaFen = -(transferAmountFen + feeFen)`，方向由正负号推导，不单独保存 `direction`
 
-`LocalTxStore` 和 `PendingTxReconciler` 留在 `lib/transaction/shared/`，因为它们服务于交易记录展示与对账，不属于 onchain 支付目录私有实现。
+`LocalTxStore` 留在 `lib/transaction/shared/`，因为它服务于交易记录展示，不属于 onchain 支付目录私有实现。
+
+confirmed 链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析 finalized 区块 `System.Events` 写入；confirmed 记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并。
 
 ## 6. 签名边界
 

@@ -6,22 +6,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'chain_rpc.dart';
 import 'signed_extrinsic_builder.dart';
 
-/// 交易确认状态。
-enum TxConfirmResult {
-  /// 账户 nonce 已推进。
-  ///
-  /// 中文注释：这只说明该 nonce 已被链上消耗。投票类交易不能据此判定
-  /// 投票成功，必须继续读取 runtime 投票引擎 storage。
-  confirmed,
-
-  /// 当前等待周期内未确认，需要由业务层结合自身链上真源判断是否可重试。
-  lost,
-
-  /// 尚未确认，继续等待。
-  pending,
-}
-
-/// onchain 模块所有 RPC 功能：extrinsic 构造、转账、交易确认查询。
+/// onchain 模块所有 RPC 功能：extrinsic 构造与普通转账提交。
 class OnchainRpc {
   OnchainRpc({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
@@ -65,59 +50,10 @@ class OnchainRpc {
     );
   }
 
-  /// 交易提交后超过此时间仍未被打包，判定为丢失（节点重启 / 交易池清空等）。
-  static const _txLostTimeout = Duration(minutes: 5);
-
-  /// 检查提交账户的 nonce 是否已被链上推进。
-  ///
-  /// 返回三种状态：
-  /// - `confirmed` — nonce 已推进，不代表投票类业务已经成功
-  /// - `lost` — 超时未打包；业务层仍应按自身链上 storage 复核
-  /// - `pending` — 尚未确认，继续等待
-  Future<TxConfirmResult> checkTxStatus({
-    required String pubkeyHex,
-    required int usedNonce,
-    required String txHash,
-    DateTime? createdAt,
-  }) async {
-    final confirmedNonce = await _rpc.fetchConfirmedNonce(pubkeyHex);
-
-    if (confirmedNonce <= usedNonce) {
-      // 链上 nonce 还没到这笔交易。
-      // 如果已超时，判定为丢失（交易池可能已清空）。
-      if (createdAt != null &&
-          DateTime.now().difference(createdAt) > _txLostTimeout) {
-        return TxConfirmResult.lost;
-      }
-      return TxConfirmResult.pending;
-    }
-
-    // nonce 已推进 → 确认。
-    //
-    // 2026-04-23 整改:删除"在最近区块中按 txHash 搜索二次验证"路径。
-    // 原因见 `pending_tx_reconciler._reconcileOne`:逐块拉 body 会触发
-    // substrate `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用 ban,
-    // 把轻节点 peer 打到 peers=0。
-    // 由于原逻辑"未找到也返回 confirmed"(同 nonce 的另一笔 tx 顶替是罕见
-    // 场景,宁可保守标 confirmed 也不误判 lost),这次二次验证实际从不改变
-    // 结果,直接删除即可。
-    return TxConfirmResult.confirmed;
-  }
-
-  /// 向后兼容的简单确认检查（仅 nonce）。
-  Future<bool> isTxConfirmed({
-    required String pubkeyHex,
-    required int usedNonce,
-  }) async {
-    final confirmedNonce = await _rpc.fetchConfirmedNonce(pubkeyHex);
-    return confirmedNonce > usedNonce;
-  }
-
   // 2026-04-23 整改:`findTxInRecentBlocks` 已删除。
   // 原实现逐块调 `fetchBlockExtrinsicHashes` → `getBlockExtrinsics`,
   // 触发 substrate block-request 反滥用机制(MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2)
-  // 把轻节点 peer ban 掉。交易确认改走 nonce-only 判定,
-  // 详见 `pending_tx_reconciler.dart`。
+  // 把轻节点 peer ban 掉。钱包交易流水改由 finalized 事件监听写入本地记录。
 
   // ──── 手续费估算 ────
 

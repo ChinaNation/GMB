@@ -14,6 +14,7 @@
 - 提供轻节点状态快照等逐步收口中的 typed capability
 - 链上状态查询（余额、nonce、metadata 等）
 - 链上交易构造与提交（转账、未来的投票/提案）
+- 钱包交易流水增量监听：从 finalized 区块读取 `System.Events`，只记录本机钱包开始跟踪后的余额变化
 
 约束：所有链上通信必须通过本模块，业务模块不直接建立 RPC 连接。
 
@@ -28,6 +29,7 @@
 
 ```text
 lib/rpc/
+├── chain_tx_monitor.dart← 业务：钱包 finalized 区块事件监听 + 本地流水写入
 ├── chain_rpc.dart       ← 底层：节点连接管理 + JSON-RPC 方法
 ├── onchain.dart         ← 业务：extrinsic 构造 + 转账 + 交易确认
 ├── rpc.dart             ← barrel export
@@ -224,11 +226,11 @@ citizenchain 12 个 TxExtension：
 
 Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compact_u128(fen)]`
 
-### 7.4 交易确认
+### 7.4 普通转账提交后的确认口径
 
-`OnchainRpc.isTxConfirmed(address, usedNonce)` — 通过 runtime 确认 nonce 对比判断普通交易是否可能已被打包。
+`OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 pending 流水，confirmed 状态由 `ChainTxMonitor` 读取 finalized 区块 `System.Events` 后写入。
 
-> 投票类交易不得使用 `isTxConfirmed` 判定成功。内部投票必须读
+> 投票类交易同样不得使用 nonce 推进判定成功。内部投票必须读
 > `InternalVote::InternalVotesByAccount`，联合投票必须读
 > `JointVote::JointVotesByAdmin`。
 
@@ -281,6 +283,27 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 不需要改 Rust。blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`。
 
+### 8.3 钱包交易流水监听（已实现）
+
+当前实现：`ChainTxMonitor`
+
+```text
+钱包新建/导入本机
+  → 建立 WalletTxSyncCursorEntity，起点为当前 finalized 区块
+finalized head 到达
+  → 按游标读取区块 System.Events
+  → 解析 Balances::Transfer
+  → 命中本机钱包时写入 LocalTxEntity
+```
+
+约束：
+
+- 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
+- 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
+- `type` 只保存业务类型；confirmed 记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录唯一键为 `walletPubkeyHex:pending:txHash`。
+- 单轮最多补齐 120 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路。
+- 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。
+
 ## 9. 依赖
 
 - `polkadart`：RPC Provider、Hasher、SigningPayload、ExtrinsicPayload、RuntimeMetadata
@@ -299,5 +322,6 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 | 模块 | 用途 | 状态 |
 | --- | --- | --- |
 | `wallet` | 余额查询（`ChainRpc.fetchBalance`） | 已实现 |
+| `wallet` | 钱包交易流水监听（`ChainTxMonitor`） | 已实现 |
 | `onchain` | 普通链上转账（`OnchainRpc.transferKeepAlive`） | 已实现 |
 | `governance` | 提案/投票 | 规划中 |
