@@ -176,13 +176,24 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           for (final entry in voteResults) entry.key: entry.value,
         };
 
-        // 检查待确认投票
-        final pendingRecords = await PendingVoteStore.instance.confirmAll(
+        // 检查待确认投票。联合投票不读 InternalVote，而是读 JointVote
+        // 机构管理员投票记录。
+        final pendingSummary =
+            await PendingVoteStore.instance.confirmAllDetailed(
           'runtime_upgrade',
           widget.proposalId,
           OnchainRpc(),
+          chainVoteLookup: (record) => _service.fetchJointAdminVote(
+            record.proposalId,
+            institutionBytes,
+            record.walletPubkey,
+          ),
         );
-        final pendingPks = pendingRecords.map((r) => r.walletPubkey).toSet();
+        for (final confirmed in pendingSummary.confirmed) {
+          adminVotes[confirmed.walletPubkey] = confirmed.approve;
+        }
+        final pendingPks =
+            pendingSummary.stillPending.map((r) => r.walletPubkey).toSet();
 
         votableWallets = matchedAdminWallets.where((wallet) {
           final pk = _normalizeHex(wallet.pubkeyHex);

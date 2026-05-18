@@ -281,10 +281,10 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
   (String, bool)? _pendingSummaryNotice(PendingVoteConfirmSummary summary) {
     if (summary.lost.isNotEmpty) {
-      return ('${summary.lost.length} 笔投票交易未出块，已清除等待状态，可重新提交。', true);
+      return ('${summary.lost.length} 笔投票未写入链上投票记录，已清除等待状态，可重新提交。', true);
     }
     if (summary.confirmed.isNotEmpty) {
-      return ('${summary.confirmed.length} 笔投票交易已出块，正在同步链上投票结果。', false);
+      return ('${summary.confirmed.length} 笔投票已由链上投票记录确认。', false);
     }
     return null;
   }
@@ -504,13 +504,52 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     TxPoolWatchEvent event,
   ) async {
     final pubkey = _normalizePubkey(wallet.pubkeyHex);
+    final chainVote =
+        await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
+    final message = _poolFailureMessage(event);
+
+    // 中文注释：交易池 watch 是传输层状态，不是投票真源；先复核
+    // runtime 投票引擎 storage，避免交易已入块后 watch 超时导致页面回到未投票。
+    if (chainVote != null) {
+      await PendingVoteStore.instance.remove(
+        'duoqian_manage',
+        widget.proposalId,
+        pubkey,
+      );
+      if (!mounted) return;
+      setState(() {
+        _adminVotes[pubkey] = chainVote;
+        _voteNotice = '链上已确认该管理员投票。';
+        _voteNoticeIsError = false;
+        _pendingPubkeys = _pendingPubkeys.difference({pubkey});
+      });
+      unawaited(_load(showSpinner: false));
+      return;
+    }
+
+    if (_shouldKeepPendingForPoolFailure(event)) {
+      if (!mounted) return;
+      setState(() {
+        _voteNotice = '$message 请刷新后以链上投票记录为准。';
+        _voteNoticeIsError = false;
+        _pendingPubkeys = {..._pendingPubkeys, pubkey};
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_voteNotice!),
+          backgroundColor: AppTheme.primaryDark,
+        ),
+      );
+      unawaited(_load(showSpinner: false));
+      return;
+    }
+
     await PendingVoteStore.instance.remove(
       'duoqian_manage',
       widget.proposalId,
       pubkey,
     );
     NonceManager.instance.reset(wallet.address);
-    final message = _poolFailureMessage(event);
     if (!mounted) return;
     setState(() {
       _voteNotice = message;
@@ -521,6 +560,22 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
     );
     unawaited(_load(showSpinner: false));
+  }
+
+  bool _shouldKeepPendingForPoolFailure(TxPoolWatchEvent event) {
+    return switch (event.kind) {
+      TxPoolWatchKind.future ||
+      TxPoolWatchKind.retracted ||
+      TxPoolWatchKind.finalityTimeout ||
+      TxPoolWatchKind.timeout ||
+      TxPoolWatchKind.error =>
+        true,
+      TxPoolWatchKind.invalid ||
+      TxPoolWatchKind.dropped ||
+      TxPoolWatchKind.usurped =>
+        false,
+      _ => true,
+    };
   }
 
   String _poolFailureMessage(TxPoolWatchEvent event) {

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
+import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_query_service.dart';
 
 /// 待确认投票记录。
 ///
@@ -79,6 +80,13 @@ class PendingVoteConfirmSummary {
   final List<PendingVoteRecord> errored;
 }
 
+/// 待确认投票对应的链上投票记录查询函数。
+///
+/// 返回 null 表示 runtime 投票引擎尚未记录该管理员投票；返回 true/false
+/// 都表示链上已经确认投票。
+typedef PendingVoteChainLookup = Future<bool?> Function(
+    PendingVoteRecord record);
+
 /// 通用的待确认投票存储。
 ///
 /// 使用 Isar [AppKvEntity] 持久化，key 格式：
@@ -142,10 +150,15 @@ class PendingVoteStore {
   Future<List<PendingVoteRecord>> confirmAll(
     String proposalType,
     int proposalId,
-    OnchainRpc onchainRpc,
-  ) async {
-    final summary =
-        await confirmAllDetailed(proposalType, proposalId, onchainRpc);
+    OnchainRpc onchainRpc, {
+    PendingVoteChainLookup? chainVoteLookup,
+  }) async {
+    final summary = await confirmAllDetailed(
+      proposalType,
+      proposalId,
+      onchainRpc,
+      chainVoteLookup: chainVoteLookup,
+    );
     return summary.stillPending;
   }
 
@@ -156,8 +169,9 @@ class PendingVoteStore {
   Future<PendingVoteConfirmSummary> confirmAllDetailed(
     String proposalType,
     int proposalId,
-    OnchainRpc onchainRpc,
-  ) async {
+    OnchainRpc onchainRpc, {
+    PendingVoteChainLookup? chainVoteLookup,
+  }) async {
     final pending = await getPending(proposalType, proposalId);
     debugPrint(
         '[PendingVote.confirmAll] proposalId=$proposalId pending.len=${pending.length}');
@@ -165,9 +179,20 @@ class PendingVoteStore {
     final confirmed = <PendingVoteRecord>[];
     final lost = <PendingVoteRecord>[];
     final errored = <PendingVoteRecord>[];
+    final lookup = chainVoteLookup ?? _defaultInternalVoteLookup;
 
     for (final record in pending) {
       try {
+        // 中文注释：投票是否成功只能以 runtime 投票引擎 storage 为准。
+        // txHash / nonce / 交易池 watch 只能帮助判断是否需要重试，不能直接
+        // 证明管理员已经投票。
+        final chainVote = await lookup(record);
+        if (chainVote != null) {
+          confirmed.add(record);
+          await remove(proposalType, proposalId, record.walletPubkey);
+          continue;
+        }
+
         final result = await onchainRpc.checkTxStatus(
           pubkeyHex: record.walletPubkey,
           usedNonce: record.usedNonce,
@@ -179,14 +204,25 @@ class PendingVoteStore {
         if (result == TxConfirmResult.pending) {
           stillPending.add(record);
         } else if (result == TxConfirmResult.confirmed) {
-          confirmed.add(record);
-          await remove(proposalType, proposalId, record.walletPubkey);
-        } else {
+          // nonce 已推进但投票引擎没有记录，说明这笔投票没有被 runtime 接受，
+          // 可能被同 nonce 交易替代或执行失败；清掉 pending 让用户重新提交。
           lost.add(record);
           await remove(proposalType, proposalId, record.walletPubkey);
+        } else {
+          final nonceConsumed = await onchainRpc.isTxConfirmed(
+            pubkeyHex: record.walletPubkey,
+            usedNonce: record.usedNonce,
+          );
+          if (nonceConsumed) {
+            lost.add(record);
+            await remove(proposalType, proposalId, record.walletPubkey);
+          } else {
+            // 超时但 nonce 未推进时，不能判定投票失败；继续等待链上真源。
+            stillPending.add(record);
+          }
         }
       } catch (e) {
-        // 节点不可达时保留，下次重试
+        // 节点不可达或投票 storage 查询失败时保留，下次刷新继续查 runtime。
         debugPrint(
             '[PendingVote.confirmAll] checkTxStatus 异常,保留记录 ${record.txHash}: $e');
         errored.add(record);
@@ -199,5 +235,10 @@ class PendingVoteStore {
       lost: lost,
       errored: errored,
     );
+  }
+
+  Future<bool?> _defaultInternalVoteLookup(PendingVoteRecord record) {
+    return InternalVoteQueryService()
+        .fetchAdminVote(record.proposalId, record.walletPubkey);
   }
 }

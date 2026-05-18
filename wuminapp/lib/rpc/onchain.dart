@@ -8,10 +8,13 @@ import 'signed_extrinsic_builder.dart';
 
 /// 交易确认状态。
 enum TxConfirmResult {
-  /// 交易哈希在链上找到，已确认。
+  /// 账户 nonce 已推进。
+  ///
+  /// 中文注释：这只说明该 nonce 已被链上消耗。投票类交易不能据此判定
+  /// 投票成功，必须继续读取 runtime 投票引擎 storage。
   confirmed,
 
-  /// nonce 已被其他交易消耗，本笔交易丢失（未上链）。
+  /// 当前等待周期内未确认，需要由业务层结合自身链上真源判断是否可重试。
   lost,
 
   /// 尚未确认，继续等待。
@@ -65,11 +68,11 @@ class OnchainRpc {
   /// 交易提交后超过此时间仍未被打包，判定为丢失（节点重启 / 交易池清空等）。
   static const _txLostTimeout = Duration(minutes: 5);
 
-  /// 检查交易是否已被链上确认。
+  /// 检查提交账户的 nonce 是否已被链上推进。
   ///
   /// 返回三种状态：
-  /// - `confirmed` — 交易哈希在链上找到，真正确认
-  /// - `lost` — nonce 已被其他交易消耗，或超时未打包
+  /// - `confirmed` — nonce 已推进，不代表投票类业务已经成功
+  /// - `lost` — 超时未打包；业务层仍应按自身链上 storage 复核
   /// - `pending` — 尚未确认，继续等待
   Future<TxConfirmResult> checkTxStatus({
     required String pubkeyHex,
