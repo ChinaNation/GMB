@@ -129,6 +129,7 @@ class DuoqianTransferProposalAdapter {
 
   static void clearCache() {
     DuoqianTransferCache.clear();
+    DuoqianTransferProposalFeed.clearCache();
   }
 
   static DuoqianTransferKind? _detailKind(ProposalWithDetail proposal) {
@@ -150,15 +151,86 @@ class DuoqianTransferProposalFeed {
   DuoqianTransferProposalFeed({DuoqianTransferService? service})
       : _service = service ?? DuoqianTransferService();
 
+  static const Duration _balanceCacheTtl = Duration(seconds: 10);
+  static const Duration _proposalCacheTtl = Duration(seconds: 20);
+
+  static final Map<String, _TimedValue<double>> _balanceCache = {};
+  static final Map<String, Future<double>> _balanceInFlight = {};
+  static final Map<String, int> _balanceFetchTokens = {};
+  static final Map<String, _TimedValue<List<ProposalWithDetail>>>
+      _visibleProposalCache = {};
+  static final Map<String, Future<List<ProposalWithDetail>>>
+      _visibleProposalInFlight = {};
+  static final Map<String, int> _visibleProposalFetchTokens = {};
+  static int _nextFetchToken = 0;
+
   final DuoqianTransferService _service;
 
-  Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
-    return _service.fetchInstitutionBalance(institution);
+  Future<double> fetchInstitutionBalance(
+    InstitutionInfo institution, {
+    bool forceRefresh = false,
+  }) {
+    final key = _balanceKey(institution);
+    final cached = _balanceCache[key];
+    if (!forceRefresh && cached != null && cached.isFresh(_balanceCacheTtl)) {
+      return Future.value(cached.value);
+    }
+
+    final inFlight = _balanceInFlight[key];
+    if (!forceRefresh && inFlight != null) return inFlight;
+
+    final token = ++_nextFetchToken;
+    _balanceFetchTokens[key] = token;
+    final future = _service.fetchInstitutionBalance(institution).then((value) {
+      if (_balanceFetchTokens[key] == token) {
+        _balanceCache[key] = _TimedValue(value);
+      }
+      return value;
+    });
+    _balanceInFlight[key] = future;
+    return future.whenComplete(() {
+      if (_balanceInFlight[key] == future) {
+        _balanceInFlight.remove(key);
+      }
+      if (_balanceFetchTokens[key] == token) {
+        _balanceFetchTokens.remove(key);
+      }
+    });
   }
 
   Future<List<ProposalWithDetail>> fetchInstitutionVisibleProposals(
-      String sfidNumber) {
-    return _service.fetchInstitutionVisibleProposals(sfidNumber);
+    String sfidNumber, {
+    bool forceRefresh = false,
+  }) {
+    final cached = _visibleProposalCache[sfidNumber];
+    if (!forceRefresh && cached != null && cached.isFresh(_proposalCacheTtl)) {
+      return Future.value(cached.value);
+    }
+
+    final inFlight = _visibleProposalInFlight[sfidNumber];
+    if (!forceRefresh && inFlight != null) return inFlight;
+
+    final token = ++_nextFetchToken;
+    _visibleProposalFetchTokens[sfidNumber] = token;
+    // 中文注释：机构页提案查询会读取机构索引和年度联合提案，短缓存只减少重复读取，不改变链上真值。
+    final future = _service.fetchInstitutionVisibleProposals(sfidNumber).then(
+      (value) {
+        final immutableValue = List<ProposalWithDetail>.unmodifiable(value);
+        if (_visibleProposalFetchTokens[sfidNumber] == token) {
+          _visibleProposalCache[sfidNumber] = _TimedValue(immutableValue);
+        }
+        return immutableValue;
+      },
+    );
+    _visibleProposalInFlight[sfidNumber] = future;
+    return future.whenComplete(() {
+      if (_visibleProposalInFlight[sfidNumber] == future) {
+        _visibleProposalInFlight.remove(sfidNumber);
+      }
+      if (_visibleProposalFetchTokens[sfidNumber] == token) {
+        _visibleProposalFetchTokens.remove(sfidNumber);
+      }
+    });
   }
 
   Future<List<int>> fetchProposalIdsByOrg(int org) {
@@ -168,4 +240,26 @@ class DuoqianTransferProposalFeed {
   Future<List<ProposalWithDetail>> fetchProposalsByIds(List<int> ids) {
     return _service.fetchProposalsByIds(ids);
   }
+
+  static void clearCache() {
+    _balanceCache.clear();
+    _balanceInFlight.clear();
+    _balanceFetchTokens.clear();
+    _visibleProposalCache.clear();
+    _visibleProposalInFlight.clear();
+    _visibleProposalFetchTokens.clear();
+  }
+
+  static String _balanceKey(InstitutionInfo institution) {
+    return '${institution.sfidNumber}:${institution.mainAddress}';
+  }
+}
+
+class _TimedValue<T> {
+  _TimedValue(this.value) : createdAt = DateTime.now();
+
+  final T value;
+  final DateTime createdAt;
+
+  bool isFresh(Duration ttl) => DateTime.now().difference(createdAt) < ttl;
 }

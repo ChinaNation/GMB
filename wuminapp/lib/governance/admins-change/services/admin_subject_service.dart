@@ -9,8 +9,12 @@ import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 class AdminSubjectService {
   AdminSubjectService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
 
+  static const Duration _cacheTtl = Duration(seconds: 30);
+  static final Map<String, _AdminSubjectCacheEntry> _cache = {};
+  static final Map<String, Future<AdminSubjectState?>> _inFlight = {};
+  static int _cacheGeneration = 0;
+
   final ChainRpc _rpc;
-  final Map<String, AdminSubjectState> _cache = {};
 
   Future<AdminSubjectState?> fetchByIdentity(
       AdminSubjectIdentity identity) async {
@@ -20,7 +24,29 @@ class AdminSubjectService {
   Future<AdminSubjectState?> fetchBySubjectId(Uint8List subjectId) async {
     final subjectKey = AdminSubjectIdCodec.hexEncode(subjectId);
     final cached = _cache[subjectKey];
-    if (cached != null) return cached;
+    if (cached != null && cached.isFresh(_cacheTtl)) return cached.state;
+    final inFlight = _inFlight[subjectKey];
+    if (inFlight != null) return inFlight;
+
+    final generation = _cacheGeneration;
+    final future = _fetchBySubjectIdUncached(
+      subjectId,
+      subjectKey,
+      generation,
+    );
+    _inFlight[subjectKey] = future;
+    return future.whenComplete(() {
+      if (_inFlight[subjectKey] == future) {
+        _inFlight.remove(subjectKey);
+      }
+    });
+  }
+
+  Future<AdminSubjectState?> _fetchBySubjectIdUncached(
+    Uint8List subjectId,
+    String subjectKey,
+    int generation,
+  ) async {
     final key = AdminSubjectIdCodec.adminSubjectStorageKey(subjectId);
     final data =
         await _rpc.fetchStorage('0x${AdminSubjectIdCodec.hexEncode(key)}');
@@ -29,7 +55,10 @@ class AdminSubjectService {
     final threshold =
         decoded == null ? null : await _resolveThreshold(decoded, subjectId);
     final state = decoded?.copyWith(threshold: threshold ?? 0);
-    if (state != null) _cache[subjectKey] = state;
+    // 中文注释：管理员主体属于链上动态数据，短缓存只用于避免页面间反复进入时重复 RPC。
+    if (state != null && generation == _cacheGeneration) {
+      _cache[subjectKey] = _AdminSubjectCacheEntry(state);
+    }
     return state;
   }
 
@@ -49,18 +78,26 @@ class AdminSubjectService {
 
   void clearCache([AdminSubjectIdentity? identity]) {
     if (identity == null) {
+      _cacheGeneration++;
       _cache.clear();
+      _inFlight.clear();
     } else {
       clearIdentityCache(identity);
     }
   }
 
   void clearIdentityCache(AdminSubjectIdentity identity) {
-    _cache.remove(AdminSubjectIdCodec.normalizeHex(identity.subjectIdHex));
+    _cacheGeneration++;
+    final key = AdminSubjectIdCodec.normalizeHex(identity.subjectIdHex);
+    _cache.remove(key);
+    _inFlight.remove(key);
   }
 
   void clearSubjectCache(String subjectIdHex) {
-    _cache.remove(AdminSubjectIdCodec.normalizeHex(subjectIdHex));
+    _cacheGeneration++;
+    final key = AdminSubjectIdCodec.normalizeHex(subjectIdHex);
+    _cache.remove(key);
+    _inFlight.remove(key);
   }
 
   Future<int?> _resolveThreshold(
@@ -139,4 +176,13 @@ class AdminSubjectService {
       _ => null,
     };
   }
+}
+
+class _AdminSubjectCacheEntry {
+  _AdminSubjectCacheEntry(this.state) : createdAt = DateTime.now();
+
+  final AdminSubjectState state;
+  final DateTime createdAt;
+
+  bool isFresh(Duration ttl) => DateTime.now().difference(createdAt) < ttl;
 }
