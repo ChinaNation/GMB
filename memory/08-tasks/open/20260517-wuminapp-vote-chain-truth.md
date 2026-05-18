@@ -21,6 +21,8 @@ wuminapp
 - 交易池 watch 的 timeout/finalityTimeout/retracted/future 不能直接清除 pending。
 - 只有链上已经写入投票记录，才把 pending 标记为 confirmed。
 - nonce 已被消耗且链上仍没有投票记录时，才清除 pending 并允许用户重新提交。
+- runtime 无投票记录、nonce 未推进且 pending 超过 20 分钟确认窗口时，必须清除 pending 并允许重新投票，不能无限显示“投票中”。
+- 投票提交拿到 txHash 后，按钮必须立即停止转圈，链上确认走后台刷新。
 - 改代码后必须补中文注释、更新文档并清理残留。
 
 预计修改目录：
@@ -59,6 +61,9 @@ wuminapp
 - 已修复 runtime 升级详情页：pending 确认使用 `JointVote::JointVotesByAdmin` 作为真源。
 - 已修正 `OnchainRpc.checkTxStatus` 注释：明确 confirmed 只代表 nonce 已推进，不代表投票类业务成功。
 - 已同步 wuminapp 架构文档、治理技术文档和多签转账技术文档。
+- 已补充 pending 20 分钟确认窗口：链上无投票记录、nonce 未推进且超时后清除 pending，避免管理员明细无限“投票中”。
+- 已修复 runtime 升级联合投票 `SubjectId` 编码：删除页面内裸 sfid `[u8;48]` 编码，统一走 `institutionIdentityToPalletId()`。
+- 已修复多签转账和 runtime 升级投票提交后的按钮转圈：拿到 txHash 后后台刷新，不再 `await _load()`。
 
 验证记录：
 - `dart format wuminapp/lib/votingengine/internal-vote/pending_vote_store.dart wuminapp/lib/governance/duoqian_manage_detail_page.dart wuminapp/lib/transaction/duoqian-transfer/duoqian_transfer_detail_page.dart wuminapp/lib/governance/runtime-upgrade/runtime_upgrade_detail_page.dart wuminapp/lib/rpc/onchain.dart`：通过。
@@ -66,3 +71,6 @@ wuminapp
 - `cd wuminapp && flutter test`：通过，182 passed。
 - `git diff --check`：通过。
 - 残留搜索 `txFailureEvent / event.isFailure / PendingVoteStore.instance.remove / confirmAll / 投票成功 / 交易已出块 / 未出块，已清除`：未发现旧的“watch 失败直接恢复未投票”流程残留；保留的 remove 均在链上投票记录复核或 nonce 消耗后执行。
+- 本次补修后复跑 `cd wuminapp && dart analyze lib test`：通过，No issues found。
+- 本次补修后复跑 `cd wuminapp && flutter test`：通过，182 passed。
+- 本次补修残留搜索 `await _load / _sfidNumberToFixed48 / _votePendingTimeout / institutionIdentityToPalletId`：投票提交路径已无 `await _load()`；runtime 升级页已无错误 `_sfidNumberToFixed48()`；pending 20 分钟确认窗口和统一 SubjectId 编码已落地。

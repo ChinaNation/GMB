@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:flutter/services.dart';
@@ -110,11 +112,15 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     return null;
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (mounted) {
+      setState(() => _error = null);
+    }
 
     try {
       final futures = <Future<dynamic>>[
@@ -126,13 +132,14 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       final institution = widget.institution;
       if (institution != null) {
+        final institutionSubjectId = _institutionSubjectId(institution);
         futures.add(_adminService.fetchAdmins(
           AdminSubjectIdentity.fromInstitution(institution),
         ));
         futures.add(_service.fetchJointVoteByInstitution(
-            widget.proposalId, _sfidNumberToFixed48(institution.sfidNumber)));
+            widget.proposalId, institutionSubjectId));
         futures.add(_service.fetchJointInstitutionTally(
-            widget.proposalId, _sfidNumberToFixed48(institution.sfidNumber)));
+            widget.proposalId, institutionSubjectId));
       }
 
       final results = await Future.wait(futures);
@@ -161,7 +168,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         }).toList(growable: false)
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
-        final institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
+        final institutionBytes = _institutionSubjectId(institution);
         final voteResults = await Future.wait(
           admins.map((pubkey) async => MapEntry(
                 pubkey,
@@ -241,13 +248,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
         : hex.toLowerCase();
   }
 
-  Uint8List _sfidNumberToFixed48(String sfidNumber) {
-    final bytes = Uint8List(48);
-    final raw = sfidNumber.codeUnits;
-    for (var i = 0; i < raw.length && i < 48; i++) {
-      bytes[i] = raw[i];
-    }
-    return bytes;
+  Uint8List _institutionSubjectId(InstitutionInfo institution) {
+    // 中文注释：联合投票 storage 使用 runtime SubjectId，不是裸 sfidNumber。
+    // 内置机构需要 kind=0x01 前缀；机构账户/个人多签也必须走统一编码。
+    return Uint8List.fromList(
+      institutionIdentityToPalletId(institution.sfidNumber),
+    );
   }
 
   Uint8List _hexDecode(String hex) {
@@ -325,7 +331,7 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
     setState(() => _submitting = true);
 
     try {
-      final institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
+      final institutionBytes = _institutionSubjectId(institution);
       final result = await _service.submitJointVote(
         proposalId: widget.proposalId,
         institutionId48: institutionBytes,
@@ -381,7 +387,9 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
 
       _adminService
           .clearCache(AdminSubjectIdentity.fromInstitution(institution));
-      await _load();
+      // 中文注释：提交返回 txHash 后立即结束按钮转圈，链上 JointVote 结果由
+      // 后台刷新和 pending 状态机确认，避免整页读取慢导致按钮一直转。
+      unawaited(_load(showSpinner: false));
     } on WalletAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

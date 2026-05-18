@@ -53,3 +53,5 @@
 - `invalid / dropped / usurped`：先复核链上投票记录；如果仍没有投票记录，清除本地 pending，并提示交易未出块原因。
 - `inBlock / finalized`：保留正常确认路径，等待链上投票记录刷新。
 - nonce 已被消耗但 `InternalVotesByAccount` 仍无记录时，视为本次投票未被 runtime 接受，清除 pending 后允许重新提交。
+- runtime 无投票记录、nonce 未推进且 pending 超过 20 分钟时，视为本地提交未进入链，清除 pending 后允许重新提交。
+- 提交拿到 txHash 后，按钮 `submitting` 必须立即结束，链上确认走后台 `_load(showSpinner: false)`，不得等待整页详情重新加载。

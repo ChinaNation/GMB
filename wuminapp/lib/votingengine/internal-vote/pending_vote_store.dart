@@ -103,6 +103,13 @@ class PendingVoteStore {
   /// 存储 key 前缀。
   static const _prefix = 'pending_vote';
 
+  /// 投票 pending 最长确认窗口。
+  ///
+  /// 中文注释：GMB 链当前出块可能按分钟级推进，确认窗口必须覆盖多个出块周期。
+  /// 超过窗口仍没有 runtime 投票记录且 nonce 未推进，说明这条本地 pending
+  /// 不能再阻塞用户重投，应清掉并显示可重试状态。
+  static const _votePendingTimeout = Duration(minutes: 20);
+
   String _key(String type, int id, String pubkey) =>
       '$_prefix:$type:$id:$pubkey';
 
@@ -193,33 +200,25 @@ class PendingVoteStore {
           continue;
         }
 
-        final result = await onchainRpc.checkTxStatus(
+        final nonceConsumed = await onchainRpc.isTxConfirmed(
           pubkeyHex: record.walletPubkey,
           usedNonce: record.usedNonce,
-          txHash: record.txHash,
-          createdAt: record.createdAt,
         );
         debugPrint(
-            '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} → $result');
-        if (result == TxConfirmResult.pending) {
-          stillPending.add(record);
-        } else if (result == TxConfirmResult.confirmed) {
+            '[PendingVote.confirmAll] pubkey=${record.walletPubkey} usedNonce=${record.usedNonce} txHash=${record.txHash} nonceConsumed=$nonceConsumed');
+        if (nonceConsumed) {
           // nonce 已推进但投票引擎没有记录，说明这笔投票没有被 runtime 接受，
           // 可能被同 nonce 交易替代或执行失败；清掉 pending 让用户重新提交。
           lost.add(record);
           await remove(proposalType, proposalId, record.walletPubkey);
+        } else if (DateTime.now().difference(record.createdAt) >
+            _votePendingTimeout) {
+          // nonce 没推进、runtime 也没有投票记录，且已经超过确认窗口：
+          // 视为本地这次提交没有进入链，清掉 pending，避免 UI 无限“投票中”。
+          lost.add(record);
+          await remove(proposalType, proposalId, record.walletPubkey);
         } else {
-          final nonceConsumed = await onchainRpc.isTxConfirmed(
-            pubkeyHex: record.walletPubkey,
-            usedNonce: record.usedNonce,
-          );
-          if (nonceConsumed) {
-            lost.add(record);
-            await remove(proposalType, proposalId, record.walletPubkey);
-          } else {
-            // 超时但 nonce 未推进时，不能判定投票失败；继续等待链上真源。
-            stillPending.add(record);
-          }
+          stillPending.add(record);
         }
       } catch (e) {
         // 节点不可达或投票 storage 查询失败时保留，下次刷新继续查 runtime。
