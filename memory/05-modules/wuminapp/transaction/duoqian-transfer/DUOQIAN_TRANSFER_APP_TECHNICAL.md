@@ -48,5 +48,8 @@
 
 投票提交后监听交易池状态：
 
-- `invalid / dropped / future / usurped / retracted / timeout / error`：清除本地 pending，并提示交易未出块原因。
-- `inBlock / finalized`：保留正常确认路径，等待链上状态刷新。
+- 投票成功真源是 `InternalVote::InternalVotesByAccount(proposal_id, admin)`，不是 txHash、交易池 watch 或本地 nonce。
+- `timeout / finalityTimeout / retracted / future / error`：保留本地 pending，并提示用户刷新后以链上投票记录为准。
+- `invalid / dropped / usurped`：先复核链上投票记录；如果仍没有投票记录，清除本地 pending，并提示交易未出块原因。
+- `inBlock / finalized`：保留正常确认路径，等待链上投票记录刷新。
+- nonce 已被消耗但 `InternalVotesByAccount` 仍无记录时，视为本次投票未被 runtime 接受，清除 pending 后允许重新提交。

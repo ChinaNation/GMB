@@ -246,10 +246,22 @@ message = blake2_256(SCALE.encode(payload))
 1. 根据提案类型匹配投票入口（内部/联合/公民）。
 2. 采集投票字段并做本地格式校验；联合投票与内部投票一样，直接由管理员个人钱包上链投票。
 3. 发起签名并提交交易。
-4. 监听事件刷新状态：
+4. 投票是否成功必须由 runtime 投票引擎 storage 确认：
+  - 内部投票读取 `InternalVote::InternalVotesByAccount(proposal_id, admin)`。
+  - 联合投票读取 `JointVote::JointVotesByAdmin(proposal_id, institution, admin)`。
+  - 公民投票读取投票引擎对应的公民投票记录。
+5. `author_submitExtrinsic` 返回 txHash、交易池 watch 的 `inBlock/finalized`、本地 nonce 推进都不能单独代表“已投票”；它们只用于辅助判断 pending 是否仍需等待或是否可以重新提交。
+6. 监听事件刷新状态：
   - `InternalVoteCast / JointAdminVoteCast / JointInstitutionVoteFinalized / CitizenVoteCast`
   - `ProposalAdvancedToCitizen`
   - `ProposalFinalized`
+
+待确认投票处理规则：
+
+- 提交投票后，wuminapp 先写本地 `PendingVoteStore`，页面刷新时先查 runtime 投票 storage。
+- 如果 runtime 已记录该管理员投票，清除 pending，并把管理员显示为已投票。
+- 如果交易池 watch 返回 `timeout / finalityTimeout / retracted / future / error`，不得直接清除 pending，也不得把管理员恢复成未投票；必须继续以 runtime 投票 storage 为准。
+- 如果 nonce 已被消耗但 runtime 仍没有该管理员投票记录，说明该投票没有被链上投票引擎接受，可清除 pending 并允许重新提交。
 
 #### 6.2.1 协议升级提案在 App 里的联合投票实现
 
