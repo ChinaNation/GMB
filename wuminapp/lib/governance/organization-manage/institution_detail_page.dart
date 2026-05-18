@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -54,8 +55,18 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   List<String> _admins = const [];
   bool _isCurrentUserAdmin = false;
-  bool _loading = true;
-  String? _error;
+
+  /// 管理员和当前用户权限属于链上/本地混合动态数据，不能阻塞机构固定信息首屏。
+  bool _adminLoading = true;
+  String? _adminError;
+
+  /// 提案列表链上查询较重，单独后台刷新并局部展示状态。
+  bool _proposalLoading = true;
+  String? _proposalError;
+
+  /// 主账户余额是动态链上数据，首屏先展示地址，再异步补余额。
+  bool _mainBalanceLoading = true;
+  String? _mainBalanceError;
 
   /// 通过 ProposalContext 解析的管理员钱包。
   List<WalletProfile> _adminWallets = const [];
@@ -93,60 +104,49 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_refreshAll());
   }
 
-  Future<void> _load() async {
+  Future<void> _refreshAll({bool force = false}) async {
+    if (force) {
+      _adminService.clearCache(_subjectIdentity);
+      _contextResolver.clearWalletCache();
+      ProposalCache.clear();
+      DuoqianTransferProposalAdapter.clearCache();
+    }
+
+    await Future.wait([
+      _loadAdminsAndRole(),
+      _loadMainBalance(force: force),
+      _loadProposalEvents(force: force),
+    ]);
+  }
+
+  Future<void> _loadAdminsAndRole() async {
+    if (!mounted) return;
     setState(() {
-      _loading = true;
-      _error = null;
+      _adminLoading = true;
+      _adminError = null;
     });
 
     try {
       final subjectIdentity = _subjectIdentity;
-      final results = await Future.wait([
+      final results = await Future.wait<Object>([
         _adminService.fetchAdmins(subjectIdentity),
         _contextResolver.resolve(
           knownInstitution: widget.institution,
         ),
-        _duoqianTransferFeed.fetchInstitutionVisibleProposals(
-          widget.institution.sfidNumber,
-        ),
-        _activationService.getActivatedAdmins(subjectIdentity),
-        _duoqianTransferFeed
-            .fetchInstitutionBalance(widget.institution)
-            .then<double?>((value) => value)
-            .catchError((_) => null),
+        _activationService
+            .getActivatedAdmins(subjectIdentity)
+            .catchError((_) => <ActivatedAdmin>[]),
       ]);
       final admins = results[0] as List<String>;
       final ctx = results[1] as ProposalContext;
-      final proposals = results[2] as List<ProposalWithDetail>;
-      final activated = results[3] as List<ActivatedAdmin>;
-      final mainBalance = results[4] as double?;
-
-      // 已激活公钥集合
+      final activated = results[2] as List<ActivatedAdmin>;
       final activatedPks = activated.map((a) => a.pubkeyHex).toSet();
+      final coldPubkeys = await _loadImportedColdPubkeys(admins);
 
-      final coldPubkeys = <String>{};
-      try {
-        // 中文注释：本地钱包库只影响管理员身份提示，不能让机构链上信息整体加载失败。
-        final allWallets = await _walletManager.getWallets();
-        for (final w in allWallets) {
-          if (w.isColdWallet) {
-            var pk = w.pubkeyHex.toLowerCase();
-            if (pk.startsWith('0x')) pk = pk.substring(2);
-            if (admins.contains(pk)) {
-              coldPubkeys.add(pk);
-            }
-          }
-        }
-      } catch (e, st) {
-        if (!WalletIsar.instance.isBusyError(e)) {
-          debugPrint('[InstitutionDetail] local wallet load failed: $e\n$st');
-        }
-      }
-
-      // 记录管理员机构状态到公共缓存
+      // 中文注释：这里只记录已确认的管理员机构，用于列表页本地视觉提示，不改变链上排序或身份。
       if (ctx.isAdmin) {
         ProposalContextResolver.markAdminInstitution(
           widget.institution.sfidNumber,
@@ -160,15 +160,95 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _importedColdPubkeys = coldPubkeys;
         _activatedPubkeys = activatedPks;
         _isCurrentUserAdmin = ctx.isAdmin;
-        _proposalEvents = proposals;
-        _mainBalance = mainBalance;
-        _loading = false;
+        _adminLoading = false;
+        _adminError = null;
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[InstitutionDetail] admin load failed: $e\n$st');
       if (!mounted) return;
       setState(() {
-        _error = SmoldotClientManager.instance.buildUserFacingError(e);
-        _loading = false;
+        _adminError = SmoldotClientManager.instance.buildUserFacingError(e);
+        _adminLoading = false;
+      });
+    }
+  }
+
+  Future<Set<String>> _loadImportedColdPubkeys(List<String> admins) async {
+    final coldPubkeys = <String>{};
+    try {
+      // 中文注释：本地钱包库只影响管理员身份提示，不能让机构链上信息整体加载失败。
+      final allWallets = await _walletManager.getWallets();
+      for (final w in allWallets) {
+        if (w.isColdWallet) {
+          var pk = w.pubkeyHex.toLowerCase();
+          if (pk.startsWith('0x')) pk = pk.substring(2);
+          if (admins.contains(pk)) {
+            coldPubkeys.add(pk);
+          }
+        }
+      }
+    } catch (e, st) {
+      if (!WalletIsar.instance.isBusyError(e)) {
+        debugPrint('[InstitutionDetail] local wallet load failed: $e\n$st');
+      }
+    }
+    return coldPubkeys;
+  }
+
+  Future<void> _loadMainBalance({bool force = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _mainBalanceLoading = true;
+      _mainBalanceError = null;
+    });
+
+    try {
+      final balance = await _duoqianTransferFeed.fetchInstitutionBalance(
+        widget.institution,
+        forceRefresh: force,
+      );
+      if (!mounted) return;
+      setState(() {
+        _mainBalance = balance;
+        _mainBalanceLoading = false;
+        _mainBalanceError = null;
+      });
+    } catch (e, st) {
+      debugPrint('[InstitutionDetail] main balance load failed: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _mainBalanceError =
+            SmoldotClientManager.instance.buildUserFacingError(e);
+        _mainBalanceLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadProposalEvents({bool force = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _proposalLoading = true;
+      _proposalError = null;
+    });
+
+    try {
+      final proposals =
+          await _duoqianTransferFeed.fetchInstitutionVisibleProposals(
+        widget.institution.sfidNumber,
+        forceRefresh: force,
+      );
+      if (!mounted) return;
+      setState(() {
+        _proposalEvents = proposals;
+        _proposalLoading = false;
+        _proposalError = null;
+      });
+    } catch (e, st) {
+      debugPrint('[InstitutionDetail] proposal load failed: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _proposalError = SmoldotClientManager.instance.buildUserFacingError(e);
+        _proposalLoading = false;
       });
     }
   }
@@ -185,50 +265,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         centerTitle: true,
         foregroundColor: AppTheme.textPrimary,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildContent(),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-            const SizedBox(height: 12),
-            const Text('加载失败',
-                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
-            const SizedBox(height: 6),
-            Text(
-              _error!,
-              style:
-                  const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-              textAlign: TextAlign.center,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
-      ),
+      body: _buildContent(),
     );
   }
 
   Widget _buildContent() {
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(_subjectIdentity);
-        _contextResolver.clearWalletCache();
-        ProposalCache.clear();
-        DuoqianTransferProposalAdapter.clearCache();
-        await _load();
+        await _refreshAll(force: true);
         if (_extraAccountsExpanded) {
           await _loadExtraAccounts(force: true);
         }
@@ -240,7 +284,13 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           const SizedBox(height: 12),
           _buildHeader(),
           const SizedBox(height: 12),
-          if (_isCurrentUserAdmin) ...[
+          if (_adminLoading && _admins.isEmpty) ...[
+            _buildAdminRoleLoading(),
+            const SizedBox(height: 12),
+          ] else if (_adminError != null && _admins.isEmpty) ...[
+            _buildAdminRoleError(),
+            const SizedBox(height: 12),
+          ] else if (_isCurrentUserAdmin) ...[
             _buildAdminBadge(),
             const SizedBox(height: 12),
           ] else ...[
@@ -287,11 +337,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
             _buildAccountInfoTile(
               icon: Icons.payments_outlined,
               label: '主账户余额',
-              value: _mainBalance == null
-                  ? '读取失败'
-                  : AmountFormat.format(_mainBalance!, symbol: 'GMB'),
-              valueColor:
-                  _mainBalance == null ? AppTheme.danger : AppTheme.textPrimary,
+              value: _mainBalanceLabel(),
+              valueColor: _mainBalanceColor(),
             ),
             if (extraSources.isNotEmpty) ...[
               const Divider(height: 18),
@@ -314,6 +361,21 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         ),
       ),
     );
+  }
+
+  String _mainBalanceLabel() {
+    final balance = _mainBalance;
+    if (balance != null) return AmountFormat.format(balance, symbol: 'GMB');
+    if (_mainBalanceLoading) return '读取中...';
+    if (_mainBalanceError != null) return '读取失败';
+    return '未读取';
+  }
+
+  Color _mainBalanceColor() {
+    if (_mainBalance == null && _mainBalanceError != null) {
+      return AppTheme.danger;
+    }
+    return _mainBalance == null ? AppTheme.textTertiary : AppTheme.textPrimary;
   }
 
   Widget _buildAccountInfoTile({
@@ -723,7 +785,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '管理员 ${_admins.length} 人　通过阈值 ${inst.internalThreshold}',
+                      _adminSummaryText(inst),
                       style: const TextStyle(
                           fontSize: 12, color: AppTheme.textTertiary),
                     ),
@@ -738,6 +800,22 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         ),
       ),
     );
+  }
+
+  String _adminSummaryText(InstitutionInfo inst) {
+    if (_adminLoading && _admins.isEmpty) {
+      return '管理员读取中　通过阈值 ${inst.internalThreshold}';
+    }
+    if (_adminError != null && _admins.isEmpty) {
+      return '管理员读取失败　通过阈值 ${inst.internalThreshold}';
+    }
+    return '管理员 ${_admins.length} 人　通过阈值 ${inst.internalThreshold}';
+  }
+
+  String _adminEntrySubtitle() {
+    if (_adminLoading && _admins.isEmpty) return '正在读取管理员列表';
+    if (_adminError != null && _admins.isEmpty) return '管理员读取失败，点击重试';
+    return '共 ${_admins.length} 位管理员';
   }
 
   // ──── 管理员身份标识 ────
@@ -758,6 +836,61 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
               color: AppTheme.success,
               fontWeight: FontWeight.w500,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminRoleLoading() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: AppTheme.bannerDecoration(AppTheme.textTertiary),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '正在确认管理员身份',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textTertiary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminRoleError() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: AppTheme.bannerDecoration(AppTheme.danger),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 14, color: AppTheme.danger),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _adminError ?? '管理员身份读取失败',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.danger,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => unawaited(_loadAdminsAndRole()),
+            child: const Text('重试'),
           ),
         ],
       ),
@@ -799,7 +932,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         side: const BorderSide(color: AppTheme.border),
       ),
       child: InkWell(
-        onTap: _openAdminList,
+        onTap: _adminLoading && _admins.isEmpty
+            ? null
+            : () {
+                if (_adminError != null && _admins.isEmpty) {
+                  unawaited(_loadAdminsAndRole());
+                } else {
+                  _openAdminList();
+                }
+              },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -830,7 +971,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '共 ${_admins.length} 位管理员',
+                      _adminEntrySubtitle(),
                       style: const TextStyle(
                           fontSize: 12, color: AppTheme.textTertiary),
                     ),
@@ -861,42 +1002,131 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_proposalEvents.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceMuted,
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              border: Border.all(color: AppTheme.border),
-            ),
-            child: const Column(
-              children: [
-                Icon(Icons.ballot_outlined,
-                    size: 40, color: AppTheme.textTertiary),
-                SizedBox(height: 8),
-                Text(
-                  '暂无提案',
-                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '本机构提案与全局联合投票将在此显示',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-                ),
-              ],
-            ),
-          )
-        else
-          ...List.generate(_proposalEvents.length, (index) {
-            final proposal = _proposalEvents[index];
-            return Padding(
-              padding: EdgeInsets.only(
-                  bottom: index < _proposalEvents.length - 1 ? 8 : 0),
-              child: _buildProposalCard(proposal),
-            );
-          }),
+        if (_proposalLoading && _proposalEvents.isEmpty)
+          _buildProposalLoading()
+        else if (_proposalError != null && _proposalEvents.isEmpty)
+          _buildProposalError()
+        else if (_proposalEvents.isEmpty)
+          _buildEmptyProposalState()
+        else if (_proposalLoading) ...[
+          _buildProposalRefreshingHint(),
+          const SizedBox(height: 8),
+        ],
+        ...List.generate(_proposalEvents.length, (index) {
+          final proposal = _proposalEvents[index];
+          return Padding(
+            padding: EdgeInsets.only(
+                bottom: index < _proposalEvents.length - 1 ? 8 : 0),
+            child: _buildProposalCard(proposal),
+          );
+        }),
       ],
+    );
+  }
+
+  Widget _buildProposalLoading() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text(
+            '正在读取链上提案...',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProposalError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: AppTheme.bannerDecoration(AppTheme.danger),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 16, color: AppTheme.danger),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _proposalError ?? '提案读取失败',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.danger,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => unawaited(_loadProposalEvents(force: true)),
+            child: const Text('重试'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProposalRefreshingHint() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: AppTheme.bannerDecoration(AppTheme.textTertiary),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '正在刷新提案状态',
+            style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyProposalState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: const Column(
+        children: [
+          Icon(Icons.ballot_outlined, size: 40, color: AppTheme.textTertiary),
+          SizedBox(height: 8),
+          Text(
+            '暂无提案',
+            style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+          ),
+          SizedBox(height: 4),
+          Text(
+            '本机构提案与全局联合投票将在此显示',
+            style: TextStyle(fontSize: 12, color: AppTheme.textTertiary),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1073,10 +1303,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     );
     // 返回后刷新（可能新建了提案）
     if (mounted) {
-      _adminService.clearCache(_subjectIdentity);
-      ProposalCache.clear();
-      DuoqianTransferProposalAdapter.clearCache();
-      _load();
+      unawaited(_refreshAll(force: true));
     }
   }
 
@@ -1122,10 +1349,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
     // 返回后刷新（投票状态可能变化）
     if (mounted) {
-      _adminService.clearCache(_subjectIdentity);
-      ProposalCache.clear();
-      DuoqianTransferProposalAdapter.clearCache();
-      _load();
+      unawaited(_refreshAll(force: true));
     }
   }
 
@@ -1159,10 +1383,10 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           activatedPubkeys: _activatedPubkeys,
           badgeColor: widget.badgeColor,
           onActivated: () {
-            // 激活成功后刷新页面
+            // 中文注释：激活只影响当前用户管理员身份和管理员列表展示，局部刷新即可。
             _adminService.clearCache(_subjectIdentity);
             _contextResolver.clearWalletCache();
-            _load();
+            unawaited(_loadAdminsAndRole());
           },
         ),
       ),

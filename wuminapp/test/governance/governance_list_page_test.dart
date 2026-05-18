@@ -88,11 +88,36 @@ void main() {
     expect(find.text('国家储备委员会'), findsOneWidget);
     expect(find.text('甲省储会'), findsNothing);
     expect(find.text('甲省储行'), findsNothing);
-    expect(find.byIcon(Icons.arrow_right), findsNWidgets(2));
-    expect(find.byIcon(Icons.arrow_drop_down), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsNWidgets(3));
+    expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+    expect(
+      tester
+          .getTopRight(
+            find.byKey(
+              const ValueKey(
+                'governance_section_toggle_provincialCouncil',
+              ),
+            ),
+          )
+          .dx,
+      greaterThan(380),
+    );
   });
 
-  testWidgets('点击三角后只展开对应分组', (tester) async {
+  testWidgets('国储会卡片横跨整行', (tester) async {
+    await _pumpPage(tester, councils: councils, banks: banks);
+
+    final cardSize = tester.getSize(
+      find.byKey(const ValueKey('governance_national_card_nrc')),
+    );
+    final cardRight =
+        tester.getTopRight(find.byIcon(Icons.chevron_right).first).dx;
+
+    expect(cardSize.height, 76);
+    expect(cardRight, greaterThan(380));
+  });
+
+  testWidgets('点击右侧箭头后只展开对应分组', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
 
     await tester.tap(
@@ -105,7 +130,7 @@ void main() {
     expect(find.text('甲省储会'), findsOneWidget);
     expect(find.text('乙省储会'), findsOneWidget);
     expect(find.text('甲省储行'), findsNothing);
-    expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_arrow_down), findsOneWidget);
   });
 
   testWidgets('展开后按本机保存顺序展示，不做管理员优先自动排序', (tester) async {

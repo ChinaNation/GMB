@@ -49,5 +49,6 @@
 - 状态：done
 - 代码：`GovernanceListPage` 已删除 `_sorted()` 自动排序；国储会保持直接展示，省储会、省储行默认折叠并通过标题三角展开。
 - 排序：省储会、省储行卡片支持同分组内长按拖拽；顺序保存到本机 `SharedPreferences`，只记录 `sfidNumber` 列表。
+- 视觉修正：省储会、省储行折叠控件已改为标题行最右侧的线性右箭头/下箭头；国储会卡片已改为整行宽度显示到右侧边缘，并加高到 76px。
 - 文档：已同步 `memory/01-architecture/wuminapp/WUMINAPP_TECHNICAL.md` 和 `memory/05-modules/wuminapp/governance/GOVERNANCE_TECHNICAL.md`。
 - 验证：`dart analyze lib test`、`flutter test test/governance/governance_list_page_test.dart`、`git diff --check` 已通过。

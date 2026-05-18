@@ -308,7 +308,7 @@ class _GovernanceSection extends StatelessWidget {
               ),
             ),
             if (collapsible) ...[
-              const SizedBox(width: 4),
+              const Spacer(),
               IconButton(
                 key: ValueKey(
                   'governance_section_toggle_${sectionKind.name}',
@@ -321,7 +321,7 @@ class _GovernanceSection extends StatelessWidget {
                 ),
                 onPressed: onToggleExpanded,
                 icon: Icon(
-                  expanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                  expanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
                   size: 24,
                   color: AppTheme.textSecondary,
                 ),
@@ -336,6 +336,29 @@ class _GovernanceSection extends StatelessWidget {
             builder: (context, constraints) {
               if (constraints.maxWidth <= 0) {
                 return const SizedBox.shrink();
+              }
+              if (sectionKind == _GovernanceSectionKind.nationalCouncil) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final inst in institutions)
+                      SizedBox(
+                        key: ValueKey(
+                          'governance_national_card_${inst.sfidNumber}',
+                        ),
+                        height: 76,
+                        child: _GovernanceCard(
+                          institution: inst,
+                          icon: icon,
+                          badgeColor: badgeColor,
+                          isAdmin: ProposalContextResolver.isAdminInstitution(
+                            inst.sfidNumber,
+                          ),
+                          onReturnFromDetail: onReturnFromDetail,
+                        ),
+                      ),
+                  ],
+                );
               }
               // 机构列表固定一行两列，避免不同 Android 机型出现列数漂移。
               const crossAxisCount = 2;
