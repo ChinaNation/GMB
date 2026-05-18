@@ -262,6 +262,9 @@ message = blake2_256(SCALE.encode(payload))
 - 如果 runtime 已记录该管理员投票，清除 pending，并把管理员显示为已投票。
 - 如果交易池 watch 返回 `timeout / finalityTimeout / retracted / future / error`，不得直接清除 pending，也不得把管理员恢复成未投票；必须继续以 runtime 投票 storage 为准。
 - 如果 nonce 已被消耗但 runtime 仍没有该管理员投票记录，说明该投票没有被链上投票引擎接受，可清除 pending 并允许重新提交。
+- 如果 runtime 无投票记录、nonce 未推进且 pending 超过 20 分钟确认窗口，视为本地提交未进入链，清除 pending 并允许重新提交，不能让管理员明细无限显示“投票中”。
+- 提交投票拿到 txHash 后，底部按钮必须立即停止 `submitting` 转圈；详情页 `_load()` 只能后台刷新，不得阻塞按钮恢复。
+- 联合投票读取 `JointVote` storage 时，机构参数必须使用统一 `SubjectId` 编码；wuminapp 只能调用 `institutionIdentityToPalletId()`，不得在页面内手写 sfid `[u8;48]` 编码。
 
 #### 6.2.1 协议升级提案在 App 里的联合投票实现
 

@@ -143,11 +143,15 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else if (mounted) {
+      setState(() => _error = null);
+    }
 
     try {
       // 根据 kind 选择对应的详情查询方法。
@@ -452,7 +456,9 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
 
       // 刷新数据
       _adminService.clearCache(_subjectIdentity);
-      await _load();
+      // 中文注释：提交拿到 txHash 后立即结束按钮转圈，链上投票结果走后台刷新
+      // 和 PendingVoteStore 状态机确认，不能让整页 _load 卡住提交按钮。
+      unawaited(_load(showSpinner: false));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -494,7 +500,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      unawaited(_load());
+      unawaited(_load(showSpinner: false));
       return;
     }
 
@@ -508,7 +514,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      unawaited(_load());
+      unawaited(_load(showSpinner: false));
       return;
     }
 
@@ -525,7 +531,7 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppTheme.danger),
     );
-    unawaited(_load());
+    unawaited(_load(showSpinner: false));
   }
 
   bool _shouldKeepPendingForPoolFailure(TxPoolWatchEvent event) {
