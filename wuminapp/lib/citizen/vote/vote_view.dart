@@ -97,7 +97,7 @@ class _VoteViewState extends State<VoteView> {
     _subscription = ChainEventSubscription();
     _subscription!.connect();
     _eventSub = _subscription!.events.listen((event) {
-      if (event == ChainEvent.newBlock) {
+      if (event.type == ChainEventType.newBlock) {
         _checkForNewProposals();
       }
     });

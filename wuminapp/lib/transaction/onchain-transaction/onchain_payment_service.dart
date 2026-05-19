@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_models.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -26,6 +27,7 @@ class OnchainPaymentService {
   Future<({String txHash, int usedNonce})> submitTransfer(
     OnchainPaymentDraft draft, {
     required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
   }) async {
     final toAddress = draft.toAddress.trim();
     final symbol = draft.symbol.trim().toUpperCase();
@@ -54,6 +56,7 @@ class OnchainPaymentService {
         toAddress: toAddress,
         amountYuan: draft.amount,
         sign: sign,
+        onWatchEvent: onWatchEvent,
       );
     } catch (e) {
       if (e is OnchainPaymentException) rethrow;

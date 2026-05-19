@@ -10,33 +10,52 @@ import 'smoldot_client.dart';
 class ChainEventSubscription {
   final StreamController<ChainEvent> _eventController =
       StreamController<ChainEvent>.broadcast();
-  bool _disposed = false;
 
-  StreamSubscription<dynamic>? _smoldotSub;
+  StreamSubscription<dynamic>? _newHeadsSub;
+  StreamSubscription<dynamic>? _finalizedHeadsSub;
 
   /// 新区块等事件流。
   Stream<ChainEvent> get events => _eventController.stream;
 
-  /// 开始订阅 finalized 区块头（确保事件已最终确认）。
-  void connect() {
-    if (_disposed) return;
-
+  /// 开始订阅新区块头和 finalized 区块头。
+  ///
+  /// 中文注释：newHeads 用于把钱包交易流水先标记为 inBlock，finalizedHeads
+  /// 用于把同一条流水升级为 finalized。返回值用于上层判断是否需要重试订阅。
+  bool connect() {
     if (!SmoldotClientManager.instance.isReady) {
       debugPrint('[ChainSub] smoldot 尚未就绪，跳过区块订阅');
-      return;
+      return false;
     }
 
-    _connectSmoldot();
+    final newHeadsOk = _connectSmoldot(
+      method: 'chain_subscribeNewHeads',
+      type: ChainEventType.newBlock,
+      logLabel: 'newHeads',
+    );
+    final finalizedOk = _connectSmoldot(
+      method: 'chain_subscribeFinalizedHeads',
+      type: ChainEventType.newFinalizedBlock,
+      logLabel: 'finalizedHeads',
+    );
+    return newHeadsOk && finalizedOk;
   }
 
-  void _connectSmoldot() {
-    debugPrint('[ChainSub] 使用 smoldot 轻节点订阅 finalized 区块');
+  bool _connectSmoldot({
+    required String method,
+    required ChainEventType type,
+    required String logLabel,
+  }) {
+    if (type == ChainEventType.newBlock && _newHeadsSub != null) return true;
+    if (type == ChainEventType.newFinalizedBlock &&
+        _finalizedHeadsSub != null) {
+      return true;
+    }
+
+    debugPrint('[ChainSub] 使用 smoldot 轻节点订阅 $logLabel');
     try {
-      final stream = SmoldotClientManager.instance
-          .subscribe('chain_subscribeFinalizedHeads', []);
-      _smoldotSub = stream.listen(
+      final stream = SmoldotClientManager.instance.subscribe(method, []);
+      final sub = stream.listen(
         (data) {
-          if (_disposed) return;
           // 中文注释：解析区块头中的 number 字段（hex 编码）。
           int? blockNumber;
           if (data is Map) {
@@ -49,32 +68,48 @@ class ChainEventSubscription {
             }
           }
           _eventController.add(ChainEvent(
-            type: ChainEventType.newFinalizedBlock,
+            type: type,
             blockNumber: blockNumber,
           ));
         },
         onError: (Object e) {
-          debugPrint('[ChainSub] smoldot 订阅错误: $e');
+          debugPrint('[ChainSub] $logLabel 订阅错误: $e');
         },
         onDone: () {
-          debugPrint('[ChainSub] smoldot 订阅结束');
+          debugPrint('[ChainSub] $logLabel 订阅结束');
+          if (type == ChainEventType.newBlock) {
+            _newHeadsSub = null;
+          } else {
+            _finalizedHeadsSub = null;
+          }
         },
       );
+      if (type == ChainEventType.newBlock) {
+        _newHeadsSub = sub;
+      } else {
+        _finalizedHeadsSub = sub;
+      }
+      return true;
     } catch (e) {
-      debugPrint('[ChainSub] smoldot 订阅启动失败: $e');
+      debugPrint('[ChainSub] $logLabel 订阅启动失败: $e');
+      return false;
     }
   }
 
   /// 断开连接并释放资源。
   void disconnect() {
-    _disposed = true;
-    _smoldotSub?.cancel();
-    _smoldotSub = null;
+    _newHeadsSub?.cancel();
+    _finalizedHeadsSub?.cancel();
+    _newHeadsSub = null;
+    _finalizedHeadsSub = null;
   }
 }
 
 /// 链事件类型。
 enum ChainEventType {
+  /// 新出块。
+  newBlock,
+
   /// 新 finalized 区块。
   newFinalizedBlock,
 }
@@ -85,7 +120,4 @@ class ChainEvent {
 
   final ChainEventType type;
   final int? blockNumber;
-
-  /// 向后兼容的静态常量。
-  static const newBlock = ChainEvent(type: ChainEventType.newFinalizedBlock);
 }

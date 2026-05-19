@@ -10,6 +10,7 @@ import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_models.dart';
 import 'package:wuminapp_mobile/transaction/onchain-transaction/onchain_payment_service.dart';
+import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
@@ -145,9 +146,11 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'pending':
+      case LocalTxStore.statusPending:
         return AppTheme.warning;
-      case 'confirmed':
+      case LocalTxStore.statusInBlock:
+        return AppTheme.primaryDark;
+      case LocalTxStore.statusFinalized:
         return AppTheme.success;
       case 'failed':
         return AppTheme.danger;
@@ -378,6 +381,21 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         };
       }
 
+      String? submittedTxHash;
+      String? includedBlockHash;
+      void handleWatchEvent(TxPoolWatchEvent event) {
+        if (!event.isIncluded) return;
+        includedBlockHash = event.blockHashHex ?? includedBlockHash;
+        final txHash = submittedTxHash;
+        final wallet = _currentWallet;
+        if (txHash == null || wallet == null) return;
+        unawaited(LocalTxStore.markLocalSubmitInBlock(
+          walletPubkeyHex: wallet.pubkeyHex,
+          txHash: txHash,
+          blockHash: event.blockHashHex,
+        ).then((_) => _loadLocalRecords()));
+      }
+
       final result = await _paymentService.submitTransfer(
         OnchainPaymentDraft(
           toAddress: toAddress,
@@ -385,6 +403,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           symbol: _selectedSymbol,
         ),
         sign: signCallback,
+        onWatchEvent: handleWatchEvent,
       );
       if (!mounted) {
         return;
@@ -392,6 +411,7 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
 
       // 交易已成功提交，后续写入本地记录失败不影响交易结果
       final txHash = result.txHash.toLowerCase();
+      submittedTxHash = txHash;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('签名成功，交易已发送，tx=$txHash')));
@@ -420,16 +440,23 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
           ..counterpartyAddress = toAddress
           ..fromAddress = _currentWallet!.address
           ..toAddress = toAddress
-          ..status = 'pending'
+          ..status = LocalTxStore.statusPending
           ..source = 'local_submit'
           ..txHash = txHash
           ..usedNonce = result.usedNonce
           ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
         await LocalTxStore.upsert(entity);
+        if (includedBlockHash != null) {
+          await LocalTxStore.markLocalSubmitInBlock(
+            walletPubkeyHex: _currentWallet!.pubkeyHex,
+            txHash: txHash,
+            blockHash: includedBlockHash,
+          );
+        }
         if (mounted) await _loadLocalRecords();
 
-        // 中文注释：本机先展示 pending，confirmed 只由 finalized 事件监听写回；
-        // 这里仅延迟刷新本地列表，不再按 nonce 推断成功。
+        // 中文注释：本机先展示 pending；交易池 inBlock 回调会升级为已出块，
+        // finalized 区块事件再升级为已确认。这里仅兜底延迟刷新本地列表。
         unawaited(_reloadAfterChainEventWindow());
       } catch (e) {
         debugPrint('[交易记录] 写入本地失败: $e');
@@ -595,10 +622,18 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
                     spacing: 16,
                     runSpacing: 8,
                     children: [
-                      _buildStatusText('待确认', _countByStatus('pending'),
-                          _statusColor('pending')),
-                      _buildStatusText('已确认', _countByStatus('confirmed'),
-                          _statusColor('confirmed')),
+                      _buildStatusText(
+                          '已提交',
+                          _countByStatus(LocalTxStore.statusPending),
+                          _statusColor(LocalTxStore.statusPending)),
+                      _buildStatusText(
+                          '已出块',
+                          _countByStatus(LocalTxStore.statusInBlock),
+                          _statusColor(LocalTxStore.statusInBlock)),
+                      _buildStatusText(
+                          '已确认',
+                          _countByStatus(LocalTxStore.statusFinalized),
+                          _statusColor(LocalTxStore.statusFinalized)),
                       _buildStatusText('失败', _countByStatus('failed'),
                           _statusColor('failed')),
                     ],

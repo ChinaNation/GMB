@@ -200,9 +200,11 @@ String _sourceLabel(String source) {
 
 String _statusLabel(String status) {
   switch (status) {
-    case 'pending':
-      return '待确认';
-    case 'confirmed':
+    case LocalTxStore.statusPending:
+      return '已提交';
+    case LocalTxStore.statusInBlock:
+      return '已出块';
+    case LocalTxStore.statusFinalized:
       return '已确认';
     case 'failed':
       return '失败';
@@ -213,9 +215,11 @@ String _statusLabel(String status) {
 
 Color _statusColor(String status) {
   switch (status) {
-    case 'pending':
+    case LocalTxStore.statusPending:
       return AppTheme.warning;
-    case 'confirmed':
+    case LocalTxStore.statusInBlock:
+      return AppTheme.primaryDark;
+    case LocalTxStore.statusFinalized:
       return AppTheme.success;
     case 'failed':
       return AppTheme.danger;
@@ -312,7 +316,7 @@ class _LocalTxRecordTile extends StatelessWidget {
             label,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
-          if (record.status != 'confirmed') ...[
+          if (record.status != LocalTxStore.statusFinalized) ...[
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -526,7 +530,7 @@ class _LocalTxRecordDetailPage extends StatelessWidget {
           if (record.confirmedAtMillis != null)
             _buildRow(
               context,
-              label: '确认时间',
+              label: '最终确认时间',
               value: _formatMillisFull(record.confirmedAtMillis!),
             ),
           if (record.failureReason != null)
