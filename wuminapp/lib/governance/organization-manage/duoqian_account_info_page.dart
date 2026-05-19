@@ -44,6 +44,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   List<String> _adminPubkeys = const [];
   String _localStatus = InstitutionDuoqianLocalState.statusPending;
   int? _lastDetailRefreshAtMillis;
+  int? _lastBalanceRefreshAtMillis;
   double? _balanceYuan;
 
   @override
@@ -57,7 +58,11 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
 
   Future<void> _load() async {
     await _loadFromLocal();
-    unawaited(_refreshChainDetailIfNeeded());
+    if (_shouldRefreshDetail()) {
+      unawaited(_refreshChainDetail());
+    } else {
+      unawaited(_refreshBalanceIfNeeded());
+    }
   }
 
   Future<void> _loadFromLocal() async {
@@ -110,15 +115,11 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         _balanceYuan = isClosed ? null : local.detail?.balanceYuan;
         _lastDetailRefreshAtMillis = local.detail?.lastChainRefreshAtMillis ??
             local.status?.lastSyncAtMillis;
+        _lastBalanceRefreshAtMillis = local.detail?.lastBalanceRefreshAtMillis;
       });
     } catch (_) {
       // 中文注释：本地读取失败不阻塞详情页；页面仍展示入口传入的名称和地址。
     }
-  }
-
-  Future<void> _refreshChainDetailIfNeeded() async {
-    if (!_shouldRefreshDetail()) return;
-    await _refreshChainDetail();
   }
 
   bool _shouldRefreshDetail() {
@@ -130,6 +131,52 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         ? const Duration(minutes: 60)
         : const Duration(minutes: 10);
     return DateTime.now().difference(lastSyncAt) >= ttl;
+  }
+
+  bool _shouldRefreshBalance() {
+    if (_localStatus != InstitutionDuoqianLocalState.statusActive) return false;
+    if (_balanceYuan == null) return true;
+    if (_lastBalanceRefreshAtMillis == null) return true;
+    final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
+      _lastBalanceRefreshAtMillis!,
+    );
+    return DateTime.now().difference(lastSyncAt) >= const Duration(minutes: 10);
+  }
+
+  Future<void> _refreshBalanceIfNeeded({bool force = false}) async {
+    if (!force && !_shouldRefreshBalance()) return;
+    try {
+      final balance =
+          await _rpc.fetchBalance(widget.institution.duoqianAddress);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await WalletIsar.instance.writeTxn((isar) async {
+        final previous = await InstitutionDuoqianLocalState.readDetail(
+          isar,
+          widget.institution.duoqianAddress,
+        );
+        await InstitutionDuoqianLocalState.putDetailInTxn(
+          isar,
+          widget.institution.duoqianAddress,
+          DuoqianLocalDetailSnapshot(
+            status: previous?.status ?? _localStatus,
+            adminPubkeys: previous?.adminPubkeys ?? _adminPubkeys,
+            threshold: previous?.threshold ?? _accountInfo?.threshold,
+            balanceYuan: balance,
+            lastChainRefreshAtMillis: previous?.lastChainRefreshAtMillis ??
+                _lastDetailRefreshAtMillis,
+            lastBalanceRefreshAtMillis: now,
+            updatedAtMillis: now,
+          ),
+        );
+      });
+      if (!mounted) return;
+      setState(() {
+        _balanceYuan = balance;
+        _lastBalanceRefreshAtMillis = now;
+      });
+    } catch (_) {
+      // 中文注释：余额失败只保留本地旧余额；不要影响详情页其他信息。
+    }
   }
 
   Future<void> _refreshChainDetail({bool force = false}) async {
@@ -157,6 +204,10 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
             widget.institution.duoqianAddress,
           );
         } else {
+          final previous = await InstitutionDuoqianLocalState.readDetail(
+            isar,
+            widget.institution.duoqianAddress,
+          );
           await InstitutionDuoqianLocalState.putDetailInTxn(
             isar,
             widget.institution.duoqianAddress,
@@ -164,10 +215,12 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
               status: status,
               adminPubkeys: info.adminPubkeys,
               threshold: info.threshold,
-              balanceYuan: balance,
+              balanceYuan: balance ?? previous?.balanceYuan,
               lastChainRefreshAtMillis: now,
               lastBalanceRefreshAtMillis:
-                  info.status == DuoqianStatus.active ? now : null,
+                  info.status == DuoqianStatus.active && balance != null
+                      ? now
+                      : previous?.lastBalanceRefreshAtMillis,
               updatedAtMillis: now,
             ),
           );
@@ -181,8 +234,13 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
         _adminPubkeys = _normalizeAdminPubkeys(info?.adminPubkeys);
         _balanceYuan = status == InstitutionDuoqianLocalState.statusClosed
             ? null
-            : balance;
+            : balance ?? _balanceYuan;
         _lastDetailRefreshAtMillis = now;
+        if (status == InstitutionDuoqianLocalState.statusClosed) {
+          _lastBalanceRefreshAtMillis = null;
+        } else if (balance != null) {
+          _lastBalanceRefreshAtMillis = now;
+        }
       });
     } catch (_) {
       // 中文注释：链上刷新失败只保留本地详情，不弹同步提示也不清空页面。

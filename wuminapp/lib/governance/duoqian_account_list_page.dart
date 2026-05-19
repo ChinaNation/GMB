@@ -262,6 +262,10 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               personal.duoqianAddress,
             );
           } else {
+            final previousDetail = await PersonalDuoqianLocalState.readDetail(
+              isar,
+              personal.duoqianAddress,
+            );
             await PersonalDuoqianLocalState.putDetailInTxn(
               isar,
               personal.duoqianAddress,
@@ -269,6 +273,9 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                 status: status,
                 adminPubkeys: info.adminPubkeys,
                 threshold: info.threshold,
+                balanceYuan: previousDetail?.balanceYuan,
+                lastBalanceRefreshAtMillis:
+                    previousDetail?.lastBalanceRefreshAtMillis,
                 updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
                 lastChainRefreshAtMillis: DateTime.now().millisecondsSinceEpoch,
               ),
@@ -337,6 +344,11 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               institution.duoqianAddress,
             );
           } else {
+            final previousDetail =
+                await InstitutionDuoqianLocalState.readDetail(
+              isar,
+              institution.duoqianAddress,
+            );
             await InstitutionDuoqianLocalState.putDetailInTxn(
               isar,
               institution.duoqianAddress,
@@ -344,6 +356,9 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
                 status: status,
                 adminPubkeys: info.adminPubkeys,
                 threshold: info.threshold,
+                balanceYuan: previousDetail?.balanceYuan,
+                lastBalanceRefreshAtMillis:
+                    previousDetail?.lastBalanceRefreshAtMillis,
                 updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
                 lastChainRefreshAtMillis: DateTime.now().millisecondsSinceEpoch,
               ),

@@ -31,6 +31,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-balance.md`
 - `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-local-first.md`
 - `memory/08-tasks/done/20260518-wuminapp-duoqian-list-ttl.md`
 - `memory/08-tasks/done/20260518-wuminapp-governance-detail-loading.md`

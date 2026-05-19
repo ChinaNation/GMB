@@ -647,6 +647,9 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
   `institution_duoqian_detail:*`。这些都是本机持久化储存，不是内存缓存。
 - 详情页本机快照可直接显示名称、地址、本地状态、管理员公钥列表、阈值和余额快照；
   链上只负责更新账户是否存在、Active/Pending 状态、管理员/阈值和 Active 余额。
+- 详情页状态 TTL 与余额 TTL 不得混用。列表页批量状态刷新写入详情快照时，必须保留已有
+  `balanceYuan` 和 `lastBalanceRefreshAtMillis`；Active 详情页若本地余额为空或余额
+  TTL 过期，应只调用余额读取，不重复拉管理员/阈值。
 - 详情页进入时不得用全屏转圈等待 `fetchPersonalAccount()`、
   `fetchDuoqianAccount()` 或 `InstitutionAdminService.fetchAdmins()`；
   自动刷新必须复用 `fetchPersonalAccountsBatch([address])` /
