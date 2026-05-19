@@ -89,6 +89,7 @@ lib/rpc/
   - `ChainRpc.fetchStorage()` / `fetchStorageBatch()` 在轻节点模式下已改走原生 storage 读取
   - `ChainRpc.fetchRuntimeVersion()` / `fetchMetadata()` 在轻节点模式下已改走原生 capability
   - `ChainRpc.fetchLatestBlock()` 在轻节点模式下已改为复用状态快照中的 `bestBlock`
+  - `ChainRpc.fetchFinalizedBlock()` 在轻节点模式下复用状态快照中的 `finalizedBlock`，钱包流水确认只允许使用该方法
   - `ChainRpc.fetchNonce()` / `fetchGenesisHash()` / `fetchBlockExtrinsicHashes()` / `submitExtrinsic()` 在轻节点模式下已切到原生 capability
 - 2026-03-23 新增状态能力治理：
   - `smoldot_get_status_snapshot` 底层已不再经 `system_health` 包装，而是直接读取 `sync_service/runtime_service`
@@ -138,6 +139,9 @@ lib/rpc/
   - 调用原生 `smoldot_get_block_hash(0)`，优先命中创世块快路径
 - `fetchLatestBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新块
   - 复用 `status snapshot.bestBlockHash/bestBlockNumber`
+- `fetchFinalizedBlock() → Future<({Uint8List blockHash, int blockNumber})>` — 最新 finalized 块
+  - 复用 `status snapshot.finalizedBlockHash/finalizedBlockNumber`
+  - 钱包交易流水升级为 `finalized` 时只能使用该高度
 - `fetchMetadata() → Future<RuntimeMetadata>` — 运行时 metadata（缓存，含 registry）
   - 调用原生 `smoldot_get_metadata`
 - `fetchBlockExtrinsicHashes(int blockNumber) → Future<List<String>?>` — 区块 extrinsic 哈希列表
@@ -228,7 +232,7 @@ Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compa
 
 ### 7.4 普通转账提交后的确认口径
 
-`OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 `pending` 流水，交易池 watch 收到 included 后升级为 `inBlock`；`ChainTxMonitor` 读取 finalized 区块 `System.Events` 后升级为 `finalized`。
+`OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 `pending` 流水，交易池 watch 收到 included 后升级为 `inBlock`；`ChainTxMonitor` 只读取 finalized 高度的 `System.Events` 后升级为 `finalized`，禁止使用 best/latest block 作为已确认真源。
 
 > 投票类交易同样不得使用 nonce 推进判定成功。内部投票必须读
 > `InternalVote::InternalVotesByAccount`，联合投票必须读
@@ -304,7 +308,8 @@ finalized head 到达
 
 - 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
 - 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
-- `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`。
+- `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`；写入时还要按同钱包、同区块、同发送方、同接收方、同转账本金做语义去重，防止 newHeads/finalized 重复处理同一事件。
+- finalized 补同步只能使用 `finalizedBlockNumber/finalizedBlockHash`，不能使用 `bestBlockNumber/bestBlockHash`。
 - 单轮最多补齐 120 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路。
 - 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。
 

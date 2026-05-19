@@ -128,14 +128,14 @@ class ChainTxMonitor {
   Future<void> initBaselineBalance(String address, String pubkeyHex) async {
     watchWallet(address, pubkeyHex);
     try {
-      final latest = await _chainRpc.fetchLatestBlock();
+      final finalized = await _chainRpc.fetchFinalizedBlock();
       await LocalTxStore.ensureCursor(
         walletAddress: address,
         walletPubkeyHex: pubkeyHex,
-        trackingStartBlock: latest.blockNumber,
-        lastSyncedBlock: latest.blockNumber,
+        trackingStartBlock: finalized.blockNumber,
+        lastSyncedBlock: finalized.blockNumber,
       );
-      debugPrint('[TxMonitor] 初始化交易记录游标: $address @${latest.blockNumber}');
+      debugPrint('[TxMonitor] 初始化交易记录游标: $address @${finalized.blockNumber}');
     } catch (e) {
       debugPrint('[TxMonitor] 初始化交易记录游标失败，稍后从轻节点就绪块开始: $e');
     }
@@ -185,10 +185,10 @@ class ChainTxMonitor {
   Future<void> _syncToLatest() async {
     if (_walletAddressByPubkey.isEmpty) return;
     try {
-      final latest = await _chainRpc.fetchLatestBlock();
+      final finalized = await _chainRpc.fetchFinalizedBlock();
       await _syncThrough(
-        latest.blockNumber,
-        missingCursorStartsAt: latest.blockNumber,
+        finalized.blockNumber,
+        missingCursorStartsAt: finalized.blockNumber,
       );
     } catch (e) {
       debugPrint('[TxMonitor] 启动补同步失败: $e');

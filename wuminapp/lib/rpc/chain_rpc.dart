@@ -202,6 +202,23 @@ class ChainRpc {
     );
   }
 
+  /// 获取最新 finalized 区块的哈希和块号。
+  ///
+  /// 中文注释：钱包交易流水的“已确认”只能来自 finalized 高度；best/latest
+  /// 只代表当前最优链头，不能用来升级 `finalized` 状态。
+  Future<({Uint8List blockHash, int blockNumber})> fetchFinalizedBlock() async {
+    final snapshot = await SmoldotClientManager.instance.getStatusSnapshot();
+    final hashHex = snapshot?.finalizedBlockHash;
+    final blockNumber = snapshot?.finalizedBlockNumber;
+    if (hashHex == null || hashHex.isEmpty || blockNumber == null) {
+      throw StateError('smoldot 轻节点尚未提供 finalized 区块快照');
+    }
+    return (
+      blockHash: _hexDecode(_stripHexPrefix(hashHex)),
+      blockNumber: blockNumber,
+    );
+  }
+
   // 2026-04-23 整改:`fetchBlockExtrinsicHashes` 已删除。
   //
   // 原实现包装 `getBlockExtrinsics`(smoldot `chainHead_v1_body`)逐块拉 body

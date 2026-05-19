@@ -425,27 +425,20 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
         final amountDeltaFen =
             (-(BigInt.parse(transferAmountFen) + BigInt.parse(feeFen)))
                 .toString();
-        final entity = LocalTxEntity()
-          ..recordKey = LocalTxStore.pendingRecordKey(
-            _currentWallet!.pubkeyHex,
-            txHash,
-          )
-          ..walletAddress = _currentWallet!.address
-          ..walletPubkeyHex =
-              LocalTxStore.normalizePubkey(_currentWallet!.pubkeyHex)
-          ..type = 'transfer'
-          ..amountDeltaFen = amountDeltaFen
-          ..transferAmountFen = transferAmountFen
-          ..feeFen = feeFen
-          ..counterpartyAddress = toAddress
-          ..fromAddress = _currentWallet!.address
-          ..toAddress = toAddress
-          ..status = LocalTxStore.statusPending
-          ..source = 'local_submit'
-          ..txHash = txHash
-          ..usedNonce = result.usedNonce
-          ..createdAtMillis = DateTime.now().millisecondsSinceEpoch;
-        await LocalTxStore.upsert(entity);
+        await LocalTxStore.upsertLocalSubmitTransfer(
+          walletAddress: _currentWallet!.address,
+          walletPubkeyHex: _currentWallet!.pubkeyHex,
+          txHash: txHash,
+          amountDeltaFen: amountDeltaFen,
+          transferAmountFen: transferAmountFen,
+          feeFen: feeFen,
+          counterpartyAddress: toAddress,
+          fromAddress: _currentWallet!.address,
+          toAddress: toAddress,
+          usedNonce: result.usedNonce,
+          createdAtMillis: DateTime.now().millisecondsSinceEpoch,
+          blockHash: includedBlockHash,
+        );
         if (includedBlockHash != null) {
           await LocalTxStore.markLocalSubmitInBlock(
             walletPubkeyHex: _currentWallet!.pubkeyHex,
