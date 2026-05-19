@@ -9,6 +9,7 @@ import 'package:wuminapp_mobile/governance/shared/duoqian_create_amount_rules.da
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart'
     show QrScanMode, QrScanPage;
@@ -475,6 +476,27 @@ class _InstitutionDuoqianCreatePageState
         sign: signCallback,
       );
 
+      await WalletIsar.instance.writeTxn((isar) async {
+        // 中文注释：创建交易已入块并确认事件后，直接写入当前账户的本地 pending
+        // 快照；列表返回时只精准刷新该账户，不再依赖全量 discovery 扫描。
+        final entity = DuoqianInstitutionEntity()
+          ..duoqianAddress = result.mainAddressHex
+          ..sfidNumber = registrationInfo.sfidNumber
+          ..adminSubjectOrg = _defaultInstitutionAdminOrg
+          ..name = accounts.isEmpty
+              ? registrationInfo.institutionName
+              : accounts.first.accountName
+          ..addedAtMillis = DateTime.now().millisecondsSinceEpoch
+          ..discoveredViaAdmin = false
+          ..matchedAdminPubkeys = const [];
+        await isar.duoqianInstitutionEntitys.put(entity);
+        await InstitutionDuoqianLocalState.putStatusInTxn(
+          isar,
+          result.mainAddressHex,
+          InstitutionDuoqianLocalState.statusPending,
+        );
+      });
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -483,7 +505,7 @@ class _InstitutionDuoqianCreatePageState
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(result.mainAddressHex);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

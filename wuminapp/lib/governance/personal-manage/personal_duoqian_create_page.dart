@@ -406,7 +406,7 @@ class _PersonalDuoqianCreatePageState extends State<PersonalDuoqianCreatePage> {
           backgroundColor: AppTheme.primaryDark,
         ),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(addrHex);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

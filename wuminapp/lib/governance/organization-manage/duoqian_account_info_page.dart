@@ -1,13 +1,13 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -24,9 +24,13 @@ class DuoqianAccountInfoPage extends StatefulWidget {
   const DuoqianAccountInfoPage({
     super.key,
     required this.institution,
+    this.initialLocalStatus,
+    this.initialAdminPubkeys = const [],
   });
 
   final InstitutionInfo institution;
+  final String? initialLocalStatus;
+  final List<String> initialAdminPubkeys;
 
   @override
   State<DuoqianAccountInfoPage> createState() => _DuoqianAccountInfoPageState();
@@ -34,55 +38,154 @@ class DuoqianAccountInfoPage extends StatefulWidget {
 
 class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   final DuoqianManageService _manageService = DuoqianManageService();
-  final InstitutionAdminService _adminService = InstitutionAdminService();
   final ChainRpc _rpc = ChainRpc();
-
-  AdminSubjectIdentity get _subjectIdentity =>
-      AdminSubjectIdentity.fromInstitution(widget.institution);
-
-  bool _loading = true;
-  String? _error;
 
   DuoqianAccountInfo? _accountInfo;
   List<String> _adminPubkeys = const [];
+  String _localStatus = InstitutionDuoqianLocalState.statusPending;
+  int? _lastDetailRefreshAtMillis;
   double? _balanceYuan;
 
   @override
   void initState() {
     super.initState();
+    _localStatus =
+        widget.initialLocalStatus ?? InstitutionDuoqianLocalState.statusPending;
+    _adminPubkeys = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
     _load();
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    await _loadFromLocal();
+    unawaited(_refreshChainDetailIfNeeded());
+  }
 
+  Future<void> _loadFromLocal() async {
     try {
-      final results = await Future.wait([
-        _manageService.fetchDuoqianAccount(widget.institution.duoqianAddress),
-        _adminService.fetchAdmins(_subjectIdentity),
-      ]);
+      final local = await WalletIsar.instance.read((isar) async {
+        final entity = await isar.duoqianInstitutionEntitys
+            .filter()
+            .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+            .findFirst();
+        final statuses = await InstitutionDuoqianLocalState.readStatusSnapshots(
+          isar,
+          [widget.institution.duoqianAddress],
+        );
+        final detail = await InstitutionDuoqianLocalState.readDetail(
+          isar,
+          widget.institution.duoqianAddress,
+        );
+        return (
+          entity: entity,
+          status: statuses[_normalizeHex(widget.institution.duoqianAddress)],
+          detail: detail,
+        );
+      });
 
-      final accountInfo = results[0] as DuoqianAccountInfo?;
-      final admins = results[1] as List<String>;
-      final balance = await _resolveBalance(accountInfo?.status);
-      await _writeLocalStatus(accountInfo);
+      final status = local.status?.status ??
+          local.detail?.status ??
+          widget.initialLocalStatus ??
+          InstitutionDuoqianLocalState.statusPending;
+      final isClosed = status == InstitutionDuoqianLocalState.statusClosed;
+      final admins = local.detail?.adminPubkeys.isNotEmpty == true
+          ? local.detail!.adminPubkeys
+          : local.entity?.matchedAdminPubkeys.isNotEmpty == true
+              ? local.entity!.matchedAdminPubkeys
+              : widget.initialAdminPubkeys;
+      final normalizedAdmins = _normalizeAdminPubkeys(admins);
+      final accountInfo = isClosed
+          ? null
+          : DuoqianAccountInfo(
+              adminCount: normalizedAdmins.length,
+              threshold: local.detail?.threshold,
+              adminPubkeys: normalizedAdmins,
+              status: _statusEnumFromLocal(status),
+            );
 
       if (!mounted) return;
       setState(() {
+        _localStatus = status;
         _accountInfo = accountInfo;
-        _adminPubkeys = admins;
-        _balanceYuan = balance;
-        _loading = false;
+        _adminPubkeys = normalizedAdmins;
+        _balanceYuan = isClosed ? null : local.detail?.balanceYuan;
+        _lastDetailRefreshAtMillis = local.detail?.lastChainRefreshAtMillis ??
+            local.status?.lastSyncAtMillis;
       });
-    } catch (e) {
+    } catch (_) {
+      // 中文注释：本地读取失败不阻塞详情页；页面仍展示入口传入的名称和地址。
+    }
+  }
+
+  Future<void> _refreshChainDetailIfNeeded() async {
+    if (!_shouldRefreshDetail()) return;
+    await _refreshChainDetail();
+  }
+
+  bool _shouldRefreshDetail() {
+    if (_lastDetailRefreshAtMillis == null) return true;
+    final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
+      _lastDetailRefreshAtMillis!,
+    );
+    final ttl = _localStatus == InstitutionDuoqianLocalState.statusActive
+        ? const Duration(minutes: 60)
+        : const Duration(minutes: 10);
+    return DateTime.now().difference(lastSyncAt) >= ttl;
+  }
+
+  Future<void> _refreshChainDetail({bool force = false}) async {
+    if (!force && !_shouldRefreshDetail()) return;
+    try {
+      final infos = await _manageService.fetchDuoqianAccountsBatch(
+        [widget.institution.duoqianAddress],
+      );
+      final info = infos[_normalizeHex(widget.institution.duoqianAddress)];
+      final status = info == null
+          ? InstitutionDuoqianLocalState.statusClosed
+          : _localStatusFromInfo(info.status);
+      final balance = info == null ? null : await _resolveBalance(info.status);
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await WalletIsar.instance.writeTxn((isar) async {
+        await InstitutionDuoqianLocalState.putStatusInTxn(
+          isar,
+          widget.institution.duoqianAddress,
+          status,
+        );
+        if (info == null) {
+          await InstitutionDuoqianLocalState.deleteDetailInTxn(
+            isar,
+            widget.institution.duoqianAddress,
+          );
+        } else {
+          await InstitutionDuoqianLocalState.putDetailInTxn(
+            isar,
+            widget.institution.duoqianAddress,
+            DuoqianLocalDetailSnapshot(
+              status: status,
+              adminPubkeys: info.adminPubkeys,
+              threshold: info.threshold,
+              balanceYuan: balance,
+              lastChainRefreshAtMillis: now,
+              lastBalanceRefreshAtMillis:
+                  info.status == DuoqianStatus.active ? now : null,
+              updatedAtMillis: now,
+            ),
+          );
+        }
+      });
+
       if (!mounted) return;
       setState(() {
-        _error = SmoldotClientManager.instance.buildUserFacingError(e);
-        _loading = false;
+        _localStatus = status;
+        _accountInfo = info;
+        _adminPubkeys = _normalizeAdminPubkeys(info?.adminPubkeys);
+        _balanceYuan = status == InstitutionDuoqianLocalState.statusClosed
+            ? null
+            : balance;
+        _lastDetailRefreshAtMillis = now;
       });
+    } catch (_) {
+      // 中文注释：链上刷新失败只保留本地详情，不弹同步提示也不清空页面。
     }
   }
 
@@ -95,19 +198,29 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  Future<void> _writeLocalStatus(DuoqianAccountInfo? accountInfo) async {
-    final status = accountInfo == null
-        ? InstitutionDuoqianLocalState.statusClosed
-        : accountInfo.status == DuoqianStatus.active
-            ? InstitutionDuoqianLocalState.statusActive
-            : InstitutionDuoqianLocalState.statusPending;
-    await WalletIsar.instance.writeTxn((isar) async {
-      await InstitutionDuoqianLocalState.putStatusInTxn(
-        isar,
-        widget.institution.duoqianAddress,
-        status,
-      );
-    });
+  String _localStatusFromInfo(DuoqianStatus status) {
+    return status == DuoqianStatus.active
+        ? InstitutionDuoqianLocalState.statusActive
+        : InstitutionDuoqianLocalState.statusPending;
+  }
+
+  DuoqianStatus _statusEnumFromLocal(String status) {
+    return status == InstitutionDuoqianLocalState.statusActive
+        ? DuoqianStatus.active
+        : DuoqianStatus.pending;
+  }
+
+  List<String> _normalizeAdminPubkeys(List<String>? admins) {
+    if (admins == null) return const [];
+    return admins
+        .map(_normalizeHex)
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 
   void _showDeleteMenu() {
@@ -137,7 +250,11 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   }
 
   Future<void> _openClosePage() async {
-    final wallets = await _getAdminWallets();
+    var wallets = await _getAdminWallets();
+    if (wallets.isEmpty) {
+      await _refreshChainDetail(force: true);
+      wallets = await _getAdminWallets();
+    }
     if (!mounted || wallets.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,16 +279,21 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     }
   }
 
-  bool get _isClosed => _accountInfo == null;
+  bool get _isClosed =>
+      _localStatus == InstitutionDuoqianLocalState.statusClosed;
 
   bool _shouldShowMenu() =>
-      _accountInfo?.status == DuoqianStatus.active || _isClosed;
+      _localStatus == InstitutionDuoqianLocalState.statusActive || _isClosed;
 
   Future<void> _removeFromLocal() async {
     await WalletIsar.instance.writeTxn((isar) async {
       await isar.duoqianInstitutionEntitys
           .deleteByDuoqianAddress(widget.institution.duoqianAddress);
       await InstitutionDuoqianLocalState.deleteStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+      );
+      await InstitutionDuoqianLocalState.deleteDetailInTxn(
         isar,
         widget.institution.duoqianAddress,
       );
@@ -238,7 +360,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
                 if (value == 'delete') _confirmDeleteLocal();
               },
               itemBuilder: (_) => [
-                if (_accountInfo?.status == DuoqianStatus.active)
+                if (_localStatus == InstitutionDuoqianLocalState.statusActive)
                   const PopupMenuItem(
                     value: 'close',
                     child: Row(
@@ -278,60 +400,27 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildContent(),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-            const SizedBox(height: 12),
-            const Text(
-              '加载失败',
-              style: TextStyle(fontSize: 16, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _error!,
-              style:
-                  const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
-      ),
+      body: _buildContent(),
     );
   }
 
   Widget _buildContent() {
     final duoqianSs58 = _hexToSs58(widget.institution.duoqianAddress);
     final info = _accountInfo;
-    final statusLabel = info == null
+    final statusLabel = _isClosed
         ? '已注销'
-        : info.status == DuoqianStatus.active
+        : _localStatus == InstitutionDuoqianLocalState.statusActive
             ? '已激活'
             : '待激活';
-    final statusColor = info == null
+    final statusColor = _isClosed
         ? AppTheme.textTertiary
-        : info.status == DuoqianStatus.active
+        : _localStatus == InstitutionDuoqianLocalState.statusActive
             ? AppTheme.success
             : AppTheme.warning;
 
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(_subjectIdentity);
-        await _load();
+        await _refreshChainDetail(force: true);
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -392,9 +481,10 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
             DuoqianTransferEntryCard(
               institution: widget.institution,
               isPersonal: false,
-              enabled: _accountInfo?.status == DuoqianStatus.active,
+              enabled:
+                  _localStatus == InstitutionDuoqianLocalState.statusActive,
               loadAdminWallets: _getAdminWallets,
-              onCreated: _load,
+              onCreated: () => _refreshChainDetail(force: true),
             ),
             const SizedBox(height: 16),
           ],

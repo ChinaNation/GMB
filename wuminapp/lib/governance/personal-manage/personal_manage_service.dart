@@ -218,6 +218,129 @@ class PersonalManageService {
     );
   }
 
+  /// 批量查询个人多签账户状态。
+  ///
+  /// 中文注释：多签列表页不能对每个账户逐个调用 [fetchPersonalAccount]。
+  /// 这里按 storage 依赖分阶段批量读取：先读账户与管理员主体，再批量读动态阈值。
+  Future<Map<String, DuoqianAccountInfo?>> fetchPersonalAccountsBatch(
+    Iterable<String> duoqianAddressHexList, {
+    int chunkSize = 100,
+  }) async {
+    final addresses = duoqianAddressHexList
+        .map(_normalizeHex)
+        .where((address) => address.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (addresses.isEmpty) return {};
+
+    final personalKeyByAddress = <String, String>{};
+    final adminKeyByAddress = <String, String>{};
+    final subjectIdByAddress = <String, Uint8List>{};
+    final firstRoundKeys = <String>[];
+
+    for (final address in addresses) {
+      final subjectId = PersonalManageStorageCodec.subjectIdFromAccountHex(
+        address,
+      );
+      final personalKey =
+          '0x${_hexEncode(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
+      final adminKey =
+          '0x${_hexEncode(PersonalManageStorageCodec.adminSubjectKey(subjectId))}';
+      subjectIdByAddress[address] = subjectId;
+      personalKeyByAddress[address] = personalKey;
+      adminKeyByAddress[address] = adminKey;
+      firstRoundKeys
+        ..add(personalKey)
+        ..add(adminKey);
+    }
+
+    final firstRoundValues = await _rpc.fetchStorageBatchChunked(
+      firstRoundKeys,
+      chunkSize: chunkSize,
+    );
+    final result = <String, DuoqianAccountInfo?>{};
+    final personalByAddress = <String, PersonalManageAccountSnapshot>{};
+    final adminByAddress = <String, PersonalManageAdminSnapshot>{};
+
+    for (final address in addresses) {
+      final personalData = firstRoundValues[personalKeyByAddress[address]];
+      final adminData = firstRoundValues[adminKeyByAddress[address]];
+      if (personalData == null || adminData == null) {
+        result[address] = null;
+        continue;
+      }
+      final personal =
+          PersonalManageStorageCodec.decodePersonalDuoqian(personalData);
+      final admin = PersonalManageStorageCodec.decodeAdminSubject(adminData);
+      if (personal == null || admin == null) {
+        result[address] = null;
+        continue;
+      }
+      personalByAddress[address] = personal;
+      adminByAddress[address] = admin;
+    }
+
+    final activeThresholdKeyByAddress = <String, String>{};
+    for (final entry in adminByAddress.entries) {
+      final subjectId = subjectIdByAddress[entry.key]!;
+      activeThresholdKeyByAddress[entry.key] =
+          '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
+        storageName: 'ActiveDynamicThresholds',
+        org: entry.value.org,
+        subjectId: subjectId,
+      ))}';
+    }
+    final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
+      activeThresholdKeyByAddress.values,
+      chunkSize: chunkSize,
+    );
+
+    final thresholdByAddress = <String, int?>{};
+    final pendingThresholdKeyByAddress = <String, String>{};
+    for (final entry in activeThresholdKeyByAddress.entries) {
+      final threshold = PersonalManageStorageCodec.decodeDynamicThreshold(
+        activeThresholdValues[entry.value],
+      );
+      thresholdByAddress[entry.key] = threshold;
+      if (threshold == null) {
+        final admin = adminByAddress[entry.key]!;
+        pendingThresholdKeyByAddress[entry.key] =
+            '0x${_hexEncode(PersonalManageStorageCodec.dynamicThresholdKey(
+          storageName: 'PendingDynamicThresholds',
+          org: admin.org,
+          subjectId: subjectIdByAddress[entry.key]!,
+        ))}';
+      }
+    }
+
+    if (pendingThresholdKeyByAddress.isNotEmpty) {
+      final pendingThresholdValues = await _rpc.fetchStorageBatchChunked(
+        pendingThresholdKeyByAddress.values,
+        chunkSize: chunkSize,
+      );
+      for (final entry in pendingThresholdKeyByAddress.entries) {
+        thresholdByAddress[entry.key] =
+            PersonalManageStorageCodec.decodeDynamicThreshold(
+          pendingThresholdValues[entry.value],
+        );
+      }
+    }
+
+    for (final address in addresses) {
+      final personal = personalByAddress[address];
+      final admin = adminByAddress[address];
+      if (personal == null || admin == null) continue;
+      result[address] = DuoqianAccountInfo(
+        adminCount: admin.adminCount,
+        threshold: thresholdByAddress[address],
+        adminPubkeys: admin.adminPubkeys,
+        status: _statusFromByte(personal.statusByte),
+      );
+    }
+
+    return result;
+  }
+
   Future<int?> _fetchPersonalDynamicThreshold({
     required int org,
     required Uint8List subjectId,
@@ -610,6 +733,11 @@ class PersonalManageService {
 
   static String _hexEncode(List<int> bytes) {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 
   Uint8List _hexDecode(String hex) {

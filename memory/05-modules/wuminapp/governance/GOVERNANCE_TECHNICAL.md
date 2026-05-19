@@ -637,6 +637,33 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 - 个人多签读取 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`。
 - 机构多签读取 `DuoqianInstitutionEntity` 和 `InstitutionDuoqianLocalState`。
 - 多签列表在首次点击 `多签` Tab 后构建，防止应用启动时提前触发多签账户发现。
+- 多签列表首屏只读本机 Isar，不等待链上账户状态查询、不等待 `AdminsChange::Subjects`
+  全量 discovery；链上刷新只能在后台更新局部状态。
+- 本地状态使用 `AppKvEntity.stringValue` 保存 `active / pending / closed`，
+  使用 `AppKvEntity.intValue` 记录最近成功链上同步时间。
+- 多签账户详情页必须 local-first：个人详情页读取 `PersonalDuoqianEntity`、
+  `PersonalDuoqianLocalState` 和 `personal_duoqian_detail:*`；机构详情页读取
+  `DuoqianInstitutionEntity`、`InstitutionDuoqianLocalState` 和
+  `institution_duoqian_detail:*`。这些都是本机持久化储存，不是内存缓存。
+- 详情页本机快照可直接显示名称、地址、本地状态、管理员公钥列表、阈值和余额快照；
+  链上只负责更新账户是否存在、Active/Pending 状态、管理员/阈值和 Active 余额。
+- 详情页进入时不得用全屏转圈等待 `fetchPersonalAccount()`、
+  `fetchDuoqianAccount()` 或 `InstitutionAdminService.fetchAdmins()`；
+  自动刷新必须复用 `fetchPersonalAccountsBatch([address])` /
+  `fetchDuoqianAccountsBatch([address])`，并受 TTL 控制。
+- 详情页不展示“同步中”类 UI。下拉刷新、转账提案创建返回、投票返回、关闭返回
+  才忽略 TTL 精准刷新当前账户；链上失败只保留本机已储存数据，不写成 Closed。
+- Active 账户 60 分钟内不自动重复查链；Pending / Closed 账户 10 分钟内不自动重复查链；
+  下拉刷新才忽略 TTL 强制刷新。
+- 自动 discovery 只允许首次进入多签 Tab 或本机钱包 pubkey fingerprint 变化时触发；
+  不做每日自动扫描，也不增加单独扫描按钮。
+- 下拉刷新先强制刷新已知账户状态，再强制执行个人和机构 discovery。
+- 创建、关闭、投票、删除返回时只刷新相关账户或本地记录，不重新扫描全部多签。
+- 个人多签状态刷新由 `PersonalManageService.fetchPersonalAccountsBatch()` 分阶段批量读取
+  `PersonalDuoqians / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
+- 机构多签状态刷新由 `DuoqianManageService.fetchDuoqianAccountsBatch()` 分阶段批量读取
+  `AddressRegisteredSfid / InstitutionAccounts / Subjects / ActiveDynamicThresholds / PendingDynamicThresholds`。
+- 两条批量路径都通过 `ChainRpc.fetchStorageBatchChunked()` 分块读取 storage，列表页不得逐个账户循环调用详情查询。
 - 右上角加号提供“新增个人多签 / 新增机构多签”两个入口。
 - 原交易页中的多签入口删除，交易页只保留普通链上支付和扫码支付。
 
@@ -685,6 +712,8 @@ PersonalManage ProposalData 解码、`PersonalManage::PersonalDuoqians` storage 
 | `lib/governance/personal-manage/personal_manage_service.dart` | PersonalManage 个人多签链上交互服务 |
 | `lib/governance/personal-manage/personal_manage_storage_codec.dart` | PersonalManage storage key 与 SCALE 解码 |
 | `lib/governance/personal-manage/personal_proposal_history_service.dart` | 个人多签提案历史聚合与 Isar 持久化 |
+| `lib/isar/wallet_isar.dart` | 多签本地状态和最近链上同步时间复用 `AppKvEntity` |
+| `lib/rpc/chain_rpc.dart` | 提供分块批量 storage 读取，供多签列表降低链上请求数量 |
 | `organization-manage/src/lib.rs` | SFID 注册机构多签登记、创建、关闭业务逻辑 |
 | `personal-manage/src/lib.rs` | 个人多签创建、关闭业务逻辑 |
 | `duoqian-transfer/src/lib.rs` | 机构账户转账复用现有提案/投票/执行流程 |

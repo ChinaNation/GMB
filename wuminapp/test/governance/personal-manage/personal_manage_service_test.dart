@@ -16,6 +16,19 @@ class FakeChainRpc extends ChainRpc {
     requestedKeys.add(storageKeyHex);
     return responses[storageKeyHex];
   }
+
+  @override
+  Future<Map<String, Uint8List?>> fetchStorageBatchChunked(
+    Iterable<String> storageKeyHexList, {
+    int chunkSize = 100,
+  }) async {
+    final result = <String, Uint8List?>{};
+    for (final key in storageKeyHexList) {
+      requestedKeys.add(key);
+      result[key] = responses[key];
+    }
+    return result;
+  }
 }
 
 void main() {
@@ -184,6 +197,62 @@ void main() {
       expect(info.threshold, 2);
       expect(info.status, DuoqianStatus.active);
       expect(rpc.requestedKeys, [personalKey, adminKey, thresholdKey]);
+    });
+
+    test('fetchPersonalAccountsBatch reads accounts in staged storage batches',
+        () async {
+      final rpc = FakeChainRpc();
+      final service = PersonalManageService(chainRpc: rpc);
+      final firstAddress = '22' * 32;
+      final secondAddress = '33' * 32;
+      String personalKey(String address) =>
+          '0x${hexOf(PersonalManageStorageCodec.personalDuoqiansKey(address))}';
+      String adminKey(String address) =>
+          '0x${hexOf(PersonalManageStorageCodec.adminSubjectKey(
+            PersonalManageStorageCodec.subjectIdFromAccountHex(address),
+          ))}';
+      String thresholdKey(String address, String storageName) =>
+          '0x${hexOf(PersonalManageStorageCodec.dynamicThresholdKey(
+            storageName: storageName,
+            org: 3,
+            subjectId: PersonalManageStorageCodec.subjectIdFromAccountHex(
+              address,
+            ),
+          ))}';
+
+      rpc.responses[personalKey(firstAddress)] = personalAccountBytes();
+      rpc.responses[personalKey(secondAddress)] = personalAccountBytes();
+      rpc.responses[adminKey(firstAddress)] = adminSubjectBytes(
+        admin1: List<int>.filled(32, 0xaa),
+        admin2: List<int>.filled(32, 0xbb),
+      );
+      rpc.responses[adminKey(secondAddress)] = adminSubjectBytes(
+        admin1: List<int>.filled(32, 0xcc),
+        admin2: List<int>.filled(32, 0xdd),
+      );
+      rpc.responses[thresholdKey(firstAddress, 'ActiveDynamicThresholds')] =
+          Uint8List.fromList(u32Le(2));
+      rpc.responses[thresholdKey(secondAddress, 'PendingDynamicThresholds')] =
+          Uint8List.fromList(u32Le(2));
+
+      final infos = await service.fetchPersonalAccountsBatch([
+        firstAddress,
+        secondAddress,
+      ]);
+
+      expect(infos[firstAddress]!.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+      expect(infos[secondAddress]!.adminPubkeys, ['cc' * 32, 'dd' * 32]);
+      expect(infos[firstAddress]!.threshold, 2);
+      expect(infos[secondAddress]!.threshold, 2);
+      expect(rpc.requestedKeys, [
+        personalKey(firstAddress),
+        adminKey(firstAddress),
+        personalKey(secondAddress),
+        adminKey(secondAddress),
+        thresholdKey(firstAddress, 'ActiveDynamicThresholds'),
+        thresholdKey(secondAddress, 'ActiveDynamicThresholds'),
+        thresholdKey(secondAddress, 'PendingDynamicThresholds'),
+      ]);
     });
 
     test('describes in-block PersonalManage dispatch failure', () {
