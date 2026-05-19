@@ -350,9 +350,9 @@ WUMIN_QR_V1|system|challenge|expires_at
 - `LoginReplayEntity`
 - `AppKvEntity`
 
-`LocalTxEntity` 只记录本机钱包进入 wuminapp 后的余额变化流水，不补扫导入前历史；`WalletTxSyncCursorEntity` 只记录 finalized 补同步游标，newHeads 只用于把当前区块内命中的流水先标记为 `inBlock`。
+`LocalTxEntity` 只记录本机钱包进入 wuminapp 后的余额变化流水，不补扫导入前历史；`WalletTxSyncCursorEntity` 只记录 finalized 补同步游标，newHeads 只用于把当前区块内命中的流水先标记为 `inBlock`，不得把 best/latest block 当成 finalized。
 
-当前 schema 版本：`wallet.data.schema.version = 2`。
+当前 schema 版本：`wallet.data.schema.version = 3`。v3 会清空旧 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`，从当前本机时刻重新记录交易流水。
 
 ### 5.3 偏好层（SharedPreferences）
 

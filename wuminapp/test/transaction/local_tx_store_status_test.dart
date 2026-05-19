@@ -19,27 +19,23 @@ void main() {
   });
 
   test('本机转出记录按 pending -> inBlock -> finalized 升级且不重复', () async {
-    final pending = LocalTxEntity()
-      ..recordKey = LocalTxStore.pendingRecordKey(fromPubkey, '0xabc')
-      ..walletAddress = fromAddress
-      ..walletPubkeyHex = fromPubkey
-      ..type = 'transfer'
-      ..amountDeltaFen = '-101'
-      ..transferAmountFen = '100'
-      ..feeFen = '1'
-      ..counterpartyAddress = toAddress
-      ..fromAddress = fromAddress
-      ..toAddress = toAddress
-      ..status = LocalTxStore.statusPending
-      ..source = 'local_submit'
-      ..txHash = '0xabc'
-      ..createdAtMillis = 1;
-
-    await LocalTxStore.upsert(pending);
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      walletAddress: fromAddress,
+      walletPubkeyHex: fromPubkey,
+      txHash: '0xabc',
+      amountDeltaFen: '-101',
+      transferAmountFen: '100',
+      feeFen: '1',
+      counterpartyAddress: toAddress,
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      usedNonce: 7,
+      createdAtMillis: 1,
+    );
     await LocalTxStore.markLocalSubmitInBlock(
       walletPubkeyHex: fromPubkey,
       txHash: '0xabc',
-      blockHash: '0x11',
+      blockHash: '0x22',
     );
 
     var records = await LocalTxStore.queryByWalletPubkey(fromPubkey);
@@ -70,6 +66,47 @@ void main() {
     expect(records.single.amountDeltaFen, '-101');
     expect(records.single.txHash, '0xabc');
     expect(records.single.confirmedAtMillis, isNotNull);
+  });
+
+  test('区块事件先到时，本机提交记录按同区块同转账合并为一条', () async {
+    final eventKey = LocalTxStore.blockEventRecordKey(fromPubkey, '0x44', 2);
+    await LocalTxStore.upsertBlockTransferEvent(
+      walletAddress: fromAddress,
+      walletPubkeyHex: fromPubkey,
+      recordKey: eventKey,
+      status: LocalTxStore.statusInBlock,
+      amountDeltaFen: '-210',
+      transferAmountFen: '210',
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      counterpartyAddress: toAddress,
+      blockNumber: 11,
+      blockHash: '0x44',
+      eventIndex: 2,
+    );
+
+    await LocalTxStore.upsertLocalSubmitTransfer(
+      walletAddress: fromAddress,
+      walletPubkeyHex: fromPubkey,
+      txHash: '0xdef',
+      amountDeltaFen: '-220',
+      transferAmountFen: '210',
+      feeFen: '10',
+      counterpartyAddress: toAddress,
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      usedNonce: 8,
+      createdAtMillis: 2,
+      blockHash: '0x44',
+    );
+
+    final records = await LocalTxStore.queryByWalletPubkey(fromPubkey);
+    expect(records, hasLength(1));
+    expect(records.single.recordKey, eventKey);
+    expect(records.single.status, LocalTxStore.statusInBlock);
+    expect(records.single.amountDeltaFen, '-220');
+    expect(records.single.feeFen, '10');
+    expect(records.single.txHash, '0xdef');
   });
 
   test('收款钱包先写入 inBlock 收入记录，finalized 再升级同一条记录', () async {
@@ -114,5 +151,45 @@ void main() {
     expect(records, hasLength(1));
     expect(records.single.status, LocalTxStore.statusFinalized);
     expect(records.single.confirmedAtMillis, isNotNull);
+  });
+
+  test('同一区块同一收入事件重复处理时只升级状态不新增记录', () async {
+    final firstKey = LocalTxStore.blockEventRecordKey(toPubkey, '0x55', 5);
+    await LocalTxStore.upsertBlockTransferEvent(
+      walletAddress: toAddress,
+      walletPubkeyHex: toPubkey,
+      recordKey: firstKey,
+      status: LocalTxStore.statusInBlock,
+      amountDeltaFen: '210',
+      transferAmountFen: '210',
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      counterpartyAddress: fromAddress,
+      blockNumber: 12,
+      blockHash: '0x55',
+      eventIndex: 5,
+    );
+
+    final secondKey = LocalTxStore.blockEventRecordKey(toPubkey, '0x55', 6);
+    await LocalTxStore.upsertBlockTransferEvent(
+      walletAddress: toAddress,
+      walletPubkeyHex: toPubkey,
+      recordKey: secondKey,
+      status: LocalTxStore.statusFinalized,
+      amountDeltaFen: '210',
+      transferAmountFen: '210',
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      counterpartyAddress: fromAddress,
+      blockNumber: 12,
+      blockHash: '0x55',
+      eventIndex: 6,
+    );
+
+    final records = await LocalTxStore.queryByWalletPubkey(toPubkey);
+    expect(records, hasLength(1));
+    expect(records.single.recordKey, firstKey);
+    expect(records.single.status, LocalTxStore.statusFinalized);
+    expect(records.single.amountDeltaFen, '210');
   });
 }

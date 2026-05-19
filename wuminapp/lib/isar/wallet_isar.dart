@@ -899,7 +899,7 @@ class WalletIsarMigration {
   static const String _kSchemaVersion = 'wallet.data.schema.version';
 
   /// 当前 schema 版本。开发阶段直接覆盖，不做增量迁移。
-  static const int currentSchemaVersion = 2;
+  static const int currentSchemaVersion = 3;
 
   static Future<void> ensureMigrated(Isar isar) async {
     await _ensureSettingsRow(isar);
@@ -908,6 +908,13 @@ class WalletIsarMigration {
       return;
     }
     await isar.writeTxn(() async {
+      if (version < 3) {
+        // 中文注释：三段交易状态上线前的本机流水可能已经把 best block
+        // 误标为 finalized，且 newHeads/finalized 去重规则不完整。旧记录
+        // 不作为账本真源，升级到 v3 时直接清空，从当前本机时刻重新记录。
+        await isar.localTxEntitys.clear();
+        await isar.walletTxSyncCursorEntitys.clear();
+      }
       final entity = AppKvEntity()
         ..key = _kSchemaVersion
         ..intValue = currentSchemaVersion

@@ -160,7 +160,7 @@ lib/
 2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `Balances::Transfer` 写成 `inBlock`，监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / duoqian_transfer`；列表方向由金额正负号推导。
-5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，区块事件按同钱包、同发送方、同接收方、同转账本金合并本机提交记录，避免重复显示。
+5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
 6. 删除钱包时同步删除该 `walletPubkeyHex` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
 7. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
 
@@ -260,17 +260,17 @@ lib/
 
 钱包详情页和交易记录页面直接复用 `LocalTxStore`（Isar `LocalTxEntity`），按 `walletPubkeyHex` 过滤。
 
-- 本机提交普通转账成功后先写入 `source=local_submit / status=pending` 记录，用于立即反馈支出
+- 本机提交普通转账成功后通过 `LocalTxStore.upsertLocalSubmitTransfer()` 写入 `source=local_submit / status=pending` 记录，用于立即反馈支出；如果区块事件已经先写入，则合并手续费、txHash 和 nonce，不新增第二条
 - 交易池 included 回调先把本机提交记录升级为 `status=inBlock`；newHeads 命中收入或支出事件时写入 `source=chain_event / status=inBlock`
-- finalized 区块事件监听命中后升级同一条区块事件记录为 `status=finalized`，并把匹配的本机提交记录合并为 finalized
+- finalized 区块事件监听命中后升级同一条区块事件记录为 `status=finalized`，并把匹配的本机提交记录合并为 finalized；该升级只能来自 finalized 高度，不能来自 best/latest 高度
 - 钱包详情页展示最近 5 条，点击"交易记录"进入完整列表
 - `txHash` 只作为本机 pending 提交标识；单条链上流水的唯一定位以 `recordKey` 为准
 
 ## 6. 迁移与清理策略
 
-当前 schema：`wallet.data.schema.version = 1`。
+当前 schema：`wallet.data.schema.version = 3`。
 
-开发阶段直接覆盖，不做增量迁移。启动时仅确保 settings 行存在并更新 schema 版本标记。
+开发阶段直接覆盖，不做增量迁移。v3 会清空旧 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`，丢弃此前错误流水和游标；启动时确保 settings 行存在并更新 schema 版本标记。
 
 ## 7. 安全边界
 

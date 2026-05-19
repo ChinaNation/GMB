@@ -89,6 +89,92 @@ class LocalTxStore {
     });
   }
 
+  /// 写入本机发起的普通转账记录。
+  ///
+  /// 中文注释：交易池和区块事件可能先于页面本地写入返回。这里先查是否
+  /// 已有同钱包、同发送方、同接收方、同本金的区块事件记录；若有，直接
+  /// 合并手续费、txHash 和 nonce，避免“本金事件 + 本机扣费记录”显示两条。
+  static Future<void> upsertLocalSubmitTransfer({
+    required String walletAddress,
+    required String walletPubkeyHex,
+    required String txHash,
+    required String amountDeltaFen,
+    required String transferAmountFen,
+    required String feeFen,
+    required String counterpartyAddress,
+    required String fromAddress,
+    required String toAddress,
+    required int usedNonce,
+    required int createdAtMillis,
+    String? blockHash,
+  }) async {
+    final pubkey = normalizePubkey(walletPubkeyHex);
+    final normalizedTxHash = txHash.toLowerCase();
+    final pendingKey = pendingRecordKey(pubkey, normalizedTxHash);
+    final normalizedBlockHash = blockHash == null || blockHash.isEmpty
+        ? null
+        : normalizeBlockHash(blockHash);
+    await WalletIsar.instance.writeTxn((isar) async {
+      final existingPending = await isar.localTxEntitys
+          .where()
+          .recordKeyEqualTo(pendingKey)
+          .findFirst();
+      if (existingPending != null) {
+        existingPending
+          ..walletAddress = walletAddress
+          ..walletPubkeyHex = pubkey
+          ..type = 'transfer'
+          ..amountDeltaFen = amountDeltaFen
+          ..transferAmountFen = transferAmountFen
+          ..feeFen = feeFen
+          ..counterpartyAddress = counterpartyAddress
+          ..fromAddress = fromAddress
+          ..toAddress = toAddress
+          ..status = _mergeStatus(existingPending.status, statusPending)
+          ..source = 'local_submit'
+          ..txHash = normalizedTxHash
+          ..usedNonce = usedNonce
+          ..createdAtMillis = existingPending.createdAtMillis
+          ..failureReason = null;
+        await isar.localTxEntitys.put(existingPending);
+        return;
+      }
+
+      final existingEvent = normalizedBlockHash == null
+          ? null
+          : await _findSemanticBlockTransferInTxn(
+              isar,
+              walletPubkeyHex: pubkey,
+              blockNumber: null,
+              blockHash: normalizedBlockHash,
+              fromAddress: fromAddress,
+              toAddress: toAddress,
+              transferAmountFen: transferAmountFen,
+              extrinsicIndex: null,
+              eventIndex: null,
+            );
+      final entity = existingEvent ?? LocalTxEntity();
+      entity
+        ..recordKey = existingEvent?.recordKey ?? pendingKey
+        ..walletAddress = walletAddress
+        ..walletPubkeyHex = pubkey
+        ..type = 'transfer'
+        ..amountDeltaFen = amountDeltaFen
+        ..transferAmountFen = transferAmountFen
+        ..feeFen = feeFen
+        ..counterpartyAddress = counterpartyAddress
+        ..fromAddress = fromAddress
+        ..toAddress = toAddress
+        ..status = _mergeStatus(existingEvent?.status, statusPending)
+        ..source = 'local_submit'
+        ..txHash = normalizedTxHash
+        ..usedNonce = usedNonce
+        ..createdAtMillis = existingEvent?.createdAtMillis ?? createdAtMillis
+        ..failureReason = null;
+      await isar.localTxEntitys.put(entity);
+    });
+  }
+
   /// 写入链上区块转账事件；如能匹配本机发起记录，则更新原记录。
   ///
   /// 中文注释：钱包流水状态分三段：
@@ -138,6 +224,46 @@ class LocalTxStore {
               : existing.confirmedAtMillis
           ..failureReason = null;
         await isar.localTxEntitys.put(existing);
+        return;
+      }
+
+      final semanticExisting = await _findSemanticBlockTransferInTxn(
+        isar,
+        walletPubkeyHex: pubkey,
+        blockNumber: blockNumber,
+        blockHash: normalizedBlockHash,
+        fromAddress: fromAddress,
+        toAddress: toAddress,
+        transferAmountFen: transferAmountFen,
+        extrinsicIndex: extrinsicIndex,
+        eventIndex: eventIndex,
+      );
+      if (semanticExisting != null) {
+        semanticExisting
+          ..recordKey = semanticExisting.recordKey.contains(':pending:')
+              ? recordKey
+              : semanticExisting.recordKey
+          ..walletAddress = walletAddress
+          ..walletPubkeyHex = pubkey
+          ..amountDeltaFen = semanticExisting.feeFen != null
+              ? semanticExisting.amountDeltaFen
+              : amountDeltaFen
+          ..transferAmountFen =
+              semanticExisting.transferAmountFen ?? transferAmountFen
+          ..fromAddress = semanticExisting.fromAddress ?? fromAddress
+          ..toAddress = semanticExisting.toAddress ?? toAddress
+          ..counterpartyAddress =
+              semanticExisting.counterpartyAddress ?? counterpartyAddress
+          ..status = _mergeStatus(semanticExisting.status, status)
+          ..blockNumber = blockNumber
+          ..blockHash = normalizedBlockHash
+          ..eventIndex = semanticExisting.eventIndex ?? eventIndex
+          ..extrinsicIndex = semanticExisting.extrinsicIndex ?? extrinsicIndex
+          ..confirmedAtMillis = status == statusFinalized
+              ? (confirmedAtMillis ?? now)
+              : semanticExisting.confirmedAtMillis
+          ..failureReason = null;
+        await isar.localTxEntitys.put(semanticExisting);
         return;
       }
 
@@ -240,6 +366,49 @@ class LocalTxStore {
           (record.status == statusPending || record.status == statusInBlock)) {
         return record;
       }
+    }
+    return null;
+  }
+
+  static Future<LocalTxEntity?> _findSemanticBlockTransferInTxn(
+    Isar isar, {
+    required String walletPubkeyHex,
+    required int? blockNumber,
+    required String? blockHash,
+    required String fromAddress,
+    required String toAddress,
+    required String transferAmountFen,
+    required int? extrinsicIndex,
+    required int? eventIndex,
+  }) async {
+    final records = await isar.localTxEntitys
+        .filter()
+        .walletPubkeyHexEqualTo(walletPubkeyHex)
+        .typeEqualTo('transfer')
+        .findAll();
+    for (final record in records) {
+      if (record.fromAddress != fromAddress ||
+          record.toAddress != toAddress ||
+          record.transferAmountFen != transferAmountFen) {
+        continue;
+      }
+      if (blockHash != null && record.blockHash != null) {
+        if (normalizeBlockHash(record.blockHash!) != blockHash) continue;
+      }
+      if (blockNumber != null &&
+          record.blockNumber != null &&
+          record.blockNumber != blockNumber) {
+        continue;
+      }
+      if (extrinsicIndex != null &&
+          record.extrinsicIndex != null &&
+          record.extrinsicIndex != extrinsicIndex) {
+        continue;
+      }
+      if (record.status == statusPending && record.source != 'local_submit') {
+        continue;
+      }
+      return record;
     }
     return null;
   }
