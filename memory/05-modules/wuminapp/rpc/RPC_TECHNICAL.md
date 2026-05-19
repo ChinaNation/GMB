@@ -14,7 +14,7 @@
 - 提供轻节点状态快照等逐步收口中的 typed capability
 - 链上状态查询（余额、nonce、metadata 等）
 - 链上交易构造与提交（转账、未来的投票/提案）
-- 钱包交易流水增量监听：从 finalized 区块读取 `System.Events`，只记录本机钱包开始跟踪后的余额变化
+- 钱包交易流水增量监听：从 newHeads/finalizedHeads 读取 `System.Events`，只记录本机钱包开始跟踪后的余额变化
 
 约束：所有链上通信必须通过本模块，业务模块不直接建立 RPC 连接。
 
@@ -29,7 +29,7 @@
 
 ```text
 lib/rpc/
-├── chain_tx_monitor.dart← 业务：钱包 finalized 区块事件监听 + 本地流水写入
+├── chain_tx_monitor.dart← 业务：钱包区块事件监听 + 本地流水写入
 ├── chain_rpc.dart       ← 底层：节点连接管理 + JSON-RPC 方法
 ├── onchain.dart         ← 业务：extrinsic 构造 + 转账 + 交易确认
 ├── rpc.dart             ← barrel export
@@ -228,7 +228,7 @@ Call data 格式：`[pallet_index=2] [call_index=3] [0x00 + dest_32bytes] [compa
 
 ### 7.4 普通转账提交后的确认口径
 
-`OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 pending 流水，confirmed 状态由 `ChainTxMonitor` 读取 finalized 区块 `System.Events` 后写入。
+`OnchainRpc` 不再提供 nonce 轮询确认 API。普通转账提交后先写本机 `pending` 流水，交易池 watch 收到 included 后升级为 `inBlock`；`ChainTxMonitor` 读取 finalized 区块 `System.Events` 后升级为 `finalized`。
 
 > 投票类交易同样不得使用 nonce 推进判定成功。内部投票必须读
 > `InternalVote::InternalVotesByAccount`，联合投票必须读
@@ -290,17 +290,21 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 ```text
 钱包新建/导入本机
   → 建立 WalletTxSyncCursorEntity，起点为当前 finalized 区块
+new head 到达
+  → 读取该区块 System.Events
+  → 解析 Balances::Transfer
+  → 命中本机钱包时写入/升级 LocalTxEntity(status=inBlock)
 finalized head 到达
   → 按游标读取区块 System.Events
   → 解析 Balances::Transfer
-  → 命中本机钱包时写入 LocalTxEntity
+  → 命中本机钱包时写入/升级 LocalTxEntity(status=finalized)
 ```
 
 约束：
 
 - 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
 - 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
-- `type` 只保存业务类型；confirmed 记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录唯一键为 `walletPubkeyHex:pending:txHash`。
+- `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`。
 - 单轮最多补齐 120 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路。
 - 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。
 

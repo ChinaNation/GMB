@@ -74,7 +74,7 @@ class SmoldotClientManager {
 
         // 中文注释：轻节点固有的"老区块体不可得"是预期边界情况，
         // 不属于"瞬断"也不应降级健康状态；上层钱包流水已改为读
-        // finalized 区块事件，不再逐块拉旧区块 body 搜索交易。
+        // 区块事件，不再逐块拉旧区块 body 搜索交易。
         final isLightClientBlockMiss =
             msg.contains('failed to download block body');
         if (isLightClientBlockMiss) {
@@ -627,7 +627,7 @@ class SmoldotClientManager {
   // 原用途:交易确认时逐块拉 body 按 extrinsic hash 搜索 txHash。
   // 因 substrate `MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2` 反滥用机制会对
   // 同一 (peer+hash+BODY) 请求超过 2 次直接返回空并 ban peer,把轻节点打死,
-  // 上层钱包流水已切换到 finalized 事件监听。smoldot-dart 层 binding 暂保留,
+  // 上层钱包流水已切换到区块事件监听。smoldot-dart 层 binding 暂保留,
   // 避免触动跨 FFI 边界;如后续也无人调用可一并移除。
 
   /// 原生提交已编码 extrinsic（必须完整同步）。

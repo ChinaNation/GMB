@@ -206,7 +206,7 @@ class ChainRpc {
   //
   // 原实现包装 `getBlockExtrinsics`(smoldot `chainHead_v1_body`)逐块拉 body
   // 并用 blake2_256 求每笔 extrinsic 哈希。因触发 substrate block-request
-  // 反滥用 ban 把轻节点打死,已整体下线。钱包交易流水改由 finalized 事件监听写入。
+  // 反滥用 ban 把轻节点打死,已整体下线。钱包交易流水改由区块事件监听写入。
 
   /// 获取运行时 metadata（含 registry，用于 extrinsic 编码）。结果缓存。
   Future<RuntimeMetadata> fetchMetadata() async {
@@ -338,10 +338,10 @@ class ChainRpc {
     }
   }
 
-  /// 后台观察一条交易的 mempool 状态,**所有状态都打日志**,被拒时立即结束。
+  /// 后台观察一条交易的交易池状态,**所有状态都打日志**。
   ///
-  /// 60 秒内未收到任何状态视为 timeout(smoldot 转发失败 / 全节点完全不响应),
-  /// 也打日志退出 — 这是排查"提交成功但链上没出块"的核心诊断输入。
+  /// 中文注释：普通钱包转账需要用 inBlock 回调把本机流水从 pending 升级为
+  /// inBlock，因此监听窗口要覆盖正常出块周期；被拒、已入块或超时都会结束。
   Future<void> _watchTxRejectInBackground(
     String hex,
     String txHashHex,
@@ -354,18 +354,18 @@ class ChainRpc {
           .subscribe('author_submitAndWatchExtrinsic', [hex]);
       final done = Completer<void>();
       var sawAnyStatus = false;
-      bailTimer = Timer(const Duration(seconds: 60), () {
+      bailTimer = Timer(const Duration(minutes: 20), () {
         if (!done.isCompleted) {
           if (!sawAnyStatus) {
             onWatchEvent?.call(const TxPoolWatchEvent(
               kind: TxPoolWatchKind.timeout,
-              description: '60 秒内未收到交易池状态，可能转发失败或交易被静默丢弃',
+              description: '20 分钟内未收到交易池状态，可能转发失败或交易被静默丢弃',
               raw: 'timeout',
             ));
             debugPrint(
-                '[ChainRpc.bgWatch] $txHashHex 60s timeout 未收到任何状态,可能 smoldot 转发失败或全节点静默 drop');
+                '[ChainRpc.bgWatch] $txHashHex 20m timeout 未收到任何状态,可能 smoldot 转发失败或全节点静默 drop');
           } else {
-            debugPrint('[ChainRpc.bgWatch] $txHashHex 60s 后结束后台监听,后续交由业务真源确认');
+            debugPrint('[ChainRpc.bgWatch] $txHashHex 20m 后结束后台监听,后续交由业务真源确认');
           }
           done.complete();
         }
@@ -383,6 +383,9 @@ class ChainRpc {
             if (cls == _TxResult.failure) {
               debugPrint(
                   '[ChainRpc.bgWatch] $txHashHex 被拒绝: ${_describeTxStatus(raw)}');
+              if (!done.isCompleted) done.complete();
+            } else if (watchEvent.isIncluded) {
+              debugPrint('[ChainRpc.bgWatch] $txHashHex 已入块，结束后台监听');
               if (!done.isCompleted) done.complete();
             }
           } catch (e) {

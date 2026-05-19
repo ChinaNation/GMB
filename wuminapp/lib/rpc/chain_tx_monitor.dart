@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:polkadart/polkadart.dart' show Hasher;
+import 'package:polkadart/polkadart.dart' show Events, Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 
 import 'chain_event_subscription.dart';
@@ -10,11 +10,35 @@ import 'smoldot_client.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/transaction/shared/local_tx_store.dart';
 
+enum _TransferEventStatus {
+  inBlock,
+  finalized;
+
+  String get storeStatus {
+    return switch (this) {
+      _TransferEventStatus.inBlock => LocalTxStore.statusInBlock,
+      _TransferEventStatus.finalized => LocalTxStore.statusFinalized,
+    };
+  }
+}
+
+class _DecodedTransferEvent {
+  const _DecodedTransferEvent({
+    required this.fromHex,
+    required this.toHex,
+    required this.amountFen,
+  });
+
+  final String fromHex;
+  final String toHex;
+  final String amountFen;
+}
+
 /// 链上交易监控服务（本机增量流水模式）。
 ///
 /// 中文注释：wuminapp 不查询钱包导入前历史，也不让全节点替手机维护交易索引。
-/// 本服务只从钱包进入本机后的游标开始，按 finalized 区块小步同步 System.Events，
-/// 将与本机钱包有关的余额变化写入 Isar，本地页面只读缓存。
+/// 本服务用 newHeads 先写入 inBlock 流水，再按 finalized 游标小步同步
+/// System.Events 并升级为 finalized，本地页面只读 Isar 缓存。
 class ChainTxMonitor {
   ChainTxMonitor._();
   static final ChainTxMonitor instance = ChainTxMonitor._();
@@ -23,7 +47,9 @@ class ChainTxMonitor {
   final ChainRpc _chainRpc = ChainRpc();
   StreamSubscription<ChainEvent>? _listener;
   Future<void>? _syncInflight;
+  Timer? _subscriptionRetryTimer;
   bool _running = false;
+  bool _subscriptionConnected = false;
 
   /// 当前监控的钱包：pubkeyHex(小写，不含 0x) → SS58 地址。
   final Map<String, String> _walletAddressByPubkey = {};
@@ -39,7 +65,7 @@ class ChainTxMonitor {
 
   // ──── 已知事件的 pallet_index + event_index ────
 
-  /// Balances::Transfer (pallet=2, event=2)
+  /// Balances::Transfer (pallet=2, event=2)，仅作为 metadata 解码失败后的兜底。
   static const int _balancesPallet = 2;
   static const int _transferEvent = 2;
 
@@ -70,11 +96,15 @@ class ChainTxMonitor {
 
   /// 启动监控。
   Future<void> start() async {
-    if (_running) return;
+    if (_running) {
+      _ensureSubscription();
+      unawaited(_syncToLatest());
+      return;
+    }
     _running = true;
 
-    _subscription.connect();
     _listener = _subscription.events.listen(_onEvent);
+    _ensureSubscription();
     debugPrint('[TxMonitor] 交易监控已启动，监控 ${_walletAddressByPubkey.length} 个钱包');
 
     // 中文注释：启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
@@ -85,6 +115,9 @@ class ChainTxMonitor {
   /// 停止监控。
   void stop() {
     _running = false;
+    _subscriptionConnected = false;
+    _subscriptionRetryTimer?.cancel();
+    _subscriptionRetryTimer = null;
     _listener?.cancel();
     _listener = null;
     _subscription.disconnect();
@@ -110,11 +143,43 @@ class ChainTxMonitor {
 
   // ──── 同步调度 ────
 
+  void _ensureSubscription() {
+    if (!_running) return;
+    if (_subscriptionConnected) return;
+
+    final connected = _subscription.connect();
+    if (connected) {
+      _subscriptionConnected = true;
+      _subscriptionRetryTimer?.cancel();
+      _subscriptionRetryTimer = null;
+      unawaited(_syncToLatest());
+      return;
+    }
+
+    _subscriptionRetryTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_running) return;
+      if (_subscriptionConnected) return;
+      if (_subscription.connect()) {
+        _subscriptionConnected = true;
+        _subscriptionRetryTimer?.cancel();
+        _subscriptionRetryTimer = null;
+        unawaited(_syncToLatest());
+      }
+    });
+  }
+
   Future<void> _onEvent(ChainEvent event) async {
     if (!_running || _walletAddressByPubkey.isEmpty) return;
     final blockNumber = event.blockNumber;
     if (blockNumber == null) return;
-    await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
+    switch (event.type) {
+      case ChainEventType.newBlock:
+        await _processBlock(blockNumber, status: _TransferEventStatus.inBlock);
+        break;
+      case ChainEventType.newFinalizedBlock:
+        await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
+        break;
+    }
   }
 
   Future<void> _syncToLatest() async {
@@ -177,7 +242,10 @@ class ChainTxMonitor {
         return;
       }
 
-      final ok = await _processBlock(block);
+      final ok = await _processBlock(
+        block,
+        status: _TransferEventStatus.finalized,
+      );
       if (!ok) return;
 
       for (final pubkey in _walletAddressByPubkey.keys) {
@@ -194,7 +262,10 @@ class ChainTxMonitor {
     }
   }
 
-  Future<bool> _processBlock(int blockNumber) async {
+  Future<bool> _processBlock(
+    int blockNumber, {
+    required _TransferEventStatus status,
+  }) async {
     try {
       final blockHashHex =
           await SmoldotClientManager.instance.getBlockHash(blockNumber);
@@ -217,6 +288,7 @@ class ChainTxMonitor {
         eventsBytes,
         blockNumber,
         blockHashHex,
+        status: status,
       );
       return true;
     } catch (e) {
@@ -229,8 +301,53 @@ class ChainTxMonitor {
   Future<void> _decodeTransferEvents(
     Uint8List data,
     int blockNumber,
-    String blockHash,
-  ) async {
+    String blockHash, {
+    required _TransferEventStatus status,
+  }) async {
+    try {
+      final keyHex = '0x${_hexEncode(_eventsStorageKey)}';
+      final metadata = await _chainRpc.fetchMetadata();
+      final events = Events.fromJson({
+        'changes': [
+          [keyHex, '0x${_hexEncode(data)}']
+        ],
+      }, metadata.chainInfo);
+
+      for (var index = 0; index < events.eventRecord.length; index++) {
+        final record = events.eventRecord[index];
+        final transfer = _readBalancesTransfer(record.event);
+        if (transfer == null) continue;
+        final extrinsicIndex = _readExtrinsicIndex(record.phase);
+        await _writeTransferForBothSides(
+          fromHex: transfer.fromHex,
+          toHex: transfer.toHex,
+          transferAmountFen: transfer.amountFen,
+          blockNumber: blockNumber,
+          blockHash: blockHash,
+          eventRecordIndex: index,
+          extrinsicIndex: extrinsicIndex,
+          status: status,
+        );
+      }
+      return;
+    } catch (e) {
+      debugPrint('[TxMonitor] metadata 事件解码失败，使用兜底解析: $e');
+    }
+
+    await _decodeTransferEventsFallback(
+      data,
+      blockNumber,
+      blockHash,
+      status: status,
+    );
+  }
+
+  Future<void> _decodeTransferEventsFallback(
+    Uint8List data,
+    int blockNumber,
+    String blockHash, {
+    required _TransferEventStatus status,
+  }) async {
     var offset = 0;
     var eventRecordIndex = 0;
     if (data.isEmpty) return;
@@ -264,34 +381,16 @@ class ChainTxMonitor {
           final toHex = _hexEncode(to);
           final transferAmountFen = _readU128LE(amountBytes, 0).toString();
 
-          if (fromHex != toHex) {
-            await _writeWalletTransferIfMatched(
-              walletPubkeyHex: toHex,
-              blockNumber: blockNumber,
-              blockHash: blockHash,
-              eventRecordIndex: eventRecordIndex,
-              extrinsicIndex: extrinsicIndex,
-              amountDeltaFen: transferAmountFen,
-              transferAmountFen: transferAmountFen,
-              fromAddress: _pubkeyToSs58(from),
-              toAddress: _walletAddressByPubkey[toHex] ?? _pubkeyToSs58(to),
-              counterpartyAddress: _pubkeyToSs58(from),
-            );
-
-            await _writeWalletTransferIfMatched(
-              walletPubkeyHex: fromHex,
-              blockNumber: blockNumber,
-              blockHash: blockHash,
-              eventRecordIndex: eventRecordIndex,
-              extrinsicIndex: extrinsicIndex,
-              amountDeltaFen: LocalTxStore.negateFen(transferAmountFen),
-              transferAmountFen: transferAmountFen,
-              fromAddress:
-                  _walletAddressByPubkey[fromHex] ?? _pubkeyToSs58(from),
-              toAddress: _pubkeyToSs58(to),
-              counterpartyAddress: _pubkeyToSs58(to),
-            );
-          }
+          await _writeTransferForBothSides(
+            fromHex: fromHex,
+            toHex: toHex,
+            transferAmountFen: transferAmountFen,
+            blockNumber: blockNumber,
+            blockHash: blockHash,
+            eventRecordIndex: eventRecordIndex,
+            extrinsicIndex: extrinsicIndex,
+            status: status,
+          );
 
           offset = _skipTopics(data, offset);
           eventRecordIndex++;
@@ -299,10 +398,156 @@ class ChainTxMonitor {
         }
       }
 
+      final skipped = _skipKnownEventPayload(data, offset, palletIndex,
+          eventIndex: eventIndex);
+      if (skipped != null) {
+        offset = _skipTopics(data, skipped);
+        eventRecordIndex++;
+        continue;
+      }
+
       // 未识别事件：尝试跳到下一个 EventRecord。
       offset = _skipToNextEvent(data, offset);
       eventRecordIndex++;
     }
+  }
+
+  Future<void> _writeTransferForBothSides({
+    required String fromHex,
+    required String toHex,
+    required String transferAmountFen,
+    required int blockNumber,
+    required String blockHash,
+    required int eventRecordIndex,
+    required int? extrinsicIndex,
+    required _TransferEventStatus status,
+  }) async {
+    if (fromHex == toHex) return;
+    final fromBytes = _hexDecode(fromHex);
+    final toBytes = _hexDecode(toHex);
+    await _writeWalletTransferIfMatched(
+      walletPubkeyHex: toHex,
+      blockNumber: blockNumber,
+      blockHash: blockHash,
+      eventRecordIndex: eventRecordIndex,
+      extrinsicIndex: extrinsicIndex,
+      amountDeltaFen: transferAmountFen,
+      transferAmountFen: transferAmountFen,
+      fromAddress: _pubkeyToSs58(fromBytes),
+      toAddress: _walletAddressByPubkey[toHex] ?? _pubkeyToSs58(toBytes),
+      counterpartyAddress: _pubkeyToSs58(fromBytes),
+      status: status,
+    );
+
+    await _writeWalletTransferIfMatched(
+      walletPubkeyHex: fromHex,
+      blockNumber: blockNumber,
+      blockHash: blockHash,
+      eventRecordIndex: eventRecordIndex,
+      extrinsicIndex: extrinsicIndex,
+      amountDeltaFen: LocalTxStore.negateFen(transferAmountFen),
+      transferAmountFen: transferAmountFen,
+      fromAddress: _walletAddressByPubkey[fromHex] ?? _pubkeyToSs58(fromBytes),
+      toAddress: _pubkeyToSs58(toBytes),
+      counterpartyAddress: _pubkeyToSs58(toBytes),
+      status: status,
+    );
+  }
+
+  _DecodedTransferEvent? _readBalancesTransfer(Map<String, dynamic> event) {
+    final balances = event['Balances'] ?? event['balances'];
+    if (balances is! Map) return null;
+    final transfer = balances['Transfer'] ?? balances['transfer'];
+    if (transfer == null) return null;
+
+    dynamic from;
+    dynamic to;
+    dynamic amount;
+    if (transfer is Map) {
+      from = transfer['from'] ?? transfer['0'];
+      to = transfer['to'] ?? transfer['1'];
+      amount = transfer['amount'] ?? transfer['value'] ?? transfer['2'];
+      if ((from == null || to == null || amount == null) &&
+          transfer.values.length >= 3) {
+        final values = transfer.values.toList(growable: false);
+        from ??= values[0];
+        to ??= values[1];
+        amount ??= values[2];
+      }
+    } else if (transfer is List && transfer.length >= 3) {
+      from = transfer[0];
+      to = transfer[1];
+      amount = transfer[2];
+    }
+
+    final fromHex = _accountToPubkeyHex(from);
+    final toHex = _accountToPubkeyHex(to);
+    final amountFen = _eventAmountToFen(amount);
+    if (fromHex == null || toHex == null || amountFen == null) return null;
+    return _DecodedTransferEvent(
+      fromHex: fromHex,
+      toHex: toHex,
+      amountFen: amountFen,
+    );
+  }
+
+  int? _readExtrinsicIndex(Map<String, dynamic> phase) {
+    final value = phase['ApplyExtrinsic'] ?? phase['applyExtrinsic'];
+    if (value is int) return value;
+    if (value is BigInt) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  String? _accountToPubkeyHex(dynamic raw) {
+    if (raw is Uint8List) return _hexEncode(raw);
+    if (raw is List) {
+      final bytes = raw.whereType<int>().toList(growable: false);
+      if (bytes.length == 32) return _hexEncode(Uint8List.fromList(bytes));
+    }
+    if (raw is String) {
+      final text = raw.trim();
+      final hex = text.startsWith('0x') ? text.substring(2) : text;
+      final isHex = RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(hex);
+      if (isHex) return hex.toLowerCase();
+      try {
+        return _hexEncode(Uint8List.fromList(Keyring().decodeAddress(text)));
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  String? _eventAmountToFen(dynamic raw) {
+    if (raw is BigInt) return raw.toString();
+    if (raw is int) return raw.toString();
+    if (raw is String) return BigInt.tryParse(raw)?.toString();
+    return null;
+  }
+
+  int? _skipKnownEventPayload(
+    Uint8List data,
+    int offset,
+    int palletIndex, {
+    required int eventIndex,
+  }) {
+    // 中文注释：metadata 解码正常时不会走到这里；兜底分支只显式跳过
+    // 普通转账前后最常见的定长事件，避免旧版“向前扫描”误命中 payload 字节。
+    final oneAccountAndAmount = offset + 48 <= data.length ? offset + 48 : null;
+    if (palletIndex == _balancesPallet) {
+      if (eventIndex == 7 ||
+          eventIndex == 8 ||
+          eventIndex == 10 ||
+          eventIndex == 11) {
+        return oneAccountAndAmount;
+      }
+    }
+    // OnchainTransaction::FeePaid { who: AccountId, fee: u128 }
+    if (palletIndex == 4 && eventIndex == 0) {
+      return oneAccountAndAmount;
+    }
+    return null;
   }
 
   Future<void> _writeWalletTransferIfMatched({
@@ -316,19 +561,21 @@ class ChainTxMonitor {
     required String fromAddress,
     required String toAddress,
     required String counterpartyAddress,
+    required _TransferEventStatus status,
   }) async {
     final pubkey = LocalTxStore.normalizePubkey(walletPubkeyHex);
     final walletAddress = _walletAddressByPubkey[pubkey];
     if (walletAddress == null) return;
 
-    await LocalTxStore.upsertConfirmedTransferEvent(
+    await LocalTxStore.upsertBlockTransferEvent(
       walletAddress: walletAddress,
       walletPubkeyHex: pubkey,
-      recordKey: LocalTxStore.confirmedRecordKey(
+      recordKey: LocalTxStore.blockEventRecordKey(
         pubkey,
         blockHash,
         eventRecordIndex,
       ),
+      status: status.storeStatus,
       amountDeltaFen: amountDeltaFen,
       transferAmountFen: transferAmountFen,
       fromAddress: fromAddress,

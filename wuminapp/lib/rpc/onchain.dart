@@ -35,6 +35,7 @@ class OnchainRpc {
     required String toAddress,
     required double amountYuan,
     required Future<Uint8List> Function(Uint8List payload) sign,
+    TxPoolWatchCallback? onWatchEvent,
   }) async {
     final destAccountId = Keyring().decodeAddress(toAddress);
     final amountFen = BigInt.from((amountYuan * 100).round());
@@ -47,13 +48,14 @@ class OnchainRpc {
       fromAddress: fromAddress,
       signerPubkey: signerPubkey,
       sign: sign,
+      onWatchEvent: onWatchEvent,
     );
   }
 
   // 2026-04-23 整改:`findTxInRecentBlocks` 已删除。
   // 原实现逐块调 `fetchBlockExtrinsicHashes` → `getBlockExtrinsics`,
   // 触发 substrate block-request 反滥用机制(MAX_NUMBER_OF_SAME_REQUESTS_PER_PEER=2)
-  // 把轻节点 peer ban 掉。钱包交易流水改由 finalized 事件监听写入本地记录。
+  // 把轻节点 peer ban 掉。钱包交易流水改由区块事件监听写入本地记录。
 
   // ──── 手续费估算 ────
 

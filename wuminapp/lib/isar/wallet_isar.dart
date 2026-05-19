@@ -526,7 +526,7 @@ class LocalTxEntity {
   /// 单条钱包流水唯一键。
   ///
   /// 中文注释：钱包账户由 walletPubkeyHex 唯一，流水记录由 recordKey 唯一。
-  /// confirmed 记录使用 `walletPubkeyHex:blockHash:eventIndex`，pending 记录
+  /// 区块事件记录使用 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录
   /// 使用 `walletPubkeyHex:pending:txHash`，避免把 txHash 误当成单条流水唯一性。
   @Index(unique: true, replace: true)
   late String recordKey;
@@ -559,7 +559,7 @@ class LocalTxEntity {
   String? fromAddress;
   String? toAddress;
 
-  /// 状态：pending / confirmed / failed。
+  /// 状态：pending=已提交 / inBlock=已出块 / finalized=已确认 / failed=失败。
   late String status;
 
   /// 记录来源：local_submit / chain_event / resync。
@@ -587,7 +587,7 @@ class LocalTxEntity {
   @Index()
   late int createdAtMillis;
 
-  /// 确认时间（毫秒时间戳）。
+  /// 最终确认时间（毫秒时间戳）。
   int? confirmedAtMillis;
 
   /// 失败原因。
