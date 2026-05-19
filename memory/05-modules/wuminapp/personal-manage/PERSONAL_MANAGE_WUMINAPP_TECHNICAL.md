@@ -97,6 +97,9 @@ PersonalManage storage：
   阈值、余额和最近链上刷新时间；进入详情页先显示本地快照，不为了读取
   `PersonalManage::PersonalDuoqians`、`AdminsChange::Subjects` 或 `InternalVote`
   阈值而全屏等待。
+- 个人多签详情页 Active 余额使用 `lastBalanceRefreshAtMillis` 单独判断；若
+  `balanceYuan` 为空或余额时间过期，只静默读取余额，不重复拉账户状态、管理员和阈值。
+  列表页批量状态刷新不得覆盖已有余额快照。
 - 详情页不显示“同步中”类 UI；TTL 到期时静默刷新，用户下拉刷新、转账/投票/关闭
   返回时才强制刷新当前个人多签。链上失败保留本机快照，不覆盖为已注销。
 - Active 个人多签 60 分钟内不自动重复查链；Pending / Closed 个人多签
