@@ -16,6 +16,19 @@ class FakeChainRpc extends ChainRpc {
     requestedKeys.add(storageKeyHex);
     return responses[storageKeyHex];
   }
+
+  @override
+  Future<Map<String, Uint8List?>> fetchStorageBatchChunked(
+    Iterable<String> storageKeyHexList, {
+    int chunkSize = 100,
+  }) async {
+    final result = <String, Uint8List?>{};
+    for (final key in storageKeyHexList) {
+      requestedKeys.add(key);
+      result[key] = responses[key];
+    }
+    return result;
+  }
 }
 
 void main() {
@@ -110,5 +123,58 @@ void main() {
     expect(info.adminPubkeys, ['aa' * 32, 'bb' * 32]);
     expect(info.status, DuoqianStatus.active);
     expect(rpc.requestedKeys, [refKey, accountKey, adminKey, thresholdKey]);
+  });
+
+  test('fetchDuoqianAccountsBatch reads institution accounts in staged batches',
+      () async {
+    final rpc = FakeChainRpc();
+    final service = DuoqianManageService(chainRpc: rpc);
+    final address = '22' * 32;
+    final sfidNumber = Uint8List.fromList(utf8.encode('SFR-AH001-20260518'));
+    final accountName = Uint8List.fromList(utf8.encode('主账户'));
+
+    final refKey =
+        '0x${hexOf(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
+    final accountKey = '0x${hexOf(DuoqianStorageCodec.institutionAccountKey(
+      sfidNumber,
+      accountName,
+    ))}';
+    final adminKey = '0x${hexOf(DuoqianStorageCodec.adminSubjectKey(
+      DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(address),
+    ))}';
+    final activeThresholdKey =
+        '0x${hexOf(DuoqianStorageCodec.dynamicThresholdKey(
+      storageName: 'ActiveDynamicThresholds',
+      org: 5,
+      subjectId: DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+        address,
+      ),
+    ))}';
+
+    rpc.responses[refKey] = Uint8List.fromList([
+      ...compactVec('SFR-AH001-20260518'),
+      ...compactVec('主账户'),
+    ]);
+    rpc.responses[adminKey] = adminSubjectBytes(
+      admin1: List<int>.filled(32, 0xaa),
+      admin2: List<int>.filled(32, 0xbb),
+    );
+    rpc.responses[accountKey] = Uint8List.fromList([
+      ...List<int>.filled(32, 0xd1),
+      ...u128Le(BigInt.from(111)),
+      1,
+      1,
+      ...u32Le(100),
+    ]);
+    rpc.responses[activeThresholdKey] = Uint8List.fromList(u32Le(2));
+
+    final infos = await service.fetchDuoqianAccountsBatch([address]);
+
+    expect(infos[address]!.adminCount, 2);
+    expect(infos[address]!.threshold, 2);
+    expect(infos[address]!.adminPubkeys, ['aa' * 32, 'bb' * 32]);
+    expect(infos[address]!.status, DuoqianStatus.active);
+    expect(
+        rpc.requestedKeys, [refKey, accountKey, adminKey, activeThresholdKey]);
   });
 }

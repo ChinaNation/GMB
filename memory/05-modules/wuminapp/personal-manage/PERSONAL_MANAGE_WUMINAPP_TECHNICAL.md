@@ -80,7 +80,7 @@ PersonalManage storage：
 - 已注销详情页不显示余额，不再从创建提案快照显示旧入金金额，也不显示“未找到”。
 - 已注销详情页右上角三点菜单显示按钮“删除”；确认后删除
   `PersonalDuoqianEntity`、该账户全部 `PersonalDuoqianProposalEntity` 和本地状态键。
-- 链路异常只显示加载失败，不把网络失败写成已注销。
+- 链路异常不把网络失败写成已注销；详情页首屏不得因链上异常显示全屏加载失败。
 - 链上注销成功后 runtime 会清空多签账户余额并删除个人多签当前状态；同一钱包地址 +
   同一账户名再次创建仍派生同一地址，但会作为全新的当前账户注册。
 - 链上 votingengine 90 天终态提案清理保持不变，wuminapp 不修改链上清理周期。
@@ -89,6 +89,25 @@ PersonalManage storage：
   该记录视为未上链幽灵数据，列表同步时删除本地多签和提案快照，不显示为“已注销/未知提案”。
 - 个人多签历史、待激活创建提案反查、反向索引发现和本地状态更新全部通过
   `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()` 进入统一队列，避免与钱包创建/导入、余额刷新和钱包交易流水同步抢 MDBX 锁。
+- 统一多签列表首屏只读本机 `PersonalDuoqianEntity` 和 `PersonalDuoqianLocalState`，
+  不等待 `PersonalManage::PersonalDuoqians`、`AdminsChange::Subjects` 或 discovery 链上读取。
+- `PersonalDuoqianLocalState` 复用 `AppKvEntity.stringValue` 保存状态，
+  `AppKvEntity.intValue` 保存最近一次成功链上状态同步时间。
+- 个人多签详情页额外使用 `personal_duoqian_detail:*` 本机持久化快照保存管理员公钥、
+  阈值、余额和最近链上刷新时间；进入详情页先显示本地快照，不为了读取
+  `PersonalManage::PersonalDuoqians`、`AdminsChange::Subjects` 或 `InternalVote`
+  阈值而全屏等待。
+- 详情页不显示“同步中”类 UI；TTL 到期时静默刷新，用户下拉刷新、转账/投票/关闭
+  返回时才强制刷新当前个人多签。链上失败保留本机快照，不覆盖为已注销。
+- Active 个人多签 60 分钟内不自动重复查链；Pending / Closed 个人多签
+  10 分钟内不自动重复查链；用户下拉刷新才强制忽略 TTL。
+- 自动 discovery 只在首次进入多签 Tab 或本机钱包 pubkey fingerprint 变化时触发；
+  下拉刷新才强制执行全量 discovery。
+- 个人多签列表状态刷新使用 `PersonalManageService.fetchPersonalAccountsBatch()`：
+  先批量读取 `PersonalDuoqians` 与 `AdminsChange::Subjects`，再按解码出的
+  `org + subject_id` 批量读取 `InternalVote.ActiveDynamicThresholds`，缺失时再批量读取
+  `PendingDynamicThresholds`。
+- 列表页从个人多签详情、创建、关闭、投票返回时只刷新相关账户或本地记录，不重新扫描全部多签。
 
 ## 3.2 创建 / 注销阈值 UI
 

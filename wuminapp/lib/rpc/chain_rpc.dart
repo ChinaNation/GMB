@@ -113,6 +113,29 @@ class ChainRpc {
     return result;
   }
 
+  /// 分块批量查询多个 storage key，避免单次请求 payload 过大。
+  ///
+  /// 中文注释：多签列表会按 storage 依赖分阶段拼出大量 key；这里统一限制
+  /// 每批大小，让业务层得到批量收益，同时不给 smoldot / 全节点制造尖峰。
+  Future<Map<String, Uint8List?>> fetchStorageBatchChunked(
+    Iterable<String> storageKeyHexList, {
+    int chunkSize = 100,
+  }) async {
+    final keys = storageKeyHexList.toSet().toList(growable: false);
+    if (keys.isEmpty) return {};
+    if (chunkSize <= 0) {
+      throw ArgumentError.value(chunkSize, 'chunkSize', '必须大于 0');
+    }
+
+    final result = <String, Uint8List?>{};
+    for (var start = 0; start < keys.length; start += chunkSize) {
+      final end = (start + chunkSize).clamp(0, keys.length);
+      final chunk = keys.sublist(start, end);
+      result.addAll(await fetchStorageBatch(chunk));
+    }
+    return result;
+  }
+
   // ──── 转账相关 RPC ────
 
   /// 查询 runtime `frame_system::Account.nonce` 给出的账户 nonce。

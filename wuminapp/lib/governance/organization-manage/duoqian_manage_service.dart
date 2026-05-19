@@ -394,6 +394,153 @@ class DuoqianManageService {
     return _fetchInstitutionDuoqianAccount(duoqianAddressHex);
   }
 
+  /// 批量查询机构多签账户状态。
+  ///
+  /// 中文注释：机构多签需要先从地址反查 SFID 与账户名，再读取账户主体和
+  /// 管理员主体，所以必须分阶段批量读取，不能简单逐个调用详情查询。
+  Future<Map<String, DuoqianAccountInfo?>> fetchDuoqianAccountsBatch(
+    Iterable<String> duoqianAddressHexList, {
+    int chunkSize = 100,
+  }) async {
+    final addresses = duoqianAddressHexList
+        .map(_normalizeHex)
+        .where((address) => address.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (addresses.isEmpty) return {};
+
+    final result = <String, DuoqianAccountInfo?>{};
+    final refKeyByAddress = <String, String>{};
+    for (final address in addresses) {
+      refKeyByAddress[address] =
+          '0x${_hexEncode(DuoqianStorageCodec.addressRegisteredSfidKey(address))}';
+    }
+
+    final refValues = await _rpc.fetchStorageBatchChunked(
+      refKeyByAddress.values,
+      chunkSize: chunkSize,
+    );
+    final refByAddress = <String, RegisteredInstitutionRef>{};
+    for (final address in addresses) {
+      final refData = refValues[refKeyByAddress[address]];
+      if (refData == null) {
+        result[address] = null;
+        continue;
+      }
+      final ref = DuoqianStorageCodec.decodeRegisteredInstitution(refData);
+      if (ref == null) {
+        result[address] = null;
+        continue;
+      }
+      refByAddress[address] = ref;
+    }
+
+    final accountKeyByAddress = <String, String>{};
+    final adminKeyByAddress = <String, String>{};
+    final subjectIdByAddress = <String, Uint8List>{};
+    final secondRoundKeys = <String>[];
+    for (final entry in refByAddress.entries) {
+      final subjectId = DuoqianStorageCodec.subjectIdFromInstitutionAccountHex(
+        entry.key,
+      );
+      final accountKey =
+          '0x${_hexEncode(DuoqianStorageCodec.institutionAccountKey(
+        entry.value.sfidNumber,
+        entry.value.accountName,
+      ))}';
+      final adminKey =
+          '0x${_hexEncode(DuoqianStorageCodec.adminSubjectKey(subjectId))}';
+      subjectIdByAddress[entry.key] = subjectId;
+      accountKeyByAddress[entry.key] = accountKey;
+      adminKeyByAddress[entry.key] = adminKey;
+      secondRoundKeys
+        ..add(accountKey)
+        ..add(adminKey);
+    }
+
+    final secondRoundValues = await _rpc.fetchStorageBatchChunked(
+      secondRoundKeys,
+      chunkSize: chunkSize,
+    );
+    final accountByAddress = <String, InstitutionAccountSnapshot>{};
+    final adminByAddress = <String, DuoqianAdminSnapshot>{};
+    for (final address in refByAddress.keys) {
+      final accountData = secondRoundValues[accountKeyByAddress[address]];
+      final adminData = secondRoundValues[adminKeyByAddress[address]];
+      if (accountData == null || adminData == null) {
+        result[address] = null;
+        continue;
+      }
+      final account = DuoqianStorageCodec.decodeInstitutionAccount(accountData);
+      final admin = DuoqianStorageCodec.decodeAdminSubject(adminData);
+      if (account == null || admin == null) {
+        result[address] = null;
+        continue;
+      }
+      accountByAddress[address] = account;
+      adminByAddress[address] = admin;
+    }
+
+    final activeThresholdKeyByAddress = <String, String>{};
+    for (final entry in adminByAddress.entries) {
+      activeThresholdKeyByAddress[entry.key] =
+          '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
+        storageName: 'ActiveDynamicThresholds',
+        org: entry.value.org,
+        subjectId: subjectIdByAddress[entry.key]!,
+      ))}';
+    }
+    final activeThresholdValues = await _rpc.fetchStorageBatchChunked(
+      activeThresholdKeyByAddress.values,
+      chunkSize: chunkSize,
+    );
+
+    final thresholdByAddress = <String, int?>{};
+    final pendingThresholdKeyByAddress = <String, String>{};
+    for (final entry in activeThresholdKeyByAddress.entries) {
+      final threshold = DuoqianStorageCodec.decodeDynamicThreshold(
+        activeThresholdValues[entry.value],
+      );
+      thresholdByAddress[entry.key] = threshold;
+      if (threshold == null) {
+        final admin = adminByAddress[entry.key]!;
+        pendingThresholdKeyByAddress[entry.key] =
+            '0x${_hexEncode(DuoqianStorageCodec.dynamicThresholdKey(
+          storageName: 'PendingDynamicThresholds',
+          org: admin.org,
+          subjectId: subjectIdByAddress[entry.key]!,
+        ))}';
+      }
+    }
+
+    if (pendingThresholdKeyByAddress.isNotEmpty) {
+      final pendingThresholdValues = await _rpc.fetchStorageBatchChunked(
+        pendingThresholdKeyByAddress.values,
+        chunkSize: chunkSize,
+      );
+      for (final entry in pendingThresholdKeyByAddress.entries) {
+        thresholdByAddress[entry.key] =
+            DuoqianStorageCodec.decodeDynamicThreshold(
+          pendingThresholdValues[entry.value],
+        );
+      }
+    }
+
+    for (final address in addresses) {
+      final account = accountByAddress[address];
+      final admin = adminByAddress[address];
+      if (account == null || admin == null) continue;
+      result[address] = DuoqianAccountInfo(
+        adminCount: admin.adminCount,
+        threshold: thresholdByAddress[address],
+        adminPubkeys: admin.adminPubkeys,
+        status: _statusFromByte(account.statusByte),
+      );
+    }
+
+    return result;
+  }
+
   Future<DuoqianAccountInfo?> _fetchInstitutionDuoqianAccount(
     String duoqianAddressHex,
   ) async {
@@ -921,6 +1068,11 @@ class DuoqianManageService {
 
   static String _hexEncode(Uint8List bytes) {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 
   Uint8List _hexDecode(String hex) {

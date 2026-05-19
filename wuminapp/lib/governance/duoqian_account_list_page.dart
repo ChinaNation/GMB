@@ -3,11 +3,12 @@
 // 设计要点:
 // - 后端按 governance/personal-manage 与 governance/organization-manage 分开;
 //   本页只是 UI 编排壳子,并行加载两套数据源,合并按时间倒序展示。
-// - 启动期/进入页面时并行触发两个 discovery 服务,30 分钟内重复进入不再扫;
-//   下拉刷新强制全扫。
+// - 首屏只读本地 Isar,链上状态刷新和反向发现均转为后台任务;
+//   下拉刷新才强制查链和全量 discovery。
 // - 反向校验由各自 discovery service 内部完成,本页不涉及。
 // - 右上角 "+" 弹 ActionSheet,2 选项分别进入个人多签/机构多签创建页。
 
+import 'dart:async' show unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -86,6 +87,11 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
       PersonalProposalHistoryService();
   final DuoqianManageService _duoqianManageService = DuoqianManageService();
 
+  static const _activeStatusTtl = Duration(minutes: 60);
+  static const _inactiveStatusTtl = Duration(minutes: 10);
+  static const _discoveryWalletFingerprintKey =
+      'duoqian_discovery_wallet_fingerprint';
+
   @override
   void initState() {
     super.initState();
@@ -103,20 +109,11 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     setState(() => _loading = false);
 
     if (runDiscovery) {
-      // ignore: discarded_futures
-      _runBackgroundDiscovery();
+      unawaited(_runBackgroundRefresh());
     }
   }
 
   Future<void> _readFromIsar() async {
-    final initial = await WalletIsar.instance.read((isar) async {
-      final personals = await isar.personalDuoqianEntitys.where().findAll();
-      final institutions =
-          await isar.duoqianInstitutionEntitys.where().findAll();
-      return (personals: personals, institutions: institutions);
-    });
-    await _syncPersonalStatuses(initial.personals);
-    await _syncInstitutionStatuses(initial.institutions);
     final snapshot = await WalletIsar.instance.read((isar) async {
       final personals = await isar.personalDuoqianEntitys.where().findAll();
       final institutions =
@@ -157,13 +154,91 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     setState(() => _items = merged);
   }
 
+  Future<void> _runBackgroundRefresh() async {
+    await _refreshKnownStatuses();
+    await _runDiscoveryIfWalletsChanged();
+  }
+
+  Future<void> _refreshKnownStatuses({
+    bool force = false,
+    Set<String>? personalAddresses,
+    Set<String>? institutionAddresses,
+  }) async {
+    final snapshot = await WalletIsar.instance.read((isar) async {
+      final personals = await isar.personalDuoqianEntitys.where().findAll();
+      final institutions =
+          await isar.duoqianInstitutionEntitys.where().findAll();
+      final personalStatuses =
+          await PersonalDuoqianLocalState.readStatusSnapshots(
+        isar,
+        personals.map((p) => p.duoqianAddress),
+      );
+      final institutionStatuses =
+          await InstitutionDuoqianLocalState.readStatusSnapshots(
+        isar,
+        institutions.map((p) => p.duoqianAddress),
+      );
+      return (
+        personals: personals,
+        institutions: institutions,
+        personalStatuses: personalStatuses,
+        institutionStatuses: institutionStatuses,
+      );
+    });
+
+    final personalFilter = personalAddresses?.map(_normalizeHex).toSet();
+    final institutionFilter = institutionAddresses?.map(_normalizeHex).toSet();
+    final personalTargets = snapshot.personals.where((item) {
+      final address = _normalizeHex(item.duoqianAddress);
+      if (personalFilter != null && !personalFilter.contains(address)) {
+        return false;
+      }
+      return force || _shouldRefreshStatus(snapshot.personalStatuses[address]);
+    }).toList(growable: false);
+    final institutionTargets = snapshot.institutions.where((item) {
+      final address = _normalizeHex(item.duoqianAddress);
+      if (institutionFilter != null && !institutionFilter.contains(address)) {
+        return false;
+      }
+      return force ||
+          _shouldRefreshStatus(snapshot.institutionStatuses[address]);
+    }).toList(growable: false);
+
+    if (personalTargets.isEmpty && institutionTargets.isEmpty) return;
+    await Future.wait([
+      _syncPersonalStatuses(personalTargets),
+      _syncInstitutionStatuses(institutionTargets),
+    ]);
+    await _readFromIsar();
+  }
+
+  bool _shouldRefreshStatus(DuoqianLocalStatusSnapshot? snapshot) {
+    if (snapshot?.lastSyncAtMillis == null) return true;
+    final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
+      snapshot!.lastSyncAtMillis!,
+    );
+    final ttl = snapshot.status == PersonalDuoqianLocalState.statusActive ||
+            snapshot.status == InstitutionDuoqianLocalState.statusActive
+        ? _activeStatusTtl
+        : _inactiveStatusTtl;
+    return DateTime.now().difference(lastSyncAt) >= ttl;
+  }
+
   Future<void> _syncPersonalStatuses(
       List<PersonalDuoqianEntity> personals) async {
+    if (personals.isEmpty) return;
+    Map<String, DuoqianAccountInfo?> infos;
+    try {
+      infos = await _personalManageService.fetchPersonalAccountsBatch(
+        personals.map((p) => p.duoqianAddress),
+      );
+    } catch (_) {
+      // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
+      return;
+    }
     for (final personal in personals) {
       try {
-        final info = await _personalManageService.fetchPersonalAccount(
-          personal.duoqianAddress,
-        );
+        final info = infos[_normalizeHex(personal.duoqianAddress)];
         if (info == null &&
             await _personalProposalHistoryService
                 .hasUnchainedVotingCreateProposal(personal.duoqianAddress)) {
@@ -181,6 +256,24 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             personal.duoqianAddress,
             status,
           );
+          if (info == null) {
+            await PersonalDuoqianLocalState.deleteDetailInTxn(
+              isar,
+              personal.duoqianAddress,
+            );
+          } else {
+            await PersonalDuoqianLocalState.putDetailInTxn(
+              isar,
+              personal.duoqianAddress,
+              DuoqianLocalDetailSnapshot(
+                status: status,
+                adminPubkeys: info.adminPubkeys,
+                threshold: info.threshold,
+                updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+                lastChainRefreshAtMillis: DateTime.now().millisecondsSinceEpoch,
+              ),
+            );
+          }
         });
       } catch (_) {
         // 中文注释：链路异常时不改本地状态，避免把网络失败误判成注销。
@@ -204,17 +297,29 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         isar,
         personalAddressHex,
       );
+      await PersonalDuoqianLocalState.deleteDetailInTxn(
+        isar,
+        personalAddressHex,
+      );
     });
   }
 
   Future<void> _syncInstitutionStatuses(
     List<DuoqianInstitutionEntity> institutions,
   ) async {
+    if (institutions.isEmpty) return;
+    Map<String, org_models.DuoqianAccountInfo?> infos;
+    try {
+      infos = await _duoqianManageService.fetchDuoqianAccountsBatch(
+        institutions.map((p) => p.duoqianAddress),
+      );
+    } catch (_) {
+      // 中文注释：批量查链失败时保留本地旧状态，不能把网络失败写成已注销。
+      return;
+    }
     for (final institution in institutions) {
       try {
-        final info = await _duoqianManageService.fetchDuoqianAccount(
-          institution.duoqianAddress,
-        );
+        final info = infos[_normalizeHex(institution.duoqianAddress)];
         final status = info == null
             ? InstitutionDuoqianLocalState.statusClosed
             : info.status == org_models.DuoqianStatus.active
@@ -226,6 +331,24 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
             institution.duoqianAddress,
             status,
           );
+          if (info == null) {
+            await InstitutionDuoqianLocalState.deleteDetailInTxn(
+              isar,
+              institution.duoqianAddress,
+            );
+          } else {
+            await InstitutionDuoqianLocalState.putDetailInTxn(
+              isar,
+              institution.duoqianAddress,
+              DuoqianLocalDetailSnapshot(
+                status: status,
+                adminPubkeys: info.adminPubkeys,
+                threshold: info.threshold,
+                updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+                lastChainRefreshAtMillis: DateTime.now().millisecondsSinceEpoch,
+              ),
+            );
+          }
         });
       } catch (_) {
         // 中文注释：网络/轻节点异常不改本地状态，避免把查询失败误判为注销。
@@ -233,13 +356,16 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
     }
   }
 
-  Future<void> _runBackgroundDiscovery({bool force = false}) async {
-    if (_scanning) return;
+  Future<({bool anyChanged, bool completed})> _runBackgroundDiscovery({
+    bool force = false,
+  }) async {
+    if (_scanning) return (anyChanged: false, completed: false);
     setState(() {
       _scanning = true;
       _scanProgress = '扫描中...';
     });
     var anyChanged = false;
+    var completed = false;
     try {
       final personalFuture =
           PersonalManageDiscoveryService().discoverByMyWallets(
@@ -268,6 +394,8 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
           personalStats.orphansRemoved > 0 ||
           institutionStats.newlyAdded > 0 ||
           institutionStats.orphansRemoved > 0;
+      completed =
+          !personalStats.partialFailure && !institutionStats.partialFailure;
     } catch (e) {
       debugPrint('[DuoqianListPage] discovery 失败: $e');
     } finally {
@@ -281,11 +409,26 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         });
       }
     }
+    return (anyChanged: anyChanged, completed: completed);
+  }
+
+  Future<void> _runDiscoveryIfWalletsChanged() async {
+    final fingerprint = await _currentWalletFingerprint();
+    final lastFingerprint = await _readDiscoveryWalletFingerprint();
+    if (lastFingerprint == fingerprint) return;
+    final result = await _runBackgroundDiscovery(force: true);
+    if (result.completed) {
+      await _writeDiscoveryWalletFingerprint(fingerprint);
+    }
   }
 
   Future<void> _onPullRefresh() async {
+    await _refreshKnownStatuses(force: true);
+    final result = await _runBackgroundDiscovery(force: true);
+    if (result.completed) {
+      await _writeDiscoveryWalletFingerprint(await _currentWalletFingerprint());
+    }
     await _readFromIsar();
-    await _runBackgroundDiscovery(force: true);
   }
 
   Future<void> _openCreateMenu() async {
@@ -327,11 +470,16 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   }
 
   Future<void> _openCreatePersonal() async {
-    final created = await Navigator.push<bool>(
+    final createdAddress = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (_) => const PersonalDuoqianCreatePage()),
     );
-    if (created == true) await _load();
+    if (createdAddress != null) {
+      await _refreshKnownStatuses(
+        force: true,
+        personalAddresses: {createdAddress},
+      );
+    }
   }
 
   Future<void> _openCreateInstitution() async {
@@ -343,7 +491,7 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
       );
       return;
     }
-    final created = await Navigator.push<bool>(
+    final createdAddress = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (_) => InstitutionDuoqianCreatePage(
@@ -360,7 +508,12 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
         ),
       ),
     );
-    if (created == true) await _load();
+    if (createdAddress != null) {
+      await _refreshKnownStatuses(
+        force: true,
+        institutionAddresses: {createdAddress},
+      );
+    }
   }
 
   void _onCardTap(_UnifiedItem item) {
@@ -373,6 +526,9 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               orgType: OrgType.duoqian,
               duoqianAddress: item.duoqianAddress,
             ),
+            initialLocalStatus: item.localStatus,
+            initialAdminPubkeys:
+                item.personal?.matchedAdminPubkeys ?? const <String>[],
           ),
         ),
       _DuoqianKind.institution => MaterialPageRoute(
@@ -384,11 +540,26 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
               adminSubjectOrg: item.institution?.adminSubjectOrg,
               duoqianAddress: item.duoqianAddress,
             ),
+            initialLocalStatus: item.localStatus,
+            initialAdminPubkeys:
+                item.institution?.matchedAdminPubkeys ?? const <String>[],
           ),
         ),
     };
     Navigator.push(context, route).then((_) {
-      if (mounted) _load(runDiscovery: false);
+      if (!mounted) return;
+      switch (item.kind) {
+        case _DuoqianKind.personal:
+          unawaited(_refreshKnownStatuses(
+            force: true,
+            personalAddresses: {item.duoqianAddress},
+          ));
+        case _DuoqianKind.institution:
+          unawaited(_refreshKnownStatuses(
+            force: true,
+            institutionAddresses: {item.duoqianAddress},
+          ));
+      }
     });
   }
 
@@ -628,5 +799,35 @@ class _DuoqianAccountListPageState extends State<DuoqianAccountListPage> {
   String _normalizeHex(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     return h.toLowerCase();
+  }
+
+  Future<String> _currentWalletFingerprint() async {
+    final wallets = await WalletManager().getWallets();
+    final pubkeys = wallets
+        .map((wallet) => _normalizeHex(wallet.pubkeyHex))
+        .toList()
+      ..sort();
+    return pubkeys.join('|');
+  }
+
+  Future<String?> _readDiscoveryWalletFingerprint() {
+    return WalletIsar.instance.read((isar) async {
+      return (await isar.appKvEntitys.getByKey(_discoveryWalletFingerprintKey))
+          ?.stringValue;
+    });
+  }
+
+  Future<void> _writeDiscoveryWalletFingerprint(String fingerprint) {
+    return WalletIsar.instance.writeTxn((isar) async {
+      final entity = await isar.appKvEntitys.getByKey(
+            _discoveryWalletFingerprintKey,
+          ) ??
+          AppKvEntity();
+      entity
+        ..key = _discoveryWalletFingerprintKey
+        ..stringValue = fingerprint
+        ..intValue = DateTime.now().millisecondsSinceEpoch;
+      await isar.appKvEntitys.putByKey(entity);
+    });
   }
 }

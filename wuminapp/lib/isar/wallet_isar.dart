@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -97,6 +98,97 @@ class AppKvEntity {
   bool? boolValue;
 }
 
+/// 多签账户本地状态快照。
+///
+/// 中文注释：`status` 负责 UI 展示，`lastSyncAtMillis` 负责判断是否需要
+/// 再次查链；两者都复用 AppKvEntity，避免为 TTL 新增 Isar schema。
+class DuoqianLocalStatusSnapshot {
+  const DuoqianLocalStatusSnapshot({
+    required this.status,
+    required this.lastSyncAtMillis,
+  });
+
+  final String status;
+  final int? lastSyncAtMillis;
+}
+
+/// 多签详情页本地持久化快照。
+///
+/// 中文注释：这不是短期内存缓存，而是详情页首屏可直接使用的本机状态。
+/// 链上刷新成功后覆盖写入；链上失败时保留旧值，避免进详情页被 RPC 卡住。
+class DuoqianLocalDetailSnapshot {
+  const DuoqianLocalDetailSnapshot({
+    required this.status,
+    required this.adminPubkeys,
+    this.threshold,
+    this.balanceYuan,
+    this.lastChainRefreshAtMillis,
+    this.lastBalanceRefreshAtMillis,
+    this.updatedAtMillis,
+  });
+
+  final String status;
+  final List<String> adminPubkeys;
+  final int? threshold;
+  final double? balanceYuan;
+  final int? lastChainRefreshAtMillis;
+  final int? lastBalanceRefreshAtMillis;
+  final int? updatedAtMillis;
+
+  Map<String, dynamic> toJson() => {
+        'status': status,
+        'admin_pubkeys': adminPubkeys,
+        'threshold': threshold,
+        'balance_yuan': balanceYuan,
+        'last_chain_refresh_at_millis': lastChainRefreshAtMillis,
+        'last_balance_refresh_at_millis': lastBalanceRefreshAtMillis,
+        'updated_at_millis': updatedAtMillis,
+      };
+
+  static DuoqianLocalDetailSnapshot? fromJsonString(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final adminRaw = decoded['admin_pubkeys'];
+      final admins = adminRaw is List
+          ? adminRaw
+              .map((item) => item.toString().toLowerCase())
+              .where((item) => item.isNotEmpty)
+              .toList(growable: false)
+          : const <String>[];
+      final status = decoded['status']?.toString();
+      if (status == null || status.isEmpty) return null;
+      return DuoqianLocalDetailSnapshot(
+        status: status,
+        adminPubkeys: admins,
+        threshold: _toInt(decoded['threshold']),
+        balanceYuan: _toDouble(decoded['balance_yuan']),
+        lastChainRefreshAtMillis:
+            _toInt(decoded['last_chain_refresh_at_millis']),
+        lastBalanceRefreshAtMillis:
+            _toInt(decoded['last_balance_refresh_at_millis']),
+        updatedAtMillis: _toInt(decoded['updated_at_millis']),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static int? _toInt(Object? value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  static double? _toDouble(Object? value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
+  }
+}
+
 /// 个人多签本地生命周期状态。
 ///
 /// 中文注释：链上注销后账户主体可能已经不存在，但用户本机仍要在账户列表
@@ -110,20 +202,60 @@ class PersonalDuoqianLocalState {
   static String statusKey(String personalAddressHex) =>
       'personal_duoqian_status:${_normalizeHex(personalAddressHex)}';
 
+  static String detailKey(String personalAddressHex) =>
+      'personal_duoqian_detail:${_normalizeHex(personalAddressHex)}';
+
   static Future<Map<String, String>> readStatuses(
     Isar isar,
     Iterable<String> personalAddressesHex,
   ) async {
-    final result = <String, String>{};
+    final snapshots = await readStatusSnapshots(isar, personalAddressesHex);
+    return snapshots.map((key, value) => MapEntry(key, value.status));
+  }
+
+  static Future<Map<String, DuoqianLocalStatusSnapshot>> readStatusSnapshots(
+    Isar isar,
+    Iterable<String> personalAddressesHex,
+  ) async {
+    final result = <String, DuoqianLocalStatusSnapshot>{};
     for (final address in personalAddressesHex) {
       final normalized = _normalizeHex(address);
       final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
       final status = entity?.stringValue;
       if (status != null && status.isNotEmpty) {
-        result[normalized] = status;
+        result[normalized] = DuoqianLocalStatusSnapshot(
+          status: status,
+          lastSyncAtMillis: entity?.intValue,
+        );
       }
     }
     return result;
+  }
+
+  static Future<DuoqianLocalDetailSnapshot?> readDetail(
+    Isar isar,
+    String personalAddressHex,
+  ) async {
+    final entity =
+        await isar.appKvEntitys.getByKey(detailKey(personalAddressHex));
+    return DuoqianLocalDetailSnapshot.fromJsonString(entity?.stringValue);
+  }
+
+  /// 写入个人多签详情快照；调用方必须处在 Isar writeTxn 内。
+  static Future<void> putDetailInTxn(
+    Isar isar,
+    String personalAddressHex,
+    DuoqianLocalDetailSnapshot snapshot,
+  ) async {
+    final key = detailKey(personalAddressHex);
+    final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+    entity
+      ..key = key
+      ..stringValue = jsonEncode(snapshot.toJson())
+      ..intValue = snapshot.lastChainRefreshAtMillis ??
+          snapshot.updatedAtMillis ??
+          DateTime.now().millisecondsSinceEpoch;
+    await isar.appKvEntitys.putByKey(entity);
   }
 
   /// 写入个人多签本地状态；调用方必须处在 Isar writeTxn 内。
@@ -152,6 +284,17 @@ class PersonalDuoqianLocalState {
         .deleteAll();
   }
 
+  /// 删除个人多签详情快照；调用方必须处在 Isar writeTxn 内。
+  static Future<void> deleteDetailInTxn(
+    Isar isar,
+    String personalAddressHex,
+  ) async {
+    await isar.appKvEntitys
+        .where()
+        .keyEqualTo(detailKey(personalAddressHex))
+        .deleteAll();
+  }
+
   static String _normalizeHex(String hex) {
     final h = hex.startsWith('0x') ? hex.substring(2) : hex;
     return h.toLowerCase();
@@ -170,20 +313,60 @@ class InstitutionDuoqianLocalState {
   static String statusKey(String duoqianAddressHex) =>
       'institution_duoqian_status:${_normalizeHex(duoqianAddressHex)}';
 
+  static String detailKey(String duoqianAddressHex) =>
+      'institution_duoqian_detail:${_normalizeHex(duoqianAddressHex)}';
+
   static Future<Map<String, String>> readStatuses(
     Isar isar,
     Iterable<String> duoqianAddressesHex,
   ) async {
-    final result = <String, String>{};
+    final snapshots = await readStatusSnapshots(isar, duoqianAddressesHex);
+    return snapshots.map((key, value) => MapEntry(key, value.status));
+  }
+
+  static Future<Map<String, DuoqianLocalStatusSnapshot>> readStatusSnapshots(
+    Isar isar,
+    Iterable<String> duoqianAddressesHex,
+  ) async {
+    final result = <String, DuoqianLocalStatusSnapshot>{};
     for (final address in duoqianAddressesHex) {
       final normalized = _normalizeHex(address);
       final entity = await isar.appKvEntitys.getByKey(statusKey(normalized));
       final status = entity?.stringValue;
       if (status != null && status.isNotEmpty) {
-        result[normalized] = status;
+        result[normalized] = DuoqianLocalStatusSnapshot(
+          status: status,
+          lastSyncAtMillis: entity?.intValue,
+        );
       }
     }
     return result;
+  }
+
+  static Future<DuoqianLocalDetailSnapshot?> readDetail(
+    Isar isar,
+    String duoqianAddressHex,
+  ) async {
+    final entity =
+        await isar.appKvEntitys.getByKey(detailKey(duoqianAddressHex));
+    return DuoqianLocalDetailSnapshot.fromJsonString(entity?.stringValue);
+  }
+
+  /// 写入机构多签详情快照；调用方必须处在 Isar writeTxn 内。
+  static Future<void> putDetailInTxn(
+    Isar isar,
+    String duoqianAddressHex,
+    DuoqianLocalDetailSnapshot snapshot,
+  ) async {
+    final key = detailKey(duoqianAddressHex);
+    final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+    entity
+      ..key = key
+      ..stringValue = jsonEncode(snapshot.toJson())
+      ..intValue = snapshot.lastChainRefreshAtMillis ??
+          snapshot.updatedAtMillis ??
+          DateTime.now().millisecondsSinceEpoch;
+    await isar.appKvEntitys.putByKey(entity);
   }
 
   /// 写入机构多签本地状态；调用方必须处在 Isar writeTxn 内。
@@ -209,6 +392,17 @@ class InstitutionDuoqianLocalState {
     await isar.appKvEntitys
         .where()
         .keyEqualTo(statusKey(duoqianAddressHex))
+        .deleteAll();
+  }
+
+  /// 删除机构多签详情快照；调用方必须处在 Isar writeTxn 内。
+  static Future<void> deleteDetailInTxn(
+    Isar isar,
+    String duoqianAddressHex,
+  ) async {
+    await isar.appKvEntitys
+        .where()
+        .keyEqualTo(detailKey(duoqianAddressHex))
         .deleteAll();
   }
 

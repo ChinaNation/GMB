@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,13 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:isar/isar.dart';
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
-import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.dart';
-import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_entry.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
-import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
@@ -30,9 +28,13 @@ class PersonalManageAccountInfoPage extends StatefulWidget {
   const PersonalManageAccountInfoPage({
     super.key,
     required this.institution,
+    this.initialLocalStatus,
+    this.initialAdminPubkeys = const [],
   });
 
   final InstitutionInfo institution;
+  final String? initialLocalStatus;
+  final List<String> initialAdminPubkeys;
 
   @override
   State<PersonalManageAccountInfoPage> createState() =>
@@ -42,17 +44,12 @@ class PersonalManageAccountInfoPage extends StatefulWidget {
 class _PersonalManageAccountInfoPageState
     extends State<PersonalManageAccountInfoPage> {
   final PersonalManageService _personalManageService = PersonalManageService();
-  final InstitutionAdminService _adminService = InstitutionAdminService();
   final ChainRpc _rpc = ChainRpc();
-
-  AdminSubjectIdentity get _subjectIdentity =>
-      AdminSubjectIdentity.fromInstitution(widget.institution);
-
-  bool _loading = true;
-  String? _error;
 
   DuoqianAccountInfo? _accountInfo;
   List<String> _adminPubkeys = const [];
+  String _localStatus = PersonalDuoqianLocalState.statusPending;
+  int? _lastDetailRefreshAtMillis;
   bool _isClosed = false;
 
   /// 账户余额(元):Active 来自链上 free_balance,Pending 来自本机 Isar
@@ -62,57 +59,153 @@ class _PersonalManageAccountInfoPageState
   @override
   void initState() {
     super.initState();
+    _localStatus =
+        widget.initialLocalStatus ?? PersonalDuoqianLocalState.statusPending;
+    _adminPubkeys = _normalizeAdminPubkeys(widget.initialAdminPubkeys);
+    _isClosed = _localStatus == PersonalDuoqianLocalState.statusClosed;
     _load();
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    await _loadFromLocal();
+    unawaited(_refreshChainDetailIfNeeded());
+  }
 
+  Future<void> _loadFromLocal() async {
     try {
-      final results = await Future.wait([
-        _personalManageService.fetchPersonalAccount(
-          widget.institution.duoqianAddress,
-        ),
-        _adminService.fetchAdmins(_subjectIdentity),
-      ]);
-
-      final accountInfo = results[0] as DuoqianAccountInfo?;
-      final admins = results[1] as List<String>;
-      final isClosed = accountInfo == null;
-      final accountStatus = accountInfo?.status;
-
-      // 余额取值规则：
-      // Active → 链上 free_balance(实时)
-      // Pending → 本机创建快照金额(链上还未到账)
-      // Closed → 不显示金额,避免注销账户继续显示旧创建金额。
-      if (isClosed) {
-        await _markLocalStatus(PersonalDuoqianLocalState.statusClosed);
-      } else {
-        await _markLocalStatus(
-          accountStatus == DuoqianStatus.active
-              ? PersonalDuoqianLocalState.statusActive
-              : PersonalDuoqianLocalState.statusPending,
+      final local = await WalletIsar.instance.read((isar) async {
+        final entity = await isar.personalDuoqianEntitys
+            .filter()
+            .duoqianAddressEqualTo(widget.institution.duoqianAddress)
+            .findFirst();
+        final statuses = await PersonalDuoqianLocalState.readStatusSnapshots(
+          isar,
+          [widget.institution.duoqianAddress],
         );
-      }
-      final balance = isClosed ? null : await _resolveBalance(accountStatus);
+        final detail = await PersonalDuoqianLocalState.readDetail(
+          isar,
+          widget.institution.duoqianAddress,
+        );
+        final pendingBalance = await _readPendingBalanceFromIsar(isar);
+        return (
+          entity: entity,
+          status: statuses[_normalizeHex(widget.institution.duoqianAddress)],
+          detail: detail,
+          pendingBalance: pendingBalance,
+        );
+      });
+
+      final status = local.status?.status ??
+          local.detail?.status ??
+          widget.initialLocalStatus ??
+          PersonalDuoqianLocalState.statusPending;
+      final isClosed = status == PersonalDuoqianLocalState.statusClosed;
+      final admins = local.detail?.adminPubkeys.isNotEmpty == true
+          ? local.detail!.adminPubkeys
+          : local.entity?.matchedAdminPubkeys.isNotEmpty == true
+              ? local.entity!.matchedAdminPubkeys
+              : widget.initialAdminPubkeys;
+      final normalizedAdmins = _normalizeAdminPubkeys(admins);
+      final statusEnum = _statusEnumFromLocal(status);
+      final accountInfo = isClosed
+          ? null
+          : DuoqianAccountInfo(
+              adminCount: normalizedAdmins.length,
+              threshold: local.detail?.threshold,
+              adminPubkeys: normalizedAdmins,
+              status: statusEnum,
+            );
+      final balance = isClosed
+          ? null
+          : statusEnum == DuoqianStatus.active
+              ? local.detail?.balanceYuan
+              : local.pendingBalance ?? local.detail?.balanceYuan;
 
       if (!mounted) return;
       setState(() {
+        _localStatus = status;
         _accountInfo = accountInfo;
-        _adminPubkeys = admins;
+        _adminPubkeys = normalizedAdmins;
         _isClosed = isClosed;
         _balanceYuan = balance;
-        _loading = false;
+        _lastDetailRefreshAtMillis = local.detail?.lastChainRefreshAtMillis ??
+            local.status?.lastSyncAtMillis;
       });
-    } catch (e) {
+    } catch (_) {
+      // 中文注释：本地读取失败也不能让详情页进入全屏错误；保留入口传入的
+      // 名称、地址和状态，用户仍可下拉触发链上强制刷新。
+    }
+  }
+
+  Future<void> _refreshChainDetailIfNeeded() async {
+    if (!_shouldRefreshDetail()) return;
+    await _refreshChainDetail();
+  }
+
+  bool _shouldRefreshDetail() {
+    if (_lastDetailRefreshAtMillis == null) return true;
+    final lastSyncAt = DateTime.fromMillisecondsSinceEpoch(
+      _lastDetailRefreshAtMillis!,
+    );
+    final ttl = _localStatus == PersonalDuoqianLocalState.statusActive
+        ? const Duration(minutes: 60)
+        : const Duration(minutes: 10);
+    return DateTime.now().difference(lastSyncAt) >= ttl;
+  }
+
+  Future<void> _refreshChainDetail({bool force = false}) async {
+    if (!force && !_shouldRefreshDetail()) return;
+    try {
+      final infos = await _personalManageService.fetchPersonalAccountsBatch(
+        [widget.institution.duoqianAddress],
+      );
+      final info = infos[_normalizeHex(widget.institution.duoqianAddress)];
+      final status = info == null
+          ? PersonalDuoqianLocalState.statusClosed
+          : _localStatusFromInfo(info.status);
+      final balance = info == null ? null : await _resolveBalance(info.status);
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await WalletIsar.instance.writeTxn((isar) async {
+        await PersonalDuoqianLocalState.putStatusInTxn(
+          isar,
+          widget.institution.duoqianAddress,
+          status,
+        );
+        if (info == null) {
+          await PersonalDuoqianLocalState.deleteDetailInTxn(
+            isar,
+            widget.institution.duoqianAddress,
+          );
+        } else {
+          await PersonalDuoqianLocalState.putDetailInTxn(
+            isar,
+            widget.institution.duoqianAddress,
+            DuoqianLocalDetailSnapshot(
+              status: status,
+              adminPubkeys: info.adminPubkeys,
+              threshold: info.threshold,
+              balanceYuan: balance,
+              lastChainRefreshAtMillis: now,
+              lastBalanceRefreshAtMillis:
+                  info.status == DuoqianStatus.active ? now : null,
+              updatedAtMillis: now,
+            ),
+          );
+        }
+      });
+
       if (!mounted) return;
       setState(() {
-        _error = SmoldotClientManager.instance.buildUserFacingError(e);
-        _loading = false;
+        _localStatus = status;
+        _isClosed = status == PersonalDuoqianLocalState.statusClosed;
+        _accountInfo = info;
+        _adminPubkeys = _normalizeAdminPubkeys(info?.adminPubkeys);
+        _balanceYuan = _isClosed ? null : balance;
+        _lastDetailRefreshAtMillis = now;
       });
+    } catch (_) {
+      // 中文注释：链上刷新失败只保留本地详情，不弹进度提示或全屏失败。
     }
   }
 
@@ -124,16 +217,18 @@ class _PersonalManageAccountInfoPageState
         return null;
       }
     }
+    return WalletIsar.instance.read(_readPendingBalanceFromIsar);
+  }
+
+  Future<double?> _readPendingBalanceFromIsar(Isar isar) async {
     // Pending 态:从本机 Isar PersonalDuoqianProposalEntity 取
     // (该 multisig 的 create 提案 snapshot 含 amount_fen)。
     try {
-      final entity = await WalletIsar.instance.read((isar) {
-        return isar.personalDuoqianProposalEntitys
-            .filter()
-            .personalAddressEqualTo(widget.institution.duoqianAddress)
-            .actionEqualTo('create')
-            .findFirst();
-      });
+      final entity = await isar.personalDuoqianProposalEntitys
+          .filter()
+          .personalAddressEqualTo(widget.institution.duoqianAddress)
+          .actionEqualTo('create')
+          .findFirst();
       if (entity?.snapshotJson == null || entity!.snapshotJson!.isEmpty) {
         return null;
       }
@@ -148,14 +243,29 @@ class _PersonalManageAccountInfoPageState
     }
   }
 
-  Future<void> _markLocalStatus(String status) async {
-    await WalletIsar.instance.writeTxn((isar) async {
-      await PersonalDuoqianLocalState.putStatusInTxn(
-        isar,
-        widget.institution.duoqianAddress,
-        status,
-      );
-    });
+  String _localStatusFromInfo(DuoqianStatus status) {
+    return status == DuoqianStatus.active
+        ? PersonalDuoqianLocalState.statusActive
+        : PersonalDuoqianLocalState.statusPending;
+  }
+
+  DuoqianStatus _statusEnumFromLocal(String status) {
+    return status == PersonalDuoqianLocalState.statusActive
+        ? DuoqianStatus.active
+        : DuoqianStatus.pending;
+  }
+
+  List<String> _normalizeAdminPubkeys(List<String>? admins) {
+    if (admins == null) return const [];
+    return admins
+        .map(_normalizeHex)
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 
   // ──── 关闭 ────
@@ -187,7 +297,11 @@ class _PersonalManageAccountInfoPageState
   }
 
   Future<void> _openClosePage() async {
-    final wallets = await _getAdminWallets();
+    var wallets = await _getAdminWallets();
+    if (wallets.isEmpty) {
+      await _refreshChainDetail(force: true);
+      wallets = await _getAdminWallets();
+    }
     if (!mounted || wallets.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -217,10 +331,8 @@ class _PersonalManageAccountInfoPageState
   /// 是否展示右上角三点菜单；Active 显关闭，Pending 显撤销创建，Closed 显删除。
   bool _shouldShowMenu() {
     if (_isClosed) return true;
-    final status = _accountInfo?.status;
-    if (status == null) return false;
-    if (status == DuoqianStatus.active) return true;
-    return true;
+    return _localStatus == PersonalDuoqianLocalState.statusActive ||
+        _localStatus == PersonalDuoqianLocalState.statusPending;
   }
 
   Future<List<WalletProfile>> _getAdminWallets() async {
@@ -247,6 +359,10 @@ class _PersonalManageAccountInfoPageState
           .personalAddressEqualTo(widget.institution.duoqianAddress)
           .deleteAll();
       await PersonalDuoqianLocalState.deleteStatusInTxn(
+        isar,
+        widget.institution.duoqianAddress,
+      );
+      await PersonalDuoqianLocalState.deleteDetailInTxn(
         isar,
         widget.institution.duoqianAddress,
       );
@@ -291,9 +407,13 @@ class _PersonalManageAccountInfoPageState
   /// 仅个人 Pending 路径调用；Active 走 propose_close。
   /// 当前仅支持热钱包:冷钱包用户走"管理员列表" → 投反对票完成同样语义。
   Future<void> _confirmRevokeCreate() async {
-    if (_accountInfo?.status == DuoqianStatus.active) return;
+    if (_localStatus == PersonalDuoqianLocalState.statusActive) return;
 
-    final adminWallets = await _getAdminWallets();
+    var adminWallets = await _getAdminWallets();
+    if (adminWallets.isEmpty) {
+      await _refreshChainDetail(force: true);
+      adminWallets = await _getAdminWallets();
+    }
     if (!mounted) return;
     if (adminWallets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -346,7 +466,6 @@ class _PersonalManageAccountInfoPageState
     );
     if (ok != true || !mounted) return;
 
-    setState(() => _loading = true);
     try {
       final wm = WalletManager();
       await wm.authenticateForSigning();
@@ -365,7 +484,6 @@ class _PersonalManageAccountInfoPageState
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('撤销失败:$e')),
       );
@@ -401,7 +519,8 @@ class _PersonalManageAccountInfoPageState
                 if (value == 'revoke_create') _confirmRevokeCreate();
               },
               itemBuilder: (_) {
-                final isActive = _accountInfo?.status == DuoqianStatus.active;
+                final isActive =
+                    _localStatus == PersonalDuoqianLocalState.statusActive;
                 return [
                   if (_isClosed)
                     const PopupMenuItem(
@@ -451,37 +570,7 @@ class _PersonalManageAccountInfoPageState
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _buildContent(),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.danger),
-            const SizedBox(height: 12),
-            const Text('加载失败',
-                style: TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
-            const SizedBox(height: 6),
-            Text(
-              _error!,
-              style:
-                  const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(onPressed: _load, child: const Text('重试')),
-          ],
-        ),
-      ),
+      body: _buildContent(),
     );
   }
 
@@ -490,21 +579,18 @@ class _PersonalManageAccountInfoPageState
     final info = _accountInfo;
     final statusLabel = _isClosed
         ? '已注销'
-        : info == null
-            ? '已注销'
-            : info.status == DuoqianStatus.active
-                ? '已激活'
-                : '待激活';
+        : _localStatus == PersonalDuoqianLocalState.statusActive
+            ? '已激活'
+            : '待激活';
     final statusColor = _isClosed
         ? AppTheme.textTertiary
-        : info?.status == DuoqianStatus.active
+        : _localStatus == PersonalDuoqianLocalState.statusActive
             ? AppTheme.success
             : AppTheme.warning;
 
     return RefreshIndicator(
       onRefresh: () async {
-        _adminService.clearCache(_subjectIdentity);
-        await _load();
+        await _refreshChainDetail(force: true);
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -550,7 +636,7 @@ class _PersonalManageAccountInfoPageState
                     // 账户余额：Active 显示链上 free_balance，Pending 显示
                     // 发起人承诺金额；注销账户不再显示旧金额。
                     const Divider(height: 20),
-                    _buildBalanceRow(info?.status),
+                    _buildBalanceRow(_statusEnumFromLocal(_localStatus)),
                   ],
                   const Divider(height: 20),
                   _buildInfoRow('状态', statusLabel, valueColor: statusColor),
@@ -566,9 +652,9 @@ class _PersonalManageAccountInfoPageState
             DuoqianTransferEntryCard(
               institution: widget.institution,
               isPersonal: true,
-              enabled: _accountInfo?.status == DuoqianStatus.active,
+              enabled: _localStatus == PersonalDuoqianLocalState.statusActive,
               loadAdminWallets: _getAdminWallets,
-              onCreated: _load,
+              onCreated: () => _refreshChainDetail(force: true),
             ),
             const SizedBox(height: 16),
           ] else
@@ -662,6 +748,9 @@ class _PersonalManageAccountInfoPageState
   }
 
   Future<void> _openAdminListPage(DuoqianAccountInfo? info) async {
+    if (_adminPubkeys.isEmpty) {
+      await _refreshChainDetail(force: true);
+    }
     final wallets = await _getAdminWallets();
     if (!mounted) return;
     final creator = await _resolvePersonalCreatorPubkeyHex();
@@ -671,15 +760,15 @@ class _PersonalManageAccountInfoPageState
       MaterialPageRoute(
         builder: (_) => PersonalAdminListPage(
           institution: widget.institution,
-          duoqianStatus: info?.status ?? DuoqianStatus.pending,
+          duoqianStatus: _statusEnumFromLocal(_localStatus),
           adminPubkeys: _adminPubkeys,
           adminWallets: wallets,
           creatorPubkeyHex: creator,
         ),
       ),
     );
-    // 子页可能完成投票 → 刷新本页状态(可能多签已激活)
-    if (mounted) await _load();
+    // 子页可能完成投票 → 精准刷新当前多签状态(可能已激活)。
+    if (mounted) await _refreshChainDetail(force: true);
   }
 
   /// 从本机 Isar 读取个人多签创建者公钥 hex。
