@@ -15,6 +15,35 @@ class InternalVoteQueryService {
 
   /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
+    final data = await _rpc.fetchStorage(_adminVoteKey(proposalId, pubkeyHex));
+    if (data == null || data.isEmpty) return null;
+    return data[0] == 1;
+  }
+
+  /// 批量查询管理员投票记录。
+  ///
+  /// 中文注释：详情页和红点判断不能再按管理员逐条 RPC；这里统一拼好
+  /// `InternalVotesByAccount` storage key 后分块读取。
+  Future<Map<String, bool?>> fetchAdminVotesBatch(
+    int proposalId,
+    Iterable<String> pubkeysHex,
+  ) async {
+    final keyByPubkey = <String, String>{};
+    for (final pubkey in pubkeysHex) {
+      final clean = _normalizeHex(pubkey);
+      if (clean.isEmpty) continue;
+      keyByPubkey[clean] = _adminVoteKey(proposalId, clean);
+    }
+    if (keyByPubkey.isEmpty) return const {};
+
+    final values = await _rpc.fetchStorageBatchChunked(keyByPubkey.values);
+    return {
+      for (final entry in keyByPubkey.entries)
+        entry.key: _decodeVote(values[entry.value]),
+    };
+  }
+
+  String _adminVoteKey(int proposalId, String pubkeyHex) {
     final proposalIdBytes = _u64ToLeBytes(proposalId);
     final accountBytes = _hexDecode(pubkeyHex);
     final palletHash = Hasher.twoxx128.hashString('InternalVote');
@@ -32,7 +61,10 @@ class InternalVoteQueryService {
     fullKey.setAll(offset, key1);
     offset += key1.length;
     fullKey.setAll(offset, key2);
-    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    return '0x${_hexEncode(fullKey)}';
+  }
+
+  bool? _decodeVote(Uint8List? data) {
     if (data == null || data.isEmpty) return null;
     return data[0] == 1;
   }
@@ -53,12 +85,17 @@ class InternalVoteQueryService {
   }
 
   Uint8List _hexDecode(String hex) {
-    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final h = _normalizeHex(hex);
     final result = Uint8List(h.length ~/ 2);
     for (var i = 0; i < result.length; i++) {
       result[i] = int.parse(h.substring(i * 2, i * 2 + 2), radix: 16);
     }
     return result;
+  }
+
+  String _normalizeHex(String hex) {
+    final h = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return h.toLowerCase();
   }
 
   static String _hexEncode(Uint8List bytes) {

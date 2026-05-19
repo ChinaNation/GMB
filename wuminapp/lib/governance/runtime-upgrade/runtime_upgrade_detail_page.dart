@@ -11,6 +11,7 @@ import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/organization-manage/institution_registry.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_detail_local_store.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_service.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
@@ -49,6 +50,8 @@ class RuntimeUpgradeDetailPage extends StatefulWidget {
 class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   final RuntimeUpgradeService _service = RuntimeUpgradeService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
+  final ProposalDetailLocalStore _detailStore =
+      ProposalDetailLocalStore.instance;
 
   bool _loading = true;
   bool _submitting = false;
@@ -113,7 +116,16 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
   }
 
   Future<void> _load({bool showSpinner = true}) async {
+    ProposalDetailSnapshot? localSnapshot;
     if (showSpinner) {
+      localSnapshot = await _applyLocalSnapshot();
+    }
+    if (showSpinner &&
+        localSnapshot?.isFresh(ProposalDetailLocalStore.activeTtl) == true) {
+      return;
+    }
+
+    if (showSpinner && localSnapshot == null) {
       setState(() {
         _loading = true;
         _error = null;
@@ -169,19 +181,12 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
           ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
 
         final institutionBytes = _institutionSubjectId(institution);
-        final voteResults = await Future.wait(
-          admins.map((pubkey) async => MapEntry(
-                pubkey,
-                await _service.fetchJointAdminVote(
-                  widget.proposalId,
-                  institutionBytes,
-                  pubkey,
-                ),
-              )),
+        final voteResults = await _service.fetchJointAdminVotesBatch(
+          widget.proposalId,
+          institutionBytes,
+          admins,
         );
-        adminVotes = {
-          for (final entry in voteResults) entry.key: entry.value,
-        };
+        adminVotes = voteResults;
 
         // 检查待确认投票。联合投票不读 InternalVote，而是读 JointVote
         // 机构管理员投票记录。
@@ -219,6 +224,22 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       }
 
       if (!mounted) return;
+      try {
+        await _detailStore.put(_snapshotFromChain(
+          meta: meta,
+          proposalInfo: proposalInfo,
+          jointTally: jointTally,
+          referendumTally: referendumTally,
+          admins: admins,
+          adminVotes: adminVotes,
+          pendingPubkeys: pendingPubkeys,
+          institutionVote: institutionVote,
+          institutionAdminTally: institutionAdminTally,
+        ));
+      } catch (_) {
+        // 中文注释：详情快照写入失败不能影响链上最新结果展示。
+      }
+      if (!mounted) return;
       setState(() {
         _meta = meta;
         _proposalInfo = proposalInfo;
@@ -235,11 +256,165 @@ class _RuntimeUpgradeDetailPageState extends State<RuntimeUpgradeDetailPage> {
       });
     } catch (e) {
       if (!mounted) return;
+      if (localSnapshot != null) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
+  }
+
+  Future<ProposalDetailSnapshot?> _applyLocalSnapshot() async {
+    try {
+      final snapshot =
+          await _detailStore.read('runtime_upgrade', widget.proposalId);
+      if (snapshot == null || !mounted) return snapshot;
+      final admins = snapshot.admins;
+      final pendingPks = snapshot.pendingPubkeys.toSet();
+      final adminSet = admins.toSet();
+      final matchedAdminWallets = widget.adminWallets.where((wallet) {
+        return adminSet.contains(_normalizeHex(wallet.pubkeyHex));
+      }).toList(growable: false)
+        ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
+      final votableWallets = matchedAdminWallets.where((wallet) {
+        final pk = _normalizeHex(wallet.pubkeyHex);
+        return snapshot.adminVotes[pk] == null && !pendingPks.contains(pk);
+      }).toList(growable: false)
+        ..sort((a, b) => a.walletIndex.compareTo(b.walletIndex));
+      setState(() {
+        _meta = _metaFromSnapshot(snapshot);
+        _proposalInfo = _proposalInfoFromSnapshot(snapshot);
+        _jointTally = (
+          yes: _toInt(snapshot.extra['joint_yes']) ?? snapshot.yesCount,
+          no: _toInt(snapshot.extra['joint_no']) ?? snapshot.noCount,
+        );
+        _referendumTally = (
+          yes: _toInt(snapshot.extra['referendum_yes']) ?? 0,
+          no: _toInt(snapshot.extra['referendum_no']) ?? 0,
+        );
+        _admins = admins;
+        _institutionVote = _toBool(snapshot.extra['institution_vote']);
+        _institutionAdminTally = (
+          yes: _toInt(snapshot.extra['institution_yes']) ?? 0,
+          no: _toInt(snapshot.extra['institution_no']) ?? 0,
+        );
+        _adminVotes = snapshot.adminVotes;
+        _pendingPubkeys = pendingPks;
+        _votableWallets = votableWallets;
+        _selectedVoteWallet =
+            votableWallets.isNotEmpty ? votableWallets.first : null;
+        _loading = false;
+        _error = null;
+      });
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ProposalDetailSnapshot _snapshotFromChain({
+    required ProposalMeta? meta,
+    required RuntimeUpgradeProposalInfo? proposalInfo,
+    required ({int yes, int no}) jointTally,
+    required ({int yes, int no}) referendumTally,
+    required List<String> admins,
+    required Map<String, bool?> adminVotes,
+    required Set<String> pendingPubkeys,
+    required bool? institutionVote,
+    required ({int yes, int no}) institutionAdminTally,
+  }) {
+    return ProposalDetailSnapshot(
+      proposalId: widget.proposalId,
+      typeKey: 'runtime_upgrade',
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      status: meta?.status,
+      yesCount: jointTally.yes,
+      noCount: jointTally.no,
+      threshold: _requiredAdminThreshold,
+      admins: admins.map(_normalizeHex).toList(growable: false),
+      adminVotes: adminVotes.map(
+        (key, value) => MapEntry(_normalizeHex(key), value),
+      ),
+      pendingPubkeys: pendingPubkeys.map(_normalizeHex).toList(growable: false),
+      detail: _proposalInfoToJson(proposalInfo),
+      extra: {
+        'meta_kind': meta?.kind,
+        'meta_stage': meta?.stage,
+        'meta_status': meta?.status,
+        'meta_internal_org': meta?.internalOrg,
+        'meta_institution_bytes_hex': meta?.institutionBytes == null
+            ? null
+            : _toHex(meta!.institutionBytes!),
+        'joint_yes': jointTally.yes,
+        'joint_no': jointTally.no,
+        'referendum_yes': referendumTally.yes,
+        'referendum_no': referendumTally.no,
+        'institution_vote': institutionVote,
+        'institution_yes': institutionAdminTally.yes,
+        'institution_no': institutionAdminTally.no,
+      },
+    );
+  }
+
+  Map<String, Object?> _proposalInfoToJson(
+    RuntimeUpgradeProposalInfo? info,
+  ) {
+    if (info == null) return const {};
+    return {
+      'proposer': info.proposer,
+      'reason': info.reason,
+      'code_hash_hex': info.codeHashHex,
+    };
+  }
+
+  RuntimeUpgradeProposalInfo? _proposalInfoFromSnapshot(
+    ProposalDetailSnapshot snapshot,
+  ) {
+    final detail = snapshot.detail;
+    final codeHash = detail['code_hash_hex']?.toString();
+    if (codeHash == null || codeHash.isEmpty) return null;
+    return RuntimeUpgradeProposalInfo(
+      proposalId: snapshot.proposalId,
+      proposer: detail['proposer']?.toString() ?? '',
+      reason: detail['reason']?.toString() ?? '',
+      codeHashHex: codeHash,
+    );
+  }
+
+  ProposalMeta? _metaFromSnapshot(ProposalDetailSnapshot snapshot) {
+    final kind = _toInt(snapshot.extra['meta_kind']);
+    final stage = _toInt(snapshot.extra['meta_stage']);
+    final status = _toInt(snapshot.extra['meta_status']);
+    if (kind == null || stage == null || status == null) return null;
+    final institutionHex =
+        snapshot.extra['meta_institution_bytes_hex']?.toString();
+    return ProposalMeta(
+      proposalId: snapshot.proposalId,
+      kind: kind,
+      stage: stage,
+      status: status,
+      internalOrg: _toInt(snapshot.extra['meta_internal_org']),
+      institutionBytes: institutionHex == null || institutionHex.isEmpty
+          ? null
+          : Uint8List.fromList(_hexDecode(institutionHex)),
+    );
+  }
+
+  int? _toInt(Object? value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    return int.tryParse(value.toString());
+  }
+
+  bool? _toBool(Object? value) {
+    if (value == null) return null;
+    if (value is bool) return value;
+    if (value.toString() == 'true') return true;
+    if (value.toString() == 'false') return false;
+    return null;
   }
 
   String _normalizeHex(String hex) {

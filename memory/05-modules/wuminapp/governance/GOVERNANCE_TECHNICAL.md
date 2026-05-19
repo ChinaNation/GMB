@@ -43,6 +43,10 @@ lib/votingengine/
 - `ProposalContextResolver` 读取本地钱包失败时返回空管理员钱包列表，并保留链上机构/提案内容展示。
 - 机构详情页单独读取冷钱包管理员匹配关系；该读取失败只影响“当前用户是否管理员”的本地提示，不影响机构余额、管理员名单和提案列表。
 - 所有治理模块读写 Isar 必须走 `WalletIsar.instance.read()` / `WalletIsar.instance.writeTxn()`，不得直接取 `WalletIsar.instance.db()`。
+- 治理列表和详情页的展示数据分三层：本地静态机构常量、本机 Isar 持久化展示快照、链上 runtime 真值。页面首屏只能依赖前两层；链上读取放到后台 TTL 刷新、下拉刷新、返回刷新或提交前复核。
+- `ProposalLocalStore` 保存广场/机构提案列表摘要和索引；`ProposalDetailLocalStore` 保存转账提案、多签管理提案、Runtime 升级提案详情快照；两者都只服务展示，不得作为投票/执行/提交前校验的最终真相。
+- `AdminSubjectService` 保存管理员主体持久化短缓存；提交投票前仍必须重新读取链上管理员快照、提案状态和对应管理员投票记录。
+- 管理员投票记录必须批量读取：内部投票走 `InternalVoteQueryService.fetchAdminVotesBatch()`，联合投票走 `RuntimeUpgradeService.fetchJointAdminVotesBatch()`，避免 43 个管理员造成 43 次 storage RPC。
 
 ## 2. 链上入口与权限边界
 
@@ -412,7 +416,34 @@ message = blake2_256(SCALE.encode(payload))
 
 治理机构详情页不得使用单个 `_loading` 等待全部链上请求。管理员、余额、提案任一读取失败时，只能影响对应区域；固定本地数据必须始终可见。
 
-### 7.2.2 全局提案列表（广场 tab）
+### 7.2.2 提案列表本地持久化读库
+
+治理机构详情页和公民-广场的提案列表使用 `ProposalLocalStore` 作为本机持久化展示读库：
+
+| 本地持久化内容 | 存储位置 | 用途 |
+| --- | --- | --- |
+| `LocalProposalSummary` | Isar `AppKvEntity(governance.proposal.summary.<proposal_id>)` | 提案卡片首屏展示摘要 |
+| 全局治理提案 ID 索引 | Isar `AppKvEntity(governance.proposal.index.global)` | 公民-广场分页排序 |
+| 单机构提案 ID 索引 | Isar `AppKvEntity(governance.proposal.index.institution.<sfid_number>)` | 治理机构详情页提案列表 |
+
+本地摘要包含 `proposalId / displayId / kind / stage / status / internalOrg /
+institutionBytes / institutionName / title / subtitle / iconKind /
+updatedAtMillis`。这些字段只用于列表展示和首屏恢复，不作为链上真相。
+
+链上同步规则：
+
+- 治理机构详情页先读本地机构索引和摘要；本地为空、索引超过 5 分钟、用户下拉刷新、发起/查看提案返回时，再读取链上 `ProposalsByInstitution` 和年度联合提案索引。
+- 公民-广场先读本地全局索引和摘要；本地为空、索引超过 5 分钟、用户下拉刷新、详情返回时，再读取 `ProposalsByOrg[0/1/2]`。
+- 新区块订阅只做节流检查，当前最短 60 秒读取一次全局治理 ID 索引；不得每个新区块都全量读取三类 org 索引。
+- 提案详情点击时，如果当前只有本地摘要，才按单个 `proposalId` 读取链上详情并回写本地摘要。
+- `ProposalData` 和展示摘要创建后变化很少，优先持久化复用；`status`、红点、投票记录、票数进度等动态字段按短 TTL 或用户操作触发链上刷新。
+
+硬边界：
+
+- 本地持久化读库只服务列表展示，不允许替代 runtime storage。
+- 投票按钮可用性、是否已投票、提交前状态校验、执行状态判断，仍必须读取链上 `VotingEngine / InternalVote / JointVote / AdminsChange` 相关 storage。
+
+### 7.2.3 全局提案列表（广场 tab）
 
 公民页面的"广场"tab 展示全链所有提案（不分机构），按提案 ID 倒序（新的在上）。
 
@@ -420,12 +451,13 @@ message = blake2_256(SCALE.encode(payload))
 
 | 层 | 说明 | 文件 |
 | --- | --- | --- |
-| WebSocket 订阅 | `chain_subscribeNewHeads` 监听新区块，自动检测新提案插入列表顶部 | `lib/rpc/chain_event_subscription.dart` |
-| 本地内存缓存 | ProposalMeta / TransferProposalInfo / RuntimeUpgradeProposalInfo 缓存，避免重复 RPC | `lib/citizen/governance/proposal_cache.dart` |
+| 新区块订阅 | `chain_subscribeNewHeads` 监听新区块，但对索引检查做 60 秒节流，避免每块全量读取 | `lib/rpc/chain_event_subscription.dart` |
+| 本地持久化读库 | `LocalProposalSummary` + 全局/机构索引持久化，App 重启后可先显示本地列表 | `lib/governance/shared/proposal/proposal_local_store.dart` |
+| 本地内存缓存 | ProposalMeta / TransferProposalInfo / RuntimeUpgradeProposalInfo 缓存，避免同一会话重复 RPC | `lib/governance/shared/proposal/proposal_cache.dart` |
 | 批量查询 | `state_queryStorageAt` 一次 RPC 查多个 key，减少网络往返 | `chain_rpc.dart::fetchStorageBatch` |
-| 分页加载 | 首屏 10 个，ScrollController 滚动触底加载更多 | `all_proposals_view.dart` |
+| 分页加载 | 首屏 10 个，ScrollController 滚动触底加载更多 | `lib/citizen/vote/vote_view.dart` |
 
-**数据流**：首屏 → 分页取最新 10 个 ID → 缓存命中直接显示，未命中批量查 → 存缓存 → WebSocket 后台监听新区块 → 有新提案自动插入顶部。
+**数据流**：首屏先读本机 Isar 全局索引和摘要 → 本地可用则直接显示 → 索引过期/用户刷新/详情返回再读取链上三类 org 反向索引 → 首屏 10 条缺失详情批量查询 → 写回本地持久化读库和内存缓存 → 新区块后台节流检查，有新提案再插入顶部。
 
 **提案类型识别**：
 - 内部提案：按转账等内部提案数据结构解码。
@@ -449,7 +481,7 @@ message = blake2_256(SCALE.encode(payload))
 | 公民投票 | 钱包绑定了 SFID | ⏭️ 后期 |
 | 机构联合投票 | 钱包是当前省级管理员，且该管理员尚未对本机构投票 | ✅ 已实现 |
 
-关键文件：`lib/citizen/governance/all_proposals_view.dart`
+关键文件：`lib/citizen/vote/vote_view.dart`
 
 ### 7.3 权限控制规则
 
@@ -527,6 +559,10 @@ governance 侧只允许保留通用提案列表、机构详情页挂载点、投
 字段。更多制度账户不再进入二级页面，而是在当前账户信息卡内点击箭头展开。展开项按机构
 实际存在的 `feeAddress / safetyFundAddress / stakeAddress` 懒加载链上余额，分别显示
 费用账户、安全基金账户和质押账户。
+
+治理机构详情页的提案列表先读取 `ProposalLocalStore` 中的机构索引和摘要；链上刷新成功后
+回写本地摘要与机构索引。该列表展示的本地摘要允许短暂落后链上状态，但点击提案详情、投票、
+执行和提交前校验必须重新读取链上详情和投票状态。
 
 ### 7.6 管理员列表页面
 

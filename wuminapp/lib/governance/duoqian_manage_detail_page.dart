@@ -11,6 +11,7 @@ import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_detail_local_store.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/proposal_vote_widgets.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_query_service.dart';
 import 'package:wuminapp_mobile/qr/bodies/sign_request_body.dart';
@@ -53,6 +54,8 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
   static const int _statusVoting = 0;
 
   final ProposalQueryService _proposalService = ProposalQueryService();
+  final ProposalDetailLocalStore _detailStore =
+      ProposalDetailLocalStore.instance;
   final DuoqianManageService _manageService = DuoqianManageService();
   final PersonalManageService _personalManageService = PersonalManageService();
   final InstitutionAdminService _adminService = InstitutionAdminService();
@@ -100,7 +103,16 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
 
   Future<void> _load({bool showSpinner = true}) async {
     debugPrint('[VoteDetail._load] 开始 proposalId=${widget.proposalId}');
+    ProposalDetailSnapshot? localSnapshot;
     if (showSpinner) {
+      localSnapshot = await _applyLocalSnapshot();
+    }
+    if (showSpinner &&
+        localSnapshot?.isFresh(ProposalDetailLocalStore.activeTtl) == true) {
+      return;
+    }
+
+    if (showSpinner && localSnapshot == null) {
       setState(() {
         _loading = true;
         _error = null;
@@ -183,18 +195,12 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       debugPrint(
           '[VoteDetail._load] step3 完成 stillPending.len=${pendingSummary.stillPending.length}');
 
-      // step4:逐个查询每位管理员的投票记录
-      debugPrint('[VoteDetail._load] step4: 逐 admin 查投票 (${admins.length} 个)');
-      final votes = <String, bool?>{};
-      final voteFutures = admins.map((pubkey) async {
-        final vote =
-            await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
-        return MapEntry(pubkey, vote);
-      });
-      final voteResults = await Future.wait(voteFutures);
-      for (final entry in voteResults) {
-        votes[entry.key] = entry.value;
-      }
+      // step4:批量查询每位管理员的投票记录，避免按管理员逐条 RPC。
+      debugPrint('[VoteDetail._load] step4: 批量查 admin 投票 (${admins.length} 个)');
+      final votes = await _proposalService.fetchAdminVotesBatch(
+        widget.proposalId,
+        admins,
+      );
       debugPrint('[VoteDetail._load] step4 完成');
 
       // 筛选可投票钱包
@@ -213,6 +219,21 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
         debugPrint('[VoteDetail._load] !mounted 提前返回');
         return;
       }
+      try {
+        await _detailStore.put(_snapshotFromChain(
+          status: status,
+          tally: tally,
+          threshold: threshold,
+          admins: admins,
+          votes: votes,
+          pendingPks: pendingPks,
+          createInfo: createInfo,
+          closeInfo: closeInfo,
+        ));
+      } catch (_) {
+        // 中文注释：详情快照只是首屏加速，写入失败不能影响链上结果展示。
+      }
+      if (!mounted) return;
       debugPrint('[VoteDetail._load] step5: setState');
       setState(() {
         _admins = admins;
@@ -237,11 +258,149 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
     } catch (e, st) {
       debugPrint('[VoteDetail._load] catch 异常: $e\n$st');
       if (!mounted) return;
+      if (localSnapshot != null) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
+  }
+
+  Future<ProposalDetailSnapshot?> _applyLocalSnapshot() async {
+    try {
+      final snapshot =
+          await _detailStore.read('duoqian_manage', widget.proposalId);
+      if (snapshot == null || !mounted) return snapshot;
+      final admins = snapshot.admins;
+      final pendingPks = snapshot.pendingPubkeys.toSet();
+      final votable = <WalletProfile>[];
+      for (final w in widget.adminWallets) {
+        final pk = _normalizePubkey(w.pubkeyHex);
+        if (admins.contains(pk) &&
+            snapshot.adminVotes[pk] == null &&
+            !pendingPks.contains(pk)) {
+          votable.add(w);
+        }
+      }
+      final createInfo = _createInfoFromSnapshot(snapshot);
+      final closeInfo = _closeInfoFromSnapshot(snapshot);
+      setState(() {
+        _admins = admins;
+        _status = snapshot.status;
+        _yesCount = snapshot.yesCount;
+        _noCount = snapshot.noCount;
+        _threshold = snapshot.threshold ?? 0;
+        _adminVotes = snapshot.adminVotes;
+        _pendingPubkeys = pendingPks;
+        _votableWallets = votable;
+        _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
+        _createInfo = createInfo;
+        _closeInfo = closeInfo;
+        _loading = false;
+        _error = null;
+      });
+      _syncPendingPoll(
+          pendingPks.isNotEmpty && snapshot.status == _statusVoting);
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ProposalDetailSnapshot _snapshotFromChain({
+    required int? status,
+    required ({int yes, int no}) tally,
+    required int threshold,
+    required List<String> admins,
+    required Map<String, bool?> votes,
+    required Set<String> pendingPks,
+    required personal_models.CreateDuoqianProposalInfo? createInfo,
+    required personal_models.CloseDuoqianProposalInfo? closeInfo,
+  }) {
+    return ProposalDetailSnapshot(
+      proposalId: widget.proposalId,
+      typeKey: 'duoqian_manage',
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      status: status,
+      yesCount: tally.yes,
+      noCount: tally.no,
+      threshold: threshold,
+      admins: admins.map(_normalizePubkey).toList(growable: false),
+      adminVotes: votes.map(
+        (key, value) => MapEntry(_normalizePubkey(key), value),
+      ),
+      pendingPubkeys: pendingPks.map(_normalizePubkey).toList(growable: false),
+      detail: createInfo != null
+          ? _createInfoToJson(createInfo)
+          : closeInfo != null
+              ? _closeInfoToJson(closeInfo)
+              : const {},
+    );
+  }
+
+  Map<String, Object?> _createInfoToJson(
+    personal_models.CreateDuoqianProposalInfo info,
+  ) {
+    return {
+      'kind': 'create',
+      'duoqian_address': info.duoqianAddress,
+      'proposer': info.proposer,
+      'amount_fen': info.amountFen.toString(),
+      'fee_fen': info.feeFen.toString(),
+      'status': info.status,
+    };
+  }
+
+  Map<String, Object?> _closeInfoToJson(
+    personal_models.CloseDuoqianProposalInfo info,
+  ) {
+    return {
+      'kind': 'close',
+      'duoqian_address': info.duoqianAddress,
+      'beneficiary': info.beneficiary,
+      'proposer': info.proposer,
+      'status': info.status,
+    };
+  }
+
+  personal_models.CreateDuoqianProposalInfo? _createInfoFromSnapshot(
+    ProposalDetailSnapshot snapshot,
+  ) {
+    final detail = snapshot.detail;
+    if (detail['kind'] != 'create') return null;
+    final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
+    final feeFen = BigInt.tryParse(detail['fee_fen']?.toString() ?? '');
+    final duoqianAddress = detail['duoqian_address']?.toString();
+    if (amountFen == null || feeFen == null || duoqianAddress == null) {
+      return null;
+    }
+    return personal_models.CreateDuoqianProposalInfo(
+      proposalId: snapshot.proposalId,
+      duoqianAddress: duoqianAddress,
+      proposer: detail['proposer']?.toString() ?? '',
+      amountFen: amountFen,
+      feeFen: feeFen,
+      status: snapshot.status,
+    );
+  }
+
+  personal_models.CloseDuoqianProposalInfo? _closeInfoFromSnapshot(
+    ProposalDetailSnapshot snapshot,
+  ) {
+    final detail = snapshot.detail;
+    if (detail['kind'] != 'close') return null;
+    final duoqianAddress = detail['duoqian_address']?.toString();
+    if (duoqianAddress == null) return null;
+    return personal_models.CloseDuoqianProposalInfo(
+      proposalId: snapshot.proposalId,
+      duoqianAddress: duoqianAddress,
+      beneficiary: detail['beneficiary']?.toString() ?? '',
+      proposer: detail['proposer']?.toString() ?? '',
+      status: snapshot.status,
+    );
   }
 
   // ──── 工具方法 ────

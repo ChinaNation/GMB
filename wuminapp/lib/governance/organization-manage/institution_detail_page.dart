@@ -16,12 +16,14 @@ import 'package:wuminapp_mobile/governance/organization-manage/institution_admin
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_local_store.dart';
 import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/governance/governance_proposals_page.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
+import 'package:wuminapp_mobile/transaction/shared/account_balance_snapshot_store.dart';
 
 /// 机构详情页。
 class InstitutionDetailPage extends StatefulWidget {
@@ -77,8 +79,11 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
   /// 已激活的管理员公钥集合（小写 hex）。
   Set<String> _activatedPubkeys = const {};
 
-  /// 机构页可见的提案事件（本机构内部提案 + 全局联合投票提案）。
-  List<ProposalWithDetail> _proposalEvents = const [];
+  /// 机构页可见的提案展示摘要，优先来自本地持久化读库。
+  List<LocalProposalSummary> _proposalSummaries = const [];
+
+  /// 当前会话已从链上取回的提案详情；本地摘要点击时再按需补链上详情。
+  Map<int, ProposalWithDetail> _proposalDetailsById = const {};
 
   /// 主账户实时可用余额（元）。
   double? _mainBalance;
@@ -197,8 +202,19 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Future<void> _loadMainBalance({bool force = false}) async {
     if (!mounted) return;
+    final balanceStore = AccountBalanceSnapshotStore.instance;
+    final local =
+        force ? null : await balanceStore.read(widget.institution.mainAddress);
+    if (local != null && mounted) {
+      setState(() {
+        _mainBalance = local.balanceYuan;
+        _mainBalanceLoading = false;
+        _mainBalanceError = null;
+      });
+      if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
+    }
     setState(() {
-      _mainBalanceLoading = true;
+      _mainBalanceLoading = local == null;
       _mainBalanceError = null;
     });
 
@@ -207,6 +223,14 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         widget.institution,
         forceRefresh: force,
       );
+      try {
+        await balanceStore.put(
+          accountHex: widget.institution.mainAddress,
+          balanceYuan: balance,
+        );
+      } catch (_) {
+        // 余额快照写入失败不影响当前链上余额展示。
+      }
       if (!mounted) return;
       setState(() {
         _mainBalance = balance;
@@ -216,16 +240,31 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     } catch (e, st) {
       debugPrint('[InstitutionDetail] main balance load failed: $e\n$st');
       if (!mounted) return;
-      setState(() {
-        _mainBalanceError =
-            SmoldotClientManager.instance.buildUserFacingError(e);
-        _mainBalanceLoading = false;
-      });
+      if (local == null) {
+        setState(() {
+          _mainBalanceError =
+              SmoldotClientManager.instance.buildUserFacingError(e);
+          _mainBalanceLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadProposalEvents({bool force = false}) async {
     if (!mounted) return;
+    final localLoaded = await _loadLocalProposalSummaries();
+    final localFresh = await ProposalLocalStore.instance
+        .isInstitutionIndexFresh(widget.institution.sfidNumber)
+        .catchError((_) => false);
+    if (!force && localLoaded && localFresh) {
+      if (!mounted) return;
+      setState(() {
+        _proposalLoading = false;
+        _proposalError = null;
+      });
+      return;
+    }
+
     setState(() {
       _proposalLoading = true;
       _proposalError = null;
@@ -237,9 +276,25 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         widget.institution.sfidNumber,
         forceRefresh: force,
       );
+      final summaries = proposals
+          .map(
+            (proposal) => LocalProposalSummary.fromProposal(
+              proposal,
+              institution: widget.institution,
+            ),
+          )
+          .toList(growable: false);
+      await ProposalLocalStore.instance.upsertSummaries(summaries);
+      await ProposalLocalStore.instance.putInstitutionIndex(
+        widget.institution.sfidNumber,
+        summaries.map((summary) => summary.proposalId).toList(growable: false),
+      );
       if (!mounted) return;
       setState(() {
-        _proposalEvents = proposals;
+        _proposalSummaries = summaries;
+        _proposalDetailsById = {
+          for (final proposal in proposals) proposal.meta.proposalId: proposal,
+        };
         _proposalLoading = false;
         _proposalError = null;
       });
@@ -250,6 +305,23 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         _proposalError = SmoldotClientManager.instance.buildUserFacingError(e);
         _proposalLoading = false;
       });
+    }
+  }
+
+  Future<bool> _loadLocalProposalSummaries() async {
+    try {
+      final summaries = await ProposalLocalStore.instance
+          .readInstitutionSummaries(widget.institution.sfidNumber);
+      if (!mounted || summaries.isEmpty) return summaries.isNotEmpty;
+      setState(() {
+        _proposalSummaries = summaries;
+      });
+      return true;
+    } catch (e, st) {
+      if (!WalletIsar.instance.isBusyError(e)) {
+        debugPrint('[InstitutionDetail] local proposal load failed: $e\n$st');
+      }
+      return false;
     }
   }
 
@@ -704,9 +776,22 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
     try {
       // 中文注释：更多账户余额只在用户展开时读取，避免机构详情列表初次进入时放大 RPC 压力。
+      final balanceStore = AccountBalanceSnapshotStore.instance;
       final views = await Future.wait(
         sources.map((item) async {
-          final balance = await _chainRpc.fetchBalance(item.address);
+          final local = await balanceStore.readFresh(item.address);
+          final balance =
+              local?.balanceYuan ?? await _chainRpc.fetchBalance(item.address);
+          if (local == null) {
+            try {
+              await balanceStore.put(
+                accountHex: item.address,
+                balanceYuan: balance,
+              );
+            } catch (_) {
+              // 余额快照写入失败不影响当前链上余额展示。
+            }
+          }
           return _InstitutionAccountView(
             name: item.name,
             addressSs58: _accountHexToSs58(item.address),
@@ -1002,22 +1087,22 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
           ),
         ),
         const SizedBox(height: 12),
-        if (_proposalLoading && _proposalEvents.isEmpty)
+        if (_proposalLoading && _proposalSummaries.isEmpty)
           _buildProposalLoading()
-        else if (_proposalError != null && _proposalEvents.isEmpty)
+        else if (_proposalError != null && _proposalSummaries.isEmpty)
           _buildProposalError()
-        else if (_proposalEvents.isEmpty)
+        else if (_proposalSummaries.isEmpty)
           _buildEmptyProposalState()
         else if (_proposalLoading) ...[
           _buildProposalRefreshingHint(),
           const SizedBox(height: 8),
         ],
-        ...List.generate(_proposalEvents.length, (index) {
-          final proposal = _proposalEvents[index];
+        ...List.generate(_proposalSummaries.length, (index) {
+          final summary = _proposalSummaries[index];
           return Padding(
             padding: EdgeInsets.only(
-                bottom: index < _proposalEvents.length - 1 ? 8 : 0),
-            child: _buildProposalCard(proposal),
+                bottom: index < _proposalSummaries.length - 1 ? 8 : 0),
+            child: _buildProposalCard(summary),
           );
         }),
       ],
@@ -1149,73 +1234,23 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
 
   Color _statusColor(int? status) => AppTheme.proposalStatusColor(status ?? -1);
 
-  String _proposalTitle(ProposalWithDetail proposal) {
-    final proposalId = formatProposalId(proposal.meta.displayMeta);
-    final duoqianTransferTitle =
-        DuoqianTransferProposalAdapter.title(proposal, proposalId);
-    if (duoqianTransferTitle != null) {
-      return duoqianTransferTitle;
-    }
-    if (proposal.createDuoqianDetail != null) {
-      return '创建多签 $proposalId';
-    }
-    if (proposal.closeDuoqianDetail != null) {
-      return '关闭多签 $proposalId';
-    }
-    if (proposal.runtimeUpgradeDetail != null) {
-      return '协议升级 $proposalId';
-    }
-    if (proposal.meta.kind == 1) {
-      return '联合投票提案 $proposalId';
-    }
-    return '提案 $proposalId';
+  IconData _proposalIcon(LocalProposalSummary summary) {
+    return switch (summary.iconKind) {
+      'transfer' => Icons.send_outlined,
+      'safety_fund' => Icons.health_and_safety_outlined,
+      'sweep' => Icons.account_balance_wallet_outlined,
+      'create_duoqian' => Icons.group_add,
+      'close_duoqian' => Icons.group_remove,
+      'runtime_upgrade' => Icons.arrow_upward,
+      'resolution_issuance' => Icons.add_circle_outline,
+      'resolution_destroy' => Icons.remove_circle_outline,
+      'joint' => Icons.groups_outlined,
+      _ => Icons.description_outlined,
+    };
   }
 
-  String _proposalSubtitle(ProposalWithDetail proposal) {
-    final status = _statusLabel(proposal.meta.status);
-    final duoqianTransferSubtitle =
-        DuoqianTransferProposalAdapter.subtitle(proposal, status);
-    if (duoqianTransferSubtitle != null) {
-      return duoqianTransferSubtitle;
-    }
-    final createDetail = proposal.createDuoqianDetail;
-    if (createDetail != null) {
-      return '创建个人多签账户 · $status';
-    }
-    if (proposal.closeDuoqianDetail != null) {
-      return '关闭多签账户 · $status';
-    }
-    if (proposal.runtimeUpgradeDetail != null) {
-      return '协议升级 · $status';
-    }
-    if (proposal.meta.kind == 1) {
-      return '联合投票 · $status';
-    }
-    return '提案事件 · $status';
-  }
-
-  IconData _proposalIcon(ProposalWithDetail proposal) {
-    final duoqianTransferIcon = DuoqianTransferProposalAdapter.icon(proposal);
-    if (duoqianTransferIcon != null) {
-      return duoqianTransferIcon;
-    }
-    if (proposal.createDuoqianDetail != null) {
-      return Icons.group_add;
-    }
-    if (proposal.closeDuoqianDetail != null) {
-      return Icons.group_remove;
-    }
-    if (proposal.runtimeUpgradeDetail != null) {
-      return Icons.arrow_upward;
-    }
-    if (proposal.meta.kind == 1) {
-      return Icons.groups_outlined;
-    }
-    return Icons.description_outlined;
-  }
-
-  Widget _buildProposalCard(ProposalWithDetail proposal) {
-    final statusColor = _statusColor(proposal.meta.status);
+  Widget _buildProposalCard(LocalProposalSummary summary) {
+    final statusColor = _statusColor(summary.status);
     return Card(
       elevation: 0,
       margin: EdgeInsets.zero,
@@ -1224,7 +1259,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
         side: BorderSide(color: statusColor.withValues(alpha: 0.2)),
       ),
       child: InkWell(
-        onTap: () => _openProposalDetail(proposal),
+        onTap: () => _openProposalDetail(summary),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1238,7 +1273,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child:
-                    Icon(_proposalIcon(proposal), size: 18, color: statusColor),
+                    Icon(_proposalIcon(summary), size: 18, color: statusColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1246,7 +1281,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _proposalTitle(proposal),
+                      summary.title,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -1255,7 +1290,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _proposalSubtitle(proposal),
+                      summary.subtitle,
                       style: const TextStyle(
                           fontSize: 12, color: AppTheme.textTertiary),
                     ),
@@ -1269,7 +1304,7 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  _statusLabel(proposal.meta.status),
+                  _statusLabel(summary.status),
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1307,7 +1342,15 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     }
   }
 
-  Future<void> _openProposalDetail(ProposalWithDetail proposal) async {
+  Future<void> _openProposalDetail(LocalProposalSummary summary) async {
+    final proposal = await _resolveProposalDetail(summary);
+    if (!mounted) return;
+    if (proposal == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('提案详情读取失败，请稍后重试')),
+      );
+      return;
+    }
     final proposalId = proposal.meta.proposalId;
     final ctx = ProposalContext(
       institution: widget.institution,
@@ -1350,6 +1393,42 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
     // 返回后刷新（投票状态可能变化）
     if (mounted) {
       unawaited(_refreshAll(force: true));
+    }
+  }
+
+  Future<ProposalWithDetail?> _resolveProposalDetail(
+    LocalProposalSummary summary,
+  ) async {
+    final cached = _proposalDetailsById[summary.proposalId];
+    if (cached != null) return cached;
+    try {
+      final fresh =
+          await _duoqianTransferFeed.fetchProposalsByIds([summary.proposalId]);
+      if (fresh.isEmpty) return null;
+      final proposal = fresh.first;
+      final refreshedSummary = LocalProposalSummary.fromProposal(
+        proposal,
+        institution: widget.institution,
+      );
+      await ProposalLocalStore.instance.upsertSummaries([refreshedSummary]);
+      if (!mounted) return proposal;
+      setState(() {
+        _proposalDetailsById = {
+          ..._proposalDetailsById,
+          proposal.meta.proposalId: proposal,
+        };
+        _proposalSummaries = [
+          for (final item in _proposalSummaries)
+            if (item.proposalId == refreshedSummary.proposalId)
+              refreshedSummary
+            else
+              item,
+        ];
+      });
+      return proposal;
+    } catch (e, st) {
+      debugPrint('[InstitutionDetail] proposal detail resolve failed: $e\n$st');
+      return null;
     }
   }
 

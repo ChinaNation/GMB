@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:polkadart/polkadart.dart' show Hasher;
 import 'package:polkadart_keyring/polkadart_keyring.dart' show Keyring;
+import 'package:wuminapp_mobile/isar/wallet_isar.dart';
 import 'package:wuminapp_mobile/rpc/chain_rpc.dart';
 import 'package:wuminapp_mobile/rpc/sfid_public.dart';
 
@@ -82,19 +83,29 @@ class ClearingBankDirectory {
   }
 
   Future<ClearingBankNodeEndpoint?> fetchEndpoint(String sfidNumber) async {
+    final cached = await _ClearingBankCache.readEndpoint(sfidNumber);
+    if (cached != null && cached.isEndpointFresh) return cached.endpoint;
     final key = _clearingBankNodesKey(sfidNumber);
     final raw = await _chainRpc.fetchStorage(key);
     if (raw == null || raw.isEmpty) return null;
-    return _decodeEndpoint(sfidNumber, raw);
+    final endpoint = _decodeEndpoint(sfidNumber, raw);
+    if (endpoint != null) {
+      await _ClearingBankCache.writeEndpoint(endpoint);
+    }
+    return endpoint;
   }
 
   /// 查询链上 `UserBank[user]`,返回用户当前绑定清算行主账户 SS58。
   Future<String?> fetchUserBank(String userAddress) async {
+    final cached = await _ClearingBankCache.readUserBank(userAddress);
+    if (cached != null && cached.isUserBankFresh) return cached.userBank;
     final account = Uint8List.fromList(Keyring().decodeAddress(userAddress));
     final key = _userBankKey(account);
     final raw = await _chainRpc.fetchStorage(key);
     if (raw == null || raw.length < 32) return null;
-    return Keyring().encodeAddress(raw.sublist(0, 32).toList(), 2027);
+    final userBank = Keyring().encodeAddress(raw.sublist(0, 32).toList(), 2027);
+    await _ClearingBankCache.writeUserBank(userAddress, userBank);
+    return userBank;
   }
 
   static ClearingBankNodeEndpoint? _decodeEndpoint(
@@ -199,4 +210,194 @@ class ClearingBankDirectory {
   static String _hex(List<int> bytes) {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
+}
+
+class _ClearingBankCache {
+  static const _endpointPrefix = 'offchain.clearing_bank.endpoint.';
+  static const _userBankPrefix = 'offchain.clearing_bank.user_bank.';
+  static const _endpointTtl = Duration(hours: 24);
+  static const _userBankTtl = Duration(minutes: 3);
+
+  static Future<_CachedClearingBankEndpoint?> readEndpoint(
+    String sfidNumber,
+  ) async {
+    try {
+      return WalletIsar.instance.read((isar) async {
+        final entity = await isar.appKvEntitys.getByKey(
+          '$_endpointPrefix$sfidNumber',
+        );
+        return _CachedClearingBankEndpoint.fromJsonString(entity?.stringValue);
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> writeEndpoint(ClearingBankNodeEndpoint endpoint) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _CachedClearingBankEndpoint(
+      endpoint: endpoint,
+      updatedAtMillis: now,
+    );
+    try {
+      await WalletIsar.instance.writeTxn((isar) async {
+        final key = '$_endpointPrefix${endpoint.sfidNumber}';
+        final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+        entity
+          ..key = key
+          ..stringValue = jsonEncode(cached.toJson())
+          ..intValue = now
+          ..boolValue = null;
+        await isar.appKvEntitys.putByKey(entity);
+      });
+    } catch (_) {
+      // 中文注释：清算行 endpoint 缓存失败时继续使用链上结果。
+    }
+  }
+
+  static Future<_CachedUserBank?> readUserBank(String userAddress) async {
+    try {
+      return WalletIsar.instance.read((isar) async {
+        final entity = await isar.appKvEntitys.getByKey(
+          '$_userBankPrefix$userAddress',
+        );
+        return _CachedUserBank.fromJsonString(entity?.stringValue);
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> writeUserBank(String userAddress, String userBank) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _CachedUserBank(
+      userBank: userBank,
+      updatedAtMillis: now,
+    );
+    try {
+      await WalletIsar.instance.writeTxn((isar) async {
+        final key = '$_userBankPrefix$userAddress';
+        final entity = await isar.appKvEntitys.getByKey(key) ?? AppKvEntity();
+        entity
+          ..key = key
+          ..stringValue = jsonEncode(cached.toJson())
+          ..intValue = now
+          ..boolValue = null;
+        await isar.appKvEntitys.putByKey(entity);
+      });
+    } catch (_) {
+      // 绑定状态缓存失败不影响链上结果返回。
+    }
+  }
+}
+
+class _CachedClearingBankEndpoint {
+  const _CachedClearingBankEndpoint({
+    required this.endpoint,
+    required this.updatedAtMillis,
+  });
+
+  final ClearingBankNodeEndpoint endpoint;
+  final int updatedAtMillis;
+
+  bool get isEndpointFresh {
+    return DateTime.now().millisecondsSinceEpoch - updatedAtMillis <
+        _ClearingBankCache._endpointTtl.inMilliseconds;
+  }
+
+  Map<String, Object?> toJson() => {
+        'updated_at_millis': updatedAtMillis,
+        'endpoint': {
+          'sfid_number': endpoint.sfidNumber,
+          'peer_id': endpoint.peerId,
+          'rpc_domain': endpoint.rpcDomain,
+          'rpc_port': endpoint.rpcPort,
+          'registered_at': endpoint.registeredAt,
+          'registered_by': endpoint.registeredBy,
+        },
+      };
+
+  static _CachedClearingBankEndpoint? fromJsonString(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final endpointRaw = decoded['endpoint'];
+      if (endpointRaw is! Map<String, dynamic>) return null;
+      final updatedAtMillis = _toInt(decoded['updated_at_millis']);
+      final sfidNumber = endpointRaw['sfid_number']?.toString();
+      final peerId = endpointRaw['peer_id']?.toString();
+      final rpcDomain = endpointRaw['rpc_domain']?.toString();
+      final rpcPort = _toInt(endpointRaw['rpc_port']);
+      final registeredAt = _toInt(endpointRaw['registered_at']);
+      final registeredBy = endpointRaw['registered_by']?.toString();
+      if (updatedAtMillis == null ||
+          sfidNumber == null ||
+          peerId == null ||
+          rpcDomain == null ||
+          rpcPort == null ||
+          registeredAt == null ||
+          registeredBy == null) {
+        return null;
+      }
+      return _CachedClearingBankEndpoint(
+        updatedAtMillis: updatedAtMillis,
+        endpoint: ClearingBankNodeEndpoint(
+          sfidNumber: sfidNumber,
+          peerId: peerId,
+          rpcDomain: rpcDomain,
+          rpcPort: rpcPort,
+          registeredAt: registeredAt,
+          registeredBy: registeredBy,
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+class _CachedUserBank {
+  const _CachedUserBank({
+    required this.userBank,
+    required this.updatedAtMillis,
+  });
+
+  final String userBank;
+  final int updatedAtMillis;
+
+  bool get isUserBankFresh {
+    return DateTime.now().millisecondsSinceEpoch - updatedAtMillis <
+        _ClearingBankCache._userBankTtl.inMilliseconds;
+  }
+
+  Map<String, Object?> toJson() => {
+        'user_bank': userBank,
+        'updated_at_millis': updatedAtMillis,
+      };
+
+  static _CachedUserBank? fromJsonString(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final userBank = decoded['user_bank']?.toString();
+      final updatedAtMillis = _toInt(decoded['updated_at_millis']);
+      if (userBank == null || userBank.isEmpty || updatedAtMillis == null) {
+        return null;
+      }
+      return _CachedUserBank(
+        userBank: userBank,
+        updatedAtMillis: updatedAtMillis,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+int? _toInt(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  return int.tryParse(value.toString());
 }

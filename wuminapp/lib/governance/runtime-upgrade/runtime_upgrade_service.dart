@@ -156,6 +156,43 @@ class RuntimeUpgradeService {
     Uint8List institutionId48,
     String pubkeyHex,
   ) async {
+    final key = _jointAdminVoteKey(proposalId, institutionId48, pubkeyHex);
+    if (key == null) return null;
+    final data = await _rpc.fetchStorage(key);
+    if (data == null || data.isEmpty) return null;
+    return data[0] == 1;
+  }
+
+  /// 批量查询联合投票管理员投票记录。
+  ///
+  /// 中文注释：协议升级详情页最多会显示 43 个管理员，必须批量读取
+  /// `JointVotesByAdmin`，不能逐管理员发起 RPC。
+  Future<Map<String, bool?>> fetchJointAdminVotesBatch(
+    int proposalId,
+    Uint8List institutionId48,
+    Iterable<String> pubkeysHex,
+  ) async {
+    final keyByPubkey = <String, String>{};
+    for (final pubkey in pubkeysHex) {
+      final clean = _normalizeHex(pubkey);
+      if (clean.isEmpty) continue;
+      final key = _jointAdminVoteKey(proposalId, institutionId48, clean);
+      if (key == null) continue;
+      keyByPubkey[clean] = key;
+    }
+    if (keyByPubkey.isEmpty) return const {};
+    final values = await _rpc.fetchStorageBatchChunked(keyByPubkey.values);
+    return {
+      for (final entry in keyByPubkey.entries)
+        entry.key: _decodeBoolVote(values[entry.value]),
+    };
+  }
+
+  String? _jointAdminVoteKey(
+    int proposalId,
+    Uint8List institutionId48,
+    String pubkeyHex,
+  ) {
     final accountBytes = Uint8List.fromList(_hexDecode(pubkeyHex));
     if (institutionId48.length != 48 || accountBytes.length != 32) return null;
     final compositeKey = Uint8List(institutionId48.length + accountBytes.length)
@@ -167,7 +204,10 @@ class RuntimeUpgradeService {
       _u64ToLeBytes(proposalId),
       compositeKey,
     );
-    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
+    return '0x${_hexEncode(fullKey)}';
+  }
+
+  bool? _decodeBoolVote(Uint8List? data) {
     if (data == null || data.isEmpty) return null;
     return data[0] == 1;
   }
@@ -483,12 +523,17 @@ class RuntimeUpgradeService {
   }
 
   static List<int> _hexDecode(String hex) {
-    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    final clean = _normalizeHex(hex);
     final out = <int>[];
     for (var i = 0; i + 1 < clean.length; i += 2) {
       out.add(int.parse(clean.substring(i, i + 2), radix: 16));
     }
     return out;
+  }
+
+  static String _normalizeHex(String hex) {
+    final clean = hex.startsWith('0x') ? hex.substring(2) : hex;
+    return clean.toLowerCase();
   }
 
   // ──── 内部：哈希（直接使用 polkadart Hasher）────

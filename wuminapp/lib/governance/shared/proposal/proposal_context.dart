@@ -381,6 +381,21 @@ class VoteChecker {
       institutionBytes = _sfidNumberToFixed48(institution.sfidNumber);
     }
 
+    final pubkeys = adminWallets.map((wallet) => wallet.pubkeyHex).toList();
+    if (kind == 0) {
+      final votes =
+          await _internalVoteService.fetchAdminVotesBatch(proposalId, pubkeys);
+      return pubkeys.any((pubkey) => votes[_normalize(pubkey)] == null);
+    }
+    if (kind == 1 && institutionBytes != null) {
+      final votes = await _runtimeService.fetchJointAdminVotesBatch(
+        proposalId,
+        institutionBytes,
+        pubkeys,
+      );
+      return pubkeys.any((pubkey) => votes[_normalize(pubkey)] == null);
+    }
+
     for (final w in adminWallets) {
       final vote = await fetchVote(
         proposalId: proposalId,
