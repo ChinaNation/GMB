@@ -9,9 +9,9 @@ import 'package:wuminapp_mobile/ui/widgets/shimmer_loading.dart';
 import 'package:wuminapp_mobile/rpc/chain_event_subscription.dart';
 import 'package:wuminapp_mobile/rpc/smoldot_client.dart';
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
-import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_cache.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_local_store.dart';
 import 'package:wuminapp_mobile/governance/runtime-upgrade/runtime_upgrade_detail_page.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_proposal_adapter.dart';
@@ -39,6 +39,7 @@ class VoteView extends StatefulWidget {
 
 class _VoteViewState extends State<VoteView> {
   static const int _pageSize = 10;
+  static const Duration _newBlockIndexCheckMinInterval = Duration(seconds: 60);
 
   // 治理类 org 编码(与 votingengine::internal_vote::ORG_* 对齐)
   static const int _orgNrc = 0;
@@ -69,6 +70,8 @@ class _VoteViewState extends State<VoteView> {
 
   /// 待投票计数。
   int _pendingVoteCount = 0;
+
+  DateTime? _lastProposalIndexCheckAt;
 
   bool get _hasMore => _items.length < _allIds.length;
 
@@ -101,8 +104,17 @@ class _VoteViewState extends State<VoteView> {
   }
 
   Future<void> _checkForNewProposals() async {
+    final now = DateTime.now();
+    final lastCheck = _lastProposalIndexCheckAt;
+    if (lastCheck != null &&
+        now.difference(lastCheck) < _newBlockIndexCheckMinInterval) {
+      return;
+    }
+    _lastProposalIndexCheckAt = now;
+
     try {
       final fresh = await _fetchAllGovernanceIds();
+      await ProposalLocalStore.instance.putGlobalIndex(fresh);
       final knownSet = _allIds.toSet();
       final newIds = fresh.where((id) => !knownSet.contains(id)).toList();
       if (newIds.isEmpty) return;
@@ -142,22 +154,30 @@ class _VoteViewState extends State<VoteView> {
     return all;
   }
 
-  Future<void> _loadFirstPage() async {
+  Future<void> _loadFirstPage({bool force = false}) async {
     setState(() {
-      _loading = true;
+      _loading = _items.isEmpty;
       _error = null;
-      _items = [];
-      _allIds = const [];
       _loadingMore = false;
     });
+
+    final localLoaded = !force && await _loadFirstPageFromLocal();
+    if (localLoaded && await ProposalLocalStore.instance.isGlobalIndexFresh()) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+      return;
+    }
 
     try {
       final ids = await _fetchAllGovernanceIds();
 
       if (ids.isEmpty) {
+        await ProposalLocalStore.instance.putGlobalIndex(const []);
         if (!mounted) return;
         setState(() {
           _allIds = const [];
+          _items = const [];
           _loading = false;
         });
         widget.onPendingVoteCountChanged?.call(0);
@@ -168,6 +188,7 @@ class _VoteViewState extends State<VoteView> {
       final firstPageIds =
           ids.sublist(0, ids.length < _pageSize ? ids.length : _pageSize);
       final items = await _loadItemsForIds(firstPageIds);
+      await ProposalLocalStore.instance.putGlobalIndex(ids);
 
       if (!mounted) return;
       setState(() {
@@ -179,11 +200,37 @@ class _VoteViewState extends State<VoteView> {
       _updatePendingVoteCount();
     } catch (e) {
       if (!mounted) return;
+      if (localLoaded) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
       widget.onPendingVoteCountChanged?.call(0);
+    }
+  }
+
+  Future<bool> _loadFirstPageFromLocal() async {
+    try {
+      final index = await ProposalLocalStore.instance.readGlobalIndex();
+      if (index == null || index.ids.isEmpty) return false;
+      final summaries = await ProposalLocalStore.instance.readGlobalPage(
+        limit: _pageSize,
+      );
+      if (!mounted || summaries.isEmpty) return summaries.isNotEmpty;
+      setState(() {
+        _allIds = index.ids;
+        _items = summaries
+            .map(_ProposalDisplayItem.fromLocalSummary)
+            .toList(growable: false);
+        _loading = false;
+      });
+      widget.onPendingVoteCountChanged?.call(0);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -198,7 +245,11 @@ class _VoteViewState extends State<VoteView> {
           ? _allIds.length
           : (from + _pageSize);
       final pageIds = _allIds.sublist(from, to);
-      final newItems = await _loadItemsForIds(pageIds);
+      final localItems = await _loadLocalItemsForIds(pageIds);
+      final useLocalOnly = localItems.length == pageIds.length &&
+          await ProposalLocalStore.instance.isGlobalIndexFresh();
+      final newItems =
+          useLocalOnly ? localItems : await _loadItemsForIds(pageIds);
 
       if (!mounted) return;
       setState(() {
@@ -212,6 +263,15 @@ class _VoteViewState extends State<VoteView> {
         setState(() => _loadingMore = false);
       }
     }
+  }
+
+  Future<List<_ProposalDisplayItem>> _loadLocalItemsForIds(
+      List<int> ids) async {
+    final summaries =
+        await ProposalLocalStore.instance.readSummariesForIds(ids);
+    return summaries
+        .map(_ProposalDisplayItem.fromLocalSummary)
+        .toList(growable: false);
   }
 
   /// 给定一组 proposal_id,batch fetch 详情 + 上下文 + 待投票判定,
@@ -245,13 +305,16 @@ class _VoteViewState extends State<VoteView> {
         );
       }
 
-      items.add(_ProposalDisplayItem(
+      items.add(_ProposalDisplayItem.fromProposal(
         proposal: p,
         context: ctx,
         needsVote: needsVote,
       ));
     }
 
+    await ProposalLocalStore.instance.upsertSummaries(
+      items.map((item) => item.summary).toList(growable: false),
+    );
     return items;
   }
 
@@ -309,7 +372,7 @@ class _VoteViewState extends State<VoteView> {
           _contextResolver.clearWalletCache();
           ProposalCache.clear();
           DuoqianTransferProposalAdapter.clearCache();
-          await _loadFirstPage();
+          await _loadFirstPage(force: true);
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -324,7 +387,7 @@ class _VoteViewState extends State<VoteView> {
         _contextResolver.clearWalletCache();
         ProposalCache.clear();
         DuoqianTransferProposalAdapter.clearCache();
-        await _loadFirstPage();
+        await _loadFirstPage(force: true);
       },
       child: ListView.separated(
         controller: _scrollController,
@@ -352,17 +415,8 @@ class _VoteViewState extends State<VoteView> {
   }
 
   Widget _buildProposalCard(_ProposalDisplayItem item) {
-    final meta = item.proposal.meta;
-    final inst = item.institution;
-    final statusColor = _statusColor(meta.status);
-    final statusLabel = _statusLabel(meta.status);
-    final duoqianTransferSummary =
-        DuoqianTransferProposalAdapter.listSummary(item.proposal);
-    final upgradeDetail = item.proposal.runtimeUpgradeDetail;
-    final createDqDetail = item.proposal.createDuoqianDetail;
-    final closeDqDetail = item.proposal.closeDuoqianDetail;
-    final resIssuance = item.proposal.resolutionIssuanceSummary;
-    final resDestroy = item.proposal.resolutionDestroySummary;
+    final statusColor = _statusColor(item.status);
+    final statusLabel = _statusLabel(item.status);
 
     return PressableCard(
       child: Card(
@@ -387,16 +441,8 @@ class _VoteViewState extends State<VoteView> {
                     color: statusColor.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                      _proposalIcon(
-                          item.proposal,
-                          upgradeDetail,
-                          createDqDetail != null,
-                          closeDqDetail != null,
-                          resIssuance,
-                          resDestroy),
-                      size: 18,
-                      color: statusColor),
+                  child:
+                      Icon(_proposalIcon(item), size: 18, color: statusColor),
                 ),
                 const SizedBox(width: 12),
                 // 中间信息
@@ -407,7 +453,7 @@ class _VoteViewState extends State<VoteView> {
                       Row(
                         children: [
                           Text(
-                            formatProposalId(meta.displayMeta),
+                            item.displayId,
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -415,7 +461,7 @@ class _VoteViewState extends State<VoteView> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (inst != null)
+                          if (item.institutionName != null)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
@@ -425,7 +471,7 @@ class _VoteViewState extends State<VoteView> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                inst.name,
+                                item.institutionName!,
                                 style: const TextStyle(
                                     fontSize: 10, color: AppTheme.primaryDark),
                                 overflow: TextOverflow.ellipsis,
@@ -435,20 +481,7 @@ class _VoteViewState extends State<VoteView> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        duoqianTransferSummary ??
-                            (upgradeDetail != null
-                                ? '协议升级'
-                                : createDqDetail != null
-                                    ? '创建个人多签'
-                                    : closeDqDetail != null
-                                        ? '关闭多签'
-                                        : resIssuance != null
-                                            ? '决议发行'
-                                            : resDestroy != null
-                                                ? '决议销毁'
-                                                : meta.kind == 1
-                                                    ? '联合投票提案'
-                                                    : '提案 ${_kindLabel(meta.kind)}'),
+                        item.summary.listSubtitle,
                         style: const TextStyle(
                             fontSize: 12, color: AppTheme.textTertiary),
                       ),
@@ -519,57 +552,54 @@ class _VoteViewState extends State<VoteView> {
 
   /// 根据提案类型返回图标。
   IconData _proposalIcon(
-    ProposalWithDetail proposal,
-    RuntimeUpgradeProposalInfo? upgradeDetail, [
-    bool hasCreateDqDetail = false,
-    bool hasCloseDqDetail = false,
-    String? resIssuance,
-    String? resDestroy,
-  ]) {
-    final duoqianTransferIcon = DuoqianTransferProposalAdapter.icon(proposal);
-    if (duoqianTransferIcon != null) return duoqianTransferIcon;
-    if (upgradeDetail != null) return Icons.arrow_upward; // 协议升级
-    if (hasCreateDqDetail) return Icons.group_add; // 创建多签
-    if (hasCloseDqDetail) return Icons.group_remove; // 关闭多签
-    if (resIssuance != null) return Icons.add_circle_outline; // 决议发行
-    if (resDestroy != null) return Icons.remove_circle_outline; // 决议销毁
-    return Icons.description_outlined; // 其他/未知
-  }
-
-  String _kindLabel(int kind) {
-    switch (kind) {
-      case 0:
-        return '内部投票';
-      case 1:
-        return '联合投票';
-      default:
-        return '';
-    }
+    _ProposalDisplayItem item,
+  ) {
+    return switch (item.summary.iconKind) {
+      'transfer' => Icons.send_outlined,
+      'safety_fund' => Icons.health_and_safety_outlined,
+      'sweep' => Icons.account_balance_wallet_outlined,
+      'create_duoqian' => Icons.group_add,
+      'close_duoqian' => Icons.group_remove,
+      'runtime_upgrade' => Icons.arrow_upward,
+      'resolution_issuance' => Icons.add_circle_outline,
+      'resolution_destroy' => Icons.remove_circle_outline,
+      'joint' => Icons.groups_outlined,
+      _ => Icons.description_outlined,
+    };
   }
 
   Future<void> _openProposalDetail(_ProposalDisplayItem item) async {
-    final inst = item.institution;
-    final proposalId = item.proposal.meta.proposalId;
+    final resolved = await _resolveProposalDetail(item);
+    if (!mounted) return;
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('提案详情读取失败，请稍后重试')),
+      );
+      return;
+    }
+    final (:proposal, :proposalContext) = resolved;
+    final inst = proposalContext.institution;
+    final proposalId = proposal.meta.proposalId;
 
     // 协议升级提案（联合投票，kind=1）
-    if (item.proposal.runtimeUpgradeDetail != null) {
+    if (proposal.runtimeUpgradeDetail != null) {
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => RuntimeUpgradeDetailPage(
             proposalId: proposalId,
-            proposalContext: item.context,
+            proposalContext: proposalContext,
           ),
         ),
       );
-    } else if (DuoqianTransferProposalAdapter.matches(item.proposal)) {
+    } else if (DuoqianTransferProposalAdapter.matches(proposal)) {
       await DuoqianTransferProposalAdapter.openDetail(
         context,
-        proposal: item.proposal,
+        proposal: proposal,
         institution: inst,
-        proposalContext: item.context,
+        proposalContext: proposalContext,
       );
-    } else if ((item.proposal.createDuoqianDetail != null ||
-            item.proposal.closeDuoqianDetail != null) &&
+    } else if ((proposal.createDuoqianDetail != null ||
+            proposal.closeDuoqianDetail != null) &&
         inst != null) {
       // 多签管理提案
       await Navigator.of(context).push(
@@ -577,7 +607,7 @@ class _VoteViewState extends State<VoteView> {
           builder: (_) => DuoqianManageDetailPage(
             institution: inst,
             proposalId: proposalId,
-            proposalContext: item.context,
+            proposalContext: proposalContext,
           ),
         ),
       );
@@ -594,21 +624,93 @@ class _VoteViewState extends State<VoteView> {
       _adminService.clearCache();
       ProposalCache.clear();
       DuoqianTransferProposalAdapter.clearCache();
-      _loadFirstPage();
+      _loadFirstPage(force: true);
+    }
+  }
+
+  Future<({ProposalWithDetail proposal, ProposalContext proposalContext})?>
+      _resolveProposalDetail(_ProposalDisplayItem item) async {
+    final existingProposal = item.proposal;
+    final existingContext = item.context;
+    if (existingProposal != null && existingContext != null) {
+      return (proposal: existingProposal, proposalContext: existingContext);
+    }
+
+    try {
+      final proposals =
+          await _duoqianTransferFeed.fetchProposalsByIds([item.proposalId]);
+      if (proposals.isEmpty) return null;
+      final proposal = proposals.first;
+      final contexts = await _contextResolver.resolveBatch(
+        [proposal.meta.institutionBytes?.toList()],
+        internalOrgList: [proposal.meta.internalOrg],
+      );
+      final proposalContext =
+          contexts.isEmpty ? const ProposalContext() : contexts.first;
+      final resolvedItem = _ProposalDisplayItem.fromProposal(
+        proposal: proposal,
+        context: proposalContext,
+        needsVote: item.needsVote,
+      );
+      await ProposalLocalStore.instance.upsertSummaries([
+        resolvedItem.summary,
+      ]);
+      if (mounted) {
+        setState(() {
+          _items = [
+            for (final current in _items)
+              if (current.proposalId == item.proposalId)
+                resolvedItem
+              else
+                current,
+          ];
+        });
+      }
+      return (proposal: proposal, proposalContext: proposalContext);
+    } catch (_) {
+      return null;
     }
   }
 }
 
 class _ProposalDisplayItem {
   const _ProposalDisplayItem({
-    required this.proposal,
-    required this.context,
+    required this.summary,
+    this.proposal,
+    this.context,
     this.needsVote = false,
   });
 
-  final ProposalWithDetail proposal;
-  final ProposalContext context;
+  factory _ProposalDisplayItem.fromProposal({
+    required ProposalWithDetail proposal,
+    required ProposalContext context,
+    bool needsVote = false,
+  }) {
+    return _ProposalDisplayItem(
+      proposal: proposal,
+      context: context,
+      summary: LocalProposalSummary.fromProposal(
+        proposal,
+        institution: context.institution,
+      ),
+      needsVote: needsVote,
+    );
+  }
+
+  factory _ProposalDisplayItem.fromLocalSummary(
+    LocalProposalSummary summary,
+  ) {
+    return _ProposalDisplayItem(summary: summary);
+  }
+
+  final LocalProposalSummary summary;
+  final ProposalWithDetail? proposal;
+  final ProposalContext? context;
   final bool needsVote;
 
-  InstitutionInfo? get institution => context.institution;
+  int get proposalId => summary.proposalId;
+  int get status => summary.status;
+  String get displayId => summary.displayId;
+  String? get institutionName =>
+      context?.institution?.name ?? summary.institutionName;
 }

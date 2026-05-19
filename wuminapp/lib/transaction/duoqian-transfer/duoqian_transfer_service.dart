@@ -20,14 +20,18 @@ import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.da
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_models.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_cache.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
+import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_query_service.dart';
 
 /// 机构转账提案链上交互服务。
 ///
 /// 负责 extrinsic 编码/提交 和 storage 查询。
 class DuoqianTransferService {
-  DuoqianTransferService({ChainRpc? chainRpc}) : _rpc = chainRpc ?? ChainRpc();
+  DuoqianTransferService({ChainRpc? chainRpc})
+      : _rpc = chainRpc ?? ChainRpc(),
+        _internalVoteQuery = InternalVoteQueryService(chainRpc: chainRpc);
 
   final ChainRpc _rpc;
+  final InternalVoteQueryService _internalVoteQuery;
 
   // ──── 常量 ────
 
@@ -864,29 +868,18 @@ class DuoqianTransferService {
 
   /// 查询某管理员对某提案的投票记录。null=未投票，true=赞成，false=反对。
   Future<bool?> fetchAdminVote(int proposalId, String pubkeyHex) async {
-    final proposalIdBytes = _u64ToLeBytes(proposalId);
-    final accountBytes = _hexDecode(pubkeyHex);
+    return _internalVoteQuery.fetchAdminVote(proposalId, pubkeyHex);
+  }
 
-    // 双 key：blake2_128_concat(proposal_id) + blake2_128_concat(account)
-    final palletHash = _twoxx128String('InternalVote');
-    final storageHash = _twoxx128String('InternalVotesByAccount');
-    final key1 = _blake2128Concat(proposalIdBytes);
-    final key2 = _blake2128Concat(accountBytes);
-
-    final fullKey = Uint8List(
-        palletHash.length + storageHash.length + key1.length + key2.length);
-    var offset = 0;
-    fullKey.setAll(offset, palletHash);
-    offset += palletHash.length;
-    fullKey.setAll(offset, storageHash);
-    offset += storageHash.length;
-    fullKey.setAll(offset, key1);
-    offset += key1.length;
-    fullKey.setAll(offset, key2);
-
-    final data = await _rpc.fetchStorage('0x${_hexEncode(fullKey)}');
-    if (data == null || data.isEmpty) return null;
-    return data[0] == 1;
+  /// 批量查询某提案下多名管理员的投票记录。
+  ///
+  /// 中文注释：转账/多签管理详情页展示全管理员投票时走批量读取，
+  /// 避免 43 名管理员造成 43 次 storage RPC。
+  Future<Map<String, bool?>> fetchAdminVotesBatch(
+    int proposalId,
+    Iterable<String> pubkeysHex,
+  ) {
+    return _internalVoteQuery.fetchAdminVotesBatch(proposalId, pubkeysHex);
   }
 
   /// 查询 NextProposalId（投票引擎全局递增 ID）。

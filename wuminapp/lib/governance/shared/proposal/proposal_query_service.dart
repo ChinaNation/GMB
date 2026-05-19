@@ -91,6 +91,17 @@ class ProposalQueryService {
     return _internalVoteQuery.fetchAdminVote(proposalId, pubkeyHex);
   }
 
+  /// 批量查询内部投票管理员记录。
+  ///
+  /// 中文注释：详情页和待投票红点通过本方法合并 storage 读取，避免
+  /// 按管理员逐条访问轻节点。
+  Future<Map<String, bool?>> fetchAdminVotesBatch(
+    int proposalId,
+    Iterable<String> pubkeysHex,
+  ) {
+    return _internalVoteQuery.fetchAdminVotesBatch(proposalId, pubkeysHex);
+  }
+
   Uint8List _buildStorageValueKey(String palletName, String storageName) {
     final palletHash = Hasher.twoxx128.hashString(palletName);
     final storageHash = Hasher.twoxx128.hashString(storageName);

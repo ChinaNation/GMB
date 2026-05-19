@@ -9,6 +9,7 @@ import 'package:wuminapp_mobile/governance/admins-change/models/admin_subject.da
 import 'package:wuminapp_mobile/governance/admins-change/services/institution_admin_service.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/pending_vote_store.dart';
 import 'package:wuminapp_mobile/governance/shared/proposal/proposal_context.dart';
+import 'package:wuminapp_mobile/governance/shared/proposal/proposal_detail_local_store.dart';
 import 'package:wuminapp_mobile/votingengine/internal-vote/internal_vote_service.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_balance_guard.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_models.dart';
@@ -70,6 +71,8 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   static const int _statusVoting = 0;
 
   final DuoqianTransferService _proposalService = DuoqianTransferService();
+  final ProposalDetailLocalStore _detailStore =
+      ProposalDetailLocalStore.instance;
   final InstitutionAdminService _adminService = InstitutionAdminService();
   AdminSubjectIdentity get _subjectIdentity =>
       AdminSubjectIdentity.fromInstitution(widget.institution);
@@ -151,7 +154,16 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
   }
 
   Future<void> _load({bool showSpinner = true}) async {
+    ProposalDetailSnapshot? localSnapshot;
     if (showSpinner) {
+      localSnapshot = await _applyLocalSnapshot();
+    }
+    if (showSpinner &&
+        localSnapshot?.isFresh(ProposalDetailLocalStore.activeTtl) == true) {
+      return;
+    }
+
+    if (showSpinner && localSnapshot == null) {
       setState(() {
         _loading = true;
         _error = null;
@@ -204,17 +216,11 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         admins = await _adminService.fetchAdmins(_subjectIdentity);
       }
 
-      // 逐个查询每位管理员的投票记录
-      final votes = <String, bool?>{};
-      final voteFutures = admins.map((pubkey) async {
-        final vote =
-            await _proposalService.fetchAdminVote(widget.proposalId, pubkey);
-        return MapEntry(pubkey, vote);
-      });
-      final voteResults = await Future.wait(voteFutures);
-      for (final entry in voteResults) {
-        votes[entry.key] = entry.value;
-      }
+      // 中文注释：管理员投票记录批量读取，避免 43 个管理员产生 43 次 RPC。
+      final votes = await _proposalService.fetchAdminVotesBatch(
+        widget.proposalId,
+        admins,
+      );
 
       // 检查待确认投票：先批量确认，再获取仍在等待的记录。
       // 用 kind 对应的 type key，避免跨类型提案 ID 误判（虽然 ID 全局递增，
@@ -246,6 +252,20 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
         }
       }
 
+      if (!mounted) return;
+      try {
+        await _detailStore.put(_snapshotFromChain(
+          status: status,
+          tally: tally,
+          thresholdSnapshot: thresholdSnapshot,
+          admins: admins,
+          votes: votes,
+          pendingPks: pendingPks,
+          detail: detail,
+        ));
+      } catch (_) {
+        // 中文注释：详情快照写入失败不能影响链上最新结果展示。
+      }
       if (!mounted) return;
       setState(() {
         _admins = admins;
@@ -280,11 +300,169 @@ class _DuoqianTransferDetailPageState extends State<DuoqianTransferDetailPage> {
       _syncPendingPoll(pendingPks.isNotEmpty && status == _statusVoting);
     } catch (e) {
       if (!mounted) return;
+      if (localSnapshot != null) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
         _error = SmoldotClientManager.instance.buildUserFacingError(e);
         _loading = false;
       });
     }
+  }
+
+  Future<ProposalDetailSnapshot?> _applyLocalSnapshot() async {
+    try {
+      final snapshot =
+          await _detailStore.read(_proposalTypeKey, widget.proposalId);
+      if (snapshot == null || !mounted) return snapshot;
+      final admins = snapshot.admins;
+      final pendingPks = snapshot.pendingPubkeys.toSet();
+      final votable = <WalletProfile>[];
+      for (final w in widget.adminWallets) {
+        final pk = _normalizePubkey(w.pubkeyHex);
+        if (admins.contains(pk) &&
+            snapshot.adminVotes[pk] == null &&
+            !pendingPks.contains(pk)) {
+          votable.add(w);
+        }
+      }
+      final detail = _detailFromSnapshot(snapshot);
+      setState(() {
+        _admins = admins;
+        _status = snapshot.status;
+        _yesCount = snapshot.yesCount;
+        _noCount = snapshot.noCount;
+        _thresholdSnapshot = snapshot.threshold;
+        _adminVotes = snapshot.adminVotes;
+        _pendingPubkeys = pendingPks;
+        _votableWallets = votable;
+        _selectedVoteWallet = votable.isNotEmpty ? votable.first : null;
+        _transferInfo = null;
+        _safetyFundInfo = null;
+        _sweepInfo = null;
+        switch (widget.kind) {
+          case DuoqianTransferKind.transfer:
+            _transferInfo = detail as TransferProposalInfo?;
+            break;
+          case DuoqianTransferKind.safetyFund:
+            _safetyFundInfo = detail as SafetyFundProposalInfo?;
+            break;
+          case DuoqianTransferKind.sweep:
+            _sweepInfo = detail as SweepProposalInfo?;
+            break;
+        }
+        _loading = false;
+        _error = null;
+      });
+      _syncPendingPoll(
+          pendingPks.isNotEmpty && snapshot.status == _statusVoting);
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ProposalDetailSnapshot _snapshotFromChain({
+    required int? status,
+    required ({int yes, int no}) tally,
+    required int? thresholdSnapshot,
+    required List<String> admins,
+    required Map<String, bool?> votes,
+    required Set<String> pendingPks,
+    required Object? detail,
+  }) {
+    return ProposalDetailSnapshot(
+      proposalId: widget.proposalId,
+      typeKey: _proposalTypeKey,
+      updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+      status: status,
+      yesCount: tally.yes,
+      noCount: tally.no,
+      threshold: thresholdSnapshot,
+      admins: admins.map(_normalizePubkey).toList(growable: false),
+      adminVotes: votes.map(
+        (key, value) => MapEntry(_normalizePubkey(key), value),
+      ),
+      pendingPubkeys: pendingPks.map(_normalizePubkey).toList(growable: false),
+      detail: _detailToJson(detail),
+    );
+  }
+
+  Map<String, Object?> _detailToJson(Object? detail) {
+    if (detail is TransferProposalInfo) {
+      return {
+        'kind': 'transfer',
+        'institution_bytes_hex': _toHex(detail.institutionBytes),
+        'beneficiary': detail.beneficiary,
+        'amount_fen': detail.amountFen.toString(),
+        'remark': detail.remark,
+        'proposer': detail.proposer,
+        'status': detail.status,
+      };
+    }
+    if (detail is SafetyFundProposalInfo) {
+      return {
+        'kind': 'safety_fund',
+        'beneficiary': detail.beneficiary,
+        'amount_fen': detail.amountFen.toString(),
+        'remark': detail.remark,
+        'proposer': detail.proposer,
+        'status': detail.status,
+      };
+    }
+    if (detail is SweepProposalInfo) {
+      return {
+        'kind': 'sweep',
+        'institution_bytes_hex': _toHex(detail.institutionBytes),
+        'amount_fen': detail.amountFen.toString(),
+        'status': detail.status,
+      };
+    }
+    return const {};
+  }
+
+  Object? _detailFromSnapshot(ProposalDetailSnapshot snapshot) {
+    final detail = snapshot.detail;
+    final kind = detail['kind']?.toString();
+    if (kind == 'transfer') {
+      final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
+      final institutionBytesHex = detail['institution_bytes_hex']?.toString();
+      if (amountFen == null || institutionBytesHex == null) return null;
+      return TransferProposalInfo(
+        proposalId: snapshot.proposalId,
+        institutionBytes: _hexDecode(institutionBytesHex),
+        beneficiary: detail['beneficiary']?.toString() ?? '',
+        amountFen: amountFen,
+        remark: detail['remark']?.toString() ?? '',
+        proposer: detail['proposer']?.toString() ?? '',
+        status: snapshot.status,
+      );
+    }
+    if (kind == 'safety_fund') {
+      final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
+      if (amountFen == null) return null;
+      return SafetyFundProposalInfo(
+        proposalId: snapshot.proposalId,
+        beneficiary: detail['beneficiary']?.toString() ?? '',
+        amountFen: amountFen,
+        remark: detail['remark']?.toString() ?? '',
+        proposer: detail['proposer']?.toString() ?? '',
+        status: snapshot.status,
+      );
+    }
+    if (kind == 'sweep') {
+      final amountFen = BigInt.tryParse(detail['amount_fen']?.toString() ?? '');
+      final institutionBytesHex = detail['institution_bytes_hex']?.toString();
+      if (amountFen == null || institutionBytesHex == null) return null;
+      return SweepProposalInfo(
+        proposalId: snapshot.proposalId,
+        institutionBytes: _hexDecode(institutionBytesHex),
+        amountFen: amountFen,
+        status: snapshot.status,
+      );
+    }
+    return null;
   }
 
   // ──── SS58 编码工具 ────

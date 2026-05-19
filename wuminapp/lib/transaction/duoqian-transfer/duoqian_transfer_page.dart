@@ -15,6 +15,7 @@ import 'package:wuminapp_mobile/my/util/amount_format.dart';
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_balance_guard.dart';
 import 'package:wuminapp_mobile/transaction/duoqian-transfer/duoqian_transfer_service.dart';
+import 'package:wuminapp_mobile/transaction/shared/account_balance_snapshot_store.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_sign_session_page.dart';
 import 'package:wuminapp_mobile/rpc/onchain.dart' show OnchainRpc;
@@ -83,9 +84,26 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
   }
 
   Future<void> _fetchBalance() async {
+    final store = AccountBalanceSnapshotStore.instance;
+    final local = await store.read(widget.institution.mainAddress);
+    if (local != null && mounted) {
+      setState(() {
+        _availableBalance = local.balanceYuan;
+        _loadingBalance = false;
+      });
+      if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
+    }
     try {
       final service = DuoqianTransferService();
       final balance = await service.fetchInstitutionBalance(widget.institution);
+      try {
+        await store.put(
+          accountHex: widget.institution.mainAddress,
+          balanceYuan: balance,
+        );
+      } catch (_) {
+        // 余额快照写入失败不影响当前链上余额展示。
+      }
       if (!mounted) return;
       setState(() {
         _availableBalance = balance;
@@ -93,10 +111,12 @@ class _DuoqianTransferPageState extends State<DuoqianTransferPage> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _availableBalance = null;
-        _loadingBalance = false;
-      });
+      if (local == null) {
+        setState(() {
+          _availableBalance = null;
+          _loadingBalance = false;
+        });
+      }
     }
   }
 
