@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:smoldot/smoldot.dart' show LightClientStatusSnapshot;
@@ -41,12 +42,14 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   @override
   void initState() {
     super.initState();
+    if (_isFlutterTest) return;
     unawaited(_loadProgress());
   }
 
   @override
   void didUpdateWidget(covariant ChainProgressBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_isFlutterTest) return;
     if (widget.busy && !oldWidget.busy) {
       unawaited(_loadProgress());
     }
@@ -59,6 +62,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   }
 
   Future<void> _loadProgress() async {
+    if (_isFlutterTest) return;
     _pollTimer?.cancel();
     if (mounted) {
       setState(() {
@@ -90,6 +94,7 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
   }
 
   void _scheduleNextPoll({LightClientStatusSnapshot? progress}) {
+    if (_isFlutterTest) return;
     final current = progress ?? _progress;
     final shouldPoll = current == null ||
         !current.hasPeers ||
@@ -112,7 +117,14 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
     final String title;
     final String subtitle;
 
-    if (progress == null && error == null) {
+    if (_isFlutterTest) {
+      // 中文注释：widget test 保留提示条结构，但不读取链状态、不创建轮询定时器。
+      // 测试环境没有真实轻节点，继续创建链状态轮询会让 pumpAndSettle 等不到稳定帧。
+      color = AppTheme.info;
+      icon = Icons.sync_disabled;
+      title = '测试环境已跳过轻节点状态读取';
+      subtitle = '真机运行时会正常读取 peer、best、finalized 等链路信息';
+    } else if (progress == null && error == null) {
       color = AppTheme.info;
       icon = Icons.sync;
       title = '正在读取轻节点状态';
@@ -199,4 +211,6 @@ class _ChainProgressBannerState extends State<ChainProgressBanner> {
       ),
     );
   }
+
+  bool get _isFlutterTest => Platform.environment.containsKey('FLUTTER_TEST');
 }

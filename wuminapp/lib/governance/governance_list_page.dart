@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:wuminapp_mobile/governance/shared/institution_info.dart';
@@ -14,6 +15,9 @@ const String governanceProvincialCouncilOrderPrefsKey =
     'governance.institution_order.prc.v1';
 const String governanceProvincialBankOrderPrefsKey =
     'governance.institution_order.prb.v1';
+const String _governanceProvincialCouncilIconAsset =
+    'assets/icons/government-line.svg';
+const String _governanceProvincialBankIconAsset = 'assets/icons/bank.svg';
 
 @visibleForTesting
 List<InstitutionInfo> applyGovernanceInstitutionOrder(
@@ -216,6 +220,7 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
           sectionKind: _GovernanceSectionKind.provincialCouncil,
           title: '省储会',
           icon: Icons.groups_2_outlined,
+          iconAsset: _governanceProvincialCouncilIconAsset,
           badgeColor: AppTheme.primary,
           institutions: _provincialCouncils,
           collapsible: true,
@@ -236,6 +241,7 @@ class _GovernanceListPageState extends State<GovernanceListPage> {
           sectionKind: _GovernanceSectionKind.provincialBank,
           title: '省储行',
           icon: Icons.account_balance_wallet_outlined,
+          iconAsset: _governanceProvincialBankIconAsset,
           badgeColor: AppTheme.accent,
           institutions: _provincialBanks,
           collapsible: true,
@@ -264,6 +270,7 @@ class _GovernanceSection extends StatelessWidget {
     required this.icon,
     required this.badgeColor,
     required this.institutions,
+    this.iconAsset,
     this.collapsible = false,
     this.expanded = true,
     this.onToggleExpanded,
@@ -274,6 +281,7 @@ class _GovernanceSection extends StatelessWidget {
   final _GovernanceSectionKind sectionKind;
   final String title;
   final IconData icon;
+  final String? iconAsset;
   final Color badgeColor;
   final List<InstitutionInfo> institutions;
   final bool collapsible;
@@ -289,14 +297,12 @@ class _GovernanceSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: badgeColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Icon(icon, size: 16, color: badgeColor),
+            _GovernanceIconBadge(
+              icon: icon,
+              iconAsset: iconAsset,
+              color: badgeColor,
+              boxSize: 28,
+              iconSize: 16,
             ),
             const SizedBox(width: 10),
             Text(
@@ -337,6 +343,13 @@ class _GovernanceSection extends StatelessWidget {
               if (constraints.maxWidth <= 0) {
                 return const SizedBox.shrink();
               }
+              // 中文注释：国储会虽横跨整行，但高度必须和省储会/省储行网格卡片保持一致。
+              const crossAxisCount = 2;
+              const crossAxisSpacing = 8.0;
+              final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
+              final gridCardWidth =
+                  (constraints.maxWidth - crossAxisSpacing) / crossAxisCount;
+              final governanceCardHeight = gridCardWidth / childAspectRatio;
               if (sectionKind == _GovernanceSectionKind.nationalCouncil) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -346,7 +359,7 @@ class _GovernanceSection extends StatelessWidget {
                         key: ValueKey(
                           'governance_national_card_${inst.sfidNumber}',
                         ),
-                        height: 76,
+                        height: governanceCardHeight,
                         child: _GovernanceCard(
                           institution: inst,
                           icon: icon,
@@ -361,8 +374,6 @@ class _GovernanceSection extends StatelessWidget {
                 );
               }
               // 机构列表固定一行两列，避免不同 Android 机型出现列数漂移。
-              const crossAxisCount = 2;
-              final childAspectRatio = constraints.maxWidth < 360 ? 2.6 : 2.9;
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -370,7 +381,7 @@ class _GovernanceSection extends StatelessWidget {
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
                   mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
+                  crossAxisSpacing: crossAxisSpacing,
                   childAspectRatio: childAspectRatio,
                 ),
                 itemBuilder: (context, index) {
@@ -541,17 +552,8 @@ class _GovernanceCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: effectiveColor.withAlpha(20),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Icon(icon, size: 14, color: effectiveColor),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
+                  // 中文注释：机构卡片不再显示名称左侧图标，只保留名称和右箭头。
                   child: Text(
                     institution.name,
                     maxLines: 2,
@@ -578,5 +580,45 @@ class _GovernanceCard extends StatelessWidget {
       return card;
     }
     return PressableCard(child: card);
+  }
+}
+
+class _GovernanceIconBadge extends StatelessWidget {
+  const _GovernanceIconBadge({
+    required this.icon,
+    required this.color,
+    required this.boxSize,
+    required this.iconSize,
+    this.iconAsset,
+  });
+
+  final IconData icon;
+  final String? iconAsset;
+  final Color color;
+  final double boxSize;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = iconAsset;
+    return Container(
+      width: boxSize,
+      height: boxSize,
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Center(
+        // 中文注释：省储会/省储行使用指定 SVG 图案；国储会继续使用原 Material 图标。
+        child: asset == null
+            ? Icon(icon, size: iconSize, color: color)
+            : SvgPicture.asset(
+                asset,
+                width: iconSize,
+                height: iconSize,
+                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+              ),
+      ),
+    );
   }
 }

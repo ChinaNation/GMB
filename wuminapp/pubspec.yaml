@@ -55,5 +55,7 @@ flutter:
     - assets/icons/scale.svg
     - assets/icons/contact-round.svg
     - assets/icons/download.svg
+    - assets/icons/government-line.svg
+    - assets/icons/bank.svg
     - assets/icons/icons8-96.png
     - assets/icons/icons8-64.png

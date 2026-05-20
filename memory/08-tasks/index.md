@@ -31,6 +31,7 @@
 
 ## done
 
+- `memory/08-tasks/done/20260519-wuminapp-ci-chain-progress-test.md`
 - `memory/08-tasks/done/20260519-wuminapp-wallet-tx-three-status.md`
 - `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-balance.md`
 - `memory/08-tasks/done/20260519-wuminapp-local-chain-optimization.md`
