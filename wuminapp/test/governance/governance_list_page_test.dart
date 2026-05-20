@@ -104,7 +104,7 @@ void main() {
     );
   });
 
-  testWidgets('国储会卡片横跨整行', (tester) async {
+  testWidgets('国储会卡片横跨整行且高度对齐省级卡片', (tester) async {
     await _pumpPage(tester, councils: councils, banks: banks);
 
     final cardSize = tester.getSize(
@@ -112,8 +112,9 @@ void main() {
     );
     final cardRight =
         tester.getTopRight(find.byIcon(Icons.chevron_right).first).dx;
+    const expectedProvincialCardHeight = ((420 - 32 - 8) / 2) / 2.9;
 
-    expect(cardSize.height, 76);
+    expect(cardSize.height, closeTo(expectedProvincialCardHeight, 0.01));
     expect(cardRight, greaterThan(380));
   });
 

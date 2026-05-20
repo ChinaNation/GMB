@@ -69,6 +69,7 @@ lib/rpc/
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
 - `ChainProgressBanner` 只展示轻节点状态快照（peer / best / finalized / syncing），文案必须使用“轻节点状态/轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。
+- Flutter widget test 环境不具备真实 smoldot 轻节点链路，`ChainProgressBanner` 在测试中只渲染静态提示条，禁止读取链状态和创建轮询定时器，避免 `pumpAndSettle` 被后台链路轮询卡住。
 - 当前代码已继续下沉原生能力，且已完成 **异步 FFI 迁移**：
   - `smoldot_get_status_snapshot_async`
   - `smoldot_get_system_account_async`
