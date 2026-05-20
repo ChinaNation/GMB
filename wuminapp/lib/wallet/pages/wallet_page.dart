@@ -882,34 +882,6 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
     }
   }
 
-  String _localTxTypeLabel(String type) {
-    switch (type) {
-      case 'transfer':
-        return '转账';
-      case 'fee':
-        return '手续费';
-      case 'reward':
-        return '奖励';
-      case 'interest':
-        return '利息';
-      case 'issuance':
-        return '增发';
-      case 'burn':
-        return '资金销毁';
-      case 'duoqian_transfer':
-        return '多签转账';
-      default:
-        return type;
-    }
-  }
-
-  String _shortAddress(String? address) {
-    if (address == null || address.length <= 12) return address ?? '-';
-    return '${address.substring(0, 6)}...${address.substring(address.length - 6)}';
-  }
-
-  String _pad(int n) => n.toString().padLeft(2, '0');
-
   Future<void> _onMenuAction(String action) async {
     switch (action) {
       case 'clearing_bank':
@@ -1086,7 +1058,7 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
                 wallet: widget.wallet,
               ),
               const SizedBox(height: 24),
-              // 交易记录区块(保留原实现)。
+              // 中文注释：交易记录区块标题进入完整列表，单条记录进入该笔详情。
               ..._buildTransactionHistorySection(),
             ],
           ),
@@ -1140,57 +1112,18 @@ class _WalletDetailPageState extends State<WalletDetailPage> {
       else
         ...List.generate(_recentRecords.length, (index) {
           final record = _recentRecords[index];
-          final amountDeltaYuan = LocalTxStore.fenToYuan(record.amountDeltaFen);
-          final isOut = amountDeltaYuan < 0;
-          final label = _localTxTypeLabel(record.type);
-          final counterparty = _shortAddress(record.counterpartyAddress);
-          final dt = DateTime.fromMillisecondsSinceEpoch(record.createdAtMillis)
-              .toLocal();
-          final timeStr =
-              '${dt.year}-${_pad(dt.month)}-${_pad(dt.day)} ${_pad(dt.hour)}:${_pad(dt.minute)}';
-          final amountColor = isOut ? AppTheme.danger : AppTheme.primaryDark;
           return Column(
             children: [
-              ListTile(
+              // 中文注释：标题行进入完整列表；单条最近记录直接进入该笔交易详情。
+              LocalTxRecordTile(
+                record: record,
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => TransactionHistoryPage(
-                        walletAddress: widget.wallet.address,
-                        walletPubkeyHex: widget.wallet.pubkeyHex,
-                      ),
+                      builder: (_) => LocalTxRecordDetailPage(record: record),
                     ),
                   );
                 },
-                leading: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: isOut
-                      ? AppTheme.danger.withAlpha(20)
-                      : AppTheme.success.withAlpha(20),
-                  child: Icon(
-                    isOut ? Icons.arrow_upward : Icons.arrow_downward,
-                    size: 18,
-                    color: amountColor,
-                  ),
-                ),
-                title: Text(
-                  label,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  '$counterparty\n$timeStr',
-                  style: const TextStyle(fontSize: 12, height: 1.5),
-                ),
-                isThreeLine: true,
-                trailing: Text(
-                  '${isOut ? "-" : "+"}${AmountFormat.format(amountDeltaYuan.abs(), symbol: '')}',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: amountColor,
-                  ),
-                ),
               ),
               if (index < _recentRecords.length - 1) const Divider(height: 1),
             ],

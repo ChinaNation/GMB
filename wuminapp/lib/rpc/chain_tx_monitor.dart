@@ -47,7 +47,9 @@ class ChainTxMonitor {
   final ChainRpc _chainRpc = ChainRpc();
   StreamSubscription<ChainEvent>? _listener;
   Future<void>? _syncInflight;
+  Future<void>? _inBlockSweepInflight;
   Timer? _subscriptionRetryTimer;
+  Timer? _syncRetryTimer;
   bool _running = false;
   bool _subscriptionConnected = false;
 
@@ -62,6 +64,7 @@ class ChainTxMonitor {
 
   /// 每次补同步最多连续处理的区块数，避免手机长时间离线后一次性压节点。
   static const int _maxBlocksPerRun = 120;
+  static const int _maxUnfinalizedBlocksPerRun = 32;
 
   // ──── 已知事件的 pallet_index + event_index ────
 
@@ -99,6 +102,7 @@ class ChainTxMonitor {
     if (_running) {
       _ensureSubscription();
       unawaited(_syncToLatest());
+      unawaited(_syncBestUnfinalized());
       return;
     }
     _running = true;
@@ -110,6 +114,7 @@ class ChainTxMonitor {
     // 中文注释：启动后只补 lastSyncedBlock 之后的缺口；没有游标的钱包
     // 以当前 finalized 区块为起点，不回扫导入前历史。
     unawaited(_syncToLatest());
+    unawaited(_syncBestUnfinalized());
   }
 
   /// 停止监控。
@@ -118,6 +123,8 @@ class ChainTxMonitor {
     _subscriptionConnected = false;
     _subscriptionRetryTimer?.cancel();
     _subscriptionRetryTimer = null;
+    _syncRetryTimer?.cancel();
+    _syncRetryTimer = null;
     _listener?.cancel();
     _listener = null;
     _subscription.disconnect();
@@ -153,6 +160,7 @@ class ChainTxMonitor {
       _subscriptionRetryTimer?.cancel();
       _subscriptionRetryTimer = null;
       unawaited(_syncToLatest());
+      unawaited(_syncBestUnfinalized());
       return;
     }
 
@@ -164,6 +172,7 @@ class ChainTxMonitor {
         _subscriptionRetryTimer?.cancel();
         _subscriptionRetryTimer = null;
         unawaited(_syncToLatest());
+        unawaited(_syncBestUnfinalized());
       }
     });
   }
@@ -178,8 +187,19 @@ class ChainTxMonitor {
         break;
       case ChainEventType.newFinalizedBlock:
         await _syncThrough(blockNumber, missingCursorStartsAt: blockNumber - 1);
+        unawaited(_syncBestUnfinalized());
         break;
     }
+  }
+
+  void _scheduleSyncRetry() {
+    if (!_running || _syncRetryTimer != null) return;
+    _syncRetryTimer = Timer(const Duration(seconds: 2), () {
+      _syncRetryTimer = null;
+      if (!_running) return;
+      unawaited(_syncToLatest());
+      unawaited(_syncBestUnfinalized());
+    });
   }
 
   Future<void> _syncToLatest() async {
@@ -192,6 +212,53 @@ class ChainTxMonitor {
       );
     } catch (e) {
       debugPrint('[TxMonitor] 启动补同步失败: $e');
+      _scheduleSyncRetry();
+    }
+  }
+
+  Future<void> _syncBestUnfinalized() {
+    final existing = _inBlockSweepInflight;
+    if (existing != null) return existing;
+
+    final task = _runSyncBestUnfinalized().whenComplete(() {
+      _inBlockSweepInflight = null;
+    });
+    _inBlockSweepInflight = task;
+    return task;
+  }
+
+  Future<void> _runSyncBestUnfinalized() async {
+    if (!_running || _walletAddressByPubkey.isEmpty) return;
+    try {
+      final finalized = await _chainRpc.fetchFinalizedBlock();
+      final latest = await _chainRpc.fetchLatestBlock();
+      final startBlock = finalized.blockNumber + 1;
+      final targetBlock = latest.blockNumber;
+      if (startBlock > targetBlock) return;
+
+      final cappedEnd = startBlock + _maxUnfinalizedBlocksPerRun - 1;
+      final endBlock = cappedEnd < targetBlock ? cappedEnd : targetBlock;
+      for (var block = startBlock; block <= endBlock; block++) {
+        if (!_running || _walletAddressByPubkey.isEmpty) return;
+        if (WalletIsar.instance.hasActiveOperation) {
+          // 中文注释：未确认区块补扫只用于补 UI 里的“已出块”状态，
+          // 遇到前台数据库操作时让路，并安排一次短延迟重试。
+          _scheduleSyncRetry();
+          return;
+        }
+        final ok = await _processBlock(
+          block,
+          status: _TransferEventStatus.inBlock,
+        );
+        if (!ok) {
+          _scheduleSyncRetry();
+          return;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    } catch (e) {
+      debugPrint('[TxMonitor] 未确认区块补扫失败: $e');
+      _scheduleSyncRetry();
     }
   }
 
@@ -239,6 +306,7 @@ class ChainTxMonitor {
       if (WalletIsar.instance.hasActiveOperation) {
         // 中文注释：交易流水同步是低优先级后台任务；前台钱包/治理读写繁忙时让路，
         // 游标不推进，下一次新区块或启动补同步会继续补缺口。
+        _scheduleSyncRetry();
         return;
       }
 
@@ -246,7 +314,10 @@ class ChainTxMonitor {
         block,
         status: _TransferEventStatus.finalized,
       );
-      if (!ok) return;
+      if (!ok) {
+        _scheduleSyncRetry();
+        return;
+      }
 
       for (final pubkey in _walletAddressByPubkey.keys) {
         final last = lastByPubkey[pubkey] ?? missingCursorStartsAt;

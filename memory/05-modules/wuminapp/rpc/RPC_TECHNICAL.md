@@ -299,6 +299,9 @@ new head 到达
   → 读取该区块 System.Events
   → 解析 Balances::Transfer
   → 命中本机钱包时写入/升级 LocalTxEntity(status=inBlock)
+启动 / 订阅重连 / finalized 后
+  → 补扫 finalized+1..best 的未确认区块
+  → 命中本机钱包时写入/升级 LocalTxEntity(status=inBlock)
 finalized head 到达
   → 按游标读取区块 System.Events
   → 解析 Balances::Transfer
@@ -310,8 +313,8 @@ finalized head 到达
 - 不补扫导入前历史；删除钱包时删除本地流水和同步游标，再次导入从新的导入时刻重新记录。
 - 收入写入正数 `amountDeltaFen`，支出写入负数 `amountDeltaFen`；业务方向由金额正负号推导，不保存 `direction`。
 - `type` 只保存业务类型；区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，本机提交记录唯一键为 `walletPubkeyHex:pending:txHash`；写入时还要按同钱包、同区块、同发送方、同接收方、同转账本金做语义去重，防止 newHeads/finalized 重复处理同一事件。
-- finalized 补同步只能使用 `finalizedBlockNumber/finalizedBlockHash`，不能使用 `bestBlockNumber/bestBlockHash`。
-- 单轮最多补齐 120 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路。
+- finalized 补同步只能使用 `finalizedBlockNumber/finalizedBlockHash`，不能使用 `bestBlockNumber/bestBlockHash` 升级为 `finalized`；`bestBlockNumber/bestBlockHash` 只允许用于补扫未确认区块并写入 `inBlock`。
+- finalized 单轮最多补齐 120 个区块；未确认区块单轮最多补扫 32 个区块；若 `WalletIsar` 正在处理前台读写或本地库 busy，本轮直接让路并安排短延迟重试。
 - 读取区块事件仍需要节点网络和处理器参与响应 RPC，因此 App 不做全历史扫描，避免增加全节点和手机端负担。
 
 ## 9. 依赖

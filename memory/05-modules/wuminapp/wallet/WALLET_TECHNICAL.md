@@ -157,7 +157,7 @@ lib/
 ### 4.5.1 钱包交易流水同步
 
 1. 钱包新建或导入到本机后，`ChainTxMonitor` 为该钱包建立 `WalletTxSyncCursorEntity`，finalized 补同步起点为当前 finalized 区块；不查询、不补录导入前历史。
-2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `Balances::Transfer` 写成 `inBlock`，监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
+2. 钱包页加载本地钱包后按 `walletPubkeyHex` 注册监听；监听 newHeads 时先把当前区块命中的 `Balances::Transfer` 写成 `inBlock`，启动、重连和 finalized 后还会补扫 `finalized+1..best` 的未确认区块，避免错过 newHeads 的收款记录；监听 finalizedHeads 时按游标补同步并升级为 `finalized`。
 3. 命中本机钱包的事件写入 `LocalTxEntity`：收入保存正数 `amountDeltaFen`，支出保存负数 `amountDeltaFen`；不再单独保存 `direction`。
 4. 业务类型只写入 `type`，例如 `transfer / fee / reward / interest / issuance / burn / duoqian_transfer`；列表方向由金额正负号推导。
 5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
@@ -254,16 +254,16 @@ lib/
 3. 热钱包额外显示“离线签名”按钮，进入 `QrOfflineSignPage`
 4. 地址+复制：地址居中两行显示，复制图标在右侧
 5. 交易记录标题行：左侧"交易记录"，右侧箭头，点击进入完整交易记录列表
-6. 最近交易记录：最多显示 5 条，点击进入交易详情
+6. 最近交易记录：最多显示 5 条，显示与完整列表一致的状态标签，点击单条进入交易详情
 
 ### 5.5 交易记录数据来源
 
 钱包详情页和交易记录页面直接复用 `LocalTxStore`（Isar `LocalTxEntity`），按 `walletPubkeyHex` 过滤。
 
 - 本机提交普通转账成功后通过 `LocalTxStore.upsertLocalSubmitTransfer()` 写入 `source=local_submit / status=pending` 记录，用于立即反馈支出；如果区块事件已经先写入，则合并手续费、txHash 和 nonce，不新增第二条
-- 交易池 included 回调先把本机提交记录升级为 `status=inBlock`；newHeads 命中收入或支出事件时写入 `source=chain_event / status=inBlock`
+- 交易池 included 回调先把本机提交记录升级为 `status=inBlock`；newHeads 命中收入或支出事件时写入 `source=chain_event / status=inBlock`；启动、重连和 finalized 后会补扫 finalized 之后的未确认区块，补齐错过实时订阅的 `inBlock` 流水
 - finalized 区块事件监听命中后升级同一条区块事件记录为 `status=finalized`，并把匹配的本机提交记录合并为 finalized；该升级只能来自 finalized 高度，不能来自 best/latest 高度
-- 钱包详情页展示最近 5 条，点击"交易记录"进入完整列表
+- 钱包详情页展示最近 5 条，点击"交易记录"标题或右侧箭头进入完整列表，点击单条进入该笔交易详情
 - `txHash` 只作为本机 pending 提交标识；单条链上流水的唯一定位以 `recordKey` 为准
 
 ## 6. 迁移与清理策略
@@ -300,7 +300,7 @@ lib/
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
   - `fetchBalance` — 直连节点查询链上余额
 - `ChainTxMonitor`（`lib/rpc/chain_tx_monitor.dart`）
-  - 监听 newHeads/finalizedHeads 区块事件，按本机钱包游标增量写入并升级交易流水
+  - 监听 newHeads/finalizedHeads 区块事件，补扫未 finalized 区块，按本机钱包游标增量写入并升级交易流水
 
 ## 9. 测试覆盖（当前）
 
