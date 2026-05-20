@@ -47,7 +47,7 @@ wuminapp/lib/transaction/shared/
 4. 调用 `OnchainPaymentService.submitTransfer()`
 5. 服务调用 `OnchainRpc.transferKeepAlive()` 完成 extrinsic 构造、签名和广播
 6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=...)`
-7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`；`ChainTxMonitor` 只按 finalized 高度监听区块事件，把匹配记录合并并升级为 `finalized`
+7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`；`ChainTxMonitor` 监听 newHeads 并补扫 finalized 之后的未确认区块，把命中本机钱包的收支先写为 `inBlock`，再按 finalized 高度把匹配记录合并并升级为 `finalized`
 
 ## 4. 链上转账
 
@@ -77,7 +77,7 @@ wuminapp/lib/transaction/shared/
 
 `LocalTxStore` 留在 `lib/transaction/shared/`，因为它服务于交易记录展示，不属于 onchain 支付目录私有实现。
 
-链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
+链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中或未确认区块补扫命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
 
 ## 6. 签名边界
 

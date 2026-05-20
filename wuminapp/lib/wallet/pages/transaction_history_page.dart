@@ -148,12 +148,12 @@ class _TransactionHistoryPageState extends State<TransactionHistoryPage> {
             );
           }
           final record = _records[index];
-          return _LocalTxRecordTile(
+          return LocalTxRecordTile(
             record: record,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => _LocalTxRecordDetailPage(record: record),
+                  builder: (_) => LocalTxRecordDetailPage(record: record),
                 ),
               );
             },
@@ -251,8 +251,9 @@ String _formatFen(String fen, {String symbol = 'GMB'}) {
 
 // ─── 交易记录列表项 ──────────────────────────────────────────
 
-class _LocalTxRecordTile extends StatelessWidget {
-  const _LocalTxRecordTile({
+class LocalTxRecordTile extends StatelessWidget {
+  const LocalTxRecordTile({
+    super.key,
     required this.record,
     this.onTap,
   });
@@ -316,24 +317,22 @@ class _LocalTxRecordTile extends StatelessWidget {
             label,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
-          if (record.status != LocalTxStore.statusFinalized) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(
-                color: _statusColor(record.status).withAlpha(30),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _statusLabel(record.status),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: _statusColor(record.status),
-                  fontWeight: FontWeight.w600,
-                ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: _statusColor(record.status).withAlpha(30),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              _statusLabel(record.status),
+              style: TextStyle(
+                fontSize: 10,
+                color: _statusColor(record.status),
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ],
+          ),
         ],
       ),
       subtitle: Text(
@@ -355,8 +354,9 @@ class _LocalTxRecordTile extends StatelessWidget {
 
 // ─── 交易详情页 ──────────────────────────────────────────────
 
-class _LocalTxRecordDetailPage extends StatelessWidget {
-  const _LocalTxRecordDetailPage({
+class LocalTxRecordDetailPage extends StatelessWidget {
+  const LocalTxRecordDetailPage({
+    super.key,
     required this.record,
   });
 
