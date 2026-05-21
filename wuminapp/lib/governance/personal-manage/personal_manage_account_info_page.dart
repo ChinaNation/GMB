@@ -328,7 +328,7 @@ class _PersonalManageAccountInfoPageState
 
   // ──── 关闭 ────
 
-  void _showDeleteMenu() {
+  void _confirmClose() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -565,7 +565,7 @@ class _PersonalManageAccountInfoPageState
         elevation: 0,
         scrolledUnderElevation: 0.5,
         // 个人多签菜单:
-        // - Active  → 关闭个人多签，走 PersonalManage::propose_close。
+        // - Active  → 关闭个人多签，走 PersonalManage::propose_close，不显示删除图标。
         // - Pending → 撤销创建，走 InternalVote approve=false 早期否决。
         actions: [
           if (_shouldShowMenu())
@@ -573,7 +573,7 @@ class _PersonalManageAccountInfoPageState
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
                 if (value == 'delete') _confirmDeleteLocal();
-                if (value == 'close') _showDeleteMenu();
+                if (value == 'close') _confirmClose();
                 if (value == 'revoke_create') _confirmRevokeCreate();
               },
               itemBuilder: (_) {
@@ -598,16 +598,9 @@ class _PersonalManageAccountInfoPageState
                   else if (isActive)
                     const PopupMenuItem(
                       value: 'close',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline,
-                              size: 20, color: AppTheme.danger),
-                          SizedBox(width: 8),
-                          Text(
-                            '关闭个人多签',
-                            style: TextStyle(color: AppTheme.danger),
-                          ),
-                        ],
+                      child: Text(
+                        '关闭个人多签',
+                        style: TextStyle(color: AppTheme.danger),
                       ),
                     )
                   else

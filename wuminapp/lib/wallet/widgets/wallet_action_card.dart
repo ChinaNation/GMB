@@ -7,13 +7,13 @@ import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/withdraw_
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
-/// 钱包详情页第 2 卡片:3 列等宽布局(充值/提现/余额)。
+/// 钱包详情页第 2 卡片:3 列等宽布局(充值/提现/零钱包)。
 ///
 /// 中文注释:
 /// - 布局:Row + 3 个 Expanded,三列等宽,spaceAround 分布。
 /// - 充值列 / 提现列:已绑定清算行时进入真实充值 / 提现页;未绑定时提示先绑定。
-/// - 余额列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调。
-/// - 清算行余额来自当前绑定快照中的节点端点,通过 `offchain_queryBalance`
+/// - 零钱包列:**静态展示**,严格不加 InkWell / GestureDetector / onTap 回调。
+/// - 零钱包余额来自当前绑定清算行快照中的节点端点,通过 `offchain_queryBalance`
 ///   查询;失败时展示节点不可达,不再写死 0.00 元。
 class WalletActionCard extends StatefulWidget {
   const WalletActionCard({super.key, required this.wallet});
@@ -142,7 +142,7 @@ class WalletActionCardState extends State<WalletActionCard> {
 ///
 /// 中文注释:
 /// - 使用 `Material + InkWell` 组合,ripple 限制在 `CircleBorder` 内,不溢出圆圈。
-/// - 底部用一个非断空格 `\u00A0` 占位,保证和余额列的 `0.00 元` 行高对齐,
+/// - 底部用一个非断空格 `\u00A0` 占位,保证和零钱包列的 `0.00 元` 行高对齐,
 ///   避免 3 列底部不齐。
 class _ClickableAction extends StatelessWidget {
   const _ClickableAction({
@@ -187,7 +187,7 @@ class _ClickableAction extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        // 中文注释:非断空格占位,保证三列底部和余额列的 0.00 元对齐。
+        // 中文注释:非断空格占位,保证三列底部和零钱包列的 0.00 元对齐。
         const Text(
           '\u00A0',
           style: TextStyle(
@@ -200,7 +200,7 @@ class _ClickableAction extends StatelessWidget {
   }
 }
 
-/// 余额列:纯静态展示,**禁止**包 InkWell / GestureDetector,不响应任何点击。
+/// 零钱包列:纯静态展示,**禁止**包 InkWell / GestureDetector,不响应任何点击。
 ///
 /// 中文注释:
 /// - 图标用普通 Container + BoxShape.circle,没有 Material 涟漪,也没有 onTap。
@@ -230,7 +230,7 @@ class _StaticBalance extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          '余额',
+          '零钱包',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,

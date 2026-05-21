@@ -281,7 +281,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     return h.toLowerCase();
   }
 
-  void _showDeleteMenu() {
+  void _confirmClose() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -414,26 +414,16 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                if (value == 'close') _showDeleteMenu();
+                if (value == 'close') _confirmClose();
                 if (value == 'delete') _confirmDeleteLocal();
               },
               itemBuilder: (_) => [
                 if (_localStatus == InstitutionDuoqianLocalState.statusActive)
                   const PopupMenuItem(
                     value: 'close',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 20,
-                          color: AppTheme.danger,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          '关闭机构多签',
-                          style: TextStyle(color: AppTheme.danger),
-                        ),
-                      ],
+                    child: Text(
+                      '关闭机构多签',
+                      style: TextStyle(color: AppTheme.danger),
                     ),
                   ),
                 if (_isClosed)

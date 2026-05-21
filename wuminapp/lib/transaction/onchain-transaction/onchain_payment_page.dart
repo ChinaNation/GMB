@@ -28,6 +28,13 @@ typedef OnchainPaymentExtraEntriesBuilder = List<Widget> Function(
   WalletProfile? currentWallet,
 );
 
+typedef OnchainWalletPicker = Future<bool?> Function();
+typedef OnchainCurrentWalletLoader = Future<WalletProfile?> Function();
+typedef OnchainLocalRecordsLoader = Future<List<LocalTxEntity>> Function(
+  String walletPubkeyHex, {
+  int limit,
+});
+
 class OnchainPaymentPage extends StatelessWidget {
   const OnchainPaymentPage({super.key, this.initialToAddress});
 
@@ -49,6 +56,10 @@ class OnchainPaymentPanel extends StatefulWidget {
     required this.title,
     this.initialToAddress,
     this.extraEntriesBuilder,
+    this.walletPicker,
+    this.currentWalletLoader,
+    this.localRecordsLoader,
+    this.enableDelayedLocalRecordRefresh = true,
   });
 
   final String title;
@@ -59,6 +70,18 @@ class OnchainPaymentPanel extends StatefulWidget {
   /// 中文注释：交易 Tab 可在链状态提示下方、链上支付表单上方插入入口。
   /// onchain 模块不直接 import offchain / duoqian，跨功能编排留在 ui 层。
   final OnchainPaymentExtraEntriesBuilder? extraEntriesBuilder;
+
+  /// 中文注释：默认打开我的钱包选择页；测试或宿主页面可替换选择流程。
+  final OnchainWalletPicker? walletPicker;
+
+  /// 中文注释：默认读取当前激活钱包；测试可替换为内存钱包。
+  final OnchainCurrentWalletLoader? currentWalletLoader;
+
+  /// 中文注释：默认读取本地流水；测试可替换为内存流水。
+  final OnchainLocalRecordsLoader? localRecordsLoader;
+
+  /// 中文注释：真机保留延迟刷新兜底；widget test 可关闭，避免残留 Timer。
+  final bool enableDelayedLocalRecordRefresh;
 
   @override
   State<OnchainPaymentPanel> createState() => _OnchainPaymentPanelState();
@@ -102,10 +125,12 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   }
 
   Future<void> _bootstrap() async {
-    await _reloadWallet();
-    await _loadLocalRecords();
+    await _reloadWalletAndLocalRecords();
     // 中文注释：交易流水确认由 ChainTxMonitor 写入，本页只做一次延迟本地刷新；
     // 不再发 nonce 轮询确认 RPC，避免增加节点负担。
+    if (!widget.enableDelayedLocalRecordRefresh) {
+      return;
+    }
     unawaited(Future<void>.delayed(const Duration(seconds: 20), () async {
       if (!mounted || WalletIsar.instance.hasActiveOperation) {
         return;
@@ -115,11 +140,20 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   }
 
   /// 中文注释：从本地 Isar 加载链上转账记录。
-  Future<void> _loadLocalRecords() async {
-    if (_currentWallet == null) return;
+  Future<void> _loadLocalRecords({WalletProfile? wallet}) async {
+    final targetWallet = wallet ?? _currentWallet;
+    if (targetWallet == null) {
+      if (mounted && _localTxRecords.isNotEmpty) {
+        setState(() {
+          _localTxRecords = [];
+        });
+      }
+      return;
+    }
+    final targetPubkey = LocalTxStore.normalizePubkey(targetWallet.pubkeyHex);
     try {
-      final records = await LocalTxStore.queryByWalletPubkey(
-        _currentWallet!.pubkeyHex,
+      final records = await _queryLocalRecords(
+        targetPubkey,
         limit: 100,
       );
       // 中文注释：钱包流水不再保存 direction，支出由 amountDeltaFen 的负号判断。
@@ -128,6 +162,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
               r.type == 'transfer' && BigInt.parse(r.amountDeltaFen).isNegative)
           .toList();
       if (mounted) {
+        final currentPubkey = _walletPubkey(_currentWallet);
+        if (currentPubkey != targetPubkey) {
+          return;
+        }
         setState(() {
           _localTxRecords = filtered;
         });
@@ -138,6 +176,22 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
       }
       debugPrint('[链上交易] 加载本地记录失败: $e');
     }
+  }
+
+  String? _walletPubkey(WalletProfile? wallet) {
+    if (wallet == null) return null;
+    return LocalTxStore.normalizePubkey(wallet.pubkeyHex);
+  }
+
+  Future<List<LocalTxEntity>> _queryLocalRecords(
+    String walletPubkeyHex, {
+    int limit = 100,
+  }) {
+    final loader = widget.localRecordsLoader;
+    if (loader != null) {
+      return loader(walletPubkeyHex, limit: limit);
+    }
+    return LocalTxStore.queryByWalletPubkey(walletPubkeyHex, limit: limit);
   }
 
   int _countByStatus(String status) {
@@ -162,7 +216,10 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
   Future<void> _reloadWallet() async {
     WalletProfile? wallet;
     try {
-      wallet = await _paymentService.getCurrentWallet();
+      final loader = widget.currentWalletLoader;
+      wallet = loader != null
+          ? await loader()
+          : await _paymentService.getCurrentWallet();
     } catch (e, st) {
       if (!WalletIsar.instance.isBusyError(e)) {
         debugPrint('[链上交易] 当前钱包加载失败: $e\n$st');
@@ -171,20 +228,37 @@ class _OnchainPaymentPanelState extends State<OnchainPaymentPanel> {
     if (!mounted) {
       return;
     }
+    final nextPubkey = _walletPubkey(wallet);
+    final currentPubkey = _walletPubkey(_currentWallet);
     setState(() {
       _currentWallet = wallet;
       _loadingWallet = false;
+      if (nextPubkey != currentPubkey) {
+        _localTxRecords = [];
+      }
     });
   }
 
+  Future<void> _reloadWalletAndLocalRecords() async {
+    await _reloadWallet();
+    await _loadLocalRecords();
+  }
+
   Future<void> _openMyWalletPage() async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => const MyWalletPage(selectForTrade: true),
-      ),
-    );
+    final picker = widget.walletPicker;
+    final navigator = Navigator.of(context);
+    final changed = picker != null
+        ? await picker()
+        : await navigator.push<bool>(
+            MaterialPageRoute(
+              builder: (_) => const MyWalletPage(selectForTrade: true),
+            ),
+          );
+    if (!mounted) {
+      return;
+    }
     if (changed == true) {
-      await _reloadWallet();
+      await _reloadWalletAndLocalRecords();
     }
   }
 
