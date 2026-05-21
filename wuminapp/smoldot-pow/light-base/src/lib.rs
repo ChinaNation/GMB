@@ -907,6 +907,84 @@ impl<TPlat: platform::PlatformRef, TChain> Client<TPlat, TChain> {
         }))
     }
 
+    /// Returns multiple storage values of the latest finalized block without going through legacy JSON-RPC.
+    pub fn chain_finalized_storage_values(
+        &self,
+        chain_id: ChainId,
+        storage_keys: Vec<Vec<u8>>,
+    ) -> Result<
+        Pin<Box<dyn core::future::Future<Output = Result<Vec<Option<Vec<u8>>>, String>> + Send>>,
+        String,
+    > {
+        let services = self.clone_chain_services(chain_id)?;
+        let block_number_bytes = services.sync_service.block_number_bytes();
+
+        Ok(Box::pin(async move {
+            if storage_keys.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            let subscribe_all = services.sync_service.subscribe_all(16, false).await;
+            let decoded_header = header::decode(
+                &subscribe_all.finalized_block_scale_encoded_header,
+                block_number_bytes,
+            )
+            .map_err(|error| format!("Failed to decode finalized block header: {error}"))?;
+            let block_number = decoded_header.number;
+            let block_hash = header::hash_from_scale_encoded_header(
+                &subscribe_all.finalized_block_scale_encoded_header,
+            );
+            let block_state_trie_root_hash = *decoded_header.state_root;
+
+            // 中文注释：金额展示统一读 finalized 状态根，避免 best 头上短暂可见的余额
+            // 和最终确认后的余额不一致；交易三段状态仍由上层监听 best/inBlock/finalized。
+            let mut values: Vec<Option<Option<Vec<u8>>>> =
+                (0..storage_keys.len()).map(|_| None).collect();
+            let mut query = services
+                .sync_service
+                .clone()
+                .storage_query(
+                    block_number,
+                    block_hash,
+                    block_state_trie_root_hash,
+                    storage_keys
+                        .iter()
+                        .cloned()
+                        .map(|key| sync_service::StorageRequestItem {
+                            key,
+                            ty: sync_service::StorageRequestItemTy::Value,
+                        }),
+                    3,
+                    Duration::from_secs(20),
+                    NonZero::<u32>::new(3).unwrap(),
+                )
+                .advance()
+                .await;
+
+            loop {
+                match query {
+                    sync_service::StorageQueryProgress::Finished => break,
+                    sync_service::StorageQueryProgress::Progress {
+                        request_index,
+                        item: sync_service::StorageResultItem::Value { value, .. },
+                        query: next,
+                    } => {
+                        values[request_index] = Some(value);
+                        query = next.advance().await;
+                    }
+                    sync_service::StorageQueryProgress::Progress { .. } => unreachable!(),
+                    sync_service::StorageQueryProgress::Error(error) => {
+                        return Err(format!(
+                            "Failed to download finalized storage proof: {error}"
+                        ));
+                    }
+                }
+            }
+
+            Ok(values.into_iter().map(|value| value.flatten()).collect())
+        }))
+    }
+
     /// Returns the runtime version of the current best block without going through legacy JSON-RPC.
     pub fn chain_runtime_version_snapshot(
         &self,

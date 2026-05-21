@@ -102,7 +102,8 @@ class _SafetyFundTransferPageState extends State<SafetyFundTransferPage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc().fetchBalance(_safetyFundAddressHex);
+      final balance =
+          await ChainRpc().fetchFinalizedBalance(_safetyFundAddressHex);
       try {
         await store.put(
           accountHex: _safetyFundAddressHex,

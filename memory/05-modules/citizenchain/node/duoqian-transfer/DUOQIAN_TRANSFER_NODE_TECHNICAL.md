@@ -11,6 +11,8 @@ node 端多签转账拆为独立目录：
 
 `governance/proposal` 只负责提案通用聚合，可调用 `duoqian_transfer::proposal` 的解码结果并通过 JSON flatten 保持前端兼容；不得在 governance 目录重新定义多签转账详情结构、SCALE 解码或 `DuoqianTransfer::*ProposalActions` 查询。
 
+多签转账、安全基金转账、手续费划转提案详情中的金额字段按 finalized storage 读取；best/latest 只允许用于交易进度和链状态提示，不作为金额展示口径。
+
 `offchain` 不再声明 `duoqian_transfer` 模块，清算行目录只负责清算行功能。
 
 ## 支持范围

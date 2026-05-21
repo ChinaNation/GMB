@@ -269,17 +269,35 @@ int smoldot_get_system_account_async(SmoldotChainHandle chain_handle,
                                      SmoldotDartCallback callback,
                                      char **error_out);
 
+int smoldot_get_finalized_system_account_async(SmoldotChainHandle chain_handle,
+                                               const char *account_id_hex,
+                                               int64_t callback_id,
+                                               SmoldotDartCallback callback,
+                                               char **error_out);
+
 int smoldot_get_storage_value_async(SmoldotChainHandle chain_handle,
                                     const char *storage_key_hex,
                                     int64_t callback_id,
                                     SmoldotDartCallback callback,
                                     char **error_out);
 
+int smoldot_get_finalized_storage_value_async(SmoldotChainHandle chain_handle,
+                                              const char *storage_key_hex,
+                                              int64_t callback_id,
+                                              SmoldotDartCallback callback,
+                                              char **error_out);
+
 int smoldot_get_storage_values_async(SmoldotChainHandle chain_handle,
                                      const char *storage_keys_json,
                                      int64_t callback_id,
                                      SmoldotDartCallback callback,
                                      char **error_out);
+
+int smoldot_get_finalized_storage_values_async(SmoldotChainHandle chain_handle,
+                                               const char *storage_keys_json,
+                                               int64_t callback_id,
+                                               SmoldotDartCallback callback,
+                                               char **error_out);
 
 #ifdef __cplusplus
 }  // extern "C"

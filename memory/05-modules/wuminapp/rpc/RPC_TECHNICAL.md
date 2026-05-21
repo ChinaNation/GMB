@@ -87,7 +87,8 @@ lib/rpc/
   旧的同步版本（不带 `_async` 后缀）已标记废弃，后续将删除。
   Dart 侧通过 `NativeCapabilityHandler`（`chain.dart`）统一管理异步回调注册
 - 当前代码已开始切换业务主路径：
-  - `ChainRpc.fetchBalance()` 在轻节点模式下已优先走 `SmoldotClientManager.getSystemAccountSnapshot()`
+  - `ChainRpc.fetchBalance()` 在轻节点模式下已优先走 `SmoldotClientManager.getSystemAccountSnapshot()`，仅保留给 best 视图诊断和交易监听内部流程
+  - `ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` / `fetchFinalizedTotalBalance()` 统一走 finalized storage proof，页面金额展示只允许使用这些方法
   - `ChainRpc.fetchConfirmedNonce()` 在轻节点模式下已优先走原生 `System.Account` 快照中的 nonce
   - `ChainRpc.fetchStorage()` / `fetchStorageBatch()` 在轻节点模式下已改走原生 storage 读取
   - `ChainRpc.fetchRuntimeVersion()` / `fetchMetadata()` 在轻节点模式下已改走原生 capability
@@ -103,6 +104,7 @@ lib/rpc/
   - `smoldot_get_block_hash` 已改为“最近块缓存 + 当前同步视图”双层原生路径，不再保留 `chain_getBlockHash`
   - `smoldot_get_block_extrinsics` 已改为只走按 block hash 下载 block body 的轻节点原生路径，不再保留 `chain_getBlock` 兜底
   - `smoldot_get_storage_value` / `smoldot_get_storage_values` / `smoldot_get_system_account` 已改为只走 `sync_service.storage_query` proof 读取，不再保留 `state_getStorage` 兜底
+  - `smoldot_get_finalized_storage_value` / `smoldot_get_finalized_storage_values` / `smoldot_get_finalized_system_account` 固定读取 finalized 状态根，供余额、总额、收益等金额展示使用
 - 2026-03-23 本地探针验证结果：
   - `status`、`runtimeVersion`、`metadata`、`System.Account`、单个 storage、批量 storage、`accountNextIndex`、`genesisHash`、`block_extrinsics` 都已可在 smoldot 路径稳定读出
   - 对拍本地全节点后，`System.Account` 空账户返回 `null`，`:code` 与 `state_queryStorageAt` 的大值返回和全节点一致
@@ -114,13 +116,17 @@ lib/rpc/
 
 ### 6.1 余额查询
 
-`ChainRpc.fetchBalance(String pubkeyHex) → Future<double>`
+`ChainRpc.fetchFinalizedBalance(String pubkeyHex) → Future<double>`
 
 1. 将 `pubkeyHex` 转为 32 字节 AccountId
 2. 构造 `System.Account` storage key（见 6.5）
-3. 轻节点模式通过 `smoldot_get_system_account_async` 异步走 storage proof 读取
+3. 轻节点模式通过 `smoldot_get_finalized_system_account_async` 异步走 finalized storage proof 读取
 4. 解码 SCALE 编码的 `AccountInfo`，提取 `free` 余额
 5. 分 → 元，返回 `double`
+
+`ChainRpc.fetchBalance()` 仍存在，但语义是 best 视图余额，只允许交易监听、链路诊断或明确需要未 finalized 视图的内部代码使用；UI 金额展示不得调用。
+
+`ChainRpc.fetchFinalizedTotalBalance()` 读取 finalized 块上的 `free + reserved`，用于钱包详情链上余额卡；钱包列表、治理机构详情、多签余额、转账页余额提示统一读取 finalized free 余额。
 
 ### 6.2 Nonce 查询
 
@@ -275,20 +281,20 @@ citizenchain 使用自定义 `OnchainChargeAdapter`，标准 `payment_queryInfo`
 
 ### 8.2 批量余额查询（已实现）
 
-当前实现：`ChainRpc.fetchBalances(List<String> pubkeyHexList)`
+当前实现：`ChainRpc.fetchFinalizedBalances(List<String> pubkeyHexList)`
 
-新增 `ChainRpc.fetchBalances(List<String> pubkeyHexList) → Future<Map<String, double>>`：
+新增 `ChainRpc.fetchFinalizedBalances(List<String> pubkeyHexList) → Future<Map<String, double>>`：
 
 ```text
 1. 对每个 pubkeyHex 构建 System.Account storage key：
    key = SYSTEM_ACCOUNT_PREFIX + blake2b_128(accountId) + accountId
-2. 调用已有的 fetchStorageBatch(allKeys) — 一次 storage proof 请求
+2. 调用 fetchFinalizedStorageBatch(allKeys) — 一次 finalized storage proof 请求
 3. 对每个返回值：从 SCALE 字节 offset 16 读 u128 LE → ÷100 → yuan
 ```
 
-`wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用 `fetchBalances(allPubkeys)`，并在轻节点不可用时向用户展示统一错误文案，而不是把失败静默吞成 0 余额。
+`wallet_page.dart` 的 `_refreshBalancesFromChain()` 已改为一次调用 `fetchFinalizedBalances(allPubkeys)`，并在轻节点不可用时向用户展示统一错误文案，而不是把失败静默吞成 0 余额。
 
-不需要改 Rust。blake2b_128 用 polkadart 已有的 `Hasher.blake2b128`。
+`fetchBalances()` 仍作为 best 视图批量余额读取保留，不作为页面金额展示入口。
 
 ### 8.3 钱包交易流水监听（已实现）
 

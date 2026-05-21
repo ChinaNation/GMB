@@ -505,7 +505,7 @@ class _DuoqianManageDetailPageState extends State<DuoqianManageDetailPage> {
       if (_pendingPubkeys.contains(pubkey)) {
         throw StateError('当前管理员已有待确认投票，请稍后刷新');
       }
-      final balance = await ChainRpc().fetchBalance(pubkey);
+      final balance = await ChainRpc().fetchFinalizedBalance(pubkey);
       if (balance <= 0) {
         throw StateError('当前管理员钱包余额不足，无法支付链上投票手续费');
       }

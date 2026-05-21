@@ -26,6 +26,22 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
+fn fetch_finalized_head() -> Result<String, String> {
+    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
+}
+
+fn fetch_finalized_storage(key: String) -> Result<Value, String> {
+    let finalized_hash = fetch_finalized_head()?;
+    // 中文注释：提案动作里包含金额字段，详情和摘要按 finalized 口径展示。
+    rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key), Value::String(finalized_hash)]),
+    )
+}
+
 /// 提案展示号(双层 ID v1):`ProposalDisplayId[id]` 反查值。
 ///
 /// 主键 `proposal_id` 是全局单调 u64;展示号通过本结构持有
@@ -532,7 +548,7 @@ fn fetch_proposal_meta(proposal_id: u64) -> Result<Option<ProposalMeta>, String>
 
 fn fetch_proposal_data_raw(proposal_id: u64) -> Result<Option<Vec<u8>>, String> {
     let key = storage_keys::map_key("VotingEngine", "ProposalData", &proposal_id.to_le_bytes());
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let result = fetch_finalized_storage(key)?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {

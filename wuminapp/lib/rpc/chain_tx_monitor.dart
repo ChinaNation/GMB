@@ -659,7 +659,7 @@ class ChainTxMonitor {
     );
 
     try {
-      final balance = await _chainRpc.fetchBalance(pubkey);
+      final balance = await _chainRpc.fetchFinalizedBalance(pubkey);
       onBalanceChanged?.call(walletAddress, balance);
     } catch (_) {
       // 中文注释：交易记录已经落库，余额刷新失败不能把钱包余额误写成 0。

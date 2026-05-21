@@ -226,9 +226,9 @@ class _MyWalletPageState extends State<MyWalletPage> {
         // 无钱包，跳过
       } else {
         try {
-          // 批量查询所有钱包余额（一次网络请求）
+          // 批量查询所有钱包 finalized 余额（一次网络请求）
           final pubkeys = targetWallets.map((w) => w.pubkeyHex).toList();
-          final balances = await _chainRpc.fetchBalances(pubkeys);
+          final balances = await _chainRpc.fetchFinalizedBalances(pubkeys);
           for (final wallet in targetWallets) {
             final balance = balances[wallet.pubkeyHex] ?? 0.0;
             if (balance != wallet.balance) {

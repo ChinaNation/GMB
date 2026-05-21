@@ -147,7 +147,7 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
     if (!force && !_shouldRefreshBalance()) return;
     try {
       final balance =
-          await _rpc.fetchBalance(widget.institution.duoqianAddress);
+          await _rpc.fetchFinalizedBalance(widget.institution.duoqianAddress);
       final now = DateTime.now().millisecondsSinceEpoch;
       await WalletIsar.instance.writeTxn((isar) async {
         final previous = await InstitutionDuoqianLocalState.readDetail(
@@ -250,7 +250,8 @@ class _DuoqianAccountInfoPageState extends State<DuoqianAccountInfoPage> {
   Future<double?> _resolveBalance(DuoqianStatus? status) async {
     if (status != DuoqianStatus.active) return null;
     try {
-      return await _rpc.fetchBalance(widget.institution.duoqianAddress);
+      return await _rpc
+          .fetchFinalizedBalance(widget.institution.duoqianAddress);
     } catch (_) {
       return null;
     }

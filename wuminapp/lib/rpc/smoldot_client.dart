@@ -648,12 +648,30 @@ class SmoldotClientManager {
         'getSystemAccount', () => _chain!.getSystemAccount(accountIdHex));
   }
 
+  /// 原生读取 finalized 块上的 `System.Account` 快照（必须完整同步）。
+  Future<SystemAccountSnapshot?> getFinalizedSystemAccountSnapshot(
+      String accountIdHex) async {
+    _ensureReady();
+    await ensureSynced();
+    // 中文注释：金额展示统一走 finalized storage proof，避免 best 头余额先行变动。
+    return _withRetry('getFinalizedSystemAccount',
+        () => _chain!.getFinalizedSystemAccount(accountIdHex));
+  }
+
   /// 原生读取单个 storage value hex（必须完整同步）。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
     _ensureReady();
     await ensureSynced();
     return _withRetry(
         'getStorageValue', () => _chain!.getStorageValueHex(storageKeyHex));
+  }
+
+  /// 原生读取 finalized 块上的单个 storage value hex（必须完整同步）。
+  Future<String?> getFinalizedStorageValueHex(String storageKeyHex) async {
+    _ensureReady();
+    await ensureSynced();
+    return _withRetry('getFinalizedStorageValue',
+        () => _chain!.getFinalizedStorageValueHex(storageKeyHex));
   }
 
   /// 原生批量读取多个 storage value hex（必须完整同步）。
@@ -666,6 +684,18 @@ class SmoldotClientManager {
     await ensureSynced();
     return _withRetry('getStorageValues',
         () => _chain!.getStorageValuesHex(storageKeyHexList));
+  }
+
+  /// 原生批量读取 finalized 块上的多个 storage value hex（必须完整同步）。
+  Future<Map<String, String?>> getFinalizedStorageValuesHex(
+      List<String> storageKeyHexList) async {
+    if (storageKeyHexList.isEmpty) {
+      return const {};
+    }
+    _ensureReady();
+    await ensureSynced();
+    return _withRetry('getFinalizedStorageValues',
+        () => _chain!.getFinalizedStorageValuesHex(storageKeyHexList));
   }
 
   /// 释放资源。App 退出时调用。

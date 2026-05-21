@@ -20,7 +20,7 @@ class DuoqianTransferBalanceGuard {
     ChainRpc? chainRpc,
   }) async {
     final rpc = chainRpc ?? ChainRpc();
-    final balanceYuan = await rpc.fetchBalance(wallet.pubkeyHex);
+    final balanceYuan = await rpc.fetchFinalizedBalance(wallet.pubkeyHex);
     if (balanceYuan >= requiredFeeYuan) {
       return null;
     }

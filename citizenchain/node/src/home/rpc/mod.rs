@@ -83,11 +83,15 @@ fn header_block_height(header: &Value) -> Option<u64> {
         .and_then(hex_to_u64)
 }
 
+fn finalized_block_hash() -> Result<String, String> {
+    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
+}
+
 fn finalized_block_height() -> Option<u64> {
-    let hash = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))
-        .ok()?
-        .as_str()?
-        .to_string();
+    let hash = finalized_block_hash().ok()?;
     let header = rpc_post("chain_getHeader", Value::Array(vec![Value::String(hash)])).ok()?;
     header_block_height(&header)
 }
@@ -260,7 +264,11 @@ fn get_total_issuance_sync(app: AppHandle) -> Result<TotalIssuance, String> {
     }
 
     let key = total_issuance_storage_key();
-    let raw = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let finalized_hash = finalized_block_hash()?;
+    let raw = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key), Value::String(finalized_hash)]),
+    )?;
     let amount = raw
         .as_str()
         .and_then(scale_u128_from_storage_hex)
@@ -333,10 +341,19 @@ fn get_total_stake_sync(app: AppHandle) -> Result<TotalStake, String> {
 
     let mut total: u128 = 0;
 
+    // 中文注释：金额类展示统一读取 finalized 块，避免 best 头金额先行变化。
+    let finalized_hash = finalized_block_hash()?;
+
     // 批量构造 43 个存储键，逐个查询。
     for bank in CHINA_CH.iter() {
         let key = system_account_storage_key(&bank.stake_address);
-        let raw = match rpc_post("state_getStorage", Value::Array(vec![Value::String(key)])) {
+        let raw = match rpc_post(
+            "state_getStorage",
+            Value::Array(vec![
+                Value::String(key),
+                Value::String(finalized_hash.clone()),
+            ]),
+        ) {
             Ok(v) => v,
             Err(_) => continue, // 单个查询失败跳过，不中断
         };

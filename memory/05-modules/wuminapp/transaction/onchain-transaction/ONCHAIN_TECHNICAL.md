@@ -39,7 +39,7 @@ wuminapp/lib/transaction/shared/
 ## 3. 关键流程
 
 1. `OnchainPaymentPanel` 收集 `toAddress / amount / symbol`；`OnchainPaymentPage` 只是独立链上支付路由包装
-2. 页面校验 SS58 前缀、金额、余额、ED 和预估手续费
+2. 页面校验 SS58 前缀、金额、finalized 余额、ED 和预估手续费
    - 从通讯录进入时，`ContactBookPage` 返回的联系人 `address` 已经是 SS58，页面直接填入收款栏，不做 AccountId hex 转换
 3. 页面根据钱包类型注入签名回调：
    - 热钱包：先调用 `WalletManager.authenticateForSigning()`，再用 `signWithWalletNoAuth()` 签名
@@ -48,6 +48,8 @@ wuminapp/lib/transaction/shared/
 5. 服务调用 `OnchainRpc.transferKeepAlive()` 完成 extrinsic 构造、签名和广播
 6. 广播成功后写入 `LocalTxEntity(source=local_submit, status=pending, usedNonce=...)`
 7. 交易池 watch 收到 included 后先把本机记录升级为 `inBlock`；`ChainTxMonitor` 监听 newHeads 并补扫 finalized 之后的未确认区块，把命中本机钱包的收支先写为 `inBlock`，再按 finalized 高度把匹配记录合并并升级为 `finalized`
+
+交易状态仍保留 `pending / inBlock / finalized` 三段；余额、可用金额、余额不足提示和钱包余额回写统一读取 finalized 余额，不能因为 `inBlock` 事件先到就把 best 余额写入展示缓存。
 
 ## 4. 链上转账
 

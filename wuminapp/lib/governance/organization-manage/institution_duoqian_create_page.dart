@@ -304,7 +304,8 @@ class _InstitutionDuoqianCreatePageState
     required WalletProfile wallet,
     required BigInt initialTotalFen,
   }) async {
-    final balanceYuan = await ChainRpc().fetchBalance(wallet.pubkeyHex);
+    final balanceYuan =
+        await ChainRpc().fetchFinalizedBalance(wallet.pubkeyHex);
     final balanceFen = DuoqianCreateAmountRules.yuanToFen(balanceYuan);
     final requiredFen =
         DuoqianCreateAmountRules.requiredBalanceFen(initialTotalFen);

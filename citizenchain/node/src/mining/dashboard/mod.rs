@@ -369,13 +369,17 @@ fn chain_genesis_hash() -> Result<String, String> {
     chain_genesis_hash_uncached()
 }
 
-fn best_block_height() -> Result<u64, String> {
-    let header = rpc_post("chain_getHeader", Value::Array(vec![]))?;
+fn finalized_block_height() -> Result<u64, String> {
+    let hash = rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())?;
+    let header = rpc_post("chain_getHeader", Value::Array(vec![Value::String(hash)]))?;
     header
         .get("number")
         .and_then(Value::as_str)
         .and_then(hex_to_u64)
-        .ok_or_else(|| "chain_getHeader.number 缺失或格式无效".to_string())
+        .ok_or_else(|| "chain_getHeader(finalized).number 缺失或格式无效".to_string())
 }
 
 fn block_hash_by_height(height: u64) -> Result<String, String> {
@@ -675,7 +679,7 @@ fn prune_old_income_days(cache: &mut MiningComputationCache, today_utc: u64) {
 
 fn refresh_cache(
     app: &AppHandle,
-    best_height: u64,
+    finalized_height: u64,
     today_utc: u64,
     local_miner_account: Option<&str>,
 ) -> Result<RefreshStats, String> {
@@ -703,7 +707,7 @@ fn refresh_cache(
         cache_changed = true;
     }
 
-    if working.last_processed_height > best_height {
+    if working.last_processed_height > finalized_height {
         reset_cache_for_chain(&mut working, chain_hash.clone(), local_miner);
         cache_changed = true;
     }
@@ -722,9 +726,11 @@ fn refresh_cache(
         }
     }
 
+    // 中文注释：挖矿收益、手续费分成、最近出块记录都属于金额展示，
+    // 只处理 finalized 高度内的区块，避免 best 头回滚时收益数字先变后退。
     let ts_key = timestamp_now_storage_key();
     let target_height = cmp::min(
-        best_height,
+        finalized_height,
         working
             .last_processed_height
             .saturating_add(MAX_BLOCKS_PER_REFRESH),
@@ -798,7 +804,7 @@ fn refresh_cache(
         }
     }
 
-    stats.pending_blocks = best_height.saturating_sub(target_height);
+    stats.pending_blocks = finalized_height.saturating_sub(target_height);
     prune_old_income_days(&mut working, today_utc);
 
     if commit_working_cache(app, &working, cache_changed, false, stats.pending_blocks) {
@@ -1073,10 +1079,10 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
         return Ok(empty_dashboard(resources, Some(warning)));
     }
 
-    let best_height = match best_block_height() {
+    let finalized_height = match finalized_block_height() {
         Ok(v) => v,
         Err(err) => {
-            let warning = format!("读取最新区块高度失败：{err}");
+            let warning = format!("读取 finalized 区块高度失败：{err}");
             eprintln!("{warning}");
             return Ok(empty_dashboard(resources, Some(warning)));
         }
@@ -1108,22 +1114,26 @@ pub fn get_mining_dashboard(app: AppHandle) -> Result<MiningDashboard, String> {
     }
     let _refresh_guard = RefreshInFlightGuard;
 
-    let warning_from_refresh =
-        match refresh_cache(&app, best_height, today_utc, local_miner_account.as_deref()) {
-            Ok(stats) => warning_from_stats(&stats),
-            Err(err) => {
-                let warning = format!("刷新挖矿统计失败，返回最近缓存：{err}");
-                eprintln!("{warning}");
-                warnings.push(warning);
-                let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
-                return Ok(dashboard_from_cache(
-                    &cache,
-                    resources,
-                    merge_warnings(warnings),
-                    today_utc,
-                ));
-            }
-        };
+    let warning_from_refresh = match refresh_cache(
+        &app,
+        finalized_height,
+        today_utc,
+        local_miner_account.as_deref(),
+    ) {
+        Ok(stats) => warning_from_stats(&stats),
+        Err(err) => {
+            let warning = format!("刷新挖矿统计失败，返回最近缓存：{err}");
+            eprintln!("{warning}");
+            warnings.push(warning);
+            let cache = lock_or_reset(mining_cache(), "MINING_CACHE");
+            return Ok(dashboard_from_cache(
+                &cache,
+                resources,
+                merge_warnings(warnings),
+                today_utc,
+            ));
+        }
+    };
     if let Some(w) = warning_from_refresh {
         warnings.push(w);
     }

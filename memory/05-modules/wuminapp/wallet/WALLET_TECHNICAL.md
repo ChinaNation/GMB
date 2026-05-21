@@ -8,7 +8,7 @@
 - 本地机密材料读取（热钱包 seed）
 - 登录签名编排（签名执行由 `lib/signer` 负责）
 - 转账/提案/投票所需钱包上下文输出（地址、公钥、算法、机构角色）
-- 余额查询（通过 `lib/rpc/` 直连链上节点）
+- finalized 余额查询（通过 `lib/rpc/` 直连链上节点）
 - 管理员目录、观察账户、证明态等钱包周边能力
 
 约束：钱包相关代码只应从 `wallet/...` 引用。
@@ -90,7 +90,7 @@ lib/
   - 钱包列表（带热/冷标识）、长按拖拽排序、创建、导入、删除、激活、地址复制
   - 热钱包创建/导入（`CreateWalletPage` / `ImportWalletPage`）
   - 冷钱包创建/导入（`CreateColdWalletPage` / `ImportColdWalletPage`），导入冷钱包页标题右侧提供扫码图标，复用 `QrScanPage(raw)` 识别钱包二维码并只回填账户地址/公钥输入框
-  - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchBalance()` 直连节点）
+  - 余额显示与刷新（通过 `lib/rpc/ChainRpc.fetchFinalizedBalance()` / `fetchFinalizedBalances()` 直连节点）
   - 钱包详情页（`WalletDetailPage`）：余额卡片（含钱包名称）、二维码（含下载按钮）、地址、交易记录入口+最近记录
 - `transaction_history_page.dart`
   - 交易记录列表页（`TransactionHistoryPage`）：按 `walletPubkeyHex` 过滤，显示业务类型、带正负号的余额变化、对方地址、时间、状态
@@ -103,7 +103,7 @@ lib/
 - `wallet_action_card.dart`
   - 钱包操作卡：充值、提现与零钱包余额展示；零钱包余额来自绑定清算行节点，不等同于下方链上余额卡
 - `wallet_onchain_balance_card.dart`
-  - 链上余额卡：展示链上 total 余额
+  - 链上余额卡：展示链上 finalized total 余额
 - `wallet_qr_dialog.dart`
   - 钱包二维码弹窗：生成 `WUMIN_QR_V1 kind=user_contact`
 
@@ -148,11 +148,12 @@ lib/
 
 1. 页面 `initState` 和下拉刷新触发 `_refreshBalancesFromChain()`
 2. 页面先通过 `_loadWallets()` 读取一次本地钱包列表，再把同一份列表传给余额刷新，避免首屏加载和余额刷新并发读取 Isar
-3. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchBalances(pubkeys)` 批量读取 `System.Account`
+3. 一次收集所有本地钱包公钥，调用 `ChainRpc.fetchFinalizedBalances(pubkeys)` 批量读取 finalized 块上的 `System.Account`
 4. 轻节点先等待同步完成；若轻节点未初始化、同步失败或链路降级，直接向上抛出真实错误
-5. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元
+5. 批量解码 SCALE 编码的 `AccountInfo.free` 余额（分），转换为元；钱包详情链上余额卡使用 `fetchFinalizedTotalBalance()` 显示 `free + reserved`
 6. 若余额有变化，通过统一写队列更新 Isar 中的 `WalletProfileEntity.balance`
 7. 刷新 UI 显示；若轻节点不可用，则页面显示统一提示，而不是把失败误判为 0 余额；若本地库短暂繁忙，只显示“本地钱包数据库繁忙”且保留已有列表
+8. `ChainRpc.fetchBalance()` 是 best 视图余额，只能用于交易监听或诊断；钱包页面不得把 best 余额写入展示缓存
 
 ### 4.5.1 钱包交易流水同步
 
@@ -299,7 +300,7 @@ lib/
 - `LoginService`（`lib/qr/login/login_service.dart`，通过 `sign_service.dart` re-export）
   - `parseChallenge / buildReceiptPayload / buildReceiptFromSignature`
 - `ChainRpc`（`lib/rpc/chain_rpc.dart`）
-  - `fetchBalance` — 直连节点查询链上余额
+  - `fetchFinalizedBalance` / `fetchFinalizedBalances` / `fetchFinalizedTotalBalance` — 直连节点查询 finalized 链上余额
 - `ChainTxMonitor`（`lib/rpc/chain_tx_monitor.dart`）
   - 监听 newHeads/finalizedHeads 区块事件，补扫未 finalized 区块，按本机钱包游标增量写入并升级交易流水
 

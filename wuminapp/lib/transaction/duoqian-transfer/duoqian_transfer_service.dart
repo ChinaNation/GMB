@@ -156,12 +156,12 @@ class DuoqianTransferService {
 
   // ──── 链上查询 ────
 
-  /// 查询转出主账户的可用余额（元）。
+  /// 查询转出主账户的 finalized 可用余额（元）。
   ///
   /// 中文注释：治理机构按主账户、费用账户、安全基金账户、质押账户分别建模，转账提案固定从主账户支出；
   /// 个人/注册多签账户通过 InstitutionInfo.mainAddress 继续映射到账户地址。
   Future<double> fetchInstitutionBalance(InstitutionInfo institution) {
-    return _rpc.fetchBalance(institution.mainAddress);
+    return _rpc.fetchFinalizedBalance(institution.mainAddress);
   }
 
   // ──── 双层 ID 与反向索引(spec_version v1)────

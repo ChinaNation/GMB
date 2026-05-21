@@ -780,8 +780,8 @@ class _InstitutionDetailPageState extends State<InstitutionDetailPage> {
       final views = await Future.wait(
         sources.map((item) async {
           final local = await balanceStore.readFresh(item.address);
-          final balance =
-              local?.balanceYuan ?? await _chainRpc.fetchBalance(item.address);
+          final balance = local?.balanceYuan ??
+              await _chainRpc.fetchFinalizedBalance(item.address);
           if (local == null) {
             try {
               await balanceStore.put(
