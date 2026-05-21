@@ -74,6 +74,8 @@ fn ensure_spendable_balance(
     amount_fen: u128,
     fee_fen: u128,
 ) -> Result<(), String> {
+    // 中文注释：桌面端金额显示统一以 finalized 为准；余额不足文案也使用同一口径，
+    // 真正能否入块仍由 runtime 在交易执行时最终校验。
     let balance_fen =
         institution::fetch_balance(sender_clean)?.ok_or("发送方账户不存在或余额为零")?;
     let total_needed = amount_fen + fee_fen;

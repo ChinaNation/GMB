@@ -95,7 +95,7 @@ class _SweepToMainPageState extends State<SweepToMainPage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance = await ChainRpc().fetchBalance(_feeAddressHex);
+      final balance = await ChainRpc().fetchFinalizedBalance(_feeAddressHex);
       try {
         await store.put(
           accountHex: _feeAddressHex,

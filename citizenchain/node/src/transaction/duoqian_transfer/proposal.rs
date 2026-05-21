@@ -24,6 +24,22 @@ fn rpc_post(method: &str, params: Value) -> Result<Value, String> {
     )
 }
 
+fn fetch_finalized_head() -> Result<String, String> {
+    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
+}
+
+fn fetch_finalized_storage(key: String) -> Result<Value, String> {
+    let finalized_hash = fetch_finalized_head()?;
+    // 中文注释：多签转账动作的金额展示以 finalized storage 为准。
+    rpc_post(
+        "state_getStorage",
+        Value::Array(vec![Value::String(key), Value::String(finalized_hash)]),
+    )
+}
+
 /// 普通多签转账提案详情（从 `VotingEngine::ProposalData` 解码）。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -196,7 +212,7 @@ fn fetch_safety_fund_proposal_action(
         "SafetyFundProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let result = fetch_finalized_storage(key)?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {
@@ -238,7 +254,7 @@ fn fetch_sweep_proposal_action(proposal_id: u64) -> Result<Option<SweepProposalD
         "SweepProposalActions",
         &proposal_id.to_le_bytes(),
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let result = fetch_finalized_storage(key)?;
     match result {
         Value::Null => Ok(None),
         Value::String(hex_data) => {

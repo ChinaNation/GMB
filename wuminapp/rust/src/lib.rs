@@ -1565,6 +1565,92 @@ pub unsafe extern "C" fn smoldot_get_system_account_async(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn smoldot_get_finalized_system_account_async(
+    chain_handle: ChainHandle,
+    account_id_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if account_id_hex.is_null() {
+        set_error(error_out, "account_id_hex is null");
+        return -1;
+    }
+    let account_id_hex = match CStr::from_ptr(account_id_hex).to_str() {
+        Ok(value) => value,
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in account_id_hex");
+            return -1;
+        }
+    };
+    let account_id = match decode_account_id_hex(account_id_hex) {
+        Ok(bytes) => bytes,
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let storage_key = build_system_account_storage_key(&account_id);
+            let storage_key_bytes = decode_prefixed_hex(&storage_key)?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_finalized_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
+            let storage_value_hex = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .flatten()
+                .map(|value_bytes| format!("0x{}", hex::encode(value_bytes)));
+
+            if storage_value_hex.is_none() {
+                return Ok(json!({
+                    "storageKey": storage_key,
+                    "exists": false,
+                })
+                .to_string());
+            }
+
+            let value_hex = storage_value_hex.unwrap();
+            let value_bytes = decode_prefixed_hex(&value_hex)?;
+            let nonce = if value_bytes.len() >= 4 {
+                Some(u32::from_le_bytes([
+                    value_bytes[0],
+                    value_bytes[1],
+                    value_bytes[2],
+                    value_bytes[3],
+                ]) as u64)
+            } else {
+                None
+            };
+            let free_fen = if value_bytes.len() >= 32 {
+                Some(read_u128_le_string(&value_bytes, 16)?)
+            } else {
+                None
+            };
+
+            Ok(json!({
+                "storageKey": storage_key,
+                "exists": true,
+                "valueHex": value_hex,
+                "nonce": nonce,
+                "freeFen": free_fen,
+            })
+            .to_string())
+        }
+    )
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn smoldot_get_storage_value_async(
     chain_handle: ChainHandle,
     storage_key_hex: *const c_char,
@@ -1601,6 +1687,55 @@ pub unsafe extern "C" fn smoldot_get_storage_value_async(
                 let client = client_wrapper.client.lock();
                 client
                     .chain_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
+                    .map_err(|error| error.to_string())?
+            };
+            let storage_value = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?
+                .pop()
+                .flatten();
+            Ok(json_storage_value_response_from_bytes(&storage_key_hex, storage_value).to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_finalized_storage_value_async(
+    chain_handle: ChainHandle,
+    storage_key_hex: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if storage_key_hex.is_null() {
+        set_error(error_out, "storage_key_hex is null");
+        return -1;
+    }
+    let storage_key_hex = match CStr::from_ptr(storage_key_hex).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in storage_key_hex");
+            return -1;
+        }
+    };
+    let storage_key_bytes = match decode_prefixed_hex(&storage_key_hex) {
+        Ok(bytes) => bytes,
+        Err(message) => {
+            set_error(error_out, &message);
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_finalized_storage_values(chain_wrapper.chain_id, vec![storage_key_bytes])
                     .map_err(|error| error.to_string())?
             };
             let storage_value = native_storage_future
@@ -1657,6 +1792,69 @@ pub unsafe extern "C" fn smoldot_get_storage_values_async(
                 let client = client_wrapper.client.lock();
                 client
                     .chain_storage_values(chain_wrapper.chain_id, decoded_storage_keys)
+                    .map_err(|error| error.to_string())?
+            };
+            let native_values = native_storage_future
+                .await
+                .map_err(|error| error.to_string())?;
+            let mut values = serde_json::Map::with_capacity(storage_keys.len());
+            for (storage_key_hex, storage_value) in
+                storage_keys.iter().zip(native_values.into_iter())
+            {
+                let value_hex = storage_value
+                    .map(|value_bytes| Value::String(format!("0x{}", hex::encode(value_bytes))))
+                    .unwrap_or(Value::Null);
+                values.insert(storage_key_hex.clone(), value_hex);
+            }
+            Ok(Value::Object(values).to_string())
+        }
+    )
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smoldot_get_finalized_storage_values_async(
+    chain_handle: ChainHandle,
+    storage_keys_json: *const c_char,
+    callback_id: i64,
+    callback: DartCallback,
+    error_out: *mut *mut c_char,
+) -> c_int {
+    if storage_keys_json.is_null() {
+        set_error(error_out, "storage_keys_json is null");
+        return -1;
+    }
+    let storage_keys_json = match CStr::from_ptr(storage_keys_json).to_str() {
+        Ok(value) => value.to_string(),
+        Err(_) => {
+            set_error(error_out, "Invalid UTF-8 in storage_keys_json");
+            return -1;
+        }
+    };
+    let storage_keys: Vec<String> = match serde_json::from_str(&storage_keys_json) {
+        Ok(value) => value,
+        Err(error) => {
+            set_error(
+                error_out,
+                &format!("Failed to parse storage_keys_json: {error}"),
+            );
+            return -1;
+        }
+    };
+
+    async_ffi_entry!(
+        chain_handle,
+        callback_id,
+        callback,
+        error_out,
+        move |chain_wrapper, client_wrapper| async move {
+            let decoded_storage_keys = storage_keys
+                .iter()
+                .map(|storage_key_hex| decode_prefixed_hex(storage_key_hex))
+                .collect::<Result<Vec<_>, _>>()?;
+            let native_storage_future = {
+                let client = client_wrapper.client.lock();
+                client
+                    .chain_finalized_storage_values(chain_wrapper.chain_id, decoded_storage_keys)
                     .map_err(|error| error.to_string())?
             };
             let native_values = native_storage_future

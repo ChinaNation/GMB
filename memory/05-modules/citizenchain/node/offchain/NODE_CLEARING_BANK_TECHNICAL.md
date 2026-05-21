@@ -59,7 +59,7 @@ Tauri 命令按业务拆分:
 | 目录 | 命令 | 用途 |
 |---|---|
 | `governance/organization-manage/commands.rs` | `search_eligible_clearing_banks` | 搜索清算行候选 |
-| `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上查 `Institutions[sfid_number]` + `InstitutionAccounts[sfid_number, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
+| `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_detail` | 链上按 finalized hash 查 `Institutions[sfid_number]` + `InstitutionAccounts[sfid_number, *]` + 各账户余额。`None` = 未创建,前端进 create 流程 |
 | `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_proposals` | 机构提案分页(占位:目前返回空列表,full scan 留 follow-up) |
 | `governance/organization-manage/commands.rs` | `fetch_clearing_bank_institution_registration_info` | 调 SFID `GET /api/v1/app/institutions/:sfid_number/registration-info` 拉链上注册专用信息 |
 | `governance/organization-manage/commands.rs` | `build_propose_create_institution_request` / `submit_propose_create_institution` | 冷钱包签名并提交 `propose_create_institution` |

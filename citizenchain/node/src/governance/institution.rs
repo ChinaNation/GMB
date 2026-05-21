@@ -24,9 +24,10 @@ pub fn fetch_admins(sfid_number: &str) -> Result<Vec<String>, String> {
     admins_change::storage::fetch_admins_by_sfid_number(sfid_number)
 }
 
-/// 查询账户余额（返回 free 余额，单位为最小精度）。
+/// 查询 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。
 pub fn fetch_balance(account_hex: &str) -> Result<Option<u128>, String> {
-    fetch_balance_at(account_hex, None)
+    let hash = fetch_finalized_head()?;
+    fetch_balance_at(account_hex, Some(&hash))
 }
 
 /// 查询指定 finalized 块上的账户余额（返回 free 余额，单位为最小精度）。

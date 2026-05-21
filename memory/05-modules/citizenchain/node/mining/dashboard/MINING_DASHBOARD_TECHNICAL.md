@@ -44,8 +44,8 @@
 ## 4. 统计流程
 
 1. 校验 RPC 目标链指纹（`ss58Format == 2027` + `system_name` 非空）。
-2. 读取最新区块高度。
-3. 按增量区间 `last_processed_height+1..=best_height` 处理新区块：
+2. 读取最新 finalized 区块高度。
+3. 按增量区间 `last_processed_height+1..=finalized_height` 处理已最终确认区块：
    - `chain_getBlockHash`
    - `chain_getBlock`
    - `fee_blockFees`
@@ -54,7 +54,7 @@
 4. 更新累计收益、按 UTC 天收益桶、最近 20 条记录。
 5. 返回聚合结果。
 
-说明：已移除“每次请求全链重扫”的实现，改为增量刷新，避免高度变大后接口退化。
+说明：已移除“每次请求全链重扫”的实现，改为 finalized 增量刷新，避免高度变大后接口退化，也避免 best 头回滚造成收益数字先变后退。
 
 收益口径说明：
 

@@ -45,7 +45,7 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
     refresh();
   }
 
-  /// 拉取链上 total 余额。
+  /// 拉取链上 finalized total 余额。
   ///
   /// 中文注释:公开方法,供外层 [WalletDetailPage] 通过 [GlobalKey] 触发下拉刷新。
   Future<void> refresh() async {
@@ -55,14 +55,16 @@ class WalletOnchainBalanceCardState extends State<WalletOnchainBalanceCard> {
       _hasError = false;
     });
     try {
-      final total = await _chainRpc.fetchTotalBalance(widget.wallet.pubkeyHex);
+      final total =
+          await _chainRpc.fetchFinalizedTotalBalance(widget.wallet.pubkeyHex);
       if (!mounted) return;
       setState(() {
         _balance = total;
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('[WalletOnchainBalanceCard] fetchTotalBalance failed: $e');
+      debugPrint(
+          '[WalletOnchainBalanceCard] fetchFinalizedTotalBalance failed: $e');
       if (!mounted) return;
       setState(() {
         _hasError = true;

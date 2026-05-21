@@ -22,6 +22,7 @@ governance/
 - 实现 WUMIN_QR_V1 QR 签名协议（离线签名设备 ↔ 节点桌面端）
 - 从链上 RPC 解码提案数据（联合投票/内部投票/机构管理员/销毁/发行/运行时升级）
 - 治理聚合层不得实现投票流程、人口快照获取、计票或投票状态推进；这些职责统一归投票引擎
+- 治理详情中的余额、发行/销毁/多签转账等金额字段统一按 finalized block hash 读取；提案/交易进度仍可展示 pending、inBlock、finalized 状态
 
 前端对应结构：
 - `node/frontend/governance/api.ts`：治理专用 Tauri API

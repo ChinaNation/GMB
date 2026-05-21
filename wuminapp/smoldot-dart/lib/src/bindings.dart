@@ -7,71 +7,80 @@ typedef ClientHandle = Uint64;
 typedef ChainHandle = Uint64;
 
 // Dart callback type
-typedef DartCallbackNative = Void Function(
-    Int64 callbackId, Int64 result, Pointer<Utf8> error);
-typedef DartCallbackDart = void Function(
-    int callbackId, int result, Pointer<Utf8> error);
+typedef DartCallbackNative =
+    Void Function(Int64 callbackId, Int64 result, Pointer<Utf8> error);
+typedef DartCallbackDart =
+    void Function(int callbackId, int result, Pointer<Utf8> error);
 
 // Native function signatures
-typedef SmoldotClientInitNative = ClientHandle Function(
-    Pointer<Utf8> configJson, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotClientInitDart = int Function(
-    Pointer<Utf8> configJson, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotClientInitNative =
+    ClientHandle Function(
+      Pointer<Utf8> configJson,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotClientInitDart =
+    int Function(Pointer<Utf8> configJson, Pointer<Pointer<Utf8>> errorOut);
 
-typedef SmoldotAddChainNative = Int32 Function(
-  ClientHandle clientHandle,
-  Pointer<Utf8> chainSpecJson,
-  Pointer<ChainHandle> potentialRelayChains,
-  Int32 relayCount,
-  Pointer<Utf8> databaseContent,
-  Int64 callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotAddChainDart = int Function(
-  int clientHandle,
-  Pointer<Utf8> chainSpecJson,
-  Pointer<Uint64> potentialRelayChains,
-  int relayCount,
-  Pointer<Utf8> databaseContent,
-  int callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotAddChainNative =
+    Int32 Function(
+      ClientHandle clientHandle,
+      Pointer<Utf8> chainSpecJson,
+      Pointer<ChainHandle> potentialRelayChains,
+      Int32 relayCount,
+      Pointer<Utf8> databaseContent,
+      Int64 callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotAddChainDart =
+    int Function(
+      int clientHandle,
+      Pointer<Utf8> chainSpecJson,
+      Pointer<Uint64> potentialRelayChains,
+      int relayCount,
+      Pointer<Utf8> databaseContent,
+      int callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotSendJsonRpcNative = Int32 Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> requestJson,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotSendJsonRpcDart = int Function(
-  int chainHandle,
-  Pointer<Utf8> requestJson,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotSendJsonRpcNative =
+    Int32 Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> requestJson,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotSendJsonRpcDart =
+    int Function(
+      int chainHandle,
+      Pointer<Utf8> requestJson,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotNextJsonRpcResponseNative = Int32 Function(
-  ChainHandle chainHandle,
-  Int64 callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotNextJsonRpcResponseDart = int Function(
-  int chainHandle,
-  int callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotNextJsonRpcResponseNative =
+    Int32 Function(
+      ChainHandle chainHandle,
+      Int64 callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotNextJsonRpcResponseDart =
+    int Function(
+      int chainHandle,
+      int callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotRemoveChainNative = Int32 Function(
-    ChainHandle chainHandle, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotRemoveChainDart = int Function(
-    int chainHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotRemoveChainNative =
+    Int32 Function(ChainHandle chainHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotRemoveChainDart =
+    int Function(int chainHandle, Pointer<Pointer<Utf8>> errorOut);
 
-typedef SmoldotClientDestroyNative = Int32 Function(
-    ClientHandle clientHandle, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotClientDestroyDart = int Function(
-    int clientHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotClientDestroyNative =
+    Int32 Function(ClientHandle clientHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotClientDestroyDart =
+    int Function(int clientHandle, Pointer<Pointer<Utf8>> errorOut);
 
 typedef SmoldotFreeStringNative = Void Function(Pointer<Utf8> ptr);
 typedef SmoldotFreeStringDart = void Function(Pointer<Utf8> ptr);
@@ -79,127 +88,154 @@ typedef SmoldotFreeStringDart = void Function(Pointer<Utf8> ptr);
 typedef SmoldotVersionNative = Pointer<Utf8> Function();
 typedef SmoldotVersionDart = Pointer<Utf8> Function();
 
-typedef SmoldotGetStatusSnapshotNative = Pointer<Utf8> Function(
-    ChainHandle chainHandle, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotGetStatusSnapshotDart = Pointer<Utf8> Function(
-    int chainHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotGetStatusSnapshotNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetStatusSnapshotDart =
+    Pointer<Utf8> Function(int chainHandle, Pointer<Pointer<Utf8>> errorOut);
 
-typedef SmoldotGetRuntimeVersionNative = Pointer<Utf8> Function(
-    ChainHandle chainHandle, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotGetRuntimeVersionDart = Pointer<Utf8> Function(
-    int chainHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotGetRuntimeVersionNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetRuntimeVersionDart =
+    Pointer<Utf8> Function(int chainHandle, Pointer<Pointer<Utf8>> errorOut);
 
-typedef SmoldotGetMetadataNative = Pointer<Utf8> Function(
-    ChainHandle chainHandle, Pointer<Pointer<Utf8>> errorOut);
-typedef SmoldotGetMetadataDart = Pointer<Utf8> Function(
-    int chainHandle, Pointer<Pointer<Utf8>> errorOut);
+typedef SmoldotGetMetadataNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetMetadataDart =
+    Pointer<Utf8> Function(int chainHandle, Pointer<Pointer<Utf8>> errorOut);
 
-typedef SmoldotGetAccountNextIndexNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> ss58Address,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetAccountNextIndexDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> ss58Address,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetAccountNextIndexNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> ss58Address,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetAccountNextIndexDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> ss58Address,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotGetBlockHashNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> blockNumber,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetBlockHashDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> blockNumber,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetBlockHashNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> blockNumber,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetBlockHashDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> blockNumber,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotGetBlockExtrinsicsNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> blockHashHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetBlockExtrinsicsDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> blockHashHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetBlockExtrinsicsNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> blockHashHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetBlockExtrinsicsDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> blockHashHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotSubmitExtrinsicNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> extrinsicHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotSubmitExtrinsicDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> extrinsicHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotSubmitExtrinsicNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> extrinsicHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotSubmitExtrinsicDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> extrinsicHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotGetSystemAccountNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> accountIdHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetSystemAccountDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> accountIdHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetSystemAccountNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> accountIdHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetSystemAccountDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> accountIdHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotGetStorageValueNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> storageKeyHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetStorageValueDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> storageKeyHex,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetStorageValueNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> storageKeyHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetStorageValueDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> storageKeyHex,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotGetStorageValuesNative = Pointer<Utf8> Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> storageKeysJson,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotGetStorageValuesDart = Pointer<Utf8> Function(
-  int chainHandle,
-  Pointer<Utf8> storageKeysJson,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotGetStorageValuesNative =
+    Pointer<Utf8> Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> storageKeysJson,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotGetStorageValuesDart =
+    Pointer<Utf8> Function(
+      int chainHandle,
+      Pointer<Utf8> storageKeysJson,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
 // ──── 异步 FFI 类型声明（不阻塞 Dart 主线程） ────
 
-typedef SmoldotAsyncNoArgNative = Int32 Function(
-  ChainHandle chainHandle,
-  Int64 callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotAsyncNoArgDart = int Function(
-  int chainHandle,
-  int callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotAsyncNoArgNative =
+    Int32 Function(
+      ChainHandle chainHandle,
+      Int64 callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotAsyncNoArgDart =
+    int Function(
+      int chainHandle,
+      int callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
-typedef SmoldotAsyncOneArgNative = Int32 Function(
-  ChainHandle chainHandle,
-  Pointer<Utf8> arg1,
-  Int64 callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
-typedef SmoldotAsyncOneArgDart = int Function(
-  int chainHandle,
-  Pointer<Utf8> arg1,
-  int callbackId,
-  Pointer<NativeFunction<DartCallbackNative>> callback,
-  Pointer<Pointer<Utf8>> errorOut,
-);
+typedef SmoldotAsyncOneArgNative =
+    Int32 Function(
+      ChainHandle chainHandle,
+      Pointer<Utf8> arg1,
+      Int64 callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
+typedef SmoldotAsyncOneArgDart =
+    int Function(
+      int chainHandle,
+      Pointer<Utf8> arg1,
+      int callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+      Pointer<Pointer<Utf8>> errorOut,
+    );
 
 /// FFI bindings for smoldot-light native library
 class SmoldotBindings {
@@ -235,8 +271,11 @@ class SmoldotBindings {
   late final SmoldotAsyncOneArgDart _getBlockExtrinsicsAsync;
   late final SmoldotAsyncOneArgDart _submitExtrinsicAsync;
   late final SmoldotAsyncOneArgDart _getSystemAccountAsync;
+  late final SmoldotAsyncOneArgDart _getFinalizedSystemAccountAsync;
   late final SmoldotAsyncOneArgDart _getStorageValueAsync;
+  late final SmoldotAsyncOneArgDart _getFinalizedStorageValueAsync;
   late final SmoldotAsyncOneArgDart _getStorageValuesAsync;
+  late final SmoldotAsyncOneArgDart _getFinalizedStorageValuesAsync;
 
   /// Initialize the bindings by loading the native library
   SmoldotBindings() {
@@ -247,75 +286,141 @@ class SmoldotBindings {
 
   /// Initialize function pointers from the library
   void _initializeBindings() {
-    _clientInit =
-        _library.lookupFunction<SmoldotClientInitNative, SmoldotClientInitDart>(
-            'smoldot_client_init');
-    _addChain =
-        _library.lookupFunction<SmoldotAddChainNative, SmoldotAddChainDart>(
-            'smoldot_add_chain');
-    _sendJsonRpc = _library.lookupFunction<SmoldotSendJsonRpcNative,
-        SmoldotSendJsonRpcDart>('smoldot_send_json_rpc');
-    _nextJsonRpcResponse = _library.lookupFunction<
-        SmoldotNextJsonRpcResponseNative,
-        SmoldotNextJsonRpcResponseDart>('smoldot_next_json_rpc_response');
-    _removeChain = _library.lookupFunction<SmoldotRemoveChainNative,
-        SmoldotRemoveChainDart>('smoldot_remove_chain');
-    _clientDestroy = _library.lookupFunction<SmoldotClientDestroyNative,
-        SmoldotClientDestroyDart>('smoldot_client_destroy');
-    _freeString =
-        _library.lookupFunction<SmoldotFreeStringNative, SmoldotFreeStringDart>(
-            'smoldot_free_string');
-    _version =
-        _library.lookupFunction<SmoldotVersionNative, SmoldotVersionDart>(
-            'smoldot_version');
-    _getStatusSnapshot = _library.lookupFunction<
-        SmoldotGetStatusSnapshotNative,
-        SmoldotGetStatusSnapshotDart>('smoldot_get_status_snapshot');
-    _getRuntimeVersion = _library.lookupFunction<
-        SmoldotGetRuntimeVersionNative,
-        SmoldotGetRuntimeVersionDart>('smoldot_get_runtime_version');
-    _getMetadata = _library.lookupFunction<SmoldotGetMetadataNative,
-        SmoldotGetMetadataDart>('smoldot_get_metadata');
-    _getAccountNextIndex = _library.lookupFunction<
-        SmoldotGetAccountNextIndexNative,
-        SmoldotGetAccountNextIndexDart>('smoldot_get_account_next_index');
-    _getBlockHash = _library.lookupFunction<SmoldotGetBlockHashNative,
-        SmoldotGetBlockHashDart>('smoldot_get_block_hash');
-    _getBlockExtrinsics = _library.lookupFunction<
-        SmoldotGetBlockExtrinsicsNative,
-        SmoldotGetBlockExtrinsicsDart>('smoldot_get_block_extrinsics');
-    _submitExtrinsic = _library.lookupFunction<SmoldotSubmitExtrinsicNative,
-        SmoldotSubmitExtrinsicDart>('smoldot_submit_extrinsic');
-    _getSystemAccount = _library.lookupFunction<SmoldotGetSystemAccountNative,
-        SmoldotGetSystemAccountDart>('smoldot_get_system_account');
-    _getStorageValue = _library.lookupFunction<SmoldotGetStorageValueNative,
-        SmoldotGetStorageValueDart>('smoldot_get_storage_value');
-    _getStorageValues = _library.lookupFunction<SmoldotGetStorageValuesNative,
-        SmoldotGetStorageValuesDart>('smoldot_get_storage_values');
+    _clientInit = _library
+        .lookupFunction<SmoldotClientInitNative, SmoldotClientInitDart>(
+          'smoldot_client_init',
+        );
+    _addChain = _library
+        .lookupFunction<SmoldotAddChainNative, SmoldotAddChainDart>(
+          'smoldot_add_chain',
+        );
+    _sendJsonRpc = _library
+        .lookupFunction<SmoldotSendJsonRpcNative, SmoldotSendJsonRpcDart>(
+          'smoldot_send_json_rpc',
+        );
+    _nextJsonRpcResponse = _library
+        .lookupFunction<
+          SmoldotNextJsonRpcResponseNative,
+          SmoldotNextJsonRpcResponseDart
+        >('smoldot_next_json_rpc_response');
+    _removeChain = _library
+        .lookupFunction<SmoldotRemoveChainNative, SmoldotRemoveChainDart>(
+          'smoldot_remove_chain',
+        );
+    _clientDestroy = _library
+        .lookupFunction<SmoldotClientDestroyNative, SmoldotClientDestroyDart>(
+          'smoldot_client_destroy',
+        );
+    _freeString = _library
+        .lookupFunction<SmoldotFreeStringNative, SmoldotFreeStringDart>(
+          'smoldot_free_string',
+        );
+    _version = _library
+        .lookupFunction<SmoldotVersionNative, SmoldotVersionDart>(
+          'smoldot_version',
+        );
+    _getStatusSnapshot = _library
+        .lookupFunction<
+          SmoldotGetStatusSnapshotNative,
+          SmoldotGetStatusSnapshotDart
+        >('smoldot_get_status_snapshot');
+    _getRuntimeVersion = _library
+        .lookupFunction<
+          SmoldotGetRuntimeVersionNative,
+          SmoldotGetRuntimeVersionDart
+        >('smoldot_get_runtime_version');
+    _getMetadata = _library
+        .lookupFunction<SmoldotGetMetadataNative, SmoldotGetMetadataDart>(
+          'smoldot_get_metadata',
+        );
+    _getAccountNextIndex = _library
+        .lookupFunction<
+          SmoldotGetAccountNextIndexNative,
+          SmoldotGetAccountNextIndexDart
+        >('smoldot_get_account_next_index');
+    _getBlockHash = _library
+        .lookupFunction<SmoldotGetBlockHashNative, SmoldotGetBlockHashDart>(
+          'smoldot_get_block_hash',
+        );
+    _getBlockExtrinsics = _library
+        .lookupFunction<
+          SmoldotGetBlockExtrinsicsNative,
+          SmoldotGetBlockExtrinsicsDart
+        >('smoldot_get_block_extrinsics');
+    _submitExtrinsic = _library
+        .lookupFunction<
+          SmoldotSubmitExtrinsicNative,
+          SmoldotSubmitExtrinsicDart
+        >('smoldot_submit_extrinsic');
+    _getSystemAccount = _library
+        .lookupFunction<
+          SmoldotGetSystemAccountNative,
+          SmoldotGetSystemAccountDart
+        >('smoldot_get_system_account');
+    _getStorageValue = _library
+        .lookupFunction<
+          SmoldotGetStorageValueNative,
+          SmoldotGetStorageValueDart
+        >('smoldot_get_storage_value');
+    _getStorageValues = _library
+        .lookupFunction<
+          SmoldotGetStorageValuesNative,
+          SmoldotGetStorageValuesDart
+        >('smoldot_get_storage_values');
 
     // 异步版本
-    _getStatusSnapshotAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
-        SmoldotAsyncNoArgDart>('smoldot_get_status_snapshot_async');
-    _getRuntimeVersionAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
-        SmoldotAsyncNoArgDart>('smoldot_get_runtime_version_async');
-    _getMetadataAsync = _library.lookupFunction<SmoldotAsyncNoArgNative,
-        SmoldotAsyncNoArgDart>('smoldot_get_metadata_async');
-    _getAccountNextIndexAsync = _library.lookupFunction<
-        SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_account_next_index_async');
-    _getBlockHashAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_block_hash_async');
-    _getBlockExtrinsicsAsync = _library.lookupFunction<
-        SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_block_extrinsics_async');
-    _submitExtrinsicAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_submit_extrinsic_async');
-    _getSystemAccountAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_system_account_async');
-    _getStorageValueAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_storage_value_async');
-    _getStorageValuesAsync = _library.lookupFunction<SmoldotAsyncOneArgNative,
-        SmoldotAsyncOneArgDart>('smoldot_get_storage_values_async');
+    _getStatusSnapshotAsync = _library
+        .lookupFunction<SmoldotAsyncNoArgNative, SmoldotAsyncNoArgDart>(
+          'smoldot_get_status_snapshot_async',
+        );
+    _getRuntimeVersionAsync = _library
+        .lookupFunction<SmoldotAsyncNoArgNative, SmoldotAsyncNoArgDart>(
+          'smoldot_get_runtime_version_async',
+        );
+    _getMetadataAsync = _library
+        .lookupFunction<SmoldotAsyncNoArgNative, SmoldotAsyncNoArgDart>(
+          'smoldot_get_metadata_async',
+        );
+    _getAccountNextIndexAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_account_next_index_async',
+        );
+    _getBlockHashAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_block_hash_async',
+        );
+    _getBlockExtrinsicsAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_block_extrinsics_async',
+        );
+    _submitExtrinsicAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_submit_extrinsic_async',
+        );
+    _getSystemAccountAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_system_account_async',
+        );
+    _getFinalizedSystemAccountAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_finalized_system_account_async',
+        );
+    _getStorageValueAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_storage_value_async',
+        );
+    _getFinalizedStorageValueAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_finalized_storage_value_async',
+        );
+    _getStorageValuesAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_storage_values_async',
+        );
+    _getFinalizedStorageValuesAsync = _library
+        .lookupFunction<SmoldotAsyncOneArgNative, SmoldotAsyncOneArgDart>(
+          'smoldot_get_finalized_storage_values_async',
+        );
   }
 
   // ===== Core Client Functions =====
@@ -504,7 +609,8 @@ class SmoldotBindings {
 
       if (result != 0) {
         throw Exception(
-            'Failed to get next JSON-RPC response: error code $result');
+          'Failed to get next JSON-RPC response: error code $result',
+        );
       }
     } finally {
       _allocator.free(errorOutPtr);
@@ -612,8 +718,11 @@ class SmoldotBindings {
     final accountIdPtr = accountIdHex.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr =
-          _getAccountNextIndex(chainHandle, accountIdPtr, errorOutPtr);
+      final resultPtr = _getAccountNextIndex(
+        chainHandle,
+        accountIdPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -637,8 +746,9 @@ class SmoldotBindings {
   String getBlockHash(int chainHandle, int blockNumber) {
     final errorOutPtr = _allocator<Pointer<Utf8>>();
     errorOutPtr.value = nullptr;
-    final blockNumberPtr =
-        blockNumber.toString().toNativeUtf8(allocator: _allocator);
+    final blockNumberPtr = blockNumber.toString().toNativeUtf8(
+      allocator: _allocator,
+    );
 
     try {
       final resultPtr = _getBlockHash(chainHandle, blockNumberPtr, errorOutPtr);
@@ -668,8 +778,11 @@ class SmoldotBindings {
     final blockHashPtr = blockHashHex.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr =
-          _getBlockExtrinsics(chainHandle, blockHashPtr, errorOutPtr);
+      final resultPtr = _getBlockExtrinsics(
+        chainHandle,
+        blockHashPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -696,8 +809,11 @@ class SmoldotBindings {
     final extrinsicPtr = extrinsicHex.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr =
-          _submitExtrinsic(chainHandle, extrinsicPtr, errorOutPtr);
+      final resultPtr = _submitExtrinsic(
+        chainHandle,
+        extrinsicPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -724,7 +840,11 @@ class SmoldotBindings {
     final accountIdPtr = accountIdHex.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr = _getSystemAccount(chainHandle, accountIdPtr, errorOutPtr);
+      final resultPtr = _getSystemAccount(
+        chainHandle,
+        accountIdPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -751,7 +871,11 @@ class SmoldotBindings {
     final storageKeyPtr = storageKeyHex.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr = _getStorageValue(chainHandle, storageKeyPtr, errorOutPtr);
+      final resultPtr = _getStorageValue(
+        chainHandle,
+        storageKeyPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -778,8 +902,11 @@ class SmoldotBindings {
     final storageKeysPtr = storageKeysJson.toNativeUtf8(allocator: _allocator);
 
     try {
-      final resultPtr =
-          _getStorageValues(chainHandle, storageKeysPtr, errorOutPtr);
+      final resultPtr = _getStorageValues(
+        chainHandle,
+        storageKeysPtr,
+        errorOutPtr,
+      );
       if (errorOutPtr.value != nullptr) {
         final error = errorOutPtr.value.toDartString();
         _freeString(errorOutPtr.value);
@@ -856,86 +983,175 @@ class SmoldotBindings {
     required int chainHandle,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncNoArg(_getStatusSnapshotAsync,
-      chainHandle: chainHandle, callbackId: callbackId,
-      callback: callback, debugName: 'getStatusSnapshotAsync');
+  }) => _invokeAsyncNoArg(
+    _getStatusSnapshotAsync,
+    chainHandle: chainHandle,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getStatusSnapshotAsync',
+  );
 
   void getRuntimeVersionAsync({
     required int chainHandle,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncNoArg(_getRuntimeVersionAsync,
-      chainHandle: chainHandle, callbackId: callbackId,
-      callback: callback, debugName: 'getRuntimeVersionAsync');
+  }) => _invokeAsyncNoArg(
+    _getRuntimeVersionAsync,
+    chainHandle: chainHandle,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getRuntimeVersionAsync',
+  );
 
   void getMetadataAsync({
     required int chainHandle,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncNoArg(_getMetadataAsync,
-      chainHandle: chainHandle, callbackId: callbackId,
-      callback: callback, debugName: 'getMetadataAsync');
+  }) => _invokeAsyncNoArg(
+    _getMetadataAsync,
+    chainHandle: chainHandle,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getMetadataAsync',
+  );
 
   void getAccountNextIndexAsync({
     required int chainHandle,
     required String accountIdHex,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getAccountNextIndexAsync,
-      chainHandle: chainHandle, arg: accountIdHex, callbackId: callbackId,
-      callback: callback, debugName: 'getAccountNextIndexAsync');
+  }) => _invokeAsyncOneArg(
+    _getAccountNextIndexAsync,
+    chainHandle: chainHandle,
+    arg: accountIdHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getAccountNextIndexAsync',
+  );
 
   void getBlockHashAsync({
     required int chainHandle,
     required String blockNumber,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getBlockHashAsync,
-      chainHandle: chainHandle, arg: blockNumber, callbackId: callbackId,
-      callback: callback, debugName: 'getBlockHashAsync');
+  }) => _invokeAsyncOneArg(
+    _getBlockHashAsync,
+    chainHandle: chainHandle,
+    arg: blockNumber,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getBlockHashAsync',
+  );
 
   void getBlockExtrinsicsAsync({
     required int chainHandle,
     required String blockHashHex,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getBlockExtrinsicsAsync,
-      chainHandle: chainHandle, arg: blockHashHex, callbackId: callbackId,
-      callback: callback, debugName: 'getBlockExtrinsicsAsync');
+  }) => _invokeAsyncOneArg(
+    _getBlockExtrinsicsAsync,
+    chainHandle: chainHandle,
+    arg: blockHashHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getBlockExtrinsicsAsync',
+  );
 
   void submitExtrinsicAsync({
     required int chainHandle,
     required String extrinsicHex,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_submitExtrinsicAsync,
-      chainHandle: chainHandle, arg: extrinsicHex, callbackId: callbackId,
-      callback: callback, debugName: 'submitExtrinsicAsync');
+  }) => _invokeAsyncOneArg(
+    _submitExtrinsicAsync,
+    chainHandle: chainHandle,
+    arg: extrinsicHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'submitExtrinsicAsync',
+  );
 
   void getSystemAccountAsync({
     required int chainHandle,
     required String accountIdHex,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getSystemAccountAsync,
-      chainHandle: chainHandle, arg: accountIdHex, callbackId: callbackId,
-      callback: callback, debugName: 'getSystemAccountAsync');
+  }) => _invokeAsyncOneArg(
+    _getSystemAccountAsync,
+    chainHandle: chainHandle,
+    arg: accountIdHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getSystemAccountAsync',
+  );
+
+  void getFinalizedSystemAccountAsync({
+    required int chainHandle,
+    required String accountIdHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(
+    _getFinalizedSystemAccountAsync,
+    chainHandle: chainHandle,
+    arg: accountIdHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getFinalizedSystemAccountAsync',
+  );
 
   void getStorageValueAsync({
     required int chainHandle,
     required String storageKeyHex,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getStorageValueAsync,
-      chainHandle: chainHandle, arg: storageKeyHex, callbackId: callbackId,
-      callback: callback, debugName: 'getStorageValueAsync');
+  }) => _invokeAsyncOneArg(
+    _getStorageValueAsync,
+    chainHandle: chainHandle,
+    arg: storageKeyHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getStorageValueAsync',
+  );
+
+  void getFinalizedStorageValueAsync({
+    required int chainHandle,
+    required String storageKeyHex,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(
+    _getFinalizedStorageValueAsync,
+    chainHandle: chainHandle,
+    arg: storageKeyHex,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getFinalizedStorageValueAsync',
+  );
 
   void getStorageValuesAsync({
     required int chainHandle,
     required String storageKeysJson,
     required int callbackId,
     required Pointer<NativeFunction<DartCallbackNative>> callback,
-  }) => _invokeAsyncOneArg(_getStorageValuesAsync,
-      chainHandle: chainHandle, arg: storageKeysJson, callbackId: callbackId,
-      callback: callback, debugName: 'getStorageValuesAsync');
+  }) => _invokeAsyncOneArg(
+    _getStorageValuesAsync,
+    chainHandle: chainHandle,
+    arg: storageKeysJson,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getStorageValuesAsync',
+  );
+
+  void getFinalizedStorageValuesAsync({
+    required int chainHandle,
+    required String storageKeysJson,
+    required int callbackId,
+    required Pointer<NativeFunction<DartCallbackNative>> callback,
+  }) => _invokeAsyncOneArg(
+    _getFinalizedStorageValuesAsync,
+    chainHandle: chainHandle,
+    arg: storageKeysJson,
+    callbackId: callbackId,
+    callback: callback,
+    debugName: 'getFinalizedStorageValuesAsync',
+  );
 }

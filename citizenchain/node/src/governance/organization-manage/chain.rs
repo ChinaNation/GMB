@@ -118,7 +118,7 @@ fn format_yuan(min_units: u128) -> String {
 
 /// 用 RPC `state_getStorage` 拉单账户的 free 余额(分)。
 /// 不存在 → 返回 0。
-fn fetch_account_free_balance(account: &AccountId32) -> Result<u128, String> {
+fn fetch_account_free_balance(account: &AccountId32, finalized_hash: &str) -> Result<u128, String> {
     let mut storage_data = Vec::with_capacity(32);
     let raw: [u8; 32] = (*account).clone().into();
     storage_data.extend_from_slice(&raw);
@@ -132,7 +132,13 @@ fn fetch_account_free_balance(account: &AccountId32) -> Result<u128, String> {
         hex::encode(storage_keys::twox_128(b"Account")),
         hex::encode(hashed)
     );
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![
+            Value::String(key),
+            Value::String(finalized_hash.to_string()),
+        ]),
+    )?;
     match result {
         Value::Null => Ok(0),
         Value::String(hex_data) => {
@@ -156,6 +162,13 @@ fn fetch_account_free_balance(account: &AccountId32) -> Result<u128, String> {
     }
 }
 
+fn fetch_finalized_head() -> Result<String, String> {
+    rpc_post("chain_getFinalizedHead", Value::Array(vec![]))?
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "chain_getFinalizedHead 返回格式无效".to_string())
+}
+
 fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
     let clean = admin_hex.strip_prefix("0x").unwrap_or(admin_hex);
     let raw = hex::decode(clean).ok()?;
@@ -174,9 +187,16 @@ fn admin_hex_to_ss58(admin_hex: &str) -> Option<String> {
 /// 2. `state_getKeysPaged` + `OrganizationManage::InstitutionAccounts[sfid_number, *]` 取账户列表
 /// 3. 每个账户的 `System::Account[address].data.free` 取链上余额
 pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionDetail>, String> {
+    let finalized_hash = fetch_finalized_head()?;
     let key_data = encode_sfid_key_data(sfid_number)?;
     let key = storage_keys::map_key("OrganizationManage", "Institutions", &key_data);
-    let result = rpc_post("state_getStorage", Value::Array(vec![Value::String(key)]))?;
+    let result = rpc_post(
+        "state_getStorage",
+        Value::Array(vec![
+            Value::String(key),
+            Value::String(finalized_hash.clone()),
+        ]),
+    )?;
     let raw = match result {
         Value::Null => return Ok(None),
         Value::String(s) => s,
@@ -188,7 +208,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         .map_err(|e| format!("Institutions SCALE 解码失败:{e}"))?;
 
     // 拉机构下所有账户(InstitutionAccounts[sfid_number, *] 是 DoubleMap)。
-    let accounts = fetch_institution_accounts(sfid_number, &inst)?;
+    let accounts = fetch_institution_accounts(sfid_number, &inst, &finalized_hash)?;
 
     // 主账户 / 费用账户 / 其它账户 分类(用 ss58 字符串比对,避免原始字节做 Eq)。
     let main_addr_bytes: [u8; 32] = inst.main_address.clone().into();
@@ -214,7 +234,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
     let main_account = main_account.unwrap_or_else(|| {
         // 容错:如果 InstitutionAccounts 没显式列主账户(理论上不应该),
         // 就直接用 Institutions.main_address 拉余额拼一条最小记录。
-        let bal = fetch_account_free_balance(&inst.main_address).unwrap_or(0);
+        let bal = fetch_account_free_balance(&inst.main_address, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "主账户".to_string(),
             address_ss58: pubkey_to_ss58(&main_addr_bytes).unwrap_or_default(),
@@ -224,7 +244,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
         }
     });
     let fee_account = fee_account.unwrap_or_else(|| {
-        let bal = fetch_account_free_balance(&inst.fee_address).unwrap_or(0);
+        let bal = fetch_account_free_balance(&inst.fee_address, &finalized_hash).unwrap_or(0);
         AccountWithBalance {
             account_name: "费用账户".to_string(),
             address_ss58: pubkey_to_ss58(&fee_addr_bytes).unwrap_or_default(),
@@ -286,6 +306,7 @@ pub fn fetch_institution_detail(sfid_number: &str) -> Result<Option<InstitutionD
 fn fetch_institution_accounts(
     sfid_number: &str,
     inst: &OnChainInstitution,
+    finalized_hash: &str,
 ) -> Result<Vec<AccountWithBalance>, String> {
     // 第一层 key 哈希器是 Blake2_128Concat,完整 storage key 前缀 =
     //   twox_128("OrganizationManage") ++ twox_128("InstitutionAccounts")
@@ -340,7 +361,10 @@ fn fetch_institution_accounts(
         // 我们直接拉 storage 值,然后从 key 反推 account_name(便于和 inst 对账)。
         let value = rpc_post(
             "state_getStorage",
-            Value::Array(vec![Value::String(key.clone())]),
+            Value::Array(vec![
+                Value::String(key.clone()),
+                Value::String(finalized_hash.to_string()),
+            ]),
         )?;
         let value_hex = match value {
             Value::Null => continue,
@@ -362,7 +386,7 @@ fn fetch_institution_accounts(
         };
         let acc_name = decode_account_name_from_key(&key, &prefix_hex).unwrap_or_default();
         let acc_addr_bytes: [u8; 32] = acc.address.clone().into();
-        let bal = fetch_account_free_balance(&acc.address).unwrap_or(0);
+        let bal = fetch_account_free_balance(&acc.address, finalized_hash).unwrap_or(0);
         out.push(AccountWithBalance {
             account_name: acc_name,
             address_ss58: pubkey_to_ss58(&acc_addr_bytes).unwrap_or_default(),

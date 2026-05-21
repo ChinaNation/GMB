@@ -136,7 +136,7 @@ RPC 暴露说明：
 核心职责：
 - **钱包列表**：冷钱包从 `cold-wallets.json` 读取；矿工热钱包从默认链 `powr` keystore 动态注入并置顶，不写入冷钱包文件。
 - **矿工热钱包**：列表名称固定为“矿工热钱包”，不显示删除按钮；若用户尝试重复添加同一矿工地址，后端直接拒绝。
-- **余额查询**：按钱包公钥读取链上账户余额，供首页交易栏展示。
+- **余额查询**：按钱包公钥读取 finalized 链上账户余额，供首页交易栏展示。
 - **冷钱包签名请求**：构造二维码签名所需 payload，确保普通钱包继续由离线设备签名。
 - **矿工热钱包签名提交**：前端要求设备开机密码；后端校验通过后签发进程内一次性令牌，再调用本机 `transaction_submitMinerTransfer` RPC 使用 `powr` 密钥签名 `Balances::transfer_keep_alive`。
 - **签名提交**：冷钱包接收离线签名结果后提交链上转账；矿工热钱包由节点直接返回交易哈希。
@@ -145,3 +145,4 @@ RPC 暴露说明：
 1. `cold-wallets.json` 只持久化普通冷钱包，避免把矿工热钱包误当作可删除用户钱包。
 2. `transaction_submitMinerTransfer` RPC 需要一次性令牌；令牌只由 Tauri 命令在设备密码校验通过后生成，直接访问本机 RPC 不能转出矿工余额。
 3. 手续费预估复用 runtime `onchain_transaction::calculate_onchain_fee` 口径，前端展示只作为预估，最终以链上扣费为准。
+4. 钱包余额、发行总额、永久质押总额等金额展示统一传入 `chain_getFinalizedHead` 对应 block hash 读取；best/latest 只用于链状态和交易进度。

@@ -78,8 +78,8 @@ class _PersonalDuoqianClosePageState extends State<PersonalDuoqianClosePage> {
       if (local.isFresh(AccountBalanceSnapshotStore.displayTtl)) return;
     }
     try {
-      final balance =
-          await ChainRpc().fetchBalance(widget.institution.duoqianAddress);
+      final balance = await ChainRpc()
+          .fetchFinalizedBalance(widget.institution.duoqianAddress);
       try {
         await store.put(
           accountHex: widget.institution.duoqianAddress,

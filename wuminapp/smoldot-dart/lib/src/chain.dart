@@ -19,7 +19,9 @@ void _capabilityCallback(int callbackId, int result, Pointer<Utf8> error) {
 
   if (error != nullptr) {
     final errorMsg = error.toDartString();
-    completer.completeError(SmoldotException('Native capability error: $errorMsg'));
+    completer.completeError(
+      SmoldotException('Native capability error: $errorMsg'),
+    );
   } else {
     final responsePtr = Pointer<Utf8>.fromAddress(result);
     final responseStr = responsePtr.toDartString();
@@ -36,8 +38,9 @@ class NativeCapabilityHandler {
   late final Pointer<NativeFunction<DartCallbackNative>> _nativeCallback;
 
   NativeCapabilityHandler() {
-    _nativeCallable =
-        NativeCallable<DartCallbackNative>.listener(_capabilityCallback);
+    _nativeCallable = NativeCallable<DartCallbackNative>.listener(
+      _capabilityCallback,
+    );
     _nativeCallback = _nativeCallable.nativeFunction;
   }
 
@@ -46,8 +49,11 @@ class NativeCapabilityHandler {
   /// [invoke] 回调接收 callbackId 和 callback 指针，负责调用对应的
   /// bindings.*Async 方法。Rust 侧完成后通过 DartCallback 回调结果。
   Future<String> call(
-    void Function(int callbackId,
-        Pointer<NativeFunction<DartCallbackNative>> callback) invoke,
+    void Function(
+      int callbackId,
+      Pointer<NativeFunction<DartCallbackNative>> callback,
+    )
+    invoke,
   ) {
     final id = _capabilityCallbackNextId++;
     final completer = Completer<String>();
@@ -316,6 +322,24 @@ class Chain {
     );
   }
 
+  /// 原生读取 finalized 块上的 `System.Account`。
+  Future<SystemAccountSnapshot> getFinalizedSystemAccount(
+    String accountIdHex,
+  ) async {
+    _ensureNotDisposed();
+    final json = await _capability.call((callbackId, callback) {
+      bindings.getFinalizedSystemAccountAsync(
+        chainHandle: chainId,
+        accountIdHex: accountIdHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
+    return SystemAccountSnapshot.fromJson(
+      jsonDecode(json) as Map<String, dynamic>,
+    );
+  }
+
   /// 原生读取单个 storage value。
   Future<String?> getStorageValueHex(String storageKeyHex) async {
     _ensureNotDisposed();
@@ -334,11 +358,50 @@ class Chain {
     return response['valueHex'] as String?;
   }
 
+  /// 原生读取 finalized 块上的单个 storage value。
+  Future<String?> getFinalizedStorageValueHex(String storageKeyHex) async {
+    _ensureNotDisposed();
+    final responseJson = await _capability.call((callbackId, callback) {
+      bindings.getFinalizedStorageValueAsync(
+        chainHandle: chainId,
+        storageKeyHex: storageKeyHex,
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
+    final response = jsonDecode(responseJson) as Map<String, dynamic>;
+    if (response['exists'] != true) {
+      return null;
+    }
+    return response['valueHex'] as String?;
+  }
+
   /// 原生批量读取多个 storage value。
-  Future<Map<String, String?>> getStorageValuesHex(List<String> storageKeys) async {
+  Future<Map<String, String?>> getStorageValuesHex(
+    List<String> storageKeys,
+  ) async {
     _ensureNotDisposed();
     final responseJson = await _capability.call((callbackId, callback) {
       bindings.getStorageValuesAsync(
+        chainHandle: chainId,
+        storageKeysJson: jsonEncode(storageKeys),
+        callbackId: callbackId,
+        callback: callback,
+      );
+    });
+    final response = jsonDecode(responseJson) as Map<String, dynamic>;
+    return response.map(
+      (key, value) => MapEntry(key, value == null ? null : value as String),
+    );
+  }
+
+  /// 原生批量读取 finalized 块上的多个 storage value。
+  Future<Map<String, String?>> getFinalizedStorageValuesHex(
+    List<String> storageKeys,
+  ) async {
+    _ensureNotDisposed();
+    final responseJson = await _capability.call((callbackId, callback) {
+      bindings.getFinalizedStorageValuesAsync(
         chainHandle: chainId,
         storageKeysJson: jsonEncode(storageKeys),
         callbackId: callbackId,
@@ -402,6 +465,7 @@ class Chain {
       throw SmoldotException('Chain $chainId has been disposed');
     }
   }
+
   @override
   String toString() => 'Chain(chainId: $chainId, isDisposed: $_isDisposed)';
 }
