@@ -78,6 +78,7 @@ PersonalManage storage：
 - 详情页链上明确查不到 `PersonalManage::PersonalDuoqians` 时，写入本机
   `PersonalDuoqianLocalState.statusClosed`，页面状态显示“已注销”。
 - 已注销详情页不显示余额，不再从创建提案快照显示旧入金金额，也不显示“未找到”。
+- Active 详情页右上角三点菜单显示纯文本“关闭个人多签”，不显示删除图标，避免把关闭提案误解为本机删除。
 - 已注销详情页右上角三点菜单显示按钮“删除”；确认后删除
   `PersonalDuoqianEntity`、该账户全部 `PersonalDuoqianProposalEntity` 和本地状态键。
 - 链路异常不把网络失败写成已注销；详情页首屏不得因链上异常显示全屏加载失败。

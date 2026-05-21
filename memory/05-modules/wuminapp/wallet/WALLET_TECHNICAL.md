@@ -101,7 +101,7 @@ lib/
 - `wallet_identity_card.dart`
   - 钱包身份卡：钱包名、短地址、复制与二维码入口
 - `wallet_action_card.dart`
-  - 钱包操作卡：充值、提现与清算行余额展示
+  - 钱包操作卡：充值、提现与零钱包余额展示；零钱包余额来自绑定清算行节点，不等同于下方链上余额卡
 - `wallet_onchain_balance_card.dart`
   - 链上余额卡：展示链上 total 余额
 - `wallet_qr_dialog.dart`
@@ -163,6 +163,7 @@ lib/
 5. 区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`；本机提交后的 pending 记录唯一键为 `walletPubkeyHex:pending:txHash`，写入时按同钱包、同区块、同发送方、同接收方、同转账本金合并本机提交记录和重复区块事件，避免重复显示。
 6. 删除钱包时同步删除该 `walletPubkeyHex` 下的 `LocalTxEntity` 和 `WalletTxSyncCursorEntity`；再次导入同一链上账户也从新的本机导入时刻重新记录。
 7. 流水同步遇到本地 Isar/MDBX 繁忙时直接让路到下一轮，不和钱包列表、余额刷新、治理页面抢写锁。
+8. 交易页 `签名交易` 下方的四个状态只统计当前交易钱包的转出记录；钱包详情页和完整交易记录页才展示该钱包全部收支流水。
 
 ### 4.5.2 钱包卡片拖拽排序
 

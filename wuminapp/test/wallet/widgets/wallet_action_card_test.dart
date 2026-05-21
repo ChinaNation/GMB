@@ -7,12 +7,12 @@ import 'package:wuminapp_mobile/wallet/widgets/wallet_action_card.dart';
 /// 中文注释:WalletActionCard 渲染 + SnackBar 行为测试(v2 三列版)。
 ///
 /// 验证点:
-/// - 三列 label:充值 / 提现 / 余额 全部渲染。
+/// - 三列 label:充值 / 提现 / 零钱包 全部渲染。
 /// - 三列图标:arrow_circle_down_outlined / arrow_circle_up_outlined /
 ///   account_balance_wallet_outlined 全部渲染。
 /// - 未绑定时充值 / 提现点击 → SnackBar「请先绑定清算行」。
-/// - 余额列下方小字 `未绑定` 可见。
-/// - 整卡只有 2 个 InkWell(充值 + 提现),余额列不可点击。
+/// - 零钱包列下方小字 `未绑定` 可见。
+/// - 整卡只有 2 个 InkWell(充值 + 提现),零钱包列不可点击。
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -44,18 +44,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('renders 充值 / 提现 / 余额 three columns with expected icons',
+  testWidgets('renders 充值 / 提现 / 零钱包 three columns with expected icons',
       (tester) async {
     await pumpCard(tester);
     expect(find.text('充值'), findsOneWidget);
     expect(find.text('提现'), findsOneWidget);
-    expect(find.text('余额'), findsOneWidget);
+    expect(find.text('零钱包'), findsOneWidget);
     expect(find.byIcon(Icons.arrow_circle_down_outlined), findsOneWidget);
     expect(find.byIcon(Icons.arrow_circle_up_outlined), findsOneWidget);
     expect(find.byIcon(Icons.account_balance_wallet_outlined), findsOneWidget);
   });
 
-  testWidgets('balance column shows unbound state', (tester) async {
+  testWidgets('零钱包 column shows unbound state', (tester) async {
     await pumpCard(tester);
     expect(find.text('未绑定'), findsOneWidget);
   });
@@ -76,15 +76,15 @@ void main() {
     expect(find.text('请先在“清算行”页面绑定清算行'), findsOneWidget);
   });
 
-  testWidgets('balance column is non-interactive: exactly 2 InkWells in card',
+  testWidgets('零钱包 column is non-interactive: exactly 2 InkWells in card',
       (tester) async {
     await pumpCard(tester);
-    // 中文注释:整卡只有 2 个 InkWell(充值 + 提现)。余额列是静态展示,不包
+    // 中文注释:整卡只有 2 个 InkWell(充值 + 提现)。零钱包列是静态展示,不包
     // InkWell / GestureDetector / onTap 回调。这条是硬规则。
     expect(
       tester.widgetList(find.byType(InkWell)),
       hasLength(2),
-      reason: '余额列不可点击,整卡只允许有 2 个 InkWell(充值 + 提现)',
+      reason: '零钱包列不可点击,整卡只允许有 2 个 InkWell(充值 + 提现)',
     );
   });
 }

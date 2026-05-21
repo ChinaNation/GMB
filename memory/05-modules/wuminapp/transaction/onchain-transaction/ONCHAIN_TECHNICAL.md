@@ -79,6 +79,13 @@ wuminapp/lib/transaction/shared/
 
 链上流水由 `lib/rpc/chain_tx_monitor.dart` 解析区块 `System.Events` 写入；newHeads 命中或未确认区块补扫命中时先写 `inBlock`，finalized 命中后升级为 `finalized`。区块事件记录唯一键为 `walletPubkeyHex:blockHash:eventIndex`，pending 记录只用于本机提交后的即时展示和匹配合并；普通转账本机写入统一走 `LocalTxStore.upsertLocalSubmitTransfer()`，区块事件先到时也合并为同一条。
 
+交易页 `OnchainPaymentPanel` 中 `签名交易` 下方的 `已提交 / 已出块 / 已确认 / 失败` 状态行只统计当前交易钱包自己发起的链上转出记录：
+
+- 查询条件按当前钱包 `walletPubkeyHex` 读取本地流水。
+- 展示前继续过滤 `type == transfer` 且 `amountDeltaFen < 0`。
+- 收入记录不进入交易页状态行；完整收支流水只在 `我的 -> 我的钱包 -> 钱包详情` 及完整交易记录页展示。
+- 右上角切换交易钱包后，页面必须先清空旧钱包状态，再按新钱包 `walletPubkeyHex` 重新加载本机转出记录；异步查询返回时还要校验查询发起时的钱包 pubkey，避免旧查询结果覆盖新钱包状态。
+
 ## 6. 签名边界
 
 - 签名算法固定 `sr25519`

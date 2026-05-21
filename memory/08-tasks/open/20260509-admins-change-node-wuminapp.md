@@ -210,4 +210,8 @@
 - 已将 wumin 冷钱包 `propose_admin_set_change` decoder 切到新载荷，缺少 `new_threshold` 的旧载荷和尾部多余字节直接拒签。
 - 已补齐机构多签注销后的本地显示：统一账户列表继续显示“已注销”，详情页不显示余额，右上角显示“删除”，确认后清理本机机构多签数据。
 - 已将个人多签创建/注销提案本地初始票数改为 `yesVotes = 1`，对齐投票引擎发起人自动赞成票。
+- 已修正个人/机构多签详情页右上角关闭菜单的视觉语义：Active 状态“关闭个人多签 / 关闭机构多签”不再显示删除图标，Closed 状态“删除”才保留删除图标。
+- `dart format lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart`（`wuminapp`）：通过。
+- `flutter analyze lib/governance/personal-manage/personal_manage_account_info_page.dart lib/governance/organization-manage/duoqian_account_info_page.dart`（`wuminapp`）：通过，无问题。
+- 关闭菜单残留扫描：通过，“关闭个人多签 / 关闭机构多签”附近不再出现 `Icons.delete_outline`，真正的“删除”菜单项仍保留删除图标。
 - 已同步 `unified-protocols.md`、wuminapp governance/admins-change/personal-manage/signer 文档和 wuminapp-vs-wumin 双端边界文档。
