@@ -89,8 +89,8 @@ fn has_secret_ed25519(app: &AppHandle) -> Result<bool, String> {
     Ok(secret_path.is_file())
 }
 
-/// 返回节点身份密钥的统一路径：`<node-data>/node-key/secret_ed25519`。
-/// 不依赖链 ID，dev 链和正式链共用同一个身份。
+/// 返回节点身份密钥的统一路径：`<app_data>/node-key/secret_ed25519`。
+/// 不依赖链 ID，但正式版与开发版各自使用独立 app_data 命名空间。
 fn node_key_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(crate::shared::keystore::node_data_dir(app)?
         .join(NODE_KEY_DIR)
@@ -139,10 +139,10 @@ fn peer_id_from_node_key_hex(node_key_hex: &str) -> Result<String, String> {
     Ok(peer_id.to_string())
 }
 
-/// 将引导节点私钥以原始 32 字节写入 `<node-data>/node-key/secret_ed25519`。
+/// 将引导节点私钥以原始 32 字节写入 `<app_data>/node-key/secret_ed25519`。
 ///
 /// 密钥存放在节点根目录下而非 `chains/<id>/network/` 中，
-/// 使 dev 链和正式链共用同一个 Peer ID 身份。
+/// 使同一数据命名空间内的链配置共用同一个 Peer ID 身份。
 /// 节点启动时通过 `--node-key-file` 参数显式加载。
 fn write_secret_ed25519(app: &AppHandle, secret_bytes: &[u8]) -> Result<(), String> {
     let secret_path = node_key_path(app)?;

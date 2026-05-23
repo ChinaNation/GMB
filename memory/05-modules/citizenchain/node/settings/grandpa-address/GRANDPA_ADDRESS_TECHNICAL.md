@@ -27,7 +27,7 @@
 
 ## 3. 存储设计
 
-- 节点 keystore 文件：`<node-data>/chains/*/keystore/6772616e<grandpa_pubkey_hex>`
+- 节点 keystore 文件：`<app_data>/chains/*/keystore/6772616e<grandpa_pubkey_hex>`
   - 文件内容：`"0x<private_hex>"`
   - 通过原子写入落盘，避免异常中断时文件损坏。
 - 本地元数据文件：`<app_data_dir>/grandpa-meta.json`

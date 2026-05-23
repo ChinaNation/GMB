@@ -23,15 +23,15 @@ use std::{
 
 const DEFAULT_CHAIN_ID: &str = "citizenchain";
 
-/// 返回节点数据根目录 `<app_data>/node-data`，不存在时自动创建。
+/// 返回节点数据根目录 `<app_data>`，不存在时自动创建。
 pub(crate) fn node_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let path = security::app_data_dir(app)?.join("node-data");
+    let path = security::app_data_dir(app)?;
     ensure_directory_secure(&path)
         .map_err(|e| format!("create node data dir failed ({}): {e}", path.display()))?;
     Ok(path)
 }
 
-/// 扫描 `<node-data>/chains/*/keystore` 目录列表，始终包含默认链 ID 对应的目录。
+/// 扫描 `<app_data>/chains/*/keystore` 目录列表，始终包含默认链 ID 对应的目录。
 /// 跳过符号链接，确保 keystore 目录已创建。
 pub(crate) fn keystore_dirs(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
     let chains_root = node_data_dir(app)?.join("chains");
