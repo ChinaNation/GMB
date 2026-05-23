@@ -175,6 +175,7 @@ citizenchain/
 - `node/src/<功能名>` 负责桌面端 Rust 后端能力，不再保留 `node/src/ui` 目录层。
 - `node/frontend/<功能名>` 负责 React 前端页面与交互。
 - `citizenchain/node` 负责启动 / 停止内嵌节点进程，管理 bootnode 地址、奖励地址、GRANDPA 地址、节点名称等本地设置，并展示节点状态、链状态、网络概览、挖矿面板与其他辅助信息。
+- 设置页的“全节点模式”当前展示归档全节点、普通全节点、通信全节点三项：默认归档全节点；普通全节点和通信全节点置灰不可选择；在底层剪裁和通信收件箱能力完成前，节点实际仍按归档全节点运行。
 
 ### 10.3 打包边界
 - 桌面端与原生节点在同一个 `node` crate 中构建，Tauri 打包从 `node/frontend/dist` 读取前端产物。
@@ -232,6 +233,7 @@ citizenchain/
 - `memory/05-modules/citizenchain/node/settings/device-password/DEVICE_PASSWORD_TECHNICAL.md`
 - `memory/05-modules/citizenchain/node/settings/fee-address/FEE_ADDRESS_TECHNICAL.md`
 - `memory/05-modules/citizenchain/node/settings/grandpa-address/GRANDPA_ADDRESS_TECHNICAL.md`
+- `memory/05-modules/citizenchain/node/NODE_TECHNICAL.md`（第 9 节记录全节点模式设置边界）
 
 ## 13. 维护要求
 - `citizenchain` 发生架构级、边界级、发布级改动时，必须同步更新本文档。

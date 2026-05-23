@@ -20,6 +20,24 @@ export type BootnodeOption = {
   peerId: string;
 };
 
+export type NodeMode = 'archive' | 'normal' | 'communication';
+
+export type NodeModeImplementationStatus = 'active' | 'pending';
+
+export type NodeModeOption = {
+  mode: NodeMode;
+  label: string;
+  implementationStatus: NodeModeImplementationStatus;
+  enabled: boolean;
+  description: string;
+};
+
+export type NodeModeState = {
+  selectedMode: NodeMode;
+  effectiveMode: NodeMode;
+  options: NodeModeOption[];
+};
+
 export type DesktopUpdateStatus =
   | 'checking'
   | 'available'

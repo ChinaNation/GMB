@@ -1,8 +1,17 @@
 import { invoke } from '../core/tauri';
-import type { BootnodeKey, BootnodeOption, GrandpaKey, RewardWallet } from './types';
+import type {
+  BootnodeKey,
+  BootnodeOption,
+  GrandpaKey,
+  NodeMode,
+  NodeModeState,
+  RewardWallet,
+} from './types';
 
 // 设置页专用 Tauri API。
 export const settingsApi = {
+  getNodeMode: () => invoke<NodeModeState>('get_node_mode'),
+  setNodeMode: (mode: NodeMode) => invoke<NodeModeState>('set_node_mode', { mode }),
   getRewardWallet: () => invoke<RewardWallet>('get_reward_wallet'),
   setRewardWallet: (address: string, unlockPassword: string) =>
     invoke<RewardWallet>('set_reward_wallet', { address, unlockPassword }),
