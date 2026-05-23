@@ -20,9 +20,12 @@ TARGET_DIR="$REPO_ROOT/target"
 # 本地启动脚本只使用当前源码构建 runtime WASM。
 # runtime 正式升级走链上 setCode，桌面端启动不再从 GitHub CI 下载 wasm 产物。
 unset WASM_FILE
+# 中文注释：开发启动固定使用 gmb.dev，避免和正式安装版争用同一份 RocksDB。
+export CITIZENCHAIN_DATA_PROFILE=dev
 mkdir -p "$TARGET_DIR"
 echo "==> 使用本地源码构建 runtime WASM，不下载 GitHub CI WASM..."
 echo "    节点启动产物目录: $TARGET_DIR"
+echo "    开发数据目录: $HOME/Library/Application Support/gmb.dev"
 
 # ── 启动 ──
 cd "$REPO_ROOT/node"

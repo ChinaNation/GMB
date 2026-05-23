@@ -34,9 +34,10 @@ home/
 ## 开发脚本语义
 
 当前约定：
-1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，会保留现有 `node-data`，启动时使用当前源码构建 runtime，不从 GitHub CI 下载 wasm 产物
-2. `citizenchain/scripts/clean-run.sh` 负责“保留节点身份和密钥、只清区块数据库后重新创世启动”，fresh genesis 的 runtime code 来自当前源码，不从 GitHub CI 下载 wasm 产物
+1. `citizenchain/scripts/run.sh` 负责“不清库，继续启动开发链”，固定设置 `CITIZENCHAIN_DATA_PROFILE=dev`，使用 `~/Library/Application Support/gmb.dev`，启动时使用当前源码构建 runtime，不从 GitHub CI 下载 wasm 产物
+2. `citizenchain/scripts/clean-run.sh` 负责“保留节点身份和密钥、只清开发版区块数据库后重新创世启动”，仅清理 `~/Library/Application Support/gmb.dev/chains/citizenchain/db`，fresh genesis 的 runtime code 来自当前源码，不从 GitHub CI 下载 wasm 产物
 3. runtime 正式升级只走链上 `System.set_code`，本地开发启动脚本不承担下载或内置最新 CI wasm 的职责
+4. 桌面端数据目录由 `shared/security.rs` 统一解析：正式版默认使用 `~/Library/Application Support/gmb`，开发版默认使用 `~/Library/Application Support/gmb.dev`；节点 `base-path` 直接指向该目录，因此正式版区块库为 `~/Library/Application Support/gmb/chains/citizenchain/db/full`，开发版区块库为 `~/Library/Application Support/gmb.dev/chains/citizenchain/db/full`
 
 WASM CI 版本规则：
 - `citizenchain-wasm.yml` 编译前必须查询链上 `state_getRuntimeVersion.specVersion`

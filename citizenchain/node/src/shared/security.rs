@@ -10,6 +10,9 @@ use tauri::{AppHandle, Manager};
 const AUDIT_LOG_FILE_NAME: &str = "security-audit.log";
 const AUDIT_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
 const AUDIT_LOG_MAX_BACKUPS: usize = 5;
+const DATA_PROFILE_ENV: &str = "CITIZENCHAIN_DATA_PROFILE";
+const PROD_APP_DATA_DIR_NAME: &str = "gmb";
+const DEV_APP_DATA_DIR_NAME: &str = "gmb.dev";
 static AUDIT_LOG_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// 对路径做脱敏处理：仅保留文件名，去除父目录信息。
@@ -21,11 +24,30 @@ pub(crate) fn sanitize_path(path: &Path) -> String {
         .to_string()
 }
 
+fn app_data_dir_name() -> Result<&'static str, String> {
+    let profile = std::env::var(DATA_PROFILE_ENV).ok();
+    match profile.as_deref().map(str::trim) {
+        Some("prod" | "production" | "release") => Ok(PROD_APP_DATA_DIR_NAME),
+        Some("dev" | "development" | "debug") => Ok(DEV_APP_DATA_DIR_NAME),
+        Some(other) if !other.is_empty() => Err(format!("invalid {DATA_PROFILE_ENV}: {other}")),
+        _ if cfg!(debug_assertions) => Ok(DEV_APP_DATA_DIR_NAME),
+        _ => Ok(PROD_APP_DATA_DIR_NAME),
+    }
+}
+
 pub(crate) fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let app_data = app
+    let default_app_data = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("resolve app data dir failed: {e}"))?;
+    let app_data_parent = default_app_data.parent().ok_or_else(|| {
+        format!(
+            "resolve app data parent failed: {}",
+            default_app_data.display()
+        )
+    })?;
+    // 中文注释：Tauri identifier 只作为应用身份，正式版/开发版数据命名空间统一使用短目录。
+    let app_data = app_data_parent.join(app_data_dir_name()?);
     fs::create_dir_all(&app_data).map_err(|e| format!("create app data dir failed: {e}"))?;
     #[cfg(unix)]
     {

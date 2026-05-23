@@ -8,14 +8,23 @@
 ## 目录布局
 
 ```
-<app_data>/node-data/               # node_data_dir()
-└── chains/
-    ├── citizenchain/               # 默认链 ID
-    │   └── keystore/
-    │       └── 6772616e<pubkey>     # GRANDPA 密钥文件（key_type_prefix + pubkey_hex）
-    └── <other-chain-id>/
-        └── keystore/
+<app_data>/                         # node_data_dir()
+├── chains/
+│   ├── citizenchain/               # 默认链 ID
+│   │   ├── db/full/                # Substrate RocksDB 区块库
+│   │   └── keystore/
+│   │       └── 6772616e<pubkey>     # GRANDPA 密钥文件（key_type_prefix + pubkey_hex）
+│   └── <other-chain-id>/
+│       └── keystore/
+└── node-key/
+    └── secret_ed25519              # 节点 PeerId 身份密钥
 ```
+
+数据命名空间：
+- 正式版默认 `app_data`：`~/Library/Application Support/gmb`
+- 开发版默认 `app_data`：`~/Library/Application Support/gmb.dev`
+- 开发脚本显式设置 `CITIZENCHAIN_DATA_PROFILE=dev`；未设置时 debug 构建默认 `gmb.dev`，release 构建默认 `gmb`
+- Tauri `identifier` 只保留应用身份语义，不再决定节点数据库目录名
 
 ## API
 
@@ -32,7 +41,7 @@
 ## 安全特性
 
 - Unix 下目录创建/打开使用 `mkdirat/openat(O_NOFOLLOW | O_DIRECTORY)` 逐级完成，避免“先检查再使用”的符号链接 TOCTOU
-- `node-data`、`chains`、`<chain-id>`、`keystore` 目录都会显式收口到 Unix `0700` 权限，不依赖进程 `umask`
+- `app_data`、`chains`、`<chain-id>`、`keystore` 目录都会显式收口到 Unix `0700` 权限，不依赖进程 `umask`
 - 密钥文件在已打开的 keystore 目录句柄内以“临时文件 -> fsync -> renameat”原子写入，并显式收口到 Unix `0600` 权限
 - 扫描、存在性检查、删除旧 key 都基于已打开目录句柄和 `fstatat/unlinkat` 完成，符号链接与非常规文件会被跳过
 - 写入后自动清理同类型旧密钥，避免节点加载多把 authority key

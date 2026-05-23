@@ -2,7 +2,7 @@
 # 杀进程 + 生成 fresh genesis + 清链数据 + 启动本机新链
 set -euo pipefail
 
-APP_DATA_DIR="$HOME/Library/Application Support/org.chinanation.citizenchain.desktop"
+APP_DATA_DIR="$HOME/Library/Application Support/gmb.dev"
 
 cleanup() {
     echo ""
@@ -28,6 +28,8 @@ FRESH_SPEC="$FRESH_SPEC_DIR/citizenchain.fresh.raw.json"
 # 本地 clean-run 只使用当前源码生成创世 runtime code。
 # runtime 正式升级走链上 setCode，不从 GitHub CI 下载 wasm 产物。
 unset WASM_FILE
+# 中文注释：clean-run 是开发工具，固定清理 gmb.dev，不能碰正式版 gmb 数据目录。
+export CITIZENCHAIN_DATA_PROFILE=dev
 echo "==> 使用本地源码生成 fresh genesis，不下载 GitHub CI WASM..."
 
 # ── 3. 彻底清除所有编译缓存 ──
@@ -39,7 +41,7 @@ find "$CHAIN_ROOT/target" -name "libnode*" -delete 2>/dev/null || true
 find "$CHAIN_ROOT/target" -maxdepth 3 -type d -name "node-*" -path "*/build/*" -exec rm -rf {} + 2>/dev/null || true
 echo "    已清除"
 
-# ── 4. 用最新 CI WASM 生成 fresh raw chainspec ──
+# ── 4. 用本地源码生成 fresh raw chainspec ──
 cd "$CHAIN_ROOT/node"
 echo "==> 生成 fresh genesis raw chainspec..."
 mkdir -p "$FRESH_SPEC_DIR"
@@ -87,10 +89,10 @@ mv "$FRESH_SPEC.tmp" "$FRESH_SPEC"
 echo "    fresh chainspec: $FRESH_SPEC"
 
 # ── 5. 只清区块数据库,保留节点身份/keystore/TLS 证书 ──
-# 中文注释:不能删 network/secret_ed25519(PeerId 真源,删了 chainspec 里 44 个
-# /p2p/12D3... 全失效)、不能删 keystore/(GRANDPA 权威 + powr 矿工密钥)、
-# 不能删 tls/(WSS 证书)。只删 db/ 让区块从 #0 重挖即可。
-DB_DIR="$APP_DATA_DIR/node-data/chains/citizenchain/db"
+# 中文注释:不能删 node-key/secret_ed25519(PeerId 真源,删了 chainspec 里 44 个
+# /p2p/12D3... 全失效)、不能删 chains/*/keystore/(GRANDPA 权威 + powr 矿工密钥)、
+# 不能删 tls/(WSS 证书)。只删 chains/citizenchain/db/ 让区块从 #0 重挖即可。
+DB_DIR="$APP_DATA_DIR/chains/citizenchain/db"
 echo "==> 清除区块数据库：$DB_DIR"
 rm -rf "$DB_DIR"
 echo "    已清除(node-key/keystore/tls 全部保留)"
