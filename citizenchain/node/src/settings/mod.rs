@@ -9,3 +9,5 @@ pub(crate) mod device_password;
 pub mod fee_address;
 #[path = "grandpa-address/mod.rs"]
 pub mod grandpa_address;
+#[path = "node-mode/mod.rs"]
+pub mod node_mode;

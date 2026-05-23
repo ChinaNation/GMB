@@ -27,18 +27,13 @@
 - `memory/08-tasks/open/20260517-wuminapp-permissions.md`
 - `memory/08-tasks/open/20260517-wuminapp-square-contact-address.md`
 - `memory/08-tasks/open/20260517-wuminapp-vote-chain-truth.md`
+- `memory/08-tasks/open/20260520-wuminapp-wallet-tx-history.md`
+- `memory/08-tasks/open/20260521-finalized-amount-display.md`
+- `memory/08-tasks/open/20260522-citizenchain-data-dir-isolation.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
 
-- `memory/08-tasks/done/20260519-wuminapp-ci-chain-progress-test.md`
-- `memory/08-tasks/done/20260519-wuminapp-wallet-tx-three-status.md`
-- `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-balance.md`
-- `memory/08-tasks/done/20260519-wuminapp-local-chain-optimization.md`
-- `memory/08-tasks/done/20260519-wuminapp-proposal-local-cache.md`
-- `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-local-first.md`
-- `memory/08-tasks/done/20260518-wuminapp-duoqian-list-ttl.md`
-- `memory/08-tasks/done/20260518-wuminapp-governance-detail-loading.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -325,4 +320,14 @@
 - `memory/08-tasks/done/20260517-wuminapp-smoldot-android-abi.md`
 - `memory/08-tasks/done/20260518-121925-wuminapp-wallet-tx-records.md`
 - `memory/08-tasks/done/20260518-wuminapp-cold-wallet-scan.md`
+- `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-balance.md`
+- `memory/08-tasks/done/20260518-wuminapp-duoqian-detail-local-first.md`
+- `memory/08-tasks/done/20260518-wuminapp-duoqian-list-ttl.md`
+- `memory/08-tasks/done/20260518-wuminapp-governance-detail-loading.md`
 - `memory/08-tasks/done/20260518-wuminapp-governance-order.md`
+- `memory/08-tasks/done/20260519-wuminapp-ci-chain-progress-test.md`
+- `memory/08-tasks/done/20260519-wuminapp-local-chain-optimization.md`
+- `memory/08-tasks/done/20260519-wuminapp-proposal-local-cache.md`
+- `memory/08-tasks/done/20260519-wuminapp-wallet-tx-three-status.md`
+- `memory/08-tasks/done/20260523-000011-在区块链软件设置页新增全节点模式入口-默认归档全节点-普通全节点和通信全节点作为待完成模式展示-当.md`
+- `memory/08-tasks/done/20260523-001849-调整区块链软件设置页全节点模式显示-删除待完成说明文案和已保存提示-归档全节点不显示已支持图标-普.md`

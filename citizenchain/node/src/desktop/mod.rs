@@ -31,6 +31,8 @@ pub fn run_desktop() {
             home::identity::get_node_status,
             home::sync_guard::get_sync_guard_status,
             settings::desktop_update::prepare_desktop_update,
+            settings::node_mode::get_node_mode,
+            settings::node_mode::set_node_mode,
             settings::fee_address::get_reward_wallet,
             settings::fee_address::set_reward_wallet,
             settings::fee_address::get_local_miner_address,

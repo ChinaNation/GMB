@@ -140,9 +140,102 @@ body {
 }
 
 .settings-wallet-section {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-node-mode-section {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
+}
+
+.node-mode-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  padding: 12px;
+  overflow: hidden;
+}
+
+.node-mode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.node-mode-header h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.node-mode-effective {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.node-mode-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.node-mode-option {
+  min-height: 92px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--text-primary);
+  background: #111827;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-mode-option:hover:not(:disabled),
+.node-mode-option-selected {
+  border-color: var(--primary);
+  background: #0f2436;
+}
+
+.node-mode-option:disabled {
+  cursor: not-allowed;
+}
+
+.node-mode-option-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.node-mode-option-label {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.node-mode-option-pending {
+  color: var(--text-muted);
+  background: #1f2937;
+}
+
+.node-mode-option-description {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
 }
 
 .settings-version-section {

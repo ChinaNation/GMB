@@ -3,9 +3,10 @@ import { adminsChangeApi } from '../../governance/admins_change/api';
 import { homeNodeApi } from '../../home/api';
 import { settingsApi } from '../api';
 import { WalletSection } from '../fee-address/WalletSection';
+import { NodeModeSection } from '../node-mode/NodeModeSection';
 import { NodeKeySection } from '../node-key/NodeKeySection';
 import type { ChainStatus } from '../../home/types';
-import type { BootnodeKey, DesktopUpdateInfo, RewardWallet } from '../types';
+import type { BootnodeKey, DesktopUpdateInfo, NodeModeState, RewardWallet } from '../types';
 
 type SettingsSectionProps = {
   desktopUpdateInfo: DesktopUpdateInfo;
@@ -16,6 +17,7 @@ export function SettingsSection({
   desktopUpdateInfo,
   onInstallDesktopUpdate,
 }: SettingsSectionProps) {
+  const [nodeMode, setNodeMode] = useState<NodeModeState | null>(null);
   const [wallet, setWallet] = useState<RewardWallet>({ address: null });
   const [nodeKey, setNodeKey] = useState<BootnodeKey>({
     nodeKey: null,
@@ -26,12 +28,14 @@ export function SettingsSection({
   const [isAdmin, setIsAdmin] = useState(false);
 
   const loadSettings = useCallback(async () => {
-    const [w, k, c, a] = await Promise.allSettled([
+    const [m, w, k, c, a] = await Promise.allSettled([
+      settingsApi.getNodeMode(),
       settingsApi.getRewardWallet(),
       settingsApi.getBootnodeKey(),
       homeNodeApi.getChainStatus(),
       adminsChangeApi.hasAnyActivatedAdmin(),
     ]);
+    if (m.status === 'fulfilled') setNodeMode(m.value);
     if (w.status === 'fulfilled') setWallet(w.value);
     if (k.status === 'fulfilled') setNodeKey(k.value);
     if (c.status === 'fulfilled') setChainStatus(c.value);
@@ -44,6 +48,7 @@ export function SettingsSection({
 
   return (
     <>
+      <NodeModeSection nodeMode={nodeMode} onUpdated={setNodeMode} />
       <WalletSection wallet={wallet} onUpdated={setWallet} />
       {isAdmin && (
         <NodeKeySection
