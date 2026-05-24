@@ -21,11 +21,17 @@ import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/my/user/user_service.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/update/app_update.dart';
+import 'package:wuminapp_mobile/update/update_badge.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({
+    super.key,
+    this.showSettingsUpdateDot = false,
+  });
+
+  final bool showSettingsUpdateDot;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -352,10 +358,14 @@ class _ProfilePageState extends State<ProfilePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _buildEntryCard(
-                leading: const Icon(
-                  Icons.settings_outlined,
-                  color: AppTheme.textSecondary,
-                  size: 22,
+                leading: UpdateDotBadge(
+                  show: widget.showSettingsUpdateDot,
+                  dotKey: const Key('settings-entry-update-dot'),
+                  child: const Icon(
+                    Icons.settings_outlined,
+                    color: AppTheme.textSecondary,
+                    size: 22,
+                  ),
                 ),
                 title: '设置',
                 onTap: () {

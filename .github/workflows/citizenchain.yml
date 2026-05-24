@@ -27,23 +27,70 @@ jobs:
       matrix:
         include:
           - platform: linux
-            name: Linux
+            name: Linux amd
             os: ubuntu-latest
-            artifact: 公民链-linux
-            cache_key: citizenchain-linux
+            artifact: 公民链-Linux-amd
+            installer_name: 公民链-Linux-amd.deb
+            push_bundle_targets: deb
+            manual_bundle_targets: deb,appimage
+            updater_asset_name: citizenchain-updater-linux-amd.AppImage
+            expected_runner_arch: X64
+            deb_arch: amd64
+            cache_key: citizenchain-linux-amd
+          - platform: linux
+            name: Linux arm
+            os: ubuntu-24.04-arm
+            artifact: 公民链-Linux-arm
+            installer_name: 公民链-Linux-arm.deb
+            push_bundle_targets: deb
+            manual_bundle_targets: deb,appimage
+            updater_asset_name: citizenchain-updater-linux-arm.AppImage
+            expected_runner_arch: ARM64
+            deb_arch: arm64
+            cache_key: citizenchain-linux-arm
           - platform: windows
             name: Windows
             os: windows-latest
-            artifact: 公民链-windows
+            artifact: 公民链-Windows
+            installer_name: 公民链-Windows.exe
+            push_bundle_targets: nsis
+            manual_bundle_targets: nsis
+            expected_runner_arch: X64
             cache_key: citizenchain-windows
           - platform: macos
-            name: macOS
-            os: macos-latest
-            artifact: 公民链-macos
-            cache_key: citizenchain-macos
+            name: macOS Intel
+            os: macos-15-intel
+            artifact: 公民链-macOS-Intel
+            installer_name: 公民链-macOS-Intel.dmg
+            push_bundle_targets: dmg
+            manual_bundle_targets: dmg
+            updater_asset_name: citizenchain-updater-macos-intel.app.tar.gz
+            expected_runner_arch: X64
+            cache_key: citizenchain-macos-intel
+          - platform: macos
+            name: macOS Apple
+            os: macos-15
+            artifact: 公民链-macOS-apple
+            installer_name: 公民链-macOS-apple.dmg
+            push_bundle_targets: dmg
+            manual_bundle_targets: dmg
+            updater_asset_name: citizenchain-updater-macos-apple.app.tar.gz
+            expected_runner_arch: ARM64
+            cache_key: citizenchain-macos-apple
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
+
+      - name: 校验 runner 架构
+        shell: bash
+        env:
+          EXPECTED_RUNNER_ARCH: ${{ matrix.expected_runner_arch }}
+        run: |
+          set -euo pipefail
+          if [ "${RUNNER_ARCH}" != "${EXPECTED_RUNNER_ARCH}" ]; then
+            echo "::error::runner 架构不符合 ${EXPECTED_RUNNER_ARCH}: 当前为 ${RUNNER_ARCH}"
+            exit 1
+          fi
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@1.94.0
@@ -61,6 +108,8 @@ jobs:
           CITIZENCHAIN_UPDATER_PUBKEY: ${{ vars.CITIZENCHAIN_TAURI_UPDATER_PUBKEY || secrets.CITIZENCHAIN_TAURI_UPDATER_PUBKEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || secrets.CITIZENCHAIN_TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          CITIZENCHAIN_PUSH_BUNDLE_TARGETS: ${{ matrix.push_bundle_targets }}
+          CITIZENCHAIN_MANUAL_BUNDLE_TARGETS: ${{ matrix.manual_bundle_targets }}
         run: |
           set -euo pipefail
           node <<'NODE'
@@ -69,6 +118,17 @@ jobs:
           const isManualRelease = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
           const updaterPubkey = (process.env.CITIZENCHAIN_UPDATER_PUBKEY || '').trim();
           const signingPrivateKey = (process.env.TAURI_SIGNING_PRIVATE_KEY || '').trim();
+          const targetSource = isManualRelease
+            ? process.env.CITIZENCHAIN_MANUAL_BUNDLE_TARGETS
+            : process.env.CITIZENCHAIN_PUSH_BUNDLE_TARGETS;
+          const bundleTargets = (targetSource || '')
+            .split(',')
+            .map((target) => target.trim())
+            .filter(Boolean);
+
+          if (bundleTargets.length === 0) {
+            throw new Error('缺少本 matrix 的 Tauri bundle targets。');
+          }
 
           const cargoPath = 'citizenchain/Cargo.toml';
           let cargo = fs.readFileSync(cargoPath, 'utf8');
@@ -82,6 +142,8 @@ jobs:
           const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
           tauri.version = version;
           tauri.bundle = tauri.bundle || {};
+          // 中文注释：push 只生成用户安装包；手动发布允许额外生成 updater 内部产物。
+          tauri.bundle.targets = bundleTargets;
           // 中文注释：只有手动 Run workflow 才生成 updater 签名产物；push 构建只做打包检查，不要求发布密钥。
           if (isManualRelease) {
             if (!updaterPubkey) {
@@ -101,6 +163,7 @@ jobs:
 
           console.log(`桌面端本次发布版本: ${version}`);
           console.log(`手动发布模式: ${isManualRelease ? '是' : '否'}`);
+          console.log(`Tauri bundle targets: ${bundleTargets.join(',')}`);
           NODE
 
       - name: 安装 Linux 构建依赖
@@ -169,6 +232,10 @@ jobs:
       - name: 整理 Linux 产物
         if: matrix.platform == 'linux'
         shell: bash
+        env:
+          INSTALLER_NAME: ${{ matrix.installer_name }}
+          UPDATER_ASSET_NAME: ${{ matrix.updater_asset_name }}
+          EXPECTED_DEB_ARCH: ${{ matrix.deb_arch }}
         run: |
           set -euo pipefail
           mkdir -p citizenchain-release
@@ -178,22 +245,30 @@ jobs:
             echo "::error::未找到 Linux deb 安装包。"
             exit 1
           fi
-          cp "$deb_file" "citizenchain-release/公民链.deb"
+          actual_deb_arch="$(dpkg-deb -f "$deb_file" Architecture)"
+          if [ "$actual_deb_arch" != "$EXPECTED_DEB_ARCH" ]; then
+            echo "::error::deb 架构不符合 ${EXPECTED_DEB_ARCH}: 当前为 ${actual_deb_arch}"
+            exit 1
+          fi
+          cp "$deb_file" "citizenchain-release/${INSTALLER_NAME}"
 
           appimage_file=""
           if [ -d citizenchain/target/release/bundle/appimage ]; then
             appimage_file="$(find citizenchain/target/release/bundle/appimage -name '*.AppImage' | head -1)"
           fi
-          if [ -n "$appimage_file" ]; then
-            cp "$appimage_file" "citizenchain-release/公民链.AppImage"
-            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-              appimage_sig="${appimage_file}.sig"
-              if [ ! -f "$appimage_sig" ]; then
-                echo "::error::手动发布缺少 Linux AppImage updater 签名: $appimage_sig"
-                exit 1
-              fi
-              cp "$appimage_sig" "citizenchain-release/公民链.AppImage.sig"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ -z "$appimage_file" ]; then
+              echo "::error::手动发布缺少 Linux updater AppImage。"
+              exit 1
             fi
+            appimage_sig="${appimage_file}.sig"
+            if [ ! -f "$appimage_sig" ]; then
+              echo "::error::手动发布缺少 Linux updater 签名: $appimage_sig"
+              exit 1
+            fi
+            cp "$appimage_file" "citizenchain-release/${UPDATER_ASSET_NAME}"
+            cp "$appimage_sig" "citizenchain-release/${UPDATER_ASSET_NAME}.sig"
           fi
 
           ls -lh citizenchain-release
@@ -201,6 +276,9 @@ jobs:
       - name: 整理 macOS 产物
         if: matrix.platform == 'macos'
         shell: bash
+        env:
+          INSTALLER_NAME: ${{ matrix.installer_name }}
+          UPDATER_ASSET_NAME: ${{ matrix.updater_asset_name }}
         run: |
           set -euo pipefail
           mkdir -p citizenchain-release
@@ -210,7 +288,7 @@ jobs:
             echo "::error::未找到 macOS dmg 安装包。"
             exit 1
           fi
-          cp "$dmg_file" "citizenchain-release/公民链.dmg"
+          cp "$dmg_file" "citizenchain-release/${INSTALLER_NAME}"
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             updater_file="$(find citizenchain/target/release/bundle/macos -name '*.app.tar.gz' | head -1)"
@@ -223,8 +301,8 @@ jobs:
               echo "::error::手动发布缺少 macOS updater 签名: $updater_sig"
               exit 1
             fi
-            cp "$updater_file" "citizenchain-release/公民链.app.tar.gz"
-            cp "$updater_sig" "citizenchain-release/公民链.app.tar.gz.sig"
+            cp "$updater_file" "citizenchain-release/${UPDATER_ASSET_NAME}"
+            cp "$updater_sig" "citizenchain-release/${UPDATER_ASSET_NAME}.sig"
           fi
 
           ls -lh citizenchain-release
@@ -233,6 +311,7 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
+          $installerName = "${{ matrix.installer_name }}"
           New-Item -ItemType Directory -Force citizenchain-release | Out-Null
 
           $exe = Get-ChildItem -Path "citizenchain/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
@@ -241,14 +320,14 @@ jobs:
             exit 1
           }
 
-          Copy-Item $exe.FullName "citizenchain-release/公民链.exe"
+          Copy-Item $exe.FullName (Join-Path "citizenchain-release" $installerName)
           if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch") {
             $sigPath = "$($exe.FullName).sig"
             if (-not (Test-Path $sigPath)) {
               Write-Error "手动发布缺少 Windows updater 签名: $sigPath"
               exit 1
             }
-            Copy-Item $sigPath "citizenchain-release/公民链.exe.sig"
+            Copy-Item $sigPath (Join-Path "citizenchain-release" "$installerName.sig")
           }
           Get-ChildItem citizenchain-release | Format-Table Name, Length
 
@@ -269,7 +348,7 @@ jobs:
       - name: 拉取发布上下文
         uses: actions/checkout@v4
 
-      - name: 下载三平台产物
+      - name: 下载五个安装包与 updater 产物
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
@@ -284,7 +363,7 @@ jobs:
 
           tag="citizenchain-v${DESKTOP_VERSION}"
           title="CitizenChain ${DESKTOP_VERSION}"
-          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布只包含 Linux、Windows、macOS 桌面端安装包，runtime WASM 继续走链上 setCode 协议升级。"
+          notes="公民链桌面端 ${DESKTOP_VERSION}。本发布的用户安装包固定为 5 个，另包含自动更新专用内部资产；runtime WASM 继续走链上 setCode 协议升级。"
 
           node <<'NODE'
           const fs = require('fs');
@@ -305,6 +384,19 @@ jobs:
 
           const files = new Map(walk(root).map((file) => [path.basename(file), file]));
           const platforms = {};
+          const requiredInstallers = [
+            '公民链-macOS-Intel.dmg',
+            '公民链-macOS-apple.dmg',
+            '公民链-Windows.exe',
+            '公民链-Linux-amd.deb',
+            '公民链-Linux-arm.deb',
+          ];
+
+          for (const installer of requiredInstallers) {
+            if (!files.has(installer)) {
+              throw new Error(`缺少正式用户安装包: ${installer}`);
+            }
+          }
 
           function assetUrl(name) {
             return `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(name)}`;
@@ -322,10 +414,11 @@ jobs:
             };
           }
 
-          addPlatform('linux-x86_64', '公民链.AppImage');
-          addPlatform('windows-x86_64', '公民链.exe');
-          addPlatform('darwin-x86_64', '公民链.app.tar.gz');
-          addPlatform('darwin-aarch64', '公民链.app.tar.gz');
+          addPlatform('linux-x86_64', 'citizenchain-updater-linux-amd.AppImage');
+          addPlatform('linux-aarch64', 'citizenchain-updater-linux-arm.AppImage');
+          addPlatform('windows-x86_64', '公民链-Windows.exe');
+          addPlatform('darwin-x86_64', 'citizenchain-updater-macos-intel.app.tar.gz');
+          addPlatform('darwin-aarch64', 'citizenchain-updater-macos-apple.app.tar.gz');
 
           fs.writeFileSync(
             path.join(root, 'citizenchain-latest.json'),
@@ -351,7 +444,7 @@ jobs:
           fi
 
   deploy-linux-servers:
-    name: 部署公民链.deb 到 6 台服务器
+    name: 部署公民链-Linux-amd.deb 到 6 台服务器
     needs: build-desktop
     if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -372,7 +465,7 @@ jobs:
       - name: 下载本次 Linux 安装包
         uses: actions/download-artifact@v4
         with:
-          name: 公民链-linux
+          name: 公民链-Linux-amd
           path: linux-package
 
       - name: 滚动部署到服务器
@@ -384,9 +477,14 @@ jobs:
             exit 1
           fi
 
-          deb_file="$(find linux-package -name '*.deb' | head -1)"
-          if [ -z "$deb_file" ]; then
-            echo "::error::未找到本次 Linux CI 产出的 deb 安装包。"
+          deb_file="linux-package/公民链-Linux-amd.deb"
+          if [ ! -f "$deb_file" ]; then
+            echo "::error::未找到本次 Linux amd CI 产出的 deb 安装包: $deb_file"
+            exit 1
+          fi
+          deb_arch="$(dpkg-deb -f "$deb_file" Architecture)"
+          if [ "$deb_arch" != "amd64" ]; then
+            echo "::error::服务器部署只能使用 amd64 deb，当前为: $deb_arch"
             exit 1
           fi
 
