@@ -30,6 +30,9 @@
 - `memory/08-tasks/open/20260520-wuminapp-wallet-tx-history.md`
 - `memory/08-tasks/open/20260521-finalized-amount-display.md`
 - `memory/08-tasks/open/20260522-citizenchain-data-dir-isolation.md`
+- `memory/08-tasks/open/20260524-myid-identity-status-display.md`
+- `memory/08-tasks/open/20260524-network-cards-cleanup.md`
+- `memory/08-tasks/open/20260524-wuminapp-sfid-two-paths.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done

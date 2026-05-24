@@ -2,11 +2,11 @@
 
 ## 0. 功能需求
 
-- 页面需要展示网络总览指标，包括总节点数、在线节点数、国储会节点、省储会节点、省储行节点、全节点数和轻节点数。
+- 页面需要展示网络总览指标，包括治理节点、在线节点、全节点和轻节点。
+- 治理节点卡片内部展示国储会节点、省储会节点、省储行节点三个子计数。
 - 模块需要优先基于本机节点当前可观测到的 `system_peers` 与 `system_localPeerId` 生成在线网络统计。
 - 当本机节点正在运行时，模块需要把本机节点计入在线节点，并尽量识别其轻节点/全节点角色。
-- 模块需要持续维护历史已见 PeerId 集合，用于在实时在线数据不完整时补足“总节点数”视角。
-- 前端会定时轮询该接口，模块需要支持高频读取，并避免每次请求都无意义重写 `known-peers.json`。
+- 前端会定时轮询该接口，模块需要支持高频读取。
 - 当 RPC 不可用、链指纹不匹配、PeerId 非法或部分字段缺失时，模块需要返回尽量可展示的统计结果，并通过 `warning` 告知降级原因。
 - 统计口径需要保持自洽：`onlineNodes`、`fullNodes`、`lightNodes` 的去重和本机计入口径要一致，避免出现在线节点已计入但 full/light 漏计的情况。
 - 模块需要避免把错误链或错误端口上的 RPC 数据误当作目标网络统计结果。
@@ -14,25 +14,22 @@
 ## 1. 模块位置
 
 - 后端路径：`node/src/mining/network-overview/mod.rs`
-- 前端入口：`node/frontend/mining/dashboard/NetworkInlineSection.tsx`
-- 前端 API/类型：`node/frontend/mining/dashboard/api.ts` 与 `node/frontend/mining/dashboard/types.ts`
+- 前端入口：`node/frontend/mining/NetworkInlineSection.tsx`
+- 前端 API/类型：`node/frontend/mining/api.ts` 与 `node/frontend/mining/types.ts`
 - 对外命令：
   - `get_network_overview`
 
 ## 2. 模块职责
 
 - 输出网络总览统计：
-  - 总节点数
+  - 治理节点（国储会/省储会/省储行）
   - 在线节点
-  - 国储会/省储会/省储行节点数
   - 全节点/轻节点数
-- 维护历史已见节点集合（`known-peers.json`）。
 - 在数据不完整或链 RPC 异常时返回告警信息（`warning`）。
 
 ## 3. 对外数据模型
 
 - `NetworkOverview {`
-  - `total_nodes`
   - `online_nodes`
   - `guochuhui_nodes`
   - `shengchuhui_nodes`
@@ -47,7 +44,6 @@
 - 创世引导节点列表：`settings/bootnodes-address`。
 - 实时在线节点：`system_peers`。
 - 本机节点状态：`home/home-node::current_status` + `system_localPeerId`。
-- 历史已见节点：`known-peers.json`。
 
 ## 5. 核心规则
 
@@ -55,25 +51,19 @@
    - 先采集 `system_peers` 到 `online_peer_ids`（集合）。
    - 本机节点运行时优先插入 `system_localPeerId`；失败则按本机在线 `+1` 估算。
 2. 分类统计：
-   - 按创世节点名称前缀精确匹配（`starts_with("国储会")`/`starts_with("省储会")`/`starts_with("省储行")`）对在线 PeerId 分类。
+   - 按创世引导节点配置中的 `role` 精确匹配（`guochuhui`/`shengchuhui`/`shengchuhang`）对在线 PeerId 分类。
 3. 全节点统计：
    - 远端 light 节点按唯一 PeerId 去重。
    - 本机在线但角色检测失败或角色未知时默认计入 full（降级行为，不产生告警）。
    - `full_nodes + light_nodes` 与在线节点口径保持一致。
-4. 总节点统计：
-   - `创世节点数 + 已见非创世节点数`。
+4. 已删除统计：
+   - 不再输出总节点数字段，不再维护 `known-peers.json`。
+   - 不再输出清算节点字段，清算节点业务统计不属于当前挖矿页网络卡片。
 
-## 6. known-peers 持久化策略
+## 6. 已移除的历史持久化
 
-- 存储路径：`<app_data_dir>/known-peers.json`。
-- 仅保留合法 libp2p PeerId（ASCII 字母数字、`12D3KooW` 前缀、长度 46–128）。
-- 设置上限 `KNOWN_PEERS_MAX = 5000`，超限时从头部（最久未见）截断。
-- 合并策略采用 LRU：已知且在线的 peer 移到队尾，全新 peer 追加到队尾，使活跃节点不易被淘汰。
-- 使用内存缓存 + 脏标记（`CachedKnownPeers`）：
-  - 首次访问从文件加载到内存。
-  - 后续合并新 peers 在内存中操作，设置 `dirty = true`。
-  - 仅 `dirty` 时写入文件，写入后重置标记。
-  - 避免每 5 秒轮询时重复读写文件。
+- 旧版总节点数曾通过 `known-peers.json` 补齐历史已见 PeerId。
+- 当前页面已经删除总节点数卡片，后端也不再读取或写入 `known-peers.json`。
 
 ## 7. RPC 健壮性与链指纹校验
 
@@ -96,11 +86,9 @@
 ## 8. 告警策略
 
 以下场景会写入 `warning`：
-- known-peers 读写失败
 - RPC 指纹校验失败
 - `system_peers/system_localPeerId` 读取失败或格式异常
 - 收到无效 peerId
-- known-peers 超限被截断
 
 `warning` 采用合并文本（中文分号分隔），前端直接展示。
 
@@ -108,5 +96,4 @@
 
 - 依赖 `home/process` 的 `current_status` 获取本机运行状态。
 - 依赖 `settings/bootnodes-address` 的创世节点元数据。
-- 依赖 `shared/security` 提供应用数据目录。
 - 依赖 `shared/rpc::verify_genesis_hash` 进行 genesis hash 校验。

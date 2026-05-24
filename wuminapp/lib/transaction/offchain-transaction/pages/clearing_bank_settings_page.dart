@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/bind_clearing_bank_page.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/services/clearing_bank_prefs.dart';
+import 'package:wuminapp_mobile/sfid_api_config.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
@@ -28,10 +29,7 @@ class ClearingBankSettingsPage extends StatefulWidget {
 }
 
 class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
-  static const String _sfidBaseUrl = String.fromEnvironment(
-    'SFID_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8080',
-  );
+  final String _sfidBaseUrl = SfidApiConfig.defaultBaseUrl;
 
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -87,7 +85,8 @@ class _ClearingBankSettingsPageState extends State<ClearingBankSettingsPage> {
   Future<void> _openBind(ClearingBankCandidate item) async {
     if (!item.canBind) return;
     final current = _current;
-    final isSwitch = current != null && current.sfidNumber != item.info.sfidNumber;
+    final isSwitch =
+        current != null && current.sfidNumber != item.info.sfidNumber;
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(

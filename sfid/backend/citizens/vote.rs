@@ -110,6 +110,7 @@ pub(crate) async fn app_vote_account_register(
         account_address,
         archive_no: None,
         sfid_code: None,
+        identity_status: None,
         sfid_signature: None,
         province_code: None,
         city_code: None,
@@ -162,12 +163,14 @@ pub(crate) async fn app_vote_account_status(
                 status: status_str.to_string(),
                 address: record.account_address.clone(),
                 sfid_code: record.sfid_code.clone(),
+                identity_status: record.identity_status.clone(),
             }
         }
         None => VoteAccountStatusOutput {
             status: "unset".to_string(),
             address: None,
             sfid_code: None,
+            identity_status: None,
         },
     };
     drop(store);

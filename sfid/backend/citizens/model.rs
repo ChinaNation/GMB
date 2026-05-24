@@ -74,6 +74,10 @@ pub(crate) struct CitizenRecord {
     pub(crate) account_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
+    /// 身份ID当前状态。中文注释：该字段只表示身份ID是否正常，
+    /// 不得和绑定状态 Pending/Bound/Unlinked 混用。
+    #[serde(default)]
+    pub(crate) identity_status: Option<CitizenStatus>,
     pub(crate) sfid_signature: Option<String>,
     pub(crate) province_code: Option<String>,
     #[serde(default)]
@@ -227,6 +231,7 @@ pub(crate) struct VoteAccountStatusOutput {
     pub(crate) status: String,
     pub(crate) address: Option<String>,
     pub(crate) sfid_code: Option<String>,
+    pub(crate) identity_status: Option<CitizenStatus>,
 }
 
 /// 管理员推链请求（绑定/解绑共用）。
@@ -285,4 +290,24 @@ pub(crate) struct BindScanOutput {
     pub(crate) status: CitizenStatus,
     pub(crate) issued_at: i64,
     pub(crate) expire_at: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vote_account_status_output_keeps_bind_status_and_identity_status_separate() {
+        let output = VoteAccountStatusOutput {
+            status: "bound".to_string(),
+            address: Some("5F-test".to_string()),
+            sfid_code: Some("1234567890".to_string()),
+            identity_status: Some(CitizenStatus::Normal),
+        };
+
+        let value = serde_json::to_value(output).expect("serialize status output");
+        assert_eq!(value["status"], "bound");
+        assert_eq!(value["sfid_code"], "1234567890");
+        assert_eq!(value["identity_status"], "NORMAL");
+    }
 }

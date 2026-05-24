@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/pages/offchain_pay_page.dart';
 import 'package:wuminapp_mobile/transaction/offchain-transaction/services/clearing_bank_directory.dart';
 import 'package:wuminapp_mobile/qr/pages/qr_scan_page.dart';
+import 'package:wuminapp_mobile/sfid_api_config.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 
 /// 链下扫码支付入口流程。
@@ -35,10 +36,7 @@ Future<void> openOffchainScanPaymentFlow({
     return;
   }
 
-  const sfidBaseUrl = String.fromEnvironment(
-    'SFID_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8080',
-  );
+  final sfidBaseUrl = SfidApiConfig.defaultBaseUrl;
   final directory = ClearingBankDirectory(sfidBaseUrl: sfidBaseUrl);
   final endpoint = await directory.fetchEndpoint(result.bank!);
   if (!context.mounted) return;

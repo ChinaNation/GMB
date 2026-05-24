@@ -9,27 +9,10 @@ TARGET_DIR="$APP_ROOT/target"
 TARGET_APK="$TARGET_DIR/公民.apk"
 cd "$APP_ROOT"
 
-ENV_FILE="../sfid/.env.dev.local"
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  source "$ENV_FILE"
-  set +a
-fi
-
-if [[ -z "${WUMINAPP_API_BASE_URL:-}" && -n "${SFID_PUBLIC_BASE_URL:-}" ]]; then
-  WUMINAPP_API_BASE_URL="$SFID_PUBLIC_BASE_URL"
-fi
-if [[ -z "${WUMINAPP_API_BASE_URL:-}" && -n "${SFID_BIND_ADDR:-}" ]]; then
-  WUMINAPP_API_BASE_URL="http://${SFID_BIND_ADDR}"
-fi
-
-if [[ -z "${WUMINAPP_API_BASE_URL:-}" ]]; then
-  echo "Missing WUMINAPP_API_BASE_URL or SFID_BIND_ADDR. Please configure a phone-reachable SFID address."
-  exit 1
-fi
+SFID_DEV_USB_PORT=8899
 
 # 构造 dart-define 参数
-DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
+DART_DEFINES=(--dart-define=WUMINAPP_SFID_ENV=dev_usb)
 ANDROID_TARGET_PLATFORMS=(--target-platform android-arm,android-arm64)
 echo "[启动模式] smoldot 轻节点"
 
@@ -90,18 +73,24 @@ flutter clean
 echo "==> 获取依赖..."
 flutter pub get
 
-# ── Android USB：自动 adb reverse SFID 端口，编译时 URL 覆盖为 127.0.0.1 ──
-# WiFi / iOS 等其他场景：保持 .env.dev.local 中的局域网 IP 不变
-if [[ "$DEVICE_LINE" == "android" ]]; then
-  ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
-  SFID_PORT="$(echo "$WUMINAPP_API_BASE_URL" | grep -oE '[0-9]+$')"
-  if [[ -x "$ADB_BIN" && -n "$SFID_PORT" ]]; then
-    "$ADB_BIN" reverse "tcp:$SFID_PORT" "tcp:$SFID_PORT" >/dev/null 2>&1 || true
-    WUMINAPP_API_BASE_URL="http://127.0.0.1:$SFID_PORT"
-    DART_DEFINES=(--dart-define=WUMINAPP_API_BASE_URL="$WUMINAPP_API_BASE_URL")
-    echo "==> Android USB: adb reverse tcp:$SFID_PORT, SFID URL 覆盖为 $WUMINAPP_API_BASE_URL"
-  fi
+# ── SFID 本地开发路径：只允许 Android USB adb reverse ──
+# 中文注释：开发版 App 内部固定访问 http://127.0.0.1:8899；该地址必须由
+# adb reverse 转发到本机 SFID 后端，禁止改走局域网 IP 或其他自定义 URL。
+if [[ "$DEVICE_LINE" != "android" ]]; then
+  echo "错误：wuminapp 本地开发访问 SFID 只支持 Android USB adb reverse。"
+  exit 1
 fi
+ADB_BIN="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
+if [[ ! -x "$ADB_BIN" ]]; then
+  echo "错误：未找到 adb：$ADB_BIN"
+  exit 1
+fi
+if ! "$ADB_BIN" get-state >/dev/null 2>&1; then
+  echo "错误：未检测到可用 Android USB 设备。"
+  exit 1
+fi
+"$ADB_BIN" reverse "tcp:$SFID_DEV_USB_PORT" "tcp:$SFID_DEV_USB_PORT"
+echo "==> Android USB: adb reverse tcp:$SFID_DEV_USB_PORT, wuminapp SFID 环境=dev_usb"
 
 # ── 开发期 USB 桥接：自动检测本地诊断节点并打开 ADB reverse + 注入 dart-define ──
 # 远端 prczss/nrcgch 偶发 SubstreamReset 时，本地节点 (--listen-addr ws/30334)

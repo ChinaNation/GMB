@@ -379,7 +379,7 @@ WUMIN_QR_V1|system|challenge|expires_at
 仍有少量非机密配置使用（按模块逐步收口）：
 
 - 登录防重放记录：`login.used_challenges`
-- SFID 绑定状态：`sfid.bind.*`
+- 电子护照绑定状态：`sfid.bind.*`（含绑定状态、投票账户、身份ID号码、身份ID状态）
 - 用户资料：
   - `user.profile.nickname`
   - `user.profile.avatar_path`
@@ -492,6 +492,16 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 - `GET /api/v1/health`
 - `POST /api/v1/chain/bind/request`
 - `GET /api/v1/admins/catalog`
+- `POST /api/v1/app/vote-account/register`
+- `GET /api/v1/app/vote-account/status?address=<walletAddress>`
+
+电子护照页面字段约定：
+
+- `status` 只表示绑定状态：`unset / pending / bound`。
+- `sfid_code` 在 wuminapp 展示为“身份ID”；缺失时显示“未绑定”。
+- `identity_status` 只表示身份ID状态；`NORMAL` 显示“状态：正常”，其他值显示“状态：异常”。
+- “投票账户”展示当前绑定/待绑定的钱包地址，不再使用“绑定账户”文案。
+- 当前阶段只完成 wuminapp 与 SFID 的直接绑定展示闭环；异常身份ID的投票拦截、人口快照过滤和链上投票引擎拦截另行处理。
 
 ### 7.1 区块链能力矩阵（转账 / 提案 / 投票）
 
@@ -538,20 +548,24 @@ App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 - 扫码签名当前已完成协议层实现，业务 UI 仍以本机签名为主
 - 提案/投票尚未实现直连 RPC
 
-## 10. 本地开发
+## 10. SFID 连接路径
+
+wuminapp 访问 SFID 只保留两条路径，路径由 `WUMINAPP_SFID_ENV` 选择：
 
 ```bash
+# 生产路径：不传该参数时默认也是 prod
+flutter build apk --release \
+  --dart-define=WUMINAPP_SFID_ENV=prod
+
+# 本地开发路径：必须使用脚本建立 USB 转发
 cd /Users/rhett/GMB/wuminapp
-flutter pub get
-flutter run \
-  --dart-define=WUMINAPP_RPC_URL=http://127.0.0.1:9944 \
-  --dart-define=WUMINAPP_API_BASE_URL=http://<sfid服务地址>:8899
+./scripts/wuminapp-run.sh
 ```
 
-- `WUMINAPP_RPC_URL`：覆盖默认 RPC 节点地址，本地开发时指向本机节点。不设置时 App 自动从 44 个引导节点中选择。
-- `WUMINAPP_API_BASE_URL`：指向 `sfid` 的 HTTP API 基地址，例如 `http://147.224.14.117:8899`。
-- 真机调试时 `WUMINAPP_RPC_URL` / `WUMINAPP_API_BASE_URL` 都必须使用手机可达地址，不可用 `127.0.0.1`。
-- 手机访问 RPC 不一定需要公网互联网；如果使用局域网地址（如 `10.x.x.x`），手机只需要和节点处于同一可达网络（同一 Wi-Fi / 热点 / VPN / USB 网络共享）即可。如果使用公网域名节点，则需要普通互联网连接。
+- `prod`：固定访问 `https://sfid.crcfrcn.com`。
+- `dev_usb`：固定访问 `http://127.0.0.1:8899`，由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 SFID 后端。
+- `./scripts/wuminapp-run.sh` 只注入 `--dart-define=WUMINAPP_SFID_ENV=dev_usb`，并且必须成功建立 `adb reverse tcp:8899 tcp:8899`。
+- 禁止保留或新增任意 SFID API URL 注入、旧端口默认值、手机直连电脑局域网地址、生产失败回退开发、开发失败回退生产等第三路径。
 
 ## 11. 关联模块文档
 

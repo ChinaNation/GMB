@@ -283,6 +283,17 @@
   - `x-chain-signature`（必填）
 - 签名规范（当启用 `SFID_CHAIN_SIGNING_SECRET`）：
   - Canonical payload（按以下顺序、`\n` 分隔）：
+
+### 9.4.1 wuminapp 电子护照接口（公共）
+
+- `POST /api/v1/app/vote-account/register`：wuminapp 选择钱包后提交投票账户地址、公钥、签名和签名原文，SFID 创建待绑定记录。
+- `GET /api/v1/app/vote-account/status?address=<walletAddress>`：wuminapp 查询电子护照绑定状态。
+- 返回字段：
+  - `status`：绑定状态，只允许表达 `unset / pending / bound`。
+  - `address`：投票账户地址。
+  - `sfid_code`：身份ID号码，wuminapp 展示为“身份ID”。
+  - `identity_status`：身份ID状态，来自 CPMS 档案二维码状态；`NORMAL` 表示正常，其他值由 wuminapp 展示为异常。
+- 当前阶段该接口只服务绑定展示闭环；异常身份ID的 wuminapp 投票拦截、SFID 人口快照过滤、SFID 投票凭证拒签和链上投票引擎快照拦截另行处理。
     - `route=<route_key>`
     - `request_id=<x-chain-request-id>`
     - `nonce=<x-chain-nonce>`

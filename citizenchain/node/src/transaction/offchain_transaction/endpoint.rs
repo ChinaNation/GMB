@@ -108,42 +108,6 @@ pub fn fetch_clearing_bank_node(
     }
 }
 
-/// 用 `state_getKeysPaged` 估算当前已声明节点的总数,供网络面板"清算节点"指标。
-pub fn count_clearing_bank_nodes() -> Result<u64, String> {
-    let prefix = format!(
-        "0x{}{}",
-        hex::encode(storage_keys::twox_128(b"OffchainTransaction")),
-        hex::encode(storage_keys::twox_128(b"ClearingBankNodes")),
-    );
-
-    const PAGE: u32 = 1000;
-    let mut total: u64 = 0;
-    let mut start_key: Option<String> = None;
-    loop {
-        let mut params = vec![
-            Value::String(prefix.clone()),
-            Value::Number(serde_json::Number::from(PAGE)),
-        ];
-        if let Some(s) = start_key.as_ref() {
-            params.push(Value::String(s.clone()));
-        }
-        let result = rpc_post("state_getKeysPaged", Value::Array(params))?;
-        let keys = result
-            .as_array()
-            .ok_or_else(|| "state_getKeysPaged 返回非数组".to_string())?;
-        let n = keys.len();
-        total = total.saturating_add(n as u64);
-        if n < PAGE as usize {
-            break;
-        }
-        start_key = keys.last().and_then(|v| v.as_str().map(|s| s.to_string()));
-        if start_key.is_none() {
-            break;
-        }
-    }
-    Ok(total)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

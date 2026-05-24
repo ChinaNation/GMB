@@ -172,7 +172,7 @@ No issues found!  (全项目)
 | 跨行支付提交到收款方节点后,付款方余额/nonce 不在收款方本地 ledger | **已修复** | node RPC 会读链上 `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]`,并叠加本节点 pending 做早拒,不创建付款方 ghost 账户 |
 | `offchain_queryFeeRate` 返回 `rate_bp==0` 时 UI 仅显示错误,用户体验欠缺 | **P3** | 本步先 hard-fail 提示联系运维,后续可引导到"查看清算行详情"页面 |
 | 冷钱包 `isHotWallet==false` 直接 SnackBar 拒绝 | **P2** | Step 2c-iii 通过 QR 往返签名闭合 |
-| `SFID_BASE_URL` 仍走 `String.fromEnvironment` | **P3** | 本地默认 `http://127.0.0.1:8080`;清算节点端点已改为链上 `ClearingBankNodes` 真源 |
+| SFID 地址配置分叉 | **已修复** | 链下扫码支付已统一使用 `SfidApiConfig.defaultBaseUrl`;生产固定 `https://sfid.crcfrcn.com`,本地开发固定 USB reverse 到 `127.0.0.1:8899` |
 
 ---
 
