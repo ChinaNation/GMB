@@ -3,6 +3,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::citizens::model::CitizenStatus;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum CpmsSiteStatus {
@@ -144,6 +146,7 @@ pub(crate) struct CpmsGeoSealClaims {
 #[derive(Debug, Clone)]
 pub(crate) struct VerifiedCpmsArchive {
     pub(crate) archive_no: String,
+    pub(crate) citizen_status: CitizenStatus,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
     pub(crate) sfid_number: String,

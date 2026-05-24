@@ -366,8 +366,9 @@ mnemonic
 - 钱包模块负责提供签名账户上下文，不负责生成 SFID 凭证签名。
 - 钱包模块必须保证"登录签名"和"转账/治理签名"使用不同签名 payload。
 
-## 12. 本地 SFID 联调约束
+## 12. SFID 联调约束
 
-- `ApiClient` 的 `baseUrl` 优先读取 `WUMINAPP_API_BASE_URL`。
-- 手机真机联调时，`WUMINAPP_API_BASE_URL` 必须填写手机可访问的 `sfid` 地址，不能使用 `127.0.0.1`。
-- `wuminapp/scripts/app-run.sh` 与 `wuminapp/scripts/app-clean-run.sh` 会优先读取 `sfid/.env.dev.local` 的 `SFID_PUBLIC_BASE_URL`，用于手机访问；只有缺失时才回退到 `SFID_BIND_ADDR`。
+- `ApiClient` 的 `baseUrl` 统一来自 `SfidApiConfig.defaultBaseUrl`。
+- 生产版固定访问 `https://sfid.crcfrcn.com`。
+- 本地开发版固定访问 `http://127.0.0.1:8899`，必须由 `adb reverse tcp:8899 tcp:8899` 转发到本电脑运行的 SFID 后端。
+- 不允许钱包模块自行读取或拼接 SFID API URL，也不允许从本地开发失败自动回退到生产。

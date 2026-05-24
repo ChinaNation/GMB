@@ -66,8 +66,7 @@ cargo build --release --bin citizenchain
 ```bash
 cd /Users/rhett/GMB/wuminapp
 
-flutter run -d <device> \
-  --dart-define SFID_BASE_URL=https://<sfid-host>/api
+./scripts/wuminapp-run.sh
 ```
 
 ### 期望

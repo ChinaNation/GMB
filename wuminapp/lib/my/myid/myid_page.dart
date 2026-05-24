@@ -9,14 +9,16 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
 
 class MyIdPage extends StatefulWidget {
-  const MyIdPage({super.key});
+  const MyIdPage({super.key, this.myIdService});
+
+  final MyIdService? myIdService;
 
   @override
   State<MyIdPage> createState() => _MyIdPageState();
 }
 
 class _MyIdPageState extends State<MyIdPage> {
-  final MyIdService _myIdService = MyIdService();
+  late final MyIdService _myIdService;
 
   MyIdState _state = const MyIdState(status: MyIdStatus.unset);
   bool _submitting = false;
@@ -24,6 +26,7 @@ class _MyIdPageState extends State<MyIdPage> {
   @override
   void initState() {
     super.initState();
+    _myIdService = widget.myIdService ?? MyIdService();
     _loadState();
   }
 
@@ -162,6 +165,19 @@ class _MyIdPageState extends State<MyIdPage> {
     );
   }
 
+  String _identityIdText() {
+    final code = _state.sfidCode?.trim();
+    return code == null || code.isEmpty ? '未绑定' : code;
+  }
+
+  String _identityStatusText() {
+    // 中文注释：identityStatus 是身份ID状态，不是绑定状态；
+    // 只有 SFID 明确返回 NORMAL 才显示正常，其他状态统一按异常展示。
+    return _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
+        ? '状态：正常'
+        : '状态：异常';
+  }
+
   @override
   Widget build(BuildContext context) {
     final canSign = _state.status == MyIdStatus.pending && !_state.isColdWallet;
@@ -210,7 +226,27 @@ class _MyIdPageState extends State<MyIdPage> {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  '绑定账户',
+                  '身份ID',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _identityIdText(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppTheme.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  '投票账户',
                   style: TextStyle(
                     fontSize: 13,
                     color: AppTheme.textSecondary,
@@ -226,6 +262,18 @@ class _MyIdPageState extends State<MyIdPage> {
                     fontSize: 15,
                     color: AppTheme.textPrimary,
                     height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _identityStatusText(),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color:
+                        _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
+                            ? AppTheme.success
+                            : AppTheme.danger,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

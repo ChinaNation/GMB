@@ -1195,6 +1195,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
     let cpms_pubkey_hash = hash_hex(qr4.cpms_pubkey.as_bytes());
+    let citizen_status = citizen_status_from_cpms(qr4.cs.as_str());
     bind_cpms_pubkey_if_needed(
         state,
         &province_name,
@@ -1205,12 +1206,21 @@ pub(crate) async fn verify_cpms_archive_qr(
 
     Ok(VerifiedCpmsArchive {
         archive_no: qr4.ano.clone(),
+        citizen_status,
         province_code: extract_province_code_from_sfid(seal.sfid_number.as_str()),
         city_code: extract_city_code_from_sfid(seal.sfid_number.as_str()),
         sfid_number: seal.sfid_number,
         cpms_pubkey_hash,
         geo_seal_hash,
     })
+}
+
+fn citizen_status_from_cpms(value: &str) -> crate::citizens::model::CitizenStatus {
+    if value.trim().eq_ignore_ascii_case("NORMAL") {
+        crate::citizens::model::CitizenStatus::Normal
+    } else {
+        crate::citizens::model::CitizenStatus::Abnormal
+    }
 }
 
 async fn find_site_by_geo_seal(

@@ -30,13 +30,10 @@ export type MiningDashboard = {
 };
 
 export type NetworkOverview = {
-  totalNodes: number;
   onlineNodes: number;
   guochuhuiNodes: number;
   shengchuhuiNodes: number;
   shengchuhangNodes: number;
-  // 清算节点数量由后端 network-overview 聚合。
-  clearingNodes: number;
   fullNodes: number;
   lightNodes: number;
   warning: string | null;

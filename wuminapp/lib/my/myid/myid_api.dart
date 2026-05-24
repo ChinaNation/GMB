@@ -3,32 +3,27 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:wuminapp_mobile/sfid_api_config.dart';
 
 class MyIdStatusResponse {
   const MyIdStatusResponse({
     required this.status,
     this.address,
     this.sfidCode,
+    this.identityStatus,
   });
 
   /// "pending" | "bound" | "unset"
   final String status;
   final String? address;
   final String? sfidCode;
+  final String? identityStatus;
 }
 
 class MyIdApi {
-  MyIdApi({String? baseUrl}) : _baseUrl = baseUrl ?? _defaultBaseUrl;
+  MyIdApi() : _baseUrl = SfidApiConfig.defaultBaseUrl;
 
   final String _baseUrl;
-
-  static String get _defaultBaseUrl {
-    const fromDefine = String.fromEnvironment('WUMINAPP_API_BASE_URL');
-    if (fromDefine.isNotEmpty) {
-      return fromDefine;
-    }
-    return 'http://127.0.0.1:8787';
-  }
 
   Map<String, String> _headers({
     bool includeContentType = false,
@@ -71,11 +66,8 @@ class MyIdApi {
     } on TimeoutException catch (_) {
       throw Exception('电子护照注册请求超时，请检查网络连接');
     } on SocketException catch (_) {
-      if ((Platform.isAndroid || Platform.isIOS) &&
-          _baseUrl.contains('127.0.0.1')) {
-        throw Exception(
-          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
-        );
+      if (Platform.isAndroid || Platform.isIOS) {
+        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
@@ -107,11 +99,8 @@ class MyIdApi {
     } on TimeoutException catch (_) {
       throw Exception('电子护照状态查询超时，请检查网络连接');
     } on SocketException catch (_) {
-      if ((Platform.isAndroid || Platform.isIOS) &&
-          _baseUrl.contains('127.0.0.1')) {
-        throw Exception(
-          '当前使用$_baseUrl，手机真机无法访问本机回环地址。请用 --dart-define=WUMINAPP_API_BASE_URL=http://<电脑局域网IP>:8787',
-        );
+      if (Platform.isAndroid || Platform.isIOS) {
+        throw Exception(SfidApiConfig.connectionErrorMessage(_baseUrl));
       }
       rethrow;
     }
@@ -135,6 +124,7 @@ class MyIdApi {
       status: (data['status']?.toString() ?? 'unset').trim(),
       address: data['address']?.toString(),
       sfidCode: data['sfid_code']?.toString(),
+      identityStatus: data['identity_status']?.toString(),
     );
   }
 

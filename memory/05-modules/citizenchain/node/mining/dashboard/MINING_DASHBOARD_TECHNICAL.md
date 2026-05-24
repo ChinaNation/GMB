@@ -14,7 +14,7 @@
 ## 1. 模块位置
 
 - 后端路径：`node/src/mining/dashboard/mod.rs`
-- 前端路径：`node/frontend/mining/dashboard/`
+- 前端路径：`node/frontend/mining/`
   - `api.ts`：挖矿 tab 专用 Tauri API
   - `types.ts`：挖矿收益、资源监控、网络概览与出块记录类型
   - `MiningDashboardSection.tsx` / `NetworkInlineSection.tsx`：挖矿 tab UI

@@ -10,6 +10,8 @@ class MyIdState {
     required this.status,
     this.walletAddress,
     this.walletPubkeyHex,
+    this.sfidCode,
+    this.identityStatus,
     this.isColdWallet = false,
     this.updatedAtMillis,
   });
@@ -17,6 +19,8 @@ class MyIdState {
   final MyIdStatus status;
   final String? walletAddress;
   final String? walletPubkeyHex;
+  final String? sfidCode;
+  final String? identityStatus;
   final bool isColdWallet;
   final int? updatedAtMillis;
 }
@@ -28,6 +32,8 @@ class MyIdService {
   static const _kStatus = 'sfid.bind.status';
   static const _kAddress = 'sfid.bind.address';
   static const _kPubkeyHex = 'sfid.bind.pubkey_hex';
+  static const _kSfidCode = 'sfid.bind.sfid_code';
+  static const _kIdentityStatus = 'sfid.bind.identity_status';
   static const _kIsColdWallet = 'sfid.bind.is_cold_wallet';
   static const _kUpdatedAt = 'sfid.bind.updated_at';
 
@@ -43,6 +49,8 @@ class MyIdService {
       status: status,
       walletAddress: prefs.getString(_kAddress),
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
+      sfidCode: prefs.getString(_kSfidCode),
+      identityStatus: prefs.getString(_kIdentityStatus),
       isColdWallet: prefs.getBool(_kIsColdWallet) ?? false,
       updatedAtMillis: prefs.getInt(_kUpdatedAt),
     );
@@ -92,13 +100,29 @@ class MyIdService {
       switch (remote.status) {
         case 'bound':
           await prefs.setString(_kStatus, 'bound');
+          await _setStringIfPresent(prefs, _kAddress, remote.address);
+          await _setOptionalString(prefs, _kSfidCode, remote.sfidCode);
+          await _setOptionalString(
+            prefs,
+            _kIdentityStatus,
+            remote.identityStatus,
+          );
         case 'pending':
           await prefs.setString(_kStatus, 'pending');
+          await _setStringIfPresent(prefs, _kAddress, remote.address);
+          await _setOptionalString(prefs, _kSfidCode, remote.sfidCode);
+          await _setOptionalString(
+            prefs,
+            _kIdentityStatus,
+            remote.identityStatus,
+          );
         default:
           // 后端返回 "unset"：绑定已被解除
           await prefs.setString(_kStatus, 'unset');
           await prefs.remove(_kAddress);
           await prefs.remove(_kPubkeyHex);
+          await prefs.remove(_kSfidCode);
+          await prefs.remove(_kIdentityStatus);
           await prefs.remove(_kIsColdWallet);
       }
       await prefs.setInt(_kUpdatedAt, now);
@@ -116,8 +140,35 @@ class MyIdService {
     await prefs.remove(_kStatus);
     await prefs.remove(_kAddress);
     await prefs.remove(_kPubkeyHex);
+    await prefs.remove(_kSfidCode);
+    await prefs.remove(_kIdentityStatus);
     await prefs.remove(_kIsColdWallet);
     await prefs.remove(_kUpdatedAt);
     return getState();
+  }
+
+  Future<void> _setOptionalString(
+    SharedPreferences prefs,
+    String key,
+    String? value,
+  ) async {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      await prefs.remove(key);
+      return;
+    }
+    await prefs.setString(key, normalized);
+  }
+
+  Future<void> _setStringIfPresent(
+    SharedPreferences prefs,
+    String key,
+    String? value,
+  ) async {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return;
+    }
+    await prefs.setString(key, normalized);
   }
 }
