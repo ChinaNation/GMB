@@ -17,6 +17,7 @@ import { MiningDashboardSection } from '../mining';
 import { OtherTabsSection } from '../other/other-tabs';
 import { settingsApi } from '../settings/api';
 import { SettingsSection } from '../settings/settings-panel';
+import { shouldShowDesktopUpdateDot } from '../settings/updateIndicator';
 import type { DesktopUpdateInfo } from '../settings/types';
 
 type TabKey =
@@ -83,6 +84,8 @@ export default function App() {
     }
   }, [desktopUpdate]);
 
+  const showSettingsUpdateDot = shouldShowDesktopUpdateDot(desktopUpdateInfo);
+
   return (
     <div className="page">
       <nav className="top-nav">
@@ -94,7 +97,15 @@ export default function App() {
         <button className={tab === 'clearing-bank' ? 'active' : ''} onClick={() => setTab('clearing-bank')}>清算行</button>
         <button className={tab === 'whitepaper' ? 'active' : ''} onClick={() => setTab('whitepaper')}>白皮书</button>
         <button className={tab === 'constitution' ? 'active' : ''} onClick={() => setTab('constitution')}>公民宪法</button>
-        <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>设置</button>
+        <button
+          className={`top-nav-settings-button ${tab === 'settings' ? 'active' : ''}`}
+          onClick={() => setTab('settings')}
+        >
+          设置
+          {showSettingsUpdateDot ? (
+            <span className="top-nav-update-dot" aria-label="有更新" />
+          ) : null}
+        </button>
       </nav>
 
       {tab === 'home' ? (

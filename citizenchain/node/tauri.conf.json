@@ -37,7 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "targets": ["dmg", "nsis", "deb", "appimage"],
+    "targets": ["dmg", "nsis", "deb"],
     "macOS": {
       "infoPlist": "Info.plist",
       "minimumSystemVersion": "10.15"

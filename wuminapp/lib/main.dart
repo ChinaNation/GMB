@@ -13,6 +13,7 @@ import 'package:wuminapp_mobile/my/util/screenshot_guard.dart';
 import 'package:wuminapp_mobile/my/user/user.dart';
 import 'package:wuminapp_mobile/security/app_permission_gate.dart';
 import 'package:wuminapp_mobile/update/app_update.dart';
+import 'package:wuminapp_mobile/update/update_badge.dart';
 
 import 'ui/app_theme.dart';
 
@@ -302,6 +303,7 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  final AppUpdateController _updateController = AppUpdateController.instance;
   int _currentIndex = 2;
   int _pendingVoteCount = 0;
   bool _isRooted = false;
@@ -310,9 +312,21 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _updateController.addListener(_handleUpdateStateChanged);
     _checkRootStatus();
     // 中文注释：启动后异步检查正式 Release 更新，只更新设置页状态，不阻塞主界面进入。
-    AppUpdateController.instance.check();
+    _updateController.check();
+  }
+
+  @override
+  void dispose() {
+    _updateController.removeListener(_handleUpdateStateChanged);
+    super.dispose();
+  }
+
+  void _handleUpdateStateChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _checkRootStatus() async {
@@ -335,7 +349,7 @@ class _AppShellState extends State<AppShell> {
             ? const DuoqianAccountListPage()
             : const SizedBox.shrink(),
         const TransactionTabPage(),
-        const ProfilePage(),
+        ProfilePage(showSettingsUpdateDot: _updateController.state.hasUpdate),
       ];
 
   @override
@@ -436,9 +450,17 @@ class _AppShellState extends State<AppShell> {
               ),
               label: '交易',
             ),
-            const NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
+            NavigationDestination(
+                icon: UpdateDotBadge(
+                  show: _updateController.state.hasUpdate,
+                  dotKey: const Key('my-tab-update-dot'),
+                  child: const Icon(Icons.person_outline),
+                ),
+                selectedIcon: UpdateDotBadge(
+                  show: _updateController.state.hasUpdate,
+                  dotKey: const Key('my-tab-selected-update-dot'),
+                  child: const Icon(Icons.person),
+                ),
                 label: '我的'),
           ],
         ),

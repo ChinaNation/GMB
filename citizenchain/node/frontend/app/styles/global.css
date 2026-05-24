@@ -467,6 +467,23 @@ button[disabled] {
   transition: all 0.2s;
 }
 
+.top-nav-settings-button {
+  position: relative;
+}
+
+.top-nav-update-dot {
+  position: absolute;
+  top: 7px;
+  right: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 1.5px solid var(--bg-page);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.16);
+  pointer-events: none;
+}
+
 .top-nav button:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.05);
