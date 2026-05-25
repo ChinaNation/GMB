@@ -55,10 +55,17 @@ export async function listCitizens(auth: AdminAuth, keyword?: string): Promise<C
   });
 }
 
-export async function citizenBindChallenge(auth: AdminAuth): Promise<CitizenBindChallengeResult> {
+export async function citizenBindChallenge(
+  auth: AdminAuth,
+  payload: { user_address: string },
+): Promise<CitizenBindChallengeResult> {
   return request<CitizenBindChallengeResult>('/api/v1/admin/citizen/bind/challenge', {
     method: 'POST',
-    headers: adminHeaders(auth),
+    headers: {
+      'content-type': 'application/json',
+      ...adminHeaders(auth),
+    },
+    body: JSON.stringify(payload),
   });
 }
 

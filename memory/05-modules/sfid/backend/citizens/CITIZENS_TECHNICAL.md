@@ -72,6 +72,9 @@
   `cpms_qr` 仅保留状态扫码仍需复用的 canonical 文本拼装能力。
 - ARCHIVE 档案码只能在 SFID 已有钱包地址的待绑定记录上使用；正式绑定由
   `citizen_bind(bind_archive)` 写入 `ano / sfid_code / wallet_pubkey` 三者一对一关系。
+- 公民绑定签名 challenge 生成时必须接收并锁定用户 SS58 地址，`WUMIN_QR_V1 / sign_request`
+  的 `body.address` 必须是该地址，`body.pubkey` 必须是该地址解出的 `0x` 公钥；最终
+  `citizen_bind` 提交时必须再次校验提交地址与 challenge 锁定公钥一致。
 
 ## 6. 审计事件
 

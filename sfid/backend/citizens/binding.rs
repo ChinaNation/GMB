@@ -10,7 +10,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::cpms::CpmsArchiveCodePayload;
@@ -27,36 +27,35 @@ const BIND_CHALLENGE_TTL_SECONDS: i64 = 300; // 5 分钟
 pub(crate) async fn citizen_bind_challenge(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Json(input): Json<CitizenBindChallengeInput>,
 ) -> impl IntoResponse {
     let _ctx = match require_admin_write(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let (account_address, account_pubkey) = match resolve_bind_account(input.user_address.trim()) {
+        Some(v) => v,
+        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 user_address"),
+    };
     let challenge_id = Uuid::new_v4().to_string();
     let now = Utc::now();
-    let challenge_text = format!("sfid-citizen-bind-v1|{}|{}", challenge_id, now.timestamp());
+    // 中文注释:签名原文绑定本次钱包公钥，防止同一个 challenge 被拿去给其他地址复用。
+    let challenge_text = format!(
+        "sfid-citizen-bind-v1|{}|{}|{}",
+        challenge_id,
+        now.timestamp(),
+        account_pubkey
+    );
     let expire_at = now + chrono::Duration::seconds(BIND_CHALLENGE_TTL_SECONDS);
 
-    // 构造 WUMIN_QR_V1 kind=sign_request envelope
-    let sign_request = serde_json::json!({
-        "proto": crate::qr::WUMIN_QR_V1,
-        "kind": "sign_request",
-        "id": format!("bind-{}", challenge_id),
-        "issued_at": now.timestamp(),
-        "expires_at": expire_at.timestamp(),
-        "body": {
-            "address": "",
-            "pubkey": "",
-            "sig_alg": "sr25519",
-            "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
-            "display": {
-                "action": "citizen_bind",
-                "summary": "确认将您的公钥绑定到公民身份记录",
-                "fields": []
-            }
-        }
-    });
-    let sign_request_str = serde_json::to_string(&sign_request).unwrap_or_default();
+    let sign_request_str = build_citizen_bind_sign_request(
+        &challenge_id,
+        now,
+        expire_at,
+        &challenge_text,
+        &account_address,
+        &account_pubkey,
+    );
 
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
@@ -70,7 +69,8 @@ pub(crate) async fn citizen_bind_challenge(
         CitizenBindChallenge {
             challenge_id: challenge_id.clone(),
             challenge_text: challenge_text.clone(),
-            account_pubkey: String::new(), // 签名时才确定
+            account_address: account_address.clone(),
+            account_pubkey: account_pubkey.clone(),
             expire_at,
             created_at: now,
         },
@@ -87,6 +87,63 @@ pub(crate) async fn citizen_bind_challenge(
         },
     })
     .into_response()
+}
+
+fn build_citizen_bind_sign_request(
+    challenge_id: &str,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    challenge_text: &str,
+    account_address: &str,
+    account_pubkey: &str,
+) -> String {
+    let sign_request = serde_json::json!({
+        "proto": crate::qr::WUMIN_QR_V1,
+        "kind": "sign_request",
+        "id": format!("bind-{}", challenge_id),
+        "issued_at": issued_at.timestamp(),
+        "expires_at": expires_at.timestamp(),
+        "body": {
+            "address": account_address,
+            "pubkey": account_pubkey,
+            "sig_alg": "sr25519",
+            "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
+            "display": {
+                "action": "citizen_bind",
+                "summary": "确认将您的公钥绑定到公民身份记录",
+                "fields": [
+                    { "key": "address", "label": "钱包地址", "value": account_address }
+                ]
+            }
+        }
+    });
+    serde_json::to_string(&sign_request).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn citizen_bind_sign_request_includes_locked_account() {
+        let issued_at = Utc.timestamp_opt(1_000, 0).single().unwrap();
+        let expires_at = Utc.timestamp_opt(1_300, 0).single().unwrap();
+        let raw = build_citizen_bind_sign_request(
+            "challenge-1",
+            issued_at,
+            expires_at,
+            "sfid-citizen-bind-v1|challenge-1|1000|0xabc",
+            "addr2027",
+            "0xabc",
+        );
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+
+        assert_eq!(value["kind"], "sign_request");
+        assert_eq!(value["body"]["address"], "addr2027");
+        assert_eq!(value["body"]["pubkey"], "0xabc");
+        assert_eq!(value["body"]["display"]["fields"][0]["value"], "addr2027");
+    }
 }
 
 /// 绑定公民身份。
@@ -114,11 +171,12 @@ pub(crate) async fn citizen_bind(
         );
     }
 
-    // 从 SS58 地址解出公钥
-    let account_pubkey_hex = match ss58_to_pubkey_hex(input.user_address.trim()) {
-        Some(v) => v,
-        None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 user_address"),
-    };
+    // 从 SS58 地址解出公钥，并强制与 challenge 锁定的钱包一致。
+    let (_account_address, account_pubkey_hex) =
+        match resolve_bind_account(input.user_address.trim()) {
+            Some(v) => v,
+            None => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid SS58 user_address"),
+        };
 
     // 验证 challenge
     let challenge = {
@@ -141,6 +199,9 @@ pub(crate) async fn citizen_bind(
         }
         challenge
     };
+    if !same_pubkey_hex(&account_pubkey_hex, &challenge.account_pubkey) {
+        return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge account mismatch");
+    }
 
     // 验证公钥签名（WUMIN_QR_V1 签名结果）
     let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&account_pubkey_hex) {
@@ -514,6 +575,9 @@ pub(crate) async fn citizen_unbind(
         Some(pk) if !pk.is_empty() => pk,
         _ => return api_error(StatusCode::CONFLICT, 1005, "record has no pubkey to unbind"),
     };
+    if !same_pubkey_hex(&old_pubkey, &challenge.account_pubkey) {
+        return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge account mismatch");
+    }
 
     // 验证公钥签名
     let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&old_pubkey) {
@@ -584,6 +648,20 @@ pub(crate) fn verify_citizen_bind_signature(
     };
     let ctx = signing_context(b"substrate");
     pk.verify(ctx.bytes(message.as_bytes()), &sig).is_ok()
+}
+
+fn resolve_bind_account(address: &str) -> Option<(String, String)> {
+    let account_pubkey = ss58_to_pubkey_hex(address)?;
+    let canonical_address = pubkey_hex_to_ss58(&account_pubkey)?;
+    if canonical_address != address.trim() {
+        return None;
+    }
+    Some((canonical_address, account_pubkey))
+}
+
+fn same_pubkey_hex(left: &str, right: &str) -> bool {
+    left.trim_start_matches("0x")
+        .eq_ignore_ascii_case(right.trim_start_matches("0x"))
 }
 
 /// 从 SS58 地址解出 hex 格式公钥。

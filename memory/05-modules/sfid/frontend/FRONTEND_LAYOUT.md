@@ -10,6 +10,8 @@
   - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
+  - `memory/08-tasks/done/20260525-sfid-bind-upload-qr.md`
+  - `memory/08-tasks/done/20260525-sfid-bind-sign-request-wumin-scan.md`
 
 ## 当前边界
 
@@ -55,6 +57,12 @@ sfid/frontend/
 - `citizens/BindModal.tsx` 中新账户绑定档案的入口标题统一显示为“扫描档案码”。
 - 新账户绑定档案时,弹窗不再展示模式说明和旧步骤标题。
 - 扫码框提示统一为“点击扫描档案码”;签名环节继续显示签名二维码相关文案。
+- “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
+  `utils/cameraScanner.ts` 的 `BarcodeDetector` 解析图片,解析出的二维码原文继续走同一条档案码绑定流程,
+  不把图片文件上传到后端。
+- “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
+- 绑定弹窗生成签名挑战时必须把当前钱包地址提交给 `citizens/api.ts` 的
+  `citizenBindChallenge`,确保后端生成的 `sign_request.body.address/pubkey` 完整。
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“绑定 / 确认 / 解绑”不得同时触发公民详情弹窗。
 - 本 UI 边界只处理前端展示和组件内命名,不改变后端绑定协议字段。

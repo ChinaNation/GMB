@@ -113,6 +113,7 @@ pub(crate) enum CitizenBindStatus {
 pub(crate) struct CitizenBindChallenge {
     pub(crate) challenge_id: String,
     pub(crate) challenge_text: String,
+    pub(crate) account_address: String,
     pub(crate) account_pubkey: String,
     pub(crate) expire_at: DateTime<Utc>,
     pub(crate) created_at: DateTime<Utc>,
@@ -128,6 +129,13 @@ pub(crate) struct CitizenBindChallengeOutput {
     /// WUMIN_QR_V1 签名请求 JSON（前端直接展示为二维码）。
     pub(crate) sign_request: String,
     pub(crate) expire_at: i64,
+}
+
+/// 绑定/解绑 challenge 请求。
+#[derive(Deserialize)]
+pub(crate) struct CitizenBindChallengeInput {
+    /// 用户 SS58 地址；SFID 生成 sign_request 前必须先锁定本次签名账户。
+    pub(crate) user_address: String,
 }
 
 /// 绑定请求（两种模式）。
