@@ -339,6 +339,7 @@
 - `memory/08-tasks/done/20260523-121946-保存-wuminapp-p2p-im-技术选型方案-平台原生近场模块采用-wuminapp-android-im-与-wuminapp-ios-im-两个浅层目录-im-目录.md`
 - `memory/08-tasks/done/20260524-citizenchain-ci-five-packages.md`
 - `memory/08-tasks/done/20260524-update-red-dot-indicators.md`
+- `memory/08-tasks/done/20260525-sfid-bind-copy-myid-scan-square.md`
 - `memory/08-tasks/done/20260525-sfid-bind-sign-request-wumin-scan.md`
 - `memory/08-tasks/done/20260525-sfid-bind-upload-qr.md`
 - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`

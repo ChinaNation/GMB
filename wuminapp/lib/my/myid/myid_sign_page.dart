@@ -31,8 +31,7 @@ class MyIdSignPage extends StatefulWidget {
 enum _PageStep { scanning, signing, showResponse }
 
 class _MyIdSignPageState extends State<MyIdSignPage> {
-  static const double _scanBoxSize = 240;
-  static const double _scanBoxOffsetY = -40;
+  static const double _scanBoxSize = 260;
 
   _PageStep _step = _PageStep.scanning;
   String? _responseJson;
@@ -168,50 +167,39 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           ),
         ],
         const SizedBox(height: 16),
-        // 摄像头扫码框必须与其他扫码页一致：中间正方形识别区 + 四角提示。
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MobileScanner(
-                  controller: _scannerController,
-                  onDetect: _onDetect,
-                ),
-                CustomPaint(
-                  painter: _MyIdScanOverlayPainter(
-                    scanBoxSize: _scanBoxSize,
-                    offsetY: _scanBoxOffsetY,
+        const SizedBox(height: 12),
+        const Spacer(),
+        Center(
+          child: SizedBox(
+            width: _scanBoxSize,
+            height: _scanBoxSize,
+            // 中文注释：现场签名页必须是实际正方形相机框，不能再用整块矩形相机画面。
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MobileScanner(
+                    controller: _scannerController,
+                    fit: BoxFit.cover,
+                    onDetect: _onDetect,
                   ),
-                  child: const SizedBox.expand(),
-                ),
-                Center(
-                  child: Transform.translate(
-                    offset: const Offset(0, _scanBoxOffsetY),
-                    child: SizedBox(
-                      width: _scanBoxSize,
-                      height: _scanBoxSize,
-                      child: CustomPaint(
-                        painter: _MyIdScanCornerPainter(),
-                      ),
-                    ),
+                  CustomPaint(
+                    painter: _MyIdScanCornerPainter(),
+                    child: const SizedBox.expand(),
                   ),
-                ),
-                Center(
-                  child: Transform.translate(
-                    offset: const Offset(
-                        0, _scanBoxOffsetY + _scanBoxSize / 2 + 24),
-                    child: const Text(
-                      '扫描 SFID 管理端签名请求二维码',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        const Text(
+          '扫描 SFID 管理端签名请求二维码',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+        ),
+        const Spacer(),
         const SizedBox(height: 12),
         Text(
           '钱包：${widget.wallet.address}',
@@ -272,34 +260,6 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       ],
     );
   }
-}
-
-class _MyIdScanOverlayPainter extends CustomPainter {
-  _MyIdScanOverlayPainter({required this.scanBoxSize, required this.offsetY});
-
-  final double scanBoxSize;
-  final double offsetY;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bgPaint = Paint()..color = Colors.black.withAlpha(140);
-    final clearPaint = Paint()..blendMode = BlendMode.clear;
-    final center = Offset(size.width / 2, size.height / 2 + offsetY);
-    final rect = Rect.fromCenter(
-      center: center,
-      width: scanBoxSize,
-      height: scanBoxSize,
-    );
-
-    canvas.saveLayer(Offset.zero & size, Paint());
-    canvas.drawRect(Offset.zero & size, bgPaint);
-    canvas.drawRect(rect, clearPaint);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _MyIdScanOverlayPainter oldDelegate) =>
-      oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
 }
 
 class _MyIdScanCornerPainter extends CustomPainter {
