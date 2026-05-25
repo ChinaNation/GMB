@@ -19,9 +19,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::citizens::model::{
-    CitizenBindChallenge, CitizenRecord, CitizenStatus, ImportedArchive, PendingBindScan,
-};
+use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, PendingBindScan};
 use crate::cpms::model::CpmsSiteKeys;
 use crate::institutions::{MultisigAccount, MultisigInstitution};
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
@@ -57,10 +55,6 @@ pub(crate) struct StoreShard {
     // ── 本省 citizen 绑定流程 ──
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
-
-    // ── 本省档案导入 ──
-    pub(crate) imported_archives: HashMap<String, ImportedArchive>,
-    pub(crate) pending_status_by_archive_no: HashMap<String, CitizenStatus>,
 
     // ── 本省 SFID 生成历史 ──
     pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,

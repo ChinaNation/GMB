@@ -16,7 +16,7 @@
 - 机构 SFID 字段固定为 `sfid_number`，对外协议不得使用其他命名。
 - 二维码类型只允许：
   - `INSTALL`：SFID 签发给 CPMS，用于安装初始化。
-  - `ARCHIVE`：CPMS 签发给 SFID，用于档案录入和公民绑定。
+  - `ARCHIVE`：CPMS 签发给 SFID，用于已有钱包地址记录的公民绑定。
 
 ## INSTALL - SFID 到 CPMS
 
@@ -60,7 +60,8 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
   "type": "ARCHIVE",
   "ano": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
   "cs": "NORMAL",
-  "ve": true,
+  "valid_from": "2026-05-24",
+  "valid_until": "2036-05-23",
   "cpms_pubkey": "0x...",
   "geo_seal": "g1.<nonce_hex>.<cipher_hex>",
   "sig": "0x..."
@@ -71,7 +72,8 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
 |---|---|
 | `ano` | 公民档案号，必须全局唯一且不编码归属信息 |
 | `cs` | 公民状态 |
-| `ve` | 是否具备投票资格 |
+| `valid_from` | 档案所属电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| `valid_until` | 档案所属电子护照有效期截止日期，格式 `YYYY-MM-DD` |
 | `cpms_pubkey` | CPMS 本机签发公钥 |
 | `geo_seal` | 只有 SFID 能按安装授权解开的归属密文 |
 | `sig` | CPMS 本机私钥对档案核心字段签名 |
@@ -79,8 +81,10 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
 ARCHIVE 签名原文：
 
 ```text
-sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
+sfid-cpms-v1|archive|{ano}|{cs}|{valid_from}|{valid_until}|{cpms_pubkey}|{geo_seal_hash}
 ```
+
+ARCHIVE 不包含 `status_updated_at`、`code_id` 或 `usage_limit`。档案码不是一次性票据；SFID 必须在已有钱包地址的待绑定状态下扫描档案码，并用 `ano / sfid_code / wallet_pubkey` 三者一对一关系防止重复绑定。
 
 `geo_seal` 明文结构：
 
@@ -99,7 +103,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 
 - `install_secret` 每个 CPMS 安装独有，参与 `geo_seal` 密钥派生。
 - CPMS 生成 `ano` 时必须使用安全随机数。
-- SFID 录入 ARCHIVE 时必须以 `ano` 做全局唯一检查；已有档案号必须拒绝。
+- SFID 绑定 ARCHIVE 时必须以 `ano` 做全局唯一检查；已有档案号必须拒绝。
 
 ## SFID 验证 ARCHIVE 顺序
 
@@ -109,8 +113,8 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 4. 从 `sfid_number` 解码 `province_code / city_code`，用于省市归档。
 5. 校验 CPMS 本机签名 `sig`。
 6. 首次验真成功时绑定 `cpms_pubkey_hash`；后续同一授权只能接受同一 CPMS 本机公钥。
-7. 检查 `ano` 未录入过。
-8. 按 `province_code / city_code / sfid_number` 落库。
+7. 绑定流程检查待绑定记录已经有钱包地址，并检查 `ano / sfid_code / wallet_pubkey` 三者唯一。
+8. 按 `province_code / city_code / sfid_number` 写入公民绑定记录。
 
 ## 授权状态
 

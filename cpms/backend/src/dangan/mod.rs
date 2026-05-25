@@ -9,6 +9,7 @@ use aes_gcm::{
 use axum::{http::StatusCode, Json};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
 use rand::{rngs::OsRng, RngCore};
 use schnorrkel::{signing_context, MiniSecretKey};
 use serde::Serialize;
@@ -30,7 +31,8 @@ pub(crate) struct ArchiveQrPayload {
     pub(crate) r#type: String,
     pub(crate) ano: String,
     pub(crate) cs: String,
-    pub(crate) ve: bool,
+    pub(crate) valid_from: String,
+    pub(crate) valid_until: String,
     pub(crate) cpms_pubkey: String,
     pub(crate) geo_seal: String,
     pub(crate) sig: String,
@@ -45,7 +47,7 @@ struct GeoSealClaims {
 /// 生成不暴露省市和机构号的档案号。
 ///
 /// 中文注释：`install_secret` 参与哈希域隔离，安全随机数提供全局碰撞强度，
-/// DB 唯一索引负责兜底拒绝本机重复；SFID 录入时再做全局唯一最终校验。
+/// DB 唯一索引负责兜底拒绝本机重复；SFID 绑定时再做全局唯一最终校验。
 pub(crate) async fn generate_archive_no_with_retry(
     state: &AppState,
     install_secret: &str,
@@ -192,7 +194,8 @@ pub(crate) async fn build_archive_qr_payload(
     let sign_source = build_archive_sign_source(
         archive.archive_no.as_str(),
         archive.citizen_status.as_str(),
-        archive.voting_eligible,
+        archive.valid_from.as_str(),
+        archive.valid_until.as_str(),
         sign_key.pubkey.as_str(),
         geo_seal_hash.as_str(),
     );
@@ -203,7 +206,8 @@ pub(crate) async fn build_archive_qr_payload(
         r#type: "ARCHIVE".to_string(),
         ano: archive.archive_no.clone(),
         cs: archive.citizen_status.clone(),
-        ve: archive.voting_eligible,
+        valid_from: archive.valid_from.clone(),
+        valid_until: archive.valid_until.clone(),
         cpms_pubkey: sign_key.pubkey,
         geo_seal,
         sig,
@@ -280,14 +284,47 @@ fn derive_geo_seal_key(install_secret: &str) -> [u8; 32] {
 fn build_archive_sign_source(
     archive_no: &str,
     citizen_status: &str,
-    voting_eligible: bool,
+    valid_from: &str,
+    valid_until: &str,
     cpms_pubkey: &str,
     geo_seal_hash: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}",
-        archive_no, citizen_status, voting_eligible, cpms_pubkey, geo_seal_hash
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}",
+        archive_no, citizen_status, valid_from, valid_until, cpms_pubkey, geo_seal_hash
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archive_sign_source_includes_passport_validity() {
+        let source = build_archive_sign_source(
+            "ARCHIVE-1",
+            "NORMAL",
+            "2026-05-24",
+            "2036-05-23",
+            "0xpub",
+            "0xseal",
+        );
+
+        assert_eq!(
+            source,
+            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|0xpub|0xseal"
+        );
+    }
+
+    #[test]
+    fn archive_validity_defaults_to_ten_year_passport_window() {
+        let start = DateTime::parse_from_rfc3339("2026-05-24T00:00:00Z")
+            .unwrap()
+            .timestamp();
+
+        assert_eq!(archive_valid_from(start), "2026-05-24");
+        assert_eq!(archive_valid_until(start), "2036-05-23");
+    }
 }
 
 fn geo_seal_aad(archive_no: &str, cpms_pubkey: &str) -> String {
@@ -299,6 +336,26 @@ pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, J
         "NORMAL" | "ABNORMAL" => Ok(()),
         _ => Err(err(StatusCode::BAD_REQUEST, 1001, "invalid citizen_status")),
     }
+}
+
+pub(crate) fn archive_valid_from(created_at: i64) -> String {
+    archive_date(created_at).format("%Y-%m-%d").to_string()
+}
+
+pub(crate) fn archive_valid_until(created_at: i64) -> String {
+    let start = archive_date(created_at);
+    let anniversary = NaiveDate::from_ymd_opt(start.year() + 10, start.month(), start.day())
+        .or_else(|| NaiveDate::from_ymd_opt(start.year() + 10, 2, 28))
+        .unwrap_or(start + Duration::days(3650));
+    (anniversary - Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
+fn archive_date(timestamp: i64) -> NaiveDate {
+    DateTime::<Utc>::from_timestamp(timestamp, 0)
+        .unwrap_or_else(Utc::now)
+        .date_naive()
 }
 
 pub(crate) fn sign_archive_payload_with_secret(

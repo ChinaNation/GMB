@@ -1,6 +1,6 @@
 // 中文注释:CPMS 系统管理前端 API。
 // 后端对应:backend/cpms/handler.rs。CPMS 站点挂在公安局机构详情页中展示,
-// SFID 侧只负责 INSTALL 安装授权、ARCHIVE 档案验收和站点状态治理。
+// SFID 侧只负责安装码授权、档案码验收和站点状态治理。
 
 import type { AdminAuth } from '../auth/types';
 import { adminRequest } from '../utils/http';
@@ -30,7 +30,7 @@ export type CpmsSiteRow = {
   updated_at?: string | null;
 };
 
-export type CpmsArchiveImportResult = {
+export type CpmsArchiveVerifyResult = {
   archive_no: string;
   province_code: string;
   city_code: string;
@@ -53,7 +53,7 @@ export async function getCpmsSiteByInstitution(
   );
 }
 
-/** 生成公安局 CPMS 站点 SFID 和安装 QR1。 */
+/** 生成公安局 CPMS 站点 SFID 和安装码。 */
 export async function generateCpmsInstallQr(
   auth: AdminAuth,
   payload: { province?: string; city: string; institution: string },
@@ -65,12 +65,12 @@ export async function generateCpmsInstallQr(
   });
 }
 
-/** 导入 CPMS 档案二维码。 */
-export async function importArchive(
+/** 验真 CPMS 档案码；正式绑定必须走公民绑定流程。 */
+export async function verifyArchive(
   auth: AdminAuth,
   payload: { qr_payload: string },
-): Promise<CpmsArchiveImportResult> {
-  return adminRequest<CpmsArchiveImportResult>('/api/v1/admin/cpms/archive/import', auth, {
+): Promise<CpmsArchiveVerifyResult> {
+  return adminRequest<CpmsArchiveVerifyResult>('/api/v1/admin/cpms/archive/verify', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),

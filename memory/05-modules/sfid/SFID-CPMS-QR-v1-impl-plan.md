@@ -2,7 +2,7 @@
 
 - 状态:SFID 与 CPMS 两侧已按精简协议同步实施
 - 当前协议真源:`memory/05-modules/sfid/SFID-CPMS-QR-v1.md`
-- 当前任务卡:`memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
+- 当前任务卡:`memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
 
 ## 目标
 
@@ -11,7 +11,7 @@ SFID 与 CPMS 两侧完成以下能力:
 1. 为每个市公安局 CPMS 签发唯一安装授权。
 2. INSTALL 安装码只携带 `sfid_number / province_name / city_name / install_secret / sig`。
 3. SFID 能验证 CPMS 生成的 ARCHIVE 档案码。
-4. SFID 能把档案号归入省、市和公安局机构 `sfid_number`。
+4. SFID 只能在已有钱包地址的待绑定记录上绑定 ARCHIVE。
 5. 其他 CPMS 或普通扫码方不能从档案号明文推断签发城市或机构。
 
 ## 已落地目录
@@ -19,7 +19,7 @@ SFID 与 CPMS 两侧完成以下能力:
 | 路径 | 用途 |
 |---|---|
 | `sfid/backend/cpms/model.rs` | CPMS 授权模型、INSTALL/ARCHIVE DTO、验真结果 |
-| `sfid/backend/cpms/handler.rs` | INSTALL 签发、ARCHIVE 验真、档案导入、授权状态治理 |
+| `sfid/backend/cpms/handler.rs` | INSTALL 签发、ARCHIVE 验真、授权状态治理 |
 | `sfid/backend/cpms/mod.rs` | CPMS 模块导出 |
 | `sfid/backend/citizens/model.rs` | 公民档案省市归属字段 |
 | `sfid/backend/citizens/binding.rs` | 公民绑定复用 CPMS ARCHIVE 验真入口 |
@@ -30,10 +30,10 @@ SFID 与 CPMS 两侧完成以下能力:
 
 - `CpmsSiteKeys` 保存 `sfid_number / install_secret / install_secret_hash / cpms_pubkey_hash` 等授权验真必要字段。
 - `GenerateCpmsInstallOutput` 对外返回 `sfid_number / qr1_payload`。
-- `CpmsArchiveQrPayload` 对外只接受 `proto / type / ano / cs / ve / cpms_pubkey / geo_seal / sig`。
+- `CpmsArchiveQrPayload` 对外只接受 `proto / type / ano / cs / valid_from / valid_until / cpms_pubkey / geo_seal / sig`。
 - `verify_cpms_archive_qr` 是 SFID 侧唯一 ARCHIVE 验真入口。
-- `archive_import` 和 `citizen_bind(bind_archive)` 共用同一验真入口。
-- `ImportedArchive` 保存 `province_code / city_code / sfid_number / cpms_pubkey_hash / geo_seal_hash`。
+- `archive_verify` 只做验真预览，不写正式档案导入状态。
+- `citizen_bind(bind_archive)` 复用验真入口，并按 `ano / sfid_code / wallet_pubkey` 三者唯一完成正式绑定。
 
 ## 前端要点
 

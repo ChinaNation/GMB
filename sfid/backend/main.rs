@@ -41,9 +41,11 @@ pub(crate) use app_core::runtime_ops::*;
 pub(crate) use citizens::model::*;
 pub(crate) use cpms::model::*;
 pub(crate) use cpms::scope::in_scope_cpms_site;
+#[cfg(test)]
+pub(crate) use login::verify_admin_signature;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_sheng_admin, verify_admin_signature,
+    require_admin_write, require_sheng_admin,
 };
 pub(crate) use models::*;
 pub(crate) use sfid::model::*;
@@ -754,8 +756,8 @@ fn main() {
                 post(cpms::generate_cpms_install_qr),
             )
             .route(
-                "/api/v1/admin/cpms/archive/import",
-                post(cpms::archive_import),
+                "/api/v1/admin/cpms/archive/verify",
+                post(cpms::archive_verify),
             )
             .route(
                 "/api/v1/admin/cpms-keys/:sfid_number",

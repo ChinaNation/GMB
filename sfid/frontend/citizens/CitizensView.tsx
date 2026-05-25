@@ -3,7 +3,8 @@
 // 包含:citizen 列表 + 搜索栏 + 表格 + 绑定/推链绑定/推链解绑按钮 + BindModal/操作扫码 Modal。
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Card, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
+import type { MouseEvent } from 'react';
+import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag, Typography, message } from 'antd';
 
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -28,8 +29,9 @@ export function CitizensView() {
   // 绑定/解绑弹窗控制(state 仅持有 open + 当前 record,其它细节在 Modal 组件内)
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindTargetRecord, setBindTargetRecord] = useState<CitizenRow | null>(null);
+  const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
 
-  // 操作扫码(QR4 citizen 状态扫描)—— 原 opScan 系列
+  // 操作扫码(公民状态码扫描)—— 原 opScan 系列
   const [opScanOpen, setOpScanOpen] = useState(false);
   const [opScannerReady, setOpScannerReady] = useState(false);
   const [, setOpScanSubmitting] = useState(false);
@@ -167,6 +169,29 @@ export function CitizensView() {
     setBindModalOpen(true);
   };
 
+  const bindStatusText = (v: string | undefined) => {
+    if (v === 'PENDING') return '待绑定';
+    if (v === 'BINDABLE') return '待推链';
+    if (v === 'BOUND') return '已绑定';
+    if (v === 'UNLINKED') return '已解绑';
+    return v ?? '-';
+  };
+
+  const identityStatusTag = (status: string | undefined) => (
+    status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">异常</Tag>
+  );
+
+  const formatDateRange = (from?: string, until?: string) => {
+    if (!from || !until) return '-';
+    return `${formatDate(from)}-${formatDate(until)}`;
+  };
+
+  const formatDate = (value: string) => {
+    const parts = value.split('-');
+    if (parts.length !== 3) return value;
+    return `${parts[0]}年${parts[1]}月${parts[2]}日`;
+  };
+
   const citizenColumns: ColumnsType<CitizenRow> = [
     {
       title: '序号',
@@ -197,13 +222,7 @@ export function CitizensView() {
       dataIndex: 'status',
       width: 100,
       align: 'center',
-      render: (v: string) => {
-        if (v === 'PENDING') return '待绑定';
-        if (v === 'BINDABLE') return '待推链';
-        if (v === 'BOUND') return '已绑定';
-        if (v === 'UNLINKED') return '已解绑';
-        return v;
-      },
+      render: (v: string) => bindStatusText(v),
     },
   ];
   if (capabilities.canBusinessWrite) {
@@ -211,20 +230,24 @@ export function CitizensView() {
       title: '操作',
       width: 280,
       align: 'center',
+      onCell: () => ({
+        'data-row-action': 'true',
+        onClick: (event: MouseEvent<HTMLElement>) => event.stopPropagation(),
+      }),
       render: (_v: unknown, row: CitizenRow) => (
-        <Space size={8}>
+        <Space size={8} data-row-action="true" onClick={(event) => event.stopPropagation()}>
           {row.status === 'BOUND' && (
-            <Button danger onClick={() => onPushChainUnbind(row)}>
+            <Button danger onClick={(event) => { event.stopPropagation(); onPushChainUnbind(row); }}>
               解绑
             </Button>
           )}
           {row.status === 'BINDABLE' && (
-            <Button type="primary" onClick={() => onPushChainBind(row)}>
+            <Button type="primary" onClick={(event) => { event.stopPropagation(); onPushChainBind(row); }}>
               确认
             </Button>
           )}
           {(row.status === 'UNLINKED' || row.status === 'PENDING') && (
-            <Button type="primary" onClick={() => openBindModal(row)}>
+            <Button type="primary" onClick={(event) => { event.stopPropagation(); openBindModal(row); }}>
               绑定
             </Button>
           )}
@@ -259,8 +282,49 @@ export function CitizensView() {
           loading={loading}
           pagination={{ pageSize: 10 }}
           columns={citizenColumns}
+          onRow={(record) => ({
+            onClick: (event) => {
+              // 中文注释：操作栏是独立交互区，点击绑定/推链按钮时不能再触发行详情弹窗。
+              const target = event.target as EventTarget | null;
+              if (target instanceof Element && target.closest('[data-row-action="true"]')) return;
+              setDetailRecord(record);
+            },
+            style: { cursor: 'pointer' },
+          })}
         />
       </Card>
+
+      <Modal
+        title="公民信息详情"
+        open={!!detailRecord}
+        footer={null}
+        onCancel={() => setDetailRecord(null)}
+        destroyOnClose
+        width={720}
+      >
+        {detailRecord && (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="身份ID">{detailRecord.sfid_code ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="投票账户">
+              {detailRecord.account_address ?? detailRecord.account_pubkey ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.status)}</Descriptions.Item>
+            <Descriptions.Item label="档案状态">
+              {detailRecord.archive_status === 'NORMAL' ? 'NORMAL' : detailRecord.archive_status ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="身份ID状态">
+              {identityStatusTag(detailRecord.identity_status)}
+            </Descriptions.Item>
+            <Descriptions.Item label="有效期">
+              {formatDateRange(detailRecord.valid_from, detailRecord.valid_until)}
+            </Descriptions.Item>
+            <Descriptions.Item label="签发 CPMS 归属">
+              {detailRecord.province_code ?? '-'} / {detailRecord.city_code ?? '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
 
       {capabilities.canBusinessWrite && (
         <BindModal

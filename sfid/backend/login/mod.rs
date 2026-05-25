@@ -20,7 +20,8 @@ pub(crate) use model::{AdminAuthContext, AdminSession, LoginChallenge, QrLoginRe
 #[cfg(test)]
 pub(crate) use model::{AdminQrChallengeInput, AdminQrCompleteInput, AdminQrResultQuery};
 pub(crate) use qr_login::{admin_auth_qr_challenge, admin_auth_qr_complete, admin_auth_qr_result};
+#[cfg(test)]
+pub(crate) use signature::verify_admin_signature;
 pub(crate) use signature::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes,
-    verify_admin_signature,
 };

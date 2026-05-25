@@ -12,9 +12,7 @@ use zeroize::Zeroize;
 
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 
-use crate::citizens::model::{
-    CitizenBindChallenge, CitizenRecord, CitizenStatus, ImportedArchive, PendingBindScan,
-};
+use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, CitizenStatus, PendingBindScan};
 use crate::cpms::model::CpmsSiteKeys;
 
 /// 中文注释:历史 `make_signature_envelope` 已下线,本结构仅保留作为
@@ -104,10 +102,7 @@ pub(crate) struct Store {
     pub(crate) qr_login_results: HashMap<String, QrLoginResultRecord>,
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
     pub(crate) cpms_site_keys: HashMap<String, CpmsSiteKeys>,
-    /// 已录入的档案记录，key = archive_no。
-    pub(crate) imported_archives: HashMap<String, ImportedArchive>,
     pub(crate) consumed_qr_ids: HashMap<String, DateTime<Utc>>,
-    pub(crate) pending_status_by_archive_no: HashMap<String, CitizenStatus>,
     pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
     pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,
     pub(crate) audit_logs: Vec<AuditLogEntry>,

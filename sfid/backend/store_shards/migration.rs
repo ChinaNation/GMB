@@ -206,32 +206,6 @@ fn split_legacy_store(store: &Store) -> (HashMap<String, StoreShard>, GlobalShar
         shard.local_admins.insert(pubkey.clone(), admin.clone());
     }
 
-    // ── 档案导入:按 province_code → province 反查 ──
-    for (archive_no, archive) in &store.imported_archives {
-        let province = code_to_province
-            .get(&archive.province_code)
-            .cloned()
-            .unwrap_or_else(|| "__unknown__".to_string());
-        let shard = ensure(&mut shards, &province);
-        shard
-            .imported_archives
-            .insert(archive_no.clone(), archive.clone());
-    }
-
-    // pending_status_by_archive_no:按 archive_no 对应的 imported_archives 记录再查,
-    // 查不到就下沉到 __unknown__。
-    for (archive_no, status) in &store.pending_status_by_archive_no {
-        let province = store
-            .imported_archives
-            .get(archive_no)
-            .and_then(|a| code_to_province.get(&a.province_code).cloned())
-            .unwrap_or_else(|| "__unknown__".to_string());
-        let shard = ensure(&mut shards, &province);
-        shard
-            .pending_status_by_archive_no
-            .insert(archive_no.clone(), status.clone());
-    }
-
     // generated_sfid_by_pubkey:查 citizen_id_by_pubkey 反查省份
     for (pubkey, sfid) in &store.generated_sfid_by_pubkey {
         let province = store

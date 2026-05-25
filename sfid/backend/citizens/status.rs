@@ -107,7 +107,7 @@ pub(crate) async fn admin_cpms_status_scan(
         &payload.qr_id,
         &payload.sig_alg,
     );
-    // 旧 CPMS QR 签名验证已废弃（SFID-CPMS QR v1 使用 archive_import 端点）。
+    // 旧 CPMS QR 签名验证已废弃（SFID-CPMS QR v1 使用 archive/verify 验真端点）。
     // 公钥列表已清空,跳过签名校验,仅依赖上游的 site_sfid + expire_at 校验。
     let _canonical = canonical;
     insert_bounded_map(

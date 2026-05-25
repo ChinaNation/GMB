@@ -12,6 +12,8 @@ void main() {
         walletPubkeyHex: 'abcd',
         sfidCode: '1234567890',
         identityStatus: 'NORMAL',
+        validFrom: '2026-05-24',
+        validUntil: '2036-05-23',
       ),
     );
 
@@ -28,6 +30,7 @@ void main() {
     expect(find.text('绑定账户'), findsNothing);
     expect(find.text('5F-test-address'), findsOneWidget);
     expect(find.text('状态：正常'), findsOneWidget);
+    expect(find.text('有效期：2026年05月24日-2036年05月23日'), findsOneWidget);
   });
 }
 

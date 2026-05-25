@@ -12,6 +12,8 @@ class MyIdState {
     this.walletPubkeyHex,
     this.sfidCode,
     this.identityStatus,
+    this.validFrom,
+    this.validUntil,
     this.isColdWallet = false,
     this.updatedAtMillis,
   });
@@ -21,6 +23,8 @@ class MyIdState {
   final String? walletPubkeyHex;
   final String? sfidCode;
   final String? identityStatus;
+  final String? validFrom;
+  final String? validUntil;
   final bool isColdWallet;
   final int? updatedAtMillis;
 }
@@ -34,6 +38,8 @@ class MyIdService {
   static const _kPubkeyHex = 'sfid.bind.pubkey_hex';
   static const _kSfidCode = 'sfid.bind.sfid_code';
   static const _kIdentityStatus = 'sfid.bind.identity_status';
+  static const _kValidFrom = 'sfid.bind.valid_from';
+  static const _kValidUntil = 'sfid.bind.valid_until';
   static const _kIsColdWallet = 'sfid.bind.is_cold_wallet';
   static const _kUpdatedAt = 'sfid.bind.updated_at';
 
@@ -51,6 +57,8 @@ class MyIdService {
       walletPubkeyHex: prefs.getString(_kPubkeyHex),
       sfidCode: prefs.getString(_kSfidCode),
       identityStatus: prefs.getString(_kIdentityStatus),
+      validFrom: prefs.getString(_kValidFrom),
+      validUntil: prefs.getString(_kValidUntil),
       isColdWallet: prefs.getBool(_kIsColdWallet) ?? false,
       updatedAtMillis: prefs.getInt(_kUpdatedAt),
     );
@@ -107,6 +115,8 @@ class MyIdService {
             _kIdentityStatus,
             remote.identityStatus,
           );
+          await _setOptionalString(prefs, _kValidFrom, remote.validFrom);
+          await _setOptionalString(prefs, _kValidUntil, remote.validUntil);
         case 'pending':
           await prefs.setString(_kStatus, 'pending');
           await _setStringIfPresent(prefs, _kAddress, remote.address);
@@ -116,6 +126,8 @@ class MyIdService {
             _kIdentityStatus,
             remote.identityStatus,
           );
+          await _setOptionalString(prefs, _kValidFrom, remote.validFrom);
+          await _setOptionalString(prefs, _kValidUntil, remote.validUntil);
         default:
           // 后端返回 "unset"：绑定已被解除
           await prefs.setString(_kStatus, 'unset');
@@ -123,6 +135,8 @@ class MyIdService {
           await prefs.remove(_kPubkeyHex);
           await prefs.remove(_kSfidCode);
           await prefs.remove(_kIdentityStatus);
+          await prefs.remove(_kValidFrom);
+          await prefs.remove(_kValidUntil);
           await prefs.remove(_kIsColdWallet);
       }
       await prefs.setInt(_kUpdatedAt, now);
@@ -142,6 +156,8 @@ class MyIdService {
     await prefs.remove(_kPubkeyHex);
     await prefs.remove(_kSfidCode);
     await prefs.remove(_kIdentityStatus);
+    await prefs.remove(_kValidFrom);
+    await prefs.remove(_kValidUntil);
     await prefs.remove(_kIsColdWallet);
     await prefs.remove(_kUpdatedAt);
     return getState();

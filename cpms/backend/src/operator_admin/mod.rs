@@ -33,8 +33,6 @@ struct CreateArchiveRequest {
     #[serde(default)]
     address: Option<String>,
     citizen_status: Option<String>,
-    #[serde(default)]
-    voting_eligible: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -79,7 +77,6 @@ struct UpdateArchiveRequest {
     village_id: Option<String>,
     address: Option<String>,
     citizen_status: Option<String>,
-    voting_eligible: Option<bool>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -136,9 +133,11 @@ async fn create_archive(
         ));
     }
 
-    let voting = req.voting_eligible.unwrap_or(citizen_status == "NORMAL");
+    let voting = citizen_status == "NORMAL";
 
     let now_ts = Utc::now().timestamp();
+    let valid_from = dangan::archive_valid_from(now_ts);
+    let valid_until = dangan::archive_valid_until(now_ts);
     let mut archive = Archive {
         archive_id: format!("ar_{}", Uuid::new_v4().simple()),
         archive_no: archive_no.clone(),
@@ -155,6 +154,9 @@ async fn create_archive(
         status: "ACTIVE".to_string(),
         citizen_status,
         voting_eligible: voting,
+        valid_from,
+        valid_until,
+        citizen_status_updated_at: now_ts,
         archive_qr_payload: String::new(),
         created_at: now_ts,
         updated_at: now_ts,
@@ -171,8 +173,8 @@ async fn create_archive(
     })?;
 
     sqlx::query(
-        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, archive_qr_payload, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+        "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
     )
     .bind(&archive.archive_id)
     .bind(&archive.archive_no)
@@ -189,6 +191,9 @@ async fn create_archive(
     .bind(&archive.status)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
+    .bind(&archive.valid_from)
+    .bind(&archive.valid_until)
+    .bind(archive.citizen_status_updated_at)
     .bind(&archive.archive_qr_payload)
     .bind(archive.created_at)
     .bind(archive.updated_at)
@@ -243,7 +248,7 @@ async fn list_archives(
                 })?;
 
         let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
              FROM archives
              WHERE full_name LIKE $1
              ORDER BY archive_id
@@ -270,7 +275,7 @@ async fn list_archives(
             })?;
 
         let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+            "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
              FROM archives
              ORDER BY archive_id
              LIMIT $1 OFFSET $2",
@@ -346,10 +351,9 @@ async fn update_archive(
     if let Some(v) = req.citizen_status {
         dangan::validate_citizen_status(&v)?;
         archive.citizen_status = v;
+        archive.citizen_status_updated_at = Utc::now().timestamp();
     }
-    if let Some(v) = req.voting_eligible {
-        archive.voting_eligible = v;
-    }
+    archive.voting_eligible = archive.citizen_status == "NORMAL";
 
     archive.updated_at = Utc::now().timestamp();
 
@@ -364,7 +368,7 @@ async fn update_archive(
     })?;
 
     sqlx::query(
-        "UPDATE archives SET full_name=$1, birth_date=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, archive_qr_payload=$10, updated_at=$11 WHERE archive_id=$12",
+        "UPDATE archives SET full_name=$1, birth_date=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, citizen_status_updated_at=$10, archive_qr_payload=$11, updated_at=$12 WHERE archive_id=$13",
     )
     .bind(&archive.full_name)
     .bind(&archive.birth_date)
@@ -375,6 +379,7 @@ async fn update_archive(
     .bind(&archive.address)
     .bind(&archive.citizen_status)
     .bind(archive.voting_eligible)
+    .bind(archive.citizen_status_updated_at)
     .bind(&archive.archive_qr_payload)
     .bind(archive.updated_at)
     .bind(&archive_id)
@@ -408,7 +413,8 @@ async fn generate_archive_qr(
             "archive_id": archive_id,
             "archive_no": qr_payload.ano,
             "citizen_status": qr_payload.cs,
-            "voting_eligible": qr_payload.ve,
+            "valid_from": qr_payload.valid_from,
+            "valid_until": qr_payload.valid_until,
             "cpms_pubkey": qr_payload.cpms_pubkey
         }),
     )
@@ -435,7 +441,7 @@ async fn print_archive_qr(
         archive_id: archive.archive_id,
         archive_no: qr_payload.ano.clone(),
         citizen_status: qr_payload.cs.clone(),
-        voting_eligible: qr_payload.ve,
+        voting_eligible: archive.voting_eligible,
         printed_at: Utc::now().timestamp(),
     };
 
@@ -465,6 +471,8 @@ async fn print_archive_qr(
             "archive_no": record.archive_no,
             "citizen_status": record.citizen_status,
             "voting_eligible": record.voting_eligible,
+            "valid_from": qr_payload.valid_from,
+            "valid_until": qr_payload.valid_until,
             "cpms_pubkey": qr_payload.cpms_pubkey
         }),
     )
@@ -478,7 +486,7 @@ async fn fetch_archive_by_id(
     archive_id: &str,
 ) -> Result<Archive, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -508,6 +516,14 @@ fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
         status: row.get("status"),
         citizen_status: row.get("citizen_status"),
         voting_eligible: row.try_get("voting_eligible").unwrap_or(true),
+        valid_from: row.try_get("valid_from").unwrap_or_default(),
+        valid_until: row.try_get("valid_until").unwrap_or_default(),
+        citizen_status_updated_at: row
+            .try_get("citizen_status_updated_at")
+            .unwrap_or_else(|_| {
+                row.try_get("updated_at")
+                    .unwrap_or_else(|_| Utc::now().timestamp())
+            }),
         archive_qr_payload: row.try_get("archive_qr_payload").unwrap_or_default(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

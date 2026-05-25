@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS archives (
   status TEXT NOT NULL,
   citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'ABNORMAL')),
   voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+  valid_from TEXT NOT NULL DEFAULT '',
+  valid_until TEXT NOT NULL DEFAULT '',
+  citizen_status_updated_at BIGINT NOT NULL DEFAULT 0,
   archive_qr_payload TEXT NOT NULL DEFAULT '',
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
