@@ -31,7 +31,9 @@
 - `memory/08-tasks/open/20260521-finalized-amount-display.md`
 - `memory/08-tasks/open/20260522-citizenchain-data-dir-isolation.md`
 - `memory/08-tasks/open/20260524-myid-identity-status-display.md`
+- `memory/08-tasks/open/20260524-myid-validity-sfid-wuminapp.md`
 - `memory/08-tasks/open/20260524-network-cards-cleanup.md`
+- `memory/08-tasks/open/20260524-sfid-archive-code-ui.md`
 - `memory/08-tasks/open/20260524-wuminapp-sfid-two-paths.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
@@ -335,3 +337,6 @@
 - `memory/08-tasks/done/20260523-000011-在区块链软件设置页新增全节点模式入口-默认归档全节点-普通全节点和通信全节点作为待完成模式展示-当.md`
 - `memory/08-tasks/done/20260523-001849-调整区块链软件设置页全节点模式显示-删除待完成说明文案和已保存提示-归档全节点不显示已支持图标-普.md`
 - `memory/08-tasks/done/20260523-121946-保存-wuminapp-p2p-im-技术选型方案-平台原生近场模块采用-wuminapp-android-im-与-wuminapp-ios-im-两个浅层目录-im-目录.md`
+- `memory/08-tasks/done/20260524-citizenchain-ci-five-packages.md`
+- `memory/08-tasks/done/20260524-update-red-dot-indicators.md`
+- `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`

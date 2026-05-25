@@ -8,6 +8,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 角色访问控制：`SUPER_ADMIN / OPERATOR_ADMIN`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - 安装后直接生成 `SFID_CPMS_V1 / ARCHIVE` 公民档案二维码。
+- ARCHIVE 只包含档案号、档案状态、电子护照有效期、CPMS 签发公钥、`geo_seal` 和签名，不包含状态更新时间、`code_id` 或使用次数。
 - 档案号不暴露省、市、机构号。
 - 档案号格式为 `<26位Base32>-<2位Base32校验>`，不带固定业务前缀。
 - ARCHIVE 明文不暴露省、市、机构号，归属信息写入加密 `geo_seal`。
@@ -66,7 +67,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 2. CPMS 离线解析 INSTALL 并保存 `sfid_number / province_name / city_name / install_secret`，省市代码仅从 `sfid_number` 内部解码。
 3. CPMS 生成本机 `ARCHIVE` 签发密钥，公钥保存为 `cpms_pubkey`。
 4. CPMS 创建档案时生成全局随机档案号和 ARCHIVE 二维码。
-5. SFID 录入 ARCHIVE 时解 `geo_seal`、验 CPMS 签名并检查档案号全局唯一。
+5. SFID 在已有钱包地址的待绑定记录上扫描 ARCHIVE，解 `geo_seal`、验 CPMS 签名，并检查档案号、SFID 号和钱包地址三者唯一。
 
 ## 5. 数据库表
 | 表 | 说明 |

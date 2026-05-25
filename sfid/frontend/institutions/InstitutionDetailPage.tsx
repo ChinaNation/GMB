@@ -113,8 +113,8 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
         created_by: auth.admin_pubkey,
         created_at: new Date().toISOString(),
       });
-      message.success('CPMS 安装二维码已生成');
-      // 中文注释:INSTALL 码直接交给 CPMS 初始化,不再经过中间注册回传。
+      message.success('CPMS 安装码已生成');
+      // 中文注释:安装码直接交给 CPMS 初始化,不再经过中间注册回传。
       load();
       loadCpms(result.sfid_number);
     } catch (err) {
@@ -160,7 +160,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
                   if (!cpmsSite) {
                     return (
                       <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
-                        生成 CPMS 安装二维码
+                        生成 CPMS 安装码
                       </Button>
                     );
                   }

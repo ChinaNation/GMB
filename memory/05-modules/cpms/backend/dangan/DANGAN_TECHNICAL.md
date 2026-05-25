@@ -16,7 +16,7 @@
 - 明文不包含省、市、CPMS 机构号、日期。
 - 不使用固定业务前缀，避免把示例前缀固化成协议含义。
 - 生成输入包含 `install_secret`、安全随机数、本机序列、终端 ID、管理员公钥。
-- 本机 `archives.archive_no` 唯一索引兜底拒绝重复；SFID 录入时仍做全局唯一最终校验。
+- 本机 `archives.archive_no` 唯一索引兜底拒绝重复；SFID 绑定时仍做全局唯一最终校验。
 
 ## 4. ARCHIVE 载荷
 
@@ -26,7 +26,8 @@
   "type": "ARCHIVE",
   "ano": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
   "cs": "NORMAL",
-  "ve": true,
+  "valid_from": "2026-05-24",
+  "valid_until": "2036-05-23",
   "cpms_pubkey": "0x...",
   "geo_seal": "g1.<nonce_hex>.<cipher_hex>",
   "sig": "0x..."
@@ -34,6 +35,7 @@
 ```
 
 二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
+ARCHIVE 不包含状态更新时间、`code_id` 或使用次数；重复绑定由 SFID 的 `ano / sfid_code / wallet_pubkey` 三者唯一关系约束。
 
 ## 5. 签名与加密
 - `geo_seal` 使用 AES-256-GCM。
@@ -43,7 +45,7 @@
 - ARCHIVE 签名原文：
 
 ```text
-sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
+sfid-cpms-v1|archive|{ano}|{cs}|{valid_from}|{valid_until}|{cpms_pubkey}|{geo_seal_hash}
 ```
 
 - ARCHIVE 签名上下文：`substrate`。

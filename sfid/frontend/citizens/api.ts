@@ -11,6 +11,11 @@ export type CitizenRow = {
   archive_no?: string;
   sfid_code?: string;
   province_code?: string;
+  city_code?: string;
+  archive_status?: 'NORMAL' | 'ABNORMAL';
+  identity_status?: 'NORMAL' | 'ABNORMAL';
+  valid_from?: string;
+  valid_until?: string;
   status: 'PENDING' | 'BINDABLE' | 'BOUND' | 'UNLINKED';
 };
 
@@ -62,19 +67,23 @@ export async function citizenBind(
   payload: {
     mode: 'bind_archive' | 'bind_pubkey';
     user_address: string;
-    qr4_payload?: string;
+    archiveCodePayload?: string;
     citizen_id?: number;
     challenge_id: string;
     signature: string;
   },
 ): Promise<CitizenBindResult> {
+  const { archiveCodePayload, ...rest } = payload;
   return request<CitizenBindResult>('/api/v1/admin/citizen/bind', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...adminHeaders(auth),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...rest,
+      archive_code_payload: archiveCodePayload,
+    }),
   });
 }
 

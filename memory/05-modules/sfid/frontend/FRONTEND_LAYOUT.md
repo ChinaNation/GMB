@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-05-02
+- 最后更新:2026-05-25
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
@@ -9,6 +9,7 @@
   - `memory/08-tasks/done/20260502-sfid-frontend-api归并功能模块.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-tabs.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
 
 ## 当前边界
 
@@ -48,6 +49,15 @@ sfid/frontend/
   `sheng_admins/roster_api.ts`;本人 signing seed 生成/更换接口放
   `sheng_admins/signing_keys_api.ts`。
 - 市管理员操作员接口放 `shi_admins/api.ts`。
+
+## 公民绑定弹窗 UI 口径
+
+- `citizens/BindModal.tsx` 中新账户绑定档案的入口标题统一显示为“扫描档案码”。
+- 新账户绑定档案时,弹窗不再展示模式说明和旧步骤标题。
+- 扫码框提示统一为“点击扫描档案码”;签名环节继续显示签名二维码相关文案。
+- `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
+  点击“绑定 / 确认 / 解绑”不得同时触发公民详情弹窗。
+- 本 UI 边界只处理前端展示和组件内命名,不改变后端绑定协议字段。
 
 ## 省管理员目录规则
 

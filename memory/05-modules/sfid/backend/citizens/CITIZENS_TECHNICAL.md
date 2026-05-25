@@ -30,9 +30,8 @@
 - `status.rs`
   - `admin_cpms_status_scan` CPMS 站点扫公民状态
 - `cpms_qr.rs`
-  - `canonical_citizen_qr_text`
   - `canonical_status_qr_text`
-  - `verify_cpms_qr_signature`(签名链路废弃,保留 canonical 工具供复用)
+  - 状态扫码 canonical 工具
 - `vote.rs`
   - `app_vote_account_register` / `app_vote_account_status` wuminapp 投票账户登记/查询
 - `mod.rs`    子模块注册入口
@@ -69,8 +68,10 @@
 
 - 旧 `admin_bind_confirm` + `RewardStateRecord(Pending)` 双写顺序约束已随老绑定流程下线;
   当前 `citizen_bind` 走 challenge + signature 模式,详见 `binding.rs` 内联注释。
-- CPMS QR 签名链路已废弃(SFID-CPMS QR v1 走 archive_import 端点),
-  `cpms_qr::verify_cpms_qr_signature` 仅保留向后兼容的 canonical 文本拼装能力。
+- CPMS QR 签名链路已废弃(SFID-CPMS QR v1 走 archive/verify 验真端点),
+  `cpms_qr` 仅保留状态扫码仍需复用的 canonical 文本拼装能力。
+- ARCHIVE 档案码只能在 SFID 已有钱包地址的待绑定记录上使用；正式绑定由
+  `citizen_bind(bind_archive)` 写入 `ano / sfid_code / wallet_pubkey` 三者一对一关系。
 
 ## 6. 审计事件
 

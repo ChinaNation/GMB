@@ -41,6 +41,10 @@ pub(crate) async fn admin_list_citizens(
             sfid_code: record.sfid_code.clone(),
             province_code: record.province_code.clone(),
             city_code: record.city_code.clone(),
+            archive_status: record.archive_status.clone(),
+            identity_status: record.computed_identity_status(),
+            valid_from: record.archive_valid_from.clone(),
+            valid_until: record.archive_valid_until.clone(),
             status: record.status(),
         });
     }

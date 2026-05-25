@@ -80,9 +80,9 @@ pub(crate) struct GenerateCpmsInstallInput {
     pub(crate) institution: String,
 }
 
-/// QR4 档案录入输入。
+/// ARCHIVE 档案码验真输入。
 #[derive(Deserialize)]
-pub(crate) struct CpmsArchiveImportInput {
+pub(crate) struct CpmsArchiveVerifyInput {
     pub(crate) qr_payload: String,
 }
 
@@ -120,16 +120,17 @@ pub(crate) struct CpmsSiteKeysListRow {
     pub(crate) updated_at: Option<DateTime<Utc>>,
 }
 
-/// QR4 解析后的档案业务载荷（SFID_CPMS_V1）。
+/// 档案码解析后的档案业务载荷（SFID_CPMS_V1）。
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
-pub(crate) struct CpmsArchiveQrPayload {
+pub(crate) struct CpmsArchiveCodePayload {
     #[serde(default)]
     pub(crate) proto: String,
     pub(crate) r#type: String,
     pub(crate) ano: String,
     pub(crate) cs: String,
-    pub(crate) ve: bool,
+    pub(crate) valid_from: String,
+    pub(crate) valid_until: String,
     pub(crate) cpms_pubkey: String,
     pub(crate) geo_seal: String,
     pub(crate) sig: String,
@@ -147,11 +148,11 @@ pub(crate) struct CpmsGeoSealClaims {
 pub(crate) struct VerifiedCpmsArchive {
     pub(crate) archive_no: String,
     pub(crate) citizen_status: CitizenStatus,
+    pub(crate) valid_from: String,
+    pub(crate) valid_until: String,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
     pub(crate) sfid_number: String,
-    pub(crate) cpms_pubkey_hash: String,
-    pub(crate) geo_seal_hash: String,
 }
 
 /// 生成 SFID + QR1 的输出。
@@ -161,9 +162,9 @@ pub(crate) struct GenerateCpmsInstallOutput {
     pub(crate) qr1_payload: String,
 }
 
-/// 档案录入结果。
+/// 档案码验真结果。正式公民绑定必须在 citizens 模块完成。
 #[derive(Serialize)]
-pub(crate) struct CpmsArchiveImportOutput {
+pub(crate) struct CpmsArchiveVerifyOutput {
     pub(crate) archive_no: String,
     pub(crate) province_code: String,
     pub(crate) city_code: String,

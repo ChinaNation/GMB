@@ -1,8 +1,9 @@
 # CPMS_TECHNICAL
 
-- 最后更新:2026-05-16
+- 最后更新:2026-05-25
 - 任务卡:
   - `memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
 
 ## 0. 模块边界
 
@@ -11,7 +12,7 @@
 - 生成公安局 CPMS 的 `SFID_CPMS_V1 / INSTALL` 安装授权码。
 - 保存 `install_secret / sfid_number` 授权状态，省市代码由 `sfid_number` 解码。
 - 验证 CPMS 提交的 `SFID_CPMS_V1 / ARCHIVE` 档案码。
-- 解 `geo_seal` 后按省、市、公安局机构 `sfid_number` 归档。
+- 解 `geo_seal` 后为公民绑定流程提供省、市、公安局机构 `sfid_number`。
 - 查询、禁用、启用、吊销、删除 CPMS 授权。
 - 按机构 `sfid_number` 反查对应 CPMS 授权记录。
 
@@ -23,7 +24,7 @@
 sfid/backend/cpms/
 ├── mod.rs        # 模块导出
 ├── model.rs      # CPMS 安装授权、INSTALL/ARCHIVE DTO 和验真结果
-├── handler.rs    # 安装码签发、ARCHIVE 验真、档案导入和授权状态治理
+├── handler.rs    # 安装码签发、ARCHIVE 验真和授权状态治理
 └── scope.rs      # CPMS 授权是否属于当前管理员省域
 ```
 
@@ -34,7 +35,7 @@ sfid/backend/cpms/
 | `GET /api/v1/admin/cpms-keys` | `cpms::list_cpms_keys` | 列出本省或全局 CPMS 授权 |
 | `GET /api/v1/admin/cpms-keys/by-institution/:sfid_number` | `cpms::get_cpms_site_by_institution` | 按公安局机构 SFID 查询授权 |
 | `POST /api/v1/admin/cpms-keys/sfid/generate` | `cpms::generate_cpms_install_qr` | 签发 INSTALL 安装码 |
-| `POST /api/v1/admin/cpms/archive/import` | `cpms::archive_import` | 验真并录入 ARCHIVE 档案码 |
+| `POST /api/v1/admin/cpms/archive/verify` | `cpms::archive_verify` | 只验真 ARCHIVE 档案码，不产生正式绑定 |
 | `DELETE /api/v1/admin/cpms-keys/:sfid_number` | `cpms::delete_cpms_keys` | 删除未激活授权 |
 | `POST /api/v1/admin/cpms-keys/:sfid_number/revoke-token` | `cpms::revoke_install_token` | 作废未使用安装授权 |
 | `POST /api/v1/admin/cpms-keys/:sfid_number/reissue` | `cpms::reissue_install_token` | 重新签发 INSTALL |
@@ -48,8 +49,8 @@ sfid/backend/cpms/
 2. 在当前管理员省域内用已保存的 `install_secret` 尝试解 `geo_seal`。
 3. 校验 `geo_seal.sfid_number` 与授权记录一致，并从 `sfid_number` 解码省市。
 4. 校验 CPMS 本机签名；首次成功时绑定 `cpms_pubkey_hash`，后续只接受同一公钥。
-5. 校验 `ano` 未全局录入。
-6. 写入 `ImportedArchive`，保存 `city_code / sfid_number / cpms_pubkey_hash / geo_seal_hash`。
+5. 返回验真结果；正式绑定必须由 `citizens::citizen_bind(bind_archive)` 在已有钱包地址的记录上完成。
+6. 绑定流程检查 `ano / sfid_code / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
 ## 4. 归属说明
 

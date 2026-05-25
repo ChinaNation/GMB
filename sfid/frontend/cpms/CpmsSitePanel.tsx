@@ -1,10 +1,10 @@
-// CPMS 安装授权管理面板 —— 两码方案下只展示 INSTALL 安装码和授权状态。
+// CPMS 安装授权管理面板 —— 两码方案下只展示安装码和授权状态。
 //
 // 状态对应:
-//   PENDING  → 显示 INSTALL 安装码
+//   PENDING  → 显示安装码
 //   ACTIVE   → 已经绑定 CPMS 本机签发公钥,不再展示安装码
-//   DISABLED → 暂停接收该授权签发的档案二维码
-//   REVOKED  → 不再接收该授权签发的档案二维码
+//   DISABLED → 暂停接收该授权签发的档案码
+//   REVOKED  → 不再接收该授权签发的档案码
 
 import React, { useRef, useState } from 'react';
 import { Button, Input, message, Modal, Popconfirm, QRCode, Tag, Typography } from 'antd';

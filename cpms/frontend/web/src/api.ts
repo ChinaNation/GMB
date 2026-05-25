@@ -93,7 +93,7 @@ export const deleteVillage = (id: string) => del<null>(`/api/v1/address/villages
 export const createArchive = (body: {
   full_name: string; birth_date: string; gender_code: string; height_cm?: number;
   town_code?: string; village_id?: string; address?: string;
-  citizen_status?: string; voting_eligible?: boolean;
+  citizen_status?: string;
 }) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);
 export const listArchives = (params?: { full_name?: string; page?: number; page_size?: number }) => {
   const qs = new URLSearchParams();

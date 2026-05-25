@@ -13,6 +13,7 @@ use axum::{
 use chrono::Utc;
 use uuid::Uuid;
 
+use crate::cpms::CpmsArchiveCodePayload;
 use crate::*;
 
 // ── 公民身份绑定新接口 ────────────────────────────────────────────────
@@ -163,23 +164,30 @@ pub(crate) async fn citizen_bind(
     match input.mode.as_str() {
         "bind_archive" => {
             // 有公钥，绑定档案号 + 生成 SFID 码
-            let qr4_str = match input.qr4_payload.as_deref() {
+            let archive_code_str = match input.archive_code_payload.as_deref() {
                 Some(v) if !v.trim().is_empty() => v.trim(),
                 _ => {
                     return api_error(
                         StatusCode::BAD_REQUEST,
                         1001,
-                        "qr4_payload is required for bind_archive",
+                        "archive_code_payload is required for bind_archive",
                     )
                 }
             };
 
-            // 解析 QR4
-            let qr4: CpmsArchiveQrPayload = match serde_json::from_str(qr4_str) {
+            // 解析档案码
+            let archive_code: CpmsArchiveCodePayload = match serde_json::from_str(archive_code_str)
+            {
                 Ok(v) => v,
-                Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
+                Err(_) => {
+                    return api_error(
+                        StatusCode::BAD_REQUEST,
+                        1001,
+                        "invalid archive code payload",
+                    )
+                }
             };
-            if qr4.r#type != "ARCHIVE" {
+            if archive_code.r#type != "ARCHIVE" {
                 return api_error(StatusCode::BAD_REQUEST, 1001, "type must be ARCHIVE");
             }
 
@@ -187,7 +195,7 @@ pub(crate) async fn citizen_bind(
             // SFID 通过 geo_seal 解出 sfid_number 后再派生省市归属。
             let verified = match crate::cpms::verify_cpms_archive_qr(
                 &state,
-                &qr4,
+                &archive_code,
                 ctx.admin_province.as_deref(),
             )
             .await
@@ -198,7 +206,9 @@ pub(crate) async fn citizen_bind(
             let province_code = verified.province_code.clone();
             let city_code = verified.city_code.clone();
             let archive_no = verified.archive_no.clone();
-            let identity_status = verified.citizen_status.clone();
+            let archive_status = verified.citizen_status.clone();
+            let archive_valid_from = verified.valid_from.clone();
+            let archive_valid_until = verified.valid_until.clone();
 
             // 写入(写锁内做 SFID 生成 + 1000 次碰撞重试,避免 lock-free 阶段读到陈旧的 sfid_code map)
             let mut store = match store_write_or_500(&state) {
@@ -271,7 +281,9 @@ pub(crate) async fn citizen_bind(
                 if let Some(record) = store.citizen_records.get_mut(&cid) {
                     record.archive_no = Some(archive_no.clone());
                     record.sfid_code = Some(sfid_result.clone());
-                    record.identity_status = Some(identity_status.clone());
+                    record.archive_status = Some(archive_status.clone());
+                    record.archive_valid_from = Some(archive_valid_from.clone());
+                    record.archive_valid_until = Some(archive_valid_until.clone());
                     record.province_code = Some(province_code.clone());
                     record.city_code = Some(city_code.clone());
                     record.chain_confirmed = false;
@@ -313,7 +325,9 @@ pub(crate) async fn citizen_bind(
                 account_address: account_address.clone(),
                 archive_no: Some(archive_no.clone()),
                 sfid_code: Some(sfid_result.clone()),
-                identity_status: Some(identity_status),
+                archive_status: Some(archive_status),
+                archive_valid_from: Some(archive_valid_from),
+                archive_valid_until: Some(archive_valid_until),
                 sfid_signature: None,
                 province_code: Some(province_code.clone()),
                 city_code: Some(city_code.clone()),

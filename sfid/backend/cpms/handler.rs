@@ -8,7 +8,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
@@ -297,71 +297,60 @@ pub(crate) async fn generate_cpms_install_qr(
     .into_response()
 }
 
-/// 处理 QR4 档案业务二维码，验证并录入档案。
+/// 处理档案码，验证并返回预览结果。
 ///
 /// SFID_CPMS_V1 两码方案：解 `geo_seal` 得到省市归属,再验证 CPMS 本机签名,
-/// 去重后录入 imported_archives。
-pub(crate) async fn archive_import(
+/// 档案正式绑定必须走 citizens 绑定流程,不能在没有钱包地址时单独录入。
+pub(crate) async fn archive_verify(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<CpmsArchiveImportInput>,
+    Json(input): Json<CpmsArchiveVerifyInput>,
 ) -> impl IntoResponse {
     let ctx = match require_sheng_admin(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // 解析 QR4
-    let qr4: CpmsArchiveQrPayload = match serde_json::from_str(input.qr_payload.trim()) {
+    // 解析档案码
+    let archive_code: CpmsArchiveCodePayload = match serde_json::from_str(input.qr_payload.trim()) {
         Ok(v) => v,
-        Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid QR4 payload"),
+        Err(_) => {
+            return api_error(
+                StatusCode::BAD_REQUEST,
+                1001,
+                "invalid archive code payload",
+            )
+        }
     };
-    if qr4.r#type != "ARCHIVE" {
+    if archive_code.r#type != "ARCHIVE" {
         return api_error(StatusCode::BAD_REQUEST, 1001, "type must be ARCHIVE");
     }
 
-    let verified = match verify_cpms_archive_qr(&state, &qr4, ctx.admin_province.as_deref()).await {
-        Ok(v) => v,
-        Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
-    };
+    let verified =
+        match verify_cpms_archive_qr(&state, &archive_code, ctx.admin_province.as_deref()).await {
+            Ok(v) => v,
+            Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
+        };
 
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    if store
-        .imported_archives
-        .contains_key(verified.archive_no.as_str())
-    {
-        return api_error(StatusCode::CONFLICT, 1007, "archive_no already imported");
-    }
-    store.imported_archives.insert(
-        verified.archive_no.clone(),
-        ImportedArchive {
-            archive_no: verified.archive_no.clone(),
-            province_code: verified.province_code.clone(),
-            city_code: verified.city_code.clone(),
-            sfid_number: verified.sfid_number.clone(),
-            cpms_pubkey_hash: verified.cpms_pubkey_hash.clone(),
-            geo_seal_hash: verified.geo_seal_hash.clone(),
-            imported_at: Utc::now(),
-            status: ArchiveImportStatus::Active,
-        },
-    );
     append_audit_log(
         &mut store,
-        "CPMS_ARCHIVE_IMPORT",
+        "CPMS_ARCHIVE_VERIFY",
         &ctx.admin_pubkey,
         Some(verified.archive_no.clone()),
         None,
         "SUCCESS",
         format!(
-            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={} voting_eligible={}",
+            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={} valid_from={} valid_until={}",
             verified.archive_no,
             verified.province_code,
             verified.city_code,
             verified.sfid_number,
-            qr4.cs,
-            qr4.ve
+            archive_code.cs,
+            verified.valid_from,
+            verified.valid_until
         ),
     );
     drop(store);
@@ -369,12 +358,12 @@ pub(crate) async fn archive_import(
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: CpmsArchiveImportOutput {
+        data: CpmsArchiveVerifyOutput {
             archive_no: verified.archive_no,
             province_code: verified.province_code,
             city_code: verified.city_code,
             sfid_number: verified.sfid_number,
-            status: "ACTIVE",
+            status: "VERIFIED",
         },
     })
     .into_response()
@@ -1108,40 +1097,46 @@ fn cpms_site_keys_to_list_row_simple(
 /// 只用安装授权中保存的 `install_secret` 尝试解开 `geo_seal`,再校验 CPMS 本机签名。
 pub(crate) async fn verify_cpms_archive_qr(
     state: &AppState,
-    qr4: &CpmsArchiveQrPayload,
+    archive_code: &CpmsArchiveCodePayload,
     admin_province_scope: Option<&str>,
 ) -> Result<VerifiedCpmsArchive, (StatusCode, u32, String)> {
-    if qr4.proto != "SFID_CPMS_V1" {
+    if archive_code.proto != "SFID_CPMS_V1" {
         return Err((
             StatusCode::BAD_REQUEST,
             1001,
             "proto must be SFID_CPMS_V1".to_string(),
         ));
     }
-    if qr4.r#type != "ARCHIVE" {
+    if archive_code.r#type != "ARCHIVE" {
         return Err((
             StatusCode::BAD_REQUEST,
             1001,
             "type must be ARCHIVE".to_string(),
         ));
     }
-    if qr4.ano.trim().is_empty()
-        || qr4.cs.trim().is_empty()
-        || qr4.cpms_pubkey.trim().is_empty()
-        || qr4.geo_seal.trim().is_empty()
-        || qr4.sig.trim().is_empty()
+    if archive_code.ano.trim().is_empty()
+        || archive_code.cs.trim().is_empty()
+        || archive_code.valid_from.trim().is_empty()
+        || archive_code.valid_until.trim().is_empty()
+        || archive_code.cpms_pubkey.trim().is_empty()
+        || archive_code.geo_seal.trim().is_empty()
+        || archive_code.sig.trim().is_empty()
     {
         return Err((
             StatusCode::BAD_REQUEST,
             1001,
-            "archive QR fields are required".to_string(),
+            "archive code fields are required".to_string(),
         ));
     }
+    validate_archive_validity(
+        archive_code.valid_from.as_str(),
+        archive_code.valid_until.as_str(),
+    )?;
     let (province_name, site, seal) = find_site_by_geo_seal(
         state,
-        qr4.geo_seal.as_str(),
-        qr4.ano.as_str(),
-        qr4.cpms_pubkey.as_str(),
+        archive_code.geo_seal.as_str(),
+        archive_code.ano.as_str(),
+        archive_code.cpms_pubkey.as_str(),
         admin_province_scope,
     )
     .await?;
@@ -1166,25 +1161,27 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
 
-    let cpms_pubkey =
-        crate::login::parse_sr25519_pubkey_bytes(qr4.cpms_pubkey.as_str()).ok_or((
-            StatusCode::BAD_REQUEST,
-            1001,
-            "cpms_pubkey format invalid".to_string(),
-        ))?;
-    let archive_sig = hex::decode(qr4.sig.trim().trim_start_matches("0x")).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            1001,
-            "archive sig hex decode failed".to_string(),
-        )
-    })?;
-    let geo_seal_hash = hash_hex(qr4.geo_seal.as_bytes());
+    let cpms_pubkey = crate::login::parse_sr25519_pubkey_bytes(archive_code.cpms_pubkey.as_str())
+        .ok_or((
+        StatusCode::BAD_REQUEST,
+        1001,
+        "cpms_pubkey format invalid".to_string(),
+    ))?;
+    let archive_sig =
+        hex::decode(archive_code.sig.trim().trim_start_matches("0x")).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                1001,
+                "archive sig hex decode failed".to_string(),
+            )
+        })?;
+    let geo_seal_hash = hash_hex(archive_code.geo_seal.as_bytes());
     let archive_sign_source = build_archive_sign_source(
-        qr4.ano.as_str(),
-        qr4.cs.as_str(),
-        qr4.ve,
-        qr4.cpms_pubkey.as_str(),
+        archive_code.ano.as_str(),
+        archive_code.cs.as_str(),
+        archive_code.valid_from.as_str(),
+        archive_code.valid_until.as_str(),
+        archive_code.cpms_pubkey.as_str(),
         geo_seal_hash.as_str(),
     );
     if !verify_sr25519_signature(&cpms_pubkey, &archive_sign_source, &archive_sig) {
@@ -1194,8 +1191,8 @@ pub(crate) async fn verify_cpms_archive_qr(
             "archive signature invalid".to_string(),
         ));
     }
-    let cpms_pubkey_hash = hash_hex(qr4.cpms_pubkey.as_bytes());
-    let citizen_status = citizen_status_from_cpms(qr4.cs.as_str());
+    let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
+    let citizen_status = citizen_status_from_cpms(archive_code.cs.as_str());
     bind_cpms_pubkey_if_needed(
         state,
         &province_name,
@@ -1205,14 +1202,42 @@ pub(crate) async fn verify_cpms_archive_qr(
     .await?;
 
     Ok(VerifiedCpmsArchive {
-        archive_no: qr4.ano.clone(),
+        archive_no: archive_code.ano.clone(),
         citizen_status,
+        valid_from: archive_code.valid_from.clone(),
+        valid_until: archive_code.valid_until.clone(),
         province_code: extract_province_code_from_sfid(seal.sfid_number.as_str()),
         city_code: extract_city_code_from_sfid(seal.sfid_number.as_str()),
         sfid_number: seal.sfid_number,
-        cpms_pubkey_hash,
-        geo_seal_hash,
     })
+}
+
+fn validate_archive_validity(
+    valid_from: &str,
+    valid_until: &str,
+) -> Result<(), (StatusCode, u32, String)> {
+    let from = NaiveDate::parse_from_str(valid_from.trim(), "%Y-%m-%d").map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            1001,
+            "valid_from format must be YYYY-MM-DD".to_string(),
+        )
+    })?;
+    let until = NaiveDate::parse_from_str(valid_until.trim(), "%Y-%m-%d").map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            1001,
+            "valid_until format must be YYYY-MM-DD".to_string(),
+        )
+    })?;
+    if from > until {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "valid_from must be before or equal valid_until".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn citizen_status_from_cpms(value: &str) -> crate::citizens::model::CitizenStatus {
@@ -1437,13 +1462,14 @@ fn build_install_sign_source(
 fn build_archive_sign_source(
     archive_no: &str,
     citizen_status: &str,
-    voting_eligible: bool,
+    valid_from: &str,
+    valid_until: &str,
     cpms_pubkey: &str,
     geo_seal_hash: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}",
-        archive_no, citizen_status, voting_eligible, cpms_pubkey, geo_seal_hash
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}",
+        archive_no, citizen_status, valid_from, valid_until, cpms_pubkey, geo_seal_hash
     )
 }
 

@@ -110,7 +110,9 @@ pub(crate) async fn app_vote_account_register(
         account_address,
         archive_no: None,
         sfid_code: None,
-        identity_status: None,
+        archive_status: None,
+        archive_valid_from: None,
+        archive_valid_until: None,
         sfid_signature: None,
         province_code: None,
         city_code: None,
@@ -163,7 +165,9 @@ pub(crate) async fn app_vote_account_status(
                 status: status_str.to_string(),
                 address: record.account_address.clone(),
                 sfid_code: record.sfid_code.clone(),
-                identity_status: record.identity_status.clone(),
+                identity_status: Some(record.computed_identity_status()),
+                valid_from: record.archive_valid_from.clone(),
+                valid_until: record.archive_valid_until.clone(),
             }
         }
         None => VoteAccountStatusOutput {
@@ -171,6 +175,8 @@ pub(crate) async fn app_vote_account_status(
             address: None,
             sfid_code: None,
             identity_status: None,
+            valid_from: None,
+            valid_until: None,
         },
     };
     drop(store);

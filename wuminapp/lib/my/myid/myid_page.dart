@@ -178,6 +178,30 @@ class _MyIdPageState extends State<MyIdPage> {
         : '状态：异常';
   }
 
+  String _validityText() {
+    final validFrom = _formatDate(_state.validFrom);
+    final validUntil = _formatDate(_state.validUntil);
+    if (validFrom == null || validUntil == null) {
+      return '有效期：未绑定';
+    }
+    return '有效期：$validFrom-$validUntil';
+  }
+
+  String? _formatDate(String? raw) {
+    final value = raw?.trim();
+    if (value == null || value.isEmpty) return null;
+    final parts = value.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    // 中文注释：后端返回 YYYY-MM-DD 日期，不按本地时区转换，避免护照日期跨天。
+    return '${year.toString().padLeft(4, '0')}年'
+        '${month.toString().padLeft(2, '0')}月'
+        '${day.toString().padLeft(2, '0')}日';
+  }
+
   @override
   Widget build(BuildContext context) {
     final canSign = _state.status == MyIdStatus.pending && !_state.isColdWallet;
@@ -273,6 +297,15 @@ class _MyIdPageState extends State<MyIdPage> {
                         _state.identityStatus?.trim().toUpperCase() == 'NORMAL'
                             ? AppTheme.success
                             : AppTheme.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _validityText(),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

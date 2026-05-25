@@ -1,5 +1,5 @@
 // 绑定弹窗 —— 双模式:
-// 模式1 bind_archive: 新账户绑档案(PENDING) — 扫 CPMS QR4 → 签名 → 绑定
+// 模式1 bind_archive: 新账户绑档案(PENDING) — 扫档案码 → 签名 → 绑定
 // 模式2 bind_pubkey:  旧档案绑新账户(UNLINKED) — 扫用户二维码 → 系统比对 → 签名 → 绑定
 
 import { useEffect, useRef, useState } from 'react';
@@ -18,7 +18,7 @@ import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 
 type BindMode = 'bind_archive' | 'bind_pubkey';
 type BindStep =
-  | 'scan_qr4'           // 模式1第一步:扫 CPMS QR4
+  | 'scan_archive_code'  // 模式1第一步:扫档案码
   | 'scan_user_qr'       // 模式2第一步:扫用户钱包二维码
   | 'confirm_address'    // 模式2第二步:确认识别的地址并点击绑定
   | 'sign_challenge'     // 共用:显示签名挑战二维码
@@ -35,11 +35,11 @@ interface BindModalProps {
 
 export function BindModal({ auth, open, record, onClose, onBound }: BindModalProps) {
   const [bindMode, setBindMode] = useState<BindMode>('bind_archive');
-  const [bindStep, setBindStep] = useState<BindStep>('scan_qr4');
+  const [bindStep, setBindStep] = useState<BindStep>('scan_archive_code');
   const [bindChallenge, setBindChallenge] = useState<CitizenBindChallengeResult | null>(null);
   const [bindChallengeLoading, setBindChallengeLoading] = useState(false);
-  const [bindQr4Payload, setBindQr4Payload] = useState<string | null>(null);
-  const [bindQr4ScanLoading, setBindQr4ScanLoading] = useState(false);
+  const [archiveCodePayload, setArchiveCodePayload] = useState<string | null>(null);
+  const [archiveCodeScanLoading, setArchiveCodeScanLoading] = useState(false);
   const [, setBindSignature] = useState<string | null>(null);
   const [bindTargetPubkey, setBindTargetPubkey] = useState('');
   // 模式2:扫用户二维码识别的地址
@@ -57,10 +57,10 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     setBindTargetPubkey(record.account_pubkey || '');
     setBindMode(mode);
     setBindChallenge(null);
-    setBindQr4Payload(null);
+    setArchiveCodePayload(null);
     setBindSignature(null);
     setScannedAddress('');
-    setBindStep(mode === 'bind_archive' ? 'scan_qr4' : 'scan_user_qr');
+    setBindStep(mode === 'bind_archive' ? 'scan_archive_code' : 'scan_user_qr');
     setBindScannerActive(false);
     stopBindScanner();
   }, [open, record]);
@@ -83,22 +83,22 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     setBindScannerActive(true);
   };
 
-  // 模式1:扫 CPMS QR4
-  const onScanBindQr4 = async (qrPayload: string) => {
+  // 模式1:扫档案码
+  const onScanArchiveCode = async (qrPayload: string) => {
     if (!auth) return;
     if (!qrPayload.trim()) { message.error('二维码识别失败'); return; }
-    setBindQr4ScanLoading(true);
+    setArchiveCodeScanLoading(true);
     try {
-      setBindQr4Payload(qrPayload);
+      setArchiveCodePayload(qrPayload);
       setBindScannerActive(false);
       stopBindScanner();
       const challenge = await citizenBindChallenge(auth);
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : 'QR4 扫码处理失败');
+      message.error(err instanceof Error ? err.message : '档案码扫码处理失败');
     } finally {
-      setBindQr4ScanLoading(false);
+      setArchiveCodeScanLoading(false);
     }
   };
 
@@ -128,7 +128,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const onScanBindSignature = async (raw: string) => {
     if (!auth || !bindChallenge) return;
     if (!raw.trim()) { message.error('签名二维码识别失败'); return; }
-    setBindQr4ScanLoading(true);
+    setArchiveCodeScanLoading(true);
     try {
       const payload = parseSignedReceiptPayload(raw.trim(), bindChallenge.challenge_id);
       setBindSignature(payload.signature);
@@ -138,7 +138,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       const result = await citizenBind(auth, {
         mode: bindMode,
         user_address: userAddress,
-        qr4_payload: bindQr4Payload || undefined,
+        archiveCodePayload: archiveCodePayload || undefined,
         citizen_id: record?.id,
         challenge_id: payload.challenge_id,
         signature: payload.signature,
@@ -149,7 +149,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     } catch (err) {
       message.error(err instanceof Error ? err.message : '绑定失败');
     } finally {
-      setBindQr4ScanLoading(false);
+      setArchiveCodeScanLoading(false);
     }
   };
 
@@ -165,8 +165,8 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       (raw) => {
         setBindScannerActive(false);
         stopBindScanner();
-        if (currentStep === 'scan_qr4') {
-          void onScanBindQr4(raw);
+        if (currentStep === 'scan_archive_code') {
+          void onScanArchiveCode(raw);
         } else if (currentStep === 'scan_signature') {
           void onScanBindSignature(raw);
         }
@@ -226,28 +226,23 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   return (
     <>
       <Modal
-        title={<span style={{ fontSize: 20, fontWeight: 600 }}>绑定身份</span>}
+        title={
+          <span style={{ display: 'block', fontSize: 20, fontWeight: 600, textAlign: 'center' }}>
+            扫描档案码
+          </span>
+        }
         open={open}
         footer={null}
         onCancel={() => { setBindScannerActive(false); stopBindScanner(); onClose(); }}
         destroyOnClose
         width={520}
       >
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          {bindMode === 'bind_archive'
-            ? '模式：新账户绑档案（扫描 CPMS 档案二维码 → 签名验证 → 完成绑定）'
-            : '模式：旧档案绑新账户（扫描用户二维码 → 系统比对 → 签名验证 → 完成绑定）'}
-        </Typography.Paragraph>
-
-        {/* ── 模式1:扫 CPMS QR4 ── */}
-        {bindMode === 'bind_archive' && bindStep === 'scan_qr4' && (
+        {/* ── 模式1:扫档案码 ── */}
+        {bindMode === 'bind_archive' && bindStep === 'scan_archive_code' && (
           <>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-              第一步：扫描 CPMS 档案二维码（QR4）
-            </Typography.Text>
-            {scannerBox('点击扫描档案二维码')}
+            {scannerBox('点击扫描档案码')}
             <div style={{ textAlign: 'center' }}>
-              <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+              <Button onClick={onToggleBindScanner} loading={archiveCodeScanLoading}>
                 {bindScannerActive ? '停止扫码' : '开启扫码'}
               </Button>
             </div>
@@ -332,7 +327,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
             </Typography.Text>
             {scannerBox('点击扫描签名二维码')}
             <div style={{ textAlign: 'center' }}>
-              <Button onClick={onToggleBindScanner} loading={bindQr4ScanLoading}>
+              <Button onClick={onToggleBindScanner} loading={archiveCodeScanLoading}>
                 {bindScannerActive ? '停止扫码' : '开启扫码'}
               </Button>
             </div>

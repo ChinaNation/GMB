@@ -11,6 +11,8 @@ class MyIdStatusResponse {
     this.address,
     this.sfidCode,
     this.identityStatus,
+    this.validFrom,
+    this.validUntil,
   });
 
   /// "pending" | "bound" | "unset"
@@ -18,6 +20,8 @@ class MyIdStatusResponse {
   final String? address;
   final String? sfidCode;
   final String? identityStatus;
+  final String? validFrom;
+  final String? validUntil;
 }
 
 class MyIdApi {
@@ -125,6 +129,8 @@ class MyIdApi {
       address: data['address']?.toString(),
       sfidCode: data['sfid_code']?.toString(),
       identityStatus: data['identity_status']?.toString(),
+      validFrom: data['valid_from']?.toString(),
+      validUntil: data['valid_until']?.toString(),
     );
   }
 
