@@ -212,7 +212,7 @@ export function CitizensView() {
       render: (v: string | undefined) => v ?? '-',
     },
     {
-      title: 'SFID码',
+      title: '身份ID',
       dataIndex: 'sfid_code',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',

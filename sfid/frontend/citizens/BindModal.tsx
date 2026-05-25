@@ -59,6 +59,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const [bindScannerReady, setBindScannerReady] = useState(false);
   const bindVideoRef = useRef<HTMLVideoElement | null>(null);
   const bindScanCleanupRef = useRef<(() => void) | null>(null);
+  const modalTitle = bindStep === 'sign_challenge' ? '扫码签名' : '扫描档案码';
 
   // record 变化时重置
   useEffect(() => {
@@ -261,7 +262,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       <Modal
         title={
           <span style={{ display: 'block', fontSize: 20, fontWeight: 600, textAlign: 'center' }}>
-            扫描档案码
+            {modalTitle}
           </span>
         }
         open={open}
@@ -344,9 +345,6 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         {/* ── 共用:签名挑战二维码 ── */}
         {bindStep === 'sign_challenge' && bindChallenge && (
           <>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-              {bindMode === 'bind_archive' ? '第二步' : '第三步'}：用公民钱包扫码签名
-            </Typography.Text>
             <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
               <QRCode value={bindChallenge.sign_request} size={260} color="#134e4a" />
             </div>
@@ -355,7 +353,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
             </Typography.Paragraph>
             <div style={{ textAlign: 'center' }}>
               <Button type="primary" onClick={() => { setBindStep('scan_signature'); setBindScannerActive(true); }}>
-                下一步：扫描签名结果
+                扫描签名结果
               </Button>
             </div>
           </>
