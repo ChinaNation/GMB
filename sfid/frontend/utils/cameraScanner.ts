@@ -7,6 +7,14 @@ type BarcodeDetectorLike = {
 };
 type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
+function createQrDetector(unsupportedMessage: string): BarcodeDetectorLike {
+  const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
+  if (!win.BarcodeDetector) {
+    throw new Error(unsupportedMessage);
+  }
+  return new win.BarcodeDetector({ formats: ['qr_code'] });
+}
+
 /**
  * 启动摄像头 BarcodeDetector 扫码。
  *
@@ -26,12 +34,13 @@ export function startCameraScanner(
   let stream: MediaStream | null = null;
   let timer: number | undefined;
 
-  const win = window as Window & { BarcodeDetector?: BarcodeDetectorCtor };
-  if (!win.BarcodeDetector) {
-    onError('当前浏览器不支持摄像头扫码');
+  let detector: BarcodeDetectorLike;
+  try {
+    detector = createQrDetector('当前浏览器不支持摄像头扫码');
+  } catch (err) {
+    onError(err instanceof Error ? err.message : '当前浏览器不支持摄像头扫码');
     return () => {};
   }
-  const detector = new win.BarcodeDetector({ formats: ['qr_code'] });
 
   (async () => {
     try {
@@ -71,4 +80,46 @@ export function startCameraScanner(
       stream.getTracks().forEach((t) => t.stop());
     }
   };
+}
+
+/**
+ * 从用户上传的图片文件中识别二维码内容。
+ *
+ * 中文注释：上传档案码与摄像头扫码共用 BarcodeDetector，保证只产生一份二维码原文，
+ * 后续仍交给业务组件已有的档案码处理流程，避免出现第二套绑定逻辑。
+ */
+export async function decodeQrImageFile(file: File): Promise<string> {
+  const isImage =
+    file.type.startsWith('image/') ||
+    /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name);
+  if (!isImage) {
+    throw new Error('请上传二维码图片文件');
+  }
+  if (typeof createImageBitmap !== 'function') {
+    throw new Error('当前浏览器不支持二维码图片解析');
+  }
+
+  const detector = createQrDetector('当前浏览器不支持二维码图片识别');
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('二维码图片读取失败，请上传清晰的图片文件');
+  }
+
+  try {
+    const codes = await detector.detect(bitmap);
+    const raw = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim();
+    if (!raw) {
+      throw new Error('未识别到二维码，请上传清晰的档案码图片');
+    }
+    return raw;
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('未识别到二维码')) {
+      throw err;
+    }
+    throw new Error('二维码图片识别失败，请换用清晰的档案码图片');
+  } finally {
+    bitmap.close();
+  }
 }

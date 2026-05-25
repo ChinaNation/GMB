@@ -3,7 +3,8 @@
 // 模式2 bind_pubkey:  旧档案绑新账户(UNLINKED) — 扫用户二维码 → 系统比对 → 签名 → 绑定
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Form, Input, Modal, QRCode, Typography, message } from 'antd';
+import { Button, Form, Input, Modal, QRCode, Typography, Upload, message } from 'antd';
+import type { UploadProps } from 'antd';
 
 import type { AdminAuth } from '../auth/types';
 import {
@@ -13,8 +14,9 @@ import {
   type CitizenRow,
 } from './api';
 import { ScanAccountModal } from '../common/ScanAccountModal';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { decodeQrImageFile, startCameraScanner } from '../utils/cameraScanner';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
+import { tryEncodeSs58 } from '../utils/ss58';
 
 type BindMode = 'bind_archive' | 'bind_pubkey';
 type BindStep =
@@ -33,6 +35,13 @@ interface BindModalProps {
   onBound: () => Promise<void> | void;
 }
 
+function resolveRecordAddress(record: CitizenRow): string {
+  if (record.account_address?.trim()) return record.account_address.trim();
+  if (!record.account_pubkey?.trim()) return '';
+  const encoded = tryEncodeSs58(record.account_pubkey);
+  return encoded === record.account_pubkey || encoded === '-' ? '' : encoded;
+}
+
 export function BindModal({ auth, open, record, onClose, onBound }: BindModalProps) {
   const [bindMode, setBindMode] = useState<BindMode>('bind_archive');
   const [bindStep, setBindStep] = useState<BindStep>('scan_archive_code');
@@ -40,8 +49,9 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const [bindChallengeLoading, setBindChallengeLoading] = useState(false);
   const [archiveCodePayload, setArchiveCodePayload] = useState<string | null>(null);
   const [archiveCodeScanLoading, setArchiveCodeScanLoading] = useState(false);
+  const [archiveCodeUploadLoading, setArchiveCodeUploadLoading] = useState(false);
   const [, setBindSignature] = useState<string | null>(null);
-  const [bindTargetPubkey, setBindTargetPubkey] = useState('');
+  const [bindTargetAddress, setBindTargetAddress] = useState('');
   // 模式2:扫用户二维码识别的地址
   const [scannedAddress, setScannedAddress] = useState('');
   const [scanAccountOpen, setScanAccountOpen] = useState(false);
@@ -54,11 +64,12 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   useEffect(() => {
     if (!open || !record) return;
     const mode: BindMode = record.archive_no ? 'bind_pubkey' : 'bind_archive';
-    setBindTargetPubkey(record.account_pubkey || '');
+    setBindTargetAddress(resolveRecordAddress(record));
     setBindMode(mode);
     setBindChallenge(null);
     setArchiveCodePayload(null);
     setBindSignature(null);
+    setArchiveCodeUploadLoading(false);
     setScannedAddress('');
     setBindStep(mode === 'bind_archive' ? 'scan_archive_code' : 'scan_user_qr');
     setBindScannerActive(false);
@@ -87,12 +98,13 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const onScanArchiveCode = async (qrPayload: string) => {
     if (!auth) return;
     if (!qrPayload.trim()) { message.error('二维码识别失败'); return; }
+    if (!bindTargetAddress.trim()) { message.error('当前记录缺少钱包地址，不能生成签名请求'); return; }
     setArchiveCodeScanLoading(true);
     try {
       setArchiveCodePayload(qrPayload);
       setBindScannerActive(false);
       stopBindScanner();
-      const challenge = await citizenBindChallenge(auth);
+      const challenge = await citizenBindChallenge(auth, { user_address: bindTargetAddress.trim() });
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
@@ -100,6 +112,27 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     } finally {
       setArchiveCodeScanLoading(false);
     }
+  };
+
+  const onUploadArchiveCode: UploadProps['beforeUpload'] = async (file) => {
+    if (!auth) {
+      message.error('请先登录');
+      return Upload.LIST_IGNORE;
+    }
+
+    // 中文注释：上传档案码只负责得到二维码原文，后续复用摄像头扫码同一条处理链路。
+    setBindScannerActive(false);
+    stopBindScanner();
+    setArchiveCodeUploadLoading(true);
+    try {
+      const raw = await decodeQrImageFile(file as File);
+      await onScanArchiveCode(raw);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '二维码图片识别失败');
+    } finally {
+      setArchiveCodeUploadLoading(false);
+    }
+    return Upload.LIST_IGNORE;
   };
 
   // 模式2:扫用户二维码后识别到地址
@@ -114,7 +147,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
     if (!auth || !scannedAddress.trim()) return;
     setBindChallengeLoading(true);
     try {
-      const challenge = await citizenBindChallenge(auth);
+      const challenge = await citizenBindChallenge(auth, { user_address: scannedAddress.trim() });
       setBindChallenge(challenge);
       setBindStep('sign_challenge');
     } catch (err) {
@@ -134,7 +167,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       setBindSignature(payload.signature);
       setBindScannerActive(false);
       stopBindScanner();
-      const userAddress = bindMode === 'bind_pubkey' ? scannedAddress.trim() : (bindTargetPubkey || '');
+      const userAddress = bindMode === 'bind_pubkey' ? scannedAddress.trim() : bindTargetAddress.trim();
       const result = await citizenBind(auth, {
         mode: bindMode,
         user_address: userAddress,
@@ -241,10 +274,19 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         {bindMode === 'bind_archive' && bindStep === 'scan_archive_code' && (
           <>
             {scannerBox('点击扫描档案码')}
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
               <Button onClick={onToggleBindScanner} loading={archiveCodeScanLoading}>
                 {bindScannerActive ? '停止扫码' : '开启扫码'}
               </Button>
+              <Upload
+                accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+                beforeUpload={onUploadArchiveCode}
+                showUploadList={false}
+              >
+                <Button loading={archiveCodeUploadLoading}>
+                  上传二维码
+                </Button>
+              </Upload>
             </div>
           </>
         )}

@@ -31,6 +31,9 @@ class MyIdSignPage extends StatefulWidget {
 enum _PageStep { scanning, signing, showResponse }
 
 class _MyIdSignPageState extends State<MyIdSignPage> {
+  static const double _scanBoxSize = 240;
+  static const double _scanBoxOffsetY = -40;
+
   _PageStep _step = _PageStep.scanning;
   String? _responseJson;
   String? _errorMessage;
@@ -165,13 +168,47 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           ),
         ],
         const SizedBox(height: 16),
-        // 摄像头
+        // 摄像头扫码框必须与其他扫码页一致：中间正方形识别区 + 四角提示。
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: MobileScanner(
-              controller: _scannerController,
-              onDetect: _onDetect,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(
+                  controller: _scannerController,
+                  onDetect: _onDetect,
+                ),
+                CustomPaint(
+                  painter: _MyIdScanOverlayPainter(
+                    scanBoxSize: _scanBoxSize,
+                    offsetY: _scanBoxOffsetY,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+                Center(
+                  child: Transform.translate(
+                    offset: const Offset(0, _scanBoxOffsetY),
+                    child: SizedBox(
+                      width: _scanBoxSize,
+                      height: _scanBoxSize,
+                      child: CustomPaint(
+                        painter: _MyIdScanCornerPainter(),
+                      ),
+                    ),
+                  ),
+                ),
+                Center(
+                  child: Transform.translate(
+                    offset: const Offset(
+                        0, _scanBoxOffsetY + _scanBoxSize / 2 + 24),
+                    child: const Text(
+                      '扫描 SFID 管理端签名请求二维码',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -235,6 +272,62 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       ],
     );
   }
+}
+
+class _MyIdScanOverlayPainter extends CustomPainter {
+  _MyIdScanOverlayPainter({required this.scanBoxSize, required this.offsetY});
+
+  final double scanBoxSize;
+  final double offsetY;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = Colors.black.withAlpha(140);
+    final clearPaint = Paint()..blendMode = BlendMode.clear;
+    final center = Offset(size.width / 2, size.height / 2 + offsetY);
+    final rect = Rect.fromCenter(
+      center: center,
+      width: scanBoxSize,
+      height: scanBoxSize,
+    );
+
+    canvas.saveLayer(Offset.zero & size, Paint());
+    canvas.drawRect(Offset.zero & size, bgPaint);
+    canvas.drawRect(rect, clearPaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MyIdScanOverlayPainter oldDelegate) =>
+      oldDelegate.scanBoxSize != scanBoxSize || oldDelegate.offsetY != offsetY;
+}
+
+class _MyIdScanCornerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cornerLen = 24.0;
+    const strokeWidth = 4.0;
+    final paint = Paint()
+      ..color = AppTheme.primary
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final w = size.width;
+    final h = size.height;
+
+    canvas.drawLine(const Offset(0, 0), const Offset(cornerLen, 0), paint);
+    canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLen), paint);
+    canvas.drawLine(Offset(w, 0), Offset(w - cornerLen, 0), paint);
+    canvas.drawLine(Offset(w, 0), Offset(w, cornerLen), paint);
+    canvas.drawLine(Offset(0, h), Offset(cornerLen, h), paint);
+    canvas.drawLine(Offset(0, h), Offset(0, h - cornerLen), paint);
+    canvas.drawLine(Offset(w, h), Offset(w - cornerLen, h), paint);
+    canvas.drawLine(Offset(w, h), Offset(w, h - cornerLen), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MyIdScanCornerPainter oldDelegate) => false;
 }
 
 List<int> _hexToBytes(String input) {
