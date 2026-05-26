@@ -1392,11 +1392,49 @@ fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Re
         status,
         Json(ApiError {
             code,
+            error_code: sfid_error_code(status, message),
             message: message.to_string(),
             trace_id: Uuid::new_v4().to_string(),
         }),
     )
         .into_response()
+}
+
+fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
+    // 中文注释:HTTP 状态表达协议层含义,稳定 error_code 表达业务语义;前端不得解析 message。
+    match message {
+        "missing bearer token" => "SFID_AUTH_MISSING_TOKEN",
+        "invalid access token" => "SFID_AUTH_INVALID_ACCESS_TOKEN",
+        "access token expired" => "SFID_AUTH_ACCESS_TOKEN_EXPIRED",
+        "admin disabled" => "SFID_AUTH_ADMIN_DISABLED",
+        "permission denied" => "SFID_AUTH_PERMISSION_DENIED",
+        "challenge not found" | "challenge not found or expired" => "SFID_BIND_CHALLENGE_NOT_FOUND",
+        "challenge already consumed" => "SFID_BIND_CHALLENGE_CONSUMED",
+        "challenge expired" => "SFID_BIND_CHALLENGE_EXPIRED",
+        "challenge account mismatch" | "challenge context mismatch" => "SFID_BIND_ACCOUNT_MISMATCH",
+        "signature verify failed" | "unbind signature verify failed" => {
+            "SFID_BIND_SIGNATURE_VERIFY_FAILED"
+        }
+        "invalid signature hex" => "SFID_BIND_SIGNATURE_FORMAT_INVALID",
+        "archive_no already bound" => "SFID_BIND_ARCHIVE_ALREADY_BOUND",
+        "pubkey already bound to archive" => "SFID_BIND_PUBKEY_ALREADY_BOUND",
+        "archive signature invalid" => "SFID_CITIZEN_ARCHIVE_SIGNATURE_BAD",
+        "geo_seal cannot be decrypted" => "SFID_CITIZEN_ARCHIVE_GEO_SEAL_INVALID",
+        "geo_seal install scope mismatch" => "SFID_CITIZEN_ARCHIVE_SCOPE_MISMATCH",
+        "cpms_pubkey does not match installed CPMS" => "SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH",
+        "qr expired" => "SFID_CITIZEN_QR_EXPIRED",
+        "qr header invalid" => "SFID_CITIZEN_QR_HEADER_INVALID",
+        _ if status == StatusCode::UNAUTHORIZED => "SFID_AUTH_UNAUTHORIZED",
+        _ if status == StatusCode::FORBIDDEN => "SFID_AUTH_FORBIDDEN",
+        _ if status == StatusCode::BAD_REQUEST => "SFID_REQUEST_INVALID",
+        _ if status == StatusCode::NOT_FOUND => "SFID_RESOURCE_NOT_FOUND",
+        _ if status == StatusCode::CONFLICT => "SFID_RESOURCE_CONFLICT",
+        _ if status == StatusCode::GONE => "SFID_RESOURCE_EXPIRED",
+        _ if status == StatusCode::UNPROCESSABLE_ENTITY => "SFID_BUSINESS_VALIDATION_FAILED",
+        _ if status == StatusCode::TOO_MANY_REQUESTS => "SFID_RATE_LIMITED",
+        _ if status == StatusCode::SERVICE_UNAVAILABLE => "SFID_SERVICE_UNAVAILABLE",
+        _ => "SFID_INTERNAL_ERROR",
+    }
 }
 
 pub(crate) fn store_read_or_500(

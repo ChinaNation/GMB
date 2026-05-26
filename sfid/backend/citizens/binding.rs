@@ -196,12 +196,16 @@ pub(crate) async fn citizen_bind(
             );
         };
         if Utc::now() > challenge.expire_at {
-            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         challenge
     };
     if !same_pubkey_hex(&account_pubkey_hex, &challenge.account_pubkey) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge account mismatch");
+        return api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "challenge account mismatch",
+        );
     }
 
     // 验证公钥签名（WUMIN_QR_V1 签名结果）
@@ -220,7 +224,11 @@ pub(crate) async fn citizen_bind(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
     };
     if !verify_citizen_bind_signature(&pubkey_bytes, &challenge.challenge_text, &sig_bytes) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+        return api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "signature verify failed",
+        );
     }
 
     match input.mode.as_str() {
@@ -555,7 +563,7 @@ pub(crate) async fn citizen_unbind(
             );
         };
         if Utc::now() > challenge.expire_at {
-            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         challenge
     };
@@ -577,7 +585,11 @@ pub(crate) async fn citizen_unbind(
         _ => return api_error(StatusCode::CONFLICT, 1005, "record has no pubkey to unbind"),
     };
     if !same_pubkey_hex(&old_pubkey, &challenge.account_pubkey) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge account mismatch");
+        return api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "challenge account mismatch",
+        );
     }
 
     // 验证公钥签名
@@ -597,7 +609,7 @@ pub(crate) async fn citizen_unbind(
     };
     if !verify_citizen_bind_signature(&pubkey_bytes, &challenge.challenge_text, &sig_bytes) {
         return api_error(
-            StatusCode::UNAUTHORIZED,
+            StatusCode::UNPROCESSABLE_ENTITY,
             2004,
             "unbind signature verify failed",
         );

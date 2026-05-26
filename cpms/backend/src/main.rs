@@ -77,6 +77,8 @@ where
 #[derive(Serialize)]
 struct ApiError {
     code: i32,
+    /// 中文注释:稳定业务错误码供前端判断;数字 code 只保留为内部分类编号。
+    error_code: &'static str,
     message: String,
     trace_id: String,
 }
@@ -172,7 +174,7 @@ async fn find_admin_by_pubkey(
     .fetch_optional(&state.db)
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
-    .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin_pubkey not found"))?;
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 2002, "admin_pubkey not found"))?;
 
     Ok(AdminUser {
         user_id: row.get("user_id"),
@@ -199,7 +201,7 @@ async fn find_admin_by_user_id(
     .fetch_optional(&state.db)
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
-    .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2002, "admin user not found"))?;
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 2002, "admin user not found"))?;
 
     Ok(AdminUser {
         user_id: row.get("user_id"),
@@ -301,10 +303,45 @@ fn err(status: StatusCode, code: i32, message: &str) -> (StatusCode, Json<ApiErr
         status,
         Json(ApiError {
             code,
+            error_code: cpms_error_code(status, message),
             message: message.to_string(),
             trace_id: Uuid::new_v4().to_string(),
         }),
     )
+}
+
+fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
+    // 中文注释:CPMS 是离线实名系统,错误码只描述本机认证、档案、签发和审计状态。
+    match message {
+        "missing bearer token" => "CPMS_AUTH_MISSING_TOKEN",
+        "invalid token" => "CPMS_AUTH_INVALID_TOKEN",
+        "token expired" => "CPMS_AUTH_TOKEN_EXPIRED",
+        "permission denied" => "CPMS_AUTH_PERMISSION_DENIED",
+        "admin is not active" => "CPMS_AUTH_ADMIN_INACTIVE",
+        "admin_pubkey not found" => "CPMS_AUTH_ADMIN_NOT_FOUND",
+        "admin user not found" => "CPMS_AUTH_ADMIN_NOT_FOUND",
+        "challenge not found" => "CPMS_AUTH_CHALLENGE_NOT_FOUND",
+        "challenge already consumed" => "CPMS_AUTH_CHALLENGE_CONSUMED",
+        "challenge expired" => "CPMS_AUTH_CHALLENGE_EXPIRED",
+        "challenge pubkey mismatch" | "challenge session mismatch" => {
+            "CPMS_AUTH_CHALLENGE_MISMATCH"
+        }
+        "signature verify failed" => "CPMS_AUTH_SIGNATURE_VERIFY_FAILED",
+        "archive not found" => "CPMS_INTAKE_ARCHIVE_NOT_FOUND",
+        "archive_no conflict, retry exhausted" => "CPMS_INTAKE_ARCHIVE_DUPLICATED",
+        "invalid citizen_status" => "CPMS_INTAKE_CITIZEN_STATUS_INVALID",
+        "qr encode failed" => "CPMS_ISSUE_QR_GENERATE_FAILED",
+        "save print record failed" => "CPMS_AUDIT_WRITE_FAILED",
+        _ if status == StatusCode::UNAUTHORIZED => "CPMS_AUTH_UNAUTHORIZED",
+        _ if status == StatusCode::FORBIDDEN => "CPMS_AUTH_FORBIDDEN",
+        _ if status == StatusCode::BAD_REQUEST => "CPMS_REQUEST_INVALID",
+        _ if status == StatusCode::NOT_FOUND => "CPMS_RESOURCE_NOT_FOUND",
+        _ if status == StatusCode::CONFLICT => "CPMS_RESOURCE_CONFLICT",
+        _ if status == StatusCode::GONE => "CPMS_RESOURCE_EXPIRED",
+        _ if status == StatusCode::UNPROCESSABLE_ENTITY => "CPMS_BUSINESS_VALIDATION_FAILED",
+        _ if status == StatusCode::SERVICE_UNAVAILABLE => "CPMS_SERVICE_UNAVAILABLE",
+        _ => "CPMS_INTERNAL_ERROR",
+    }
 }
 
 #[cfg(test)]

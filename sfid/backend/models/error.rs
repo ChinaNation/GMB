@@ -12,6 +12,8 @@ pub(crate) struct ApiResponse<T: Serialize> {
 #[derive(Serialize)]
 pub(crate) struct ApiError {
     pub(crate) code: u32,
+    /// 中文注释:稳定业务错误码给前端判断逻辑使用;message 只给用户展示。
+    pub(crate) error_code: &'static str,
     pub(crate) message: String,
     pub(crate) trace_id: String,
 }

@@ -95,3 +95,9 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 7. 验证
 - `cargo fmt && cargo check && cargo test`
 - `cd frontend/web && npm run build`
+
+## 8. 错误码
+
+CPMS 后端错误响应包含数字 `code` 和稳定业务 `error_code`。HTTP `401` 只表示当前
+管理员登录态无效;challenge 过期返回 `410`,签名验签失败返回 `422`,管理员停用返回
+`403`。完整规则见 `memory/05-modules/cpms/ERROR_CODES.md`。

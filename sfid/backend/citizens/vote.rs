@@ -67,11 +67,7 @@ pub(crate) async fn app_vote_account_register(
     };
     let now = Utc::now().timestamp();
     if (now - timestamp).abs() > 300 {
-        return api_error(
-            StatusCode::UNAUTHORIZED,
-            1007,
-            "sign_message expired (>5 min)",
-        );
+        return api_error(StatusCode::GONE, 1007, "sign_message expired (>5 min)");
     }
 
     let pubkey_bytes = match crate::login::parse_sr25519_pubkey_bytes(&input_pubkey) {
@@ -83,7 +79,11 @@ pub(crate) async fn app_vote_account_register(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid signature hex"),
     };
     if !verify_citizen_bind_signature(&pubkey_bytes, input.sign_message.trim(), &sig_bytes) {
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+        return api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "signature verify failed",
+        );
     }
 
     let mut store = match store_write_or_500(&state) {

@@ -15,6 +15,7 @@ import {
 } from './api';
 import { ScanAccountModal } from '../common/ScanAccountModal';
 import { decodeQrImageFile, startCameraScanner } from '../utils/cameraScanner';
+import { ApiError } from '../utils/http';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { tryEncodeSs58 } from '../utils/ss58';
 
@@ -40,6 +41,27 @@ function resolveRecordAddress(record: CitizenRow): string {
   if (!record.account_pubkey?.trim()) return '';
   const encoded = tryEncodeSs58(record.account_pubkey);
   return encoded === record.account_pubkey || encoded === '-' ? '' : encoded;
+}
+
+function bindErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    // 中文注释:绑定页按稳定 errorCode 展示业务失败,避免把 message 当程序判断依据。
+    switch (err.errorCode) {
+      case 'SFID_BIND_CHALLENGE_EXPIRED':
+        return '签名请求已过期，请重新扫码。';
+      case 'SFID_BIND_SIGNATURE_VERIFY_FAILED':
+        return '签名校验失败，请确认使用正确钱包重新签名。';
+      case 'SFID_BIND_ACCOUNT_MISMATCH':
+        return '签名账户与本次绑定账户不一致，请切换钱包账户后重试。';
+      case 'SFID_BIND_ARCHIVE_ALREADY_BOUND':
+        return '该档案已绑定身份ID。';
+      case 'SFID_BIND_PUBKEY_ALREADY_BOUND':
+        return '该链账户已绑定其他身份ID。';
+      default:
+        return err.message;
+    }
+  }
+  return err instanceof Error ? err.message : '绑定失败';
 }
 
 export function BindModal({ auth, open, record, onClose, onBound }: BindModalProps) {
@@ -186,7 +208,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
       onClose();
       await onBound();
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '绑定失败');
+      message.error(bindErrorMessage(err));
     } finally {
       setArchiveCodeScanLoading(false);
     }

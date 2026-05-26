@@ -1186,7 +1186,7 @@ pub(crate) async fn verify_cpms_archive_qr(
     );
     if !verify_sr25519_signature(&cpms_pubkey, &archive_sign_source, &archive_sig) {
         return Err((
-            StatusCode::UNAUTHORIZED,
+            StatusCode::UNPROCESSABLE_ENTITY,
             2004,
             "archive signature invalid".to_string(),
         ));
@@ -1272,7 +1272,7 @@ async fn find_site_by_geo_seal(
         return found
             .map(|(site, seal)| (province.to_string(), site, seal))
             .ok_or((
-                StatusCode::UNAUTHORIZED,
+                StatusCode::UNPROCESSABLE_ENTITY,
                 2004,
                 "geo_seal cannot be decrypted".to_string(),
             ));
@@ -1300,7 +1300,7 @@ async fn find_site_by_geo_seal(
             )
         })?;
     found.ok_or((
-        StatusCode::UNAUTHORIZED,
+        StatusCode::UNPROCESSABLE_ENTITY,
         2004,
         "geo_seal cannot be decrypted".to_string(),
     ))
@@ -1334,7 +1334,7 @@ fn validate_geo_seal_against_site(
 ) -> Result<(), (StatusCode, u32, String)> {
     if seal.sfid_number != site.site_sfid {
         return Err((
-            StatusCode::UNAUTHORIZED,
+            StatusCode::UNPROCESSABLE_ENTITY,
             2004,
             "geo_seal install scope mismatch".to_string(),
         ));
@@ -1363,7 +1363,7 @@ async fn bind_cpms_pubkey_if_needed(
             if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
                 if existing != hash {
                     return Err((
-                        StatusCode::UNAUTHORIZED,
+                        StatusCode::UNPROCESSABLE_ENTITY,
                         2004,
                         "cpms_pubkey does not match installed CPMS",
                     ));

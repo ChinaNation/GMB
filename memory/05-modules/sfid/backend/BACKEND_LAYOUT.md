@@ -90,3 +90,9 @@ test ! -d sfid/backend/chain
 rg "mod chain;|crate::chain|chain::" sfid/backend -g '*.rs'
 cd sfid/backend && cargo fmt && cargo check
 ```
+
+## 错误码边界
+
+SFID 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员
+登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败、ARCHIVE 验真失败等业务错误
+不得返回 `401`。完整规则见 `memory/05-modules/sfid/ERROR_CODES.md`。

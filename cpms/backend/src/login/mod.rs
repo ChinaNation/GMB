@@ -141,7 +141,7 @@ async fn auth_identify(
             serde_json::json!({"reason": "inactive"}),
         )
         .await?;
-        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
+        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
     }
 
     write_audit(
@@ -168,7 +168,7 @@ async fn auth_challenge(
 ) -> Result<Json<ApiResponse<ChallengeData>>, (StatusCode, Json<ApiError>)> {
     let admin = find_admin_by_pubkey(&state, &req.admin_pubkey).await?;
     if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
+        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
     }
 
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
@@ -218,7 +218,7 @@ async fn auth_verify(
 ) -> Result<Json<ApiResponse<VerifyData>>, (StatusCode, Json<ApiError>)> {
     let admin = find_admin_by_pubkey(&state, &req.admin_pubkey).await?;
     if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
+        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
     }
 
     let now_ts = Utc::now().timestamp();
@@ -264,7 +264,7 @@ async fn auth_verify(
     }
     let expire_at: i64 = row.get("expire_at");
     if expire_at < now_ts {
-        return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
+        return Err(err(StatusCode::GONE, 2006, "challenge expired"));
     }
     let challenge_payload: String = row.get("challenge_payload");
 
@@ -298,7 +298,7 @@ async fn auth_verify(
         )
         .await?;
         return Err(err(
-            StatusCode::UNAUTHORIZED,
+            StatusCode::UNPROCESSABLE_ENTITY,
             2007,
             "signature verify failed",
         ));
@@ -482,7 +482,7 @@ async fn auth_qr_complete(
 
     let expire_at: i64 = row.get("expire_at");
     if expire_at < now_ts {
-        return Err(err(StatusCode::BAD_REQUEST, 2006, "challenge expired"));
+        return Err(err(StatusCode::GONE, 2006, "challenge expired"));
     }
 
     let challenge_session_id: String = row.get("session_id");
@@ -499,7 +499,7 @@ async fn auth_qr_complete(
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
     if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::UNAUTHORIZED, 2002, "admin is not active"));
+        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
     }
     // 重建完整签名原文(包含签名者公钥),与 wumin 端
     // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
@@ -519,7 +519,7 @@ async fn auth_qr_complete(
     .is_err()
     {
         return Err(err(
-            StatusCode::UNAUTHORIZED,
+            StatusCode::UNPROCESSABLE_ENTITY,
             2007,
             "signature verify failed",
         ));

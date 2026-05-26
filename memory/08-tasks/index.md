@@ -345,3 +345,4 @@
 - `memory/08-tasks/done/20260525-sfid-bind-upload-qr.md`
 - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
 - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
+- `memory/08-tasks/done/20260526-error-codes.md`
