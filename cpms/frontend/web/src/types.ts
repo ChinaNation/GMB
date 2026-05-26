@@ -8,6 +8,7 @@ export interface ApiResponse<T> {
 
 export interface ApiError {
   code: number;
+  error_code: string;
   message: string;
   trace_id: string;
 }

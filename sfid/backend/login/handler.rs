@@ -248,14 +248,18 @@ pub(crate) async fn admin_auth_verify(
             return api_error(StatusCode::CONFLICT, 1007, "challenge already consumed");
         }
         if now > challenge.expire_at {
-            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         if challenge.origin != input.origin
             || challenge.domain != verify_domain
             || challenge.session_id != input.session_id
             || challenge.nonce != input.nonce
         {
-            return api_error(StatusCode::UNAUTHORIZED, 2004, "challenge context mismatch");
+            return api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "challenge context mismatch",
+            );
         }
 
         // 中文注释：乐观消费——先标记 consumed 再验签，防止并发请求同时通过 consumed 检查。
@@ -268,7 +272,11 @@ pub(crate) async fn admin_auth_verify(
             if let Some(c) = store.login_challenges.get_mut(&input.challenge_id) {
                 c.consumed = false;
             }
-            return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+            return api_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                2004,
+                "signature verify failed",
+            );
         }
         admin_pubkey
     };

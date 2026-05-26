@@ -44,6 +44,8 @@ sfid/frontend/
 
 - 前端不再维护独立 `api/` 目录。某个功能需要后端 API 时,直接在所属功能目录新建 `api.ts`。
 - `utils/http.ts` 只放 `request`、`adminRequest`、`adminHeaders` 和 401 拦截,不得放业务接口。
+- `utils/http.ts` 收到 `401` 必须抛 `AuthExpiredError` 并触发全局退出;其他业务错误抛
+  `ApiError`,页面按 `errorCode` 展示,不得返回 `undefined as T`。
 - 登录/会话接口放 `auth/api.ts`;登录态和角色类型放 `auth/types.ts`。
 - SFID 元数据接口放 `sfid/api.ts`,用于省份、市、A3、机构类型等跨页面选择项。
 - 机构本地管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。

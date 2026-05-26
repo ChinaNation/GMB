@@ -32,7 +32,7 @@ pub(crate) async fn admin_cpms_status_scan(
         Err(_) => return api_error(StatusCode::BAD_REQUEST, 1001, "invalid status qr_payload"),
     };
     if payload.ver != "1" || payload.issuer_id != "cpms" || payload.sig_alg != "sr25519" {
-        return api_error(StatusCode::UNAUTHORIZED, 1006, "qr header invalid");
+        return api_error(StatusCode::BAD_REQUEST, 1006, "qr header invalid");
     }
     if payload.archive_no.trim().is_empty()
         || payload.qr_id.trim().is_empty()
@@ -41,7 +41,7 @@ pub(crate) async fn admin_cpms_status_scan(
         return api_error(StatusCode::BAD_REQUEST, 1001, "qr required fields missing");
     }
     if payload.expire_at < Utc::now().timestamp() {
-        return api_error(StatusCode::UNAUTHORIZED, 1006, "qr expired");
+        return api_error(StatusCode::GONE, 1006, "qr expired");
     }
 
     // 中文注释:先从进程内分片读 CPMS 站点,再短读模块 Store 快照做其余校验。

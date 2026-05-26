@@ -6,6 +6,36 @@ import type { AdminAuth } from '../auth/types';
 let onUnauthorized: (() => void) | null = null;
 let unauthorizedFired = false;
 
+type ErrorBody = {
+  code?: number;
+  error_code?: string;
+  message?: string;
+  trace_id?: string;
+};
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: number;
+  readonly errorCode?: string;
+  readonly traceId?: string;
+
+  constructor(status: number, body: ErrorBody | null, fallback: string) {
+    super(body?.message ?? fallback);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = body?.code;
+    this.errorCode = body?.error_code;
+    this.traceId = body?.trace_id;
+  }
+}
+
+export class AuthExpiredError extends ApiError {
+  constructor(status: number, body: ErrorBody | null) {
+    super(status, body, '登录已过期，请重新登录');
+    this.name = 'AuthExpiredError';
+  }
+}
+
 /** AuthProvider 启动时注册回调;卸载时传 null 清除。 */
 export function setOnUnauthorized(cb: (() => void) | null) {
   onUnauthorized = cb;
@@ -52,11 +82,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       unauthorizedFired = true;
       onUnauthorized();
     }
-    return undefined as unknown as T;
+    // 中文注释:401 只代表管理员登录态失效;必须抛错中断业务流程,不能返回 undefined。
+    throw new AuthExpiredError(resp.status, body);
   }
 
   if (!resp.ok || !body || body.code !== 0) {
-    throw new Error(body?.message ?? `request failed (${resp.status})`);
+    throw new ApiError(resp.status, body, `request failed (${resp.status})`);
   }
   return body.data as T;
 }

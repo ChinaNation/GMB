@@ -1,7 +1,7 @@
 // CPMS 后端 API 封装
 
 import type {
-  ApiResponse, AdminUser, Archive, ChallengeData, VerifyData,
+  ApiResponse, ApiError, AdminUser, Archive, ChallengeData, VerifyData,
   InstallStatus,
 } from './types';
 
@@ -19,8 +19,8 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    // token 过期自动退出登录
+    const err = await res.json().catch(() => ({ message: res.statusText })) as Partial<ApiError>;
+    // 中文注释:401 只表示本机管理员登录态失效;业务错误由后端返回 4xx + error_code,页面自行展示。
     if (res.status === 401 && token) {
       localStorage.removeItem('cpms_token');
       localStorage.removeItem('cpms_user');

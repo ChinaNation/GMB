@@ -217,6 +217,13 @@
 | `memory/05-modules/wuminapp/user/` | wuminapp 用户 | wuminapp-user | 移动端用户模块文档 |
 | `memory/05-modules/wuminapp/wallet/` | wuminapp 钱包 | wuminapp-wallet | 移动端钱包模块文档 |
 
+## 10b. 错误码文档命名登记
+
+| 路径 | 中文名称 | English name | 简介 |
+|---|---|---|---|
+| `memory/05-modules/sfid/ERROR_CODES.md` | SFID 错误码规范 | sfid-error-codes | SFID HTTP 状态码、稳定业务错误码和前端错误处理规则 |
+| `memory/05-modules/cpms/ERROR_CODES.md` | CPMS 错误码规范 | cpms-error-codes | CPMS 离线系统 HTTP 状态码、稳定业务错误码和前端错误处理规则 |
+
 ## 11. SFID 功能目录命名登记
 
 ### SFID 后端目录

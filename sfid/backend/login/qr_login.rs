@@ -167,7 +167,7 @@ pub(crate) async fn admin_auth_qr_complete(
             }
         }
         if now > challenge.expire_at {
-            return api_error(StatusCode::UNAUTHORIZED, 1007, "challenge expired");
+            return api_error(StatusCode::GONE, 1007, "challenge expired");
         }
         (
             challenge.challenge_text.clone(),
@@ -217,7 +217,11 @@ pub(crate) async fn admin_auth_qr_complete(
             signer_pubkey = %verify_pubkey,
             "qr login signature verify failed"
         );
-        return api_error(StatusCode::UNAUTHORIZED, 2004, "signature verify failed");
+        return api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            2004,
+            "signature verify failed",
+        );
     }
     let Some(admin) = store.admin_users_by_pubkey.get(&login_pubkey) else {
         return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
