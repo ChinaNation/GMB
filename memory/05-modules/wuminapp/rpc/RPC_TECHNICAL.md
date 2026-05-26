@@ -56,7 +56,7 @@ lib/rpc/
 
 ## 5. 连接与同步策略
 
-1. App 启动时初始化 `SmoldotClientManager`
+1. App 先完成 `runApp()` 和首帧渲染,再后台初始化 `SmoldotClientManager`
 2. 轻节点读取 `SharedPreferences.smoldot_db_cache`，优先通过 `AddChainConfig.databaseContent` 恢复上次 finalized database
 3. 如果缓存失效或与当前链状态不兼容，会自动清掉缓存并回退到无缓存重连，避免坏缓存永久卡死启动
 4. 轻节点加入 `chainspec.json` 指定的 citizenchain 网络后，立即在后台预热同步
@@ -66,6 +66,8 @@ lib/rpc/
 补充说明：
 
 - 钱包余额不更新的首要风险点，不是 UI，而是“轻节点已初始化但尚未同步完成”时过早查询链上状态
+- Android 系统弹出“公民没有响应/关闭应用/等待”属于 ANR,首要排查点是启动阶段是否在
+  Flutter 首帧前等待 smoldot 初始化或同步;当前实现禁止在 `runApp()` 前 await 轻节点初始化。
 - `smoldot` 返回 JSON-RPC error 时必须抛出，不能把错误吞成 `null`，否则上层会把真实故障误判为余额为 0、没有提案或机构不存在
 - 当前代码已新增 `SmoldotClientManager.getStatusSnapshot()`，作为结构化轻节点状态接口；其底层已改为 Rust 原生 capability，不再由 Dart 层拼装 `system_health`
 - `ChainProgressBanner` 只展示轻节点状态快照（peer / best / finalized / syncing），文案必须使用“轻节点状态/轻节点已就绪”。该状态不等同于某个业务页面的本地 Isar 写库成功，也不等同于所有链上 storage 查询已经完成。

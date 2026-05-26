@@ -100,7 +100,7 @@ fn build_citizen_bind_sign_request(
     let sign_request = serde_json::json!({
         "proto": crate::qr::WUMIN_QR_V1,
         "kind": "sign_request",
-        "id": format!("bind-{}", challenge_id),
+        "id": challenge_id,
         "issued_at": issued_at.timestamp(),
         "expires_at": expires_at.timestamp(),
         "body": {
@@ -140,6 +140,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
 
         assert_eq!(value["kind"], "sign_request");
+        assert_eq!(value["id"], "challenge-1");
         assert_eq!(value["body"]["address"], "addr2027");
         assert_eq!(value["body"]["pubkey"], "0xabc");
         assert_eq!(value["body"]["display"]["fields"][0]["value"], "addr2027");

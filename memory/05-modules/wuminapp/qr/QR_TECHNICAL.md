@@ -17,6 +17,8 @@
 - 一个 `QrRouter` 统一路由，各子模块各自负责解析与校验
 - 登录模块原位于 `lib/login/`，因其唯一用途为扫码登录，已整体迁入 `lib/qr/login/`
 - 签名算法由 `lib/signer/` 提供，本模块不直接实现签名细节
+- SFID 公民绑定使用 `sign_request / sign_response` 通用签名协议;
+  `sign_response.id` 必须原样回传 `sign_request.id`,不得在 App 侧改写。
 
 ## 2. 目录结构
 
@@ -351,9 +353,10 @@ WUMIN_QR_V1|system|challenge|expires_at
 
 ### 12.3.1 回执校验规则
 
-- `request_id` 必须与当前会话一致
+- `id` 必须与当前会话的 `sign_request.id` 一致
 - `pubkey` 必须与页面发起签名时选中的钱包公钥一致
 - 任一校验失败都必须拒绝回执，不能把错误钱包的签名继续交给业务模块
+- SFID 公民绑定场景下,该 id 是后端原始 challenge UUID;前端和 App 都不得加业务前缀。
 
 ### 12.4 UI 元素
 

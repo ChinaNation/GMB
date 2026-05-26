@@ -13,6 +13,7 @@
   - `memory/08-tasks/done/20260525-sfid-bind-upload-qr.md`
   - `memory/08-tasks/done/20260525-sfid-bind-sign-request-wumin-scan.md`
   - `memory/08-tasks/done/20260525-sfid-bind-copy-myid-scan-square.md`
+  - `memory/08-tasks/done/20260525-175008-sfid绑定签名回执与wuminapp启动anr修复.md`
 
 ## 当前边界
 
@@ -59,7 +60,10 @@ sfid/frontend/
 - 新账户绑定档案时,弹窗不再展示模式说明和旧步骤标题。
 - 扫码框提示统一为“点击扫描档案码”;签名环节继续显示签名二维码相关文案。
 - 进入签名二维码展示步骤后,弹窗标题切换为“扫码签名”,不再展示“第二步：用公民钱包扫码签名”提示;
-  进入签名结果扫描的按钮文案固定为“扫描签名结果”。该口径只适用于签名步骤,不得改动上一步“扫描档案码”。
+  进入签名回执扫描页后,弹窗标题切换为“扫描签名回执”,且不再展示“第三步：扫描签名结果二维码”。
+  该口径只适用于签名回执扫描页,不得改动上一步“扫描档案码”。
+- 绑定签名回执的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
+  不得给公民绑定挑战额外添加 `bind-` 前缀,否则 SFID 后端会查不到 challenge。
 - “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
   `utils/cameraScanner.ts` 的 `BarcodeDetector` 解析图片,解析出的二维码原文继续走同一条档案码绑定流程,
   不把图片文件上传到后端。
