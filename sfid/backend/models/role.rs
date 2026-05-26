@@ -42,8 +42,8 @@ pub(crate) struct AdminUser {
     pub(crate) city: String,
     /// 中文注释:仅 ShengAdmin 使用。AES-256-GCM 加密的省签名私钥种子(32 字节明文)。
     /// ADR-008 后 3-tier 模型下,seed 持久化已搬到 `sheng_admins/signing_seed_store.rs`
-    /// (按 (province, admin_pubkey) 二级文件路径加密落盘),本字段在迁移完成后
-    /// 仅作为 legacy 兼容窗口保留,phase23e 之后由 sharded_store 接管。
+    /// (按 (province, admin_pubkey) 二级文件路径加密落盘),本字段只保留
+    /// 页面展示所需的历史元数据,不再承载签名私钥来源。
     #[serde(default)]
     pub(crate) encrypted_signing_privkey: Option<String>,
     /// 中文注释:仅 ShengAdmin 使用。对应签名公钥 hex(便于对账/UI 显示)。

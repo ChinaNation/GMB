@@ -300,7 +300,7 @@ pub struct ReconcileReport {
 ///
 /// 特殊处理:
 /// - 跳过 city_code == "000" 的保留占位
-/// - 跳过全局 store 已有但 city_code 为空的记录(会被 backfill 函数修复)
+/// - 跳过模块 Store 快照已有但 city_code 为空的记录(会被 backfill 函数修复)
 pub fn reconcile_public_security_for_province(
     store: &mut Store,
     province_name: &str,
@@ -459,10 +459,10 @@ pub fn reconcile_public_security_for_province(
     report
 }
 
-/// 给指定机构写入 2 条默认未上链账户(全局 store)。
+/// 给指定机构写入 2 条默认未上链账户(模块 Store 快照)。
 ///
 /// 幂等:已存在账户不覆盖;仅在该 `(sfid_number, account_name)` 缺失时补齐。
-/// reconcile 本身持全局 store 写锁;sharded_store 的同步由启动后的分片同步流程补齐。
+/// reconcile 本身持模块 Store 写锁;进程内分片缓存由启动后的同步流程补齐。
 pub fn insert_default_accounts_into_global_store(
     store: &mut Store,
     sfid_number: &str,

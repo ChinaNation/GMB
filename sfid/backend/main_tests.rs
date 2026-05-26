@@ -37,11 +37,10 @@ fn build_test_state() -> AppState {
         sharded_store: {
             #[cfg(test)]
             {
-                Arc::new(store_shards::ShardedStore::new(
-                    Arc::new(store_shards::backend::MockShardBackend::new())
-                        as Arc<dyn store_shards::backend::ShardBackend>,
-                    false,
-                ))
+                Arc::new(store_shards::ShardedStore::new(Arc::new(
+                    store_shards::backend::MockShardBackend::new(),
+                )
+                    as Arc<dyn store_shards::backend::ShardBackend>))
             }
             #[cfg(not(test))]
             {
@@ -58,6 +57,59 @@ async fn parse_json(resp: Response) -> serde_json::Value {
         .await
         .expect("response body bytes");
     serde_json::from_slice(&bytes).expect("json response")
+}
+
+#[test]
+fn module_snapshots_preserve_cross_request_runtime_state() {
+    let now = chrono::Utc::now();
+    let mut store = Store::default();
+    store.citizen_bind_challenges.insert(
+        "bind-1".to_string(),
+        CitizenBindChallenge {
+            challenge_id: "bind-1".to_string(),
+            challenge_text: "sfid-citizen-bind-v1|bind-1".to_string(),
+            account_address: "5CTestAddress".to_string(),
+            account_pubkey: "0xabc".to_string(),
+            expire_at: now + Duration::minutes(5),
+            created_at: now,
+        },
+    );
+    store.login_challenges.insert(
+        "login-1".to_string(),
+        LoginChallenge {
+            challenge_id: "login-1".to_string(),
+            admin_pubkey: "0xadmin".to_string(),
+            challenge_text: "challenge".to_string(),
+            challenge_token: String::new(),
+            qr_aud: String::new(),
+            qr_origin: String::new(),
+            origin: "http://localhost".to_string(),
+            domain: "localhost".to_string(),
+            session_id: "sid-1".to_string(),
+            nonce: "nonce-1".to_string(),
+            issued_at: now,
+            expire_at: now + Duration::minutes(5),
+            consumed: false,
+        },
+    );
+    store.admin_sessions.insert(
+        "token-1".to_string(),
+        AdminSession {
+            token: "token-1".to_string(),
+            admin_pubkey: "0xadmin".to_string(),
+            role: AdminRole::ShengAdmin,
+            expire_at: now + Duration::hours(1),
+            last_active_at: now,
+        },
+    );
+
+    let mut restored = Store::default();
+    CitizenStoreSnapshot::from_store(&store).apply_to(&mut restored);
+    OpsStoreSnapshot::from_store(&store).apply_to(&mut restored);
+
+    assert!(restored.citizen_bind_challenges.contains_key("bind-1"));
+    assert!(restored.login_challenges.contains_key("login-1"));
+    assert!(restored.admin_sessions.contains_key("token-1"));
 }
 
 /// 构造 QR 登录完整签名消息：challenge_payload 末尾补 principal(pubkey hex 去 0x 小写)。

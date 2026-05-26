@@ -8,6 +8,8 @@ use axum::{
 use chrono::{DateTime, Utc};
 use postgres::config::Host;
 use redis::Client as RedisClient;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -45,7 +47,7 @@ pub(crate) use cpms::scope::in_scope_cpms_site;
 pub(crate) use login::verify_admin_signature;
 pub(crate) use login::{
     build_admin_display_name, parse_sr25519_pubkey, parse_sr25519_pubkey_bytes, require_admin_any,
-    require_admin_write, require_sheng_admin,
+    require_admin_write, require_sheng_admin, AdminSession, LoginChallenge, QrLoginResultRecord,
 };
 pub(crate) use models::*;
 pub(crate) use sfid::model::*;
@@ -58,8 +60,8 @@ struct AppState {
     /// 缓存按 (province, admin_pubkey) 二级 key 持有 3 把独立 keypair,
     /// seed 持久化由 `sheng_admins/signing_seed_store.rs` 接管。
     pub(crate) sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache>,
-    /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
-    /// 按省分片的新 Store。此轮只构造 + 迁移,handler 仍走 legacy `store`。
+    /// 中文注释:按省分片的进程内缓存。Postgres 持久化已改为模块 Store 表,
+    /// 这里不再写旧 `store_shards` JSONB 表。
     #[allow(dead_code)]
     pub(crate) sharded_store: Arc<store_shards::ShardedStore>,
 }
@@ -122,6 +124,160 @@ impl Drop for StoreWriteGuard {
     }
 }
 
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct CitizenStoreSnapshot {
+    next_citizen_id: u64,
+    citizen_records: HashMap<u64, CitizenRecord>,
+    citizen_id_by_pubkey: HashMap<String, u64>,
+    citizen_id_by_archive_no: HashMap<String, u64>,
+    citizen_id_by_sfid_code: HashMap<String, u64>,
+    /// 中文注释:绑定 challenge 属于公民绑定短期状态,必须跨请求可读,
+    /// 但不再写入旧 runtime 整包 JSON。
+    citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
+    consumed_qr_ids: HashMap<String, DateTime<Utc>>,
+    pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
+    generated_sfid_by_pubkey: HashMap<String, String>,
+    reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
+    vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
+}
+
+impl CitizenStoreSnapshot {
+    fn from_store(store: &Store) -> Self {
+        Self {
+            next_citizen_id: store.next_citizen_id,
+            citizen_records: store.citizen_records.clone(),
+            citizen_id_by_pubkey: store.citizen_id_by_pubkey.clone(),
+            citizen_id_by_archive_no: store.citizen_id_by_archive_no.clone(),
+            citizen_id_by_sfid_code: store.citizen_id_by_sfid_code.clone(),
+            citizen_bind_challenges: store.citizen_bind_challenges.clone(),
+            consumed_qr_ids: store.consumed_qr_ids.clone(),
+            pending_bind_scan_by_qr_id: store.pending_bind_scan_by_qr_id.clone(),
+            generated_sfid_by_pubkey: store.generated_sfid_by_pubkey.clone(),
+            reward_state_by_pubkey: store.reward_state_by_pubkey.clone(),
+            vote_verify_cache: store.vote_verify_cache.clone(),
+        }
+    }
+
+    fn apply_to(self, store: &mut Store) {
+        store.next_citizen_id = self.next_citizen_id;
+        store.citizen_records = self.citizen_records;
+        store.citizen_id_by_pubkey = self.citizen_id_by_pubkey;
+        store.citizen_id_by_archive_no = self.citizen_id_by_archive_no;
+        store.citizen_id_by_sfid_code = self.citizen_id_by_sfid_code;
+        store.citizen_bind_challenges = self.citizen_bind_challenges;
+        store.consumed_qr_ids = self.consumed_qr_ids;
+        store.pending_bind_scan_by_qr_id = self.pending_bind_scan_by_qr_id;
+        store.generated_sfid_by_pubkey = self.generated_sfid_by_pubkey;
+        store.reward_state_by_pubkey = self.reward_state_by_pubkey;
+        store.vote_verify_cache = self.vote_verify_cache;
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct CpmsStoreSnapshot {
+    cpms_site_keys: HashMap<String, CpmsSiteKeys>,
+}
+
+impl CpmsStoreSnapshot {
+    fn from_store(store: &Store) -> Self {
+        Self {
+            cpms_site_keys: store.cpms_site_keys.clone(),
+        }
+    }
+
+    fn apply_to(self, store: &mut Store) {
+        store.cpms_site_keys = self.cpms_site_keys;
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct InstStoreSnapshot {
+    multisig_institutions: HashMap<String, crate::institutions::MultisigInstitution>,
+    multisig_accounts: HashMap<String, crate::institutions::MultisigAccount>,
+    institution_documents: HashMap<String, crate::institutions::InstitutionDocument>,
+    next_document_id: u64,
+}
+
+impl InstStoreSnapshot {
+    fn from_store(store: &Store) -> Self {
+        Self {
+            multisig_institutions: store.multisig_institutions.clone(),
+            multisig_accounts: store.multisig_accounts.clone(),
+            institution_documents: store.institution_documents.clone(),
+            next_document_id: store.next_document_id,
+        }
+    }
+
+    fn apply_to(self, store: &mut Store) {
+        store.multisig_institutions = self.multisig_institutions;
+        store.multisig_accounts = self.multisig_accounts;
+        store.institution_documents = self.institution_documents;
+        store.next_document_id = self.next_document_id;
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct OpsStoreSnapshot {
+    next_seq: u64,
+    next_audit_seq: u64,
+    next_admin_user_id: u64,
+    sheng_admin_rosters: HashMap<String, ShengAdminRosterLocal>,
+    /// 中文注释:登录 challenge/session/扫码结果必须跨请求可读;
+    /// 本任务将它们收敛到 ops 模块快照,不再依赖旧 runtime cache 表。
+    login_challenges: HashMap<String, LoginChallenge>,
+    qr_login_results: HashMap<String, QrLoginResultRecord>,
+    admin_sessions: HashMap<String, AdminSession>,
+    audit_logs: Vec<AuditLogEntry>,
+    chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
+    chain_nonce_seen: HashMap<String, DateTime<Utc>>,
+    chain_auth_last_cleanup_at: Option<DateTime<Utc>>,
+    pending_bind_last_cleanup_at: Option<DateTime<Utc>>,
+    bind_callback_jobs: Vec<BindCallbackJob>,
+    metrics: ServiceMetrics,
+}
+
+impl OpsStoreSnapshot {
+    fn from_store(store: &Store) -> Self {
+        Self {
+            next_seq: store.next_seq,
+            next_audit_seq: store.next_audit_seq,
+            next_admin_user_id: store.next_admin_user_id,
+            sheng_admin_rosters: store.sheng_admin_rosters.clone(),
+            login_challenges: store.login_challenges.clone(),
+            qr_login_results: store.qr_login_results.clone(),
+            admin_sessions: store.admin_sessions.clone(),
+            audit_logs: store.audit_logs.clone(),
+            chain_requests_by_key: store.chain_requests_by_key.clone(),
+            chain_nonce_seen: store.chain_nonce_seen.clone(),
+            chain_auth_last_cleanup_at: store.chain_auth_last_cleanup_at,
+            pending_bind_last_cleanup_at: store.pending_bind_last_cleanup_at,
+            bind_callback_jobs: store.bind_callback_jobs.clone(),
+            metrics: store.metrics.clone(),
+        }
+    }
+
+    fn apply_to(self, store: &mut Store) {
+        store.next_seq = self.next_seq;
+        store.next_audit_seq = self.next_audit_seq;
+        store.next_admin_user_id = self.next_admin_user_id;
+        store.sheng_admin_rosters = self.sheng_admin_rosters;
+        store.login_challenges = self.login_challenges;
+        store.qr_login_results = self.qr_login_results;
+        store.admin_sessions = self.admin_sessions;
+        store.audit_logs = self.audit_logs;
+        store.chain_requests_by_key = self.chain_requests_by_key;
+        store.chain_nonce_seen = self.chain_nonce_seen;
+        store.chain_auth_last_cleanup_at = self.chain_auth_last_cleanup_at;
+        store.pending_bind_last_cleanup_at = self.pending_bind_last_cleanup_at;
+        store.bind_callback_jobs = self.bind_callback_jobs;
+        store.metrics = self.metrics;
+    }
+}
+
 impl StoreBackend {
     fn with_postgres_client<R>(
         clients: &Arc<Vec<Mutex<postgres::Client>>>,
@@ -180,33 +336,59 @@ impl StoreBackend {
         }
     }
 
-    fn load_store_postgres(conn: &mut postgres::Client) -> Result<Store, String> {
-        let mut store = {
-            let cache_rows = conn
-                .query("SELECT entry_key, payload FROM runtime_cache_entries", &[])
-                .map_err(|e| format!("load runtime_cache_entries failed: {e}"))?;
-            if !cache_rows.is_empty() {
-                let mut payload_map = serde_json::Map::new();
-                for row in cache_rows {
-                    let entry_key: String = row.get(0);
-                    let payload: serde_json::Value = row.get(1);
-                    payload_map.insert(entry_key, payload);
-                }
-                serde_json::from_value(serde_json::Value::Object(payload_map))
-                    .map_err(|e| format!("decode runtime_cache_entries failed: {e}"))?
-            } else {
-                let row = conn
-                    .query_opt("SELECT payload FROM runtime_misc WHERE id=1", &[])
-                    .map_err(|e| format!("load runtime_misc failed: {e}"))?;
-                if let Some(row) = row {
-                    let payload: serde_json::Value = row.get(0);
-                    serde_json::from_value(payload)
-                        .map_err(|e| format!("decode runtime_misc failed: {e}"))?
-                } else {
-                    Store::default()
-                }
-            }
+    fn load_module_store<T>(conn: &mut postgres::Client, table: &str) -> Result<T, String>
+    where
+        T: Default + DeserializeOwned,
+    {
+        let sql = format!("SELECT payload FROM {table} WHERE id = 1");
+        let row = conn
+            .query_opt(sql.as_str(), &[])
+            .map_err(|e| format!("load {table} failed: {e}"))?;
+        let Some(row) = row else {
+            return Ok(T::default());
         };
+        let payload: serde_json::Value = row.get(0);
+        match serde_json::from_value(payload) {
+            Ok(snapshot) => Ok(snapshot),
+            Err(err) => {
+                // 中文注释:模块快照结构不匹配时直接丢弃该模块状态。
+                // 用户已确认本次 Store 重构不做旧数据迁移和旧格式兼容。
+                let delete_sql = format!("DELETE FROM {table} WHERE id = 1");
+                conn.execute(delete_sql.as_str(), &[])
+                    .map_err(|e| format!("delete invalid {table} snapshot failed: {e}"))?;
+                warn!(table, error = %err, "dropped invalid module store snapshot");
+                Ok(T::default())
+            }
+        }
+    }
+
+    fn save_module_store<T>(
+        tx: &mut postgres::Transaction<'_>,
+        table: &str,
+        snapshot: &T,
+    ) -> Result<(), String>
+    where
+        T: Serialize,
+    {
+        let payload = serde_json::to_value(snapshot)
+            .map_err(|e| format!("encode {table} snapshot failed: {e}"))?;
+        let sql = format!(
+            "INSERT INTO {table}(id, payload, updated_at) VALUES (1, $1, now())
+             ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()"
+        );
+        tx.execute(sql.as_str(), &[&payload])
+            .map_err(|e| format!("save {table} snapshot failed: {e}"))?;
+        Ok(())
+    }
+
+    fn load_store_postgres(conn: &mut postgres::Client) -> Result<Store, String> {
+        let mut store = Store::default();
+        Self::load_module_store::<CitizenStoreSnapshot>(conn, "store_citizens")?
+            .apply_to(&mut store);
+        Self::load_module_store::<CpmsStoreSnapshot>(conn, "store_cpms")?.apply_to(&mut store);
+        Self::load_module_store::<InstStoreSnapshot>(conn, "store_institutions")?
+            .apply_to(&mut store);
+        Self::load_module_store::<OpsStoreSnapshot>(conn, "store_ops")?.apply_to(&mut store);
 
         store.admin_users_by_pubkey.clear();
         store.sheng_admin_province_by_pubkey.clear();
@@ -274,37 +456,24 @@ impl StoreBackend {
     }
 
     fn save_store_postgres(conn: &mut postgres::Client, store: &Store) -> Result<(), String> {
-        let mut misc = store.clone();
-        misc.admin_users_by_pubkey.clear();
-        misc.sheng_admin_province_by_pubkey.clear();
-        let payload =
-            serde_json::to_value(&misc).map_err(|e| format!("encode runtime cache failed: {e}"))?;
-        let payload_obj = payload
-            .as_object()
-            .ok_or_else(|| "runtime cache payload is not an object".to_string())?;
         let mut tx = conn
             .transaction()
-            .map_err(|e| format!("begin runtime cache transaction failed: {e}"))?;
-        tx.execute("DELETE FROM runtime_cache_entries", &[])
-            .map_err(|e| format!("clear runtime_cache_entries failed: {e}"))?;
-        for (entry_key, entry_payload) in payload_obj {
-            tx.execute(
-                "INSERT INTO runtime_cache_entries(entry_key, payload, updated_at)
-                 VALUES ($1, $2, now())",
-                &[entry_key, entry_payload],
-            )
-            .map_err(|e| format!("save runtime cache entry {entry_key} failed: {e}"))?;
-        }
-        tx.execute(
-            "INSERT INTO runtime_misc(id, payload, updated_at) VALUES (1, $1, now())
-             ON CONFLICT (id) DO UPDATE SET payload=excluded.payload, updated_at=now()",
-            &[&payload],
-        )
-        .map_err(|e| format!("save runtime_misc compatibility snapshot failed: {e}"))?;
+            .map_err(|e| format!("begin module store transaction failed: {e}"))?;
+        Self::save_module_store(
+            &mut tx,
+            "store_citizens",
+            &CitizenStoreSnapshot::from_store(store),
+        )?;
+        Self::save_module_store(&mut tx, "store_cpms", &CpmsStoreSnapshot::from_store(store))?;
+        Self::save_module_store(
+            &mut tx,
+            "store_institutions",
+            &InstStoreSnapshot::from_store(store),
+        )?;
+        Self::save_module_store(&mut tx, "store_ops", &OpsStoreSnapshot::from_store(store))?;
         tx.commit()
-            .map_err(|e| format!("commit runtime cache transaction failed: {e}"))?;
+            .map_err(|e| format!("commit module store transaction failed: {e}"))?;
 
-        // ADR-008 Phase 23e:旧全局密钥环表已删,不再执行兼容清理。
         let mut tx = conn
             .transaction()
             .map_err(|e| format!("begin admin sync transaction failed: {e}"))?;
@@ -449,14 +618,28 @@ impl StoreHandle {
                 .map_err(|e| format!("connect postgres failed: {e}"))?;
             bootstrap
                 .batch_execute(
-                    "CREATE TABLE IF NOT EXISTS runtime_misc (
-                    id INTEGER PRIMARY KEY,
-                    payload JSONB NOT NULL,
+                    "DROP TABLE IF EXISTS runtime_store;
+                 DROP TABLE IF EXISTS runtime_misc;
+                 DROP TABLE IF EXISTS runtime_cache_entries;
+                 DROP TABLE IF EXISTS store_shards;
+                 CREATE TABLE IF NOT EXISTS store_citizens (
+                    id SMALLINT PRIMARY KEY CHECK (id = 1),
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                  );
-                 CREATE TABLE IF NOT EXISTS runtime_cache_entries (
-                    entry_key TEXT PRIMARY KEY,
-                    payload JSONB NOT NULL,
+                 CREATE TABLE IF NOT EXISTS store_cpms (
+                    id SMALLINT PRIMARY KEY CHECK (id = 1),
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                 );
+                 CREATE TABLE IF NOT EXISTS store_institutions (
+                    id SMALLINT PRIMARY KEY CHECK (id = 1),
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                 );
+                 CREATE TABLE IF NOT EXISTS store_ops (
+                    id SMALLINT PRIMARY KEY CHECK (id = 1),
+                    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                  );
                  ALTER TABLE IF EXISTS admins
@@ -470,14 +653,7 @@ impl StoreHandle {
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS signing_pubkey TEXT;
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS signing_created_at TIMESTAMPTZ;
-                 CREATE TABLE IF NOT EXISTS store_shards (
-                    shard_key TEXT PRIMARY KEY,
-                    payload JSONB NOT NULL,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    version BIGINT NOT NULL DEFAULT 0
-                 );
-                 CREATE INDEX IF NOT EXISTS idx_store_shards_updated_at ON store_shards(updated_at);",
+                   ADD COLUMN IF NOT EXISTS signing_created_at TIMESTAMPTZ;",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -506,19 +682,6 @@ impl StoreHandle {
         Ok(StoreReadGuard {
             store: self.backend.load_store()?,
         })
-    }
-
-    /// 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
-    /// 把内部 Postgres 连接池暴露给 store_shards::pg_backend / migration,
-    /// 避免新开连接池、也避免把 Phase 1 的 StoreBackend 改成 pub 字段。
-    fn postgres_pool(&self) -> Option<(Arc<Vec<Mutex<postgres::Client>>>, Arc<AtomicUsize>)> {
-        match &self.backend {
-            StoreBackend::Postgres {
-                clients,
-                next_client_idx,
-            } => Some((clients.clone(), next_client_idx.clone())),
-            StoreBackend::Memory(_) => None,
-        }
     }
 
     fn write(&self) -> Result<StoreWriteGuard, String> {
@@ -624,20 +787,12 @@ fn main() {
     // (fallback SFID_SIGNING_SEED_HEX)+ HKDF。本进程不再持有"全局 SFID MAIN signer Pair"。
     let sheng_admin_signing_cache: Arc<sheng_admins::signing_cache::ShengSigningCache> =
         Arc::new(sheng_admins::signing_cache::ShengSigningCache::new());
-    // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
-    // 基于现有 Postgres 连接池构造 ShardBackend 和 ShardedStore。
-    // 此时只构造空壳,迁移 / bootstrap / preload 等到 tokio runtime 起来后再做。
+    // 中文注释:ShardedStore 现在只作为进程内分片缓存。
+    // 主数据由模块 Store 表保存;旧 `store_shards` Postgres 整包分片已删除。
     let sharded_store: Arc<store_shards::ShardedStore> = {
-        let (pool, next_idx) = store
-            .postgres_pool()
-            .expect("store backend must be Postgres for sharded store");
-        let backend: Arc<dyn store_shards::backend::ShardBackend> = Arc::new(
-            store_shards::pg_backend::PostgresShardBackend::new(pool, next_idx),
-        );
-        let double_write = std::env::var("SFID_SHARD_SINGLE_WRITE")
-            .map(|v| v != "true")
-            .unwrap_or(true);
-        Arc::new(store_shards::ShardedStore::new(backend, double_write))
+        let backend: Arc<dyn store_shards::backend::ShardBackend> =
+            Arc::new(store_shards::backend::MemoryShardBackend::new());
+        Arc::new(store_shards::ShardedStore::new(backend))
     };
     let state = AppState {
         store,
@@ -656,49 +811,65 @@ fn main() {
         .build()
         .expect("build tokio runtime");
     runtime.block_on(async move {
-        // 任务卡 `20260410-sfid-store-shard-by-province` Phase 2 Day 2:
-        // 1) 从 legacy store 快照执行一次幂等迁移(空库首次启动才真正写入)
-        // 2) 加载 GlobalShard
-        // 3) 可选预加载所有省分片
+        // 中文注释:启动时只从进程内 ShardedStore 后端加载空缓存。
+        // 旧持久化分片迁移已删除;数据从模块 Store 快照装入后,
+        // 通过 sync_public_security_to_sharded 等函数同步到进程内缓存。
         {
-            let legacy_snapshot = match state.store.read() {
-                Ok(guard) => (*guard).clone(),
-                Err(e) => {
-                    warn!(error = %e, "load legacy store snapshot for migration failed");
-                    Store::default()
-                }
-            };
-            if let Some((pool, next_idx)) = state.store.postgres_pool() {
-                if let Err(e) = store_shards::migration::migrate_legacy_store_if_needed(
-                    pool,
-                    next_idx,
-                    &legacy_snapshot,
-                )
-                .await
-                {
-                    warn!(error = %e, "legacy → sharded migration failed");
-                }
-            }
             if let Err(e) = state.sharded_store.bootstrap_global().await {
                 warn!(error = %e, "sharded store bootstrap_global failed");
             }
-            let preload = std::env::var("SFID_SHARD_PRELOAD_ALL")
-                .map(|v| v != "false")
-                .unwrap_or(true);
-            if preload {
-                match state.sharded_store.preload_all_shards().await {
-                    Ok(n) => info!(provinces_loaded = n, "sharded store preloaded"),
-                    Err(e) => warn!(error = %e, "sharded store preload failed"),
-                }
+            let admin_runtime = state.store.read().ok().map(|store| {
+                (
+                    store
+                        .admin_users_by_pubkey
+                        .iter()
+                        .filter(|(_, admin)| admin.role == AdminRole::ShengAdmin)
+                        .map(|(pubkey, admin)| (pubkey.clone(), admin.clone()))
+                        .collect::<HashMap<_, _>>(),
+                    store.sheng_admin_province_by_pubkey.clone(),
+                    store.login_challenges.clone(),
+                    store.qr_login_results.clone(),
+                    store.admin_sessions.clone(),
+                    store.metrics.clone(),
+                    store.next_seq,
+                    store.next_audit_seq,
+                    store.next_admin_user_id,
+                )
+            });
+            if let Some((
+                admins,
+                provinces,
+                login_challenges,
+                qr_login_results,
+                admin_sessions,
+                metrics,
+                next_seq,
+                next_audit_seq,
+                next_admin_user_id,
+            )) = admin_runtime
+            {
+                let _ = state
+                    .sharded_store
+                    .write_global(|g| {
+                        g.global_admins = admins;
+                        g.sheng_admin_province_by_pubkey = provinces;
+                        g.login_challenges = login_challenges;
+                        g.qr_login_results = qr_login_results;
+                        g.admin_sessions = admin_sessions;
+                        g.metrics = metrics;
+                        g.next_seq = next_seq;
+                        g.next_audit_seq = next_audit_seq;
+                        g.next_admin_user_id = next_admin_user_id;
+                    })
+                    .await;
             }
         }
 
-        // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store 后，清理孤儿需要 async
+        // 中文注释:CPMS 授权站点缓存为异步分片访问,孤儿清理需要在 runtime 内执行。
         app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
 
-        // 2026-04-21:reconcile 是同步调用,只写 legacy store,新增的公安局机构 +
-        // 主账户/费用账户 不会自动落到 sharded_store,前端按省读分片看不到。
-        // 启动 + preload 完成后,从 legacy 快照幂等同步一次,保证详情页/列表可见。
+        // 中文注释:启动后把模块 Store 快照里的公安局机构同步到进程内分片缓存,
+        // 保证详情页/列表按省读取时能看到最新机构和账户。
         app_core::runtime_ops::sync_public_security_to_sharded(&state).await;
 
         tokio::spawn(bind_callback_worker(state.clone()));

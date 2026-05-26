@@ -44,8 +44,7 @@ pub(crate) async fn admin_cpms_status_scan(
         return api_error(StatusCode::UNAUTHORIZED, 1006, "qr expired");
     }
 
-    // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
-    // 先从分片读 cpms site（async），再拿 legacy store 短锁做其余操作
+    // 中文注释:先从进程内分片读 CPMS 站点,再短读模块 Store 快照做其余校验。
     let site_sfid_key = payload.site_sfid.trim().to_string();
     let site_keys: CpmsSiteKeys = {
         let province = match crate::cpms::resolve_site_province_via_shard(

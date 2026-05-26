@@ -36,6 +36,9 @@
 - `login_challenges`
 - `qr_login_results`
 
+短期登录状态仍由 CPMS 本机 PostgreSQL 承载；`backend/src/store/StoreDb`
+统一封装清理逻辑,定时删除过期 session、过期 challenge 和超时二维码登录结果。
+
 ## 5. 安全约束
 - challenge 一次性消费，防重放
 - challenge 带有效期，过期拒绝

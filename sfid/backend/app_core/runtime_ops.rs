@@ -524,23 +524,22 @@ pub(crate) fn backfill_and_reconcile_public_security(state: &AppState) {
 }
 
 /// 把 `backfill_and_reconcile_public_security` 新写入的公安局机构 + 2 条默认账户
-/// 从全局 store 幂等同步到 sharded_store。
+/// 从模块 Store 快照幂等同步到进程内分片缓存。
 ///
 /// 为什么需要这一步:
 /// - `reconcile_public_security_for_province` 是同步函数,只持全局 `&mut Store`,
 ///   无法写 sharded_store(sharded 接口是 async)
-/// - 启动迁移流程只在空库首次启动时写 DB
-/// - `preload_all_shards` 从 DB 加载已分片的数据,读不到全局内存新增条目
+/// - ShardedStore 当前是进程内缓存,启动后需要从模块 Store 快照同步一次
 ///
 /// 所以启动时 reconcile 新建的公安局机构和它们的主账户 / 费用账户,前端按省读
-/// sharded_store 永远看不到。本函数在 tokio runtime 起来 + preload 完成后跑一次,
-/// 把全局 store 里所有 `PublicSecurity` 机构及其默认账户写入 sharded,**幂等**(or_insert)。
+/// sharded_store 否则看不到。本函数在 tokio runtime 起来后跑一次,
+/// 把模块 Store 快照里所有 `PublicSecurity` 机构及其默认账户写入分片缓存,**幂等**(or_insert)。
 pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     use crate::institutions::model::{account_key_to_string, MultisigAccount, MultisigInstitution};
     use crate::institutions::MultisigChainStatus;
     use crate::sfid::InstitutionCategory;
 
-    // 1. 从全局 store 快照取所有公安局机构 + 其 2 条默认账户
+    // 1. 从模块 Store 快照取所有公安局机构 + 其 2 条默认账户
     let snapshot: Vec<(MultisigInstitution, Vec<MultisigAccount>)> = match state.store.read() {
         Ok(store) => {
             let institutions: Vec<MultisigInstitution> = store
@@ -615,8 +614,8 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
         }
     }
 
-    // 3. 对全局 store 里存在但缺默认账户的公安局,再补齐一次默认账户。
-    //    走 DUOQIAN_V1 本地派生;同时写全局 store + sharded。
+    // 3. 对模块 Store 快照里存在但缺默认账户的公安局,再补齐一次默认账户。
+    //    走 DUOQIAN_V1 本地派生;同时写模块 Store 快照 + 分片缓存。
     let missing: Vec<(String, String)> = {
         let mut out: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
         if let Ok(store) = state.store.read() {
@@ -698,7 +697,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
 /// 启动时清理孤儿 CPMS 站点。
 ///
-/// Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
+/// 中文注释:清理 CPMS 授权缓存中已无对应机构的孤儿站点。
 ///
 /// 中文注释:`cpms_site_keys` 里的记录通过
 /// `(admin_province, city_name, institution_code)` 元组关联到
@@ -706,7 +705,7 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
 /// 对应的 CPMS 站点就成了孤儿——老 UI 能看见,新详情页入口看不见。
 /// 直接硬删,不留数据包袱(`feedback_chain_in_dev.md`)。
 pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
-    // 构建 (province, city, institution_code) 合法三元组集合:取自所有机构(全局 store)
+    // 构建 (province, city, institution_code) 合法三元组集合:取自所有机构模块快照。
     let valid: std::collections::HashSet<(String, String, String)> = match state.store.read() {
         Ok(store) => store
             .multisig_institutions
@@ -773,7 +772,7 @@ pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
         }
     }
 
-    // 同步写 sharded_store + 全局 store(清理孤儿 cpms)
+    // 同步写分片缓存 + 模块 Store 快照(清理孤儿 CPMS)。
     {
         match state.store.write() {
             Ok(mut store) => {
@@ -784,7 +783,7 @@ pub(crate) async fn cleanup_orphan_cpms_sites(state: &AppState) {
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, "global store mirror failed (cleanup orphan cpms, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cleanup orphan cpms, shard already committed)");
             }
         }
     }

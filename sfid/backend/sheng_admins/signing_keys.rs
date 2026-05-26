@@ -100,7 +100,7 @@ pub(crate) fn pair_signing_pubkey_hex(pair: &Sr25519Pair) -> String {
     format!("0x{}", hex::encode(pair.public().0))
 }
 
-/// 把签名密钥的可展示元数据写回 legacy store 与 GlobalShard。
+/// 把签名密钥的可展示元数据写回模块 Store 快照与 GlobalShard。
 ///
 /// 中文注释:签名 seed 真私钥只保存在 `signing_seed_store.rs` 的加密文件中,
 /// 本函数只写回页面展示需要的签名公钥和生成时间。

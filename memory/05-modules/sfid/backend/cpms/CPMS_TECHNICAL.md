@@ -4,6 +4,7 @@
 - 任务卡:
   - `memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
 
 ## 0. 模块边界
 
@@ -55,7 +56,7 @@ sfid/backend/cpms/
 ## 4. 归属说明
 
 - `CpmsSiteKeys` 等数据结构归 `cpms/model.rs`。
-- CPMS 授权数据按省写入 `store_shards`，并在过渡期同步 legacy store。
+- CPMS 授权主数据写入 `store_cpms` 模块快照表；`store_shards/` 只保留进程内省分片缓存。
 - ARCHIVE 验真入口为 `cpms::verify_cpms_archive_qr`，公民绑定复用同一入口。
 - CPMS 授权省域判断归 `cpms::scope`。
 - 不得再从 `sheng_admins` 引用 CPMS handler。

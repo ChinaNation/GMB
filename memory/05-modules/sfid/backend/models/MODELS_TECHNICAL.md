@@ -1,8 +1,9 @@
 # MODELS 模块技术文档
 
-- 最后更新:2026-05-02
+- 最后更新:2026-05-25
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
 
 ## 1. 模块定位
 
@@ -17,7 +18,7 @@ sfid/backend/models/
 ├── mod.rs      # 全局共享模型 facade
 ├── error.rs    # ApiResponse / ApiError / HealthData
 ├── role.rs     # AdminRole / AdminStatus / AdminUser / 操作员 DTO
-└── store.rs    # Store 聚合体、审计、指标、链请求回执、回调、奖励、投票缓存
+└── store.rs    # Store 聚合体类型、审计、指标、链请求回执、回调、奖励、投票缓存
 ```
 
 ## 3. 已归还的业务模型
@@ -40,11 +41,14 @@ sfid/backend/institutions/model.rs
 
 - `main.rs` 继续 `pub(crate) use models::*` 暴露全局共享类型。
 - 业务模型由对应模块导出,例如 `citizens::model::*`、`cpms::model::*`。
+- `Store` 仍作为内存聚合体类型使用,但持久化由 `main.rs` 拆到
+  `store_citizens / store_cpms / store_institutions / store_ops` 四张模块快照表。
 - `Store` 可以引用业务模块模型,但业务 DTO 不反向塞回 `models`。
 
 ## 5. 铁律
 
 - 新增业务 DTO 放到对应功能模块的 `model.rs`。
 - 只有真正跨模块共享且没有明确业务归属的模型才能放入 `models`。
+- 禁止恢复旧整包 runtime Store 表或旧 `runtime_cache_entries` 兼容层。
 - 禁止在 `models` 目录恢复公民、CPMS、SFID 元信息、空权限占位、
   空会话占位或省管理员槽位 facade 文件。
