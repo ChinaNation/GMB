@@ -1,13 +1,13 @@
-// 中文注释:Phase 2 Day 1 —— ShardedStore 核心访问 API。
+// 中文注释:ShardedStore 核心访问 API。
 //
-// 本模块提供按省分片的 Store 访问入口:
+// 本模块提供按省分片的进程内缓存访问入口:
 //   - `DashMap<province, Arc<RwLock<StoreShard>>>` 实现省级并发隔离;
 //   - `Arc<RwLock<GlobalShard>>` 承载跨省共享状态;
-//   - `ShardBackend` 抽象让持久化可插拔(Day 1 mock,Day 2 Postgres)。
+//   - `ShardBackend` 抽象只用于进程内缓存测试和启动装载。
 //
-// 关键并发约束(impl.md 4.1 节):
+// 关键并发约束:
 //   1. 闭包 `f` 一律是同步的,不能 await;锁持有时间必须尽量短。
-//   2. 写入闭包执行完立即 drop RwLock guard,再 await 持久化,避免
+//   2. 写入闭包执行完立即 drop RwLock guard,再 await 写回缓存后端,避免
 //      持有锁跨 .await 造成死锁 / 卡死 tokio executor。
 //   3. `get_or_load_shard` 不能在 DashMap `entry` 闭包里 `.await`;
 //      改为先 `get` 试一次,miss 则先 await 加载,再 `entry().or_insert`
@@ -15,8 +15,6 @@
 //   4. `for_each_province` 先收集快照再回调,避免跨 await 拿 guard。
 
 pub(crate) mod backend;
-pub(crate) mod migration;
-pub(crate) mod pg_backend;
 pub(crate) mod shard_types;
 
 use std::sync::{Arc, RwLock};
@@ -30,18 +28,14 @@ pub(crate) struct ShardedStore {
     shards: DashMap<String, Arc<RwLock<StoreShard>>>,
     global: Arc<RwLock<GlobalShard>>,
     backend: Arc<dyn ShardBackend>,
-    /// 过渡期双写开关(Phase 2 中);Day 1 只存,不用。
-    #[allow(dead_code)]
-    double_write: bool,
 }
 
 impl ShardedStore {
-    pub(crate) fn new(backend: Arc<dyn ShardBackend>, double_write: bool) -> Self {
+    pub(crate) fn new(backend: Arc<dyn ShardBackend>) -> Self {
         Self {
             shards: DashMap::new(),
             global: Arc::new(RwLock::new(GlobalShard::default())),
             backend,
-            double_write,
         }
     }
 
@@ -56,23 +50,6 @@ impl ShardedStore {
         Ok(())
     }
 
-    /// 启动时预加载所有省份分片。返回成功加载的分片数(不含 global)。
-    pub(crate) async fn preload_all_shards(&self) -> Result<usize, String> {
-        let keys = self.backend.list_shard_keys().await?;
-        let mut count = 0usize;
-        for key in keys {
-            if key == "global" {
-                continue;
-            }
-            if let Some(shard) = self.backend.load_shard(&key).await? {
-                self.shards
-                    .insert(key.clone(), Arc::new(RwLock::new(shard)));
-                count += 1;
-            }
-        }
-        Ok(count)
-    }
-
     /// 读本省(懒加载)。
     pub(crate) async fn read_province<F, R>(&self, province: &str, f: F) -> Result<R, String>
     where
@@ -85,7 +62,7 @@ impl ShardedStore {
         Ok(f(&*guard))
     }
 
-    /// 写本省 + 写穿透持久化。
+    /// 写本省 + 写回进程内后端。
     pub(crate) async fn write_province<F, R>(&self, province: &str, f: F) -> Result<R, String>
     where
         F: FnOnce(&mut StoreShard) -> R,
@@ -102,7 +79,7 @@ impl ShardedStore {
             guard.version += 1;
             f(&mut *guard)
         };
-        // 释放锁后再持久化,避免跨 await 持锁。
+        // 释放锁后再写回后端,避免跨 await 持锁。
         self.persist_shard(province).await?;
         Ok(result)
     }
@@ -133,7 +110,7 @@ impl ShardedStore {
         Ok(f(&mut *guard))
     }
 
-    /// 写全局状态 + 写穿透。
+    /// 写全局状态 + 写回进程内后端。
     pub(crate) async fn write_global<F, R>(&self, f: F) -> Result<R, String>
     where
         F: FnOnce(&mut GlobalShard) -> R,
@@ -257,7 +234,7 @@ mod tests {
 
     fn new_store() -> ShardedStore {
         let backend: Arc<dyn ShardBackend> = Arc::new(MockShardBackend::new());
-        ShardedStore::new(backend, false)
+        ShardedStore::new(backend)
     }
 
     #[tokio::test]
@@ -296,7 +273,7 @@ mod tests {
             shard.version = 1;
             backend.save_shard("江苏省", &shard).await.unwrap();
         }
-        let store = ShardedStore::new(backend.clone() as Arc<dyn ShardBackend>, false);
+        let store = ShardedStore::new(backend.clone() as Arc<dyn ShardBackend>);
         // 新 store 完全没加载,read_province 应能走懒加载拿到 7
         let id = store
             .read_province("江苏省", |s| s.next_citizen_id)
@@ -411,22 +388,5 @@ mod tests {
             .unwrap();
         let cleanup_at = store.read_global(|g| g.chain_auth_last_cleanup_at).unwrap();
         assert!(cleanup_at.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_preload_all_shards() {
-        let backend = Arc::new(MockShardBackend::new());
-        for p in ["川省", "鄂省", "赣省"] {
-            let mut s = StoreShard::default();
-            s.province = p.into();
-            s.version = 1;
-            backend.save_shard(p, &s).await.unwrap();
-        }
-        let store = ShardedStore::new(backend as Arc<dyn ShardBackend>, false);
-        let n = store.preload_all_shards().await.unwrap();
-        assert_eq!(n, 3);
-        // 再 read 一次确认已加载(不会再打 backend)
-        let v = store.read_province("川省", |s| s.version).await.unwrap();
-        assert_eq!(v, 1);
     }
 }

@@ -1,19 +1,12 @@
-// 中文注释:Phase 2 Day 1 —— 分片数据结构定义。
+// 中文注释:进程内分片缓存结构定义。
 //
 // 本文件只定义 StoreShard(每省一份)和 GlobalShard(跨省共享)两个
-// 结构体。它们对应 impl.md 第 3.3 / 3.4 节的字段清单。字段类型统一
-// 引用各功能模块下已有的类型,
-// 不新建任何数据结构、不改动 Phase 1 代码。
+// 结构体。字段类型统一引用各功能模块下已有类型,避免在缓存层复制业务 DTO。
 //
 // 这两个结构体必须:
-//   1. `Serialize + Deserialize`:走 Postgres JSONB 持久化;
+//   1. `Serialize + Deserialize`:便于测试快照和进程内复制;
 //   2. `Default`:允许从无到有按需创建空分片;
-//   3. `Clone + Debug`:方便测试快照、日志打印。
-//
-// 注意:`cpms_pending_registrations` 字段在当前代码里没有独立类型,
-// impl.md 的伪代码里虽然列出了它,但实际 Store 中并不存在
-// `PendingCpmsRegistration`。Day 1 按「实际代码为准」的铁律,
-// 暂不加该字段,等 Day 3 handler 改造时若确实需要再回填。
+//   3. `Clone + Debug`:方便读写缓存时短锁复制。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

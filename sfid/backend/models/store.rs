@@ -1,8 +1,8 @@
 //! 中文注释:进程内 `Store` 聚合体 + 敏感种子封装 + 服务指标 / 审计 / 链请求回执 /
 //! 异步绑定回调 / 公民奖励 / 投票验证缓存。
 //!
-//! 中文注释:本文件维护 `Store` 这棵进程内状态树。业务模型类型只引用对应
-//! 功能模块,不在 `models` 里复制定义。
+//! 中文注释:本文件维护 `Store` 聚合体类型。运行时短锁仍使用这棵内存对象,
+//! 持久化由 `main.rs` 拆成各模块 Store 快照表,不再写旧整包 runtime JSON。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

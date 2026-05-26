@@ -68,6 +68,8 @@
 
 - 旧 `admin_bind_confirm` + `RewardStateRecord(Pending)` 双写顺序约束已随老绑定流程下线;
   当前 `citizen_bind` 走 challenge + signature 模式,详见 `binding.rs` 内联注释。
+- 公民主数据和绑定短期状态写入 `store_citizens` 模块快照表,不再进入旧
+  `runtime_cache_entries` 或旧整包 Store 表。
 - CPMS QR 签名链路已废弃(SFID-CPMS QR v1 走 archive/verify 验真端点),
   `cpms_qr` 仅保留状态扫码仍需复用的 canonical 文本拼装能力。
 - ARCHIVE 档案码只能在 SFID 已有钱包地址的待绑定记录上使用；正式绑定由

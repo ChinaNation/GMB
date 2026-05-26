@@ -25,7 +25,7 @@ const MAX_PROVINCE_CHARS: usize = 100;
 const MAX_STATUS_REASON_CHARS: usize = 500;
 const GEO_SEAL_PREFIX: &str = "g1";
 
-// 中文注释:Phase 2 Day 3 Round 2 迁移 cpms_site_keys 到 sharded_store。
+// 中文注释:`cpms_site_keys` 主数据写入模块 Store 快照,同时同步进程内省分片缓存。
 // 根据 site_sfid 定位所在省份分片:
 //   - sheng-admin 已经锁定 province scope,直接用 scope 省即可;
 //   - 无省域 scope 的内部调用才跨省扫描定位,开销可接受(admin 低频操作)。
@@ -54,8 +54,8 @@ pub(crate) async fn resolve_site_province_via_shard(
     found.ok_or((StatusCode::NOT_FOUND, "site_sfid not found"))
 }
 
-/// Phase 2 Day 3 Round 2:两段提交 audit_log。
-/// 先 cpms 写分片(已经成功),再拿 legacy store 短锁写 audit_log。
+/// CPMS 写入采用两步提交风格。
+/// 先写进程内分片缓存,再拿模块 Store 短锁保存快照和审计日志。
 /// 审计日志写失败只记 WARN,返回 OK(业务数据不丢)。
 #[allow(clippy::too_many_arguments)]
 fn append_cpms_audit_log_best_effort(
@@ -233,7 +233,7 @@ pub(crate) async fn generate_cpms_install_qr(
         updated_by: Some(ctx.admin_pubkey.clone()),
         updated_at: Some(created_at),
     };
-    let new_site_for_legacy = new_site.clone();
+    let new_site_for_store = new_site.clone();
     let insert_result = state
         .sharded_store
         .write_province(&province, move |shard| {
@@ -260,16 +260,16 @@ pub(crate) async fn generate_cpms_install_qr(
         }
     }
 
-    // 双写过渡期:sharded_store + legacy store 同步写
+    // 中文注释:同步写模块 Store 快照,作为 CPMS 授权主数据持久化来源。
     {
         match state.store.write() {
             Ok(mut store) => {
                 store
                     .cpms_site_keys
-                    .insert(site_sfid.clone(), new_site_for_legacy);
+                    .insert(site_sfid.clone(), new_site_for_store);
             }
             Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms generate, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cpms generate, shard already committed)");
             }
         }
     }
@@ -370,7 +370,7 @@ pub(crate) async fn archive_verify(
 }
 
 /// 作废安装令牌。
-/// Phase 2 Day 3:cpms_site_keys 迁移到 sharded_store
+/// 中文注释:按 site_sfid 找到省分片后,撤销 CPMS 安装授权。
 pub(crate) async fn revoke_install_token(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -409,7 +409,7 @@ pub(crate) async fn revoke_install_token(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
     }
 
-    // 双写过渡期:sharded_store + legacy store 同步写
+    // 中文注释:同步写模块 Store 快照,保证重启后授权状态仍可恢复。
     {
         match state.store.write() {
             Ok(mut store) => {
@@ -420,7 +420,7 @@ pub(crate) async fn revoke_install_token(
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms revoke, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cpms revoke, shard already committed)");
             }
         }
     }
@@ -578,7 +578,7 @@ pub(crate) async fn reissue_install_token(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
     }
 
-    // 双写过渡期:sharded_store + legacy store 同步写
+    // 中文注释:同步写模块 Store 快照,保存重新签发后的安装密钥状态。
     {
         match state.store.write() {
             Ok(mut store) => {
@@ -596,7 +596,7 @@ pub(crate) async fn reissue_install_token(
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms reissue, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cpms reissue, shard already committed)");
             }
         }
     }
@@ -686,7 +686,7 @@ pub(crate) async fn delete_cpms_keys(
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
-    // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
+    // 中文注释:先按省分片删除缓存记录,再同步模块 Store 快照。
     let province =
         match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
             .await
@@ -730,14 +730,14 @@ pub(crate) async fn delete_cpms_keys(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
     };
 
-    // 双写过渡期:sharded_store + legacy store 同步写
+    // 中文注释:同步删除模块 Store 快照中的 CPMS 授权记录。
     {
         match state.store.write() {
             Ok(mut store) => {
                 store.cpms_site_keys.remove(&site_sfid);
             }
             Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms delete, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cpms delete, shard already committed)");
             }
         }
     }
@@ -771,8 +771,8 @@ pub(crate) async fn list_cpms_keys(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
-    // 按 admin_province scope 决定读一省还是遍历全部
+    // 中文注释:CPMS 授权列表从进程内省分片缓存读取。
+    // 按 admin_province scope 决定读一省还是遍历全部。
     let scope_province = ctx.admin_province.clone();
     let mut sites: Vec<CpmsSiteKeys> = Vec::new();
     if let Some(ref p) = scope_province {
@@ -803,7 +803,7 @@ pub(crate) async fn list_cpms_keys(
             return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e);
         }
     }
-    // 拿 legacy store 短锁做 admin 名称解析
+    // 中文注释:拿模块 Store 短锁做 admin 名称解析。
     let store = match store_read_or_500(&state) {
         Ok(v) => v,
         Err(resp) => return resp,
@@ -855,7 +855,7 @@ pub(crate) async fn get_cpms_site_by_institution(
         return api_error(StatusCode::BAD_REQUEST, 1001, "sfid_number is required");
     }
 
-    // Phase 2 Day 3 Round 2:机构也从 sharded_store 读
+    // 中文注释:机构详情从进程内省分片缓存读取。
     let province_code = extract_province_code_from_sfid(&sfid_number);
     let province_name = match crate::sfid::province::province_name_by_code(&province_code) {
         Some(n) => n.to_string(),
@@ -918,7 +918,7 @@ pub(crate) async fn get_cpms_site_by_institution(
         Ok(v) => v,
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
     };
-    // 审计用的 admin display name 仍走 legacy store 短读
+    // 中文注释:展示用 admin 名称从模块 Store 快照短读。
     let matched = match state.store.read() {
         Ok(store) => matched_site.map(|site| cpms_site_keys_to_list_row(&site, &store)),
         Err(_) => matched_site.map(|site| cpms_site_keys_to_list_row_simple(&site, String::new())),
@@ -953,7 +953,7 @@ async fn update_cpms_site_status(
     if reason_text.chars().count() > MAX_STATUS_REASON_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "reason too long");
     }
-    // Phase 2 Day 3：cpms_site_keys 迁移到 sharded_store
+    // 中文注释:从进程内省分片缓存读取 CPMS 站点状态。
     let province =
         match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
             .await
@@ -998,7 +998,7 @@ async fn update_cpms_site_status(
         Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, 1004, &e),
     };
 
-    // 双写过渡期:sharded_store + legacy store 同步写(仅状态实际变更时)
+    // 中文注释:状态实际变更时同步写模块 Store 快照。
     if changed {
         match state.store.write() {
             Ok(mut store) => {
@@ -1010,12 +1010,12 @@ async fn update_cpms_site_status(
                 }
             }
             Err(e) => {
-                tracing::warn!(error = %e, "dual-write legacy store failed (cpms status update, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (cpms status update, shard already committed)");
             }
         }
     }
 
-    // 拿 legacy store 短锁做 admin 名称解析 + 审计日志
+    // 中文注释:拿模块 Store 短锁做 admin 名称解析 + 审计日志。
     let created_by_name = match state.store.read() {
         Ok(store) => resolve_admin_display_name(&store, &output.created_by),
         Err(_) => output.created_by.clone(),

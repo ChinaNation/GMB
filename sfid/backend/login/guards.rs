@@ -15,10 +15,8 @@ use crate::*;
 use super::model::AdminAuthContext;
 use super::signature::{build_admin_display_name, parse_sr25519_pubkey_bytes};
 
-/// Phase 2 admin_auth 迁移到 GlobalShard：
-/// session 验证 + 用户查找全部从 sharded_store.read_global 同步读取,
-/// 不再 lock legacy store 的写锁。write_global(async) 用 tokio::task::spawn
-/// 后台执行,不阻塞 auth 返回。
+/// 中文注释:admin_auth 优先从进程内 GlobalShard 读取会话和管理员缓存。
+/// 未命中时只短读模块 Store 快照,避免认证链路长期持有写锁。
 pub(super) fn admin_auth(
     state: &AppState,
     headers: &HeaderMap,
@@ -32,7 +30,7 @@ pub(super) fn admin_auth(
             .filter(|v| *v > 0)
             .unwrap_or(10);
 
-        // ── Phase 2:后台节流清理(每 60 秒一次,不阻塞请求) ──
+        // ── 后台节流清理(每 60 秒一次,不阻塞请求) ──
         static LAST_CLEANUP: AtomicI64 = AtomicI64::new(0);
         let last = LAST_CLEANUP.load(Ordering::Relaxed);
         let now_ts = now.timestamp();
@@ -110,9 +108,9 @@ pub(super) fn admin_auth(
 
         let session_pubkey = session.admin_pubkey.clone();
 
-        // ── 4. 查用户信息:优先 GlobalShard,fallback legacy store ──
+        // ── 4. 查用户信息:优先 GlobalShard,未命中再读模块 Store 快照 ──
         // GlobalShard.global_admins 包含 ShengAdmin;
-        // ShiAdmin 可能还未同步到 GlobalShard,fallback legacy。
+        // ShiAdmin 可能还未同步到 GlobalShard,因此保留 Store 快照兜底。
         let user_info = state
             .sharded_store
             .read_global(|g| {
@@ -157,7 +155,7 @@ pub(super) fn admin_auth(
             })?;
 
         // GlobalShard 命中:ShengAdmin(或已同步的 ShiAdmin)
-        // 未命中:fallback legacy store(ShiAdmin 可能尚未同步到 GlobalShard)
+        // 未命中:兜底读取模块 Store 快照(ShiAdmin 可能尚未同步到 GlobalShard)
         let (
             admin_pubkey,
             role,
@@ -170,7 +168,7 @@ pub(super) fn admin_auth(
         ) = if let Some(info) = user_info {
             info
         } else {
-            // fallback:从 legacy store 读(只拿读锁)
+            // 兜底:从模块 Store 快照读(只拿读锁)
             let store = store_read_or_500(state)?;
             let Some(user) = store.admin_users_by_pubkey.get(&session_pubkey) else {
                 return Err(api_error(StatusCode::FORBIDDEN, 2002, "admin not found"));

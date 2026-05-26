@@ -1,6 +1,6 @@
 # SFID 后端目录布局
 
-- 最后更新:2026-05-02
+- 最后更新:2026-05-25
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-backend-src平移根目录.md`
   - `memory/08-tasks/done/20260502-sfid-cpms-sheng目录整改.md`
@@ -8,6 +8,7 @@
   - `memory/08-tasks/done/20260502-sfid-models-scope边界整改.md`
   - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
   - `memory/08-tasks/done/20260502-sfid-sheng-backup-admin-ui.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
 
 ## 当前边界
 
@@ -42,7 +43,7 @@ sfid/backend/
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
 ├── sheng_admins/              # 省管理员治理、市管理员操作员维护、三槽展示、本地 signing seed 管理
-├── store_shards/              # 分片 Store 与迁移辅助
+├── store_shards/              # 进程内省分片缓存,不再持久化到旧 store_shards 表
 ├── db/                        # 数据库迁移和 seed,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
 ├── tests/                     # 集成/e2e 测试
@@ -67,6 +68,19 @@ sfid/backend/
   不因为页面新增按钮而创建 `chain_` 文件。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。
 - 非源码目录 `db/`、`scripts/`、`tests/`、`target/` 不参与业务模块平铺。
+
+## Store 边界
+
+- SFID 后端不再使用旧 `runtime_store`、`runtime_misc`、`runtime_cache_entries`
+  或旧 `store_shards` JSONB 表保存整包 Store。
+- 当前持久化按模块快照表拆分:
+  - `store_citizens`:公民记录、绑定 challenge、状态扫码短期池、投票缓存。
+  - `store_cpms`:CPMS 安装授权和授权状态。
+  - `store_institutions`:机构、账户、机构资料文档。
+  - `store_ops`:登录 challenge/session、扫码登录结果、审计、链幂等、回调任务、指标。
+- `store_shards/` 只保留进程内按省缓存访问 API,用于减少 handler 的跨省扫描和锁竞争;
+  重启后由模块 Store 快照重新同步。
+- `db/migrations/015_store_reset.sql` 明确删除旧整包 JSON 表,不做旧数据迁移。
 
 ## 验收口径
 

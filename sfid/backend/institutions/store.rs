@@ -1,13 +1,13 @@
 //! 机构/账户 store 读写层
 //!
-//! 中文注释:数据存在 `Store` 里(内存 + runtime_cache_entries 持久化),
+//! 中文注释:数据存在 `Store` 里(进程内聚合 + `store_institutions` 模块快照),
 //! 两个 HashMap:
 //!
 //! - `Store::multisig_institutions: HashMap<sfid_number, MultisigInstitution>`
 //! - `Store::multisig_accounts: HashMap<"sfid_number|account_name", MultisigAccount>`
 //!
-//! 持久化通过 `runtime_cache_entries` 表的 payload JSON(见 main.rs 的
-//! load_store_postgres / persist_store_postgres)。本模块**只**操作 in-memory Store。
+//! 持久化通过 `store_institutions` 模块表完成(见 main.rs 的
+//! load_store_postgres / save_store_postgres)。本模块**只**操作进程内 Store。
 
 #![allow(dead_code)]
 

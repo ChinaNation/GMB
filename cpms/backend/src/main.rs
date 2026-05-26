@@ -17,6 +17,7 @@ mod login;
 mod operator_admin;
 mod qr;
 mod ss58;
+mod store;
 mod super_admin;
 
 #[derive(Clone)]
@@ -104,7 +105,7 @@ async fn main() {
         qr_result_gc_lock: Arc::new(RwLock::new(())),
     };
 
-    let cleanup_db = state.db.clone();
+    let cleanup_store = store::StoreDb::new(state.db.clone());
 
     // 前端静态文件目录：优先 CPMS_FRONTEND_DIR 环境变量，默认 ./frontend
     let frontend_dir = env::var("CPMS_FRONTEND_DIR").unwrap_or_else(|_| "./frontend".to_string());
@@ -129,26 +130,13 @@ async fn main() {
 
     // 中文注释：后台定时清理过期 session、challenge 和 QR 登录结果，避免 DB 无限膨胀。
     {
-        let db = cleanup_db;
+        let store = cleanup_store;
         tokio::spawn(async move {
             let interval = tokio::time::Duration::from_secs(300); // 每 5 分钟
             loop {
                 tokio::time::sleep(interval).await;
                 let now = Utc::now().timestamp();
-                let _ = sqlx::query("DELETE FROM sessions WHERE expires_at < $1")
-                    .bind(now)
-                    .execute(&db)
-                    .await;
-                let _ = sqlx::query("DELETE FROM login_challenges WHERE expire_at < $1")
-                    .bind(now)
-                    .execute(&db)
-                    .await;
-                // qr_login_results 保留 10 分钟（供轮询查询）
-                let cutoff = now - 600;
-                let _ = sqlx::query("DELETE FROM qr_login_results WHERE created_at < $1")
-                    .bind(cutoff)
-                    .execute(&db)
-                    .await;
+                store.cleanup_auth_runtime(now).await;
             }
         });
     }

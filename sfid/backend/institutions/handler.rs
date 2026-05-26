@@ -102,8 +102,8 @@ fn extract_city_code(sfid: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Phase 2 Day 3 Round 2:从 sfid_number 解析省代码并映射到省名。
-/// 用于 handler 层确定 sharded_store 分片 key。
+/// 从 sfid_number 解析省代码并映射到省名。
+/// 用于 handler 层确定进程内分片缓存 key。
 fn resolve_province_from_sfid_number(sfid_number: &str) -> Option<String> {
     let code = extract_province_code(sfid_number);
     if code.is_empty() {
@@ -195,7 +195,7 @@ async fn insert_default_accounts_best_effort(
         );
         return;
     }
-    // 同步写全局 store(best-effort)。
+    // 同步写模块 Store 快照(best-effort)。
     if let Ok(mut store) = state.store.write() {
         for name in DEFAULT_ACCOUNT_NAMES {
             let key = account_key_to_string(sfid_number, name);
@@ -218,8 +218,8 @@ async fn insert_default_accounts_best_effort(
     }
 }
 
-/// Phase 2 Day 3 Round 2:两段提交 audit_log(机构/账户版)。
-/// 先 sharded_store async 写业务数据(已成功),再全局 store 短锁写审计。
+/// 两段提交 audit_log(机构/账户版)。
+/// 先写进程内分片缓存,再拿模块 Store 短锁写审计。
 /// 审计写失败只记 WARN,不影响业务返回。
 #[allow(clippy::too_many_arguments)]
 fn append_inst_audit_log_best_effort(
@@ -480,7 +480,7 @@ pub(crate) async fn create_institution(
         let province_code = extract_province_code(&site_sfid);
         let city_code = extract_city_code(&site_sfid);
 
-        // Phase 2 Day 3 Round 2:写 sharded_store 分片
+        // 中文注释:写入进程内省分片缓存。
         let inst = MultisigInstitution {
             sfid_number: site_sfid.clone(),
             institution_name: institution_name_opt.clone(),
@@ -525,7 +525,7 @@ pub(crate) async fn create_institution(
             }
         }
 
-        // 同步写全局 store,供审计与管理员反查读取同一份机构快照。
+        // 同步写模块 Store 快照,供审计与管理员反查读取同一份机构快照。
         {
             match state.store.write() {
                 Ok(mut store) => {
@@ -534,12 +534,12 @@ pub(crate) async fn create_institution(
                         .insert(site_sfid.clone(), inst.clone());
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "global store mirror failed (institution create, shard already committed)");
+                    tracing::warn!(error = %e, "module store snapshot write failed (institution create, shard already committed)");
                 }
             }
         }
 
-        // 审计日志走全局 store 短锁
+        // 审计日志走模块 Store 快照短锁。
         append_inst_audit_log_best_effort(
             &state,
             "INSTITUTION_CREATE",
@@ -756,7 +756,7 @@ pub(crate) async fn update_institution(
         );
     }
 
-    // 同步写全局 store。
+    // 同步写模块 Store 快照。
     {
         match state.store.write() {
             Ok(mut store) => {
@@ -765,7 +765,7 @@ pub(crate) async fn update_institution(
                     .insert(sfid_number.clone(), updated.clone());
             }
             Err(e) => {
-                tracing::warn!(error = %e, "global store mirror failed (institution update)");
+                tracing::warn!(error = %e, "module store snapshot write failed (institution update)");
             }
         }
     }
@@ -810,7 +810,7 @@ pub(crate) async fn create_account(
         Err(e) => return service_error_to_response(e),
     };
 
-    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    // 中文注释:从 sfid_number 解析省份后读取进程内分片缓存。
     let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
@@ -899,7 +899,7 @@ pub(crate) async fn create_account(
         );
     }
 
-    // 同步写全局 store,保持后台反查与审计读取口径一致。
+    // 中文注释:同步写模块 Store 快照,保持后台反查与审计读取口径一致。
     {
         let acc_key = account_key_to_string(&sfid_number, &account_name);
         match state.store.write() {
@@ -907,7 +907,7 @@ pub(crate) async fn create_account(
                 store.multisig_accounts.insert(acc_key, account.clone());
             }
             Err(e) => {
-                tracing::warn!(error = %e, "global store mirror failed (account create, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (account create, shard already committed)");
             }
         }
     }
@@ -963,7 +963,7 @@ pub(crate) async fn list_institutions(
     };
     let scope = get_visible_scope(&ctx);
 
-    // Phase 2 Day 3 Round 2:从 sharded_store 遍历分片收集机构列表
+    // 中文注释:从进程内分片缓存收集机构列表。
     // scope 确定需要扫描哪些省:ShengAdmin/ShiAdmin 只看锁定省。
     let target_provinces: Vec<String> = if let Some(ref locked) = scope.locked_province {
         vec![locked.clone()]
@@ -971,7 +971,7 @@ pub(crate) async fn list_institutions(
         PROVINCES.iter().map(|p| p.name.to_string()).collect()
     };
 
-    // 预先从全局 store 构建 admin pubkey → (name, role_str) 反查表
+    // 预先从模块 Store 快照构建 admin pubkey → (name, role_str) 反查表。
     // 用于 InstitutionListRow.created_by_name / created_by_role 填充
     // 归一化 key:去 0x 前缀 + 转小写,匹配 created_by 的格式
     // 中文注释:当前只剩 ShengAdmin / ShiAdmin 两角色。
@@ -1230,7 +1230,7 @@ pub(crate) async fn get_institution(
     };
     let scope = get_visible_scope(&ctx);
 
-    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    // 中文注释:从 sfid_number 解析省份后读取进程内分片缓存。
     let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
@@ -1302,7 +1302,7 @@ pub(crate) async fn list_accounts(
     };
     let scope = get_visible_scope(&ctx);
 
-    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,读 sharded_store
+    // 中文注释:从 sfid_number 解析省份后读取进程内分片缓存。
     let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
@@ -1387,7 +1387,7 @@ pub(crate) async fn delete_account(
         );
     }
 
-    // Phase 2 Day 3 Round 2:从 sfid_number 解析省份,操作 sharded_store
+    // 中文注释:从 sfid_number 解析省份后操作进程内分片缓存。
     let province = match resolve_province_from_sfid_number(&sfid_number) {
         Some(p) => p,
         None => {
@@ -1458,7 +1458,7 @@ pub(crate) async fn delete_account(
         Ok(Some(_)) => {}
     }
 
-    // 同步写全局 store,供审计与管理员反查读取同一份账户快照。
+    // 同步写模块 Store 快照,供审计与管理员反查读取同一份账户快照。
     {
         let acc_key = account_key_to_string(&sfid_number, &account_name);
         match state.store.write() {
@@ -1466,7 +1466,7 @@ pub(crate) async fn delete_account(
                 store.multisig_accounts.remove(&acc_key);
             }
             Err(e) => {
-                tracing::warn!(error = %e, "global store mirror failed (account delete, shard already committed)");
+                tracing::warn!(error = %e, "module store snapshot write failed (account delete, shard already committed)");
             }
         }
     }

@@ -1,8 +1,9 @@
 # SFID Login 模块技术文档
 
-- 最后更新:2026-05-02
+- 最后更新:2026-05-25
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
+  - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
 
 ## 1. 模块目标
 
@@ -40,9 +41,11 @@ sfid/backend/login/
 - 管理员标识:`admin_pubkey`
 - 角色模型:当前只保留 `ShengAdmin` / `ShiAdmin`
 - 会话载体:`Bearer <access_token>`
-- 会话缓存:`admin_sessions`,登录后同步写入 GlobalShard
-- 挑战缓存:`login_challenges`
-- 二维码登录结果缓存:`qr_login_results`
+- 会话缓存:`admin_sessions`,登录后同步写入进程内 GlobalShard。
+- 挑战缓存:`login_challenges`。
+- 二维码登录结果缓存:`qr_login_results`。
+- 登录短期状态持久化归 `store_ops` 模块快照表,不再进入旧
+  `runtime_cache_entries / runtime_misc`。
 
 ## 5. 核心流程
 
