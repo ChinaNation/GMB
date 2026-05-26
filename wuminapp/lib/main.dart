@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -17,7 +19,7 @@ import 'package:wuminapp_mobile/update/update_badge.dart';
 
 import 'ui/app_theme.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 中文注释：诊断 — 把所有 framework / widget 静默吞掉的异常都打到 logcat。
@@ -53,16 +55,22 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
-  // 先销毁可能残留的旧实例（hot restart 场景），再重新初始化。
+  // 先销毁可能残留的旧实例（hot restart 场景）。
   // 防止 Rust tokio 线程持有已删除的 Dart FFI 回调导致 SIGABRT。
   SmoldotClientManager.instance.dispose();
+
+  runApp(const WuminApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeSmoldotInBackground());
+  });
+}
+
+Future<void> _initializeSmoldotInBackground() async {
   try {
     await SmoldotClientManager.instance.initialize();
   } catch (e) {
     debugPrint('[main] smoldot 轻节点初始化失败: $e');
   }
-
-  runApp(const WuminApp());
 }
 
 class WuminApp extends StatelessWidget {

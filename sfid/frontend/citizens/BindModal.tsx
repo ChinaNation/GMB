@@ -59,7 +59,12 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
   const [bindScannerReady, setBindScannerReady] = useState(false);
   const bindVideoRef = useRef<HTMLVideoElement | null>(null);
   const bindScanCleanupRef = useRef<(() => void) | null>(null);
-  const modalTitle = bindStep === 'sign_challenge' ? '扫码签名' : '扫描档案码';
+  const modalTitle =
+    bindStep === 'sign_challenge'
+      ? '扫码签名'
+      : bindStep === 'scan_signature'
+        ? '扫描签名回执'
+        : '扫描档案码';
 
   // record 变化时重置
   useEffect(() => {
@@ -362,9 +367,6 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         {/* ── 共用:扫签名结果 ── */}
         {bindStep === 'scan_signature' && (
           <>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
-              {bindMode === 'bind_archive' ? '第三步' : '第四步'}：扫描签名结果二维码
-            </Typography.Text>
             {scannerBox('点击扫描签名二维码')}
             <div style={{ textAlign: 'center' }}>
               <Button onClick={onToggleBindScanner} loading={archiveCodeScanLoading}>
