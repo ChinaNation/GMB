@@ -19,6 +19,24 @@
 - 签名算法由 `lib/signer/` 提供，本模块不直接实现签名细节
 - SFID 公民绑定使用 `sign_request / sign_response` 通用签名协议;
   `sign_response.id` 必须原样回传 `sign_request.id`,不得在 App 侧改写。
+- CPMS 阶段只使用 `user_contact` 钱包地址码，不使用签名请求。
+
+## 1b. CPMS 档案钱包账户
+
+- 最后更新:2026-05-26
+- 任务卡:`memory/08-tasks/open/20260526-cpms-wallet-address-only.md`
+
+wuminapp 电子护照页使用 `WUMIN_QR_V1 / user_contact` 向 CPMS 出示钱包地址。CPMS
+只扫描该固定码并保存 `wallet_address / wallet_pubkey`，不要求 wuminapp 在 CPMS 阶段签名。
+
+```text
+kind = user_contact
+body.address = 钱包 SS58 地址
+body.name = 电子护照钱包
+```
+
+钱包签名验证属于 SFID 绑定阶段：SFID 读取 CPMS 出具的 ARCHIVE 后，再生成 SFID 绑定
+`sign_request`，wuminapp 签名并返回 `sign_response`。
 
 ## 2. 目录结构
 

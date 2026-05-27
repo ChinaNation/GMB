@@ -14,8 +14,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    authz, dangan, err, find_admin_by_user_id, initialize, ok, write_audit, ApiError, ApiResponse,
-    AppState, Archive,
+    authz, dangan, err, find_admin_by_user_id, initialize, ok, ss58, write_audit, ApiError,
+    ApiResponse, AppState, Archive,
 };
 
 #[derive(Deserialize)]
@@ -66,6 +66,11 @@ struct QrPrintData {
     printed_at: i64,
 }
 
+#[derive(Deserialize)]
+struct WalletBindRequest {
+    wallet_address: String,
+}
+
 // 编辑档案请求
 #[derive(Deserialize)]
 struct UpdateArchiveRequest {
@@ -89,6 +94,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/archives/:archive_id/qr/generate",
             post(generate_archive_qr),
+        )
+        .route(
+            "/api/v1/archives/:archive_id/wallet",
+            post(bind_archive_wallet),
         )
         .route(
             "/api/v1/archives/:archive_id/qr/print",
@@ -138,7 +147,7 @@ async fn create_archive(
     let now_ts = Utc::now().timestamp();
     let valid_from = dangan::archive_valid_from(now_ts);
     let valid_until = dangan::archive_valid_until(now_ts);
-    let mut archive = Archive {
+    let archive = Archive {
         archive_id: format!("ar_{}", Uuid::new_v4().simple()),
         archive_no: archive_no.clone(),
         province_code: install.province_code,
@@ -157,20 +166,15 @@ async fn create_archive(
         valid_from,
         valid_until,
         citizen_status_updated_at: now_ts,
+        wallet_address: None,
+        wallet_pubkey: None,
+        wallet_sig_alg: "sr25519".to_string(),
+        wallet_bound_at: None,
+        wallet_bound_by: None,
         archive_qr_payload: String::new(),
         created_at: now_ts,
         updated_at: now_ts,
     };
-
-    // 中文注释：档案创建成功前即生成 ARCHIVE payload，避免出现无签发码档案。
-    let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
-    archive.archive_qr_payload = serde_json::to_string(&archive_qr).map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "archive qr encode failed",
-        )
-    })?;
 
     sqlx::query(
         "INSERT INTO archives (archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
@@ -310,6 +314,59 @@ async fn get_archive(
     Ok(Json(ok(archive)))
 }
 
+async fn bind_archive_wallet(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(archive_id): Path<String>,
+    Json(req): Json<WalletBindRequest>,
+) -> Result<Json<ApiResponse<Archive>>, (StatusCode, Json<ApiError>)> {
+    let ctx = authz::require_role(&state, &headers, "OPERATOR_ADMIN").await?;
+    let now = Utc::now().timestamp();
+    let wallet_address = req.wallet_address.trim();
+    let wallet_pubkey = ss58::ss58_to_pubkey_hex(wallet_address)
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid wallet_address"))?;
+
+    // 中文注释:CPMS 线下只确认并保存钱包地址;钱包签名验证统一放到 SFID 绑定阶段。
+    let result = sqlx::query(
+        "UPDATE archives
+         SET wallet_address=$1, wallet_pubkey=$2, wallet_sig_alg='sr25519',
+             wallet_bound_at=$3, wallet_bound_by=$4, archive_qr_payload='', updated_at=$5
+         WHERE archive_id=$6",
+    )
+    .bind(wallet_address)
+    .bind(&wallet_pubkey)
+    .bind(now)
+    .bind(&ctx.user_id)
+    .bind(now)
+    .bind(&archive_id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "update archive wallet failed",
+        )
+    })?;
+    if result.rows_affected() == 0 {
+        return Err(err(StatusCode::NOT_FOUND, 3004, "archive not found"));
+    }
+
+    write_audit(
+        &state,
+        Some(ctx.user_id),
+        "BIND_ARCHIVE_WALLET",
+        "CITIZEN_ARCHIVE",
+        Some(archive_id.clone()),
+        "SUCCESS",
+        serde_json::json!({ "wallet_pubkey": wallet_pubkey, "wallet_address": wallet_address }),
+    )
+    .await?;
+
+    let archive = fetch_archive_by_id(&state, &archive_id).await?;
+    Ok(Json(ok(archive)))
+}
+
 /// 编辑公民档案。修改后自动重新生成 ARCHIVE 二维码。
 async fn update_archive(
     State(state): State<AppState>,
@@ -357,15 +414,19 @@ async fn update_archive(
 
     archive.updated_at = Utc::now().timestamp();
 
-    // 中文注释：状态或选举资格变化会改变签名原文，必须重新生成 ARCHIVE payload。
-    let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
-    archive.archive_qr_payload = serde_json::to_string(&archive_qr).map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "archive qr encode failed",
-        )
-    })?;
+    // 中文注释:只有已保存钱包地址的档案才允许签出 ARCHIVE;编辑实名字段时保留该硬门槛。
+    archive.archive_qr_payload = if archive_has_wallet(&archive) {
+        let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
+        serde_json::to_string(&archive_qr).map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "archive qr encode failed",
+            )
+        })?
+    } else {
+        String::new()
+    };
 
     sqlx::query(
         "UPDATE archives SET full_name=$1, birth_date=$2, gender_code=$3, height_cm=$4, town_code=$5, village_id=$6, address=$7, citizen_status=$8, voting_eligible=$9, citizen_status_updated_at=$10, archive_qr_payload=$11, updated_at=$12 WHERE archive_id=$13",
@@ -401,6 +462,19 @@ async fn generate_archive_qr(
     let qr_payload = dangan::build_archive_qr_payload(&state, &archive).await?;
     let qr_content = serde_json::to_string(&qr_payload)
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "qr encode failed"))?;
+    sqlx::query("UPDATE archives SET archive_qr_payload=$1, updated_at=$2 WHERE archive_id=$3")
+        .bind(&qr_content)
+        .bind(Utc::now().timestamp())
+        .bind(&archive_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "save archive qr failed",
+            )
+        })?;
 
     write_audit(
         &state,
@@ -486,7 +560,7 @@ async fn fetch_archive_by_id(
     archive_id: &str,
 ) -> Result<Archive, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -524,8 +598,26 @@ fn row_to_archive(row: sqlx::postgres::PgRow) -> Archive {
                 row.try_get("updated_at")
                     .unwrap_or_else(|_| Utc::now().timestamp())
             }),
+        wallet_address: row.try_get("wallet_address").ok(),
+        wallet_pubkey: row.try_get("wallet_pubkey").ok(),
+        wallet_sig_alg: row
+            .try_get("wallet_sig_alg")
+            .unwrap_or_else(|_| "sr25519".to_string()),
+        wallet_bound_at: row.try_get("wallet_bound_at").ok(),
+        wallet_bound_by: row.try_get("wallet_bound_by").ok(),
         archive_qr_payload: row.try_get("archive_qr_payload").unwrap_or_default(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }
+}
+
+fn archive_has_wallet(archive: &Archive) -> bool {
+    archive
+        .wallet_address
+        .as_deref()
+        .is_some_and(|v| !v.trim().is_empty())
+        && archive
+            .wallet_pubkey
+            .as_deref()
+            .is_some_and(|v| !v.trim().is_empty())
 }

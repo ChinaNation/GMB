@@ -97,6 +97,11 @@ CREATE TABLE IF NOT EXISTS archives (
   valid_from TEXT NOT NULL DEFAULT '',
   valid_until TEXT NOT NULL DEFAULT '',
   citizen_status_updated_at BIGINT NOT NULL DEFAULT 0,
+  wallet_address TEXT,
+  wallet_pubkey TEXT,
+  wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+  wallet_bound_at BIGINT,
+  wallet_bound_by TEXT,
   archive_qr_payload TEXT NOT NULL DEFAULT '',
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL

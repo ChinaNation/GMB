@@ -1,11 +1,13 @@
 // 公民档案详情页。左侧公民信息（可编辑），右侧 ARCHIVE 二维码（自动生成，仅下载）。
 // 下方公民资料区域预留给出生纸、证件照等上传。
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import * as api from '../api';
 import type { Archive } from '../types';
+import { parseQrEnvelope } from '../qr/wuminQr';
+import { scanImageQr, startCameraScanner } from '../utils/cameraScanner';
 
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +18,12 @@ export default function ArchiveDetail() {
   const [editForm, setEditForm] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [walletAddressRaw, setWalletAddressRaw] = useState('');
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletScanError, setWalletScanError] = useState('');
+  const [walletBusy, setWalletBusy] = useState(false);
+  const walletVideoRef = useRef<HTMLVideoElement | null>(null);
+  const walletScanCleanupRef = useRef<(() => void) | null>(null);
   // 名称解析
   const [provinceName, setProvinceName] = useState('');
   const [cityName, setCityName] = useState('');
@@ -54,6 +62,25 @@ export default function ArchiveDetail() {
       }).catch(() => {});
     }
   }, [archive?.town_code, archive?.village_id, towns]);
+
+  useEffect(() => {
+    if (!walletModalOpen || !walletVideoRef.current) return;
+    setWalletScanError('');
+    walletScanCleanupRef.current?.();
+    walletScanCleanupRef.current = startCameraScanner(
+      walletVideoRef.current,
+      (raw) => {
+        setWalletAddressRaw(raw);
+        void handleBindWallet(raw);
+      },
+      () => setWalletScanError(''),
+      (msg) => setWalletScanError(msg),
+    );
+    return () => {
+      walletScanCleanupRef.current?.();
+      walletScanCleanupRef.current = null;
+    };
+  }, [walletModalOpen]);
 
   const startEdit = () => {
     if (!archive) return;
@@ -122,6 +149,84 @@ export default function ArchiveDetail() {
       a.click();
     };
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  };
+
+  const openWalletScanner = () => {
+    setError('');
+    setWalletScanError('');
+    setWalletAddressRaw('');
+    setWalletModalOpen(true);
+  };
+
+  const handleUploadWalletResponse = async (file: File) => {
+    try {
+      const raw = await scanImageQr(file);
+      setWalletAddressRaw(raw);
+      await handleBindWallet(raw);
+    } catch (e) {
+      setWalletScanError(e instanceof Error ? e.message : '钱包二维码识别失败');
+    }
+  };
+
+  const extractWalletAddress = (raw: string) => {
+    const text = raw.trim();
+    try {
+      const env = parseQrEnvelope(text);
+      if (env.kind !== 'user_contact') {
+        throw new Error('请扫描 wuminapp 的钱包地址二维码');
+      }
+      const body = env.body as { address: string };
+      return body.address.trim();
+    } catch (e) {
+      if (text.startsWith('{')) throw e;
+      return text;
+    }
+  };
+
+  const handleBindWallet = async (rawOverride?: string) => {
+    if (!id) return;
+    setError('');
+    setWalletScanError('');
+    setWalletBusy(true);
+    try {
+      const walletAddress = extractWalletAddress(rawOverride ?? walletAddressRaw);
+      const res = await api.bindArchiveWallet(id, walletAddress);
+      if (res.data) setArchive(res.data);
+      walletScanCleanupRef.current?.();
+      walletScanCleanupRef.current = null;
+      setWalletModalOpen(false);
+      setWalletAddressRaw('');
+    } catch (e) {
+      setWalletScanError(e instanceof Error ? e.message : '保存钱包账户失败');
+    } finally {
+      setWalletBusy(false);
+    }
+  };
+
+  const closeWalletModal = () => {
+    walletScanCleanupRef.current?.();
+    walletScanCleanupRef.current = null;
+    setWalletModalOpen(false);
+    setWalletAddressRaw('');
+    setWalletScanError('');
+  };
+
+  const handleGenerateArchiveQr = async () => {
+    if (!id) return;
+    setError('');
+    setWalletBusy(true);
+    try {
+      const res = await api.generateArchiveQr(id);
+      if (res.data?.qr_content && archive) {
+        setArchive({ ...archive, archive_qr_payload: res.data.qr_content });
+      } else {
+        loadArchive();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '生成档案码失败');
+    } finally {
+      setWalletBusy(false);
+    }
   };
 
   if (loading) return <div className="card">加载中...</div>;
@@ -225,6 +330,20 @@ export default function ArchiveDetail() {
                     </span>
                   </div>
                 </div>
+                <div className="form-row mt-16">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <strong>钱包账户：</strong>
+                    <span>{archive.wallet_address || '未绑定'}</span>
+                    <button className="btn btn--primary btn--sm" onClick={openWalletScanner} disabled={walletBusy}>
+                      {archive.wallet_address ? '更新' : '绑定'}
+                    </button>
+                  </div>
+                </div>
+                {archive.wallet_pubkey && (
+                  <div className="form-row mt-16">
+                    <div style={{ wordBreak: 'break-all' }}><strong>钱包公钥：</strong>{archive.wallet_pubkey}</div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -243,9 +362,56 @@ export default function ArchiveDetail() {
                 签发未就绪
               </div>
             )}
+            <button className="btn btn--primary btn--sm" onClick={handleGenerateArchiveQr} disabled={walletBusy || !archive.wallet_pubkey}>
+              生成档案码
+            </button>
           </div>
         </div>
       </div>
+
+      {walletModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 560 }}>
+            <div className="modal__title">识别钱包账户</div>
+            {walletScanError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{walletScanError}</div>}
+            <video
+              ref={walletVideoRef}
+              muted
+              playsInline
+              style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 8, background: '#111827' }}
+            />
+            <div style={{ color: 'var(--color-text-secondary)', fontSize: 12, marginTop: 8 }}>
+              请让用户打开 wuminapp 电子护照页面的钱包二维码，对准本摄像头；识别成功会直接保存钱包账户。
+            </div>
+            <div className="form-group mt-16">
+              <label>钱包二维码原文</label>
+              <textarea
+                className="form-input"
+                style={{ minHeight: 72 }}
+                value={walletAddressRaw}
+                onChange={e => setWalletAddressRaw(e.target.value)}
+                placeholder="摄像头不可用时，可粘贴或上传 wuminapp 钱包二维码"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <label className="btn btn--ghost">
+                上传钱包二维码
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleUploadWalletResponse(file);
+                  e.currentTarget.value = '';
+                }} />
+              </label>
+              <button className="btn btn--primary" disabled={walletBusy || !walletAddressRaw.trim()} onClick={() => void handleBindWallet()}>
+                保存钱包账户
+              </button>
+            </div>
+            <div className="modal__footer">
+              <button className="btn btn--ghost" onClick={closeWalletModal} disabled={walletBusy}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card__title">公民资料</div>

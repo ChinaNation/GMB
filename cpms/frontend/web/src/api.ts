@@ -106,6 +106,10 @@ export const listArchives = (params?: { full_name?: string; page?: number; page_
 export const getArchive = (id: string) => get<Archive>(`/api/v1/archives/${id}`);
 export const updateArchive = (id: string, body: Record<string, unknown>) =>
   put<Archive>(`/api/v1/archives/${id}`, body);
+export const bindArchiveWallet = (id: string, wallet_address: string) =>
+  post<Archive>(`/api/v1/archives/${id}/wallet`, { wallet_address });
+export const generateArchiveQr = (id: string) =>
+  post<{ qr_payload: unknown; qr_content: string }>(`/api/v1/archives/${id}/qr/generate`);
 
 // ── 健康检查 ──
 export const health = () => get<{ status: string }>('/api/v1/health');

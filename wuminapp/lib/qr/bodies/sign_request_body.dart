@@ -37,12 +37,6 @@ class SignRequestBody implements QrBody {
     final sigAlg = data['sig_alg'];
     final payloadHex = data['payload_hex'];
     final display = data['display'];
-    if (address is! String || address.isEmpty) {
-      throw const FormatException('sign_request.address 必填');
-    }
-    if (pubkey is! String || !pubkey.startsWith('0x')) {
-      throw const FormatException('sign_request.pubkey 必填 0x hex');
-    }
     if (sigAlg != 'sr25519') {
       throw const FormatException('sign_request.sig_alg 必须为 sr25519');
     }
@@ -54,6 +48,12 @@ class SignRequestBody implements QrBody {
     }
     if (display is! Map<String, dynamic>) {
       throw const FormatException('sign_request.display 必填对象');
+    }
+    if (address is! String || address.isEmpty) {
+      throw const FormatException('sign_request.address 必填');
+    }
+    if (pubkey is! String || !pubkey.startsWith('0x')) {
+      throw const FormatException('sign_request.pubkey 必填 0x hex');
     }
     return SignRequestBody(
       address: address,

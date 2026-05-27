@@ -35,6 +35,9 @@ pub(crate) struct ArchiveQrPayload {
     pub(crate) valid_until: String,
     pub(crate) cpms_pubkey: String,
     pub(crate) geo_seal: String,
+    pub(crate) wallet_address: String,
+    pub(crate) wallet_pubkey: String,
+    pub(crate) wallet_sig_alg: String,
     pub(crate) sig: String,
 }
 
@@ -168,6 +171,16 @@ pub(crate) async fn build_archive_qr_payload(
     state: &AppState,
     archive: &Archive,
 ) -> Result<ArchiveQrPayload, (StatusCode, Json<ApiError>)> {
+    let wallet_address = archive
+        .wallet_address
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "archive wallet required"))?;
+    let wallet_pubkey = archive
+        .wallet_pubkey
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "archive wallet required"))?;
     let install = crate::initialize::load_cpms_install_runtime(state).await?;
     let sign_key = active_archive_sign_key(state).await?;
     if sign_key.pubkey != install.cpms_pubkey {
@@ -198,6 +211,8 @@ pub(crate) async fn build_archive_qr_payload(
         archive.valid_until.as_str(),
         sign_key.pubkey.as_str(),
         geo_seal_hash.as_str(),
+        wallet_address,
+        wallet_pubkey,
     );
     let sig = sign_archive_payload_with_secret(&sign_key.secret_bytes, &sign_source)?;
 
@@ -210,6 +225,9 @@ pub(crate) async fn build_archive_qr_payload(
         valid_until: archive.valid_until.clone(),
         cpms_pubkey: sign_key.pubkey,
         geo_seal,
+        wallet_address: wallet_address.to_string(),
+        wallet_pubkey: wallet_pubkey.to_string(),
+        wallet_sig_alg: archive.wallet_sig_alg.clone(),
         sig,
     })
 }
@@ -288,10 +306,19 @@ fn build_archive_sign_source(
     valid_until: &str,
     cpms_pubkey: &str,
     geo_seal_hash: &str,
+    wallet_address: &str,
+    wallet_pubkey: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}",
-        archive_no, citizen_status, valid_from, valid_until, cpms_pubkey, geo_seal_hash
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}",
+        archive_no,
+        citizen_status,
+        valid_from,
+        valid_until,
+        cpms_pubkey,
+        geo_seal_hash,
+        wallet_address,
+        wallet_pubkey
     )
 }
 
@@ -308,11 +335,13 @@ mod tests {
             "2036-05-23",
             "0xpub",
             "0xseal",
+            "addr2027",
+            "0xwallet",
         );
 
         assert_eq!(
             source,
-            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|0xpub|0xseal"
+            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|0xpub|0xseal|addr2027|0xwallet"
         );
     }
 

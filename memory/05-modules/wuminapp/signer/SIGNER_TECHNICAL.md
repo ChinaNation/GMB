@@ -58,6 +58,21 @@ lib/signer/
 - 校验过期时间、时钟偏差、hex 字段合法性
 - 请求包含 `display` 字段（人可读交易摘要），解决 V1 盲签问题
 
+### CPMS 档案钱包账户
+
+- 最后更新:2026-05-26
+- 任务卡:`memory/08-tasks/open/20260526-cpms-wallet-address-only.md`
+
+wuminapp 在 CPMS 阶段不签名。CPMS 只扫描电子护照页展示的 `WUMIN_QR_V1 / user_contact`
+钱包地址二维码，并把地址写入真实档案。钱包私钥控制权验证统一放到 SFID 绑定阶段，
+由 SFID 生成绑定 `sign_request`，wuminapp 再输出 `WUMIN_QR_V1 / sign_response`。
+
+验收规则:
+
+- 普通签名请求的 `body.pubkey` 必须与当前钱包公钥一致。
+- 签名对象为 `payload_hex` 对应的业务原文。
+- SFID 绑定阶段的回执 `pubkey / payload_hash / signature` 必须能被 SFID 验证。
+
 签名场景：
 
 - `login`

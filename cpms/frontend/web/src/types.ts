@@ -42,6 +42,11 @@ export interface Archive {
   status: string;
   citizen_status: string;
   voting_eligible: boolean;
+  wallet_address: string | null;
+  wallet_pubkey: string | null;
+  wallet_sig_alg: string;
+  wallet_bound_at: number | null;
+  wallet_bound_by: string | null;
   archive_qr_payload: string;
   created_at: number;
   updated_at: number;

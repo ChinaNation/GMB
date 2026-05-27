@@ -9,6 +9,11 @@ CPMS_PORT="${CPMS_BIND##*:}"
 CPMS_HEALTHCHECK_URL="http://127.0.0.1:${CPMS_PORT}/api/v1/health"
 CPMS_FRONTEND_PORT=5174
 DB_ADMIN_URL="${CPMS_DATABASE_URL%/*}/postgres"
+CPMS_RESET="${CPMS_RESET:-0}"
+
+if [[ "${1:-}" == "--reset" ]]; then
+  CPMS_RESET=1
+fi
 
 # ── 杀掉所有残留的 CPMS 进程（后端 + 前端 + 占用端口的） ──
 echo "=== 清理残留 CPMS 进程 ==="
@@ -23,12 +28,20 @@ done
 [[ -n "$ALL_PIDS" ]] && sleep 1
 echo "残留进程已清理"
 
-# ── 全新初始化：重建数据库 ──
-echo "=== CPMS 全新初始化：重建数据库 ==="
-psql "$DB_ADMIN_URL" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'cpms' AND pid != pg_backend_pid();" >/dev/null 2>&1 || true
-psql "$DB_ADMIN_URL" -c "DROP DATABASE IF EXISTS cpms;"
-psql "$DB_ADMIN_URL" -c "CREATE DATABASE cpms OWNER cpms;"
-echo "数据库已重建"
+# ── 默认保留数据库；仅显式重置时才重建 ──
+if [[ "$CPMS_RESET" == "1" ]]; then
+  echo "=== CPMS 显式重置：重建数据库 ==="
+  psql "$DB_ADMIN_URL" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'cpms' AND pid != pg_backend_pid();" >/dev/null 2>&1 || true
+  psql "$DB_ADMIN_URL" -c "DROP DATABASE IF EXISTS cpms;"
+  psql "$DB_ADMIN_URL" -c "CREATE DATABASE cpms OWNER cpms;"
+  echo "数据库已重建"
+else
+  echo "=== CPMS 保留现有数据库（如需重置请执行：CPMS_RESET=1 ./cpms.sh 或 ./cpms.sh --reset）==="
+  psql "$DB_ADMIN_URL" -tc "SELECT 1 FROM pg_database WHERE datname = 'cpms';" | grep -q 1 || {
+    psql "$DB_ADMIN_URL" -c "CREATE DATABASE cpms OWNER cpms;"
+    echo "数据库不存在，已创建空数据库"
+  }
+fi
 
 if [[ ! -d "$ROOT_DIR/frontend/web/node_modules" ]]; then
   (cd "$ROOT_DIR/frontend/web" && npm install)
@@ -63,12 +76,12 @@ FRONTEND_PID="$!"
 
 echo ""
 echo "============================================"
-echo "  CPMS 系统已启动（全新未初始化状态）"
+echo "  CPMS 系统已启动"
 echo "  前端: http://localhost:${CPMS_FRONTEND_PORT}"
 echo "  后端: http://127.0.0.1:${CPMS_PORT}"
 echo ""
 echo "  请打开浏览器访问 http://localhost:${CPMS_FRONTEND_PORT}"
-echo "  按照页面指引完成初始化："
+echo "  如果页面显示未初始化，请按照页面指引完成初始化："
 echo "    1. 扫码 SFID 安装授权二维码（INSTALL）"
 echo "    2. 绑定超级管理员"
 echo "    3. 登录后创建档案并签发 ARCHIVE 档案二维码"
