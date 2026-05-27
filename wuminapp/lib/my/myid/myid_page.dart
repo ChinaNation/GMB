@@ -1,12 +1,12 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/my/myid/myid_service.dart';
-import 'package:wuminapp_mobile/my/myid/myid_sign_page.dart';
+import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
+import 'package:wuminapp_mobile/qr/envelope.dart';
+import 'package:wuminapp_mobile/qr/qr_protocols.dart';
 import 'package:wuminapp_mobile/ui/app_theme.dart';
 import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 import 'package:wuminapp_mobile/wallet/pages/wallet_page.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class MyIdPage extends StatefulWidget {
   const MyIdPage({super.key, this.myIdService});
@@ -58,45 +58,22 @@ class _MyIdPageState extends State<MyIdPage> {
       _submitting = true;
     });
     try {
-      // 中文注释：后端当前验签协议仍使用旧挑战前缀；用户侧入口已统一为电子护照。
-      final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final signMessage = 'CITIZEN_VOTE_REGISTER|${wallet.address}|$timestamp';
-      final messageBytes = Uint8List.fromList(utf8.encode(signMessage));
-
-      if (!wallet.isHotWallet) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('冷钱包暂不支持电子护照注册，请使用热钱包')),
-        );
-        setState(() => _submitting = false);
-        return;
-      }
-      final walletManager = WalletManager();
-      final signatureBytes = await walletManager.signWithWallet(
-        wallet.walletIndex,
-        messageBytes,
-      );
-
-      final sigHex =
-          '0x${signatureBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
-      final nextState = await _myIdService.registerMyId(
+      final nextState = await _myIdService.selectWallet(
         walletAddress: wallet.address,
         walletPubkeyHex: wallet.pubkeyHex,
         isColdWallet: wallet.isColdWallet,
-        signatureHex: sigHex,
-        signMessage: signMessage,
       );
       if (!mounted) return;
       setState(() {
         _state = nextState;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('电子护照已注册，等待现场绑定')),
+        const SnackBar(content: Text('钱包已选择')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('电子护照注册失败：$e')),
+        SnackBar(content: Text('选择钱包失败：$e')),
       );
     } finally {
       if (mounted) {
@@ -105,30 +82,6 @@ class _MyIdPageState extends State<MyIdPage> {
         });
       }
     }
-  }
-
-  Future<void> _openSignPage() async {
-    if (_state.walletPubkeyHex == null) return;
-    final walletManager = WalletManager();
-    final wallets = await walletManager.getWallets();
-    final wallet = wallets.cast<WalletProfile?>().firstWhere(
-          (w) =>
-              w!.pubkeyHex.toLowerCase() ==
-              _state.walletPubkeyHex!.toLowerCase(),
-          orElse: () => null,
-        );
-    if (!mounted) return;
-    if (wallet == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('未找到匹配的钱包')),
-      );
-      return;
-    }
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MyIdSignPage(wallet: wallet),
-      ),
-    );
   }
 
   String _statusLabel() {
@@ -187,6 +140,18 @@ class _MyIdPageState extends State<MyIdPage> {
     return '有效期：$validFrom-$validUntil';
   }
 
+  String? _walletQrPayload() {
+    final address = _state.walletAddress?.trim();
+    if (address == null || address.isEmpty) return null;
+    return QrEnvelope<UserContactBody>(
+      kind: QrKind.userContact,
+      id: null,
+      issuedAt: null,
+      expiresAt: null,
+      body: UserContactBody(address: address, name: '电子护照钱包'),
+    ).toRawJson();
+  }
+
   String? _formatDate(String? raw) {
     final value = raw?.trim();
     if (value == null || value.isEmpty) return null;
@@ -204,7 +169,12 @@ class _MyIdPageState extends State<MyIdPage> {
 
   @override
   Widget build(BuildContext context) {
-    final canSign = _state.status == MyIdStatus.pending && !_state.isColdWallet;
+    final walletQrPayload = _walletQrPayload();
+    final actionLabel = _state.walletAddress == null
+        ? '选择钱包'
+        : _state.status == MyIdStatus.bound
+            ? '更新钱包'
+            : '更换钱包';
     return Scaffold(
       appBar: AppBar(
         title: const Text('电子护照'),
@@ -312,6 +282,40 @@ class _MyIdPageState extends State<MyIdPage> {
               ],
             ),
           ),
+          if (walletQrPayload != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: AppTheme.cardDecoration(),
+              child: Column(
+                children: [
+                  QrImageView(
+                    data: walletQrPayload,
+                    version: QrVersions.auto,
+                    size: 220,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: AppTheme.primary,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '钱包地址二维码',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -324,20 +328,9 @@ class _MyIdPageState extends State<MyIdPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.account_balance_wallet_outlined),
-              label: Text(_submitting ? '正在注册...' : '选择钱包'),
+              label: Text(_submitting ? '处理中...' : actionLabel),
             ),
           ),
-          if (canSign) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _openSignPage,
-                icon: const Icon(Icons.qr_code_scanner_outlined),
-                label: const Text('现场签名'),
-              ),
-            ),
-          ],
         ],
       ),
     );

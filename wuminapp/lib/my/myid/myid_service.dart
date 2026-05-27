@@ -64,22 +64,15 @@ class MyIdService {
     );
   }
 
-  /// 注册电子护照账户（带签名证明私钥所有权）。
+  /// 选择电子护照使用的钱包。
   ///
-  /// 调用后端注册接口成功后，本地状态变为 pending。
-  Future<MyIdState> registerMyId({
+  /// 中文注释：CPMS 阶段只需要扫描钱包地址;真正的钱包签名与已绑定确认
+  /// 统一放到 SFID 绑定阶段,所以这里不联网注册、不写 bound。
+  Future<MyIdState> selectWallet({
     required String walletAddress,
     required String walletPubkeyHex,
     required bool isColdWallet,
-    required String signatureHex,
-    required String signMessage,
   }) async {
-    await _api.registerMyId(
-      address: walletAddress,
-      pubkeyHex: walletPubkeyHex,
-      signatureHex: signatureHex,
-      signMessage: signMessage,
-    );
     final now = DateTime.now().millisecondsSinceEpoch;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kStatus, 'pending');
@@ -87,7 +80,7 @@ class MyIdService {
     await prefs.setString(_kPubkeyHex, walletPubkeyHex.trim());
     await prefs.setBool(_kIsColdWallet, isColdWallet);
     await prefs.setInt(_kUpdatedAt, now);
-    debugPrint('myid registered: address=$walletAddress');
+    debugPrint('myid wallet selected: address=$walletAddress');
     return getState();
   }
 
@@ -129,15 +122,17 @@ class MyIdService {
           await _setOptionalString(prefs, _kValidFrom, remote.validFrom);
           await _setOptionalString(prefs, _kValidUntil, remote.validUntil);
         default:
-          // 后端返回 "unset"：绑定已被解除
-          await prefs.setString(_kStatus, 'unset');
-          await prefs.remove(_kAddress);
-          await prefs.remove(_kPubkeyHex);
-          await prefs.remove(_kSfidCode);
-          await prefs.remove(_kIdentityStatus);
-          await prefs.remove(_kValidFrom);
-          await prefs.remove(_kValidUntil);
-          await prefs.remove(_kIsColdWallet);
+          if (localState.status == MyIdStatus.bound) {
+            // 中文注释：只有曾经由 SFID 确认 bound 的状态,才允许远端 unset 清空。
+            await prefs.setString(_kStatus, 'unset');
+            await prefs.remove(_kAddress);
+            await prefs.remove(_kPubkeyHex);
+            await prefs.remove(_kSfidCode);
+            await prefs.remove(_kIdentityStatus);
+            await prefs.remove(_kValidFrom);
+            await prefs.remove(_kValidUntil);
+            await prefs.remove(_kIsColdWallet);
+          }
       }
       await prefs.setInt(_kUpdatedAt, now);
       return getState();

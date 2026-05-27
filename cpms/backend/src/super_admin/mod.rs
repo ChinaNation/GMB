@@ -436,7 +436,7 @@ async fn update_archive_citizen_status(
     dangan::validate_citizen_status(&req.citizen_status)?;
 
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from, valid_until, citizen_status_updated_at, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from, valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -471,6 +471,13 @@ async fn update_archive_citizen_status(
         valid_from: row.get("valid_from"),
         valid_until: row.get("valid_until"),
         citizen_status_updated_at: row.get("citizen_status_updated_at"),
+        wallet_address: row.try_get("wallet_address").ok(),
+        wallet_pubkey: row.try_get("wallet_pubkey").ok(),
+        wallet_sig_alg: row
+            .try_get("wallet_sig_alg")
+            .unwrap_or_else(|_| "sr25519".to_string()),
+        wallet_bound_at: row.try_get("wallet_bound_at").ok(),
+        wallet_bound_by: row.try_get("wallet_bound_by").ok(),
         archive_qr_payload: row.try_get("archive_qr_payload").unwrap_or_default(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
@@ -481,14 +488,26 @@ async fn update_archive_citizen_status(
     archive.voting_eligible = archive.citizen_status == "NORMAL";
     archive.citizen_status_updated_at = Utc::now().timestamp();
     archive.updated_at = archive.citizen_status_updated_at;
-    let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
-    archive.archive_qr_payload = serde_json::to_string(&archive_qr).map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "archive code encode failed",
-        )
-    })?;
+    archive.archive_qr_payload = if archive
+        .wallet_address
+        .as_deref()
+        .is_some_and(|v| !v.is_empty())
+        && archive
+            .wallet_pubkey
+            .as_deref()
+            .is_some_and(|v| !v.is_empty())
+    {
+        let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
+        serde_json::to_string(&archive_qr).map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "archive code encode failed",
+            )
+        })?
+    } else {
+        String::new()
+    };
 
     sqlx::query("UPDATE archives SET citizen_status = $1, voting_eligible = $2, citizen_status_updated_at = $3, archive_qr_payload = $4, updated_at = $5 WHERE archive_id = $6")
         .bind(&archive.citizen_status)

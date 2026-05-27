@@ -1,11 +1,11 @@
-// 热钱包电子护照现场签名页。
+// 热钱包身份现场签名页。
 //
-// 用户到 SFID 现场后：
-// 1. 打开此页，摄像头扫描 SFID 管理端屏幕上的 sign_request 二维码
+// 用户到 CPMS / SFID 现场后：
+// 1. 打开此页，摄像头扫描管理端屏幕上的 sign_request 二维码
 // 2. 验证 pubkey 与当前绑定钱包一致
 // 3. 用热钱包私钥签名 payload
 // 4. 构造 sign_response envelope
-// 5. 展示回执二维码，等 SFID 管理员扫描
+// 5. 展示回执二维码，等管理端扫描
 
 import 'dart:typed_data';
 
@@ -63,7 +63,6 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
       final qrSigner = QrSigner();
       final request = qrSigner.parseRequest(raw);
 
-      // 验证 pubkey 与当前钱包一致
       final expectedPubkey = '0x${widget.wallet.pubkeyHex}'.toLowerCase();
       final requestPubkey = request.body.pubkey.toLowerCase();
       if (requestPubkey != expectedPubkey) {
@@ -126,7 +125,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('电子护照签名'),
+        title: const Text('身份签名'),
         centerTitle: true,
       ),
       body: Padding(
@@ -149,7 +148,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: AppTheme.bannerDecoration(AppTheme.info),
           child: const Text(
-            '请扫描 SFID 管理端屏幕上的签名请求二维码',
+            '请扫描管理端屏幕上的签名请求二维码',
             style: TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600),
           ),
         ),
@@ -195,7 +194,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
         ),
         const SizedBox(height: 12),
         const Text(
-          '扫描 SFID 管理端签名请求二维码',
+          '扫描管理端签名请求二维码',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
         ),
@@ -231,7 +230,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: AppTheme.bannerDecoration(AppTheme.success),
           child: const Text(
-            '签名成功，请让 SFID 管理员扫描下方二维码',
+            '签名成功，请让管理员扫描下方二维码',
             style:
                 TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
           ),
