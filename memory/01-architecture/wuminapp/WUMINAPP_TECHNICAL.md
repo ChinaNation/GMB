@@ -8,7 +8,7 @@
 
 - 区块链 Runtime/共识逻辑不在本仓库实现（由 `citizenchain` 提供）
 - SFID 与链交互由外部服务系统承载
-- `wuminapp` 负责端上钱包、登录签名、纯链上支付入口、绑定指令发起、状态展示
+- `wuminapp` 负责端上钱包、登录签名、纯链上支付入口、绑定签名与状态展示
 
 ## 2. 当前技术栈
 
@@ -490,18 +490,19 @@ lib/rpc/
 App 通过 `ApiClient` 访问非链上外部服务，当前已使用接口：
 
 - `GET /api/v1/health`
-- `POST /api/v1/chain/bind/request`
 - `GET /api/v1/admins/catalog`
-- `POST /api/v1/app/vote-account/register`
-- `GET /api/v1/app/vote-account/status?address=<walletAddress>`
+- `GET /api/v1/app/myid/status?wallet_address=<walletAddress>`
 
 电子护照页面字段约定：
 
-- `status` 只表示绑定状态：`unset / pending / bound`。
+- `bind_status` 只表示绑定状态：`unset / pending / bound`。
+- `wallet_address / wallet_pubkey` 表示电子护照使用的钱包。
 - `sfid_code` 在 wuminapp 展示为“身份ID”；缺失时显示“未绑定”。
 - `identity_status` 只表示身份ID状态；`NORMAL` 显示“状态：正常”，其他值显示“状态：异常”。
 - “投票账户”展示当前绑定/待绑定的钱包地址，不再使用“绑定账户”文案。
-- 当前阶段只完成 wuminapp 与 SFID 的直接绑定展示闭环；异常身份ID的投票拦截、人口快照过滤和链上投票引擎拦截另行处理。
+- 选择钱包但未完成绑定时，电子护照页底部操作固定为左侧“更换钱包”、右侧“扫码签名”。
+- 扫码签名必须使用 `MyIdSignPage` 扫描身份ID系统的鉴权签名码，并生成 `sign_response`。
+- SFID 完成绑定后，wuminapp 通过状态接口同步结果；wuminapp 不创建电子护照绑定记录。
 
 ### 7.1 区块链能力矩阵（转账 / 提案 / 投票）
 

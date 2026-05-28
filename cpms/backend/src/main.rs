@@ -16,6 +16,11 @@ mod initialize;
 mod login;
 mod operator_admin;
 mod qr;
+// 中文注释：行政区数据唯一源是 SFID 系统 sfid 工具；CPMS 只在编译期直接引用，
+// 不在 CPMS 源码树保存 province.rs 或 city_codes 的第二份文件。
+#[allow(dead_code)]
+#[path = "../../../sfid/backend/sfid/province.rs"]
+mod sfid_tool_province;
 mod ss58;
 mod store;
 mod super_admin;
@@ -45,7 +50,8 @@ struct Archive {
     archive_no: String,
     province_code: String,
     city_code: String,
-    full_name: String,
+    last_name: String,
+    first_name: String,
     birth_date: String,
     gender_code: String,
     height_cm: Option<f32>,
@@ -65,6 +71,9 @@ struct Archive {
     wallet_bound_at: Option<i64>,
     wallet_bound_by: Option<String>,
     archive_qr_payload: String,
+    deleted_at: Option<i64>,
+    deleted_by: Option<String>,
+    delete_reason: Option<String>,
     created_at: i64,
     updated_at: i64,
 }
@@ -104,8 +113,10 @@ async fn main() {
 
     MIGRATOR.run(&db).await.expect("run migrations failed");
 
-    // 启动时 seed 内置镇村数据（不覆盖超管已修改的数据）
-    address::seed_builtin_address(&db).await;
+    // 中文注释：已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码镇村残留。
+    address::sync_installed_city_address(&db)
+        .await
+        .expect("sync installed city address failed");
 
     let state = AppState {
         db,
@@ -339,6 +350,14 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         "save print record failed" => "CPMS_AUDIT_WRITE_FAILED",
         "archive wallet required" => "CPMS_ARCHIVE_WALLET_REQUIRED",
         "invalid wallet_address" => "CPMS_ARCHIVE_WALLET_ADDRESS_INVALID",
+        "archive already deleted" => "CPMS_ARCHIVE_ALREADY_DELETED",
+        "delete challenge not found" => "CPMS_ARCHIVE_DELETE_CHALLENGE_NOT_FOUND",
+        "delete challenge already consumed" => "CPMS_ARCHIVE_DELETE_CHALLENGE_CONSUMED",
+        "delete challenge expired" => "CPMS_ARCHIVE_DELETE_CHALLENGE_EXPIRED",
+        "delete challenge mismatch" => "CPMS_ARCHIVE_DELETE_CHALLENGE_MISMATCH",
+        "delete signer mismatch" => "CPMS_ARCHIVE_DELETE_SIGNER_MISMATCH",
+        "delete signature verify failed" => "CPMS_ARCHIVE_DELETE_SIGNATURE_INVALID",
+        "delete payload hash mismatch" => "CPMS_ARCHIVE_DELETE_PAYLOAD_HASH_MISMATCH",
         _ if status == StatusCode::UNAUTHORIZED => "CPMS_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "CPMS_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "CPMS_REQUEST_INVALID",

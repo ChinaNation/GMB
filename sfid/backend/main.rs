@@ -129,15 +129,13 @@ impl Drop for StoreWriteGuard {
 struct CitizenStoreSnapshot {
     next_citizen_id: u64,
     citizen_records: HashMap<u64, CitizenRecord>,
-    citizen_id_by_pubkey: HashMap<String, u64>,
+    citizen_id_by_wallet_pubkey: HashMap<String, u64>,
     citizen_id_by_archive_no: HashMap<String, u64>,
     citizen_id_by_sfid_code: HashMap<String, u64>,
     /// 中文注释:绑定 challenge 属于公民绑定短期状态,必须跨请求可读,
     /// 但不再写入旧 runtime 整包 JSON。
     citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
     consumed_qr_ids: HashMap<String, DateTime<Utc>>,
-    pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
-    generated_sfid_by_pubkey: HashMap<String, String>,
     reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
 }
@@ -147,13 +145,11 @@ impl CitizenStoreSnapshot {
         Self {
             next_citizen_id: store.next_citizen_id,
             citizen_records: store.citizen_records.clone(),
-            citizen_id_by_pubkey: store.citizen_id_by_pubkey.clone(),
+            citizen_id_by_wallet_pubkey: store.citizen_id_by_wallet_pubkey.clone(),
             citizen_id_by_archive_no: store.citizen_id_by_archive_no.clone(),
             citizen_id_by_sfid_code: store.citizen_id_by_sfid_code.clone(),
             citizen_bind_challenges: store.citizen_bind_challenges.clone(),
             consumed_qr_ids: store.consumed_qr_ids.clone(),
-            pending_bind_scan_by_qr_id: store.pending_bind_scan_by_qr_id.clone(),
-            generated_sfid_by_pubkey: store.generated_sfid_by_pubkey.clone(),
             reward_state_by_pubkey: store.reward_state_by_pubkey.clone(),
             vote_verify_cache: store.vote_verify_cache.clone(),
         }
@@ -162,13 +158,11 @@ impl CitizenStoreSnapshot {
     fn apply_to(self, store: &mut Store) {
         store.next_citizen_id = self.next_citizen_id;
         store.citizen_records = self.citizen_records;
-        store.citizen_id_by_pubkey = self.citizen_id_by_pubkey;
+        store.citizen_id_by_wallet_pubkey = self.citizen_id_by_wallet_pubkey;
         store.citizen_id_by_archive_no = self.citizen_id_by_archive_no;
         store.citizen_id_by_sfid_code = self.citizen_id_by_sfid_code;
         store.citizen_bind_challenges = self.citizen_bind_challenges;
         store.consumed_qr_ids = self.consumed_qr_ids;
-        store.pending_bind_scan_by_qr_id = self.pending_bind_scan_by_qr_id;
-        store.generated_sfid_by_pubkey = self.generated_sfid_by_pubkey;
         store.reward_state_by_pubkey = self.reward_state_by_pubkey;
         store.vote_verify_cache = self.vote_verify_cache;
     }
@@ -235,8 +229,6 @@ struct OpsStoreSnapshot {
     chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     chain_nonce_seen: HashMap<String, DateTime<Utc>>,
     chain_auth_last_cleanup_at: Option<DateTime<Utc>>,
-    pending_bind_last_cleanup_at: Option<DateTime<Utc>>,
-    bind_callback_jobs: Vec<BindCallbackJob>,
     metrics: ServiceMetrics,
 }
 
@@ -254,8 +246,6 @@ impl OpsStoreSnapshot {
             chain_requests_by_key: store.chain_requests_by_key.clone(),
             chain_nonce_seen: store.chain_nonce_seen.clone(),
             chain_auth_last_cleanup_at: store.chain_auth_last_cleanup_at,
-            pending_bind_last_cleanup_at: store.pending_bind_last_cleanup_at,
-            bind_callback_jobs: store.bind_callback_jobs.clone(),
             metrics: store.metrics.clone(),
         }
     }
@@ -272,8 +262,6 @@ impl OpsStoreSnapshot {
         store.chain_requests_by_key = self.chain_requests_by_key;
         store.chain_nonce_seen = self.chain_nonce_seen;
         store.chain_auth_last_cleanup_at = self.chain_auth_last_cleanup_at;
-        store.pending_bind_last_cleanup_at = self.pending_bind_last_cleanup_at;
-        store.bind_callback_jobs = self.bind_callback_jobs;
         store.metrics = self.metrics;
     }
 }
@@ -805,6 +793,7 @@ fn main() {
     info!("initialized runtime state with defaults");
     // 中文注释:任务卡 6 启动对账:按 sfid 工具市清单对齐全部公安局机构。
     app_core::runtime_ops::backfill_and_reconcile_public_security(&state);
+    app_core::runtime_ops::cleanup_stale_citizen_bind_records(&state);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -872,7 +861,6 @@ fn main() {
         // 保证详情页/列表按省读取时能看到最新机构和账户。
         app_core::runtime_ops::sync_public_security_to_sharded(&state).await;
 
-        tokio::spawn(bind_callback_worker(state.clone()));
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 
         let auth_routes = Router::new()
@@ -1040,19 +1028,6 @@ fn main() {
                 "/api/v1/admin/citizen/bind",
                 post(citizens::binding::citizen_bind),
             )
-            .route(
-                "/api/v1/admin/citizen/unbind",
-                post(citizens::binding::citizen_unbind),
-            )
-            // ── 投票账户推链 ──
-            .route(
-                "/api/v1/admin/citizen/bind/push-chain",
-                post(citizens::binding::citizen_push_chain_bind),
-            )
-            .route(
-                "/api/v1/admin/citizen/unbind/push-chain",
-                post(citizens::binding::citizen_push_chain_unbind),
-            )
             .route("/api/v1/admin/sfid/meta", get(sfid::admin::admin_sfid_meta))
             .route(
                 "/api/v1/admin/sfid/cities",
@@ -1096,7 +1071,7 @@ fn main() {
         // App routes:手机 App 与节点桌面 chain pull 用的统一命名空间。
         //
         // 全部端点都汇集在 chain/ 子目录(duoqian_info / joint_vote / citizen_vote)。
-        // wuminapp 自有功能(钱包交易索引、投票账户绑定)继续留 indexer / citizens 模块。
+        // wuminapp 自有功能(钱包交易索引、电子护照状态查询)继续留 indexer / citizens 模块。
         let app_routes = Router::new()
             // ── 联合投票:获取公民人数快照凭证 ──
             .route(
@@ -1113,14 +1088,10 @@ fn main() {
                 "/api/v1/app/wallet/:address/transactions",
                 get(indexer::api::wallet_transactions),
             )
-            // ── wuminapp 投票账户注册/查询(wuminapp 自有) ──
+            // ── wuminapp 电子护照状态查询 ──
             .route(
-                "/api/v1/app/vote-account/register",
-                post(citizens::vote::app_vote_account_register),
-            )
-            .route(
-                "/api/v1/app/vote-account/status",
-                get(citizens::vote::app_vote_account_status),
+                "/api/v1/app/myid/status",
+                get(citizens::vote::app_myid_status),
             )
             // ── 机构信息查询(链端/钱包 pull):机构搜索 / 详情 / 注册信息凭证 / 账户列表 ──
             .route(
@@ -1195,198 +1166,6 @@ fn main() {
 // 链端 chain pull 端点(duoqian_info / joint_vote / citizen_vote)无 attestor
 // 鉴权需求,全局 rate limiter 已防滥用,凭证签名本身就是反伪造保护。
 
-#[allow(dead_code)]
-fn ensure_binding_lock_db(
-    state: &AppState,
-    account_pubkey: &str,
-    archive_index: &str,
-) -> Result<(), axum::response::Response> {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return Ok(());
-    };
-    let check = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        let mut tx = conn.transaction().map_err(|e| e.to_string())?;
-        let row_by_pub = tx
-            .query_opt(
-                "SELECT archive_index FROM binding_unique_locks WHERE account_pubkey=$1 FOR UPDATE",
-                &[&account_pubkey],
-            )
-            .map_err(|e| e.to_string())?;
-        if let Some(row) = row_by_pub {
-            let existing_archive: String = row.get(0);
-            if existing_archive != archive_index {
-                return Err("pubkey_conflict".to_string());
-            }
-        }
-        let row_by_archive = tx
-            .query_opt(
-                "SELECT account_pubkey FROM binding_unique_locks WHERE archive_index=$1 FOR UPDATE",
-                &[&archive_index],
-            )
-            .map_err(|e| e.to_string())?;
-        if let Some(row) = row_by_archive {
-            let existing_pubkey: String = row.get(0);
-            if existing_pubkey != account_pubkey {
-                return Err("archive_conflict".to_string());
-            }
-        }
-        tx.execute(
-            "INSERT INTO binding_unique_locks(account_pubkey, archive_index, bound_at)
-             VALUES ($1, $2, now())
-             ON CONFLICT (account_pubkey) DO NOTHING",
-            &[&account_pubkey, &archive_index],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.commit().map_err(|e| e.to_string())?;
-        Ok(())
-    });
-    match check {
-        Ok(_) => Ok(()),
-        Err(err) if err == "archive_conflict" => Err(api_error(
-            StatusCode::CONFLICT,
-            3001,
-            "archive_index already bound",
-        )),
-        Err(err) if err == "pubkey_conflict" => Err(api_error(
-            StatusCode::CONFLICT,
-            3002,
-            "pubkey already bound to another archive_index",
-        )),
-        Err(err) => {
-            warn!("binding lock db check failed: {err}");
-            Err(api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1501,
-                "binding consistency check failed",
-            ))
-        }
-    }
-}
-
-#[allow(dead_code)]
-fn release_binding_lock_db(state: &AppState, account_pubkey: &str) {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return;
-    };
-    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        conn.execute(
-            "DELETE FROM binding_unique_locks WHERE account_pubkey=$1",
-            &[&account_pubkey],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    });
-}
-
-#[allow(dead_code)]
-fn persist_reward_state_db(
-    state: &AppState,
-    reward: &RewardStateRecord,
-    expected_updated_at: Option<DateTime<Utc>>,
-) -> Result<bool, String> {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return Ok(true);
-    };
-    StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        let status_text = format!("{:?}", reward.reward_status).to_uppercase();
-        if let Some(previous_updated_at) = expected_updated_at {
-            let affected = conn
-                .execute(
-                    "UPDATE bind_reward_states SET
-                       archive_index=$2,
-                       callback_id=$3,
-                       reward_status=$4,
-                       retry_count=$5,
-                       max_retries=$6,
-                       reward_tx_hash=$7,
-                       last_error=$8,
-                       next_retry_at=$9,
-                       updated_at=$10
-                     WHERE account_pubkey=$1 AND updated_at=$11",
-                    &[
-                        &reward.account_pubkey,
-                        &reward.archive_index,
-                        &reward.callback_id,
-                        &status_text,
-                        &(reward.retry_count as i32),
-                        &(reward.max_retries as i32),
-                        &reward.reward_tx_hash,
-                        &reward.last_error,
-                        &reward.next_retry_at,
-                        &reward.updated_at,
-                        &previous_updated_at,
-                    ],
-                )
-                .map_err(|e| e.to_string())?;
-            return Ok(affected > 0);
-        }
-
-        let affected = conn
-            .execute(
-                "INSERT INTO bind_reward_states(
-                   account_pubkey, archive_index, callback_id, reward_status, retry_count, max_retries,
-                   reward_tx_hash, last_error, next_retry_at, updated_at, created_at
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-                 ON CONFLICT (account_pubkey) DO UPDATE SET
-                   archive_index=excluded.archive_index,
-                   callback_id=excluded.callback_id,
-                   reward_status=excluded.reward_status,
-                   retry_count=excluded.retry_count,
-                   max_retries=excluded.max_retries,
-                   reward_tx_hash=excluded.reward_tx_hash,
-                   last_error=excluded.last_error,
-                   next_retry_at=excluded.next_retry_at,
-                   updated_at=excluded.updated_at",
-                &[
-                    &reward.account_pubkey,
-                    &reward.archive_index,
-                    &reward.callback_id,
-                    &status_text,
-                    &(reward.retry_count as i32),
-                    &(reward.max_retries as i32),
-                    &reward.reward_tx_hash,
-                    &reward.last_error,
-                    &reward.next_retry_at,
-                    &reward.updated_at,
-                    &reward.created_at,
-                ],
-            )
-            .map_err(|e| e.to_string())?;
-        Ok(affected > 0)
-    })
-}
-
-#[allow(dead_code)]
-fn remove_reward_state_db(state: &AppState, account_pubkey: &str) {
-    let StoreBackend::Postgres {
-        clients,
-        next_client_idx,
-    } = &state.store.backend
-    else {
-        return;
-    };
-    let _ = StoreBackend::with_postgres_client(clients, next_client_idx, |conn| {
-        conn.execute(
-            "DELETE FROM bind_reward_states WHERE account_pubkey=$1",
-            &[&account_pubkey],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    });
-}
-
 fn api_error(status: StatusCode, code: u32, message: &str) -> axum::response::Response {
     (
         status,
@@ -1411,13 +1190,12 @@ fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
         "challenge not found" | "challenge not found or expired" => "SFID_BIND_CHALLENGE_NOT_FOUND",
         "challenge already consumed" => "SFID_BIND_CHALLENGE_CONSUMED",
         "challenge expired" => "SFID_BIND_CHALLENGE_EXPIRED",
-        "challenge account mismatch" | "challenge context mismatch" => "SFID_BIND_ACCOUNT_MISMATCH",
-        "signature verify failed" | "unbind signature verify failed" => {
-            "SFID_BIND_SIGNATURE_VERIFY_FAILED"
-        }
+        "challenge wallet mismatch" | "challenge context mismatch" => "SFID_BIND_WALLET_MISMATCH",
+        "signature verify failed" => "SFID_BIND_SIGNATURE_VERIFY_FAILED",
         "invalid signature hex" => "SFID_BIND_SIGNATURE_FORMAT_INVALID",
         "archive_no already bound" => "SFID_BIND_ARCHIVE_ALREADY_BOUND",
-        "pubkey already bound to archive" => "SFID_BIND_PUBKEY_ALREADY_BOUND",
+        "archive_no immutable after binding" => "SFID_BIND_ARCHIVE_IMMUTABLE",
+        "wallet_pubkey already bound" => "SFID_BIND_WALLET_ALREADY_BOUND",
         "archive signature invalid" => "SFID_CITIZEN_ARCHIVE_SIGNATURE_BAD",
         "geo_seal cannot be decrypted" => "SFID_CITIZEN_ARCHIVE_GEO_SEAL_INVALID",
         "geo_seal install scope mismatch" => "SFID_CITIZEN_ARCHIVE_SCOPE_MISMATCH",

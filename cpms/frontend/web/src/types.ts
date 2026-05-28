@@ -31,7 +31,8 @@ export interface Archive {
   archive_no: string;
   province_code: string;
   city_code: string;
-  full_name: string;
+  last_name: string;
+  first_name: string;
   birth_date: string;
   gender_code: string;
   height_cm: number | null;
@@ -48,6 +49,9 @@ export interface Archive {
   wallet_bound_at: number | null;
   wallet_bound_by: string | null;
   archive_qr_payload: string;
+  deleted_at: number | null;
+  deleted_by: string | null;
+  delete_reason: string | null;
   created_at: number;
   updated_at: number;
 }

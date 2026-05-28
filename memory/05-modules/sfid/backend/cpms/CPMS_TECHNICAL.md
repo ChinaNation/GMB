@@ -50,8 +50,8 @@ sfid/backend/cpms/
 2. 在当前管理员省域内用已保存的 `install_secret` 尝试解 `geo_seal`。
 3. 校验 `geo_seal.sfid_number` 与授权记录一致，并从 `sfid_number` 解码省市。
 4. 校验 CPMS 本机签名；首次成功时绑定 `cpms_pubkey_hash`，后续只接受同一公钥。
-5. 返回验真结果；正式绑定必须由 `citizens::citizen_bind(bind_archive)` 在已有钱包地址的记录上完成。
-6. 绑定流程检查 `ano / sfid_code / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
+5. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
+6. 绑定流程检查 `archive_no / sfid_code / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
 ## 4. 归属说明
 

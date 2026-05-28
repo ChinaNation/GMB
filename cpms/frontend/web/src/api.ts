@@ -84,20 +84,16 @@ export const updateCitizenStatus = (archive_id: string, citizen_status: string) 
 // ── 地址管理 ──
 export const listTowns = () => get<{ town_code: string; town_name: string }[]>('/api/v1/address/towns');
 export const listVillages = (town_code: string) => get<{ village_id: string; town_code: string; village_name: string }[]>(`/api/v1/address/villages?town_code=${encodeURIComponent(town_code)}`);
-export const createTown = (town_code: string, town_name: string) => post<{ town_code: string; town_name: string }>('/api/v1/address/towns', { town_code, town_name });
-export const deleteTown = (code: string) => del<null>(`/api/v1/address/towns/${code}`);
-export const createVillage = (town_code: string, village_name: string) => post<{ village_id: string; town_code: string; village_name: string }>('/api/v1/address/villages', { town_code, village_name });
-export const deleteVillage = (id: string) => del<null>(`/api/v1/address/villages/${id}`);
 
 // ── 操作员 ──
 export const createArchive = (body: {
-  full_name: string; birth_date: string; gender_code: string; height_cm?: number;
+  last_name: string; first_name: string; birth_date: string; gender_code: string; height_cm: number;
   town_code?: string; village_id?: string; address?: string;
   citizen_status?: string;
 }) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);
-export const listArchives = (params?: { full_name?: string; page?: number; page_size?: number }) => {
+export const listArchives = (params?: { q?: string; page?: number; page_size?: number }) => {
   const qs = new URLSearchParams();
-  if (params?.full_name) qs.set('full_name', params.full_name);
+  if (params?.q) qs.set('q', params.q);
   if (params?.page) qs.set('page', String(params.page));
   if (params?.page_size) qs.set('page_size', String(params.page_size));
   const q = qs.toString();
@@ -110,6 +106,18 @@ export const bindArchiveWallet = (id: string, wallet_address: string) =>
   post<Archive>(`/api/v1/archives/${id}/wallet`, { wallet_address });
 export const generateArchiveQr = (id: string) =>
   post<{ qr_payload: unknown; qr_content: string }>(`/api/v1/archives/${id}/qr/generate`);
+export const printArchiveQr = (id: string) =>
+  post<{ print_id: string; archive_id: string; archive_no: string; printed_at: number }>(`/api/v1/archives/${id}/qr/print`);
+export const createArchiveDeleteChallenge = (id: string) =>
+  post<{ challenge_id: string; sign_request: string; expire_at: number }>(`/api/v1/archives/${id}/delete/challenge`);
+export const completeArchiveDelete = (id: string, body: {
+  challenge_id: string;
+  pubkey: string;
+  sig_alg: 'sr25519';
+  signature: string;
+  payload_hash: string;
+  signed_at: number;
+}) => post<{ archive_id: string; deleted_at: number; deleted_by: string }>(`/api/v1/archives/${id}/delete/complete`, body);
 
 // ── 健康检查 ──
 export const health = () => get<{ status: string }>('/api/v1/health');

@@ -57,7 +57,7 @@
 - 不同 `A3` 对 `T2/P1` 有严格组合约束，生成前强校验。
 - `GMR / ZRR / ZNR` 当前固定使用省级占位市码 `000`；真实市码从 `001` 起排。
 - `GFR / SFR / FFR` 与机构 `sfid_number` 继续使用真实市码。
-- 管理端生成后的 `sfid_code` 先进入 `generated_sfid_by_pubkey` 暂存，绑定确认阶段只能消费这份结果，不再允许绑定时兜底生成第二套口径。
+- 电子护照绑定阶段由 `citizens::binding` 根据已验真的 `wallet_pubkey` 生成 `sfid_code`，生成结果进入 `citizen_records` 并受 `archive_no / sfid_code / wallet_pubkey` 三者唯一关系约束。
 
 ## 4. 主要调用方
 

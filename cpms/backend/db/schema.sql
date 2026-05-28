@@ -83,10 +83,11 @@ CREATE TABLE IF NOT EXISTS archives (
   archive_no TEXT NOT NULL UNIQUE,
   province_code TEXT NOT NULL,
   city_code TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  birth_date TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  first_name TEXT NOT NULL,
+  birth_date TEXT NOT NULL CHECK (birth_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
   gender_code TEXT NOT NULL CHECK (gender_code IN ('M', 'W')),
-  height_cm REAL,
+  height_cm REAL NOT NULL CHECK (height_cm BETWEEN 30 AND 260),
   passport_no TEXT NOT NULL,
   town_code TEXT NOT NULL DEFAULT '',
   village_id TEXT NOT NULL DEFAULT '',
@@ -103,11 +104,14 @@ CREATE TABLE IF NOT EXISTS archives (
   wallet_bound_at BIGINT,
   wallet_bound_by TEXT,
   archive_qr_payload TEXT NOT NULL DEFAULT '',
+  deleted_at BIGINT,
+  deleted_by TEXT,
+  delete_reason TEXT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_archives_full_name ON archives (full_name);
+CREATE INDEX IF NOT EXISTS idx_archives_last_first_name ON archives (last_name, first_name);
 CREATE INDEX IF NOT EXISTS idx_archives_status ON archives (status);
 
 CREATE TABLE IF NOT EXISTS sequence_counters (
@@ -125,6 +129,25 @@ CREATE TABLE IF NOT EXISTS qr_print_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_qr_print_records_archive_id ON qr_print_records (archive_id);
+
+CREATE TABLE IF NOT EXISTS archive_delete_challenges (
+  challenge_id TEXT PRIMARY KEY,
+  archive_id TEXT NOT NULL,
+  archive_no TEXT NOT NULL,
+  admin_id TEXT NOT NULL,
+  admin_pubkey TEXT NOT NULL,
+  delete_payload TEXT NOT NULL,
+  expire_at BIGINT NOT NULL,
+  consumed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_delete_challenges_archive_id
+  ON archive_delete_challenges (archive_id);
+
+CREATE INDEX IF NOT EXISTS idx_archive_delete_challenges_expire_at
+  ON archive_delete_challenges (expire_at);
 
 CREATE TABLE IF NOT EXISTS address_towns (
   town_code TEXT PRIMARY KEY,

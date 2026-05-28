@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/dist/cpms-host-linux-x64"
 PAYLOAD_DIR="${OUT_DIR}/payload"
 
+# 中文注释：行政区数据由 CPMS 后端编译期直接引用 sfid/backend/sfid 唯一源，
+# 打包脚本不得再把 province.rs 或 city_codes 写入 CPMS 源码树。
 echo "[1/4] Build backend release binary"
 cargo build --release --manifest-path "${ROOT_DIR}/backend/Cargo.toml"
 

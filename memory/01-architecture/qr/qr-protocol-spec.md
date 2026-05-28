@@ -253,7 +253,6 @@ WUMIN_QR_V1|<kind>|<id>|<system 或空>|<expires_at 或 0>|<principal>
 | `account_pubkey` | `pubkey` |
 | `admin_pubkey` | `pubkey` |
 | `public_key` | `pubkey` |
-| `user_address` | `address` |
 | `request_id` | `id`(顶层) |
 | `challenge_id` | `id`(顶层) |
 | `challenge`(作为字段名) | `id`(顶层) |

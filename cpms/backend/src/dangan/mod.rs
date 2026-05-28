@@ -29,10 +29,11 @@ const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 pub(crate) struct ArchiveQrPayload {
     pub(crate) proto: String,
     pub(crate) r#type: String,
-    pub(crate) ano: String,
-    pub(crate) cs: String,
+    pub(crate) archive_no: String,
+    pub(crate) archive_status: String,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
+    pub(crate) status_updated_at: i64,
     pub(crate) cpms_pubkey: String,
     pub(crate) geo_seal: String,
     pub(crate) wallet_address: String,
@@ -137,7 +138,7 @@ fn archive_no_body(
 
 pub(crate) fn archive_no_checksum(body: &str) -> String {
     let mut hasher = Blake2b256::new();
-    hasher.update(b"sfid-cpms-v1|ano-check|");
+    hasher.update(b"sfid-cpms-v1|archive-no-check|");
     hasher.update(body.as_bytes());
     let digest = hasher.finalize();
     base32_no_padding(&digest[..4]).chars().take(2).collect()
@@ -209,6 +210,7 @@ pub(crate) async fn build_archive_qr_payload(
         archive.citizen_status.as_str(),
         archive.valid_from.as_str(),
         archive.valid_until.as_str(),
+        archive.citizen_status_updated_at,
         sign_key.pubkey.as_str(),
         geo_seal_hash.as_str(),
         wallet_address,
@@ -219,10 +221,11 @@ pub(crate) async fn build_archive_qr_payload(
     Ok(ArchiveQrPayload {
         proto: "SFID_CPMS_V1".to_string(),
         r#type: "ARCHIVE".to_string(),
-        ano: archive.archive_no.clone(),
-        cs: archive.citizen_status.clone(),
+        archive_no: archive.archive_no.clone(),
+        archive_status: archive.citizen_status.clone(),
         valid_from: archive.valid_from.clone(),
         valid_until: archive.valid_until.clone(),
+        status_updated_at: archive.citizen_status_updated_at,
         cpms_pubkey: sign_key.pubkey,
         geo_seal,
         wallet_address: wallet_address.to_string(),
@@ -304,17 +307,19 @@ fn build_archive_sign_source(
     citizen_status: &str,
     valid_from: &str,
     valid_until: &str,
+    status_updated_at: i64,
     cpms_pubkey: &str,
     geo_seal_hash: &str,
     wallet_address: &str,
     wallet_pubkey: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}",
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         archive_no,
         citizen_status,
         valid_from,
         valid_until,
+        status_updated_at,
         cpms_pubkey,
         geo_seal_hash,
         wallet_address,
@@ -333,6 +338,7 @@ mod tests {
             "NORMAL",
             "2026-05-24",
             "2036-05-23",
+            1_779_580_800,
             "0xpub",
             "0xseal",
             "addr2027",
@@ -341,7 +347,7 @@ mod tests {
 
         assert_eq!(
             source,
-            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|0xpub|0xseal|addr2027|0xwallet"
+            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|1779580800|0xpub|0xseal|addr2027|0xwallet"
         );
     }
 

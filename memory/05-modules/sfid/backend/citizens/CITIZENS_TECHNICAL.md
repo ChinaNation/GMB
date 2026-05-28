@@ -1,50 +1,39 @@
 # CITIZENS 模块技术文档
 
-> 历史:本模块由 phase23d(2026-05-01)从 `backend/operate/` 整体迁入,
-> 业务上聚焦"公民身份"业务族,与 `sheng_admins` / `shi_admins` 等管理员模块平行。
-
 ## 1. 模块定位
 
-- 路径:`backend/citizens`
-- 职责:承载公民身份相关业务,包括公民身份绑定凭证签发、链上绑定推送、
-  CPMS 站点扫码状态更新,以及 wuminapp 自有的投票账户登记/查询。
-- 来源:phase23d 由原 `backend/operate/` 物理搬迁;原 `operate/` 整目录已删除。
+- 路径：`sfid/backend/citizens`
+- 职责：承载公民电子护照绑定、CPMS 状态扫码、公民投票凭证签发和联合投票人口快照凭证签发。
+- 电子护照绑定边界：CPMS 档案码提供 `archive_no / archive_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`；SFID 验档案码后生成 `WUMIN_QR_V1 / sign_request`；wuminapp 使用对应钱包签名；SFID 验签通过后直接写入本地绑定结果并向 wuminapp 状态接口返回。
 
 ## 2. 模块结构
 
 - `binding.rs`
-  - `citizen_bind_challenge` 绑定/解绑 challenge 签发
-  - `citizen_bind` / `citizen_unbind` 公民身份绑定/解绑
-  - `citizen_push_chain_bind` / `citizen_push_chain_unbind` 推链
-- `chain_binding.rs`
-  - 公民绑定 / 解绑链上 extrinsic 提交 helper
-- `chain_vote.rs`
-  - wuminapp 公民投票凭证签发接口
-- `chain_joint_vote.rs`
-  - 联合投票人口快照凭证签发接口
-- `model.rs`
-  - 公民身份记录、绑定状态机、绑定/解绑 DTO、投票账户 DTO、扫码 QR 载荷
-- `handler.rs`
-  - `admin_list_citizens` 后台公民列表
-  - `public_identity_search` 公开身份查询
-- `status.rs`
-  - `admin_cpms_status_scan` CPMS 站点扫公民状态
-- `cpms_qr.rs`
-  - `canonical_status_qr_text`
-  - 状态扫码 canonical 工具
+  - `citizen_bind_challenge`：验 CPMS `ARCHIVE` 档案码并签发 wuminapp 签名请求。
+  - `citizen_bind`：验 wuminapp `sign_response` 并完成电子护照绑定。
 - `vote.rs`
-  - `app_vote_account_register` / `app_vote_account_status` wuminapp 投票账户登记/查询
-- `mod.rs`    子模块注册入口
+  - `app_myid_status`：wuminapp 查询电子护照绑定状态。
+- `chain_vote.rs`
+  - `app_vote_credential`：公民投票凭证签发接口。
+- `chain_joint_vote.rs`
+  - `app_voters_count`：联合投票人口快照凭证签发接口。
+- `model.rs`
+  - 公民电子护照记录、`bind_status`、绑定 DTO、状态扫码 QR 载荷。
+- `handler.rs`
+  - `admin_list_citizens`：后台公民列表。
+  - `public_identity_search`：公开身份查询。
+- `status.rs`
+  - `admin_cpms_status_scan`：CPMS 站点扫公民状态。
+- `cpms_qr.rs`
+  - 状态扫码 canonical 文本拼装能力。
+- `mod.rs`
+  - 子模块注册入口。
 
 ## 3. 路由接线
 
 - `POST /api/v1/admin/citizen/bind/challenge` -> `citizens::binding::citizen_bind_challenge`
 - `POST /api/v1/admin/citizen/bind` -> `citizens::binding::citizen_bind`
-- `POST /api/v1/admin/citizen/unbind` -> `citizens::binding::citizen_unbind`
-- `POST /api/v1/admin/citizen/bind/push-chain` -> `citizens::binding::citizen_push_chain_bind`
-- `POST /api/v1/admin/citizen/unbind/push-chain` -> `citizens::binding::citizen_push_chain_unbind`
-- `POST /api/v1/app/vote-account/register` -> `citizens::vote::app_vote_account_register`
-- `GET  /api/v1/app/vote-account/status` -> `citizens::vote::app_vote_account_status`
+- `GET  /api/v1/app/myid/status?wallet_address=<walletAddress>` -> `citizens::vote::app_myid_status`
 - `POST /api/v1/app/vote/credential` -> `citizens::chain_vote::app_vote_credential`
 - `GET  /api/v1/app/voters/count` -> `citizens::chain_joint_vote::app_voters_count`
 - `POST /api/v1/admin/cpms-status/scan` -> `citizens::status::admin_cpms_status_scan`
@@ -53,38 +42,30 @@
 
 ## 4. 依赖与边界
 
-- 依赖:
-  - `scope`(省域范围判断)
-  - 全局公共能力(鉴权、审计、状态存储、签名封装)
-  - `citizens::chain_binding`(链上 `bind_sfid` / `unbind_sfid` extrinsic 推送)
-  - `cpms`(`resolve_site_province_via_shard` / `verify_sr25519_signature`)
-- 边界:
-  - `citizens` 仅负责公民身份业务。
-  - 公民 DTO 放 `citizens/model.rs`,不得再塞入全局 `models`。
-  - 链上交互能力在 `backend/citizens/chain_*`。
-  - SFID 号生成入口在 `backend/sfid/generator.rs`。
+- 依赖：
+  - `cpms::verify_cpms_archive_qr`：验 CPMS 档案码和归属密文。
+  - `login::parse_sr25519_pubkey_bytes`：解析 wuminapp 钱包公钥。
+  - 全局公共能力：鉴权、审计、状态存储。
+- 边界：
+  - 电子护照绑定必须以 CPMS `ARCHIVE` 档案码为入口。
+  - 绑定必须使用 wuminapp 对 SFID challenge 的 sr25519 签名。
+  - `citizens` 不实现投票流程；公民投票只调用投票凭证签发接口。
+  - 公民 DTO 放 `citizens/model.rs`，不得塞入全局 `models`。
 
 ## 5. 关键一致性约束
 
-- 旧 `admin_bind_confirm` + `RewardStateRecord(Pending)` 双写顺序约束已随老绑定流程下线;
-  当前 `citizen_bind` 走 challenge + signature 模式,详见 `binding.rs` 内联注释。
-- 公民主数据和绑定短期状态写入 `store_citizens` 模块快照表,不再进入旧
-  `runtime_cache_entries` 或旧整包 Store 表。
-- CPMS QR 签名链路已废弃(SFID-CPMS QR v1 走 archive/verify 验真端点),
-  `cpms_qr` 仅保留状态扫码仍需复用的 canonical 文本拼装能力。
-- ARCHIVE 档案码只能在 SFID 已有钱包地址的待绑定记录上使用；正式绑定由
-  `citizen_bind(bind_archive)` 写入 `ano / sfid_code / wallet_pubkey` 三者一对一关系。
-- 公民绑定签名 challenge 生成时必须接收并锁定用户 SS58 地址，`WUMIN_QR_V1 / sign_request`
-  的 `body.address` 必须是该地址，`body.pubkey` 必须是该地址解出的 `0x` 公钥；最终
-  `citizen_bind` 提交时必须再次校验提交地址与 challenge 锁定公钥一致。
+- 三端字段统一：`archive_no / archive_status / identity_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg / sfid_code / bind_status`。
+- `bind_status` 只表达电子护照绑定状态：`PENDING / BOUND`；`identity_status` 表达身份 ID 当前有效状态。
+- `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
+- `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
+- `archive_no / sfid_code / wallet_pubkey` 三者保持一对一唯一关系。
+- `status_updated_at` 参与 CPMS `ARCHIVE` 签名原文；旧时间戳档案码不得覆盖新状态。
 
 ## 6. 审计事件
 
 | 事件 | 触发场景 | 关键字段 |
 |------|---------|---------|
-| `CITIZEN_BIND` | 管理员确认绑定 | account_pubkey, archive_no |
-| `CITIZEN_UNBIND` | 管理员解绑 | account_pubkey, archive_no |
-| `CITIZEN_PUSH_CHAIN_*` | 推链 extrinsic 状态 | block_hash, ext_index |
+| `CITIZEN_BIND` | 管理员完成电子护照绑定 | wallet_pubkey, archive_no, sfid_code |
 | `CPMS_STATUS_SCAN` | CPMS 站点扫公民状态 | sfid_number, qr_id, new_status |
 | `CPMS_STATUS_SCAN_META` | 状态扫码元数据 | request_id, actor_ip |
-| `APP_VOTE_ACCOUNT_REGISTER` | wuminapp 注册投票账户 | account_pubkey, archive_no |
+| `APP_VOTE_CREDENTIAL` | wuminapp 请求公民投票凭证 | wallet_pubkey, proposal_id |

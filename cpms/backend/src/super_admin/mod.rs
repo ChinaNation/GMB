@@ -1,6 +1,7 @@
 //! # 超级管理员模块 (super_admin)
 //!
-//! 操作员 CRUD、站点密钥注册 QR 生成、公民状态变更。仅 SUPER_ADMIN 角色可访问。
+//! 操作员 CRUD 仅 SUPER_ADMIN 角色可访问。
+//! 中文注释：公民状态变更属于档案业务，允许 SUPER_ADMIN 与 OPERATOR_ADMIN。
 
 use axum::{
     extract::{Path, State},
@@ -432,11 +433,11 @@ async fn update_archive_citizen_status(
     Path(archive_id): Path<String>,
     Json(req): Json<UpdateCitizenStatusRequest>,
 ) -> Result<Json<ApiResponse<UpdateCitizenStatusData>>, (StatusCode, Json<ApiError>)> {
-    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let ctx = authz::require_archive_admin(&state, &headers).await?;
     dangan::validate_citizen_status(&req.citizen_status)?;
 
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, full_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from, valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from, valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )
@@ -457,7 +458,8 @@ async fn update_archive_citizen_status(
         archive_no: row.get("archive_no"),
         province_code: row.get("province_code"),
         city_code: row.get("city_code"),
-        full_name: row.get("full_name"),
+        last_name: row.get("last_name"),
+        first_name: row.get("first_name"),
         birth_date: row.get("birth_date"),
         gender_code: row.get("gender_code"),
         height_cm: row.get("height_cm"),
@@ -479,9 +481,16 @@ async fn update_archive_citizen_status(
         wallet_bound_at: row.try_get("wallet_bound_at").ok(),
         wallet_bound_by: row.try_get("wallet_bound_by").ok(),
         archive_qr_payload: row.try_get("archive_qr_payload").unwrap_or_default(),
+        deleted_at: row.try_get("deleted_at").ok(),
+        deleted_by: row.try_get("deleted_by").ok(),
+        delete_reason: row.try_get("delete_reason").ok(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     };
+
+    if archive.status == "DELETED" || archive.deleted_at.is_some() {
+        return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
+    }
 
     let before = archive.citizen_status.clone();
     archive.citizen_status = req.citizen_status.trim().to_string();

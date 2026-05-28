@@ -5,6 +5,18 @@ import type { Archive } from '../types';
 
 const PAGE_SIZE = 20;
 
+function calcAge(birthDate: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return '-';
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return '-';
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const passedBirthday = today.getMonth() > birth.getMonth()
+    || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!passedBirthday) age -= 1;
+  return age >= 0 ? `${age}岁` : '-';
+}
+
 export default function ArchiveList() {
   const navigate = useNavigate();
   const [archives, setArchives] = useState<Archive[]>([]);
@@ -16,7 +28,7 @@ export default function ArchiveList() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.listArchives({ full_name: search || undefined, page, page_size: PAGE_SIZE });
+      const res = await api.listArchives({ q: search.trim() || undefined, page, page_size: PAGE_SIZE });
       if (res.data) {
         setArchives(res.data.items || []);
         setTotal(res.data.total || 0);
@@ -48,7 +60,7 @@ export default function ArchiveList() {
             <th>档案号</th>
             <th>姓名</th>
             <th>性别</th>
-            <th>省份</th>
+            <th>年龄</th>
             <th>公民状态</th>
             <th>创建时间</th>
             <th>操作</th>
@@ -61,10 +73,10 @@ export default function ArchiveList() {
             <tr><td colSpan={7} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无数据</td></tr>
           ) : archives.map(a => (
             <tr key={a.archive_id}>
-              <td><span className="text-ellipsis">{a.archive_no}</span></td>
-              <td>{a.full_name}</td>
+              <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{a.archive_no}</td>
+              <td>{a.last_name}{a.first_name}</td>
               <td>{a.gender_code === 'M' ? '男' : '女'}</td>
-              <td>{a.province_code}</td>
+              <td>{calcAge(a.birth_date)}</td>
               <td>
                 <span className={`tag ${a.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
                   {a.citizen_status === 'NORMAL' ? '正常' : '异常'}

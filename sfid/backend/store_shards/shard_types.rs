@@ -12,13 +12,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, PendingBindScan};
+use crate::citizens::model::{CitizenBindChallenge, CitizenRecord};
 use crate::cpms::model::CpmsSiteKeys;
 use crate::institutions::{MultisigAccount, MultisigInstitution};
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 use crate::models::{
-    AdminUser, AuditLogEntry, BindCallbackJob, ChainRequestReceipt, RewardStateRecord,
-    ServiceMetrics, VoteVerifyCacheEntry,
+    AdminUser, AuditLogEntry, ChainRequestReceipt, RewardStateRecord, ServiceMetrics,
+    VoteVerifyCacheEntry,
 };
 
 /// 省级分片:按 province 名切分的业务数据。
@@ -41,20 +41,11 @@ pub(crate) struct StoreShard {
     // ── 本省 citizen 记录 ──
     pub(crate) next_citizen_id: u64,
     pub(crate) citizen_records: HashMap<u64, CitizenRecord>,
-    pub(crate) citizen_id_by_pubkey: HashMap<String, u64>,
+    pub(crate) citizen_id_by_wallet_pubkey: HashMap<String, u64>,
     pub(crate) citizen_id_by_archive_no: HashMap<String, u64>,
-    pub(crate) pubkey_by_archive_index: HashMap<String, String>,
 
     // ── 本省 citizen 绑定流程 ──
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
-    pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
-
-    // ── 本省 SFID 生成历史 ──
-    pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,
-
-    // ── 本省回调任务 ──
-    pub(crate) bind_callback_jobs: Vec<BindCallbackJob>,
-
     // ── 本省奖励状态 ──
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
 
@@ -91,8 +82,6 @@ pub(crate) struct GlobalShard {
 
     // ── 清理时间戳 ──
     pub(crate) chain_auth_last_cleanup_at: Option<DateTime<Utc>>,
-    pub(crate) pending_bind_last_cleanup_at: Option<DateTime<Utc>>,
-
     // ── 服务指标 ──
     pub(crate) metrics: ServiceMetrics,
 

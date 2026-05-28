@@ -243,23 +243,15 @@ mod tests {
         store
             .write_province("广东省", |s| {
                 s.next_citizen_id = 42;
-                s.generated_sfid_by_pubkey
-                    .insert("pk1".into(), "sfid1".into());
             })
             .await
             .unwrap();
 
-        let (id, sfid) = store
-            .read_province("广东省", |s| {
-                (
-                    s.next_citizen_id,
-                    s.generated_sfid_by_pubkey.get("pk1").cloned(),
-                )
-            })
+        let id = store
+            .read_province("广东省", |s| s.next_citizen_id)
             .await
             .unwrap();
         assert_eq!(id, 42);
-        assert_eq!(sfid.as_deref(), Some("sfid1"));
     }
 
     #[tokio::test]

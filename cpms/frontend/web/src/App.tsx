@@ -50,10 +50,11 @@ export default function App() {
               <Route path="/admin" element={<ArchiveList />} />
               <Route path="/admin/create" element={<ArchiveCreate />} />
               <Route path="/admin/archives/:id" element={<ArchiveDetail />} />
-              {/* 管理员（仅超管） */}
-              <Route path="/admin/operators" element={<OperatorList />} />
-              {/* 系统设置（仅超管） */}
-              <Route path="/admin/settings" element={<SystemSettings />} />
+              <Route element={<ProtectedRoute role="SUPER_ADMIN" />}>
+                {/* 管理员与系统设置仅超级管理员可访问 */}
+                <Route path="/admin/operators" element={<OperatorList />} />
+                <Route path="/admin/settings" element={<SystemSettings />} />
+              </Route>
             </Route>
           </Route>
 

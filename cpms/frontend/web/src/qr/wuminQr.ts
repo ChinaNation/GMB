@@ -3,7 +3,7 @@
 // 唯一事实源:memory/01-architecture/qr/qr-protocol-spec.md
 // Golden fixtures:memory/01-architecture/qr/qr-protocol-fixtures/*.json
 //
-// 与 wuminapp/wumin 的 Dart envelope 字段逐字节一致。
+// 与 wumin 的 Dart envelope 字段逐字节一致。
 
 export const WUMIN_QR_V1 = 'WUMIN_QR_V1' as const;
 

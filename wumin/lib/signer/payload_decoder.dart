@@ -64,6 +64,9 @@ class PayloadDecoder {
     0x59, 0x50, 0x54, 0x5F, // YPT_
     0x56, 0x31, // V1
   ];
+  static final _cpmsArchiveDeletePrefix = Uint8List.fromList(
+    'CPMS_ARCHIVE_DELETE_V1|'.codeUnits,
+  );
 
   static DecodedPayload? decode(String payloadHex) {
     // 先尝试解码非链上交易：管理员激活 / 清算行管理员解密 challenge。
@@ -73,6 +76,9 @@ class PayloadDecoder {
               _activateSubjectPrefix.length + 48 + 1 + 1 + 32 + 8 + 16 &&
           _hasPrefix(raw, _activateSubjectPrefix)) {
         return _decodeActivateAdminSubject(raw);
+      }
+      if (_hasPrefix(raw, _cpmsArchiveDeletePrefix)) {
+        return _decodeCpmsArchiveDelete(raw);
       }
       if (raw.length == 118) {
         bool isDecrypt = true;
@@ -1592,6 +1598,36 @@ class PayloadDecoder {
       default:
         return false;
     }
+  }
+
+  static DecodedPayload? _decodeCpmsArchiveDelete(Uint8List bytes) {
+    final text = utf8.decode(bytes, allowMalformed: false);
+    final parts = text.split('|');
+    if (parts.length != 6 || parts[0] != 'CPMS_ARCHIVE_DELETE_V1') {
+      return null;
+    }
+    final challengeId = parts[1];
+    final archiveId = parts[2];
+    final archiveNo = parts[3];
+    final adminPubkey = parts[4];
+    final expiresAt = parts[5];
+    if (challengeId.isEmpty ||
+        archiveId.isEmpty ||
+        archiveNo.isEmpty ||
+        !adminPubkey.startsWith('0x') ||
+        expiresAt.isEmpty) {
+      return null;
+    }
+    return DecodedPayload(
+      action: 'archive_delete',
+      summary: '确认删除 CPMS 公民档案',
+      fields: {
+        'archive_no': archiveNo,
+        'archive_id': archiveId,
+        'admin_pubkey': adminPubkey,
+        'expires_at': expiresAt,
+      },
+    );
   }
 
   static bool _hasPrefix(Uint8List bytes, Uint8List prefix) {

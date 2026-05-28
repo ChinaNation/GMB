@@ -1,7 +1,7 @@
-// 热钱包身份现场签名页。
+// 热钱包扫码签名页。
 //
-// 用户到 CPMS / SFID 现场后：
-// 1. 打开此页，摄像头扫描管理端屏幕上的 sign_request 二维码
+// 用户到 SFID 现场后：
+// 1. 打开此页，摄像头扫描身份ID系统的 sign_request 二维码
 // 2. 验证 pubkey 与当前绑定钱包一致
 // 3. 用热钱包私钥签名 payload
 // 4. 构造 sign_response envelope
@@ -125,7 +125,7 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('身份签名'),
+        title: const Text('扫码签名'),
         centerTitle: true,
       ),
       body: Padding(
@@ -148,7 +148,8 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: AppTheme.bannerDecoration(AppTheme.info),
           child: const Text(
-            '请扫描管理端屏幕上的签名请求二维码',
+            '请扫描身份ID系统的鉴权签名码',
+            textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.info, fontWeight: FontWeight.w600),
           ),
         ),
@@ -165,14 +166,12 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        const SizedBox(height: 12),
-        const Spacer(),
+        const SizedBox(height: 24),
         Center(
           child: SizedBox(
             width: _scanBoxSize,
             height: _scanBoxSize,
-            // 中文注释：现场签名页必须是实际正方形相机框，不能再用整块矩形相机画面。
+            // 中文注释：扫码签名页必须是实际正方形相机框，不能再用整块矩形相机画面。
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
@@ -193,18 +192,12 @@ class _MyIdSignPageState extends State<MyIdSignPage> {
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
-          '扫描管理端签名请求二维码',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-        ),
-        const Spacer(),
-        const SizedBox(height: 12),
         Text(
           '钱包：${widget.wallet.address}',
           style: const TextStyle(fontSize: 12, color: AppTheme.textTertiary),
           overflow: TextOverflow.ellipsis,
         ),
+        const Spacer(),
       ],
     );
   }

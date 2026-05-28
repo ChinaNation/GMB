@@ -183,7 +183,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/api/v1/install/initialize", post(initialize_install))
         .route(
             "/api/v1/install/super-admin/bind",
-            post(bind_super_admin_from_wuminapp),
+            post(bind_super_admin_from_wumin),
         )
 }
 
@@ -382,6 +382,10 @@ async fn initialize_install(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
+    crate::address::sync_city_address_by_sfid(&state.db, qr_payload.sfid_number.as_str())
+        .await
+        .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
+
     write_audit(
         &state,
         None,
@@ -401,7 +405,7 @@ async fn initialize_install(
     })))
 }
 
-async fn bind_super_admin_from_wuminapp(
+async fn bind_super_admin_from_wumin(
     State(state): State<AppState>,
     Json(req): Json<BindSuperAdminRequest>,
 ) -> Result<Json<ApiResponse<BindSuperAdminData>>, (StatusCode, Json<ApiError>)> {

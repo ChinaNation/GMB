@@ -343,14 +343,15 @@ pub(crate) async fn archive_verify(
         None,
         "SUCCESS",
         format!(
-            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={} valid_from={} valid_until={}",
+            "archive_no={} province_code={} city_code={} sfid_number={} archive_status={:?} valid_from={} valid_until={} status_updated_at={}",
             verified.archive_no,
             verified.province_code,
             verified.city_code,
             verified.sfid_number,
-            archive_code.cs,
+            verified.archive_status,
             verified.valid_from,
-            verified.valid_until
+            verified.valid_until,
+            verified.status_updated_at
         ),
     );
     drop(store);
@@ -360,6 +361,10 @@ pub(crate) async fn archive_verify(
         message: "ok".to_string(),
         data: CpmsArchiveVerifyOutput {
             archive_no: verified.archive_no,
+            archive_status: verified.archive_status,
+            valid_from: verified.valid_from,
+            valid_until: verified.valid_until,
+            status_updated_at: verified.status_updated_at,
             province_code: verified.province_code,
             city_code: verified.city_code,
             sfid_number: verified.sfid_number,
@@ -1114,12 +1119,15 @@ pub(crate) async fn verify_cpms_archive_qr(
             "type must be ARCHIVE".to_string(),
         ));
     }
-    if archive_code.ano.trim().is_empty()
-        || archive_code.cs.trim().is_empty()
+    if archive_code.archive_no.trim().is_empty()
+        || archive_code.archive_status.trim().is_empty()
         || archive_code.valid_from.trim().is_empty()
         || archive_code.valid_until.trim().is_empty()
+        || archive_code.status_updated_at <= 0
         || archive_code.cpms_pubkey.trim().is_empty()
         || archive_code.geo_seal.trim().is_empty()
+        || archive_code.wallet_address.trim().is_empty()
+        || archive_code.wallet_pubkey.trim().is_empty()
         || archive_code.sig.trim().is_empty()
     {
         return Err((
@@ -1135,7 +1143,7 @@ pub(crate) async fn verify_cpms_archive_qr(
     let (province_name, site, seal) = find_site_by_geo_seal(
         state,
         archive_code.geo_seal.as_str(),
-        archive_code.ano.as_str(),
+        archive_code.archive_no.as_str(),
         archive_code.cpms_pubkey.as_str(),
         admin_province_scope,
     )
@@ -1177,12 +1185,15 @@ pub(crate) async fn verify_cpms_archive_qr(
         })?;
     let geo_seal_hash = hash_hex(archive_code.geo_seal.as_bytes());
     let archive_sign_source = build_archive_sign_source(
-        archive_code.ano.as_str(),
-        archive_code.cs.as_str(),
+        archive_code.archive_no.as_str(),
+        archive_code.archive_status.as_str(),
         archive_code.valid_from.as_str(),
         archive_code.valid_until.as_str(),
+        archive_code.status_updated_at,
         archive_code.cpms_pubkey.as_str(),
         geo_seal_hash.as_str(),
+        archive_code.wallet_address.as_str(),
+        archive_code.wallet_pubkey.as_str(),
     );
     if !verify_sr25519_signature(&cpms_pubkey, &archive_sign_source, &archive_sig) {
         return Err((
@@ -1192,7 +1203,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
     let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
-    let citizen_status = citizen_status_from_cpms(archive_code.cs.as_str());
+    let archive_status = citizen_status_from_cpms(archive_code.archive_status.as_str());
     bind_cpms_pubkey_if_needed(
         state,
         &province_name,
@@ -1202,13 +1213,17 @@ pub(crate) async fn verify_cpms_archive_qr(
     .await?;
 
     Ok(VerifiedCpmsArchive {
-        archive_no: archive_code.ano.clone(),
-        citizen_status,
+        archive_no: archive_code.archive_no.clone(),
+        archive_status,
         valid_from: archive_code.valid_from.clone(),
         valid_until: archive_code.valid_until.clone(),
+        status_updated_at: archive_code.status_updated_at,
         province_code: extract_province_code_from_sfid(seal.sfid_number.as_str()),
         city_code: extract_city_code_from_sfid(seal.sfid_number.as_str()),
         sfid_number: seal.sfid_number,
+        wallet_address: archive_code.wallet_address.clone(),
+        wallet_pubkey: archive_code.wallet_pubkey.clone(),
+        wallet_sig_alg: archive_code.wallet_sig_alg.clone(),
     })
 }
 
@@ -1464,12 +1479,23 @@ fn build_archive_sign_source(
     citizen_status: &str,
     valid_from: &str,
     valid_until: &str,
+    status_updated_at: i64,
     cpms_pubkey: &str,
     geo_seal_hash: &str,
+    wallet_address: &str,
+    wallet_pubkey: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}",
-        archive_no, citizen_status, valid_from, valid_until, cpms_pubkey, geo_seal_hash
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        archive_no,
+        citizen_status,
+        valid_from,
+        valid_until,
+        status_updated_at,
+        cpms_pubkey,
+        geo_seal_hash,
+        wallet_address,
+        wallet_pubkey
     )
 }
 
