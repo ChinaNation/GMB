@@ -52,6 +52,8 @@
 - 已清理 SFID 旧绑定回调 worker、回调环境变量文档和死字段；电子护照绑定结果只由 SFID 本地完成并由 wuminapp 状态接口查询。
 - 已新增 SFID 启动清理：启动时物理删除历史非 `BOUND` 公民记录及其反向索引，并清除旧待绑定扫码缓存、旧按钱包生成 SFID 缓存字段。
 - 已锁死更换绑定边界：更换绑定只允许更换钱包账户；`archive_no` 与 `sfid_code` 首次绑定后永久不变，扫描其他档案号会被 SFID 拒绝。
+- 已修正 SFID 公民列表绑定入口文案：无记录入口固定为“新增身份ID绑定”，已有记录操作固定为“更换绑定”，弹窗标题和 wuminapp 签名请求摘要按 `create / replace` 区分。
+- 已修复 `geo_seal cannot be decrypted` 持久化链路：SFID 启动时把 `store_cpms.cpms_site_keys` 恢复到 `sharded_store`；首次 ARCHIVE 验真绑定 `cpms_pubkey_hash / ACTIVE / USED` 时先写 `store_cpms`，再同步运行缓存。
 - 已更新协议、命名、SFID/CPMS/wuminapp 模块文档，并删除旧实现计划文档。
 - 已验证：
   - `cargo check --manifest-path sfid/backend/Cargo.toml`

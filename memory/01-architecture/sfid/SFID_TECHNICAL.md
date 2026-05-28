@@ -99,7 +99,7 @@
 - 市级管理员数据模型新增姓名字段 `admin_name`；新增管理员必须提交姓名与公钥。
 - 管理员新增/修改市级管理员时，`admin_pubkey` 必须通过 `sr25519` 公钥格式校验（非法输入拒绝）。
 - 管理员”修改”弹窗支持同时修改姓名和公钥。
-- 身份信息页“操作”列内按钮文案固定为“更新绑定”（列名仍为“操作”）。
+- 身份信息页已有记录“操作”列内按钮文案固定为“更换绑定”（列名仍为“操作”）；列表顶部新增入口文案固定为“新增身份ID绑定”。
 - 省级管理员维护机构管理：
 1. 先在机构页生成机构身份识别码（调用 `sfid`，`A3=GFR`,`P1=0`，不输入公钥）。
 2. 持 SFID 二维码去 CPMS 初始化系统，CPMS 初始化后生成机构公钥登记二维码。
@@ -135,7 +135,7 @@
 - `Rust + Axum`
 - `PostgreSQL`
 - `Redis`（可选，用于限流和缓存）
-- 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端通过 `runtime_misc`、`runtime_meta` 持久化运行态数据，管理员与密钥槽位使用结构化表持久化（见 8.1）。
+- 运行态持久化：`DATABASE_URL` 指向 PostgreSQL；后端按模块写入 `store_citizens / store_cpms / store_institutions / store_ops`，运行缓存启动时从这些主数据恢复。
 - 签名密钥缓存：运行时签名 keypair 缓存命中时不重复解码 seed，缓存中的 seed 文本使用 `SensitiveSeed` 存储并在释放时清零。
 - 旧文件态与旧整包表状态说明：
 1. 不再使用 `backend/data/runtime_state.json`。
@@ -194,14 +194,12 @@
 ## 8. 数据模型
 ### 8.1 核心表（当前落地）
 - 当前主流程持久化表：
-1. `runtime_cache_entries`：运行态分片缓存（JSONB，按 `entry_key` 存储）。
-2. `runtime_misc`：运行态兼容快照。
-3. `runtime_meta`：运行态元数据（签名种子/公钥，含加密载荷）。
-5. `provinces`：省份维度表。
-6. `sheng_admin_scope`：省级管理员省域归属（含 `scope_no`）。
-7. `shi_admin_scope`：市级管理员归属省级管理员关系。
-9. `chain_idempotency_requests`：链路幂等与防重放记录。
-10. `store_citizens`：公民电子护照绑定快照。
+1. `admins`：省级管理员、市级管理员和签名公钥元数据。
+2. `sheng_admin_scope`：省级管理员省域归属（含 `scope_no`）。
+3. `store_citizens`：公民电子护照绑定快照。
+4. `store_cpms`：CPMS 安装授权、`install_secret`、授权状态和 `cpms_pubkey_hash` 主数据。
+5. `store_institutions`：机构、机构账户和资料库快照。
+6. `store_ops`：登录 challenge/session、审计、链路幂等和服务指标。
 - 管理员视图：
 2. `v_sheng_admins`
 3. `v_shi_admins`
@@ -372,7 +370,8 @@
 ### 11.2 明确约束
 - 二维码明文不暴露签发城市和公安局机构。
 - 每个 CPMS 实例必须先扫描 SFID 签发的 INSTALL 安装码。
-- SFID 按 `sfid_number + install_secret_hash + cpms_pubkey_hash` 维护该 CPMS 授权。
+- SFID 按 `sfid_number + install_secret_hash + cpms_pubkey_hash` 维护该 CPMS 授权；
+  `store_cpms` 是主数据，`sharded_store` 只是运行期按省扫描缓存。
 - 当前版本是单向验真：CPMS 签发 ARCHIVE，SFID 解 `geo_seal` 后验签。
 - `archive_no` 作为唯一用户标识，不再引入额外用户 ID 字段。
 - `archive_no` 不承载省、市、机构、日期与状态语义，SFID 不得从 `archive_no` 推导投票资格。
@@ -442,12 +441,13 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 ### 11.4 INSTALL 安装码（机构初始化）
 - 用途：SFID 为市公安局 CPMS 签发安装授权。
 - INSTALL 字段（由 SFID 生成）：`proto`, `type`, `sfid_number`, `province_name`, `city_name`, `install_secret`, `sig`。
-- CPMS 初始化后生成本机档案签发密钥,首次 ARCHIVE 验真成功时由 SFID 绑定 `cpms_pubkey_hash`。
+- CPMS 初始化后生成本机档案签发密钥，首次 ARCHIVE 验真成功时由 SFID 把
+  `cpms_pubkey_hash / ACTIVE / USED` 写入 `store_cpms`，再同步到运行缓存。
 - 流程：
 1. SFID 省级管理员在公安局机构详情页生成 INSTALL 安装码。
 2. CPMS 使用 INSTALL 完成离线安装初始化并保存授权材料。
 3. CPMS 生成 ARCHIVE 档案码。
-4. SFID 首次验真成功后将授权状态由 `PENDING` 改为 `ACTIVE`。
+4. SFID 首次验真成功后将授权状态由 `PENDING` 改为 `ACTIVE`，并把安装码状态置为 `USED`。
 5. 未完成验真或授权状态不可用时,SFID 不认可该 CPMS 出具的档案码。
 
 ### 11.5 CPMS 对齐清单（执行项）
@@ -585,9 +585,9 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 验收标准：前后端、测试、区块链对接口与字段无歧义。
 
 ### 16.2 里程碑 1：数据层与系统初始化（2-3 天）
-- 完成运行态拆分：`runtime_misc`、`runtime_meta`，并下线 `runtime_store`。
-- 运行态缓存升级：`runtime_cache_entries`（按键分片存储），`runtime_misc` 仅保留兼容快照。
-- 完成运行态加密落地：`runtime_meta.payload_enc`。
+- 完成模块 Store 拆分：`store_citizens / store_cpms / store_institutions / store_ops`。
+- 运行缓存只作为进程内加速层，启动时从模块 Store 主数据恢复，不再作为持久化真源。
+- CPMS 授权、电子护照绑定、机构账户和登录审计按模块快照持久化。
 - 交付物：`backend/db/migrations`、初始化器代码、数据字典。
 - 当前落地迁移：
   - `backend/db/migrations/001_init_sfid.sql`
@@ -600,6 +600,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
   - `backend/db/migrations/008_chain_idempotency_reward_state.sql`
   - `backend/db/migrations/009_runtime_cache_and_pii_encryption.sql`
   - `backend/db/migrations/010_drop_plaintext_pii_columns.sql`
+  - `backend/db/migrations/015_store_reset.sql`
 - 验收标准：重复执行迁移可幂等，视图和约束稳定可查询。
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）

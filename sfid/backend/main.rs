@@ -854,12 +854,15 @@ fn main() {
             }
         }
 
-        // 中文注释:CPMS 授权站点缓存为异步分片访问,孤儿清理需要在 runtime 内执行。
-        app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
-
         // 中文注释:启动后把模块 Store 快照里的公安局机构同步到进程内分片缓存,
         // 保证详情页/列表按省读取时能看到最新机构和账户。
         app_core::runtime_ops::sync_public_security_to_sharded(&state).await;
+
+        // 中文注释:启动后把 store_cpms 持久化授权恢复到分片缓存,供 ARCHIVE geo_seal 验真扫描。
+        app_core::runtime_ops::sync_cpms_sites_to_sharded(&state).await;
+
+        // 中文注释:CPMS 授权站点缓存为异步分片访问,恢复缓存后再清理孤儿授权。
+        app_core::runtime_ops::cleanup_orphan_cpms_sites(&state).await;
 
         tokio::spawn(indexer::indexer_worker(state.store.backend.clone()));
 

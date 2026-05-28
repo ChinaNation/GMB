@@ -1,6 +1,6 @@
 # CPMS_TECHNICAL
 
-- 最后更新:2026-05-25
+- 最后更新:2026-05-28
 - 任务卡:
   - `memory/08-tasks/open/20260516-sfid-cpms-install-archive.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-archive-simplify.md`
@@ -49,7 +49,8 @@ sfid/backend/cpms/
 1. 解析 `ARCHIVE`，强制 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
 2. 在当前管理员省域内用已保存的 `install_secret` 尝试解 `geo_seal`。
 3. 校验 `geo_seal.sfid_number` 与授权记录一致，并从 `sfid_number` 解码省市。
-4. 校验 CPMS 本机签名；首次成功时绑定 `cpms_pubkey_hash`，后续只接受同一公钥。
+4. 校验 CPMS 本机签名；首次成功时把 `cpms_pubkey_hash / ACTIVE / USED`
+   写入 `store_cpms` 主数据，后续只接受同一公钥。
 5. 返回验真结果；正式绑定必须由 `citizens::binding::citizen_bind` 在 wuminapp 签名通过后完成。
 6. 绑定流程检查 `archive_no / sfid_code / wallet_pubkey` 三者唯一，不再维护独立档案导入状态。
 
@@ -57,6 +58,10 @@ sfid/backend/cpms/
 
 - `CpmsSiteKeys` 等数据结构归 `cpms/model.rs`。
 - CPMS 授权主数据写入 `store_cpms` 模块快照表；`store_shards/` 只保留进程内省分片缓存。
+- SFID 启动时必须把 `store_cpms.cpms_site_keys` 恢复到 `sharded_store`，否则 ARCHIVE
+  验真无法扫描到授权记录，会误报 `geo_seal cannot be decrypted`。
+- CPMS 本机公钥绑定状态不得只写 `sharded_store`；任何 `cpms_pubkey_hash / status /
+  install_token_status` 更新都必须先落 `store_cpms`，再覆盖运行缓存。
 - ARCHIVE 验真入口为 `cpms::verify_cpms_archive_qr`，公民绑定复用同一入口。
 - CPMS 授权省域判断归 `cpms::scope`。
 - 不得再从 `sheng_admins` 引用 CPMS handler。

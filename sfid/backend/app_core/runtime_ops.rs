@@ -490,6 +490,72 @@ pub(crate) async fn sync_public_security_to_sharded(state: &AppState) {
     );
 }
 
+/// 把持久化 Store 快照里的 CPMS 安装授权同步到进程内分片缓存。
+///
+/// 中文注释:`store_cpms` 是 CPMS 授权主数据；`sharded_store` 只是运行期按省检索缓存。
+/// ARCHIVE 验真需要按省扫描授权并用 `install_secret` 解 `geo_seal`，所以 SFID 启动后
+/// 必须先把持久化授权恢复进分片缓存，否则重启后会误报 `geo_seal cannot be decrypted`。
+pub(crate) async fn sync_cpms_sites_to_sharded(state: &AppState) {
+    let sites: Vec<CpmsSiteKeys> = match state.store.read() {
+        Ok(store) => store.cpms_site_keys.values().cloned().collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "sync_cpms_sites_to_sharded: store read failed");
+            return;
+        }
+    };
+    if sites.is_empty() {
+        return;
+    }
+
+    let mut by_province: HashMap<String, Vec<CpmsSiteKeys>> = HashMap::new();
+    for site in sites {
+        let province = if !site.admin_province.trim().is_empty() {
+            site.admin_province.clone()
+        } else {
+            match crate::sfid::province::province_name_by_code(site.province_code.as_str()) {
+                Some(name) => name.to_string(),
+                None => {
+                    tracing::warn!(
+                        sfid_number = %site.site_sfid,
+                        province_code = %site.province_code,
+                        "sync_cpms_sites_to_sharded: cannot resolve site province"
+                    );
+                    continue;
+                }
+            }
+        };
+        by_province.entry(province).or_default().push(site);
+    }
+
+    let mut total_synced = 0usize;
+    for (province, group) in by_province {
+        let group_len = group.len();
+        let write_result = state
+            .sharded_store
+            .write_province(&province, move |shard| {
+                for site in group {
+                    shard.cpms_site_keys.insert(site.site_sfid.clone(), site);
+                }
+            })
+            .await;
+        match write_result {
+            Ok(()) => total_synced += group_len,
+            Err(e) => {
+                tracing::warn!(
+                    province = %province,
+                    error = %e,
+                    "sync_cpms_sites_to_sharded: shard write failed"
+                );
+            }
+        }
+    }
+
+    tracing::info!(
+        count = total_synced,
+        "CPMS site authorizations synced to sharded_store"
+    );
+}
+
 /// 任务卡 `20260408-sfid-public-security-cpms-embed`:
 /// 启动时清理孤儿 CPMS 站点。
 ///

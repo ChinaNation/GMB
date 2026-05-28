@@ -606,6 +606,16 @@ fn build_citizen_bind_sign_request(
         CitizenStatus::Normal => "NORMAL",
         CitizenStatus::Abnormal => "ABNORMAL",
     };
+    let mode_label = if mode == "replace" {
+        "更换绑定"
+    } else {
+        "新增身份ID绑定"
+    };
+    let summary = if mode == "replace" {
+        "确认更换绑定"
+    } else {
+        "确认新增身份ID绑定"
+    };
     let sign_request = serde_json::json!({
         "proto": crate::qr::WUMIN_QR_V1,
         "kind": "sign_request",
@@ -619,9 +629,9 @@ fn build_citizen_bind_sign_request(
             "payload_hex": format!("0x{}", hex::encode(challenge_text.as_bytes())),
             "display": {
                 "action": "citizen_bind",
-                "summary": "确认绑定电子护照身份ID",
+                "summary": summary,
                 "fields": [
-                    { "key": "mode", "label": "操作", "value": mode },
+                    { "key": "mode", "label": "操作", "value": mode_label },
                     { "key": "archive_no", "label": "档案号", "value": archive_no },
                     { "key": "archive_status", "label": "档案状态", "value": archive_status_text },
                     { "key": "wallet_address", "label": "投票账户", "value": wallet_address }
