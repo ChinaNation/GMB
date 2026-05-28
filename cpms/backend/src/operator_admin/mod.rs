@@ -36,6 +36,7 @@ struct CreateArchiveRequest {
     #[serde(default)]
     address: Option<String>,
     citizen_status: Option<String>,
+    voting_eligible: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -110,6 +111,7 @@ struct UpdateArchiveRequest {
     village_id: Option<String>,
     address: Option<String>,
     citizen_status: Option<String>,
+    voting_eligible: Option<bool>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -197,7 +199,7 @@ async fn create_archive(
         ));
     }
 
-    let voting = citizen_status == "NORMAL";
+    let voting = req.voting_eligible.unwrap_or(citizen_status == "NORMAL");
 
     let now_ts = Utc::now().timestamp();
     let valid_from = dangan::archive_valid_from(now_ts);
@@ -496,7 +498,9 @@ async fn update_archive(
         archive.citizen_status = v;
         archive.citizen_status_updated_at = Utc::now().timestamp();
     }
-    archive.voting_eligible = archive.citizen_status == "NORMAL";
+    if let Some(v) = req.voting_eligible {
+        archive.voting_eligible = v;
+    }
 
     archive.updated_at = Utc::now().timestamp();
 
@@ -574,7 +578,8 @@ async fn generate_archive_qr(
         serde_json::json!({
             "archive_id": archive_id,
             "archive_no": qr_payload.archive_no,
-            "archive_status": qr_payload.archive_status,
+            "citizen_status": qr_payload.citizen_status,
+            "voting_eligible": qr_payload.voting_eligible,
             "valid_from": qr_payload.valid_from,
             "valid_until": qr_payload.valid_until,
             "status_updated_at": qr_payload.status_updated_at,
@@ -604,8 +609,8 @@ async fn print_archive_qr(
         print_id: format!("qpr_{}", Uuid::new_v4().simple()),
         archive_id: archive.archive_id,
         archive_no: qr_payload.archive_no.clone(),
-        citizen_status: qr_payload.archive_status.clone(),
-        voting_eligible: archive.voting_eligible,
+        citizen_status: qr_payload.citizen_status.clone(),
+        voting_eligible: qr_payload.voting_eligible,
         printed_at: Utc::now().timestamp(),
     };
 

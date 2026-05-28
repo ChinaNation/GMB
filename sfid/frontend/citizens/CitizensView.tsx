@@ -136,9 +136,15 @@ export function CitizensView() {
     return v ?? '-';
   };
 
-  const identityStatusTag = (status: string | undefined) => (
+  const statusTag = (status: string | undefined) => (
     status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">异常</Tag>
   );
+
+  const citizenStatusText = (status: string | undefined) => {
+    if (status === 'NORMAL') return '正常';
+    if (status === 'ABNORMAL') return '异常';
+    return '-';
+  };
 
   const formatDateRange = (from?: string, until?: string) => {
     if (!from || !until) return '-';
@@ -159,7 +165,7 @@ export function CitizensView() {
       render: (_v: unknown, _r: CitizenRow, idx: number) => idx + 1,
     },
     {
-      title: '账户地址',
+      title: '投票账户',
       dataIndex: 'wallet_address',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',
@@ -177,11 +183,11 @@ export function CitizensView() {
       render: (v: string | undefined) => v ?? '-',
     },
     {
-      title: '状态',
-      dataIndex: 'bind_status',
-      width: 100,
+      title: '投票状态',
+      dataIndex: 'vote_status',
+      width: 120,
       align: 'center',
-      render: (v: string) => bindStatusText(v),
+      render: (v: string | undefined) => statusTag(v),
     },
   ];
   if (capabilities.canBusinessWrite) {
@@ -219,7 +225,7 @@ export function CitizensView() {
             )}
             <Form layout="inline" onFinish={onSearch}>
               <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-                <Input style={{ width: 420 }} placeholder="请输入钱包、档案号或身份ID" allowClear />
+                <Input style={{ width: 420 }} placeholder="请输入投票账户、档案号或身份ID" allowClear />
               </Form.Item>
               <Form.Item style={{ marginBottom: 0 }}>
                 <Button htmlType="submit" loading={loading}>
@@ -259,22 +265,15 @@ export function CitizensView() {
         {detailRecord && (
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="身份ID">{detailRecord.sfid_code ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="投票账户">
               {detailRecord.wallet_address ?? detailRecord.wallet_pubkey ?? '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.bind_status)}</Descriptions.Item>
-            <Descriptions.Item label="档案状态">
-              {detailRecord.archive_status === 'NORMAL' ? 'NORMAL' : detailRecord.archive_status ?? '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="身份ID状态">
-              {identityStatusTag(detailRecord.identity_status)}
-            </Descriptions.Item>
+            <Descriptions.Item label="选举权利">{detailRecord.voting_eligible ? '有' : '无'}</Descriptions.Item>
+            <Descriptions.Item label="公民状态">{citizenStatusText(detailRecord.citizen_status)}</Descriptions.Item>
             <Descriptions.Item label="有效期">
               {formatDateRange(detailRecord.valid_from, detailRecord.valid_until)}
-            </Descriptions.Item>
-            <Descriptions.Item label="签发 CPMS 归属">
-              {detailRecord.province_code ?? '-'} / {detailRecord.city_code ?? '-'}
             </Descriptions.Item>
           </Descriptions>
         )}

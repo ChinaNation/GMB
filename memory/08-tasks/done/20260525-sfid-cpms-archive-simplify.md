@@ -25,7 +25,7 @@
 - `cpms/backend/src/dangan/`：调整 ARCHIVE 载荷结构与签名原文。
 - `cpms/backend/src/operator_admin/`：清理生成、打印审计中对协议字段 `status_updated_at` 的输出。
 - `sfid/backend/cpms/`：调整 ARCHIVE DTO、验签原文和字段校验。
-- `sfid/backend/citizens/`：清理 `archive_status_updated_at` 绑定残留，确认绑定前已有钱包地址。
+- `sfid/backend/citizens/`：清理旧状态时间字段残留，确认绑定前已有钱包地址。
 - `sfid/frontend/citizens/`：修复列表行点击热区与绑定按钮事件冒泡。
 - `memory/05-modules/cpms/`：更新 CPMS 档案码文档。
 - `memory/05-modules/sfid/`：更新 SFID_CPMS_V1 协议文档。
@@ -43,7 +43,7 @@
 - CPMS 生成的 ARCHIVE JSON 不包含 `status_updated_at / code_id / usage_limit`。
 - CPMS 与 SFID 使用同一份新签名原文。
 - SFID 能验签并绑定新档案码。
-- SFID 后端不再保存或返回 `archive_status_updated_at`。
+- SFID 后端不再保存或返回旧状态时间字段。
 - 公民列表点击绑定按钮只打开绑定/扫码弹窗，不打开详情弹窗。
 - 文档同步更新，旧字段残留清理完成。
 - 相关 Rust / 前端检查尽量通过；如环境限制导致无法执行，必须说明原因。

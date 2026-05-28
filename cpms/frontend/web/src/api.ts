@@ -89,7 +89,7 @@ export const listVillages = (town_code: string) => get<{ village_id: string; tow
 export const createArchive = (body: {
   last_name: string; first_name: string; birth_date: string; gender_code: string; height_cm: number;
   town_code?: string; village_id?: string; address?: string;
-  citizen_status?: string;
+  citizen_status?: string; voting_eligible?: boolean;
 }) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);
 export const listArchives = (params?: { q?: string; page?: number; page_size?: number }) => {
   const qs = new URLSearchParams();

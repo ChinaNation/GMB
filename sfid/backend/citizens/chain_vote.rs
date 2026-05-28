@@ -58,7 +58,11 @@ pub(crate) async fn app_vote_credential(
         {
             if let Some(record) = store.citizen_records.get(cid) {
                 let bound = record.archive_no.is_some();
-                (bound, bound, record.archive_no.clone())
+                (
+                    bound,
+                    bound && record.computed_vote_status() == CitizenStatus::Normal,
+                    record.archive_no.clone(),
+                )
             } else {
                 (false, false, None)
             }

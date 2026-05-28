@@ -343,12 +343,13 @@ pub(crate) async fn archive_verify(
         None,
         "SUCCESS",
         format!(
-            "archive_no={} province_code={} city_code={} sfid_number={} archive_status={:?} valid_from={} valid_until={} status_updated_at={}",
+            "archive_no={} province_code={} city_code={} sfid_number={} citizen_status={:?} voting_eligible={} valid_from={} valid_until={} status_updated_at={}",
             verified.archive_no,
             verified.province_code,
             verified.city_code,
             verified.sfid_number,
-            verified.archive_status,
+            verified.citizen_status,
+            verified.voting_eligible,
             verified.valid_from,
             verified.valid_until,
             verified.status_updated_at
@@ -361,7 +362,8 @@ pub(crate) async fn archive_verify(
         message: "ok".to_string(),
         data: CpmsArchiveVerifyOutput {
             archive_no: verified.archive_no,
-            archive_status: verified.archive_status,
+            citizen_status: verified.citizen_status,
+            voting_eligible: verified.voting_eligible,
             valid_from: verified.valid_from,
             valid_until: verified.valid_until,
             status_updated_at: verified.status_updated_at,
@@ -1120,7 +1122,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
     if archive_code.archive_no.trim().is_empty()
-        || archive_code.archive_status.trim().is_empty()
+        || archive_code.citizen_status.trim().is_empty()
         || archive_code.valid_from.trim().is_empty()
         || archive_code.valid_until.trim().is_empty()
         || archive_code.status_updated_at <= 0
@@ -1186,7 +1188,8 @@ pub(crate) async fn verify_cpms_archive_qr(
     let geo_seal_hash = hash_hex(archive_code.geo_seal.as_bytes());
     let archive_sign_source = build_archive_sign_source(
         archive_code.archive_no.as_str(),
-        archive_code.archive_status.as_str(),
+        archive_code.citizen_status.as_str(),
+        archive_code.voting_eligible,
         archive_code.valid_from.as_str(),
         archive_code.valid_until.as_str(),
         archive_code.status_updated_at,
@@ -1203,7 +1206,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
     let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
-    let archive_status = citizen_status_from_cpms(archive_code.archive_status.as_str());
+    let citizen_status = citizen_status_from_cpms(archive_code.citizen_status.as_str());
     bind_cpms_pubkey_if_needed(
         state,
         &province_name,
@@ -1214,7 +1217,8 @@ pub(crate) async fn verify_cpms_archive_qr(
 
     Ok(VerifiedCpmsArchive {
         archive_no: archive_code.archive_no.clone(),
-        archive_status,
+        citizen_status,
+        voting_eligible: archive_code.voting_eligible,
         valid_from: archive_code.valid_from.clone(),
         valid_until: archive_code.valid_until.clone(),
         status_updated_at: archive_code.status_updated_at,
@@ -1500,6 +1504,7 @@ fn build_install_sign_source(
 fn build_archive_sign_source(
     archive_no: &str,
     citizen_status: &str,
+    voting_eligible: bool,
     valid_from: &str,
     valid_until: &str,
     status_updated_at: i64,
@@ -1509,9 +1514,10 @@ fn build_archive_sign_source(
     wallet_pubkey: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         archive_no,
         citizen_status,
+        voting_eligible,
         valid_from,
         valid_until,
         status_updated_at,

@@ -9,7 +9,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
 - 安装后生成 `SFID_CPMS_V1 / ARCHIVE` 公民档案二维码；签出前必须先绑定用户投票账户。
-- ARCHIVE 包含档案号、档案状态、电子护照有效期、CPMS 签发公钥、`geo_seal`、钱包地址/公钥和签名，不包含状态更新时间、`code_id` 或使用次数。
+- ARCHIVE 包含档案号、公民状态、选举资格、电子护照有效期、公民状态更新时间、CPMS 签发公钥、`geo_seal`、投票账户地址/公钥和签名，不包含 `code_id` 或使用次数。
 - 档案号不暴露省、市、机构号。
 - 档案号格式为 `<26位Base32>-<2位Base32校验>`，不带固定业务前缀。
 - ARCHIVE 明文不暴露省、市、机构号，归属信息写入加密 `geo_seal`。

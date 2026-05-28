@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn qr_signature_can_be_verified() {
         let payload =
-            "sfid-cpms-v1|archive|ABCDEFGHIJKLMNOPQRSTUVWXY2-Z7|NORMAL|2026-05-24|2036-05-23|0x1234|0xabcd";
+            "sfid-cpms-v1|archive|ABCDEFGHIJKLMNOPQRSTUVWXY2-Z7|NORMAL|true|2026-05-24|2036-05-23|0x1234|0xabcd";
         let secret = [9u8; 32];
         let sig_hex = match sign_archive_payload_with_secret(&secret, payload) {
             Ok(v) => v,

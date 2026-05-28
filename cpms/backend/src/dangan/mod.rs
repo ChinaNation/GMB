@@ -30,7 +30,8 @@ pub(crate) struct ArchiveQrPayload {
     pub(crate) proto: String,
     pub(crate) r#type: String,
     pub(crate) archive_no: String,
-    pub(crate) archive_status: String,
+    pub(crate) citizen_status: String,
+    pub(crate) voting_eligible: bool,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
@@ -208,6 +209,7 @@ pub(crate) async fn build_archive_qr_payload(
     let sign_source = build_archive_sign_source(
         archive.archive_no.as_str(),
         archive.citizen_status.as_str(),
+        archive.voting_eligible,
         archive.valid_from.as_str(),
         archive.valid_until.as_str(),
         archive.citizen_status_updated_at,
@@ -222,7 +224,8 @@ pub(crate) async fn build_archive_qr_payload(
         proto: "SFID_CPMS_V1".to_string(),
         r#type: "ARCHIVE".to_string(),
         archive_no: archive.archive_no.clone(),
-        archive_status: archive.citizen_status.clone(),
+        citizen_status: archive.citizen_status.clone(),
+        voting_eligible: archive.voting_eligible,
         valid_from: archive.valid_from.clone(),
         valid_until: archive.valid_until.clone(),
         status_updated_at: archive.citizen_status_updated_at,
@@ -305,6 +308,7 @@ fn derive_geo_seal_key(install_secret: &str) -> [u8; 32] {
 fn build_archive_sign_source(
     archive_no: &str,
     citizen_status: &str,
+    voting_eligible: bool,
     valid_from: &str,
     valid_until: &str,
     status_updated_at: i64,
@@ -314,9 +318,10 @@ fn build_archive_sign_source(
     wallet_pubkey: &str,
 ) -> String {
     format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         archive_no,
         citizen_status,
+        voting_eligible,
         valid_from,
         valid_until,
         status_updated_at,
@@ -336,6 +341,7 @@ mod tests {
         let source = build_archive_sign_source(
             "ARCHIVE-1",
             "NORMAL",
+            true,
             "2026-05-24",
             "2036-05-23",
             1_779_580_800,
@@ -347,7 +353,7 @@ mod tests {
 
         assert_eq!(
             source,
-            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|1779580800|0xpub|0xseal|addr2027|0xwallet"
+            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1779580800|0xpub|0xseal|addr2027|0xwallet"
         );
     }
 

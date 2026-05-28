@@ -10,9 +10,9 @@ export type CitizenRow = {
   wallet_address?: string;
   archive_no?: string;
   sfid_code?: string;
-  province_code?: string;
-  city_code?: string;
-  archive_status?: 'NORMAL' | 'ABNORMAL';
+  citizen_status?: 'NORMAL' | 'ABNORMAL';
+  voting_eligible: boolean;
+  vote_status: 'NORMAL' | 'ABNORMAL';
   identity_status?: 'NORMAL' | 'ABNORMAL';
   valid_from?: string;
   valid_until?: string;
@@ -27,7 +27,8 @@ export type CitizenBindChallengeResult = {
   archive_no: string;
   wallet_address: string;
   wallet_pubkey: string;
-  archive_status: 'NORMAL' | 'ABNORMAL';
+  citizen_status: 'NORMAL' | 'ABNORMAL';
+  voting_eligible: boolean;
   valid_from: string;
   valid_until: string;
   status_updated_at: number;
@@ -42,13 +43,13 @@ export type CitizenBindResult = {
   wallet_address?: string;
   archive_no?: string;
   sfid_code?: string;
-  archive_status?: 'NORMAL' | 'ABNORMAL';
+  citizen_status?: 'NORMAL' | 'ABNORMAL';
+  voting_eligible: boolean;
+  vote_status: 'NORMAL' | 'ABNORMAL';
   identity_status: 'NORMAL' | 'ABNORMAL';
   valid_from?: string;
   valid_until?: string;
   status_updated_at?: number;
-  province_code?: string;
-  city_code?: string;
   bind_status: 'PENDING' | 'BOUND';
 };
 

@@ -32,15 +32,15 @@ function bindErrorMessage(err: unknown): string {
       case 'SFID_BIND_CHALLENGE_EXPIRED':
         return '签名请求已过期，请重新扫描档案码。';
       case 'SFID_BIND_SIGNATURE_VERIFY_FAILED':
-        return '签名校验失败，请确认使用档案码绑定的钱包签名。';
+        return '签名校验失败，请确认使用档案码绑定的投票账户签名。';
       case 'SFID_BIND_WALLET_MISMATCH':
-        return '签名钱包与本次绑定钱包不一致。';
+        return '签名账户与本次投票账户不一致。';
       case 'SFID_BIND_ARCHIVE_ALREADY_BOUND':
         return '该档案已完成电子护照绑定。';
       case 'SFID_BIND_ARCHIVE_IMMUTABLE':
-        return '档案号已和当前身份ID永久绑定，更换钱包必须扫描同一档案号的档案码。';
+        return '档案号已和对应身份ID永久绑定，更换绑定必须扫描同一档案号的档案码。';
       case 'SFID_BIND_WALLET_ALREADY_BOUND':
-        return '该钱包已绑定其他电子护照。';
+        return '该投票账户已绑定其他身份ID。';
       default:
         return err.message;
     }
@@ -257,9 +257,9 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         <>
           {record && (
             <Descriptions column={1} size="small" bordered style={{ marginBottom: 12 }}>
-              <Descriptions.Item label="当前档案号">{record.archive_no ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="当前身份ID">{record.sfid_code ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="当前钱包">{record.wallet_address ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="档案号">{record.archive_no ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="身份ID">{record.sfid_code ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="投票账户">{record.wallet_address ?? '-'}</Descriptions.Item>
             </Descriptions>
           )}
           {scannerBox('点击扫描档案码')}
@@ -282,8 +282,11 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
         <>
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="档案号">{bindChallenge.archive_no}</Descriptions.Item>
-            <Descriptions.Item label="档案状态">{bindChallenge.archive_status}</Descriptions.Item>
-            <Descriptions.Item label="绑定钱包">{bindChallenge.wallet_address}</Descriptions.Item>
+            <Descriptions.Item label="选举权利">{bindChallenge.voting_eligible ? '有' : '无'}</Descriptions.Item>
+            <Descriptions.Item label="公民状态">
+              {bindChallenge.citizen_status === 'NORMAL' ? '正常' : '异常'}
+            </Descriptions.Item>
+            <Descriptions.Item label="投票账户">{bindChallenge.wallet_address}</Descriptions.Item>
           </Descriptions>
           <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0 12px' }}>
             <QRCode value={bindChallenge.sign_request} size={260} color="#134e4a" />
