@@ -52,7 +52,10 @@ pub(crate) async fn app_vote_credential(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if let Some(cid) = store.citizen_id_by_pubkey.get(account_pubkey.as_str()) {
+        if let Some(cid) = store
+            .citizen_id_by_wallet_pubkey
+            .get(account_pubkey.as_str())
+        {
             if let Some(record) = store.citizen_records.get(cid) {
                 let bound = record.archive_no.is_some();
                 (bound, bound, record.archive_no.clone())

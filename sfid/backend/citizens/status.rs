@@ -1,7 +1,7 @@
 //! 公民状态扫码 handler:CPMS 站点扫公民状态 QR,审计 + 缓存失效。
 //!
 //! 管理端入口直接挂到 `citizens::status::admin_cpms_status_scan`,
-//! 链上交互能力位于 `citizens::chain_binding`,canonical 文本拼装位于 `citizens::cpms_qr`。
+//! canonical 文本拼装位于 `citizens::cpms_qr`。
 
 use axum::{
     extract::State,
@@ -116,7 +116,7 @@ pub(crate) async fn admin_cpms_status_scan(
         bounded_cache_limit("SFID_CONSUMED_QR_CACHE_MAX", 50_000),
     );
 
-    // 中文注释:从 citizen_records 查找绑定(取代旧 pubkey_by_archive_index + bindings_by_pubkey)。
+    // 中文注释:从 citizen_records 查找电子护照绑定记录。
     let Some(cid) = store
         .citizen_id_by_archive_no
         .get(&payload.archive_no)
@@ -127,7 +127,10 @@ pub(crate) async fn admin_cpms_status_scan(
     let Some(record) = store.citizen_records.get(&cid) else {
         return api_error(StatusCode::NOT_FOUND, 1004, "citizen record not found");
     };
-    let pubkey = record.account_pubkey.clone().unwrap_or_default();
+    if record.bind_status() != CitizenBindStatus::Bound {
+        return api_error(StatusCode::NOT_FOUND, 1004, "archive_no binding not found");
+    }
+    let pubkey = record.wallet_pubkey.clone().unwrap_or_default();
     invalidate_vote_cache_for_pubkey(&mut store, &pubkey);
     append_audit_log(
         &mut store,

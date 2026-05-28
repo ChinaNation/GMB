@@ -7,6 +7,7 @@ import * as api from '../api';
 
 export default function ArchiveCreate() {
   const navigate = useNavigate();
+  const today = new Date().toISOString().slice(0, 10);
   const [provinceCode, setProvinceCode] = useState('');
   const [cityCode, setCityCode] = useState('');
   const [provinceName, setProvinceName] = useState('');
@@ -19,7 +20,7 @@ export default function ArchiveCreate() {
   const [addressText, setAddressText] = useState('');
 
   const [form, setForm] = useState({
-    full_name: '', birth_date: '',
+    last_name: '', first_name: '', birth_date: '',
     gender_code: 'M', height_cm: '', citizen_status: 'NORMAL', voting_eligible: true,
   });
   const [loading, setLoading] = useState(false);
@@ -52,9 +53,18 @@ export default function ArchiveCreate() {
   }, [selectedTown]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+  const isValidBirthDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= today;
+  const isValidHeight = (value: string) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 30 && n <= 260;
+  };
 
   const handleSubmit = async () => {
-    if (!form.full_name.trim()) { setError('请输入姓名'); return; }
+    if (!form.last_name.trim()) { setError('请输入姓氏'); return; }
+    if (!form.first_name.trim()) { setError('请输入名字'); return; }
+    if (!isValidBirthDate(form.birth_date)) { setError('请选择正确的出生日期'); return; }
+    if (!form.gender_code) { setError('请选择性别'); return; }
+    if (!isValidHeight(form.height_cm)) { setError('请输入正确的身高'); return; }
     if (!provinceCode || !cityCode) { setError('省市信息未加载'); return; }
     if (!selectedTown) { setError('请选择镇'); return; }
     if (!selectedVillage) { setError('请选择村/路'); return; }
@@ -66,7 +76,7 @@ export default function ArchiveCreate() {
         village_id: selectedVillage,
         address: addressText.trim() || undefined,
         ...form,
-        height_cm: form.height_cm ? parseFloat(form.height_cm) : undefined,
+        height_cm: parseFloat(form.height_cm),
       };
       const res = await api.createArchive(body);
       if (res.data) navigate(`/admin/archives/${res.data.archive_id}`);
@@ -111,18 +121,19 @@ export default function ArchiveCreate() {
         <input className="form-input" placeholder="详细门牌号等（最长100字符）" maxLength={100} value={addressText} onChange={e => setAddressText(e.target.value)} />
       </div>
       <div className="form-row">
-        <div className="form-group"><label>姓名 *</label><input className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} /></div>
-        <div className="form-group"><label>出生日期</label><input className="form-input" type="date" value={form.birth_date} onChange={e => set('birth_date', e.target.value)} /></div>
+        <div className="form-group"><label>姓氏 *</label><input className="form-input" value={form.last_name} onChange={e => set('last_name', e.target.value)} /></div>
+        <div className="form-group"><label>名字 *</label><input className="form-input" value={form.first_name} onChange={e => set('first_name', e.target.value)} /></div>
       </div>
       <div className="form-row">
+        <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={today} value={form.birth_date} onChange={e => set('birth_date', e.target.value)} /></div>
         <div className="form-group">
-          <label>性别</label>
+          <label>性别 *</label>
           <select className="form-input" value={form.gender_code} onChange={e => set('gender_code', e.target.value)}>
             <option value="M">男</option>
             <option value="W">女</option>
           </select>
         </div>
-        <div className="form-group"><label>身高 (cm)</label><input className="form-input" type="number" value={form.height_cm} onChange={e => set('height_cm', e.target.value)} /></div>
+        <div className="form-group"><label>身高 (cm) *</label><input className="form-input" type="number" min={30} max={260} step="0.1" value={form.height_cm} onChange={e => set('height_cm', e.target.value)} /></div>
       </div>
       <div className="form-row">
         <div className="form-group">

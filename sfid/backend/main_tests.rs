@@ -68,8 +68,18 @@ fn module_snapshots_preserve_cross_request_runtime_state() {
         CitizenBindChallenge {
             challenge_id: "bind-1".to_string(),
             challenge_text: "sfid-citizen-bind-v1|bind-1".to_string(),
-            account_address: "5CTestAddress".to_string(),
-            account_pubkey: "0xabc".to_string(),
+            mode: "create".to_string(),
+            citizen_id: None,
+            archive_no: "ARCHIVE-1".to_string(),
+            wallet_address: "5CTestAddress".to_string(),
+            wallet_pubkey: "0xabc".to_string(),
+            wallet_sig_alg: "sr25519".to_string(),
+            archive_status: CitizenStatus::Normal,
+            archive_valid_from: "2026-05-24".to_string(),
+            archive_valid_until: "2036-05-23".to_string(),
+            status_updated_at: 1_779_580_800,
+            province_code: "GD".to_string(),
+            city_code: "4401".to_string(),
             expire_at: now + Duration::minutes(5),
             created_at: now,
         },
@@ -519,14 +529,6 @@ fn cpms_site_scope_must_match_admin_province() {
     };
     assert!(in_scope_cpms_site(&site, Some("贵州省")));
     assert!(!in_scope_cpms_site(&site, Some("中枢省")));
-}
-
-#[test]
-fn validate_bind_callback_url_rejects_localhost_and_private_literals() {
-    let localhost = validate_bind_callback_url("https://localhost/callback");
-    assert!(localhost.is_err());
-    let private_ip = validate_bind_callback_url("https://192.168.1.8/callback");
-    assert!(private_ip.is_err());
 }
 
 #[test]

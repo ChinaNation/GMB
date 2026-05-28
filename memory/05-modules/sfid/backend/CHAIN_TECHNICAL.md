@@ -19,7 +19,6 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 | 职责 | 当前文件 |
 |---|---|
 | 机构查询、注册信息凭证、账户列表、清算行候选 DTO 与 handler | `sfid/backend/institutions/chain_duoqian_info.rs` |
-| 公民绑定推链 | `sfid/backend/citizens/chain_binding.rs` |
 | 公民投票凭证 | `sfid/backend/citizens/chain_vote.rs` |
 | 联合投票人口快照凭证 | `sfid/backend/citizens/chain_joint_vote.rs` |
 | 通用链凭证/SCALE/genesis hash | `sfid/backend/app_core/chain_runtime.rs` |

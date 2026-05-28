@@ -118,6 +118,17 @@
 | 签发省份 | `province` | credential / call data | SFID 省级签名来源 |
 | 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 省级签发 admin 公钥 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `wuminapp/lib/rpc/` | 统一构造 wuminapp 在线 signed extrinsic，固定执行 immortal era 协议 |
+| 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
+| 电子护照档案状态 | `archive_status` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 档案原始状态，三端统一使用完整字段名 |
+| 电子护照身份状态 | `identity_status` | SFID citizens / wuminapp myid | SFID 按档案状态与有效期计算出的身份ID状态，不得和绑定状态混用 |
+| 电子护照生效日期 | `valid_from` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 电子护照有效期开始日期，格式 `YYYY-MM-DD` |
+| 电子护照截止日期 | `valid_until` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 电子护照有效期截止日期，格式 `YYYY-MM-DD` |
+| 档案状态更新时间 | `status_updated_at` | CPMS ARCHIVE / SFID citizens | SFID 内部用于拒绝旧档案码覆盖新状态的秒级时间戳 |
+| 电子护照钱包地址 | `wallet_address` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 用户选择用于电子护照绑定的钱包 SS58 地址 |
+| 电子护照钱包公钥 | `wallet_pubkey` | CPMS ARCHIVE / SFID citizens / wuminapp myid | `wallet_address` 对应的 32 字节 `0x` hex 公钥 |
+| 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 固定 `sr25519` |
+| 电子护照身份ID | `sfid_code` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
+| 电子护照绑定状态 | `bind_status` | SFID citizens / wuminapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
 
 ## 6. 新命名登记模板
 

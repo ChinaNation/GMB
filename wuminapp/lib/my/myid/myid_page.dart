@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wuminapp_mobile/my/myid/myid_service.dart';
+import 'package:wuminapp_mobile/my/myid/myid_sign_page.dart';
 import 'package:wuminapp_mobile/qr/bodies/user_contact_body.dart';
 import 'package:wuminapp_mobile/qr/envelope.dart';
 import 'package:wuminapp_mobile/qr/qr_protocols.dart';
@@ -20,7 +21,7 @@ class MyIdPage extends StatefulWidget {
 class _MyIdPageState extends State<MyIdPage> {
   late final MyIdService _myIdService;
 
-  MyIdState _state = const MyIdState(status: MyIdStatus.unset);
+  MyIdState _state = const MyIdState(bindStatus: MyIdBindStatus.unset);
   bool _submitting = false;
 
   @override
@@ -61,6 +62,7 @@ class _MyIdPageState extends State<MyIdPage> {
       final nextState = await _myIdService.selectWallet(
         walletAddress: wallet.address,
         walletPubkeyHex: wallet.pubkeyHex,
+        walletIndex: wallet.walletIndex,
         isColdWallet: wallet.isColdWallet,
       );
       if (!mounted) return;
@@ -85,18 +87,18 @@ class _MyIdPageState extends State<MyIdPage> {
   }
 
   String _statusLabel() {
-    return switch (_state.status) {
-      MyIdStatus.unset => '未设置',
-      MyIdStatus.pending => '待绑定',
-      MyIdStatus.bound => '已绑定',
+    return switch (_state.bindStatus) {
+      MyIdBindStatus.unset => '未设置',
+      MyIdBindStatus.pending => '待绑定',
+      MyIdBindStatus.bound => '已绑定',
     };
   }
 
   Color _statusColor() {
-    return switch (_state.status) {
-      MyIdStatus.unset => AppTheme.textTertiary,
-      MyIdStatus.pending => AppTheme.warning,
-      MyIdStatus.bound => AppTheme.success,
+    return switch (_state.bindStatus) {
+      MyIdBindStatus.unset => AppTheme.textTertiary,
+      MyIdBindStatus.pending => AppTheme.warning,
+      MyIdBindStatus.bound => AppTheme.success,
     };
   }
 
@@ -167,14 +169,54 @@ class _MyIdPageState extends State<MyIdPage> {
         '${day.toString().padLeft(2, '0')}日';
   }
 
+  Future<void> _openSignPage() async {
+    final walletIndex = _state.walletIndex;
+    final address = _state.walletAddress?.trim();
+    final pubkey = _state.walletPubkeyHex?.trim().replaceFirst('0x', '');
+    if (walletIndex == null ||
+        address == null ||
+        address.isEmpty ||
+        pubkey == null ||
+        pubkey.isEmpty ||
+        _state.isColdWallet) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MyIdSignPage(
+          wallet: WalletProfile(
+            walletIndex: walletIndex,
+            walletName: '电子护照钱包',
+            walletIcon: 'account_balance_wallet',
+            balance: 0,
+            address: address,
+            pubkeyHex: pubkey,
+            alg: 'sr25519',
+            ss58: 2027,
+            createdAtMillis: _state.updatedAtMillis ?? 0,
+            source: 'myid',
+            signMode: 'local',
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final walletQrPayload = _walletQrPayload();
     final actionLabel = _state.walletAddress == null
         ? '选择钱包'
-        : _state.status == MyIdStatus.bound
+        : _state.bindStatus == MyIdBindStatus.bound
             ? '更新钱包'
             : '更换钱包';
+    final canSign = _state.walletIndex != null &&
+        !_state.isColdWallet &&
+        (_state.walletAddress?.trim().isNotEmpty ?? false) &&
+        (_state.walletPubkeyHex?.trim().isNotEmpty ?? false);
+    final hasSelectedWallet = _state.walletAddress?.trim().isNotEmpty ?? false;
+    final showPendingActionRow =
+        hasSelectedWallet && _state.bindStatus != MyIdBindStatus.bound;
     return Scaffold(
       appBar: AppBar(
         title: const Text('电子护照'),
@@ -317,20 +359,47 @@ class _MyIdPageState extends State<MyIdPage> {
             ),
           ],
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _submitting ? null : _selectWallet,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.account_balance_wallet_outlined),
-              label: Text(_submitting ? '处理中...' : actionLabel),
+          if (showPendingActionRow)
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _submitting ? null : _selectWallet,
+                    icon: _submitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.account_balance_wallet_outlined),
+                    label: Text(_submitting ? '处理中...' : '更换钱包'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: canSign ? _openSignPage : null,
+                    icon: const Icon(Icons.qr_code_scanner_outlined),
+                    label: const Text('扫码签名'),
+                  ),
+                ),
+              ],
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submitting ? null : _selectWallet,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.account_balance_wallet_outlined),
+                label: Text(_submitting ? '处理中...' : actionLabel),
+              ),
             ),
-          ),
         ],
       ),
     );

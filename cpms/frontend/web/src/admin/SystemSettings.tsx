@@ -60,7 +60,7 @@ export default function SystemSettings() {
 
       <Divider />
 
-      <AddressManagement />
+      <AddressScope />
     </div>
   );
 }
@@ -106,16 +106,12 @@ function Divider() {
   return <div style={{ height: 1, background: 'var(--color-border)', margin: '16px 0' }} />;
 }
 
-// ── 地址管理组件（超管维护镇/村路） ──
+// ── 当前市行政区只读预览 ──
 
-function AddressManagement() {
+function AddressScope() {
   const [towns, setTowns] = useState<{ town_code: string; town_name: string }[]>([]);
   const [selectedTown, setSelectedTown] = useState('');
   const [villages, setVillages] = useState<{ village_id: string; town_code: string; village_name: string }[]>([]);
-  const [newTownCode, setNewTownCode] = useState('');
-  const [newTownName, setNewTownName] = useState('');
-  const [newVillageName, setNewVillageName] = useState('');
-  const [addrError, setAddrError] = useState('');
 
   const loadTowns = () => {
     api.listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
@@ -128,39 +124,8 @@ function AddressManagement() {
   useEffect(() => { loadTowns(); }, []);
   useEffect(() => { loadVillages(selectedTown); }, [selectedTown]);
 
-  const handleAddTown = async () => {
-    if (!newTownCode.trim() || !newTownName.trim()) { setAddrError('请输入镇代码和名称'); return; }
-    setAddrError('');
-    try {
-      await api.createTown(newTownCode.trim(), newTownName.trim());
-      setNewTownCode(''); setNewTownName('');
-      loadTowns();
-    } catch (e) { setAddrError(e instanceof Error ? e.message : '新增失败'); }
-  };
-
-  const handleDeleteTown = async (code: string) => {
-    if (!confirm('删除镇会同时删除下属所有村/路，确认？')) return;
-    try { await api.deleteTown(code); loadTowns(); setSelectedTown(''); } catch { /* ignore */ }
-  };
-
-  const handleAddVillage = async () => {
-    if (!selectedTown || !newVillageName.trim()) { setAddrError('请选择镇并输入村/路名称'); return; }
-    setAddrError('');
-    try {
-      await api.createVillage(selectedTown, newVillageName.trim());
-      setNewVillageName('');
-      loadVillages(selectedTown);
-    } catch (e) { setAddrError(e instanceof Error ? e.message : '新增失败'); }
-  };
-
-  const handleDeleteVillage = async (id: string) => {
-    try { await api.deleteVillage(id); loadVillages(selectedTown); } catch { /* ignore */ }
-  };
-
   return (
-    <Section step={4} title="地址管理" done={towns.length > 0}>
-      {addrError && <div style={{ color: 'var(--color-danger)', fontSize: 12, marginBottom: 8 }}>{addrError}</div>}
-
+    <Section step={4} title="行政区数据" done={towns.length > 0}>
       <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>镇/街道</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {towns.map(t => (
@@ -172,15 +137,8 @@ function AddressManagement() {
             cursor: 'pointer',
           }} onClick={() => setSelectedTown(t.town_code)}>
             {t.town_name}
-            <span onClick={e => { e.stopPropagation(); handleDeleteTown(t.town_code); }}
-              style={{ cursor: 'pointer', opacity: 0.5, marginLeft: 2 }}>×</span>
           </div>
         ))}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-        <input className="form-input" style={{ width: 80 }} placeholder="代码" value={newTownCode} onChange={e => setNewTownCode(e.target.value)} />
-        <input className="form-input" style={{ width: 140 }} placeholder="镇/街道名称" value={newTownName} onChange={e => setNewTownName(e.target.value)} />
-        <button className="btn btn--primary btn--sm" onClick={handleAddTown}>新增镇</button>
       </div>
 
       {selectedTown && (
@@ -195,14 +153,8 @@ function AddressManagement() {
                 padding: '2px 8px', borderRadius: 4, fontSize: 12, background: '#f3f4f6',
               }}>
                 {v.village_name}
-                <span onClick={() => handleDeleteVillage(v.village_id)}
-                  style={{ cursor: 'pointer', opacity: 0.5, marginLeft: 2 }}>×</span>
               </div>
             ))}
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input className="form-input" style={{ width: 160 }} placeholder="村/路名称" value={newVillageName} onChange={e => setNewVillageName(e.target.value)} />
-            <button className="btn btn--primary btn--sm" onClick={handleAddVillage}>新增村/路</button>
           </div>
         </>
       )}

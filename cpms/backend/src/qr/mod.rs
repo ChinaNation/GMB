@@ -3,9 +3,7 @@
 //! 唯一事实源: `memory/01-architecture/qr/qr-protocol-spec.md`
 //! Golden fixtures: `memory/01-architecture/qr/qr-protocol-fixtures/*.json`
 //!
-//! 与 wuminapp/wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS
-//! envelope 字段逐字节一致。本模块仅定义 SFID 后端需要的 kind
-//! (login_challenge / login_receipt),其余 kind 后端不参与。
+//! 与 wumin 的 Dart envelope、citizenchain/sfid/cpms 前端的 TS envelope 字段逐字节一致。
 
 use serde::{Deserialize, Serialize};
 

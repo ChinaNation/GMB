@@ -1,12 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
-use reqwest::Url;
-use std::{
-    collections::HashMap,
-    hash::Hash,
-    net::{IpAddr, SocketAddr},
-    time::Duration as StdDuration,
-};
-use tracing::warn;
+use std::{collections::HashMap, hash::Hash};
 
 use crate::sheng_admins::province_admins::sheng_admin_mains;
 use crate::*;
@@ -129,33 +122,57 @@ pub(crate) fn cleanup_consumed_qr_ids(store: &mut Store, now: DateTime<Utc>) {
 }
 
 #[allow(dead_code)]
-pub(crate) fn cleanup_pending_bind_scans(store: &mut Store, now: DateTime<Utc>) {
-    let now_ts = now.timestamp();
-    store.pending_bind_scan_by_qr_id.retain(|_, pending| {
-        pending.scanned_at > now - Duration::hours(24) && pending.expire_at >= now_ts
-    });
-}
-
 // 中文注释:vote_cache_key / cleanup_vote_cache 配套于已下架的 verify_vote_eligibility
 // dead route(`POST /api/v1/vote/verify`),2026-05-01 一并移除。当前 chain pull 的
 // /api/v1/app/vote/credential 不依赖 cache,vote_verify_cache 只在投票账户绑定状态
 // 变化时才被 invalidate_vote_cache_for_pubkey 清理。
 
+pub(crate) fn cleanup_stale_citizen_bind_records(state: &AppState) -> usize {
+    let mut store = match state.store.write() {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "cleanup_stale_citizen_bind_records: store write failed");
+            return 0;
+        }
+    };
+    let stale_ids = store
+        .citizen_records
+        .values()
+        .filter(|record| record.bind_status() != CitizenBindStatus::Bound)
+        .map(|record| record.id)
+        .collect::<Vec<_>>();
+    if stale_ids.is_empty() {
+        return 0;
+    }
+    for citizen_id in &stale_ids {
+        store.citizen_records.remove(citizen_id);
+    }
+    let bound_ids = store
+        .citizen_records
+        .iter()
+        .filter(|(_, record)| record.bind_status() == CitizenBindStatus::Bound)
+        .map(|(citizen_id, _)| *citizen_id)
+        .collect::<std::collections::HashSet<_>>();
+    store
+        .citizen_id_by_archive_no
+        .retain(|_, citizen_id| bound_ids.contains(citizen_id));
+    store
+        .citizen_id_by_wallet_pubkey
+        .retain(|_, citizen_id| bound_ids.contains(citizen_id));
+    store
+        .citizen_id_by_sfid_code
+        .retain(|_, citizen_id| bound_ids.contains(citizen_id));
+    tracing::info!(
+        count = stale_ids.len(),
+        "cleaned stale citizen bind records at startup"
+    );
+    stale_ids.len()
+}
+
 pub(crate) fn invalidate_vote_cache_for_pubkey(store: &mut Store, account_pubkey: &str) {
     store
         .vote_verify_cache
         .retain(|_, entry| entry.account_pubkey != account_pubkey);
-}
-
-pub(crate) fn normalize_optional(value: Option<String>) -> Option<String> {
-    value.and_then(|v| {
-        let trimmed = v.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
 }
 
 pub(crate) fn normalize_account_pubkey(raw: &str) -> Option<String> {
@@ -202,227 +219,6 @@ where
         }
     }
     map.insert(key, value);
-}
-
-pub(crate) fn default_bind_callback_auth_token() -> Option<String> {
-    normalize_optional(std::env::var("SFID_BIND_CALLBACK_AUTH_TOKEN").ok())
-}
-
-#[allow(dead_code)]
-pub(crate) fn enqueue_bind_callback_job(
-    store: &mut Store,
-    callback_url: Option<String>,
-    payload: BindCallbackPayload,
-) {
-    let Some(url) = callback_url else {
-        return;
-    };
-    store.bind_callback_jobs.push(BindCallbackJob {
-        callback_id: payload.callback_id.clone(),
-        callback_url: url,
-        payload,
-        attempts: 0,
-        max_attempts: 5,
-        next_attempt_at: Utc::now(),
-        last_error: None,
-    });
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct ResolvedCallbackTarget {
-    pub(crate) url: Url,
-    pub(crate) host: String,
-    pub(crate) resolved_addrs: Vec<SocketAddr>,
-    pub(crate) host_is_ip: bool,
-}
-
-fn retry_or_fail_callback_job(store: &mut Store, mut job: BindCallbackJob, err: String) {
-    job.attempts += 1;
-    if job.attempts >= job.max_attempts {
-        store.metrics.bind_callback_failed_total += 1;
-        append_audit_log(
-            store,
-            "BIND_CALLBACK",
-            "system",
-            Some(job.payload.account_pubkey.clone()),
-            Some(job.payload.archive_index.clone()),
-            "FAILED",
-            format!(
-                "callback exhausted callback_id={} error={}",
-                job.callback_id, err
-            ),
-        );
-    } else {
-        store.metrics.bind_callback_retry_total += 1;
-        let backoff_secs = (2_i64.pow(job.attempts.min(6))).min(300);
-        job.next_attempt_at = Utc::now() + Duration::seconds(backoff_secs);
-        job.last_error = Some(err);
-        store.bind_callback_jobs.push(job);
-    }
-}
-
-pub(crate) async fn ensure_callback_delivery_target_safe(
-    callback_url: &str,
-) -> Result<ResolvedCallbackTarget, String> {
-    let parsed = Url::parse(callback_url).map_err(|_| "invalid callback url".to_string())?;
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| "callback url host is missing".to_string())?
-        .to_ascii_lowercase();
-    let port = parsed
-        .port_or_known_default()
-        .ok_or_else(|| "callback url port is missing".to_string())?;
-    let host_is_ip = host.parse::<IpAddr>().is_ok();
-    let mut resolved_addrs = Vec::new();
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if is_blocked_callback_ip(ip) {
-            return Err("callback target resolves to private/local address".to_string());
-        }
-        resolved_addrs.push(SocketAddr::new(ip, port));
-    } else {
-        let resolved = tokio::net::lookup_host((host.as_str(), port))
-            .await
-            .map_err(|e| format!("callback dns resolve failed: {e}"))?;
-        for addr in resolved {
-            if is_blocked_callback_ip(addr.ip()) {
-                return Err("callback target resolves to private/local address".to_string());
-            }
-            resolved_addrs.push(addr);
-        }
-    }
-    if resolved_addrs.is_empty() {
-        return Err("callback dns resolve returned no addresses".to_string());
-    }
-    Ok(ResolvedCallbackTarget {
-        url: parsed,
-        host,
-        resolved_addrs,
-        host_is_ip,
-    })
-}
-
-pub(crate) async fn bind_callback_worker(state: AppState) {
-    loop {
-        let due_jobs = {
-            let mut store = match state.store.write() {
-                Ok(guard) => guard,
-                Err(err) => {
-                    warn!(error = %err, "bind callback worker failed to lock store");
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    continue;
-                }
-            };
-            let now = Utc::now();
-            let mut due = Vec::new();
-            let mut pending = Vec::new();
-            for job in store.bind_callback_jobs.drain(..) {
-                if job.next_attempt_at <= now {
-                    due.push(job);
-                } else {
-                    pending.push(job);
-                }
-            }
-            store.bind_callback_jobs = pending;
-            due
-        };
-
-        for job in due_jobs {
-            let target = match ensure_callback_delivery_target_safe(job.callback_url.as_str()).await
-            {
-                Ok(v) => v,
-                Err(err) => {
-                    let mut store = match state.store.write() {
-                        Ok(guard) => guard,
-                        Err(lock_err) => {
-                            warn!(error = %lock_err, "bind callback worker lock failed on dns validation");
-                            continue;
-                        }
-                    };
-                    retry_or_fail_callback_job(&mut store, job, err);
-                    continue;
-                }
-            };
-            let mut client_builder = reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(StdDuration::from_secs(10));
-            if !target.host_is_ip {
-                for addr in &target.resolved_addrs {
-                    client_builder = client_builder.resolve(target.host.as_str(), *addr);
-                }
-            }
-            let client = match client_builder.build() {
-                Ok(v) => v,
-                Err(err) => {
-                    let mut store = match state.store.write() {
-                        Ok(guard) => guard,
-                        Err(lock_err) => {
-                            warn!(error = %lock_err, "bind callback worker lock failed on client build");
-                            continue;
-                        }
-                    };
-                    retry_or_fail_callback_job(
-                        &mut store,
-                        job,
-                        format!("build callback client failed: {err}"),
-                    );
-                    continue;
-                }
-            };
-            let mut request = client
-                .post(target.url.clone())
-                .header("content-type", "application/json")
-                .header("x-sfid-callback-id", job.callback_id.clone())
-                .header(
-                    "x-sfid-callback-signature",
-                    job.payload.callback_attestation.signature_hex.clone(),
-                )
-                .header(
-                    "x-sfid-callback-key-id",
-                    job.payload.callback_attestation.key_id.clone(),
-                )
-                .json(&job.payload);
-            if let Some(token) = default_bind_callback_auth_token().as_ref() {
-                request = request.bearer_auth(token);
-            }
-            let delivery = request.send().await;
-            let mut store = match state.store.write() {
-                Ok(guard) => guard,
-                Err(err) => {
-                    warn!(error = %err, "bind callback worker failed to lock store after send");
-                    continue;
-                }
-            };
-            match delivery {
-                Ok(resp) if resp.status().is_success() => {
-                    store.metrics.bind_callback_success_total += 1;
-                    append_audit_log(
-                        &mut store,
-                        "BIND_CALLBACK",
-                        "system",
-                        Some(job.payload.account_pubkey.clone()),
-                        Some(job.payload.archive_index.clone()),
-                        "SUCCESS",
-                        format!(
-                            "callback delivered callback_id={} url={}",
-                            job.callback_id, job.callback_url
-                        ),
-                    );
-                }
-                Ok(resp) => {
-                    retry_or_fail_callback_job(
-                        &mut store,
-                        job,
-                        format!("http status {}", resp.status().as_u16()),
-                    );
-                }
-                Err(err) => {
-                    retry_or_fail_callback_job(&mut store, job, err.to_string());
-                }
-            }
-        }
-
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
 }
 
 pub(crate) fn append_audit_log(

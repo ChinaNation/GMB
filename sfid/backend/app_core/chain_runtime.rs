@@ -141,45 +141,6 @@ pub(crate) fn build_bind_credential(
     })
 }
 
-/// 用省级签名密钥构建 bind_sfid 链上凭证（推链绑定用）。
-///
-/// 与 `build_bind_credential` 的区别：签名用省级 Pair 而非 SFID MAIN。
-pub(crate) fn build_bind_credential_with_province(
-    state: &AppState,
-    account_pubkey: &str,
-    binding_seed: &str,
-    bind_nonce: String,
-    province_pair: &sp_core::sr25519::Pair,
-) -> Result<RuntimeBindCredential, String> {
-    if bind_nonce.trim().is_empty() {
-        return Err("bind nonce is required".to_string());
-    }
-    if binding_seed.trim().is_empty() {
-        return Err("binding seed is required".to_string());
-    }
-    let (normalized_who, who) = normalize_and_parse_account_id32(account_pubkey)?;
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let binding_id = blake2_256(binding_seed.as_bytes());
-    let payload = (
-        DUOQIAN_DOMAIN,
-        OP_SIGN_BIND,
-        genesis_hash,
-        who,
-        binding_id,
-        bind_nonce.as_bytes(),
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = province_pair.sign(&payload_digest).0;
-    Ok(RuntimeBindCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        who: normalized_who,
-        binding_id: hex::encode(binding_id),
-        bind_nonce,
-        signature: hex::encode(signature),
-        meta: runtime_signature_meta(state),
-    })
-}
-
 pub(crate) fn build_vote_credential(
     state: &AppState,
     account_pubkey: &str,

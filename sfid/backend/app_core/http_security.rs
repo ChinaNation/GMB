@@ -7,7 +7,6 @@ use axum::{
 };
 use chrono::Utc;
 use redis::Script;
-use reqwest::Url;
 use std::{
     net::{IpAddr, SocketAddr},
     sync::OnceLock,
@@ -331,11 +330,6 @@ pub(crate) fn parse_csv_env_set(key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)]
-pub(crate) fn callback_allowed_hosts() -> Vec<String> {
-    parse_csv_env_set("SFID_CALLBACK_ALLOWED_HOSTS")
-}
-
 fn trusted_proxy_ips() -> &'static [IpAddr] {
     TRUSTED_PROXY_IPS
         .get_or_init(|| {
@@ -364,93 +358,6 @@ fn actor_ip_from_request(request: &Request) -> Option<String> {
         return Some(peer.to_string());
     }
     actor_ip_from_headers(request.headers())
-}
-
-#[allow(dead_code)]
-pub(crate) fn host_matches_rule(host: &str, rule: &str) -> bool {
-    if let Some(suffix) = rule.strip_prefix("*.") {
-        return host.ends_with(&format!(".{suffix}"));
-    }
-    if let Some(suffix) = rule.strip_prefix('.') {
-        return host.ends_with(&format!(".{suffix}"));
-    }
-    host == rule
-}
-
-pub(crate) fn is_blocked_callback_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => {
-            v4.is_private()
-                || v4.is_loopback()
-                || v4.is_link_local()
-                || v4.is_multicast()
-                || v4.is_broadcast()
-                || v4.is_documentation()
-                || v4.is_unspecified()
-        }
-        IpAddr::V6(v6) => {
-            v6.is_loopback()
-                || v6.is_unspecified()
-                || v6.is_unique_local()
-                || v6.is_unicast_link_local()
-                || v6.is_multicast()
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) fn validate_bind_callback_url(url: &str) -> Result<(), String> {
-    let parsed = Url::parse(url).map_err(|_| "callback_url is not a valid URL".to_string())?;
-    let insecure_http_allowed = env_flag_enabled("SFID_ALLOW_INSECURE_CALLBACK_HTTP");
-    match parsed.scheme() {
-        "https" => {}
-        "http" if insecure_http_allowed => {}
-        "http" => {
-            return Err(
-                "callback_url must use https (set SFID_ALLOW_INSECURE_CALLBACK_HTTP=true only for local dev)"
-                    .to_string(),
-            )
-        }
-        _ => return Err("callback_url scheme must be http or https".to_string()),
-    }
-
-    let Some(host) = parsed.host_str() else {
-        return Err("callback_url host is required".to_string());
-    };
-    let host_lower = host.to_ascii_lowercase();
-    if host_lower == "localhost" || host_lower.ends_with(".localhost") {
-        return Err("callback_url localhost is not allowed".to_string());
-    }
-    if let Ok(ip) = host_lower.parse::<IpAddr>() {
-        if is_blocked_callback_ip(ip) {
-            return Err("callback_url private/local IP literals are not allowed".to_string());
-        }
-    }
-
-    let allowlist = callback_allowed_hosts();
-    let env_mode = optional_env("SFID_ENV")
-        .or_else(|| optional_env("ENV"))
-        .unwrap_or_else(|| "dev".to_string())
-        .to_ascii_lowercase();
-    let is_prod = env_mode == "prod" || env_mode == "production";
-    if allowlist.is_empty()
-        && is_prod
-        && !env_flag_enabled("SFID_ALLOW_OPEN_CALLBACK_TARGETS_IN_PROD")
-    {
-        return Err(
-            "SFID_CALLBACK_ALLOWED_HOSTS is required in production (or set SFID_ALLOW_OPEN_CALLBACK_TARGETS_IN_PROD=true explicitly)"
-                .to_string(),
-        );
-    }
-    if !allowlist.is_empty()
-        && !allowlist
-            .iter()
-            .any(|rule| host_matches_rule(host_lower.as_str(), rule.as_str()))
-    {
-        return Err("callback_url host is not in SFID_CALLBACK_ALLOWED_HOSTS".to_string());
-    }
-
-    Ok(())
 }
 
 pub(crate) fn chain_header_value(headers: &HeaderMap, key: &str) -> Option<String> {

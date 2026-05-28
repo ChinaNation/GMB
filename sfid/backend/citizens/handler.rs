@@ -31,12 +31,16 @@ pub(crate) async fn admin_list_citizens(
     };
     let mut rows: Vec<CitizenRow> = Vec::new();
 
-    // 从 citizen_records 构建列表
+    // 中文注释:新流程只有 ARCHIVE + wuminapp 签名完成后才形成可展示公民记录。
+    // 历史开发期遗留的半绑定记录不进入列表，避免把不可用状态暴露给后台。
     for record in store.citizen_records.values() {
+        if record.bind_status() != CitizenBindStatus::Bound {
+            continue;
+        }
         rows.push(CitizenRow {
             id: record.id,
-            account_pubkey: record.account_pubkey.clone(),
-            account_address: record.account_address.clone(),
+            wallet_pubkey: record.wallet_pubkey.clone(),
+            wallet_address: record.wallet_address.clone(),
             archive_no: record.archive_no.clone(),
             sfid_code: record.sfid_code.clone(),
             province_code: record.province_code.clone(),
@@ -45,7 +49,8 @@ pub(crate) async fn admin_list_citizens(
             identity_status: record.computed_identity_status(),
             valid_from: record.archive_valid_from.clone(),
             valid_until: record.archive_valid_until.clone(),
-            status: record.status(),
+            status_updated_at: record.status_updated_at,
+            bind_status: record.bind_status(),
         });
     }
 
@@ -53,10 +58,14 @@ pub(crate) async fn admin_list_citizens(
 
     if !keyword.is_empty() {
         rows.retain(|r| {
-            r.account_address
+            r.wallet_address
                 .as_ref()
                 .map(|v| v.to_lowercase().contains(&keyword))
                 .unwrap_or(false)
+                || r.wallet_pubkey
+                    .as_ref()
+                    .map(|v| v.to_lowercase().contains(&keyword))
+                    .unwrap_or(false)
                 || r.archive_no
                     .as_ref()
                     .map(|v| v.to_lowercase().contains(&keyword))
@@ -88,15 +97,15 @@ pub(crate) async fn public_identity_search(
 ) -> impl IntoResponse {
     // 查询结果仅含公开信息（SFID 码、档案号等），无需 token 认证。
     // 全局 rate limiter 已防滥用。
-    // 中文注释:legacy bindings_by_pubkey 已删除,改为从 citizen_records 查询。
+    // 中文注释:公开查询只返回电子护照绑定后的公开字段。
     let archive_no = query.archive_no.as_deref().map(str::trim).unwrap_or("");
     let identity_code = query.identity_code.as_deref().map(str::trim).unwrap_or("");
-    let account_pubkey = query.account_pubkey.as_deref().map(str::trim).unwrap_or("");
-    if archive_no.is_empty() && identity_code.is_empty() && account_pubkey.is_empty() {
+    let wallet_pubkey = query.wallet_pubkey.as_deref().map(str::trim).unwrap_or("");
+    if archive_no.is_empty() && identity_code.is_empty() && wallet_pubkey.is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
             1001,
-            "archive_no or identity_code or account_pubkey is required",
+            "archive_no or identity_code or wallet_pubkey is required",
         );
     }
 
@@ -107,10 +116,10 @@ pub(crate) async fn public_identity_search(
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        if !account_pubkey.is_empty() {
+        if !wallet_pubkey.is_empty() {
             store
-                .citizen_id_by_pubkey
-                .get(account_pubkey)
+                .citizen_id_by_wallet_pubkey
+                .get(wallet_pubkey)
                 .and_then(|cid| store.citizen_records.get(cid))
                 .cloned()
         } else if !archive_no.is_empty() {
@@ -126,12 +135,13 @@ pub(crate) async fn public_identity_search(
                 .find(|r| r.sfid_code.as_deref() == Some(identity_code))
                 .cloned()
         }
-    };
+    }
+    .filter(|record| record.bind_status() == CitizenBindStatus::Bound);
     let output = PublicIdentitySearchOutput {
         found: found.is_some(),
         archive_no: found.as_ref().and_then(|r| r.archive_no.clone()),
         identity_code: found.as_ref().and_then(|r| r.sfid_code.clone()),
-        account_pubkey: found.as_ref().and_then(|r| r.account_pubkey.clone()),
+        wallet_pubkey: found.as_ref().and_then(|r| r.wallet_pubkey.clone()),
     };
     let mut store = match store_write_or_500(&state) {
         Ok(v) => v,
@@ -141,7 +151,7 @@ pub(crate) async fn public_identity_search(
         &mut store,
         "PUBLIC_IDENTITY_SEARCH",
         "public",
-        output.account_pubkey.clone(),
+        output.wallet_pubkey.clone(),
         output.archive_no.clone(),
         request_id,
         actor_ip,

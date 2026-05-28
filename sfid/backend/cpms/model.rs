@@ -127,13 +127,22 @@ pub(crate) struct CpmsArchiveCodePayload {
     #[serde(default)]
     pub(crate) proto: String,
     pub(crate) r#type: String,
-    pub(crate) ano: String,
-    pub(crate) cs: String,
+    pub(crate) archive_no: String,
+    pub(crate) archive_status: String,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
+    pub(crate) status_updated_at: i64,
     pub(crate) cpms_pubkey: String,
     pub(crate) geo_seal: String,
+    pub(crate) wallet_address: String,
+    pub(crate) wallet_pubkey: String,
+    #[serde(default = "default_wallet_sig_alg")]
+    pub(crate) wallet_sig_alg: String,
     pub(crate) sig: String,
+}
+
+fn default_wallet_sig_alg() -> String {
+    "sr25519".to_string()
 }
 
 /// CPMS 档案二维码中只允许 SFID 解开的归属密文内容。
@@ -147,12 +156,16 @@ pub(crate) struct CpmsGeoSealClaims {
 #[derive(Debug, Clone)]
 pub(crate) struct VerifiedCpmsArchive {
     pub(crate) archive_no: String,
-    pub(crate) citizen_status: CitizenStatus,
+    pub(crate) archive_status: CitizenStatus,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
+    pub(crate) status_updated_at: i64,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
     pub(crate) sfid_number: String,
+    pub(crate) wallet_address: String,
+    pub(crate) wallet_pubkey: String,
+    pub(crate) wallet_sig_alg: String,
 }
 
 /// 生成 SFID + QR1 的输出。
@@ -166,6 +179,10 @@ pub(crate) struct GenerateCpmsInstallOutput {
 #[derive(Serialize)]
 pub(crate) struct CpmsArchiveVerifyOutput {
     pub(crate) archive_no: String,
+    pub(crate) archive_status: crate::citizens::model::CitizenStatus,
+    pub(crate) valid_from: String,
+    pub(crate) valid_until: String,
+    pub(crate) status_updated_at: i64,
     pub(crate) province_code: String,
     pub(crate) city_code: String,
     pub(crate) sfid_number: String,

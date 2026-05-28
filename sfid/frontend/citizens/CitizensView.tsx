@@ -1,6 +1,6 @@
 // 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
 // 注册局顶层视图 —— activeView === 'citizens' 分支。
-// 包含:citizen 列表 + 搜索栏 + 表格 + 绑定/推链绑定/推链解绑按钮 + BindModal/操作扫码 Modal。
+// 包含:citizen 列表 + 搜索栏 + 表格 + 电子护照绑定弹窗 + 操作扫码 Modal。
 
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
@@ -8,8 +8,6 @@ import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag, Typo
 
 import type { ColumnsType } from 'antd/es/table';
 import {
-  citizenPushChainBind,
-  citizenPushChainUnbind,
   listCitizens,
   scanCpmsStatusQr,
   type CitizenRow,
@@ -26,7 +24,7 @@ export function CitizensView() {
   const [rows, setRows] = useState<CitizenRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 绑定/解绑弹窗控制(state 仅持有 open + 当前 record,其它细节在 Modal 组件内)
+  // 绑定弹窗控制(state 仅持有 open + 当前 record,其它细节在 Modal 组件内)
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindTargetRecord, setBindTargetRecord] = useState<CitizenRow | null>(null);
   const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
@@ -127,53 +125,14 @@ export function CitizensView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opScanOpen, auth]);
 
-  const onPushChainBind = async (record: CitizenRow) => {
-    if (!auth) return;
-    try {
-      setLoading(true);
-      await citizenPushChainBind(auth, { citizen_id: record.id });
-      message.success('推链绑定成功');
-      await refreshList(undefined, true);
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '推链绑定失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onPushChainUnbind = async (record: CitizenRow) => {
-    if (!auth) return;
-    Modal.confirm({
-      title: '确认推链解绑',
-      content: `确定要解绑账户 ${record.account_address ?? record.account_pubkey ?? ''} 吗？解绑后链上绑定关系将被移除。`,
-      okText: '确认解绑',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          setLoading(true);
-          await citizenPushChainUnbind(auth, { citizen_id: record.id });
-          message.success('推链解绑成功');
-          await refreshList(undefined, true);
-        } catch (err) {
-          message.error(err instanceof Error ? err.message : '推链解绑失败');
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
-  };
-
-  const openBindModal = (record: CitizenRow) => {
+  const openBindModal = (record: CitizenRow | null) => {
     setBindTargetRecord(record);
     setBindModalOpen(true);
   };
 
   const bindStatusText = (v: string | undefined) => {
     if (v === 'PENDING') return '待绑定';
-    if (v === 'BINDABLE') return '待推链';
     if (v === 'BOUND') return '已绑定';
-    if (v === 'UNLINKED') return '已解绑';
     return v ?? '-';
   };
 
@@ -201,7 +160,7 @@ export function CitizensView() {
     },
     {
       title: '账户地址',
-      dataIndex: 'account_address',
+      dataIndex: 'wallet_address',
       align: 'center',
       render: (v: string | undefined) => v ?? '-',
     },
@@ -219,7 +178,7 @@ export function CitizensView() {
     },
     {
       title: '状态',
-      dataIndex: 'status',
+      dataIndex: 'bind_status',
       width: 100,
       align: 'center',
       render: (v: string) => bindStatusText(v),
@@ -236,21 +195,9 @@ export function CitizensView() {
       }),
       render: (_v: unknown, row: CitizenRow) => (
         <Space size={8} data-row-action="true" onClick={(event) => event.stopPropagation()}>
-          {row.status === 'BOUND' && (
-            <Button danger onClick={(event) => { event.stopPropagation(); onPushChainUnbind(row); }}>
-              解绑
-            </Button>
-          )}
-          {row.status === 'BINDABLE' && (
-            <Button type="primary" onClick={(event) => { event.stopPropagation(); onPushChainBind(row); }}>
-              确认
-            </Button>
-          )}
-          {(row.status === 'UNLINKED' || row.status === 'PENDING') && (
-            <Button type="primary" onClick={(event) => { event.stopPropagation(); openBindModal(row); }}>
-              绑定
-            </Button>
-          )}
+          <Button type="primary" onClick={(event) => { event.stopPropagation(); openBindModal(row); }}>
+            更新绑定
+          </Button>
         </Space>
       ),
     });
@@ -264,16 +211,23 @@ export function CitizensView() {
         style={glassCardStyle}
         headStyle={glassCardHeadStyle}
         extra={
-          <Form layout="inline" onFinish={onSearch}>
-            <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-              <Input style={{ width: 420 }} placeholder="请输入账户、档案号或SFID号" allowClear />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0 }}>
-              <Button htmlType="submit" type="primary" loading={loading}>
-                查询
+          <Space>
+            {capabilities.canBusinessWrite && (
+              <Button type="primary" onClick={() => openBindModal(null)}>
+                绑定电子护照
               </Button>
-            </Form.Item>
-          </Form>
+            )}
+            <Form layout="inline" onFinish={onSearch}>
+              <Form.Item name="keyword" style={{ marginBottom: 0 }}>
+                <Input style={{ width: 420 }} placeholder="请输入钱包、档案号或身份ID" allowClear />
+              </Form.Item>
+              <Form.Item style={{ marginBottom: 0 }}>
+                <Button htmlType="submit" loading={loading}>
+                  查询
+                </Button>
+              </Form.Item>
+            </Form>
+          </Space>
         }
       >
         <Table<CitizenRow>
@@ -284,7 +238,7 @@ export function CitizensView() {
           columns={citizenColumns}
           onRow={(record) => ({
             onClick: (event) => {
-              // 中文注释：操作栏是独立交互区，点击绑定/推链按钮时不能再触发行详情弹窗。
+              // 中文注释：操作栏是独立交互区，点击绑定按钮时不能再触发行详情弹窗。
               const target = event.target as EventTarget | null;
               if (target instanceof Element && target.closest('[data-row-action="true"]')) return;
               setDetailRecord(record);
@@ -306,10 +260,10 @@ export function CitizensView() {
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="身份ID">{detailRecord.sfid_code ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="投票账户">
-              {detailRecord.account_address ?? detailRecord.account_pubkey ?? '-'}
+              {detailRecord.wallet_address ?? detailRecord.wallet_pubkey ?? '-'}
             </Descriptions.Item>
             <Descriptions.Item label="档案号">{detailRecord.archive_no ?? '-'}</Descriptions.Item>
-            <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.status)}</Descriptions.Item>
+            <Descriptions.Item label="绑定状态">{bindStatusText(detailRecord.bind_status)}</Descriptions.Item>
             <Descriptions.Item label="档案状态">
               {detailRecord.archive_status === 'NORMAL' ? 'NORMAL' : detailRecord.archive_status ?? '-'}
             </Descriptions.Item>

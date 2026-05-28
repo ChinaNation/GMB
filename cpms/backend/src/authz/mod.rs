@@ -1,6 +1,9 @@
 //! # 鉴权模块 (authz)
 //!
-//! 提供 Bearer token 校验和角色检查。所有需要登录的 API 通过 `require_auth` 或 `require_role` 守卫。
+//! 提供 Bearer token 校验和角色检查。
+//!
+//! 中文注释：CPMS 只有 SUPER_ADMIN / OPERATOR_ADMIN 两级管理员；
+//! SUPER_ADMIN 是上级角色，必须能执行所有档案业务操作。
 
 use axum::{
     http::{header, HeaderMap, StatusCode},
@@ -27,6 +30,25 @@ pub(crate) async fn require_role(
         return Err(err(StatusCode::FORBIDDEN, 2008, "permission denied"));
     }
     Ok(ctx)
+}
+
+pub(crate) async fn require_any_role(
+    state: &AppState,
+    headers: &HeaderMap,
+    roles: &[&str],
+) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
+    let ctx = require_auth(state, headers).await?;
+    if !roles.iter().any(|role| ctx.role == *role) {
+        return Err(err(StatusCode::FORBIDDEN, 2008, "permission denied"));
+    }
+    Ok(ctx)
+}
+
+pub(crate) async fn require_archive_admin(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
+    require_any_role(state, headers, &["SUPER_ADMIN", "OPERATOR_ADMIN"]).await
 }
 
 pub(crate) async fn require_auth(

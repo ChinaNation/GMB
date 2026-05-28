@@ -24,28 +24,32 @@
 {
   "proto": "SFID_CPMS_V1",
   "type": "ARCHIVE",
-  "ano": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-  "cs": "NORMAL",
+  "archive_no": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
+  "archive_status": "NORMAL",
   "valid_from": "2026-05-24",
   "valid_until": "2036-05-23",
+  "status_updated_at": 1779580800,
   "cpms_pubkey": "0x...",
   "geo_seal": "g1.<nonce_hex>.<cipher_hex>",
+  "wallet_address": "5...",
+  "wallet_pubkey": "0x...",
+  "wallet_sig_alg": "sr25519",
   "sig": "0x..."
 }
 ```
 
 二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
-ARCHIVE 不包含状态更新时间、`code_id` 或使用次数；重复绑定由 SFID 的 `ano / sfid_code / wallet_pubkey` 三者唯一关系约束。
+ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_no / sfid_code / wallet_pubkey` 三者唯一关系约束。
 
 ## 5. 签名与加密
 - `geo_seal` 使用 AES-256-GCM。
 - `geo_seal` 密钥：`blake2b_256(install_secret)`。
-- `geo_seal` AAD：`sfid-cpms-v1|geo-seal|{ano}|{cpms_pubkey}`。
+- `geo_seal` AAD：`sfid-cpms-v1|geo-seal|{archive_no}|{cpms_pubkey}`。
 
 - ARCHIVE 签名原文：
 
 ```text
-sfid-cpms-v1|archive|{ano}|{cs}|{valid_from}|{valid_until}|{cpms_pubkey}|{geo_seal_hash}
+sfid-cpms-v1|archive|{archive_no}|{archive_status}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
 ```
 
 - ARCHIVE 签名上下文：`substrate`。

@@ -50,7 +50,7 @@ sfid/frontend/
 - SFID 元数据接口放 `sfid/api.ts`,用于省份、市、A3、机构类型等跨页面选择项。
 - 机构本地管理接口放 `institutions/api.ts`。机构与区块链交互继续放 `institutions/chain_duoqian_info.ts`。
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
-- 公民绑定、解绑、推链绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
+- 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省管理员本地后台接口放 `sheng_admins/api.ts`;一主两备展示接口放
   `sheng_admins/roster_api.ts`;本人 signing seed 生成/更换接口放
   `sheng_admins/signing_keys_api.ts`。
@@ -58,12 +58,9 @@ sfid/frontend/
 
 ## 公民绑定弹窗 UI 口径
 
-- `citizens/BindModal.tsx` 中新账户绑定档案的入口标题统一显示为“扫描档案码”。
-- 新账户绑定档案时,弹窗不再展示模式说明和旧步骤标题。
-- 扫码框提示统一为“点击扫描档案码”;签名环节继续显示签名二维码相关文案。
-- 进入签名二维码展示步骤后,弹窗标题切换为“扫码签名”,不再展示“第二步：用公民钱包扫码签名”提示;
-  进入签名回执扫描页后,弹窗标题切换为“扫描签名回执”,且不再展示“第三步：扫描签名结果二维码”。
-  该口径只适用于签名回执扫描页,不得改动上一步“扫描档案码”。
+- `citizens/BindModal.tsx` 只保留单一绑定流程：扫描/上传 CPMS 档案码、展示 wuminapp `sign_request`、扫描 wuminapp `sign_response`、提交 SFID 绑定。
+- 扫码框提示统一为“点击扫描档案码”；签名回执页提示为“点击扫描签名回执”。
+- 进入签名二维码展示步骤后，弹窗标题切换为“wuminapp 签名”；进入签名回执扫描页后，弹窗标题切换为“扫描签名回执”。
 - 绑定签名回执的 `sign_request.id` 必须与后端保存的 `challenge_id` 完全一致;
   不得给公民绑定挑战额外添加 `bind-` 前缀,否则 SFID 后端会查不到 challenge。
 - “扫描档案码”步骤同时支持摄像头扫码和上传二维码图片;上传入口只在本地用
@@ -71,11 +68,10 @@ sfid/frontend/
   不把图片文件上传到后端。
 - “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
 - `citizens/CitizensView.tsx` 公民列表中 `sfid_code` 列标题显示为“身份ID”,不改变底层字段名。
-- 绑定弹窗生成签名挑战时必须把当前钱包地址提交给 `citizens/api.ts` 的
-  `citizenBindChallenge`,确保后端生成的 `sign_request.body.address/pubkey` 完整。
+- 绑定弹窗生成签名挑战时只提交 `mode / archive_code_payload / citizen_id`；钱包字段只能来自 CPMS `ARCHIVE` 档案码。
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
-  点击“绑定 / 确认 / 解绑”不得同时触发公民详情弹窗。
-- 本 UI 边界只处理前端展示和组件内命名,不改变后端绑定协议字段。
+  点击“更新绑定”不得同时触发公民详情弹窗。
+- 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / bind_status`。
 
 ## 省管理员目录规则
 

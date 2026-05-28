@@ -1,5 +1,5 @@
 //! 中文注释:进程内 `Store` 聚合体 + 敏感种子封装 + 服务指标 / 审计 / 链请求回执 /
-//! 异步绑定回调 / 公民奖励 / 投票验证缓存。
+//! 公民奖励 / 投票验证缓存。
 //!
 //! 中文注释:本文件维护 `Store` 聚合体类型。运行时短锁仍使用这棵内存对象,
 //! 持久化由 `main.rs` 拆成各模块 Store 快照表,不再写旧整包 runtime JSON。
@@ -12,20 +12,8 @@ use zeroize::Zeroize;
 
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 
-use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, CitizenStatus, PendingBindScan};
+use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, CitizenStatus};
 use crate::cpms::model::CpmsSiteKeys;
-
-/// 中文注释:历史 `make_signature_envelope` 已下线,本结构仅保留作为
-/// `BindCallbackPayload.proof / callback_attestation` 字段类型(目前由
-/// runtime_align 单边产出,未实际填充)。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SignatureEnvelope {
-    pub(crate) key_id: String,
-    pub(crate) key_version: String,
-    pub(crate) alg: String,
-    pub(crate) payload: String,
-    pub(crate) signature_hex: String,
-}
 
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(transparent)]
@@ -79,9 +67,9 @@ pub(crate) struct Store {
     pub(crate) next_citizen_id: u64,
     #[serde(default)]
     pub(crate) citizen_records: HashMap<u64, CitizenRecord>,
-    /// 反向索引：pubkey → citizen_id
+    /// 反向索引：wallet_pubkey → citizen_id
     #[serde(default)]
-    pub(crate) citizen_id_by_pubkey: HashMap<String, u64>,
+    pub(crate) citizen_id_by_wallet_pubkey: HashMap<String, u64>,
     /// 反向索引：archive_no → citizen_id
     #[serde(default)]
     pub(crate) citizen_id_by_archive_no: HashMap<String, u64>,
@@ -103,14 +91,10 @@ pub(crate) struct Store {
     pub(crate) admin_sessions: HashMap<String, AdminSession>,
     pub(crate) cpms_site_keys: HashMap<String, CpmsSiteKeys>,
     pub(crate) consumed_qr_ids: HashMap<String, DateTime<Utc>>,
-    pub(crate) pending_bind_scan_by_qr_id: HashMap<String, PendingBindScan>,
-    pub(crate) generated_sfid_by_pubkey: HashMap<String, String>,
     pub(crate) audit_logs: Vec<AuditLogEntry>,
     pub(crate) chain_requests_by_key: HashMap<String, ChainRequestReceipt>,
     pub(crate) chain_nonce_seen: HashMap<String, DateTime<Utc>>,
     pub(crate) chain_auth_last_cleanup_at: Option<DateTime<Utc>>,
-    pub(crate) pending_bind_last_cleanup_at: Option<DateTime<Utc>>,
-    pub(crate) bind_callback_jobs: Vec<BindCallbackJob>,
     pub(crate) reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     pub(crate) vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
     pub(crate) metrics: ServiceMetrics,
@@ -174,9 +158,6 @@ pub(crate) struct ServiceMetrics {
     pub(crate) vote_verify_total: u64,
     pub(crate) binding_validate_total: u64,
     pub(crate) voters_count_total: u64,
-    pub(crate) bind_callback_success_total: u64,
-    pub(crate) bind_callback_retry_total: u64,
-    pub(crate) bind_callback_failed_total: u64,
     pub(crate) chain_request_total: u64,
     pub(crate) chain_request_failed_total: u64,
     pub(crate) chain_latency_samples: Vec<u32>,
@@ -192,17 +173,6 @@ pub(crate) struct ChainRequestReceipt {
     pub(crate) nonce: String,
     pub(crate) fingerprint: String,
     pub(crate) received_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct BindCallbackJob {
-    pub(crate) callback_id: String,
-    pub(crate) callback_url: String,
-    pub(crate) payload: BindCallbackPayload,
-    pub(crate) attempts: u32,
-    pub(crate) max_attempts: u32,
-    pub(crate) next_attempt_at: DateTime<Utc>,
-    pub(crate) last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -239,18 +209,4 @@ pub(crate) struct VoteVerifyCacheEntry {
     pub(crate) archive_index: Option<String>,
     pub(crate) citizen_status: Option<CitizenStatus>,
     pub(crate) cached_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct BindCallbackPayload {
-    pub(crate) callback_id: String,
-    pub(crate) event: String,
-    pub(crate) account_pubkey: String,
-    pub(crate) archive_index: String,
-    pub(crate) sfid_code: String,
-    pub(crate) status: String,
-    pub(crate) bound_at: i64,
-    pub(crate) proof: SignatureEnvelope,
-    pub(crate) client_request_id: Option<String>,
-    pub(crate) callback_attestation: SignatureEnvelope,
 }
