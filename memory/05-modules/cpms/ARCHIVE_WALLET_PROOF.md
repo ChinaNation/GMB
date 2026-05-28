@@ -65,7 +65,8 @@ CPMS 只接受能解析出 AccountId32 的钱包地址；解析失败返回 `inv
 ```json
 {
   "archive_no": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-  "archive_status": "NORMAL",
+  "citizen_status": "NORMAL",
+  "voting_eligible": true,
   "valid_from": "2026-05-24",
   "valid_until": "2036-05-23",
   "status_updated_at": 1779580800,
@@ -78,7 +79,7 @@ CPMS 只接受能解析出 AccountId32 的钱包地址；解析失败返回 `inv
 CPMS 签名原文:
 
 ```text
-sfid-cpms-v1|archive|{archive_no}|{archive_status}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
+sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
 ```
 
 无钱包地址时，CPMS 不允许生成 ARCHIVE。

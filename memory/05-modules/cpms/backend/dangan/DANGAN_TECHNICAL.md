@@ -25,7 +25,8 @@
   "proto": "SFID_CPMS_V1",
   "type": "ARCHIVE",
   "archive_no": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-  "archive_status": "NORMAL",
+  "citizen_status": "NORMAL",
+  "voting_eligible": true,
   "valid_from": "2026-05-24",
   "valid_until": "2036-05-23",
   "status_updated_at": 1779580800,
@@ -49,7 +50,7 @@ ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_
 - ARCHIVE 签名原文：
 
 ```text
-sfid-cpms-v1|archive|{archive_no}|{archive_status}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
+sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
 ```
 
 - ARCHIVE 签名上下文：`substrate`。

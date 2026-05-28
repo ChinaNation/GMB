@@ -112,7 +112,7 @@ pub(crate) async fn citizen_bind_challenge(
             }
             if let Some(current_updated_at) = record.status_updated_at {
                 if verified.status_updated_at < current_updated_at {
-                    return api_error(StatusCode::CONFLICT, 1005, "archive status is stale");
+                    return api_error(StatusCode::CONFLICT, 1005, "citizen status is stale");
                 }
             }
             if let Some(owner) = store.citizen_id_by_archive_no.get(&verified.archive_no) {
@@ -139,7 +139,8 @@ pub(crate) async fn citizen_bind_challenge(
         &challenge_id,
         mode,
         &verified.archive_no,
-        &verified.archive_status,
+        &verified.citizen_status,
+        verified.voting_eligible,
         &verified.valid_from,
         &verified.valid_until,
         verified.status_updated_at,
@@ -155,7 +156,8 @@ pub(crate) async fn citizen_bind_challenge(
         &wallet_address,
         &wallet_pubkey,
         &verified.archive_no,
-        &verified.archive_status,
+        &verified.citizen_status,
+        verified.voting_eligible,
         mode,
     );
 
@@ -177,7 +179,8 @@ pub(crate) async fn citizen_bind_challenge(
             wallet_address: wallet_address.clone(),
             wallet_pubkey: wallet_pubkey.clone(),
             wallet_sig_alg: verified.wallet_sig_alg.clone(),
-            archive_status: verified.archive_status.clone(),
+            citizen_status: verified.citizen_status.clone(),
+            voting_eligible: verified.voting_eligible,
             archive_valid_from: verified.valid_from.clone(),
             archive_valid_until: verified.valid_until.clone(),
             status_updated_at: verified.status_updated_at,
@@ -198,7 +201,8 @@ pub(crate) async fn citizen_bind_challenge(
             archive_no: verified.archive_no,
             wallet_address,
             wallet_pubkey,
-            archive_status: verified.archive_status,
+            citizen_status: verified.citizen_status,
+            voting_eligible: verified.voting_eligible,
             valid_from: verified.valid_from,
             valid_until: verified.valid_until,
             status_updated_at: verified.status_updated_at,
@@ -389,7 +393,8 @@ fn create_citizen_record(
         wallet_address: Some(challenge.wallet_address.clone()),
         archive_no: Some(challenge.archive_no.clone()),
         sfid_code: Some(sfid_code.clone()),
-        archive_status: Some(challenge.archive_status.clone()),
+        citizen_status: Some(challenge.citizen_status.clone()),
+        voting_eligible: challenge.voting_eligible,
         archive_valid_from: Some(challenge.archive_valid_from.clone()),
         archive_valid_until: Some(challenge.archive_valid_until.clone()),
         status_updated_at: Some(challenge.status_updated_at),
@@ -447,7 +452,7 @@ fn replace_citizen_record(
             return Err(api_error(
                 StatusCode::CONFLICT,
                 1005,
-                "archive status is stale",
+                "citizen status is stale",
             ));
         }
     }
@@ -485,7 +490,8 @@ fn replace_citizen_record(
     let record = store.citizen_records.get_mut(&citizen_id).unwrap();
     record.wallet_pubkey = Some(challenge.wallet_pubkey.clone());
     record.wallet_address = Some(challenge.wallet_address.clone());
-    record.archive_status = Some(challenge.archive_status.clone());
+    record.citizen_status = Some(challenge.citizen_status.clone());
+    record.voting_eligible = challenge.voting_eligible;
     record.archive_valid_from = Some(challenge.archive_valid_from.clone());
     record.archive_valid_until = Some(challenge.archive_valid_until.clone());
     record.status_updated_at = Some(challenge.status_updated_at);
@@ -509,13 +515,13 @@ fn citizen_bind_output(record: &CitizenRecord) -> CitizenBindOutput {
         wallet_address: record.wallet_address.clone(),
         archive_no: record.archive_no.clone(),
         sfid_code: record.sfid_code.clone(),
-        archive_status: record.archive_status.clone(),
+        citizen_status: record.citizen_status.clone(),
+        voting_eligible: record.voting_eligible,
+        vote_status: record.computed_vote_status(),
         identity_status: record.computed_identity_status(),
         valid_from: record.archive_valid_from.clone(),
         valid_until: record.archive_valid_until.clone(),
         status_updated_at: record.status_updated_at,
-        province_code: record.province_code.clone(),
-        city_code: record.city_code.clone(),
         bind_status: record.bind_status(),
     }
 }
@@ -566,23 +572,25 @@ fn build_challenge_text(
     challenge_id: &str,
     mode: &str,
     archive_no: &str,
-    archive_status: &CitizenStatus,
+    citizen_status: &CitizenStatus,
+    voting_eligible: bool,
     valid_from: &str,
     valid_until: &str,
     status_updated_at: i64,
     wallet_pubkey: &str,
     issued_at: DateTime<Utc>,
 ) -> String {
-    let archive_status_text = match archive_status {
+    let citizen_status_text = match citizen_status {
         CitizenStatus::Normal => "NORMAL",
         CitizenStatus::Abnormal => "ABNORMAL",
     };
     format!(
-        "sfid-citizen-bind-v1|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "sfid-citizen-bind-v1|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         challenge_id,
         mode,
         archive_no,
-        archive_status_text,
+        citizen_status_text,
+        voting_eligible,
         valid_from,
         valid_until,
         status_updated_at,
@@ -599,13 +607,15 @@ fn build_citizen_bind_sign_request(
     wallet_address: &str,
     wallet_pubkey: &str,
     archive_no: &str,
-    archive_status: &CitizenStatus,
+    citizen_status: &CitizenStatus,
+    voting_eligible: bool,
     mode: &str,
 ) -> String {
-    let archive_status_text = match archive_status {
-        CitizenStatus::Normal => "NORMAL",
-        CitizenStatus::Abnormal => "ABNORMAL",
+    let citizen_status_text = match citizen_status {
+        CitizenStatus::Normal => "正常",
+        CitizenStatus::Abnormal => "异常",
     };
+    let voting_eligible_text = if voting_eligible { "有" } else { "无" };
     let mode_label = if mode == "replace" {
         "更换绑定"
     } else {
@@ -633,7 +643,8 @@ fn build_citizen_bind_sign_request(
                 "fields": [
                     { "key": "mode", "label": "操作", "value": mode_label },
                     { "key": "archive_no", "label": "档案号", "value": archive_no },
-                    { "key": "archive_status", "label": "档案状态", "value": archive_status_text },
+                    { "key": "voting_eligible", "label": "选举权利", "value": voting_eligible_text },
+                    { "key": "citizen_status", "label": "公民状态", "value": citizen_status_text },
                     { "key": "wallet_address", "label": "投票账户", "value": wallet_address }
                 ]
             }
@@ -770,11 +781,12 @@ mod tests {
             "challenge-1",
             issued_at,
             expires_at,
-            "sfid-citizen-bind-v1|challenge-1|create|ARCHIVE-1|NORMAL|2026-05-24|2036-05-23|1000|0xabc|1000",
+            "sfid-citizen-bind-v1|challenge-1|create|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1000|0xabc|1000",
             "addr2027",
             "0xabc",
             "ARCHIVE-1",
             &CitizenStatus::Normal,
+            true,
             "create",
         );
         let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
@@ -783,7 +795,7 @@ mod tests {
         assert_eq!(value["id"], "challenge-1");
         assert_eq!(value["body"]["address"], "addr2027");
         assert_eq!(value["body"]["pubkey"], "0xabc");
-        assert_eq!(value["body"]["display"]["fields"][3]["value"], "addr2027");
+        assert_eq!(value["body"]["display"]["fields"][4]["value"], "addr2027");
     }
 
     #[test]
@@ -798,7 +810,8 @@ mod tests {
                 wallet_address: Some("old-address".to_string()),
                 archive_no: Some("ARCHIVE-OLD".to_string()),
                 sfid_code: Some("GMR-OLD".to_string()),
-                archive_status: Some(CitizenStatus::Normal),
+                citizen_status: Some(CitizenStatus::Normal),
+                voting_eligible: true,
                 archive_valid_from: Some("2026-05-24".to_string()),
                 archive_valid_until: Some("2036-05-23".to_string()),
                 status_updated_at: Some(1_000),
@@ -836,7 +849,8 @@ mod tests {
             wallet_address: "new-address".to_string(),
             wallet_pubkey: "0xnew".to_string(),
             wallet_sig_alg: "sr25519".to_string(),
-            archive_status: CitizenStatus::Normal,
+            citizen_status: CitizenStatus::Normal,
+            voting_eligible: true,
             archive_valid_from: "2026-05-24".to_string(),
             archive_valid_until: "2036-05-23".to_string(),
             status_updated_at: 1_001,

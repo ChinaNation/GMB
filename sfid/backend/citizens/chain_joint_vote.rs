@@ -51,7 +51,7 @@ pub(crate) async fn app_voters_count(
         store
             .citizen_records
             .values()
-            .filter(|r| r.archive_no.is_some())
+            .filter(|r| r.archive_no.is_some() && r.computed_vote_status() == CitizenStatus::Normal)
             .count() as u64
     };
 

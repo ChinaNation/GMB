@@ -59,7 +59,8 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
   "proto": "SFID_CPMS_V1",
   "type": "ARCHIVE",
   "archive_no": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-  "archive_status": "NORMAL",
+  "citizen_status": "NORMAL",
+  "voting_eligible": true,
   "valid_from": "2026-05-24",
   "valid_until": "2036-05-23",
   "status_updated_at": 1779580800,
@@ -75,10 +76,11 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
 | 字段 | 说明 |
 |---|---|
 | `archive_no` | 公民档案号，必须全局唯一且不编码归属信息 |
-| `archive_status` | CPMS 档案原始状态 |
+| `citizen_status` | CPMS 公民状态，`NORMAL` 或 `ABNORMAL` |
+| `voting_eligible` | CPMS 选举资格，`true` 表示有选举权利 |
 | `valid_from` | 档案所属电子护照有效期开始日期，格式 `YYYY-MM-DD` |
 | `valid_until` | 档案所属电子护照有效期截止日期，格式 `YYYY-MM-DD` |
-| `status_updated_at` | CPMS 档案状态更新时间，Unix 秒 |
+| `status_updated_at` | CPMS 公民状态更新时间，Unix 秒 |
 | `cpms_pubkey` | CPMS 本机签发公钥 |
 | `geo_seal` | 只有 SFID 能按安装授权解开的归属密文 |
 | `wallet_address` | wuminapp 钱包地址，由 CPMS 扫 wuminapp 钱包二维码保存 |
@@ -89,7 +91,7 @@ CPMS 离线安装时保存 INSTALL 安装材料；档案码真实性由 SFID 在
 ARCHIVE 签名原文：
 
 ```text
-sfid-cpms-v1|archive|{archive_no}|{archive_status}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
+sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}
 ```
 
 ARCHIVE 不包含 `code_id` 或 `usage_limit`。档案码不是一次性票据；SFID 以 `archive_no / sfid_code / wallet_pubkey` 三者一对一关系防止重复绑定。

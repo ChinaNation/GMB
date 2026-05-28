@@ -128,7 +128,8 @@ pub(crate) struct CpmsArchiveCodePayload {
     pub(crate) proto: String,
     pub(crate) r#type: String,
     pub(crate) archive_no: String,
-    pub(crate) archive_status: String,
+    pub(crate) citizen_status: String,
+    pub(crate) voting_eligible: bool,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
@@ -156,7 +157,8 @@ pub(crate) struct CpmsGeoSealClaims {
 #[derive(Debug, Clone)]
 pub(crate) struct VerifiedCpmsArchive {
     pub(crate) archive_no: String,
-    pub(crate) archive_status: CitizenStatus,
+    pub(crate) citizen_status: CitizenStatus,
+    pub(crate) voting_eligible: bool,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
@@ -179,7 +181,8 @@ pub(crate) struct GenerateCpmsInstallOutput {
 #[derive(Serialize)]
 pub(crate) struct CpmsArchiveVerifyOutput {
     pub(crate) archive_no: String,
-    pub(crate) archive_status: crate::citizens::model::CitizenStatus,
+    pub(crate) citizen_status: crate::citizens::model::CitizenStatus,
+    pub(crate) voting_eligible: bool,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,

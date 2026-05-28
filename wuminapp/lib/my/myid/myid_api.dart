@@ -10,6 +10,9 @@ class MyIdStatusResponse {
     required this.bindStatus,
     this.walletAddress,
     this.sfidCode,
+    this.citizenStatus,
+    this.votingEligible,
+    this.voteStatus,
     this.identityStatus,
     this.validFrom,
     this.validUntil,
@@ -20,6 +23,9 @@ class MyIdStatusResponse {
   final String bindStatus;
   final String? walletAddress;
   final String? sfidCode;
+  final String? citizenStatus;
+  final bool? votingEligible;
+  final String? voteStatus;
   final String? identityStatus;
   final String? validFrom;
   final String? validUntil;
@@ -70,6 +76,9 @@ class MyIdApi {
       bindStatus: (data['bind_status']?.toString() ?? 'unset').trim(),
       walletAddress: data['wallet_address']?.toString(),
       sfidCode: data['sfid_code']?.toString(),
+      citizenStatus: data['citizen_status']?.toString(),
+      votingEligible: _parseBool(data['voting_eligible']),
+      voteStatus: data['vote_status']?.toString(),
       identityStatus: data['identity_status']?.toString(),
       validFrom: data['valid_from']?.toString(),
       validUntil: data['valid_until']?.toString(),
@@ -77,5 +86,13 @@ class MyIdApi {
           ? data['status_updated_at'] as int
           : int.tryParse(data['status_updated_at']?.toString() ?? ''),
     );
+  }
+
+  static bool? _parseBool(Object? value) {
+    if (value is bool) return value;
+    final text = value?.toString().trim().toLowerCase();
+    if (text == 'true') return true;
+    if (text == 'false') return false;
+    return null;
   }
 }

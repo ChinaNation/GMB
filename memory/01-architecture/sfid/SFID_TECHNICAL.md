@@ -84,7 +84,7 @@
 
 ### 5.3 自动查询/校验流程（无管理员参与）
 - 区块链请求当前可投票公民数量，SFID 自动返回统计结果（仅统计状态为 `NORMAL` 且绑定有效用户）。
-- 区块链请求公民投票凭证，SFID 按本地电子护照绑定结果和 CPMS 档案状态签发或拒绝。
+- 区块链请求公民投票凭证，SFID 按本地电子护照绑定结果、CPMS 公民状态和选举资格签发或拒绝。
 
 ### 5.4 公开查询流程（无需登录）
 1. 用户访问 SFID 公开查询页面。
@@ -277,8 +277,9 @@
   - `bind_status`：绑定状态，只允许表达 `unset / pending / bound`。
   - `wallet_address`：投票账户地址。
   - `sfid_code`：身份ID号码，wuminapp 展示为“身份ID”。
-  - `identity_status`：身份ID状态，来自 CPMS 档案二维码状态；`NORMAL` 表示正常，其他值由 wuminapp 展示为异常。
-  - `valid_from / valid_until / status_updated_at`：电子护照有效期和 CPMS 档案状态更新时间。
+  - `citizen_status / voting_eligible / vote_status`：公民状态、选举资格和投票状态。
+  - `identity_status`：身份ID状态，来自 CPMS 公民状态和电子护照有效期；`NORMAL` 表示正常，其他值由 wuminapp 展示为异常。
+  - `valid_from / valid_until / status_updated_at`：电子护照有效期和 CPMS 公民状态更新时间。
 - 绑定入口：
   - SFID 后台扫描 CPMS `ARCHIVE` 档案码后生成 `WUMIN_QR_V1 / sign_request`。
   - wuminapp 使用 `MyIdSignPage` 扫描签名请求并返回 `sign_response`。
@@ -292,7 +293,7 @@
 - 幂等与防重放：
   - 进程内：`chain_requests_by_key + chain_nonce_seen`（24 小时窗口）。
   - 数据库：`chain_idempotency_requests(route_key, request_id|nonce)` 双唯一约束。
-- 投票资格规则：以 CPMS 二维码状态为准（SFID 记录并反馈），`ABNORMAL` 状态不可投票。
+- 投票资格规则：以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准；公民状态异常或无选举资格时不可投票。
 - `/api/v1/vote/verify` 使用 5 秒短缓存（按 `account_pubkey + proposal_id`），状态变更/绑定变更会即时失效缓存。
 - 绑定凭证刷新规则：若当前 signer 公钥或 `key_id/key_version/alg` 与已持久化 Runtime 凭证不一致，会自动重签发并覆盖持久化凭证。
 
@@ -316,7 +317,7 @@
 
 #### 9.9.3 电子护照状态查询
 - `GET /api/v1/app/myid/status?wallet_address=<walletAddress>`
-- 返回 `bind_status / wallet_address / sfid_code / identity_status / valid_from / valid_until / status_updated_at`。
+- 返回 `bind_status / wallet_address / sfid_code / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at`。
 
 #### 9.9.4 App Token 配置说明
 - 新增环境变量：`SFID_APP_TOKEN`（在部署脚本中配置）。
@@ -332,12 +333,12 @@
 - `GET /api/v1/public/identity/search?wallet_pubkey=...`
 - 返回字段：`found`, `archive_no`, `identity_code`, `wallet_pubkey`
 - 访问控制：必须携带 `x-public-search-token`（服务端配置 `SFID_PUBLIC_SEARCH_TOKEN`）并受全局限流。
-- 可选返回：`is_voting_eligible`, `citizen_status`（以 CPMS 二维码状态为准）。
+- 公开查询只返回公开绑定字段，不返回公民状态、选举资格或有效期。
 
 ### 9.7 状态返回（已落地）
 1. SFID 完成电子护照绑定后，本地记录直接成为状态查询真相。
-2. wuminapp 通过 `/api/v1/app/myid/status?wallet_address=<walletAddress>` 查询 `bind_status / sfid_code / identity_status / valid_from / valid_until / status_updated_at`。
-3. 管理端列表通过 `/api/v1/admin/citizens` 查看 `wallet_address / archive_no / sfid_code / bind_status`。
+2. wuminapp 通过 `/api/v1/app/myid/status?wallet_address=<walletAddress>` 查询 `bind_status / sfid_code / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at`。
+3. 管理端列表通过 `/api/v1/admin/citizens` 查看 `wallet_address / archive_no / sfid_code / bind_status / citizen_status / voting_eligible / vote_status`。
 
 ## 10. 安全与合规
 - 管理员登录采用“公钥身份识别 + challenge 二维码签名验签”。
@@ -359,9 +360,10 @@
 - `proto`：固定 `SFID_CPMS_V1`。
 - `type`：固定 `ARCHIVE`。
 - `archive_no`：档案号（全局唯一用户标识）。
-- `archive_status`：CPMS 档案状态，`NORMAL` 或 `ABNORMAL`。
+- `citizen_status`：CPMS 公民状态，`NORMAL` 或 `ABNORMAL`。
+- `voting_eligible`：CPMS 选举资格，布尔值。
 - `valid_from / valid_until`：电子护照有效期。
-- `status_updated_at`：CPMS 档案状态更新时间。
+- `status_updated_at`：CPMS 公民状态更新时间。
 - `wallet_address / wallet_pubkey / wallet_sig_alg`：wuminapp 钱包地址、公钥与签名算法。
 - `cpms_pubkey`：CPMS 本机档案签发公钥。
 - `geo_seal`：只有 SFID 可解开的归属密文，明文只包含 `sfid_number`。
@@ -428,14 +430,14 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
 7. 服务端接收回执时应兼容 `request_id|challenge_id`、`pubkey|admin_pubkey|public_key`、`signature|sig` 字段别名。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。
-- 投票资格最终以 CPMS 二维码状态为准（`NORMAL` 可投票，`ABNORMAL` 不可投票）。
+- 投票资格最终以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准。
 
 ### 11.3 验签规则
 1. 解析二维码并校验必填字段完整性。
 2. 校验 `proto=SFID_CPMS_V1`、`type=ARCHIVE`。
 3. 用 SFID 保存的 `install_secret` 解 `geo_seal`。
 4. 校验 `geo_seal.sfid_number`、CPMS 本机签名和授权状态。
-5. 验签通过后返回 `archive_no + archive_status + valid_from + valid_until + status_updated_at + wallet_address + wallet_pubkey + province_code + city_code + sfid_number`；失败直接拒绝。
+5. 验签通过后返回 `archive_no + citizen_status + voting_eligible + valid_from + valid_until + status_updated_at + wallet_address + wallet_pubkey + province_code + city_code + sfid_number`；失败直接拒绝。
 6. 绑定确认必须使用同一 ARCHIVE 验真结果,不得从档案号明文推导归属。
 
 ### 11.4 INSTALL 安装码（机构初始化）
@@ -455,10 +457,10 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 绑定校验口径：SFID 在 ARCHIVE 验真时必须校验 `geo_seal` 与 SFID 侧授权记录一致。
 - 可信链路口径：只有“SFID 签发 INSTALL -> CPMS 初始化 -> SFID 验真 ARCHIVE”闭环完成，CPMS 该机构二维码才进入受信集合。
 - 机构密钥口径：每个 `sfid_number` 授权只允许绑定一个 `cpms_pubkey_hash`。
-- 绑定二维码字段：`proto, type, archive_no, archive_status, valid_from, valid_until, status_updated_at, cpms_pubkey, geo_seal, wallet_address, wallet_pubkey, wallet_sig_alg, sig`。
+- 绑定二维码字段：`proto, type, archive_no, citizen_status, voting_eligible, valid_from, valid_until, status_updated_at, cpms_pubkey, geo_seal, wallet_address, wallet_pubkey, wallet_sig_alg, sig`。
 - 状态变更二维码字段继续按 CPMS 状态扫码接口单独维护,不得混入 ARCHIVE 档案码。
-- 状态值口径：`NORMAL` 可投票，`ABNORMAL` 不可投票；CPMS 输出状态即业务最终状态源。
-- 签名原文口径：`sfid-cpms-v1|archive|{archive_no}|{archive_status}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}`，严禁字段重排、空格填充、编码漂移。
+- 状态值口径：`citizen_status=NORMAL` 且 `voting_eligible=true` 才是投票状态正常；任一条件不满足即异常。
+- 签名原文口径：`sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from}|{valid_until}|{status_updated_at}|{cpms_pubkey}|{geo_seal_hash}|{wallet_address}|{wallet_pubkey}`，严禁字段重排、空格填充、编码漂移。
 - 重复绑定口径：`archive_no / sfid_code / wallet_pubkey` 三者一对一；SFID 以该关系拒绝重复绑定。
 - 失败语义对齐：SFID 返回“站点未登记/签名失败/二维码过期/二维码已消费”时，CPMS 按同义错误码落日志并触发补发流程。
 - 拒绝语义口径：验签失败、机构未登记、机构非 `ACTIVE`、初始化链路不一致时，SFID 必须拒绝该 CPMS 公民档案号二维码/状态变更二维码。
@@ -613,7 +615,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 
 ### 16.4 里程碑 3：电子护照绑定主流程（3 天）
 - 完成 CPMS 授权验真流程：INSTALL 初始化后首次 ARCHIVE 验真绑定 `sfid_number + cpms_pubkey_hash`。
-- 完成 CPMS `ARCHIVE` 验签：`archive_no / archive_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey` 必填。
+- 完成 CPMS `ARCHIVE` 验签：`archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey` 必填。
 - 实现 wuminapp 签名确认：写入 `archive_no + sfid_code + wallet_pubkey`，`bind_status=BOUND`。
 - 交付物：绑定 challenge API、绑定提交 API、验签模块、审计日志落库。
 - 验收标准：伪造二维码与重放请求被拦截；绑定闭环可复现。

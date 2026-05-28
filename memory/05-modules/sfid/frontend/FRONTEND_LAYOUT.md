@@ -1,6 +1,6 @@
 # SFID 前端目录布局
 
-- 最后更新:2026-05-25
+- 最后更新:2026-05-28
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-duoqian-info-layout.md`
   - `memory/08-tasks/open/20260502-114447-按业务边界重新设计并落地-sfid-省管理员相关前后端与-runtime-目录结构.md`
@@ -68,10 +68,13 @@ sfid/frontend/
   不把图片文件上传到后端。
 - “上传二维码”按钮保持纯文字按钮;同一按钮组内的“开启扫码”没有图标,上传入口也不得额外增加图标。
 - `citizens/CitizensView.tsx` 公民列表中 `sfid_code` 列标题显示为“身份ID”,不改变底层字段名。
+- `citizens/CitizensView.tsx` 公民列表中 `wallet_address` 列标题显示为“投票账户”；列表状态列显示“投票状态”，由 `citizen_status + voting_eligible` 计算。
+- 公民详情只展示“身份ID / 档案号 / 投票账户 / 绑定状态 / 选举权利 / 公民状态 / 有效期”，不得接收或展示签发地市归属。
+- 更换绑定弹窗的当前记录摘要只展示“档案号 / 身份ID / 投票账户”；签名请求摘要使用“选举权利 / 公民状态 / 投票账户”。
 - 绑定弹窗生成签名挑战时只提交 `mode / archive_code_payload / citizen_id`；钱包字段只能来自 CPMS `ARCHIVE` 档案码。
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
-- 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / bind_status`。
+- 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
 
 ## 省管理员目录规则
 

@@ -37,11 +37,11 @@
 - wuminapp 电子护照相关测试通过。
 - 全仓电子护照绑定链路只描述 SFID 验签落库与 wuminapp 状态查询。
 - 全仓电子护照绑定链路不再使用历史主动注册、历史双模式字段或历史注册路由。
-- CPMS、SFID、wuminapp 使用统一字段：`archive_no`、`archive_status`、`identity_status`、`valid_from`、`valid_until`、`status_updated_at`、`wallet_address`、`wallet_pubkey`、`wallet_sig_alg`、`sfid_code`、`bind_status`。
+- CPMS、SFID、wuminapp 使用统一字段：`archive_no`、`citizen_status`、`voting_eligible`、`vote_status`、`identity_status`、`valid_from`、`valid_until`、`status_updated_at`、`wallet_address`、`wallet_pubkey`、`wallet_sig_alg`、`sfid_code`、`bind_status`。
 
 ## 执行记录
 
-- 已完成 CPMS `ARCHIVE` 载荷字段统一：`archive_no / archive_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并更新 CPMS 签名原文。
+- 已完成 CPMS `ARCHIVE` 载荷字段统一：`archive_no / citizen_status / voting_eligible / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg`，并更新 CPMS 签名原文。
 - 已完成 SFID `ARCHIVE` 验真解析、绑定 challenge、wuminapp 签名验签、本地绑定落库和 `/api/v1/app/myid/status` 查询。
 - 已移除 SFID 电子护照绑定旧路由和历史修改入口。
 - 已完成 SFID 前端 `citizens/api.ts / BindModal.tsx / CitizensView.tsx` 单一绑定流程改造。
@@ -54,9 +54,12 @@
 - 已锁死更换绑定边界：更换绑定只允许更换钱包账户；`archive_no` 与 `sfid_code` 首次绑定后永久不变，扫描其他档案号会被 SFID 拒绝。
 - 已修正 SFID 公民列表绑定入口文案：无记录入口固定为“新增身份ID绑定”，已有记录操作固定为“更换绑定”，弹窗标题和 wuminapp 签名请求摘要按 `create / replace` 区分。
 - 已修复 `geo_seal cannot be decrypted` 持久化链路：SFID 启动时把 `store_cpms.cpms_site_keys` 恢复到 `sharded_store`；首次 ARCHIVE 验真绑定 `cpms_pubkey_hash / ACTIVE / USED` 时先写 `store_cpms`，再同步运行缓存。
+- 已把 SFID 公民列表地址列改为“投票账户”，把列表状态改为由 `citizen_status + voting_eligible` 计算的“投票状态 正常/异常”；公民列表和详情响应不再下发签发地市归属，避免暴露签发地市。
+- 已把更换绑定弹窗当前记录标签改为“档案号 / 身份ID / 投票账户”，并把签名请求展示字段改为“选举权利 / 公民状态 / 投票账户”。
+- 已补齐 wuminapp 状态接口解析和本地缓存字段：`citizen_status / voting_eligible / vote_status`。
 - 已更新协议、命名、SFID/CPMS/wuminapp 模块文档，并删除旧实现计划文档。
 - 已验证：
-  - `cargo check --manifest-path sfid/backend/Cargo.toml`
+  - `cargo test --manifest-path sfid/backend/Cargo.toml`
   - `cargo check --manifest-path cpms/backend/Cargo.toml`
   - `npm run build`（`sfid/frontend`）
   - `npm run build`（`cpms/frontend/web`）

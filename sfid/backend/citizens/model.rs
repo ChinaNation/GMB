@@ -26,13 +26,16 @@ pub(crate) struct CitizenRecord {
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
-    /// CPMS 档案码原始状态。中文注释：它不是绑定状态，也不是最终身份ID状态。
-    pub(crate) archive_status: Option<CitizenStatus>,
+    /// CPMS 档案码中的公民状态。中文注释：它不是绑定状态，也不是最终身份ID状态。
+    pub(crate) citizen_status: Option<CitizenStatus>,
+    /// CPMS 档案码中的选举资格。
+    #[serde(default)]
+    pub(crate) voting_eligible: bool,
     /// 电子护照生效日期，格式固定为 YYYY-MM-DD。
     pub(crate) archive_valid_from: Option<String>,
     /// 电子护照截止日期，格式固定为 YYYY-MM-DD。
     pub(crate) archive_valid_until: Option<String>,
-    /// CPMS 档案状态更新时间，和 ARCHIVE 签名原文一致。
+    /// CPMS 公民状态更新时间，和 ARCHIVE 签名原文一致。
     #[serde(default)]
     pub(crate) status_updated_at: Option<i64>,
     pub(crate) sfid_signature: Option<String>,
@@ -57,7 +60,7 @@ impl CitizenRecord {
     }
 
     pub(crate) fn computed_identity_status_on_date(&self, today: NaiveDate) -> CitizenStatus {
-        if self.archive_status != Some(CitizenStatus::Normal) {
+        if self.citizen_status != Some(CitizenStatus::Normal) {
             return CitizenStatus::Abnormal;
         }
         let Some(valid_from) = parse_archive_date(self.archive_valid_from.as_deref()) else {
@@ -67,6 +70,14 @@ impl CitizenRecord {
             return CitizenStatus::Abnormal;
         };
         if valid_from <= today && today <= valid_until {
+            CitizenStatus::Normal
+        } else {
+            CitizenStatus::Abnormal
+        }
+    }
+
+    pub(crate) fn computed_vote_status(&self) -> CitizenStatus {
+        if self.voting_eligible && self.citizen_status == Some(CitizenStatus::Normal) {
             CitizenStatus::Normal
         } else {
             CitizenStatus::Abnormal
@@ -98,7 +109,8 @@ pub(crate) struct CitizenBindChallenge {
     pub(crate) wallet_address: String,
     pub(crate) wallet_pubkey: String,
     pub(crate) wallet_sig_alg: String,
-    pub(crate) archive_status: CitizenStatus,
+    pub(crate) citizen_status: CitizenStatus,
+    pub(crate) voting_eligible: bool,
     pub(crate) archive_valid_from: String,
     pub(crate) archive_valid_until: String,
     pub(crate) status_updated_at: i64,
@@ -119,7 +131,8 @@ pub(crate) struct CitizenBindChallengeOutput {
     pub(crate) archive_no: String,
     pub(crate) wallet_address: String,
     pub(crate) wallet_pubkey: String,
-    pub(crate) archive_status: CitizenStatus,
+    pub(crate) citizen_status: CitizenStatus,
+    pub(crate) voting_eligible: bool,
     pub(crate) valid_from: String,
     pub(crate) valid_until: String,
     pub(crate) status_updated_at: i64,
@@ -160,13 +173,13 @@ pub(crate) struct CitizenBindOutput {
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
-    pub(crate) archive_status: Option<CitizenStatus>,
+    pub(crate) citizen_status: Option<CitizenStatus>,
+    pub(crate) voting_eligible: bool,
+    pub(crate) vote_status: CitizenStatus,
     pub(crate) identity_status: CitizenStatus,
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
     pub(crate) status_updated_at: Option<i64>,
-    pub(crate) province_code: Option<String>,
-    pub(crate) city_code: Option<String>,
     pub(crate) bind_status: CitizenBindStatus,
 }
 
@@ -199,9 +212,9 @@ pub(crate) struct CitizenRow {
     pub(crate) wallet_address: Option<String>,
     pub(crate) archive_no: Option<String>,
     pub(crate) sfid_code: Option<String>,
-    pub(crate) province_code: Option<String>,
-    pub(crate) city_code: Option<String>,
-    pub(crate) archive_status: Option<CitizenStatus>,
+    pub(crate) citizen_status: Option<CitizenStatus>,
+    pub(crate) voting_eligible: bool,
+    pub(crate) vote_status: CitizenStatus,
     pub(crate) identity_status: CitizenStatus,
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
@@ -222,6 +235,9 @@ pub(crate) struct MyIdStatusOutput {
     pub(crate) bind_status: String,
     pub(crate) wallet_address: Option<String>,
     pub(crate) sfid_code: Option<String>,
+    pub(crate) citizen_status: Option<CitizenStatus>,
+    pub(crate) voting_eligible: Option<bool>,
+    pub(crate) vote_status: Option<CitizenStatus>,
     pub(crate) identity_status: Option<CitizenStatus>,
     pub(crate) valid_from: Option<String>,
     pub(crate) valid_until: Option<String>,
@@ -286,6 +302,9 @@ mod tests {
             bind_status: "bound".to_string(),
             wallet_address: Some("5F-test".to_string()),
             sfid_code: Some("1234567890".to_string()),
+            citizen_status: Some(CitizenStatus::Normal),
+            voting_eligible: Some(true),
+            vote_status: Some(CitizenStatus::Normal),
             identity_status: Some(CitizenStatus::Normal),
             valid_from: Some("2026-05-24".to_string()),
             valid_until: Some("2036-05-23".to_string()),
@@ -295,6 +314,9 @@ mod tests {
         let value = serde_json::to_value(output).expect("serialize status output");
         assert_eq!(value["bind_status"], "bound");
         assert_eq!(value["sfid_code"], "1234567890");
+        assert_eq!(value["citizen_status"], "NORMAL");
+        assert_eq!(value["voting_eligible"], true);
+        assert_eq!(value["vote_status"], "NORMAL");
         assert_eq!(value["identity_status"], "NORMAL");
         assert_eq!(value["valid_from"], "2026-05-24");
         assert_eq!(value["valid_until"], "2036-05-23");
@@ -302,14 +324,15 @@ mod tests {
     }
 
     #[test]
-    fn citizen_record_computes_identity_status_from_archive_status_and_validity() {
+    fn citizen_record_computes_identity_status_from_citizen_status_and_validity() {
         let record = CitizenRecord {
             id: 1,
             wallet_pubkey: Some("0xabc".to_string()),
             wallet_address: Some("5F-test".to_string()),
             archive_no: Some("ARCHIVE-1".to_string()),
             sfid_code: Some("1234567890".to_string()),
-            archive_status: Some(CitizenStatus::Normal),
+            citizen_status: Some(CitizenStatus::Normal),
+            voting_eligible: true,
             archive_valid_from: Some("2026-05-24".to_string()),
             archive_valid_until: Some("2036-05-23".to_string()),
             status_updated_at: Some(1_779_580_800),
@@ -333,5 +356,6 @@ mod tests {
             record.computed_identity_status_on_date(NaiveDate::from_ymd_opt(2036, 5, 24).unwrap()),
             CitizenStatus::Abnormal
         );
+        assert_eq!(record.computed_vote_status(), CitizenStatus::Normal);
     }
 }

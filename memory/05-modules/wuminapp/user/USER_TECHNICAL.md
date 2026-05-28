@@ -93,7 +93,7 @@
 
 电子护照状态归属 `lib/my/myid/MyIdService`，用户模块不直接读写电子护照状态。
 电子护照页展示字段由 SFID 状态接口同步：绑定状态、身份ID号码、投票账户地址、身份ID状态。
-绑定状态和身份ID状态必须分离；`identity_status == NORMAL` 显示“状态：正常”，其他值显示“状态：异常”。
+绑定状态、投票状态和身份ID状态必须分离；wuminapp 状态接口缓存 `citizen_status / voting_eligible / vote_status / identity_status`，其中 `identity_status == NORMAL` 显示“状态：正常”，其他值显示“状态：异常”。
 
 ## 5. 页面与交互流程
 
