@@ -1357,7 +1357,7 @@ fn validate_geo_seal_against_site(
     Ok(())
 }
 
-async fn bind_cpms_pubkey_if_needed(
+pub(crate) async fn bind_cpms_pubkey_if_needed(
     state: &AppState,
     province: &str,
     sfid_number: &str,
@@ -1365,39 +1365,62 @@ async fn bind_cpms_pubkey_if_needed(
 ) -> Result<(), (StatusCode, u32, String)> {
     let sfid_key = sfid_number.to_string();
     let hash = cpms_pubkey_hash.to_string();
+    let updated_site = {
+        let mut store = state.store.write().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "store write failed".to_string(),
+            )
+        })?;
+        let Some(site) = store.cpms_site_keys.get_mut(sfid_key.as_str()) else {
+            return Err((
+                StatusCode::NOT_FOUND,
+                1004,
+                "cpms install authorization not found".to_string(),
+            ));
+        };
+        if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
+            if existing != hash {
+                return Err((
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    2004,
+                    "cpms_pubkey does not match installed CPMS".to_string(),
+                ));
+            }
+        }
+
+        let mut changed = false;
+        if site.cpms_pubkey_hash.is_none() {
+            site.cpms_pubkey_hash = Some(hash.clone());
+            changed = true;
+        }
+        if site.status == CpmsSiteStatus::Pending {
+            site.status = CpmsSiteStatus::Active;
+            changed = true;
+        }
+        if site.install_token_status == InstallTokenStatus::Pending {
+            site.install_token_status = InstallTokenStatus::Used;
+            changed = true;
+        }
+        if changed {
+            site.version += 1;
+            site.updated_at = Some(Utc::now());
+        }
+        site.clone()
+    };
+
     let result = state
         .sharded_store
         .write_province(province, move |shard| {
-            let Some(site) = shard.cpms_site_keys.get_mut(sfid_key.as_str()) else {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    1004,
-                    "cpms install authorization not found",
-                ));
-            };
-            if let Some(existing) = site.cpms_pubkey_hash.as_deref() {
-                if existing != hash {
-                    return Err((
-                        StatusCode::UNPROCESSABLE_ENTITY,
-                        2004,
-                        "cpms_pubkey does not match installed CPMS",
-                    ));
-                }
-            } else {
-                site.cpms_pubkey_hash = Some(hash.clone());
-            }
-            if site.status == CpmsSiteStatus::Pending {
-                site.status = CpmsSiteStatus::Active;
-                site.install_token_status = InstallTokenStatus::Used;
-            }
-            site.version += 1;
-            site.updated_at = Some(Utc::now());
-            Ok(())
+            // 中文注释:store_cpms 是主数据；分片缓存直接覆盖为刚持久化后的授权快照。
+            shard
+                .cpms_site_keys
+                .insert(sfid_key.clone(), updated_site.clone());
         })
         .await;
     match result {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err((status, code, msg))) => Err((status, code, msg.to_string())),
+        Ok(()) => Ok(()),
         Err(_) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             1004,

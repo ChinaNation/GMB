@@ -52,11 +52,120 @@ fn build_test_state() -> AppState {
     state
 }
 
+fn sample_cpms_site(site_sfid: &str) -> CpmsSiteKeys {
+    CpmsSiteKeys {
+        site_sfid: site_sfid.to_string(),
+        install_token: String::new(),
+        install_secret: "0x1111111111111111111111111111111111111111111111111111111111111111"
+            .to_string(),
+        install_secret_hash: "0xinstall-secret-hash".to_string(),
+        install_token_status: InstallTokenStatus::Pending,
+        status: CpmsSiteStatus::Pending,
+        version: 1,
+        province_code: "GZ".to_string(),
+        admin_province: "贵州省".to_string(),
+        city_name: "贵阳市".to_string(),
+        city_code: "001".to_string(),
+        institution_code: "ZF".to_string(),
+        institution_name: "贵阳市公安局".to_string(),
+        qr1_payload: String::new(),
+        cpms_pubkey_hash: None,
+        created_by: "0xSUPER".to_string(),
+        created_at: Utc::now(),
+        updated_by: None,
+        updated_at: None,
+    }
+}
+
 async fn parse_json(resp: Response) -> serde_json::Value {
     let bytes = to_bytes(resp.into_body(), usize::MAX)
         .await
         .expect("response body bytes");
     serde_json::from_slice(&bytes).expect("json response")
+}
+
+#[tokio::test]
+async fn cpms_site_snapshot_sync_restores_sharded_runtime_cache() {
+    let state = build_test_state();
+    let site = sample_cpms_site("SFID-SITE-RESTORE");
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        store
+            .cpms_site_keys
+            .insert(site.site_sfid.clone(), site.clone());
+    }
+
+    sync_cpms_sites_to_sharded(&state).await;
+
+    let restored = state
+        .sharded_store
+        .read_province("贵州省", |shard| {
+            shard.cpms_site_keys.get(&site.site_sfid).cloned()
+        })
+        .await
+        .expect("read province");
+    let restored = restored.expect("cpms site restored to sharded cache");
+    assert_eq!(restored.site_sfid, site.site_sfid);
+    assert_eq!(restored.install_secret, site.install_secret);
+}
+
+#[tokio::test]
+async fn cpms_pubkey_binding_persists_store_and_runtime_cache() {
+    let state = build_test_state();
+    let site = sample_cpms_site("SFID-SITE-PUBKEY");
+    {
+        let mut store = state.store.write().expect("store write lock poisoned");
+        store
+            .cpms_site_keys
+            .insert(site.site_sfid.clone(), site.clone());
+    }
+
+    cpms::handler::bind_cpms_pubkey_if_needed(
+        &state,
+        "贵州省",
+        site.site_sfid.as_str(),
+        "0xcpms-pubkey-hash",
+    )
+    .await
+    .expect("bind cpms pubkey");
+
+    let stored = {
+        let store = state.store.read().expect("store read lock poisoned");
+        store
+            .cpms_site_keys
+            .get(&site.site_sfid)
+            .cloned()
+            .expect("stored cpms site")
+    };
+    assert_eq!(
+        stored.cpms_pubkey_hash.as_deref(),
+        Some("0xcpms-pubkey-hash")
+    );
+    assert_eq!(stored.status, CpmsSiteStatus::Active);
+    assert_eq!(stored.install_token_status, InstallTokenStatus::Used);
+
+    let cached = state
+        .sharded_store
+        .read_province("贵州省", |shard| {
+            shard.cpms_site_keys.get(&site.site_sfid).cloned()
+        })
+        .await
+        .expect("read province")
+        .expect("cached cpms site");
+    assert_eq!(cached.cpms_pubkey_hash, stored.cpms_pubkey_hash);
+    assert_eq!(cached.status, stored.status);
+    assert_eq!(cached.install_token_status, stored.install_token_status);
+
+    let err = cpms::handler::bind_cpms_pubkey_if_needed(
+        &state,
+        "贵州省",
+        site.site_sfid.as_str(),
+        "0xdifferent-cpms-pubkey-hash",
+    )
+    .await
+    .expect_err("different cpms pubkey hash must be rejected");
+    assert_eq!(err.0, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(err.2, "cpms_pubkey does not match installed CPMS");
 }
 
 #[test]

@@ -1,6 +1,6 @@
 // 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
 // 注册局顶层视图 —— activeView === 'citizens' 分支。
-// 包含:citizen 列表 + 搜索栏 + 表格 + 电子护照绑定弹窗 + 操作扫码 Modal。
+// 包含:citizen 列表 + 搜索栏 + 表格 + 身份ID绑定弹窗 + 操作扫码 Modal。
 
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
@@ -196,7 +196,7 @@ export function CitizensView() {
       render: (_v: unknown, row: CitizenRow) => (
         <Space size={8} data-row-action="true" onClick={(event) => event.stopPropagation()}>
           <Button type="primary" onClick={(event) => { event.stopPropagation(); openBindModal(row); }}>
-            更新绑定
+            更换绑定
           </Button>
         </Space>
       ),
@@ -214,7 +214,7 @@ export function CitizensView() {
           <Space>
             {capabilities.canBusinessWrite && (
               <Button type="primary" onClick={() => openBindModal(null)}>
-                绑定电子护照
+                新增身份ID绑定
               </Button>
             )}
             <Form layout="inline" onFinish={onSearch}>
