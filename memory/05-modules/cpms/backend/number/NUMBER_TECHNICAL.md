@@ -42,7 +42,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 - 操作员不得手工指定护照号。
 - `archives.passport_no` 必须非空唯一。
 - `sequence_counters` 保存本机档案号序列和本市护照号序列。
-- `archive_number_recycle_pool` 保存满 100 年硬删除后释放的一对档案号和护照号。
+- `archive_number_recycle_pool` 保存满 100 年硬删除后释放的一对档案号和护照号；唯一约束只作用于未使用池项，避免同一号码多轮复用后再次硬删除被历史池项挡住。
 - CPMS 永不联网，省内不同市的护照号不靠联网查重，而靠城市隔离编号保证生成空间不重叠。
 
 ## 5. 回收规则
@@ -50,6 +50,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 - 软删除就是注销，但软删除未满 100 年时，`archives` 行仍保留，档案号和护照号继续被唯一约束占用。
 - 满 100 年硬删除后，`dangan/lifecycle.rs` 将档案号和护照号成对写入 `archive_number_recycle_pool`。
 - 新建档案时，`number` 模块优先在同一事务内领取一对未使用的回收号码；没有可用回收号码时再生成新号码。
+- 回收池领取会写入 `used_at / used_by_archive_id`；事务回滚时领取状态同步回滚，号码仍保持可用。
 - 档案号和护照号必须成对领取，不允许只回收或只复用其中一个。
 - `archive_id` 是内部随机 ID，不进入回收池，不复用。
 

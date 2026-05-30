@@ -145,14 +145,13 @@ async fn create_operator(
     };
 
     sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, status, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, FALSE, NULL, $6, $7)",
+        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
     )
     .bind(&operator.user_id)
     .bind(&operator.admin_pubkey)
     .bind(&operator.admin_name)
     .bind(&operator.role)
-    .bind("ACTIVE")
     .bind(now_ts)
     .bind(now_ts)
     .execute(&state.db)
@@ -276,7 +275,7 @@ async fn update_archive_citizen_status(
     dangan::validate_citizen_status(&req.citizen_status)?;
 
     let row = sqlx::query(
-        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from, valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
+        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
          FROM archives
          WHERE archive_id = $1",
     )

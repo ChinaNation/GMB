@@ -2,7 +2,7 @@ use axum::{http::StatusCode, Json};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
@@ -15,7 +15,7 @@ use super::{
 
 type Blake2b256 = Blake2b<U32>;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(crate) struct CpmsStatusExportFile {
     proto: String,
     r#type: String,
@@ -33,7 +33,7 @@ pub(crate) struct CpmsStatusExportFile {
     sig: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct CpmsStatusRecord {
     archive_no: String,
     citizen_status: String,
@@ -41,7 +41,7 @@ struct CpmsStatusRecord {
     status_updated_at: i64,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct CpmsNumberReleaseRecord {
     archive_no: String,
     passport_no: String,
@@ -63,18 +63,16 @@ pub(crate) async fn build_and_record_cpms_status_export(
 ) -> Result<CpmsStatusExportFile, (StatusCode, Json<ApiError>)> {
     let now = Utc::now();
     let export_year = current_export_year(now)?;
+    if let Some(export_file) = load_recorded_status_export(state, export_year).await? {
+        return Ok(export_file);
+    }
     let export_file = build_cpms_status_export(state, export_year, now).await?;
 
-    sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO cpms_status_exports
-         (export_year, export_batch_id, exported_at, records_hash, status_records_count, number_release_records_count)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (export_year) DO UPDATE SET
-           export_batch_id = EXCLUDED.export_batch_id,
-           exported_at = EXCLUDED.exported_at,
-           records_hash = EXCLUDED.records_hash,
-           status_records_count = EXCLUDED.status_records_count,
-           number_release_records_count = EXCLUDED.number_release_records_count",
+         (export_year, export_batch_id, exported_at, records_hash, status_records_count, number_release_records_count, export_file)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (export_year) DO NOTHING",
     )
     .bind(export_year)
     .bind(&export_file.export_batch_id)
@@ -82,11 +80,24 @@ pub(crate) async fn build_and_record_cpms_status_export(
     .bind(&export_file.records_hash)
     .bind(export_file.status_records_count as i64)
     .bind(export_file.number_release_records_count as i64)
+    .bind(sqlx::types::Json(&export_file))
     .execute(&state.db)
     .await
     .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "record annual status export failed"))?;
 
-    Ok(export_file)
+    if result.rows_affected() == 1 {
+        return Ok(export_file);
+    }
+
+    load_recorded_status_export(state, export_year)
+        .await?
+        .ok_or_else(|| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "load annual status export failed",
+            )
+        })
 }
 
 pub(crate) async fn ensure_operator_annual_export_unlocked(
@@ -249,6 +260,36 @@ async fn annual_export_exists(
                 "query annual status export failed",
             )
         })
+}
+
+async fn load_recorded_status_export(
+    state: &AppState,
+    export_year: i32,
+) -> Result<Option<CpmsStatusExportFile>, (StatusCode, Json<ApiError>)> {
+    let row = sqlx::query("SELECT export_file FROM cpms_status_exports WHERE export_year = $1")
+        .bind(export_year)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "query annual status export failed",
+            )
+        })?;
+
+    row.map(|r| {
+        r.try_get::<sqlx::types::Json<CpmsStatusExportFile>, _>("export_file")
+            .map(|v| v.0)
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "decode annual status export failed",
+                )
+            })
+    })
+    .transpose()
 }
 
 fn records_hash(

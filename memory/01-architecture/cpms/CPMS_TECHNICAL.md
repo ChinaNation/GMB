@@ -88,13 +88,16 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 签名上下文：`substrate`。
 
 ## 7. 数据库表
-- `system_install`：单行安装授权状态。
+- `system_install`：单行安装授权状态，显式保存 `sfid_number / province_code / city_code`。
 - `qr_sign_keys`：本机 ARCHIVE 签发密钥。
-- `admin_users`：管理员账号。
+- `admin_users`：管理员账号；不保留停用状态字段，操作管理员删除即物理删除。
 - `sessions`：登录会话。
 - `login_challenges`：登录挑战。
 - `qr_login_results`：扫码登录结果。
-- `archives`：公民档案和 `archive_qr_payload`。
+- `archives`：公民档案和 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用数据库 `DATE`。
+- `archive_number_recycle_pool`：满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史。
+- `archive_hard_delete_logs`：满 100 年硬删除最小日志，不保存实名原文。
+- `cpms_status_exports`：年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告。
 - `sequence_counters`：本机序列。
 - `qr_print_records`：打印记录。
 - `address_towns` / `address_villages`：地址维护。

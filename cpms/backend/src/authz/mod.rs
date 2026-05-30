@@ -60,7 +60,7 @@ pub(crate) async fn require_auth(
     let token = session_token(headers)?;
 
     let row = sqlx::query(
-        "SELECT s.user_id, a.role, a.status, s.expires_at
+        "SELECT s.user_id, a.role, s.expires_at
          FROM sessions s
          JOIN admin_users a ON a.user_id = s.user_id
          WHERE s.access_token = $1",
@@ -85,17 +85,9 @@ pub(crate) async fn require_auth(
     };
 
     let role: String = row.get("role");
-    let status: String = row.get("status");
     let expires_at: i64 = row.get("expires_at");
-    if status != "ACTIVE" {
-        let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
-            .bind(&token)
-            .execute(&state.db)
-            .await;
-        return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid session"));
-    }
 
-    // 超管 session 不过期；普通管理员检查过期 + 滑动续期 30 分钟
+    // 超管 session 不过期；普通管理员检查过期 + 滑动续期 30 分钟。
     if role != "SUPER_ADMIN" {
         if role == "OPERATOR_ADMIN" {
             match crate::dangan::ensure_operator_annual_export_unlocked(state).await {

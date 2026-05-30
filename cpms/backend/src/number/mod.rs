@@ -535,6 +535,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn db_recycle_pool_allows_same_numbers_after_previous_claim() {
+        let Some(pool) = test_pool().await else {
+            return;
+        };
+        let case_id = format!("test_recycle_again_{}", Uuid::new_v4().simple());
+        let archive_no = format!("AN-{case_id}");
+        let passport_no = format!("PP{case_id}");
+
+        cleanup_case(&pool, &case_id).await;
+        sqlx::query(
+            "INSERT INTO archive_number_recycle_pool
+             (pool_id, archive_no, passport_no, source_archive_id, deleted_at, released_at, used_at, used_by_archive_id)
+             VALUES ($1, $2, $3, $4, 1, 1, 2, $5)",
+        )
+        .bind(format!("pool_used_{case_id}"))
+        .bind(&archive_no)
+        .bind(&passport_no)
+        .bind(format!("old_first_{case_id}"))
+        .bind(format!("new_first_{case_id}"))
+        .execute(&pool)
+        .await
+        .expect("insert used recycle pool row");
+
+        insert_recycle_pool_row(
+            &pool,
+            &format!("pool_available_{case_id}"),
+            &format!("old_second_{case_id}"),
+            &archive_no,
+            &passport_no,
+        )
+        .await;
+
+        let available_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM archive_number_recycle_pool WHERE archive_no = $1",
+        )
+        .bind(&archive_no)
+        .fetch_one(&pool)
+        .await
+        .expect("count recycle rows");
+        assert_eq!(available_count, 2);
+        cleanup_case(&pool, &case_id).await;
+    }
+
+    #[tokio::test]
     async fn db_generate_creates_new_numbers_when_recycle_pool_is_empty() {
         let Some(pool) = test_pool().await else {
             return;
