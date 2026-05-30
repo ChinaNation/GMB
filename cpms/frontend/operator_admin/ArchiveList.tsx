@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as api from '../api';
-import type { Archive } from '../types';
+import { listArchives } from './api';
+import type { Archive } from './types';
 
 const PAGE_SIZE = 20;
 
@@ -28,7 +28,7 @@ export default function ArchiveList() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.listArchives({ q: search.trim() || undefined, page, page_size: PAGE_SIZE });
+      const res = await listArchives({ q: search.trim() || undefined, page, page_size: PAGE_SIZE });
       if (res.data) {
         setArchives(res.data.items || []);
         setTotal(res.data.total || 0);

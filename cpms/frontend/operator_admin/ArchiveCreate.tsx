@@ -3,7 +3,10 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import * as api from '../api';
+import { listTowns, listVillages } from '../address/api';
+import { installStatus } from '../initialize/api';
+import { createArchive } from './api';
+import type { Town, Village } from '../address/types';
 
 export default function ArchiveCreate() {
   const navigate = useNavigate();
@@ -13,8 +16,8 @@ export default function ArchiveCreate() {
   const [provinceName, setProvinceName] = useState('');
   const [cityName, setCityName] = useState('');
   // 地址数据
-  const [towns, setTowns] = useState<{ town_code: string; town_name: string }[]>([]);
-  const [villages, setVillages] = useState<{ village_id: string; town_code: string; village_name: string }[]>([]);
+  const [towns, setTowns] = useState<Town[]>([]);
+  const [villages, setVillages] = useState<Village[]>([]);
   const [selectedTown, setSelectedTown] = useState('');
   const [selectedVillage, setSelectedVillage] = useState('');
   const [addressText, setAddressText] = useState('');
@@ -28,7 +31,7 @@ export default function ArchiveCreate() {
 
   // 中文注释：省市只来自 CPMS 安装授权，前端不允许手工指定归属。
   useEffect(() => {
-    api.installStatus().then(res => {
+    installStatus().then(res => {
       if (res.data?.province_code) setProvinceCode(res.data.province_code);
       if (res.data?.city_code) setCityCode(res.data.city_code);
       if (res.data?.province_name) setProvinceName(res.data.province_name);
@@ -38,7 +41,7 @@ export default function ArchiveCreate() {
 
   // 加载镇列表
   useEffect(() => {
-    api.listTowns().then(res => {
+    listTowns().then(res => {
       if (res.data) setTowns(res.data);
     }).catch(() => {});
   }, []);
@@ -46,7 +49,7 @@ export default function ArchiveCreate() {
   // 选镇后联动加载村/路
   useEffect(() => {
     if (!selectedTown) { setVillages([]); setSelectedVillage(''); return; }
-    api.listVillages(selectedTown).then(res => {
+    listVillages(selectedTown).then(res => {
       if (res.data) setVillages(res.data);
     }).catch(() => {});
     setSelectedVillage('');
@@ -78,7 +81,7 @@ export default function ArchiveCreate() {
         ...form,
         height_cm: parseFloat(form.height_cm),
       };
-      const res = await api.createArchive(body);
+      const res = await createArchive(body);
       if (res.data) navigate(`/admin/archives/${res.data.archive_id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建失败');

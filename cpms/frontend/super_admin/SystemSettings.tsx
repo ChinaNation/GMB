@@ -1,8 +1,11 @@
 // 系统设置页：展示 INSTALL 安装授权、超级管理员绑定和 ARCHIVE 签发状态。
 
 import { useState, useEffect } from 'react';
-import * as api from '../api';
-import type { InstallStatus } from '../types';
+import { listTowns, listVillages } from '../address/api';
+import { installStatus } from '../initialize/api';
+import type { Town, Village } from '../address/types';
+import type { InstallStatus } from '../initialize/types';
+import { exportStatusFile } from './api';
 
 export default function SystemSettings() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
@@ -10,7 +13,7 @@ export default function SystemSettings() {
   const [exporting, setExporting] = useState(false);
 
   const load = () => {
-    api.installStatus()
+    installStatus()
       .then(res => { if (res.data) setStatus(res.data); })
       .catch(e => setError(e instanceof Error ? e.message : '状态加载失败'));
   };
@@ -25,7 +28,7 @@ export default function SystemSettings() {
     setError('');
     setExporting(true);
     try {
-      const res = await api.exportStatusFile();
+      const res = await exportStatusFile();
       if (res.data) {
         const text = JSON.stringify(res.data.export_file, null, 2);
         const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
@@ -140,16 +143,16 @@ function Divider() {
 // ── 当前市行政区只读预览 ──
 
 function AddressScope() {
-  const [towns, setTowns] = useState<{ town_code: string; town_name: string }[]>([]);
+  const [towns, setTowns] = useState<Town[]>([]);
   const [selectedTown, setSelectedTown] = useState('');
-  const [villages, setVillages] = useState<{ village_id: string; town_code: string; village_name: string }[]>([]);
+  const [villages, setVillages] = useState<Village[]>([]);
 
   const loadTowns = () => {
-    api.listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
+    listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
   };
   const loadVillages = (code: string) => {
     if (!code) { setVillages([]); return; }
-    api.listVillages(code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+    listVillages(code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
   };
 
   useEffect(() => { loadTowns(); }, []);

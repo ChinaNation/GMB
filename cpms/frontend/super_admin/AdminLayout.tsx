@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth';
-import * as api from '../api';
+import { useAuth } from '../authz/AuthProvider';
+import { authLogout } from '../login/api';
 import { QrIcon } from '../components/QrIcon';
 
 export default function AdminLayout() {
@@ -10,7 +10,7 @@ export default function AdminLayout() {
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   const handleLogout = async () => {
-    try { await api.authLogout(); } catch { /* ignore */ }
+    try { await authLogout(); } catch { /* ignore */ }
     logout();
     navigate('/login');
   };

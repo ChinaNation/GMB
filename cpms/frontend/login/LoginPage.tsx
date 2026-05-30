@@ -6,10 +6,10 @@ import { useState, useEffect, useRef } from 'react';
 import { ScanIcon } from '../components/ScanIcon';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import { useAuth } from '../auth';
-import * as api from '../api';
+import { useAuth } from '../authz/AuthProvider';
+import * as api from './api';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { startCameraScanner } from '../qr/cameraScanner';
 
 export default function LoginPage() {
   const { login } = useAuth();

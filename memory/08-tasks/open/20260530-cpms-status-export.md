@@ -17,7 +17,7 @@
 - `cpms/backend/src/operator_admin`：软删除时强制写入注销状态和无投票资格，新增导出接口。
 - `cpms/backend/src/super_admin`：状态更新逻辑改为正常/注销，并保持注销无投票资格。
 - `cpms/backend/db`：更新 `citizen_status` 约束为 `NORMAL / REVOKED`。
-- `cpms/frontend/web/src`：清理“异常/ABNORMAL”残留，改为“注销/REVOKED”。
+- `cpms/frontend`：清理“异常/ABNORMAL”残留，改为“注销/REVOKED”。
 - `memory/05-modules` 与 `memory/07-ai`：同步协议、命名和技术文档。
 
 ## 主要风险点

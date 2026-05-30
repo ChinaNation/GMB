@@ -21,7 +21,7 @@
 
 - `cpms/backend/src/dangan/`：ARCHIVE payload 与签名原文。
 - `cpms/backend/src/operator_admin/`：档案码生成、更新、打印和投票账户保存。
-- `cpms/frontend/web/src/operator/`：投票账户与档案码 UI 文案。
+- `cpms/frontend/operator_admin/`：投票账户与档案码 UI 文案。
 - `sfid/backend/cpms/`：ARCHIVE 验真与字段解析。
 - `sfid/backend/citizens/`：电子护照绑定 challenge、验签、状态查询。
 - `sfid/frontend/citizens/`：扫描档案码、签名请求、签名回执、绑定完成 UI。
@@ -62,5 +62,5 @@
   - `cargo test --manifest-path sfid/backend/Cargo.toml`
   - `cargo check --manifest-path cpms/backend/Cargo.toml`
   - `npm run build`（`sfid/frontend`）
-  - `npm run build`（`cpms/frontend/web`）
+  - `npm run build`（`cpms/frontend`）
   - `flutter test test/myid_page_test.dart test/sfid_api_config_test.dart`

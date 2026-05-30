@@ -1,15 +1,15 @@
 // 顶部状态栏
 
-import { useAuth } from '../auth';
+import { useAuth } from '../authz/AuthProvider';
 import { useNavigate } from 'react-router-dom';
-import * as api from '../api';
+import { authLogout } from '../login/api';
 
 export default function Header({ title }: { title: string }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    try { await api.authLogout(); } catch { /* ignore */ }
+    try { await authLogout(); } catch { /* ignore */ }
     logout();
     navigate('/login');
   };

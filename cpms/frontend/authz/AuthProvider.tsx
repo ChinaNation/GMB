@@ -1,8 +1,8 @@
 // 认证上下文：HttpOnly Cookie 承载登录态，前端只保存用户镜像
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import * as api from './api';
-import type { SessionUser } from './types';
+import { authMe } from '../login/api';
+import type { SessionUser } from '../common/types';
 
 interface AuthState {
   user: SessionUser | null;
@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    api.authMe()
+    authMe()
       .then(res => {
         if (res.data) {
           sessionStorage.setItem('cpms_user', JSON.stringify(res.data));
