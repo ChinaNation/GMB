@@ -35,18 +35,14 @@
 - `memory/08-tasks/open/20260524-network-cards-cleanup.md`
 - `memory/08-tasks/open/20260524-sfid-archive-code-ui.md`
 - `memory/08-tasks/open/20260524-wuminapp-sfid-two-paths.md`
+- `memory/08-tasks/open/20260528-myid-bind-cleanup.md`
+- `memory/08-tasks/open/20260530-cpms-p26-number-revoke.md`
+- `memory/08-tasks/open/20260530-cpms-status-export.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
 
-- `memory/08-tasks/done/20260527-sfid-myid-archive-driven-bind.md`
-- `memory/08-tasks/done/20260527-cpms-archive-soft-delete-wumin.md`
-- `memory/08-tasks/done/20260527-cpms-last-first-name-fields.md`
-- `memory/08-tasks/done/20260527-cpms-name-split-display.md`
-- `memory/08-tasks/done/20260527-cpms-archive-list-detail-display.md`
-- `memory/08-tasks/done/20260527-cpms-admin-permissions.md`
-- `memory/08-tasks/done/20260527-cpms-vote-account-scan-ui.md`
-- `memory/08-tasks/done/20260527-cpms-sfid-address.md`
+- `memory/08-tasks/done/20260529-cpms安全与残留整改.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -356,3 +352,15 @@
 - `memory/08-tasks/done/20260526-cpms-wallet-address-only.md`
 - `memory/08-tasks/done/20260526-cpms-wallet-proof.md`
 - `memory/08-tasks/done/20260526-error-codes.md`
+- `memory/08-tasks/done/20260527-cpms-admin-permissions.md`
+- `memory/08-tasks/done/20260527-cpms-archive-list-detail-display.md`
+- `memory/08-tasks/done/20260527-cpms-archive-soft-delete-wumin.md`
+- `memory/08-tasks/done/20260527-cpms-last-first-name-fields.md`
+- `memory/08-tasks/done/20260527-cpms-name-split-display.md`
+- `memory/08-tasks/done/20260527-cpms-sfid-address.md`
+- `memory/08-tasks/done/20260527-cpms-vote-account-scan-ui.md`
+- `memory/08-tasks/done/20260527-sfid-myid-archive-driven-bind.md`
+- `memory/08-tasks/done/20260529-162348-cpms-编号工具与护照号规则.md`
+- `memory/08-tasks/done/20260529-164449-cpms-删除签名请求与弹窗修复.md`
+- `memory/08-tasks/done/20260529-170516-cpms档案详情打印样式修复.md`
+- `memory/08-tasks/done/20260529-171139-cpms投票账户单行显示修复.md`

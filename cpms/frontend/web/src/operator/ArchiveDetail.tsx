@@ -1,5 +1,4 @@
-// 公民档案详情页。左侧公民信息（可编辑），右侧 ARCHIVE 二维码（自动生成，仅下载）。
-// 下方公民资料区域预留给出生纸、证件照等上传。
+// 公民档案详情页：公民信息、护照有效期、投票账户和 ARCHIVE 二维码操作。
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -22,6 +21,12 @@ function calcAge(birthDate: string): string {
   return age >= 0 ? `${age}岁` : '-';
 }
 
+function formatYmdZh(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return '-';
+  return `${match[1]}年${match[2]}月${match[3]}日`;
+}
+
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -41,6 +46,7 @@ export default function ArchiveDetail() {
   const [deleteChallenge, setDeleteChallenge] = useState<{ challenge_id: string; sign_request: string; expire_at: number } | null>(null);
   const [deleteScanError, setDeleteScanError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteScannerReady, setDeleteScannerReady] = useState(false);
   const deleteVideoRef = useRef<HTMLVideoElement | null>(null);
   const deleteScanCleanupRef = useRef<(() => void) | null>(null);
   // 名称解析
@@ -103,18 +109,26 @@ export default function ArchiveDetail() {
   useEffect(() => {
     if (!deleteModalOpen || !deleteVideoRef.current || !deleteChallenge) return;
     setDeleteScanError('');
+    setDeleteScannerReady(false);
     deleteScanCleanupRef.current?.();
     deleteScanCleanupRef.current = startCameraScanner(
       deleteVideoRef.current,
       (raw) => {
         void handleDeleteReceipt(raw);
       },
-      () => setDeleteScanError(''),
-      (msg) => setDeleteScanError(msg),
+      () => {
+        setDeleteScanError('');
+        setDeleteScannerReady(true);
+      },
+      (msg) => {
+        setDeleteScannerReady(false);
+        setDeleteScanError(msg);
+      },
     );
     return () => {
       deleteScanCleanupRef.current?.();
       deleteScanCleanupRef.current = null;
+      setDeleteScannerReady(false);
     };
   }, [deleteModalOpen, deleteChallenge?.challenge_id]);
 
@@ -282,6 +296,7 @@ export default function ArchiveDetail() {
     if (!id) return;
     setError('');
     setDeleteScanError('');
+    setDeleteScannerReady(false);
     setDeleteBusy(true);
     try {
       const res = await api.createArchiveDeleteChallenge(id);
@@ -319,6 +334,7 @@ export default function ArchiveDetail() {
       deleteScanCleanupRef.current?.();
       deleteScanCleanupRef.current = null;
       setDeleteModalOpen(false);
+      setDeleteScannerReady(false);
       navigate('/admin');
     } catch (e) {
       setDeleteScanError(e instanceof Error ? e.message : '删除签名验证失败');
@@ -333,6 +349,7 @@ export default function ArchiveDetail() {
     setDeleteModalOpen(false);
     setDeleteChallenge(null);
     setDeleteScanError('');
+    setDeleteScannerReady(false);
   };
 
   if (loading) return <div className="card">加载中...</div>;
@@ -341,16 +358,16 @@ export default function ArchiveDetail() {
 
   return (
     <>
-      <div className="card">
+      <div className="card archive-detail-card print-area">
         <div className="card__title flex-between">
           公民档案详情
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="no-print" style={{ display: 'flex', gap: 8 }}>
             {!archiveDeleted && !editing && <button className="btn btn--danger btn--sm" onClick={openDeleteModal} disabled={deleteBusy}>删除</button>}
             {!archiveDeleted && !editing && <button className="btn btn--primary btn--sm" onClick={startEdit}>编辑</button>}
             <button className="btn btn--ghost btn--sm" onClick={() => navigate('/admin')}>返回列表</button>
           </div>
         </div>
-        {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
+        {error && <div className="no-print" style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
         {archiveDeleted && (
           <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>
             该档案已删除{archive.deleted_at ? `，删除时间：${new Date(archive.deleted_at * 1000).toLocaleString()}` : ''}{archive.deleted_by ? `，删除人：${archive.deleted_by}` : ''}
@@ -398,7 +415,7 @@ export default function ArchiveDetail() {
                   <div className="form-group">
                     <label>公民状态</label>
                     <select className="form-input" value={String(editForm.citizen_status || 'NORMAL')} onChange={e => setEditForm(f => ({ ...f, citizen_status: e.target.value }))}>
-                      <option value="NORMAL">正常</option><option value="ABNORMAL">异常</option>
+                      <option value="NORMAL">正常</option><option value="REVOKED">注销</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -415,13 +432,21 @@ export default function ArchiveDetail() {
               </>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', columnGap: 32, rowGap: 16 }}>
+                <div className="archive-detail-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', columnGap: 32, rowGap: 16 }}>
                   <div><strong>姓氏：</strong>{archive.last_name || '-'}</div>
                   <div><strong>名字：</strong>{archive.first_name || '-'}</div>
                   <div><strong>性别：</strong>{archive.gender_code === 'M' ? '男' : '女'}</div>
                   <div><strong>身高：</strong>{archive.height_cm ? `${archive.height_cm} cm` : '-'}</div>
                   <div><strong>出生日期：</strong>{archive.birth_date}</div>
                   <div><strong>年龄：</strong>{calcAge(archive.birth_date)}</div>
+                  <div><strong>护照号：</strong>{archive.passport_no || '-'}</div>
+                  <div className="archive-validity-field">
+                    <strong>有效期</strong>
+                    <span className="archive-validity-lines">
+                      <span>：{formatYmdZh(archive.valid_from)}</span>
+                      <span>-{formatYmdZh(archive.valid_until)}</span>
+                    </span>
+                  </div>
                   <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
                   <div><strong>城市：</strong>{cityName || archive.city_code}</div>
                   <div style={{ gridColumn: '1 / -1' }}><strong>地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
@@ -429,7 +454,7 @@ export default function ArchiveDetail() {
                 <div className="form-row mt-16">
                   <div><strong>公民状态：</strong>
                     <span className={`tag ${archive.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
-                      {archive.citizen_status === 'NORMAL' ? '正常' : '异常'}
+                      {archive.citizen_status === 'NORMAL' ? '正常' : '注销'}
                     </span>
                   </div>
                   <div><strong>选举资格：</strong>
@@ -439,35 +464,38 @@ export default function ArchiveDetail() {
                   </div>
                 </div>
                 <div className="form-row mt-16">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', width: '100%', gridColumn: '1 / -1' }}>
                     <strong>投票账户：</strong>
                     {archive.wallet_address ? (
                       <>
-                        <span style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{archive.wallet_address}</span>
-                        {!archiveDeleted && <button className="btn btn--primary btn--sm" onClick={openWalletScanner} disabled={walletBusy}>更换</button>}
+                        <span className="archive-wallet-address">{archive.wallet_address}</span>
+                        {!archiveDeleted && <button className="btn btn--primary btn--sm no-print" onClick={openWalletScanner} disabled={walletBusy}>更换</button>}
                       </>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 520, flex: '1 1 640px', maxWidth: 960 }}>
-                        <input
-                          className="form-input"
-                          value=""
-                          placeholder="未绑定"
-                          readOnly
-                          style={{ flex: 1 }}
-                        />
-                        {!archiveDeleted && (
-                          <button
-                            className="btn btn--primary btn--sm"
-                            onClick={openWalletScanner}
-                            disabled={walletBusy}
-                            title="扫描钱包二维码"
-                            aria-label="扫描钱包二维码"
-                            style={{ width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <ScanIcon size={18} />
-                          </button>
-                        )}
-                      </div>
+                      <>
+                        <span className="print-only">未绑定</span>
+                        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 520, flex: '1 1 640px', maxWidth: 960 }}>
+                          <input
+                            className="form-input"
+                            value=""
+                            placeholder="未绑定"
+                            readOnly
+                            style={{ flex: 1 }}
+                          />
+                          {!archiveDeleted && (
+                            <button
+                              className="btn btn--primary btn--sm no-print"
+                              onClick={openWalletScanner}
+                              disabled={walletBusy}
+                              title="扫描钱包二维码"
+                              aria-label="扫描钱包二维码"
+                              style={{ width: 36, height: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              <ScanIcon size={18} />
+                            </button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -489,7 +517,7 @@ export default function ArchiveDetail() {
               </div>
             )}
             {!archiveDeleted && (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="no-print" style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn--primary btn--sm" onClick={handleGenerateArchiveQr} disabled={walletBusy || !archive.wallet_pubkey}>
                   更新
                 </button>
@@ -525,23 +553,72 @@ export default function ArchiveDetail() {
 
       {deleteModalOpen && deleteChallenge && (
         <div className="modal-overlay">
-          <div className="modal" style={{ width: 620, minWidth: 620, maxWidth: 620 }}>
-            <div className="modal__title">删除档案签名</div>
-            {deleteScanError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{deleteScanError}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 18, alignItems: 'start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <QRCodeSVG value={deleteChallenge.sign_request} size={240} />
-                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', textAlign: 'center' }}>
-                  请使用 wumin 扫码确认删除
+          <div className="modal" style={{ width: 'min(680px, calc(100vw - 32px))', minWidth: 0, maxWidth: 680 }}>
+            <div className="modal__title">删除档案签名确认</div>
+            {deleteScanError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{deleteScanError}</div>}
+            <div style={{ display: 'flex', gap: 24, alignItems: 'stretch', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>删除签名二维码</div>
+                <div style={{
+                  width: 260, height: 260,
+                  background: '#f8fffe',
+                  borderRadius: 16,
+                  border: '2px solid #e6f7f5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  <QRCodeSVG value={deleteChallenge.sign_request} size={228} fgColor="#134e4a" />
+                </div>
+                <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  有效期至 {new Date(deleteChallenge.expire_at * 1000).toLocaleTimeString()}
+                </div>
+                <div style={{ marginTop: 6, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  当前登录管理员使用 wumin 扫码签名
                 </div>
               </div>
-              <div>
-                <video
-                  ref={deleteVideoRef}
-                  muted
-                  playsInline
-                  style={{ width: 292, height: 292, display: 'block', objectFit: 'cover', borderRadius: 8, background: '#111827' }}
-                />
+
+              <div style={{
+                width: 1,
+                background: 'linear-gradient(to bottom, transparent, var(--color-border), transparent)',
+                alignSelf: 'stretch',
+              }} />
+
+              <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>扫码窗口</div>
+                <div style={{
+                  width: 260, height: 260,
+                  background: 'linear-gradient(145deg, #0f172a, #1e293b)',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  border: '2px solid #334155',
+                }}>
+                  <video
+                    ref={deleteVideoRef}
+                    muted
+                    playsInline
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  {!deleteScannerReady && (
+                    <div style={{
+                      position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center', gap: 8,
+                    }}>
+                      <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
+                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                        摄像头初始化中...
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  扫描 wumin 返回的删除签名回执
+                </div>
               </div>
             </div>
             <div className="modal__footer">
@@ -550,13 +627,6 @@ export default function ArchiveDetail() {
           </div>
         </div>
       )}
-
-      <div className="card">
-        <div className="card__title">公民资料</div>
-        <div style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
-          出生纸、证件照、档案等资料（待开发）
-        </div>
-      </div>
     </>
   );
 }

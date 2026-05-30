@@ -23,7 +23,6 @@ export interface AdminUser {
   admin_pubkey: string;
   admin_name: string;
   role: string;
-  status: string;
 }
 
 export interface Archive {
@@ -43,6 +42,8 @@ export interface Archive {
   status: string;
   citizen_status: string;
   voting_eligible: boolean;
+  valid_from: string;
+  valid_until: string;
   wallet_address: string | null;
   wallet_pubkey: string | null;
   wallet_sig_alg: string;
@@ -65,6 +66,32 @@ export interface QrPrintRecord {
   printed_at: number;
 }
 
+export interface CpmsStatusExportFile {
+  proto: 'SFID_CPMS_V1';
+  type: 'CPMS_STATUS_EXPORT';
+  version: number;
+  export_year: number;
+  sfid_number: string;
+  cpms_pubkey: string;
+  export_batch_id: string;
+  exported_at: number;
+  status_records_count: number;
+  number_release_records_count: number;
+  records_hash: string;
+  status_records: Array<{
+    archive_no: string;
+    citizen_status: string;
+    voting_eligible: boolean;
+    status_updated_at: number;
+  }>;
+  number_release_records: Array<{
+    archive_no: string;
+    passport_no: string;
+    hard_deleted_at: number;
+  }>;
+  sig: string;
+}
+
 export interface InstallStatus {
   initialized: boolean;
   sfid_number: string | null;
@@ -75,17 +102,4 @@ export interface InstallStatus {
   super_admin_bound_count: number;
   archive_signing_ready: boolean;
   cpms_pubkey: string | null;
-}
-
-export interface ChallengeData {
-  challenge_id: string;
-  challenge_payload: string;
-  nonce: string;
-  expire_at: number;
-}
-
-export interface VerifyData {
-  access_token: string;
-  expires_in: number;
-  user: SessionUser;
 }

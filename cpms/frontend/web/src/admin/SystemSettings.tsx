@@ -7,6 +7,7 @@ import type { InstallStatus } from '../types';
 export default function SystemSettings() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const load = () => {
     api.installStatus()
@@ -19,6 +20,28 @@ export default function SystemSettings() {
   const initialized = status?.initialized ?? false;
   const adminBound = (status?.super_admin_bound_count ?? 0) >= 1;
   const signingReady = status?.archive_signing_ready ?? false;
+
+  const handleExport = async () => {
+    setError('');
+    setExporting(true);
+    try {
+      const res = await api.exportStatusFile();
+      if (res.data) {
+        const text = JSON.stringify(res.data.export_file, null, 2);
+        const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.data.file_name;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导出失败');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="card">
@@ -56,6 +79,14 @@ export default function SystemSettings() {
           <InfoRow label="签发状态" value={signingReady ? '已就绪' : '未就绪'} />
           <InfoRow label="CPMS 公钥" value={status?.cpms_pubkey || '—'} />
         </div>
+      </Section>
+
+      <Divider />
+
+      <Section step={4} title="年度报告" done={signingReady}>
+        <button className="btn btn--primary" onClick={handleExport} disabled={!signingReady || exporting}>
+          {exporting ? '导出中...' : '导出年度报告'}
+        </button>
       </Section>
 
       <Divider />

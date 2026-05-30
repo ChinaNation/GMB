@@ -1,18 +1,20 @@
 //! # 鉴权模块 (authz)
 //!
-//! 提供 Bearer token 校验和角色检查。
+//! 提供 Cookie session 校验和角色检查。
 //!
 //! 中文注释：CPMS 只有 SUPER_ADMIN / OPERATOR_ADMIN 两级管理员；
 //! SUPER_ADMIN 是上级角色，必须能执行所有档案业务操作。
 
 use axum::{
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use chrono::Utc;
 use sqlx::Row;
 
 use crate::{err, ApiError, AppState};
+
+pub(crate) const SESSION_COOKIE_NAME: &str = "cpms_session";
 
 #[derive(Clone)]
 pub(crate) struct AuthContext {
@@ -55,33 +57,66 @@ pub(crate) async fn require_auth(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AuthContext, (StatusCode, Json<ApiError>)> {
-    let token = bearer_token(headers)?;
+    let token = session_token(headers)?;
 
-    let row = sqlx::query("SELECT user_id, role, expires_at FROM sessions WHERE access_token = $1")
-        .bind(&token)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "query session failed",
-            )
-        })?
-        .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2001, "invalid token"))?;
+    let row = sqlx::query(
+        "SELECT s.user_id, a.role, a.status, s.expires_at
+         FROM sessions s
+         JOIN admin_users a ON a.user_id = s.user_id
+         WHERE s.access_token = $1",
+    )
+    .bind(&token)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query session failed",
+        )
+    })?;
+
+    let Some(row) = row else {
+        let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+            .bind(&token)
+            .execute(&state.db)
+            .await;
+        return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid session"));
+    };
 
     let role: String = row.get("role");
+    let status: String = row.get("status");
     let expires_at: i64 = row.get("expires_at");
+    if status != "ACTIVE" {
+        let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+            .bind(&token)
+            .execute(&state.db)
+            .await;
+        return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid session"));
+    }
 
     // 超管 session 不过期；普通管理员检查过期 + 滑动续期 30 分钟
     if role != "SUPER_ADMIN" {
+        if role == "OPERATOR_ADMIN" {
+            match crate::dangan::ensure_operator_annual_export_unlocked(state).await {
+                Ok(()) => {}
+                Err((status, body)) if status == StatusCode::LOCKED => {
+                    let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+                        .bind(&token)
+                        .execute(&state.db)
+                        .await;
+                    return Err((status, body));
+                }
+                Err(e) => return Err(e),
+            }
+        }
         if expires_at < Utc::now().timestamp() {
             // 过期则删除 session，强制重新登录
             let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
                 .bind(&token)
                 .execute(&state.db)
                 .await;
-            return Err(err(StatusCode::UNAUTHORIZED, 2009, "token expired"));
+            return Err(err(StatusCode::UNAUTHORIZED, 2009, "session expired"));
         }
         // 滑动续期：每次请求刷新过期时间
         let new_expires = (Utc::now()
@@ -100,11 +135,16 @@ pub(crate) async fn require_auth(
     })
 }
 
-pub(crate) fn bearer_token(headers: &HeaderMap) -> Result<String, (StatusCode, Json<ApiError>)> {
+pub(crate) fn session_token(headers: &HeaderMap) -> Result<String, (StatusCode, Json<ApiError>)> {
     headers
-        .get(header::AUTHORIZATION)
+        .get(axum::http::header::COOKIE)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2001, "missing bearer token"))
+        .and_then(|raw| {
+            raw.split(';').find_map(|part| {
+                let (name, value) = part.trim().split_once('=')?;
+                (name == SESSION_COOKIE_NAME && !value.trim().is_empty())
+                    .then(|| value.trim().to_string())
+            })
+        })
+        .ok_or_else(|| err(StatusCode::UNAUTHORIZED, 2001, "missing session cookie"))
 }

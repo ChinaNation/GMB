@@ -4,6 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export CPMS_DATABASE_URL="${CPMS_DATABASE_URL:-postgres://cpms:cpms@127.0.0.1:5432/cpms}"
+if [[ -z "${CPMS_KEY_ENCRYPT_SECRET:-}" ]]; then
+  CPMS_KEY_FILE="${ROOT_DIR}/.cpms_key"
+  if [[ ! -f "${CPMS_KEY_FILE}" ]]; then
+    if command -v openssl >/dev/null 2>&1; then
+      openssl rand -hex 32 >"${CPMS_KEY_FILE}"
+    else
+      od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >"${CPMS_KEY_FILE}"
+    fi
+    chmod 0600 "${CPMS_KEY_FILE}"
+  fi
+  export CPMS_KEY_ENCRYPT_SECRET="$(tr -d ' \n' <"${CPMS_KEY_FILE}")"
+fi
 CPMS_BIND="${CPMS_BIND:-0.0.0.0:8080}"
 CPMS_PORT="${CPMS_BIND##*:}"
 CPMS_HEALTHCHECK_URL="http://127.0.0.1:${CPMS_PORT}/api/v1/health"

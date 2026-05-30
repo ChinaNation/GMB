@@ -21,6 +21,7 @@ citizenchain/node/frontend/dist/
 
 # Local/generated backup files
 *.spec*-backup
+cpms/.cpms_key
 
 # OS / Editor junk
 .DS_Store

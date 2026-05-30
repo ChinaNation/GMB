@@ -128,6 +128,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 |---|---|---|---|---|
 | `activate_admin` | `GMB_ACTIVATE`(12B) + `sfid_number`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `sfid_number` | node_ui / sfid 后端 | 管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
+| `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `archive_id`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
 
 ## 二、字段渲染规则
 
@@ -140,10 +141,11 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `org` | u8 / u32 机构代号 | 机构中文名;找不到时回退为 `机构<raw>` |
 | `institution` | 48B sfid_number | 优先转机构中文名;找不到时回退原 sfid_number |
 | `wasm_size` | u32 字节 | `"X.XX MB"` 或 `"X KB"` |
-| `wasm_hash` / `signer_admin_pubkey` / `new_key` | 32 字节 | `0x<64hex>` 小写 |
+| `wasm_hash` / `signer_admin_pubkey` / `admin_pubkey` / `new_key` | 32 字节 | `0x<64hex>` 小写 |
 | `reason` / `remark` / `account_name` / `institution_name` / `sfid_number` / `province` / `peer_id` / `rpc_domain` / `new_domain` | UTF-8 | 原字符串;UI 可截断展示,签名原文不截断 |
 | `admin_count` | u32 | 十进制字符串 |
 | `threshold` | u32 | `"<threshold>/<admin_count>"` |
+| `archive_no` / `archive_id` / `expires_at` | UTF-8 | 原字符串 |
 
 ## 三、字段约束
 

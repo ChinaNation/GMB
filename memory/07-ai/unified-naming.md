@@ -119,6 +119,7 @@
 | 签发管理员公钥 | `signer_admin_pubkey` | credential / call data | 省级签发 admin 公钥 |
 | 已签名交易构造器 | `SignedExtrinsicBuilder` / `signed_extrinsic_builder.dart` | `wuminapp/lib/rpc/` | 统一构造 wuminapp 在线 signed extrinsic，固定执行 immortal era 协议 |
 | 电子护照档案号 | `archive_no` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 签发的公民档案号，三端统一使用完整字段名 |
+| 电子护照护照号 | `passport_no` | CPMS archives / CPMS frontend | CPMS 后端自动生成并印刷在公民护照上的 11 位护照号 |
 | 电子护照公民状态 | `citizen_status` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 公民状态，三端统一使用完整字段名 |
 | 电子护照选举资格 | `voting_eligible` | CPMS ARCHIVE / SFID citizens / wuminapp myid | CPMS 选举资格，三端统一使用完整字段名 |
 | 电子护照投票状态 | `vote_status` | SFID citizens / wuminapp myid | SFID 按 `citizen_status + voting_eligible` 计算出的投票状态，不得和绑定状态混用 |
@@ -131,6 +132,10 @@
 | 电子护照钱包签名算法 | `wallet_sig_alg` | CPMS ARCHIVE / SFID citizens / wuminapp myid | 固定 `sr25519` |
 | 电子护照身份ID | `sfid_code` | SFID citizens / wuminapp myid | SFID 生成并返回给用户展示的身份ID号码 |
 | 电子护照绑定状态 | `bind_status` | SFID citizens / wuminapp myid | 电子护照绑定流程状态，不得使用 `status` 表达绑定状态 |
+| CPMS 编号工具 | `number` | `cpms/backend/src/number/` | CPMS 后端档案号与护照号生成模块 |
+| CPMS 档案生命周期 | `lifecycle` | `cpms/backend/src/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
+| CPMS 状态导出 | `export` | `cpms/backend/src/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
+| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与号码释放凭证 |
 
 ## 6. 新命名登记模板
 

@@ -1,22 +1,23 @@
 use axum::{
     extract::{Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use chrono::{Duration, Utc};
+use rand::{rngs::OsRng, RngCore};
 use schnorrkel::{signing_context, MiniSecretKey, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{authz, err, find_admin_by_pubkey, ok, write_audit, ApiError, ApiResponse, AppState};
-use rand::Rng;
+use crate::{authz, err, find_admin_by_pubkey, ok, ApiError, ApiResponse, AppState};
 
 /// 中文注释：用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
 fn generate_secure_token(prefix: &str) -> String {
     let mut buf = [0u8; 32];
-    rand::thread_rng().fill(&mut buf);
+    OsRng.fill_bytes(&mut buf);
     format!("{}_{}", prefix, hex::encode(buf))
 }
 
@@ -33,49 +34,9 @@ pub(crate) struct SessionUser {
 }
 
 #[derive(Deserialize)]
-struct IdentifyRequest {
-    admin_pubkey: String,
-}
-
-#[derive(Serialize)]
-struct IdentifyData {
-    user_id: String,
-    role: String,
-    status: String,
-}
-
-#[derive(Deserialize)]
-struct ChallengeRequest {
-    admin_pubkey: String,
-}
-
-#[derive(Serialize)]
-struct ChallengeData {
-    challenge_id: String,
-    challenge_payload: String,
-    nonce: String,
-    expire_at: i64,
-}
-
-#[derive(Deserialize)]
-struct VerifyRequest {
-    challenge_id: String,
-    admin_pubkey: String,
-    signature: String,
-}
-
-#[derive(Serialize)]
-struct VerifyData {
-    access_token: String,
-    expires_in: i64,
-    user: SessionUser,
-}
-
-#[derive(Deserialize)]
 struct QrChallengeRequest {
     origin: Option<String>,
     domain: Option<String>,
-    session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -109,248 +70,17 @@ struct QrResultQuery {
 struct QrResultData {
     status: String,
     message: String,
-    access_token: Option<String>,
     expires_in: Option<i64>,
     user: Option<SessionUser>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/admin/auth/identify", post(auth_identify))
-        .route("/api/v1/admin/auth/challenge", post(auth_challenge))
-        .route("/api/v1/admin/auth/verify", post(auth_verify))
         .route("/api/v1/admin/auth/qr/challenge", post(auth_qr_challenge))
         .route("/api/v1/admin/auth/qr/complete", post(auth_qr_complete))
         .route("/api/v1/admin/auth/qr/result", get(auth_qr_result))
+        .route("/api/v1/admin/auth/me", get(auth_me))
         .route("/api/v1/admin/auth/logout", post(auth_logout))
-}
-
-async fn auth_identify(
-    State(state): State<AppState>,
-    Json(req): Json<IdentifyRequest>,
-) -> Result<Json<ApiResponse<IdentifyData>>, (StatusCode, Json<ApiError>)> {
-    let admin = find_admin_by_pubkey(&state, &req.admin_pubkey).await?;
-    if admin.status != "ACTIVE" {
-        write_audit(
-            &state,
-            None,
-            "AUTH_IDENTIFY",
-            "ADMIN_USER",
-            Some(admin.user_id.clone()),
-            "FAILED",
-            serde_json::json!({"reason": "inactive"}),
-        )
-        .await?;
-        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
-    }
-
-    write_audit(
-        &state,
-        Some(admin.user_id.clone()),
-        "AUTH_IDENTIFY",
-        "ADMIN_USER",
-        Some(admin.user_id.clone()),
-        "SUCCESS",
-        serde_json::json!({}),
-    )
-    .await?;
-
-    Ok(Json(ok(IdentifyData {
-        user_id: admin.user_id,
-        role: admin.role,
-        status: admin.status,
-    })))
-}
-
-async fn auth_challenge(
-    State(state): State<AppState>,
-    Json(req): Json<ChallengeRequest>,
-) -> Result<Json<ApiResponse<ChallengeData>>, (StatusCode, Json<ApiError>)> {
-    let admin = find_admin_by_pubkey(&state, &req.admin_pubkey).await?;
-    if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
-    }
-
-    let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
-    let nonce = Uuid::new_v4().simple().to_string();
-    let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
-    let challenge_payload = format!(
-        "cpms-admin-auth-v1|{}|{}|{}|{}",
-        challenge_id, req.admin_pubkey, nonce, expire_at
-    );
-
-    sqlx::query(
-        "INSERT INTO login_challenges (challenge_id, admin_pubkey, challenge_payload, session_id, expire_at, consumed, created_at)
-         VALUES ($1, $2, $3, $4, $5, FALSE, $6)",
-    )
-    .bind(&challenge_id)
-    .bind(req.admin_pubkey.trim())
-    .bind(&challenge_payload)
-    .bind(&challenge_id)
-    .bind(expire_at)
-    .bind(Utc::now().timestamp())
-    .execute(&state.db)
-    .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "save challenge failed"))?;
-
-    write_audit(
-        &state,
-        Some(admin.user_id.clone()),
-        "AUTH_CHALLENGE",
-        "LOGIN_CHALLENGE",
-        Some(challenge_id.clone()),
-        "SUCCESS",
-        serde_json::json!({"expire_at": expire_at}),
-    )
-    .await?;
-
-    Ok(Json(ok(ChallengeData {
-        challenge_id,
-        challenge_payload,
-        nonce,
-        expire_at,
-    })))
-}
-
-async fn auth_verify(
-    State(state): State<AppState>,
-    Json(req): Json<VerifyRequest>,
-) -> Result<Json<ApiResponse<VerifyData>>, (StatusCode, Json<ApiError>)> {
-    let admin = find_admin_by_pubkey(&state, &req.admin_pubkey).await?;
-    if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
-    }
-
-    let now_ts = Utc::now().timestamp();
-    let mut tx = state
-        .db
-        .begin()
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
-
-    let row = sqlx::query(
-        "SELECT admin_pubkey, challenge_payload, expire_at, consumed
-         FROM login_challenges
-         WHERE challenge_id = $1
-         FOR UPDATE",
-    )
-    .bind(req.challenge_id.trim())
-    .fetch_optional(tx.as_mut())
-    .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "query challenge failed",
-        )
-    })?
-    .ok_or_else(|| err(StatusCode::BAD_REQUEST, 2003, "challenge not found"))?;
-
-    let challenge_pubkey: String = row.get("admin_pubkey");
-    if challenge_pubkey != req.admin_pubkey {
-        return Err(err(
-            StatusCode::BAD_REQUEST,
-            2004,
-            "challenge pubkey mismatch",
-        ));
-    }
-    let consumed: bool = row.get("consumed");
-    if consumed {
-        return Err(err(
-            StatusCode::BAD_REQUEST,
-            2005,
-            "challenge already consumed",
-        ));
-    }
-    let expire_at: i64 = row.get("expire_at");
-    if expire_at < now_ts {
-        return Err(err(StatusCode::GONE, 2006, "challenge expired"));
-    }
-    let challenge_payload: String = row.get("challenge_payload");
-
-    sqlx::query("UPDATE login_challenges SET consumed = TRUE WHERE challenge_id = $1")
-        .bind(req.challenge_id.trim())
-        .execute(tx.as_mut())
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "consume challenge failed",
-            )
-        })?;
-
-    tx.commit()
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
-
-    if let Err(reason) =
-        verify_challenge_signature(&req.admin_pubkey, &challenge_payload, &req.signature)
-    {
-        write_audit(
-            &state,
-            Some(admin.user_id.clone()),
-            "AUTH_VERIFY",
-            "LOGIN_CHALLENGE",
-            Some(req.challenge_id.clone()),
-            "FAILED",
-            serde_json::json!({"reason": reason}),
-        )
-        .await?;
-        return Err(err(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            2007,
-            "signature verify failed",
-        ));
-    }
-
-    let access_token = generate_secure_token("atk");
-    // 超管不过期，普通管理员 30 分钟无操作后过期
-    let ttl = if admin.role == "SUPER_ADMIN" {
-        SUPER_ADMIN_TOKEN_EXPIRES_SECONDS
-    } else {
-        TOKEN_EXPIRES_SECONDS
-    };
-    let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
-
-    sqlx::query(
-        "INSERT INTO sessions (access_token, user_id, role, expires_at, created_at)
-         VALUES ($1, $2, $3, $4, $5)",
-    )
-    .bind(&access_token)
-    .bind(&admin.user_id)
-    .bind(&admin.role)
-    .bind(expires_at)
-    .bind(Utc::now().timestamp())
-    .execute(&state.db)
-    .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "create session failed",
-        )
-    })?;
-
-    write_audit(
-        &state,
-        Some(admin.user_id.clone()),
-        "AUTH_VERIFY",
-        "SESSION",
-        Some(access_token.clone()),
-        "SUCCESS",
-        serde_json::json!({"challenge_id": req.challenge_id}),
-    )
-    .await?;
-
-    Ok(Json(ok(VerifyData {
-        access_token,
-        expires_in: ttl,
-        user: SessionUser {
-            user_id: admin.user_id,
-            role: admin.role,
-        },
-    })))
 }
 
 async fn auth_qr_challenge(
@@ -361,10 +91,7 @@ async fn auth_qr_challenge(
     if origin.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "origin is required"));
     }
-    let session_id = req.session_id.unwrap_or_default().trim().to_string();
-    if session_id.is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "session_id is required"));
-    }
+    let session_id = generate_secure_token("sid");
     let domain = extract_domain_from_origin(&origin)
         .or(req.domain)
         .unwrap_or_default();
@@ -375,7 +102,7 @@ async fn auth_qr_challenge(
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
     let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
-    // challenge_payload:保留为回放保护用的唯一 token(DB 列名沿用历史 schema)。
+    // 中文注释：challenge_payload 只保存当前 QR 登录挑战摘要，用于回放保护。
     // 实际客户端签名原文在验证时通过 qr::build_signature_message 重建。
     let challenge_payload = format!(
         "{}|{}|{}|{}|{}|",
@@ -498,8 +225,8 @@ async fn auth_qr_complete(
 
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
-    if admin.status != "ACTIVE" {
-        return Err(err(StatusCode::FORBIDDEN, 2002, "admin is not active"));
+    if admin.role == "OPERATOR_ADMIN" {
+        crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
     }
     // 重建完整签名原文(包含签名者公钥),与 wumin 端
     // buildSignatureMessage(kind=login_receipt, principal=pubkey) 一致。
@@ -612,7 +339,7 @@ async fn auth_qr_complete(
 async fn auth_qr_result(
     State(state): State<AppState>,
     Query(query): Query<QrResultQuery>,
-) -> Result<Json<ApiResponse<QrResultData>>, (StatusCode, Json<ApiError>)> {
+) -> Result<Response, (StatusCode, Json<ApiError>)> {
     if query.challenge_id.trim().is_empty() || query.session_id.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -659,16 +386,41 @@ async fn auth_qr_result(
                 "challenge session mismatch",
             ));
         }
-        return Ok(Json(ok(QrResultData {
+        let access_token: String = row.get("access_token");
+        let expires_in: i64 = row.get("expires_in");
+        let user = SessionUser {
+            user_id: row.get("user_id"),
+            role: row.get("role"),
+        };
+        if user.role == "OPERATOR_ADMIN" {
+            crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
+        }
+        sqlx::query("DELETE FROM qr_login_results WHERE challenge_id = $1 AND session_id = $2")
+            .bind(query.challenge_id.trim())
+            .bind(query.session_id.trim())
+            .execute(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "consume qr result failed",
+                )
+            })?;
+        let mut response = Json(ok(QrResultData {
             status: "SUCCESS".to_string(),
             message: "login success".to_string(),
-            access_token: Some(row.get("access_token")),
-            expires_in: Some(row.get("expires_in")),
-            user: Some(SessionUser {
-                user_id: row.get("user_id"),
-                role: row.get("role"),
-            }),
-        })));
+            expires_in: Some(expires_in),
+            user: Some(user),
+        }))
+        .into_response();
+        response.headers_mut().insert(
+            header::SET_COOKIE,
+            session_cookie(&access_token, expires_in)
+                .parse()
+                .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "set cookie failed"))?,
+        );
+        return Ok(response);
     }
 
     let challenge_row =
@@ -698,26 +450,26 @@ async fn auth_qr_result(
         return Ok(Json(ok(QrResultData {
             status: "EXPIRED".to_string(),
             message: "challenge expired".to_string(),
-            access_token: None,
             expires_in: None,
             user: None,
-        })));
+        }))
+        .into_response());
     }
 
     Ok(Json(ok(QrResultData {
         status: "PENDING".to_string(),
         message: "waiting mobile scan".to_string(),
-        access_token: None,
         expires_in: None,
         user: None,
-    })))
+    }))
+    .into_response())
 }
 
 async fn auth_logout(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
-    let token = authz::bearer_token(&headers)?;
+) -> Result<Response, (StatusCode, Json<ApiError>)> {
+    let token = authz::session_token(&headers)?;
     let result = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
         .bind(token)
         .execute(&state.db)
@@ -731,10 +483,48 @@ async fn auth_logout(
         })?;
 
     if result.rows_affected() == 0 {
-        return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid token"));
+        return Err(err(StatusCode::UNAUTHORIZED, 2001, "invalid session"));
     }
 
-    Ok(Json(ok(serde_json::json!({"status": "SIGNED_OUT"}))))
+    let mut response = Json(ok(serde_json::json!({"status": "SIGNED_OUT"}))).into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        clear_session_cookie().parse().map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "clear cookie failed",
+            )
+        })?,
+    );
+    Ok(response)
+}
+
+async fn auth_me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<SessionUser>>, (StatusCode, Json<ApiError>)> {
+    let ctx = authz::require_auth(&state, &headers).await?;
+    Ok(Json(ok(SessionUser {
+        user_id: ctx.user_id,
+        role: ctx.role,
+    })))
+}
+
+fn session_cookie(access_token: &str, max_age: i64) -> String {
+    format!(
+        "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
+        authz::SESSION_COOKIE_NAME,
+        access_token,
+        max_age
+    )
+}
+
+fn clear_session_cookie() -> String {
+    format!(
+        "{}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
+        authz::SESSION_COOKIE_NAME
+    )
 }
 
 fn extract_domain_from_origin(origin: &str) -> Option<String> {
@@ -755,19 +545,6 @@ fn extract_domain_from_origin(origin: &str) -> Option<String> {
         return None;
     }
     Some(domain.to_string())
-}
-
-pub(crate) fn verify_challenge_signature(
-    admin_pubkey: &str,
-    challenge_payload: &str,
-    signature: &str,
-) -> Result<(), &'static str> {
-    crate::verify_signature_with_context(
-        admin_pubkey,
-        challenge_payload,
-        signature,
-        b"CPMS-ADMIN-AUTH-V1",
-    )
 }
 
 pub(crate) fn verify_wumin_login_signature(

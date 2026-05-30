@@ -48,14 +48,6 @@ export default function OperatorList() {
     setLoading(false);
   };
 
-  const handleToggleStatus = async (op: AdminUser) => {
-    const next = op.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
-    try {
-      await api.updateOperatorStatus(op.user_id, next);
-      await load();
-    } catch { /* ignore */ }
-  };
-
   const handleDelete = async (op: AdminUser) => {
     if (!confirm(`确认删除管理员 ${op.admin_name || op.user_id}？`)) return;
     try {
@@ -164,26 +156,18 @@ export default function OperatorList() {
 
       <table className="table">
         <thead>
-          <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>角色</th><th>状态</th><th>操作</th></tr>
+          <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>角色</th><th>操作</th></tr>
         </thead>
         <tbody>
           {operators.length === 0 ? (
-            <tr><td colSpan={6} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无管理员</td></tr>
+            <tr><td colSpan={5} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无管理员</td></tr>
           ) : operators.map(op => (
             <tr key={op.user_id}>
               <td>{op.admin_name || '—'}</td>
               <td><span className="text-ellipsis">{op.user_id}</span></td>
               <td><span className="text-ellipsis" style={{ maxWidth: 160 }}>{op.admin_pubkey}</span></td>
               <td>{op.role === 'OPERATOR_ADMIN' ? '系统管理员' : op.role}</td>
-              <td>
-                <span className={`tag ${op.status === 'ACTIVE' ? 'tag--success' : 'tag--warning'}`}>
-                  {op.status === 'ACTIVE' ? '启用' : '禁用'}
-                </span>
-              </td>
               <td style={{ display: 'flex', gap: 4 }}>
-                <button className="btn btn--ghost btn--sm" onClick={() => handleToggleStatus(op)}>
-                  {op.status === 'ACTIVE' ? '禁用' : '启用'}
-                </button>
                 <button className="btn btn--danger btn--sm" onClick={() => handleDelete(op)}>删除</button>
               </td>
             </tr>

@@ -32,6 +32,7 @@ services:
     environment:
       CPMS_BIND: ${CPMS_BIND:-0.0.0.0:8080}
       CPMS_DATABASE_URL: postgresql://${CPMS_DB_USER:-cpms}:${CPMS_DB_PASSWORD:-cpms_local_change_me}@postgres:5432/${CPMS_DB_NAME:-cpms}
+      CPMS_KEY_ENCRYPT_SECRET: ${CPMS_KEY_ENCRYPT_SECRET:?CPMS_KEY_ENCRYPT_SECRET must be 32-byte hex}
     ports:
       - "${CPMS_HTTP_PORT:-8080}:8080"
 

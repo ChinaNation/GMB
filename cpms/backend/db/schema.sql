@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   admin_pubkey TEXT NOT NULL UNIQUE,
   admin_name TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
-  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED')),
+  status TEXT NOT NULL CHECK (status = 'ACTIVE'),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
   managed_key_id TEXT UNIQUE,
   created_at BIGINT NOT NULL,
@@ -41,7 +41,6 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users (role);
-CREATE INDEX IF NOT EXISTS idx_admin_users_status ON admin_users (status);
 
 CREATE TABLE IF NOT EXISTS sessions (
   access_token TEXT PRIMARY KEY,
@@ -88,12 +87,12 @@ CREATE TABLE IF NOT EXISTS archives (
   birth_date TEXT NOT NULL CHECK (birth_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
   gender_code TEXT NOT NULL CHECK (gender_code IN ('M', 'W')),
   height_cm REAL NOT NULL CHECK (height_cm BETWEEN 30 AND 260),
-  passport_no TEXT NOT NULL,
+  passport_no TEXT NOT NULL UNIQUE,
   town_code TEXT NOT NULL DEFAULT '',
   village_id TEXT NOT NULL DEFAULT '',
   address TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
-  citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'ABNORMAL')),
+  citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'REVOKED')),
   voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
   valid_from TEXT NOT NULL DEFAULT '',
   valid_until TEXT NOT NULL DEFAULT '',
@@ -117,6 +116,43 @@ CREATE INDEX IF NOT EXISTS idx_archives_status ON archives (status);
 CREATE TABLE IF NOT EXISTS sequence_counters (
   seq_key TEXT PRIMARY KEY,
   next_seq BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS archive_number_recycle_pool (
+  pool_id TEXT PRIMARY KEY,
+  archive_no TEXT NOT NULL UNIQUE,
+  passport_no TEXT NOT NULL UNIQUE,
+  source_archive_id TEXT NOT NULL UNIQUE,
+  deleted_at BIGINT NOT NULL,
+  released_at BIGINT NOT NULL,
+  used_at BIGINT,
+  used_by_archive_id TEXT UNIQUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_number_recycle_pool_available
+  ON archive_number_recycle_pool (released_at, pool_id)
+  WHERE used_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS archive_hard_delete_logs (
+  hard_delete_id TEXT PRIMARY KEY,
+  source_archive_id TEXT NOT NULL UNIQUE,
+  archive_no TEXT NOT NULL,
+  passport_no TEXT NOT NULL,
+  deleted_at BIGINT NOT NULL,
+  hard_deleted_at BIGINT NOT NULL,
+  reason TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_hard_delete_logs_deleted_at
+  ON archive_hard_delete_logs (hard_deleted_at);
+
+CREATE TABLE IF NOT EXISTS cpms_status_exports (
+  export_year INT PRIMARY KEY,
+  export_batch_id TEXT NOT NULL UNIQUE,
+  exported_at BIGINT NOT NULL,
+  records_hash TEXT NOT NULL,
+  status_records_count BIGINT NOT NULL,
+  number_release_records_count BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS qr_print_records (

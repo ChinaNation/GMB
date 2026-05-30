@@ -1,30 +1,25 @@
 // CPMS 后端 API 封装
 
 import type {
-  ApiResponse, ApiError, AdminUser, Archive, ChallengeData, VerifyData,
-  InstallStatus,
+  ApiResponse, ApiError, AdminUser, Archive,
+  CpmsStatusExportFile, InstallStatus,
 } from './types';
 
-function getToken(): string | null {
-  return localStorage.getItem('cpms_token');
-}
-
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText })) as Partial<ApiError>;
-    // 中文注释:401 只表示本机管理员登录态失效;业务错误由后端返回 4xx + error_code,页面自行展示。
-    if (res.status === 401 && token) {
-      localStorage.removeItem('cpms_token');
-      localStorage.removeItem('cpms_user');
-      window.location.href = '/login';
+    // 中文注释:登录态由 HttpOnly Cookie 承载；401 时只清理前端用户镜像。
+    if (res.status === 401) {
+      sessionStorage.removeItem('cpms_user');
+      if (!['/login', '/install'].includes(window.location.pathname)) {
+        window.location.href = '/login';
+      }
     }
     throw new Error(err.message || `HTTP ${res.status}`);
   }
@@ -48,16 +43,10 @@ export const bindSuperAdmin = (admin_pubkey: string) =>
   post<AdminUser>('/api/v1/install/super-admin/bind', { admin_pubkey });
 
 // ── 认证 ──
-export const authIdentify = (admin_pubkey: string) =>
-  post<{ user_id: string; role: string; status: string }>('/api/v1/admin/auth/identify', { admin_pubkey });
-export const authChallenge = (admin_pubkey: string) =>
-  post<ChallengeData>('/api/v1/admin/auth/challenge', { admin_pubkey });
-export const authVerify = (challenge_id: string, admin_pubkey: string, signature: string) =>
-  post<VerifyData>('/api/v1/admin/auth/verify', { challenge_id, admin_pubkey, signature });
 export const authLogout = () => post<null>('/api/v1/admin/auth/logout');
+export const authMe = () => get<{ user_id: string; role: string }>('/api/v1/admin/auth/me');
 export const authQrChallenge = () => post<{ challenge_id: string; login_qr_payload: string; session_id: string; expire_at: number }>('/api/v1/admin/auth/qr/challenge', {
   origin: window.location.origin,
-  session_id: `sid-${Date.now()}-${Math.random().toString(16).slice(2)}`,
 });
 export const authQrComplete = (body: {
   challenge_id: string;
@@ -67,16 +56,14 @@ export const authQrComplete = (body: {
 }) => post<null>('/api/v1/admin/auth/qr/complete', body);
 
 export const authQrResult = (challenge_id: string, session_id: string) =>
-  get<{ status: string; access_token?: string; expires_in?: number; user?: { user_id: string; role: string } }>(
-    `/api/v1/admin/auth/qr/result?challenge_id=${challenge_id}&session_id=${session_id}`
+  get<{ status: string; expires_in?: number; user?: { user_id: string; role: string } }>(
+    `/api/v1/admin/auth/qr/result?challenge_id=${encodeURIComponent(challenge_id)}&session_id=${encodeURIComponent(session_id)}`
   );
 
 // ── 超级管理员 ──
 export const listOperators = () => get<AdminUser[]>('/api/v1/admin/operators');
 export const createOperator = (admin_pubkey: string, admin_name: string) =>
   post<AdminUser>('/api/v1/admin/operators', { admin_pubkey, admin_name });
-export const updateOperatorStatus = (id: string, status: string) =>
-  put<null>(`/api/v1/admin/operators/${id}/status`, { status });
 export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators/${id}`);
 export const updateCitizenStatus = (archive_id: string, citizen_status: string) =>
   put<{ archive_id: string; citizen_status: string }>(`/api/v1/archives/${archive_id}/citizen-status`, { citizen_status });
@@ -90,7 +77,7 @@ export const createArchive = (body: {
   last_name: string; first_name: string; birth_date: string; gender_code: string; height_cm: number;
   town_code?: string; village_id?: string; address?: string;
   citizen_status?: string; voting_eligible?: boolean;
-}) => post<{ archive_id: string; archive_no: string }>('/api/v1/archives', body);
+}) => post<{ archive_id: string; archive_no: string; passport_no: string }>('/api/v1/archives', body);
 export const listArchives = (params?: { q?: string; page?: number; page_size?: number }) => {
   const qs = new URLSearchParams();
   if (params?.q) qs.set('q', params.q);
@@ -118,6 +105,8 @@ export const completeArchiveDelete = (id: string, body: {
   payload_hash: string;
   signed_at: number;
 }) => post<{ archive_id: string; deleted_at: number; deleted_by: string }>(`/api/v1/archives/${id}/delete/complete`, body);
+export const exportStatusFile = () =>
+  get<{ file_name: string; export_file: CpmsStatusExportFile }>('/api/v1/archives/status-export');
 
 // ── 健康检查 ──
 export const health = () => get<{ status: string }>('/api/v1/health');

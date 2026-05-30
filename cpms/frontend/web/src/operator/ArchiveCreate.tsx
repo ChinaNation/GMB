@@ -140,7 +140,7 @@ export default function ArchiveCreate() {
           <label>公民状态 *</label>
           <select className="form-input" value={form.citizen_status} onChange={e => set('citizen_status', e.target.value)}>
             <option value="NORMAL">正常</option>
-            <option value="ABNORMAL">异常</option>
+            <option value="REVOKED">注销</option>
           </select>
         </div>
         <div className="form-group">

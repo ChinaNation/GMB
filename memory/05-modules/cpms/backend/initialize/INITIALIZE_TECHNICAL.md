@@ -40,12 +40,14 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 - `system_install`：保存 `sfid_number / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
 - `qr_sign_keys`：保存本机 `ARCHIVE` 签发密钥。
 - `admin_users`：保存超级管理员和操作员账号。
+- `address_towns/address_villages`：在同一初始化事务内重建安装码对应市的镇/村路运行表。
 
-`install_secret` 与 ARCHIVE 私钥使用 `CPMS_KEY_ENCRYPT_SECRET` 派生密钥加密存储；开发环境未配置时允许明文落库并打印警告。
+`install_secret` 与 ARCHIVE 私钥使用 `CPMS_KEY_ENCRYPT_SECRET` 作为 32 字节 hex 主密钥，通过 AES-256-GCM 加密后落库，格式为 `enc:gcm:<nonce_hex>:<cipher_hex>`。未配置或格式错误时拒绝初始化；已初始化实例启动时如果存在加密材料，也必须能读取该主密钥。
 
 ## 5. 安全约束
 - `proto` 必须为 `SFID_CPMS_V1`，`type` 必须为 `INSTALL`。
-- `sfid_number` 必须能解析出省市代码；CPMS 不维护本地省市真源。
+- `sfid_number` 必须能解析出省市代码，且 `province_name/city_name` 必须和 SFID 工具行政区真源一致。
+- 初始化必须先完成 INSTALL 校验、主密钥校验、ARCHIVE 密钥生成、安装材料落库、地址表重建和超级管理员绑定前置校验；任何一步失败都不得提交半初始化状态。
 - `system_install.sfid_number` 已存在时拒绝重复初始化；本阶段按清库重装处理，不提供旧库迁移兼容。
 - 超级管理员只允许绑定 1 个，`admin_pubkey` 不允许重复。
 

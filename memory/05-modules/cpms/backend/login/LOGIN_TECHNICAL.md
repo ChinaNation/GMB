@@ -7,28 +7,26 @@
 
 ## 2. 职责范围
 ### 2.1 本模块负责
-- 管理员身份识别（`identify`）
-- 登录挑战码下发（普通签名登录与二维码登录）
-- 登录签名验签
-- 登录结果轮询
+- QR 登录挑战码下发
+- wumin 登录回执签名验签
+- 登录结果轮询，且结果领取一次后立即删除
 - 登录会话创建与登出
+- 当前登录管理员查询
 - 登录相关状态持久化（`sessions/login_challenges/qr_login_results`）
 
 ### 2.2 本模块不负责
 - 角色权限控制（`SUPER_ADMIN` / `OPERATOR_ADMIN` 的业务授权）
-- 管理员管理（创建/更新/禁用）
+- 管理员管理（创建/删除）
 - 公民档案与二维码业务
 - 审计以外的业务领域逻辑
 
 ## 3. 路由清单
 由 `router()` 统一注册并由主路由 `merge` 挂载：
 
-- `POST /api/v1/admin/auth/identify`
-- `POST /api/v1/admin/auth/challenge`
-- `POST /api/v1/admin/auth/verify`
 - `POST /api/v1/admin/auth/qr/challenge`
 - `POST /api/v1/admin/auth/qr/complete`
 - `GET /api/v1/admin/auth/qr/result`
+- `GET /api/v1/admin/auth/me`
 - `POST /api/v1/admin/auth/logout`
 
 ## 4. 持久化表（PostgreSQL）
@@ -36,53 +34,46 @@
 - `login_challenges`
 - `qr_login_results`
 
-短期登录状态仍由 CPMS 本机 PostgreSQL 承载；`backend/src/store/StoreDb`
-统一封装清理逻辑,定时删除过期 session、过期 challenge 和超时二维码登录结果。
+短期登录状态由 CPMS 本机 PostgreSQL 承载。`sessions.access_token` 只写入
+`cpms_session` HttpOnly Cookie，前端不再保存 token。定时清理逻辑删除过期 session、
+过期 challenge 和超时二维码登录结果。
 
 ## 5. 安全约束
-- challenge 一次性消费，防重放
-- challenge 带有效期，过期拒绝
-- 校验 challenge 与 `session_id` 绑定关系
-- 管理员状态必须为 `ACTIVE`
-- 签名必须通过 `sr25519` 验签
+- QR challenge 由后端生成 `challenge_id/session_id`，前端不得自带会话 ID。
+- challenge 与 `session_id` 绑定，带有效期，完成登录后标记消费，防重放。
+- `qr_login_results` 中的成功结果领取一次后立即删除。
+- 操作管理员被删除后，对应 session 被清理；无管理员记录的 session 视为无效。
+- 签名必须通过 `sr25519` 验签，且签名公钥必须属于管理员。
+- UTC 1 月 6 日到 1 月 10 日，如果上一年度 `CPMS_STATUS_EXPORT` 尚未由超级管理员导出，`OPERATOR_ADMIN` 登录完成和登录结果领取都会被拒绝；已有操作管理员会话在鉴权时也会被清理。`SUPER_ADMIN` 不受该锁定影响，用于完成年度报告导出。
 
 ## 6. 扫码登录协议（与 wumin 对齐）
 ### 6.1 挑战二维码字段
-- `proto`: 固定 `WUMIN_QR_V1`
-- `system`: 固定 `cpms`
-- `request_id`: 挑战 ID（即 `challenge_id`）
-- `challenge`: 随机挑战串
-- `nonce`: 随机串
-- `issued_at`: 秒级时间戳
-- `expires_at`: 秒级时间戳（TTL=90 秒）
-- `sys_pubkey`: CPMS 当前登录系统公钥（0x + hex）
-- `sys_sig`: CPMS 对挑战原文的签名（0x + hex）
-- `sys_cert`: SFID 对该 CPMS 公钥的背书签名（0x + hex，必填）
+登录二维码使用统一 envelope：
 
-说明：
-
-- `origin`/`domain`/`session_id` 可以保留为网页侧会话上下文字段，但不进入移动端扫码挑战协议主载荷
-- CPMS 不与区块链交互；`sys_cert` 由 SFID 背书提供信任链
-
-### 6.2 验签拼串（后端与移动端一致）
-```text
-WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at
+```json
+{
+  "proto": "WUMIN_QR_V1",
+  "kind": "login_challenge",
+  "id": "login_xxx",
+  "issued_at": 1779990000,
+  "expires_at": 1779990090,
+  "body": {
+    "system": "cpms",
+    "sys_pubkey": "0x...",
+    "sys_sig": "0x..."
+  }
+}
 ```
 
-### 6.3 CPMS 证书链规范
+后端保存的 `session_id` 只用于浏览器轮询绑定，不进入二维码主载荷。
 
-CPMS 登录二维码中的 `sys_cert` 对应以下固定原文：
-
+### 6.2 验签拼串（后端与 wumin 一致）
 ```text
-CPMS_CERT_V1|cpms_pubkey|sfid_number|issued_at|expires_at
+WUMIN_QR_V1|login_challenge|{challenge_id}|cpms|{expires_at}|{cpms_pubkey_without_0x}
 ```
 
-要求：
-
-- `cpms_pubkey` 必须等于挑战码中的 `sys_pubkey`
-- `sfid_number` 为当前 CPMS 实例绑定的机构编号
-- `sys_cert` 由 SFID 当前有效私钥签发
-- WuminApp 使用区块链当前 SFID 公钥验证 `sys_cert`
+wumin 返回 `login_receipt` 后，CPMS 校验回执公钥、签名算法和签名值；通过后创建
+`sessions` 记录，并在 `qr/result` 的成功响应中设置 HttpOnly Cookie。
 
 ## 7. 依赖边界
 本模块依赖主模块提供通用能力：
@@ -95,6 +86,5 @@ CPMS_CERT_V1|cpms_pubkey|sfid_number|issued_at|expires_at
 ## 8. 后续拆分建议
 如继续模块化，可在 `backend/src` 下独立出：
 - `authz/`：权限与角色校验
-- `admin/`：管理员管理
 - `archive/`：档案业务
 - `qr/`：业务二维码签发与打印
