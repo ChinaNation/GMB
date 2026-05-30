@@ -13,7 +13,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::{authz, err, ok, sfid_tool_province::PROVINCES, ApiError, ApiResponse, AppState};
+use crate::{
+    authz, err, ok,
+    sfid_tool_province::{CityCode, ProvinceCode, PROVINCES},
+    ApiError, ApiResponse, AppState,
+};
 
 pub(crate) async fn sync_installed_city_address(db: &sqlx::PgPool) -> Result<(), String> {
     let sfid_number: Option<String> =
@@ -32,26 +36,91 @@ pub(crate) async fn sync_city_address_by_sfid(
     db: &sqlx::PgPool,
     sfid_number: &str,
 ) -> Result<(), String> {
-    let (province_code, city_code) = parse_sfid_area_codes(sfid_number)?;
-    let city = PROVINCES
-        .iter()
-        .find(|p| p.code == province_code)
-        .and_then(|p| p.cities.iter().find(|c| c.code == city_code))
-        .ok_or_else(|| {
-            format!("install city not found in embedded sfid tool: {province_code}{city_code}")
-        })?;
-
     let mut tx = db
         .begin()
         .await
         .map_err(|e| format!("begin address sync tx failed: {e}"))?;
-    // 中文注释：行政区唯一来源是 SFID 工具；启动同步只落当前市运行表，清掉旧城市/旧硬编码残留。
+    sync_city_address_by_sfid_in_tx(tx.as_mut(), sfid_number).await?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit address sync failed: {e}"))?;
+    Ok(())
+}
+
+pub(crate) async fn sync_city_address_by_sfid_in_tx(
+    conn: &mut sqlx::PgConnection,
+    sfid_number: &str,
+) -> Result<(), String> {
+    let (_, city) = find_install_city(sfid_number)?;
+    replace_city_address(conn, city).await
+}
+
+pub(crate) fn validate_install_area(
+    sfid_number: &str,
+    province_name: &str,
+    city_name: &str,
+) -> Result<(), String> {
+    let (province, city) = find_install_city(sfid_number)?;
+    if province.name != province_name.trim() {
+        return Err(format!(
+            "install province_name '{}' does not match code {}",
+            province_name.trim(),
+            province.code
+        ));
+    }
+    if city.name != city_name.trim() {
+        return Err(format!(
+            "install city_name '{}' does not match code {}{}",
+            city_name.trim(),
+            province.code,
+            city.code
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn validate_town_village(
+    state: &AppState,
+    town_code: &str,
+    village_id: &str,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM address_towns t
+            JOIN address_villages v ON v.town_code = t.town_code
+            WHERE t.town_code = $1 AND v.village_id = $2
+         )",
+    )
+    .bind(town_code.trim())
+    .bind(village_id.trim())
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query address failed",
+        )
+    })?;
+
+    if !exists {
+        return Err(err(StatusCode::NOT_FOUND, 3006, "address area not found"));
+    }
+    Ok(())
+}
+
+async fn replace_city_address(
+    conn: &mut sqlx::PgConnection,
+    city: &CityCode,
+) -> Result<(), String> {
+    // 中文注释：行政区唯一来源是 SFID 工具；同步只落当前市运行表，清掉旧城市/旧硬编码残留。
     sqlx::query("DELETE FROM address_villages")
-        .execute(tx.as_mut())
+        .execute(&mut *conn)
         .await
         .map_err(|e| format!("clear villages failed: {e}"))?;
     sqlx::query("DELETE FROM address_towns")
-        .execute(tx.as_mut())
+        .execute(&mut *conn)
         .await
         .map_err(|e| format!("clear towns failed: {e}"))?;
 
@@ -59,7 +128,7 @@ pub(crate) async fn sync_city_address_by_sfid(
         sqlx::query("INSERT INTO address_towns (town_code, town_name) VALUES ($1, $2)")
             .bind(town.code)
             .bind(town.name)
-            .execute(tx.as_mut())
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("insert town {} failed: {e}", town.code))?;
 
@@ -71,16 +140,32 @@ pub(crate) async fn sync_city_address_by_sfid(
             .bind(&village_id)
             .bind(town.code)
             .bind(village.name)
-            .execute(tx.as_mut())
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("insert village {} failed: {e}", village_id))?;
         }
     }
-
-    tx.commit()
-        .await
-        .map_err(|e| format!("commit address sync failed: {e}"))?;
     Ok(())
+}
+
+fn find_install_city(
+    sfid_number: &str,
+) -> Result<(&'static ProvinceCode, &'static CityCode), String> {
+    let (province_code, city_code) = parse_sfid_area_codes(sfid_number)?;
+    let province = PROVINCES
+        .iter()
+        .find(|p| p.code == province_code)
+        .ok_or_else(|| {
+            format!("install province not found in embedded sfid tool: {province_code}")
+        })?;
+    let city = province
+        .cities
+        .iter()
+        .find(|c| c.code == city_code)
+        .ok_or_else(|| {
+            format!("install city not found in embedded sfid tool: {province_code}{city_code}")
+        })?;
+    Ok((province, city))
 }
 
 fn parse_sfid_area_codes(sfid_number: &str) -> Result<(&str, &str), String> {

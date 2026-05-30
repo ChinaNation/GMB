@@ -1,40 +1,52 @@
-// 认证上下文：管理 token、user、角色状态
+// 认证上下文：HttpOnly Cookie 承载登录态，前端只保存用户镜像
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import * as api from './api';
 import type { SessionUser } from './types';
 
 interface AuthState {
-  token: string | null;
   user: SessionUser | null;
-  login: (token: string, user: SessionUser) => void;
+  ready: boolean;
+  login: (user: SessionUser) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('cpms_token'));
+  const [ready, setReady] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(() => {
-    const raw = localStorage.getItem('cpms_user');
+    const raw = sessionStorage.getItem('cpms_user');
     return raw ? JSON.parse(raw) : null;
   });
 
-  const login = useCallback((t: string, u: SessionUser) => {
-    localStorage.setItem('cpms_token', t);
-    localStorage.setItem('cpms_user', JSON.stringify(u));
-    setToken(t);
+  useEffect(() => {
+    api.authMe()
+      .then(res => {
+        if (res.data) {
+          sessionStorage.setItem('cpms_user', JSON.stringify(res.data));
+          setUser(res.data);
+        }
+      })
+      .catch(() => {
+        sessionStorage.removeItem('cpms_user');
+        setUser(null);
+      })
+      .finally(() => setReady(true));
+  }, []);
+
+  const login = useCallback((u: SessionUser) => {
+    sessionStorage.setItem('cpms_user', JSON.stringify(u));
     setUser(u);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('cpms_token');
-    localStorage.removeItem('cpms_user');
-    setToken(null);
+    sessionStorage.removeItem('cpms_user');
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ user, ready, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

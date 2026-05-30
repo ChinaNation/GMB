@@ -32,12 +32,6 @@ impl QrKind {
             Self::UserTransfer => "user_transfer",
         }
     }
-
-    // 中文注释：固定码判断由前后端统一协议保留，当前后端暂未调用。
-    #[allow(dead_code)]
-    pub fn is_fixed(&self) -> bool {
-        matches!(self, Self::UserContact)
-    }
 }
 
 // ---------- body ----------
@@ -47,18 +41,6 @@ pub struct LoginChallengeBody {
     pub system: String,
     pub sys_pubkey: String,
     pub sys_sig: String,
-}
-
-// 中文注释：登录回执解析由统一二维码协议保留，当前登录流程先走手动字段校验。
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoginReceiptBody {
-    pub system: String,
-    pub pubkey: String,
-    pub sig_alg: String,
-    pub signature: String,
-    pub payload_hash: String,
-    pub signed_at: i64,
 }
 
 // ---------- envelope ----------
@@ -78,28 +60,12 @@ pub struct QrEnvelope<B> {
 }
 
 pub type LoginChallengeEnvelope = QrEnvelope<LoginChallengeBody>;
-#[allow(dead_code)]
-pub type LoginReceiptEnvelope = QrEnvelope<LoginReceiptBody>;
 
 impl LoginChallengeEnvelope {
     pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginChallengeBody) -> Self {
         Self {
             proto: WUMIN_QR_V1.to_string(),
             kind: QrKind::LoginChallenge.wire().to_string(),
-            id: Some(id),
-            issued_at: Some(issued_at),
-            expires_at: Some(expires_at),
-            body,
-        }
-    }
-}
-
-#[allow(dead_code)]
-impl LoginReceiptEnvelope {
-    pub fn new(id: String, issued_at: i64, expires_at: i64, body: LoginReceiptBody) -> Self {
-        Self {
-            proto: WUMIN_QR_V1.to_string(),
-            kind: QrKind::LoginReceipt.wire().to_string(),
             id: Some(id),
             issued_at: Some(issued_at),
             expires_at: Some(expires_at),
@@ -138,92 +104,4 @@ pub fn build_signature_message(
         exp,
         pp
     )
-}
-
-// ---------- parse helpers ----------
-
-// 中文注释：回执解析错误类型预留给后端切换统一解析入口。
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum QrParseError {
-    BadJson(String),
-    BadProto(String),
-    BadKind(String),
-    BadField(String),
-    FixedCodeHasTemporal(String),
-}
-
-impl std::fmt::Display for QrParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BadJson(m) => write!(f, "QR JSON 非法: {}", m),
-            Self::BadProto(m) => write!(f, "proto 必须为 WUMIN_QR_V1, 实际: {}", m),
-            Self::BadKind(m) => write!(f, "未知 kind: {}", m),
-            Self::BadField(m) => write!(f, "字段错误: {}", m),
-            Self::FixedCodeHasTemporal(m) => {
-                write!(f, "固定码 {} 不应包含 id/issued_at/expires_at", m)
-            }
-        }
-    }
-}
-
-impl std::error::Error for QrParseError {}
-
-/// 解析 login_receipt envelope。后端收到 wumin 冷钱包的回执后使用。
-#[allow(dead_code)]
-pub fn parse_login_receipt(raw: &str) -> Result<LoginReceiptEnvelope, QrParseError> {
-    let value: serde_json::Value =
-        serde_json::from_str(raw).map_err(|e| QrParseError::BadJson(e.to_string()))?;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| QrParseError::BadJson("不是对象".into()))?;
-
-    match obj.get("proto").and_then(|v| v.as_str()) {
-        Some(WUMIN_QR_V1) => {}
-        other => return Err(QrParseError::BadProto(format!("{:?}", other))),
-    }
-    match obj.get("kind").and_then(|v| v.as_str()) {
-        Some("login_receipt") => {}
-        other => return Err(QrParseError::BadKind(format!("{:?}", other))),
-    }
-
-    let id = obj
-        .get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| QrParseError::BadField("id 必填".into()))?
-        .to_string();
-    let issued_at = obj
-        .get("issued_at")
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| QrParseError::BadField("issued_at 必填整数".into()))?;
-    let expires_at = obj
-        .get("expires_at")
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| QrParseError::BadField("expires_at 必填整数".into()))?;
-
-    let body_val = obj
-        .get("body")
-        .ok_or_else(|| QrParseError::BadField("body 必填".into()))?;
-    let body: LoginReceiptBody = serde_json::from_value(body_val.clone())
-        .map_err(|e| QrParseError::BadField(format!("body: {}", e)))?;
-    if body.sig_alg != "sr25519" {
-        return Err(QrParseError::BadField(
-            "login_receipt.sig_alg 必须为 sr25519".into(),
-        ));
-    }
-    if body.system != "sfid" && body.system != "cpms" {
-        return Err(QrParseError::BadField(format!(
-            "login_receipt.system 非法: {}",
-            body.system
-        )));
-    }
-
-    Ok(LoginReceiptEnvelope {
-        proto: WUMIN_QR_V1.to_string(),
-        kind: "login_receipt".to_string(),
-        id: Some(id),
-        issued_at: Some(issued_at),
-        expires_at: Some(expires_at),
-        body,
-    })
 }

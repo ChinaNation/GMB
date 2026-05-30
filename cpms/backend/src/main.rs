@@ -3,7 +3,6 @@ use std::{env, net::SocketAddr, sync::Arc};
 use axum::{http::StatusCode, routing::get, Json, Router};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
-use schnorrkel::{signing_context, PublicKey, Signature};
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use tokio::sync::RwLock;
@@ -14,11 +13,13 @@ mod authz;
 mod dangan;
 mod initialize;
 mod login;
+mod number;
 mod operator_admin;
 mod qr;
 // 中文注释：行政区数据唯一源是 SFID 系统 sfid 工具；CPMS 只在编译期直接引用，
 // 不在 CPMS 源码树保存 province.rs 或 city_codes 的第二份文件。
 #[allow(dead_code)]
+#[allow(clippy::large_const_arrays)]
 #[path = "../../../sfid/backend/sfid/province.rs"]
 mod sfid_tool_province;
 mod ss58;
@@ -112,11 +113,18 @@ async fn main() {
         .expect("connect postgres failed");
 
     MIGRATOR.run(&db).await.expect("run migrations failed");
+    initialize::ensure_secret_config(&db)
+        .await
+        .expect("CPMS secret encryption config invalid");
 
     // 中文注释：已初始化实例启动时按安装码所属市重建地址表，避免旧硬编码镇村残留。
     address::sync_installed_city_address(&db)
         .await
         .expect("sync installed city address failed");
+    // 中文注释：启动时先执行一次到期档案硬删除；软删除未满 100 年的号码不会进入回收池。
+    dangan::run_due_archive_hard_delete(&db)
+        .await
+        .expect("run archive hard delete failed");
 
     let state = AppState {
         db,
@@ -138,7 +146,7 @@ async fn main() {
         .merge(super_admin::router())
         .merge(operator_admin::router())
         .merge(address::router())
-        .with_state(state)
+        .with_state(state.clone())
         .fallback_service(serve_frontend);
 
     let addr: SocketAddr = env::var("CPMS_BIND")
@@ -155,6 +163,18 @@ async fn main() {
                 tokio::time::sleep(interval).await;
                 let now = Utc::now().timestamp();
                 store.cleanup_auth_runtime(now).await;
+            }
+        });
+    }
+    {
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            let interval = tokio::time::Duration::from_secs(24 * 3600);
+            loop {
+                tokio::time::sleep(interval).await;
+                if let Err(e) = dangan::run_due_archive_hard_delete(&db).await {
+                    eprintln!("archive hard delete failed: {e}");
+                }
             }
         });
     }
@@ -231,36 +251,6 @@ async fn find_admin_by_user_id(
     })
 }
 
-fn validate_admin_status(status: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
-    match status {
-        "ACTIVE" | "DISABLED" => Ok(()),
-        _ => Err(err(StatusCode::BAD_REQUEST, 1001, "invalid status")),
-    }
-}
-
-fn verify_signature_with_context(
-    admin_pubkey: &str,
-    payload: &str,
-    signature: &str,
-    context: &[u8],
-) -> Result<(), &'static str> {
-    let pubkey_bytes = decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
-    if pubkey_bytes.len() != 32 {
-        return Err("invalid admin_pubkey length");
-    }
-    let sig_bytes = decode_bytes(signature).ok_or("invalid signature encoding")?;
-    if sig_bytes.len() != 64 {
-        return Err("invalid signature length");
-    }
-
-    let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
-    let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
-
-    let ctx = signing_context(context);
-    pk.verify(ctx.bytes(payload.as_bytes()), &sig)
-        .map_err(|_| "sr25519 verify failed")
-}
-
 fn decode_bytes(input: &str) -> Option<Vec<u8>> {
     let trimmed = input.trim();
 
@@ -329,11 +319,10 @@ fn err(status: StatusCode, code: i32, message: &str) -> (StatusCode, Json<ApiErr
 fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
     // 中文注释:CPMS 是离线实名系统,错误码只描述本机认证、档案、签发和审计状态。
     match message {
-        "missing bearer token" => "CPMS_AUTH_MISSING_TOKEN",
-        "invalid token" => "CPMS_AUTH_INVALID_TOKEN",
-        "token expired" => "CPMS_AUTH_TOKEN_EXPIRED",
+        "missing session cookie" => "CPMS_AUTH_MISSING_SESSION",
+        "invalid session" => "CPMS_AUTH_INVALID_SESSION",
+        "session expired" => "CPMS_AUTH_SESSION_EXPIRED",
         "permission denied" => "CPMS_AUTH_PERMISSION_DENIED",
-        "admin is not active" => "CPMS_AUTH_ADMIN_INACTIVE",
         "admin_pubkey not found" => "CPMS_AUTH_ADMIN_NOT_FOUND",
         "admin user not found" => "CPMS_AUTH_ADMIN_NOT_FOUND",
         "challenge not found" => "CPMS_AUTH_CHALLENGE_NOT_FOUND",
@@ -344,8 +333,16 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         }
         "signature verify failed" => "CPMS_AUTH_SIGNATURE_VERIFY_FAILED",
         "archive not found" => "CPMS_INTAKE_ARCHIVE_NOT_FOUND",
+        "address area not found" => "CPMS_INTAKE_ADDRESS_AREA_NOT_FOUND",
         "archive_no conflict, retry exhausted" => "CPMS_INTAKE_ARCHIVE_DUPLICATED",
+        "passport_no conflict, retry exhausted" => "CPMS_INTAKE_PASSPORT_DUPLICATED",
+        "passport_no capacity exhausted" => "CPMS_INTAKE_PASSPORT_CAPACITY_EXHAUSTED",
+        "invalid passport province_code" | "invalid passport city_code" => {
+            "CPMS_INTAKE_PASSPORT_AREA_INVALID"
+        }
         "invalid citizen_status" => "CPMS_INTAKE_CITIZEN_STATUS_INVALID",
+        "annual status export required" => "CPMS_ANNUAL_STATUS_EXPORT_REQUIRED",
+        "annual status export window closed" => "CPMS_ANNUAL_STATUS_EXPORT_WINDOW_CLOSED",
         "qr encode failed" => "CPMS_ISSUE_QR_GENERATE_FAILED",
         "save print record failed" => "CPMS_AUDIT_WRITE_FAILED",
         "archive wallet required" => "CPMS_ARCHIVE_WALLET_REQUIRED",
@@ -366,6 +363,7 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         _ if status == StatusCode::GONE => "CPMS_RESOURCE_EXPIRED",
         _ if status == StatusCode::UNPROCESSABLE_ENTITY => "CPMS_BUSINESS_VALIDATION_FAILED",
         _ if status == StatusCode::SERVICE_UNAVAILABLE => "CPMS_SERVICE_UNAVAILABLE",
+        _ if status == StatusCode::LOCKED => "CPMS_RESOURCE_LOCKED",
         _ => "CPMS_INTERNAL_ERROR",
     }
 }
@@ -373,50 +371,16 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        dangan::{archive_no_checksum, sign_archive_payload_with_secret, validate_citizen_status},
-        login::verify_challenge_signature,
+        dangan::{sign_archive_payload_with_secret, validate_citizen_status},
+        number::archive_no_checksum,
     };
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
     use schnorrkel::{signing_context, ExpansionMode, MiniSecretKey, PublicKey, Signature};
-
-    #[test]
-    fn verify_signature_accepts_hex_inputs() {
-        let payload = "cpms-admin-auth-v1|chl_x|pub_x|nonce_x|1234567890";
-        let (pubkey_hex, sig_hex) = build_signed_payload(payload);
-        assert!(verify_challenge_signature(&pubkey_hex, payload, &sig_hex).is_ok());
-    }
-
-    #[test]
-    fn verify_signature_accepts_base64_inputs() {
-        let payload = "cpms-admin-auth-v1|chl_y|pub_y|nonce_y|1234567890";
-        let (pubkey_hex, sig_hex) = build_signed_payload(payload);
-        let pubkey_raw = hex::decode(pubkey_hex).expect("hex pubkey decode");
-        let sig_raw = hex::decode(sig_hex).expect("hex signature decode");
-        let pubkey_b64 = STANDARD.encode(pubkey_raw);
-        let sig_b64 = STANDARD.encode(sig_raw);
-        assert!(verify_challenge_signature(&pubkey_b64, payload, &sig_b64).is_ok());
-    }
-
-    #[test]
-    fn verify_signature_rejects_tampered_payload() {
-        let payload = "cpms-admin-auth-v1|chl_z|pub_z|nonce_z|1234567890";
-        let (pubkey_hex, sig_hex) = build_signed_payload(payload);
-        let tampered = "cpms-admin-auth-v1|chl_z|pub_z|nonce_z|1234567891";
-        let result = verify_challenge_signature(&pubkey_hex, tampered, &sig_hex);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn verify_signature_rejects_invalid_encoding() {
-        let payload = "cpms-admin-auth-v1|chl_w|pub_w|nonce_w|1234567890";
-        let result = verify_challenge_signature("not-a-key", payload, "not-a-signature");
-        assert!(result.is_err());
-    }
 
     #[test]
     fn citizen_status_validation_works() {
         assert!(validate_citizen_status("NORMAL").is_ok());
-        assert!(validate_citizen_status("ABNORMAL").is_ok());
+        assert!(validate_citizen_status("REVOKED").is_ok());
+        assert!(validate_citizen_status("ABNORMAL").is_err());
         assert!(validate_citizen_status("UNKNOWN").is_err());
     }
 
@@ -450,15 +414,5 @@ mod tests {
         assert_eq!(check.len(), 2);
         assert_eq!(archive_no.len(), 29);
         assert_eq!(archive_no.split('-').count(), 2);
-    }
-
-    fn build_signed_payload(payload: &str) -> (String, String) {
-        let mini = MiniSecretKey::from_bytes(&[7u8; 32]).expect("mini secret key");
-        let keypair = mini.expand_to_keypair(ExpansionMode::Ed25519);
-        let sig = keypair.sign(signing_context(b"CPMS-ADMIN-AUTH-V1").bytes(payload.as_bytes()));
-        (
-            hex::encode(keypair.public.to_bytes()),
-            hex::encode(sig.to_bytes()),
-        )
     }
 }

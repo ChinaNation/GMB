@@ -14,7 +14,7 @@ import ArchiveCreate from './operator/ArchiveCreate';
 import ArchiveDetail from './operator/ArchiveDetail';
 
 function RootRedirect() {
-  const { user } = useAuth();
+  const { ready, user } = useAuth();
   const [checking, setChecking] = useState(true);
   const [initialized, setInitialized] = useState(true);
 
@@ -29,7 +29,7 @@ function RootRedirect() {
     }).finally(() => setChecking(false));
   }, []);
 
-  if (checking) return null;
+  if (checking || !ready) return null;
   if (!initialized) return <Navigate to="/install" replace />;
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to="/admin" replace />;

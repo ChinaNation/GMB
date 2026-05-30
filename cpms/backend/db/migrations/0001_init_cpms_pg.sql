@@ -1,3 +1,5 @@
+-- CPMS PostgreSQL schema (SFID_CPMS_V1 two-code baseline)
+
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS system_install (
@@ -31,7 +33,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   admin_pubkey TEXT NOT NULL UNIQUE,
   admin_name TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
-  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED')),
+  status TEXT NOT NULL CHECK (status = 'ACTIVE'),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
   managed_key_id TEXT UNIQUE,
   created_at BIGINT NOT NULL,
@@ -39,7 +41,6 @@ CREATE TABLE IF NOT EXISTS admin_users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_role ON admin_users (role);
-CREATE INDEX IF NOT EXISTS idx_admin_users_status ON admin_users (status);
 
 CREATE TABLE IF NOT EXISTS sessions (
   access_token TEXT PRIMARY KEY,
@@ -81,28 +82,77 @@ CREATE TABLE IF NOT EXISTS archives (
   archive_no TEXT NOT NULL UNIQUE,
   province_code TEXT NOT NULL,
   city_code TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  birth_date TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  first_name TEXT NOT NULL,
+  birth_date TEXT NOT NULL CHECK (birth_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
   gender_code TEXT NOT NULL CHECK (gender_code IN ('M', 'W')),
-  height_cm REAL,
-  passport_no TEXT NOT NULL,
+  height_cm REAL NOT NULL CHECK (height_cm BETWEEN 30 AND 260),
+  passport_no TEXT NOT NULL UNIQUE,
   town_code TEXT NOT NULL DEFAULT '',
   village_id TEXT NOT NULL DEFAULT '',
   address TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
-  citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'ABNORMAL')),
+  citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'REVOKED')),
   voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+  valid_from TEXT NOT NULL DEFAULT '',
+  valid_until TEXT NOT NULL DEFAULT '',
+  citizen_status_updated_at BIGINT NOT NULL DEFAULT 0,
+  wallet_address TEXT,
+  wallet_pubkey TEXT,
+  wallet_sig_alg TEXT NOT NULL DEFAULT 'sr25519',
+  wallet_bound_at BIGINT,
+  wallet_bound_by TEXT,
   archive_qr_payload TEXT NOT NULL DEFAULT '',
+  deleted_at BIGINT,
+  deleted_by TEXT,
+  delete_reason TEXT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_archives_full_name ON archives (full_name);
+CREATE INDEX IF NOT EXISTS idx_archives_last_first_name ON archives (last_name, first_name);
 CREATE INDEX IF NOT EXISTS idx_archives_status ON archives (status);
 
 CREATE TABLE IF NOT EXISTS sequence_counters (
   seq_key TEXT PRIMARY KEY,
   next_seq BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS archive_number_recycle_pool (
+  pool_id TEXT PRIMARY KEY,
+  archive_no TEXT NOT NULL UNIQUE,
+  passport_no TEXT NOT NULL UNIQUE,
+  source_archive_id TEXT NOT NULL UNIQUE,
+  deleted_at BIGINT NOT NULL,
+  released_at BIGINT NOT NULL,
+  used_at BIGINT,
+  used_by_archive_id TEXT UNIQUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_number_recycle_pool_available
+  ON archive_number_recycle_pool (released_at, pool_id)
+  WHERE used_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS archive_hard_delete_logs (
+  hard_delete_id TEXT PRIMARY KEY,
+  source_archive_id TEXT NOT NULL UNIQUE,
+  archive_no TEXT NOT NULL,
+  passport_no TEXT NOT NULL,
+  deleted_at BIGINT NOT NULL,
+  hard_deleted_at BIGINT NOT NULL,
+  reason TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_hard_delete_logs_deleted_at
+  ON archive_hard_delete_logs (hard_deleted_at);
+
+CREATE TABLE IF NOT EXISTS cpms_status_exports (
+  export_year INT PRIMARY KEY,
+  export_batch_id TEXT NOT NULL UNIQUE,
+  exported_at BIGINT NOT NULL,
+  records_hash TEXT NOT NULL,
+  status_records_count BIGINT NOT NULL,
+  number_release_records_count BIGINT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS qr_print_records (
@@ -115,6 +165,25 @@ CREATE TABLE IF NOT EXISTS qr_print_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_qr_print_records_archive_id ON qr_print_records (archive_id);
+
+CREATE TABLE IF NOT EXISTS archive_delete_challenges (
+  challenge_id TEXT PRIMARY KEY,
+  archive_id TEXT NOT NULL,
+  archive_no TEXT NOT NULL,
+  admin_id TEXT NOT NULL,
+  admin_pubkey TEXT NOT NULL,
+  delete_payload TEXT NOT NULL,
+  expire_at BIGINT NOT NULL,
+  consumed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at BIGINT NOT NULL,
+  consumed_at BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_delete_challenges_archive_id
+  ON archive_delete_challenges (archive_id);
+
+CREATE INDEX IF NOT EXISTS idx_archive_delete_challenges_expire_at
+  ON archive_delete_challenges (expire_at);
 
 CREATE TABLE IF NOT EXISTS address_towns (
   town_code TEXT PRIMARY KEY,

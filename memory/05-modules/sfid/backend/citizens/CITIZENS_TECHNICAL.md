@@ -56,6 +56,8 @@
 
 - 三端字段统一：`archive_no / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg / sfid_code / bind_status`。
 - `bind_status` 只表达电子护照绑定状态：`PENDING / BOUND`；`identity_status` 表达身份 ID 当前有效状态；`vote_status` 由 `citizen_status + voting_eligible` 计算。
+- `citizen_status` 当前只允许 `NORMAL / REVOKED`；`REVOKED` 表示 CPMS 软删除注销，必须对应 `voting_eligible=false`。
+- CPMS 年度 `CPMS_STATUS_EXPORT` 后续导入时，只更新档案号对应的公民状态与投票资格；硬删除释放记录只用于释放号码/绑定关系，不作为公民状态更新。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
 - `archive_no / sfid_code / wallet_pubkey` 三者保持一对一唯一关系。

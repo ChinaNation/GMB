@@ -16,8 +16,8 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    authz, dangan, err, find_admin_by_user_id, initialize, ok, ss58, write_audit, ApiError,
-    ApiResponse, AppState, Archive,
+    address, authz, dangan, err, find_admin_by_user_id, initialize, ok, ss58, write_audit,
+    ApiError, ApiResponse, AppState, Archive,
 };
 
 #[derive(Deserialize)]
@@ -27,8 +27,6 @@ struct CreateArchiveRequest {
     birth_date: String,
     gender_code: String,
     height_cm: Option<f32>,
-    #[serde(default)]
-    passport_no: Option<String>,
     #[serde(default)]
     town_code: Option<String>,
     #[serde(default)]
@@ -43,6 +41,7 @@ struct CreateArchiveRequest {
 struct CreateArchiveData {
     archive_id: String,
     archive_no: String,
+    passport_no: String,
     status: String,
     citizen_status: String,
 }
@@ -99,6 +98,12 @@ struct ArchiveDeleteCompleteData {
     deleted_by: String,
 }
 
+#[derive(Serialize)]
+struct StatusExportData {
+    file_name: String,
+    export_file: dangan::CpmsStatusExportFile,
+}
+
 // 编辑档案请求
 #[derive(Deserialize)]
 struct UpdateArchiveRequest {
@@ -141,6 +146,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/archives/:archive_id/delete/complete",
             post(complete_archive_delete),
         )
+        .route("/api/v1/archives/status-export", get(export_status_file))
 }
 
 async fn create_archive(
@@ -159,7 +165,7 @@ async fn create_archive(
             "last_name and first_name are required",
         ));
     }
-    validate_birth_date(&req.birth_date)?;
+    let birth_date = validate_birth_date(&req.birth_date)?;
     if req.gender_code != "M" && req.gender_code != "W" {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid gender_code"));
     }
@@ -167,8 +173,8 @@ async fn create_archive(
         .height_cm
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "height_cm is required"))?;
     validate_height_cm(height_cm)?;
-    let town_code = req.town_code.unwrap_or_default();
-    let village_id = req.village_id.unwrap_or_default();
+    let town_code = req.town_code.unwrap_or_default().trim().to_string();
+    let village_id = req.village_id.unwrap_or_default().trim().to_string();
     if town_code.trim().is_empty() || village_id.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -176,15 +182,27 @@ async fn create_archive(
             "town_code and village_id are required",
         ));
     }
+    address::validate_town_village(&state, &town_code, &village_id).await?;
     let terminal_id = headers
         .get("x-terminal-id")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("terminal-000");
-    let citizen_status = req.citizen_status.unwrap_or_else(|| "NORMAL".to_string());
+    let citizen_status = req
+        .citizen_status
+        .unwrap_or_else(|| dangan::CITIZEN_STATUS_NORMAL.to_string());
     dangan::validate_citizen_status(&citizen_status)?;
-    let archive_no = dangan::generate_archive_no_with_retry(
-        &state,
+    let archive_id = format!("ar_{}", Uuid::new_v4().simple());
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+    let numbers = crate::number::generate_archive_numbers_with_retry(
+        tx.as_mut(),
+        &archive_id,
         install.install_secret.as_str(),
+        install.province_code.as_str(),
+        install.city_code.as_str(),
         terminal_id,
         &admin.admin_pubkey,
     )
@@ -199,14 +217,15 @@ async fn create_archive(
         ));
     }
 
-    let voting = req.voting_eligible.unwrap_or(citizen_status == "NORMAL");
+    let voting = dangan::normalize_voting_eligible(&citizen_status, req.voting_eligible);
 
     let now_ts = Utc::now().timestamp();
     let valid_from = dangan::archive_valid_from(now_ts);
-    let valid_until = dangan::archive_valid_until(now_ts);
+    let valid_until =
+        dangan::archive_valid_until(now_ts, dangan::archive_validity_years(now_ts, birth_date));
     let archive = Archive {
-        archive_id: format!("ar_{}", Uuid::new_v4().simple()),
-        archive_no: archive_no.clone(),
+        archive_id,
+        archive_no: numbers.archive_no.clone(),
         province_code: install.province_code,
         city_code: install.city_code,
         last_name: req.last_name.trim().to_string(),
@@ -214,7 +233,7 @@ async fn create_archive(
         birth_date: req.birth_date.trim().to_string(),
         gender_code: req.gender_code,
         height_cm: Some(height_cm),
-        passport_no: req.passport_no.unwrap_or_default(),
+        passport_no: numbers.passport_no.clone(),
         town_code,
         village_id,
         address: addr,
@@ -237,6 +256,7 @@ async fn create_archive(
         updated_at: now_ts,
     };
 
+    // 中文注释：号码池领取与档案写入必须同事务完成，避免回收号码被半消费。
     sqlx::query(
         "INSERT INTO archives (archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, town_code, village_id, address, status, citizen_status, voting_eligible, valid_from, valid_until, citizen_status_updated_at, archive_qr_payload, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)",
@@ -263,9 +283,13 @@ async fn create_archive(
     .bind(&archive.archive_qr_payload)
     .bind(archive.created_at)
     .bind(archive.updated_at)
-    .execute(&state.db)
+    .execute(tx.as_mut())
     .await
     .map_err(|_| err(StatusCode::CONFLICT, 3005, "archive_no conflict, retry exhausted"))?;
+
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     write_audit(
         &state,
@@ -280,7 +304,8 @@ async fn create_archive(
 
     Ok(Json(ok(CreateArchiveData {
         archive_id: archive.archive_id,
-        archive_no,
+        archive_no: numbers.archive_no,
+        passport_no: numbers.passport_no,
         status: archive.status,
         citizen_status: archive.citizen_status,
     })))
@@ -478,11 +503,12 @@ async fn update_archive(
         archive.height_cm = Some(v);
     }
     if let Some(v) = req.town_code {
-        archive.town_code = v;
+        archive.town_code = v.trim().to_string();
     }
     if let Some(v) = req.village_id {
-        archive.village_id = v;
+        archive.village_id = v.trim().to_string();
     }
+    address::validate_town_village(&state, &archive.town_code, &archive.village_id).await?;
     if let Some(v) = req.address {
         if v.chars().count() > 100 {
             return Err(err(
@@ -501,6 +527,8 @@ async fn update_archive(
     if let Some(v) = req.voting_eligible {
         archive.voting_eligible = v;
     }
+    archive.voting_eligible =
+        dangan::normalize_voting_eligible(&archive.citizen_status, Some(archive.voting_eligible));
 
     archive.updated_at = Utc::now().timestamp();
 
@@ -670,20 +698,27 @@ async fn create_archive_delete_challenge(
             "invalid admin pubkey",
         )
     })?;
+    let admin_pubkey_hex = normalize_pubkey_hex(&admin.admin_pubkey).ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid admin pubkey",
+        )
+    })?;
     let delete_payload = build_archive_delete_payload(
         &challenge_id,
         &archive.archive_id,
         &archive.archive_no,
-        &admin.admin_pubkey,
+        &admin_pubkey_hex,
         expire_at,
-    );
+    )?;
     let payload_hex = format!("0x{}", hex::encode(delete_payload.as_bytes()));
     let sign_request = build_archive_delete_sign_request(
         &challenge_id,
         issued_at,
         expire_at,
         &admin_address,
-        &admin.admin_pubkey,
+        &admin_pubkey_hex,
         &payload_hex,
         &archive,
     )?;
@@ -697,7 +732,7 @@ async fn create_archive_delete_challenge(
     .bind(&archive.archive_id)
     .bind(&archive.archive_no)
     .bind(&ctx.user_id)
-    .bind(&admin.admin_pubkey)
+    .bind(&admin_pubkey_hex)
     .bind(&delete_payload)
     .bind(expire_at)
     .bind(issued_at)
@@ -725,8 +760,6 @@ async fn complete_archive_delete(
     Json(req): Json<ArchiveDeleteCompleteRequest>,
 ) -> Result<Json<ApiResponse<ArchiveDeleteCompleteData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_archive_admin(&state, &headers).await?;
-    let archive = fetch_archive_by_id(&state, &archive_id).await?;
-    ensure_archive_not_deleted(&archive)?;
     let admin = find_admin_by_user_id(&state, &ctx.user_id).await?;
 
     if req.sig_alg != "sr25519" {
@@ -737,13 +770,20 @@ async fn complete_archive_delete(
         ));
     }
 
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
     let row = sqlx::query(
         "SELECT challenge_id, archive_id, archive_no, admin_id, admin_pubkey, delete_payload, expire_at, consumed
          FROM archive_delete_challenges
-         WHERE challenge_id = $1",
+         WHERE challenge_id = $1
+         FOR UPDATE",
     )
     .bind(req.challenge_id.trim())
-    .fetch_optional(&state.db)
+    .fetch_optional(tx.as_mut())
     .await
     .map_err(|_| {
         err(
@@ -772,6 +812,27 @@ async fn complete_archive_delete(
         return Err(err(StatusCode::GONE, 3012, "delete challenge expired"));
     }
     if challenge_archive_id != archive_id || challenge_admin_id != ctx.user_id {
+        return Err(err(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            3013,
+            "delete challenge mismatch",
+        ));
+    }
+
+    let archive_row = sqlx::query(
+        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, COALESCE(valid_from,'') AS valid_from, COALESCE(valid_until,'') AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
+         FROM archives
+         WHERE archive_id = $1
+         FOR UPDATE",
+    )
+    .bind(&archive_id)
+    .fetch_optional(tx.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))?
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
+    let archive = row_to_archive(archive_row);
+    ensure_archive_not_deleted(&archive)?;
+    if archive.archive_no != row.get::<String, _>("archive_no") {
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3013,
@@ -820,30 +881,40 @@ async fn complete_archive_delete(
         return Err(err(StatusCode::GONE, 3012, "delete challenge expired"));
     }
 
-    crate::login::verify_wumin_login_signature(
+    if let Err(reason) = crate::login::verify_wumin_login_signature(
         &signed_pubkey,
         &delete_payload,
         req.signature.trim(),
-    )
-    .map_err(|_| {
-        err(
+    ) {
+        let _ = write_audit(
+            &state,
+            Some(ctx.user_id.clone()),
+            "DELETE_ARCHIVE",
+            "CITIZEN_ARCHIVE",
+            Some(req.challenge_id.clone()),
+            "FAILED",
+            serde_json::json!({"reason": reason}),
+        )
+        .await;
+        return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3016,
             "delete signature verify failed",
-        )
-    })?;
+        ));
+    }
 
     let deleted_at = Utc::now().timestamp();
     let delete_result = sqlx::query(
         "UPDATE archives
-         SET status='DELETED', deleted_at=$1, deleted_by=$2, delete_reason=$3, updated_at=$1
+         SET status='DELETED', citizen_status='REVOKED', voting_eligible=false,
+             citizen_status_updated_at=$1, deleted_at=$1, deleted_by=$2, delete_reason=$3, updated_at=$1
          WHERE archive_id=$4 AND status <> 'DELETED'",
     )
     .bind(deleted_at)
     .bind(&ctx.user_id)
     .bind("wumin signed archive delete")
     .bind(&archive_id)
-    .execute(&state.db)
+    .execute(tx.as_mut())
     .await
     .map_err(|_| {
         err(
@@ -861,7 +932,7 @@ async fn complete_archive_delete(
     )
     .bind(deleted_at)
     .bind(req.challenge_id.trim())
-    .execute(&state.db)
+    .execute(tx.as_mut())
     .await
     .map_err(|_| {
         err(
@@ -871,25 +942,44 @@ async fn complete_archive_delete(
         )
     })?;
 
-    write_audit(
-        &state,
-        Some(ctx.user_id.clone()),
-        "DELETE_ARCHIVE",
-        "CITIZEN_ARCHIVE",
-        Some(archive_id.clone()),
-        "SUCCESS",
-        serde_json::json!({
-            "archive_no": archive.archive_no,
-            "deleted_at": deleted_at,
-            "signer_pubkey": signed_pubkey
-        }),
+    sqlx::query(
+        "INSERT INTO audit_logs (log_id, operator_user_id, action, target_type, target_id, result, detail, created_at)
+         VALUES ($1, $2, 'DELETE_ARCHIVE', 'CITIZEN_ARCHIVE', $3, 'SUCCESS', $4, $5)",
     )
-    .await?;
+    .bind(format!("log_{}", Uuid::new_v4().simple()))
+    .bind(&ctx.user_id)
+    .bind(&archive_id)
+    .bind(sqlx::types::Json(serde_json::json!({
+        "archive_no": archive.archive_no,
+        "deleted_at": deleted_at,
+        "signer_pubkey": signed_pubkey
+    })))
+    .bind(deleted_at)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "write audit failed"))?;
+
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     Ok(Json(ok(ArchiveDeleteCompleteData {
         archive_id,
         deleted_at,
         deleted_by: ctx.user_id,
+    })))
+}
+
+async fn export_status_file(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<StatusExportData>>, (StatusCode, Json<ApiError>)> {
+    authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let export_file = dangan::build_and_record_cpms_status_export(&state).await?;
+    let file_name = format!("cpms-annual-status-report-{}.json", export_file.exported_at);
+    Ok(Json(ok(StatusExportData {
+        file_name,
+        export_file,
     })))
 }
 
@@ -977,15 +1067,19 @@ fn build_archive_delete_payload(
     archive_no: &str,
     admin_pubkey: &str,
     expire_at: i64,
-) -> String {
-    format!(
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    // 中文注释：wumin 冷钱包按 0x 32 字节公钥识别 CPMS 删除 payload，不能输出裸 hex。
+    let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid admin pubkey",
+        )
+    })?;
+    Ok(format!(
         "CPMS_ARCHIVE_DELETE_V1|{}|{}|{}|{}|{}",
-        challenge_id,
-        archive_id,
-        archive_no,
-        admin_pubkey.trim().to_lowercase(),
-        expire_at
-    )
+        challenge_id, archive_id, archive_no, admin_pubkey_hex, expire_at
+    ))
 }
 
 fn build_archive_delete_sign_request(
@@ -998,6 +1092,13 @@ fn build_archive_delete_sign_request(
     archive: &Archive,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     // 中文注释：display 字段必须与 wumin 的 payload 解码结果一致，否则 wumin 会拒签。
+    let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5003,
+            "invalid admin pubkey",
+        )
+    })?;
     let sign_request = serde_json::json!({
         "proto": crate::qr::WUMIN_QR_V1,
         "kind": crate::qr::QrKind::SignRequest.wire(),
@@ -1006,7 +1107,7 @@ fn build_archive_delete_sign_request(
         "expires_at": expire_at,
         "body": {
             "address": admin_address,
-            "pubkey": admin_pubkey,
+            "pubkey": admin_pubkey_hex,
             "sig_alg": "sr25519",
             "payload_hex": payload_hex,
             "display": {
@@ -1015,7 +1116,7 @@ fn build_archive_delete_sign_request(
                 "fields": [
                     { "key": "archive_no", "label": "档案号", "value": archive.archive_no },
                     { "key": "archive_id", "label": "档案ID", "value": archive.archive_id },
-                    { "key": "admin_pubkey", "label": "管理员公钥", "value": admin_pubkey },
+                    { "key": "admin_pubkey", "label": "管理员公钥", "value": admin_pubkey_hex },
                     { "key": "expires_at", "label": "过期时间", "value": expire_at.to_string() }
                 ]
             }
@@ -1038,14 +1139,17 @@ fn payload_sha256_hex(bytes: &[u8]) -> String {
     format!("0x{}", hex::encode(digest))
 }
 
-fn validate_birth_date(value: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
+fn validate_birth_date(value: &str) -> Result<NaiveDate, (StatusCode, Json<ApiError>)> {
     let trimmed = value.trim();
     if trimmed.len() != 10 {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"));
     }
-    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+    let birth_date = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
-    Ok(())
+    if birth_date > Utc::now().date_naive() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"));
+    }
+    Ok(birth_date)
 }
 
 fn validate_height_cm(value: f32) -> Result<(), (StatusCode, Json<ApiError>)> {
@@ -1053,4 +1157,88 @@ fn validate_height_cm(value: f32) -> Result<(), (StatusCode, Json<ApiError>)> {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid height_cm"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_archive() -> Archive {
+        Archive {
+            archive_id: "ar_test".to_string(),
+            archive_no: "ARCHIVE123".to_string(),
+            province_code: "ZS".to_string(),
+            city_code: "001".to_string(),
+            last_name: "吴".to_string(),
+            first_name: "明".to_string(),
+            birth_date: "1988-05-20".to_string(),
+            gender_code: "M".to_string(),
+            height_cm: Some(175.0),
+            passport_no: "ZSABCDEFG1".to_string(),
+            town_code: "100001".to_string(),
+            village_id: "village-1".to_string(),
+            address: "测试地址".to_string(),
+            status: "ACTIVE".to_string(),
+            citizen_status: "NORMAL".to_string(),
+            voting_eligible: true,
+            valid_from: "2026-05-29".to_string(),
+            valid_until: "2036-05-29".to_string(),
+            citizen_status_updated_at: 1_779_984_000,
+            wallet_address: None,
+            wallet_pubkey: None,
+            wallet_sig_alg: "sr25519".to_string(),
+            wallet_bound_at: None,
+            wallet_bound_by: None,
+            archive_qr_payload: String::new(),
+            deleted_at: None,
+            deleted_by: None,
+            delete_reason: None,
+            created_at: 1_779_984_000,
+            updated_at: 1_779_984_000,
+        }
+    }
+
+    #[test]
+    fn archive_delete_payload_uses_canonical_0x_admin_pubkey() {
+        let bare_pubkey = "11".repeat(32);
+        let payload = build_archive_delete_payload(
+            "adc_test",
+            "ar_test",
+            "ARCHIVE123",
+            &bare_pubkey,
+            1_779_984_120,
+        )
+        .unwrap_or_else(|_| panic!("valid pubkey should build payload"));
+
+        assert_eq!(
+            payload,
+            format!(
+                "CPMS_ARCHIVE_DELETE_V1|adc_test|ar_test|ARCHIVE123|0x{}|1779984120",
+                bare_pubkey
+            )
+        );
+    }
+
+    #[test]
+    fn archive_delete_sign_request_uses_canonical_0x_admin_pubkey() {
+        let bare_pubkey = "22".repeat(32);
+        let qr = build_archive_delete_sign_request(
+            "adc_test",
+            1_779_984_000,
+            1_779_984_120,
+            "5AdminAddress",
+            &bare_pubkey,
+            "0x7061796c6f6164",
+            &sample_archive(),
+        )
+        .unwrap_or_else(|_| panic!("valid pubkey should build sign request"));
+        let json: serde_json::Value =
+            serde_json::from_str(&qr).expect("sign request should be valid json");
+
+        assert_eq!(json["body"]["pubkey"], format!("0x{}", bare_pubkey));
+        assert_eq!(
+            json["body"]["display"]["fields"][2]["value"],
+            format!("0x{}", bare_pubkey)
+        );
+    }
 }

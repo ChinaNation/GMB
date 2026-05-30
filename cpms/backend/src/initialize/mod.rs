@@ -1,5 +1,9 @@
 use std::env;
 
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -10,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use chrono::Utc;
-use rand::rngs::OsRng;
+use rand::{rngs::OsRng, RngCore};
 use schnorrkel::MiniSecretKey;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -25,65 +29,61 @@ const INSTALL_SECRET_KEY_ID: &str = "INSTALL_SECRET";
 
 // ── 本机密钥加密存储 ─────────────────────────────────────────────────────
 // 中文注释：使用环境变量 CPMS_KEY_ENCRYPT_SECRET（32 字节 hex）作为主密钥，
-// 对 ARCHIVE 签名私钥和 install_secret 做本机加密后存入 DB。
-// 未配置主密钥时允许开发环境明文落库，但会输出警告。
+// 对 ARCHIVE 签名私钥和 install_secret 做 AES-GCM 加密后存入 DB；缺失主密钥时拒绝初始化。
 
-fn master_encrypt_key() -> Option<[u8; 32]> {
-    let hex_str = env::var("CPMS_KEY_ENCRYPT_SECRET").ok()?;
-    let bytes = hex::decode(hex_str.trim().trim_start_matches("0x")).ok()?;
+fn master_encrypt_key() -> Result<[u8; 32], String> {
+    let hex_str = env::var("CPMS_KEY_ENCRYPT_SECRET")
+        .map_err(|_| "CPMS_KEY_ENCRYPT_SECRET not set".to_string())?;
+    let bytes = hex::decode(hex_str.trim().trim_start_matches("0x"))
+        .map_err(|_| "CPMS_KEY_ENCRYPT_SECRET must be 32-byte hex".to_string())?;
     if bytes.len() != 32 {
-        return None;
+        return Err("CPMS_KEY_ENCRYPT_SECRET must be 32-byte hex".to_string());
     }
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
-    Some(key)
+    Ok(key)
 }
 
-/// 用主密钥 + key_id 派生的流密钥对 32 字节 secret 做 XOR 加密/解密。
-fn xor_with_derived_key(master: &[u8; 32], key_id: &str, data: &[u8; 32]) -> [u8; 32] {
+fn secret_cipher(key_id: &str) -> Result<Aes256Gcm, String> {
+    let master = master_encrypt_key()?;
     let mut hasher = Blake2b256::new();
     hasher.update(master);
     hasher.update(key_id.as_bytes());
-    let derived = hasher.finalize();
-    let mut out = [0u8; 32];
-    for i in 0..32 {
-        out[i] = data[i] ^ derived[i];
-    }
-    out
+    let key = hasher.finalize();
+    Aes256Gcm::new_from_slice(&key).map_err(|_| "invalid derived secret key".to_string())
 }
 
-fn encrypt_secret(key_id: &str, secret_bytes: &[u8; 32]) -> String {
-    match master_encrypt_key() {
-        Some(master) => {
-            let encrypted = xor_with_derived_key(&master, key_id, secret_bytes);
-            format!("enc:{}", hex::encode(encrypted))
-        }
-        None => {
-            eprintln!("WARNING: CPMS_KEY_ENCRYPT_SECRET not set, storing CPMS secret in plaintext");
-            hex::encode(secret_bytes)
-        }
-    }
+fn encrypt_secret(key_id: &str, secret_bytes: &[u8; 32]) -> Result<String, String> {
+    let cipher = secret_cipher(key_id)?;
+    let mut nonce_bytes = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), secret_bytes.as_slice())
+        .map_err(|_| "encrypt CPMS secret failed".to_string())?;
+    Ok(format!(
+        "enc:gcm:{}:{}",
+        hex::encode(nonce_bytes),
+        hex::encode(ciphertext)
+    ))
 }
 
 fn decrypt_secret(key_id: &str, stored: &str) -> Option<Vec<u8>> {
-    if let Some(enc_hex) = stored.strip_prefix("enc:") {
-        let master = master_encrypt_key()?;
-        let encrypted = hex::decode(enc_hex).ok()?;
-        if encrypted.len() != 32 {
-            return None;
-        }
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&encrypted);
-        let decrypted = xor_with_derived_key(&master, key_id, &arr);
-        Some(decrypted.to_vec())
-    } else {
-        crate::decode_bytes(stored)
+    let rest = stored.strip_prefix("enc:gcm:")?;
+    let (nonce_hex, cipher_hex) = rest.split_once(':')?;
+    let nonce = hex::decode(nonce_hex).ok()?;
+    if nonce.len() != 12 {
+        return None;
     }
+    let ciphertext = hex::decode(cipher_hex).ok()?;
+    let cipher = secret_cipher(key_id).ok()?;
+    cipher
+        .decrypt(Nonce::from_slice(&nonce), ciphertext.as_slice())
+        .ok()
 }
 
 fn encrypt_install_secret(install_secret: &str) -> Result<String, String> {
     let bytes = decode_32_byte_hex(install_secret)?;
-    Ok(encrypt_secret(INSTALL_SECRET_KEY_ID, &bytes))
+    encrypt_secret(INSTALL_SECRET_KEY_ID, &bytes)
 }
 
 fn decrypt_install_secret(stored: &str) -> Option<String> {
@@ -187,6 +187,25 @@ pub(crate) fn router() -> Router<AppState> {
         )
 }
 
+pub(crate) async fn ensure_secret_config(db: &sqlx::PgPool) -> Result<(), String> {
+    let has_stored_secret: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM system_install
+            WHERE id = 1 AND install_secret IS NOT NULL AND install_secret <> ''
+            UNION ALL
+            SELECT 1 FROM qr_sign_keys
+            LIMIT 1
+         )",
+    )
+    .fetch_one(db)
+    .await
+    .map_err(|e| format!("query CPMS secret state failed: {e}"))?;
+    if has_stored_secret {
+        master_encrypt_key()?;
+    }
+    Ok(())
+}
+
 async fn install_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<InstallStatusData>>, (StatusCode, Json<ApiError>)> {
@@ -278,9 +297,10 @@ async fn initialize_install(
         .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
 
     let install_secret_stored = encrypt_install_secret(qr_payload.install_secret.as_str())
-        .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
+        .map_err(|reason| err(StatusCode::SERVICE_UNAVAILABLE, 5003, &reason))?;
     let (cpms_pubkey, secret_raw) = generate_sr25519_keypair_raw();
-    let secret_stored = encrypt_secret(ARCHIVE_SIGN_KEY_ID, &secret_raw);
+    let secret_stored = encrypt_secret(ARCHIVE_SIGN_KEY_ID, &secret_raw)
+        .map_err(|reason| err(StatusCode::SERVICE_UNAVAILABLE, 5003, &reason))?;
     let now_ts = Utc::now().timestamp();
 
     let mut tx = state
@@ -378,13 +398,13 @@ async fn initialize_install(
         )
     })?;
 
+    crate::address::sync_city_address_by_sfid_in_tx(tx.as_mut(), qr_payload.sfid_number.as_str())
+        .await
+        .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
+
     tx.commit()
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
-
-    crate::address::sync_city_address_by_sfid(&state.db, qr_payload.sfid_number.as_str())
-        .await
-        .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
 
     write_audit(
         &state,
@@ -638,10 +658,11 @@ fn validate_sfid_install_qr(payload: &SfidInstallQrPayload) -> Result<(), String
     {
         return Err("invalid sfid install qr payload".to_string());
     }
-    let (province_code, city_code) = parse_sfid_area_codes(payload.sfid_number.trim());
-    if province_code.is_none() || city_code.is_none() {
-        return Err("invalid sfid_number area code".to_string());
-    }
+    crate::address::validate_install_area(
+        payload.sfid_number.trim(),
+        payload.province_name.trim(),
+        payload.city_name.trim(),
+    )?;
     decode_32_byte_hex(payload.install_secret.as_str())?;
     Ok(())
 }

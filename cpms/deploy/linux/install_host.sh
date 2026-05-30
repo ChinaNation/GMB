@@ -62,17 +62,27 @@ generate_password() {
   fi
 }
 
+generate_secret_hex32() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+  fi
+}
+
 setup_database() {
   local db_name="cpms"
   local db_user="cpms"
   local db_password
+  local key_encrypt_secret
   db_password="$(generate_password)"
+  key_encrypt_secret="$(generate_secret_hex32)"
 
   install -d -m 0750 /etc/cpms
   cat >/etc/cpms/cpms-backend.env <<EOF
 CPMS_BIND=0.0.0.0:8080
 CPMS_DATABASE_URL=postgresql://${db_user}:${db_password}@127.0.0.1:5432/${db_name}
-CPMS_INSTALL_FILE=/var/lib/cpms/runtime/cpms_install_init.json
+CPMS_KEY_ENCRYPT_SECRET=${key_encrypt_secret}
 EOF
   chmod 0600 /etc/cpms/cpms-backend.env
   chown root:cpms /etc/cpms/cpms-backend.env

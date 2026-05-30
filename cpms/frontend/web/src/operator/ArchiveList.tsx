@@ -79,7 +79,7 @@ export default function ArchiveList() {
               <td>{calcAge(a.birth_date)}</td>
               <td>
                 <span className={`tag ${a.citizen_status === 'NORMAL' ? 'tag--success' : 'tag--danger'}`}>
-                  {a.citizen_status === 'NORMAL' ? '正常' : '异常'}
+                  {a.citizen_status === 'NORMAL' ? '正常' : '注销'}
                 </span>
               </td>
               <td>{new Date(a.created_at * 1000).toLocaleDateString()}</td>

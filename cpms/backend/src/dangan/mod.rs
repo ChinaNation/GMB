@@ -1,6 +1,9 @@
 //! # 档案管理模块 (dangan)
 //!
-//! 档案号生成、ARCHIVE 二维码载荷构造与签名、公民状态校验。
+//! ARCHIVE 二维码载荷构造与签名、公民状态校验、有效期计算、年度状态导出。
+
+mod export;
+mod lifecycle;
 
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
@@ -16,13 +19,19 @@ use serde::Serialize;
 
 use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
 
+pub(crate) use lifecycle::run_due_archive_hard_delete;
+
 type Blake2b256 = Blake2b<U32>;
 
-const ARCHIVE_NO_MAX_RETRY: u32 = 20;
+pub(crate) const CITIZEN_STATUS_NORMAL: &str = "NORMAL";
+pub(crate) const CITIZEN_STATUS_REVOKED: &str = "REVOKED";
 const ARCHIVE_SIGN_KEY_ID: &str = "ARCHIVE";
-const ARCHIVE_NO_BODY_BYTES: usize = 16;
 const GEO_SEAL_PREFIX: &str = "g1";
-const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+pub(crate) use export::{
+    build_and_record_cpms_status_export, ensure_operator_annual_export_unlocked,
+    CpmsStatusExportFile,
+};
 
 /// SFID_CPMS_V1 / ARCHIVE 档案二维码载荷。
 #[derive(Clone, Serialize)]
@@ -47,122 +56,6 @@ pub(crate) struct ArchiveQrPayload {
 struct GeoSealClaims {
     /// 中文注释：归属密文只放机构 SFID 号；省市由 SFID 从 sfid_number 解码。
     sfid_number: String,
-}
-
-/// 生成不暴露省市和机构号的档案号。
-///
-/// 中文注释：`install_secret` 参与哈希域隔离，安全随机数提供全局碰撞强度，
-/// DB 唯一索引负责兜底拒绝本机重复；SFID 绑定时再做全局唯一最终校验。
-pub(crate) async fn generate_archive_no_with_retry(
-    state: &AppState,
-    install_secret: &str,
-    terminal_id: &str,
-    admin_pubkey: &str,
-) -> Result<String, (StatusCode, Json<ApiError>)> {
-    let mut counter: i64 = sqlx::query_scalar(
-        "INSERT INTO sequence_counters (seq_key, next_seq)
-         VALUES ('archive_no', 2)
-         ON CONFLICT (seq_key) DO UPDATE SET next_seq = sequence_counters.next_seq + 1
-         RETURNING next_seq - 1",
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "sequence alloc failed",
-        )
-    })?;
-
-    for _ in 0..ARCHIVE_NO_MAX_RETRY {
-        let mut random = [0u8; 32];
-        OsRng.fill_bytes(&mut random);
-        let body = archive_no_body(
-            install_secret,
-            terminal_id,
-            admin_pubkey,
-            counter,
-            random.as_slice(),
-        );
-        let checksum = archive_no_checksum(&body);
-        // 中文注释：档案号不携带协议前缀，避免把示例前缀固化成业务含义。
-        let archive_no = format!("{}-{}", body, checksum);
-
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM archives WHERE archive_no = $1)")
-                .bind(&archive_no)
-                .fetch_one(&state.db)
-                .await
-                .map_err(|_| {
-                    err(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        5001,
-                        "archive lookup failed",
-                    )
-                })?;
-
-        if !exists {
-            return Ok(archive_no);
-        }
-        counter += 1;
-    }
-
-    Err(err(
-        StatusCode::CONFLICT,
-        3005,
-        "archive_no conflict, retry exhausted",
-    ))
-}
-
-fn archive_no_body(
-    install_secret: &str,
-    terminal_id: &str,
-    admin_pubkey: &str,
-    counter: i64,
-    random: &[u8],
-) -> String {
-    let mut hasher = Blake2b256::new();
-    hasher.update(b"sfid-cpms-v1|archive-no|");
-    hasher.update(install_secret.as_bytes());
-    hasher.update(b"|");
-    hasher.update(terminal_id.as_bytes());
-    hasher.update(b"|");
-    hasher.update(admin_pubkey.as_bytes());
-    hasher.update(b"|");
-    hasher.update(counter.to_string().as_bytes());
-    hasher.update(b"|");
-    hasher.update(random);
-    let digest = hasher.finalize();
-    base32_no_padding(&digest[..ARCHIVE_NO_BODY_BYTES])
-}
-
-pub(crate) fn archive_no_checksum(body: &str) -> String {
-    let mut hasher = Blake2b256::new();
-    hasher.update(b"sfid-cpms-v1|archive-no-check|");
-    hasher.update(body.as_bytes());
-    let digest = hasher.finalize();
-    base32_no_padding(&digest[..4]).chars().take(2).collect()
-}
-
-fn base32_no_padding(bytes: &[u8]) -> String {
-    let mut out = String::new();
-    let mut buffer: u32 = 0;
-    let mut bits_left: u8 = 0;
-    for byte in bytes {
-        buffer = (buffer << 8) | (*byte as u32);
-        bits_left += 8;
-        while bits_left >= 5 {
-            let idx = ((buffer >> (bits_left - 5)) & 0x1f) as usize;
-            out.push(BASE32_ALPHABET[idx] as char);
-            bits_left -= 5;
-        }
-    }
-    if bits_left > 0 {
-        let idx = ((buffer << (5 - bits_left)) & 0x1f) as usize;
-        out.push(BASE32_ALPHABET[idx] as char);
-    }
-    out
 }
 
 /// 构造 ARCHIVE 载荷（SFID_CPMS_V1）。
@@ -206,18 +99,18 @@ pub(crate) async fn build_archive_qr_payload(
         install.cpms_pubkey.as_str(),
     )?;
     let geo_seal_hash = hash_hex(geo_seal.as_bytes());
-    let sign_source = build_archive_sign_source(
-        archive.archive_no.as_str(),
-        archive.citizen_status.as_str(),
-        archive.voting_eligible,
-        archive.valid_from.as_str(),
-        archive.valid_until.as_str(),
-        archive.citizen_status_updated_at,
-        sign_key.pubkey.as_str(),
-        geo_seal_hash.as_str(),
+    let sign_source = build_archive_sign_source(ArchiveSignSourceParts {
+        archive_no: archive.archive_no.as_str(),
+        citizen_status: archive.citizen_status.as_str(),
+        voting_eligible: archive.voting_eligible,
+        valid_from: archive.valid_from.as_str(),
+        valid_until: archive.valid_until.as_str(),
+        status_updated_at: archive.citizen_status_updated_at,
+        cpms_pubkey: sign_key.pubkey.as_str(),
+        geo_seal_hash: geo_seal_hash.as_str(),
         wallet_address,
         wallet_pubkey,
-    );
+    });
     let sig = sign_archive_payload_with_secret(&sign_key.secret_bytes, &sign_source)?;
 
     Ok(ArchiveQrPayload {
@@ -305,67 +198,33 @@ fn derive_geo_seal_key(install_secret: &str) -> [u8; 32] {
     key
 }
 
-fn build_archive_sign_source(
-    archive_no: &str,
-    citizen_status: &str,
+struct ArchiveSignSourceParts<'a> {
+    archive_no: &'a str,
+    citizen_status: &'a str,
     voting_eligible: bool,
-    valid_from: &str,
-    valid_until: &str,
+    valid_from: &'a str,
+    valid_until: &'a str,
     status_updated_at: i64,
-    cpms_pubkey: &str,
-    geo_seal_hash: &str,
-    wallet_address: &str,
-    wallet_pubkey: &str,
-) -> String {
-    format!(
-        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        archive_no,
-        citizen_status,
-        voting_eligible,
-        valid_from,
-        valid_until,
-        status_updated_at,
-        cpms_pubkey,
-        geo_seal_hash,
-        wallet_address,
-        wallet_pubkey
-    )
+    cpms_pubkey: &'a str,
+    geo_seal_hash: &'a str,
+    wallet_address: &'a str,
+    wallet_pubkey: &'a str,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn archive_sign_source_includes_passport_validity() {
-        let source = build_archive_sign_source(
-            "ARCHIVE-1",
-            "NORMAL",
-            true,
-            "2026-05-24",
-            "2036-05-23",
-            1_779_580_800,
-            "0xpub",
-            "0xseal",
-            "addr2027",
-            "0xwallet",
-        );
-
-        assert_eq!(
-            source,
-            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1779580800|0xpub|0xseal|addr2027|0xwallet"
-        );
-    }
-
-    #[test]
-    fn archive_validity_defaults_to_ten_year_passport_window() {
-        let start = DateTime::parse_from_rfc3339("2026-05-24T00:00:00Z")
-            .unwrap()
-            .timestamp();
-
-        assert_eq!(archive_valid_from(start), "2026-05-24");
-        assert_eq!(archive_valid_until(start), "2036-05-23");
-    }
+fn build_archive_sign_source(parts: ArchiveSignSourceParts<'_>) -> String {
+    format!(
+        "sfid-cpms-v1|archive|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        parts.archive_no,
+        parts.citizen_status,
+        parts.voting_eligible,
+        parts.valid_from,
+        parts.valid_until,
+        parts.status_updated_at,
+        parts.cpms_pubkey,
+        parts.geo_seal_hash,
+        parts.wallet_address,
+        parts.wallet_pubkey
+    )
 }
 
 fn geo_seal_aad(archive_no: &str, cpms_pubkey: &str) -> String {
@@ -374,23 +233,46 @@ fn geo_seal_aad(archive_no: &str, cpms_pubkey: &str) -> String {
 
 pub(crate) fn validate_citizen_status(status: &str) -> Result<(), (StatusCode, Json<ApiError>)> {
     match status {
-        "NORMAL" | "ABNORMAL" => Ok(()),
+        CITIZEN_STATUS_NORMAL | CITIZEN_STATUS_REVOKED => Ok(()),
         _ => Err(err(StatusCode::BAD_REQUEST, 1001, "invalid citizen_status")),
     }
+}
+
+pub(crate) fn normalize_voting_eligible(citizen_status: &str, requested: Option<bool>) -> bool {
+    // 中文注释：注销公民没有投票资格；正常公民允许独立配置有或没有投票资格。
+    citizen_status == CITIZEN_STATUS_NORMAL && requested.unwrap_or(true)
 }
 
 pub(crate) fn archive_valid_from(created_at: i64) -> String {
     archive_date(created_at).format("%Y-%m-%d").to_string()
 }
 
-pub(crate) fn archive_valid_until(created_at: i64) -> String {
+pub(crate) fn archive_valid_until(created_at: i64, years: i32) -> String {
     let start = archive_date(created_at);
-    let anniversary = NaiveDate::from_ymd_opt(start.year() + 10, start.month(), start.day())
-        .or_else(|| NaiveDate::from_ymd_opt(start.year() + 10, 2, 28))
-        .unwrap_or(start + Duration::days(3650));
+    let anniversary = NaiveDate::from_ymd_opt(start.year() + years, start.month(), start.day())
+        .or_else(|| NaiveDate::from_ymd_opt(start.year() + years, 2, 28))
+        .unwrap_or(start + Duration::days(365 * i64::from(years)));
     (anniversary - Duration::days(1))
         .format("%Y-%m-%d")
         .to_string()
+}
+
+pub(crate) fn archive_validity_years(created_at: i64, birth_date: NaiveDate) -> i32 {
+    let today = archive_date(created_at);
+    let birthday_this_year =
+        NaiveDate::from_ymd_opt(today.year(), birth_date.month(), birth_date.day())
+            .or_else(|| NaiveDate::from_ymd_opt(today.year(), 2, 28))
+            .unwrap_or(today);
+    let mut age = today.year() - birth_date.year();
+    if today < birthday_this_year {
+        age -= 1;
+    }
+    // 中文注释：创建档案当天已满 16 周岁签发 10 年有效期，未满 16 周岁签发 5 年。
+    if age >= 16 {
+        10
+    } else {
+        5
+    }
 }
 
 fn archive_date(timestamp: i64) -> NaiveDate {
@@ -425,4 +307,53 @@ pub(crate) fn sign_archive_payload_with_secret(
 
 fn hash_hex(bytes: &[u8]) -> String {
     format!("0x{}", hex::encode(Blake2b256::digest(bytes)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn archive_sign_source_includes_passport_validity() {
+        let source = build_archive_sign_source(ArchiveSignSourceParts {
+            archive_no: "ARCHIVE-1",
+            citizen_status: "NORMAL",
+            voting_eligible: true,
+            valid_from: "2026-05-24",
+            valid_until: "2036-05-23",
+            status_updated_at: 1_779_580_800,
+            cpms_pubkey: "0xpub",
+            geo_seal_hash: "0xseal",
+            wallet_address: "addr2027",
+            wallet_pubkey: "0xwallet",
+        });
+
+        assert_eq!(
+            source,
+            "sfid-cpms-v1|archive|ARCHIVE-1|NORMAL|true|2026-05-24|2036-05-23|1779580800|0xpub|0xseal|addr2027|0xwallet"
+        );
+    }
+
+    #[test]
+    fn archive_validity_defaults_to_ten_year_passport_window() {
+        let start = DateTime::parse_from_rfc3339("2026-05-24T00:00:00Z")
+            .unwrap()
+            .timestamp();
+
+        assert_eq!(archive_valid_from(start), "2026-05-24");
+        assert_eq!(archive_valid_until(start, 10), "2036-05-23");
+        assert_eq!(archive_valid_until(start, 5), "2031-05-23");
+    }
+
+    #[test]
+    fn archive_validity_years_follow_age_boundary() {
+        let now = DateTime::parse_from_rfc3339("2026-05-24T00:00:00Z")
+            .unwrap()
+            .timestamp();
+        let under_16 = NaiveDate::from_ymd_opt(2010, 5, 25).unwrap();
+        let exactly_16 = NaiveDate::from_ymd_opt(2010, 5, 24).unwrap();
+
+        assert_eq!(archive_validity_years(now, under_16), 5);
+        assert_eq!(archive_validity_years(now, exactly_16), 10);
+    }
 }

@@ -31,7 +31,7 @@ export default function CitizenStatusEdit() {
         <label>目标状态</label>
         <select className="form-input" value={status} onChange={e => setStatus(e.target.value)}>
           <option value="NORMAL">正常 (NORMAL)</option>
-          <option value="ABNORMAL">异常 (ABNORMAL)</option>
+          <option value="REVOKED">注销 (REVOKED)</option>
         </select>
       </div>
       <button className="btn btn--primary" onClick={handleSubmit} disabled={loading}>

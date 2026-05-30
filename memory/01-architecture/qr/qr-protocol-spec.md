@@ -47,7 +47,7 @@
 |---|---|---|---|---|
 | `login_challenge` | 临时 | SFID/CPMS 后端 | wumin | 登录挑战码 |
 | `login_receipt` | 临时 | wumin | SFID/CPMS 后端 | 登录回执码 |
-| `sign_request` | 临时 | wuminapp | wumin | 离线签名请求 |
+| `sign_request` | 临时 | wuminapp / citizenchain/node / CPMS | wumin | 离线签名请求 |
 | `sign_response` | 临时 | wumin | wuminapp | 离线签名回执 |
 | `user_contact` | **固定** | wuminapp | wuminapp / citizenchain / sfid 前端 | 个人联系码 |
 | `user_transfer` | 临时 | wuminapp | wuminapp / citizenchain | 临时收款码 |

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../auth';
 import * as api from '../api';
+import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import { startCameraScanner } from '../utils/cameraScanner';
 
 export default function LoginPage() {
@@ -45,14 +46,14 @@ export default function LoginPage() {
     }
   };
 
-  const doLogin = (accessToken: string, user: { user_id: string; role: string }) => {
+  const doLogin = (user: { user_id: string; role: string }) => {
     if (loggedInRef.current) return;
     loggedInRef.current = true;
     stopPolling();
     stopScanner();
     setScannerActive(false);
-    login(accessToken, user);
-    navigate(user.role === 'SUPER_ADMIN' ? '/admin' : '/operator');
+    login(user);
+    navigate('/admin');
   };
 
   useEffect(() => {
@@ -72,8 +73,8 @@ export default function LoginPage() {
         pollingRef.current = window.setInterval(async () => {
           try {
             const r = await api.authQrResult(challenge_id, session_id);
-            if (r.data?.status === 'SUCCESS' && r.data.access_token && r.data.user) {
-              doLogin(r.data.access_token, r.data.user);
+            if (r.data?.status === 'SUCCESS' && r.data.user) {
+              doLogin(r.data.user);
             } else if (r.data?.status === 'EXPIRED') {
               stopPolling();
               setError('二维码已过期，请重新生成');
@@ -110,7 +111,6 @@ export default function LoginPage() {
     if (!qrChallenge) return;
     setScanSubmitting(true);
     try {
-      const { parseQrEnvelope, QrParseError } = await import('../qr/wuminQr');
       let env;
       try {
         env = parseQrEnvelope(raw);
@@ -140,8 +140,8 @@ export default function LoginPage() {
       });
 
       const result = await api.authQrResult(qrChallenge.challenge_id, qrChallenge.session_id);
-      if (result.data?.status === 'SUCCESS' && result.data.access_token && result.data.user) {
-        doLogin(result.data.access_token, result.data.user);
+      if (result.data?.status === 'SUCCESS' && result.data.user) {
+        doLogin(result.data.user);
         return;
       }
       setError('登录验证失败，请重试');
@@ -149,6 +149,10 @@ export default function LoginPage() {
       const msg = e instanceof Error ? e.message : '签名处理失败';
       if (msg.includes('admin not found')) {
         setError('非管理员禁止登录本系统');
+      } else if (msg.includes('annual status export required')) {
+        const tip = '上一年度数据超过1月5日仍未导出，操作管理员登录已锁定。请联系超级管理员在系统设置中导出年度报告后再登录。';
+        window.alert(tip);
+        setError(tip);
       } else {
         setError(msg);
       }

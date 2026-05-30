@@ -18,7 +18,7 @@
 
 CPMS 只有 `SUPER_ADMIN` 和 `OPERATOR_ADMIN` 两种管理员。`SUPER_ADMIN` 是上级角色，
 可以执行所有档案业务操作；`OPERATOR_ADMIN` 可以执行日常档案业务，但不能查看系统设置，
-也不能创建、停用或删除操作员。
+也不能创建或删除操作员。操作管理员删除是物理删除，并同步清理其本机会话；超级管理员不能被删除。
 
 投票账户绑定/更换属于档案业务，允许 `SUPER_ADMIN` 和 `OPERATOR_ADMIN` 操作。
 公民状态修改同样属于档案业务，两种管理员都可以操作。
@@ -94,16 +94,29 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 
 - 更新：刷新当前 ARCHIVE 二维码内容。
 - 下载：下载当前二维码图片。
-- 打印：记录打印审计并调用浏览器打印。
+- 打印：记录打印审计并调用浏览器打印；打印媒体只输出“公民档案详情”卡片，不输出页面导航
+  或删除/编辑/返回列表/更换/更新/下载/打印等操作按钮。
 
 ## 6. 软删除
 
 公民档案删除必须走 wumin 签名确认，不能物理删除。CPMS 创建 `WUMIN_QR_V1 / sign_request`
-删除签名请求，当前登录管理员使用 wumin 签名后返回 `sign_response`。后端只接受当前登录
-管理员本人公钥签出的回执，验签成功后设置:
+删除签名请求，当前登录管理员使用 wumin 签名后返回 `sign_response`。删除签名请求锁定当前
+登录 CPMS 管理员的 `address / pubkey`，其中二维码 `body.pubkey` 和删除 payload 中的
+`admin_pubkey` 必须是 `0x` + 64 位小写 hex。
+
+删除 payload 固定为:
+
+```text
+CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expires_at
+```
+
+后端只接受当前登录管理员本人公钥签出的回执。完成接口先锁定删除 challenge 和档案行；
+验签成功后在同一事务内消费 challenge、软删除档案并写入审计，避免重复提交:
 
 ```text
 status = DELETED
+citizen_status = REVOKED
+voting_eligible = false
 deleted_at = 当前时间
 deleted_by = 当前登录管理员 user_id
 delete_reason = wumin signed archive delete
