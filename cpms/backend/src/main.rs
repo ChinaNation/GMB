@@ -38,7 +38,6 @@ struct AdminUser {
     user_id: String,
     admin_pubkey: String,
     role: String,
-    status: String,
     immutable: bool,
     managed_key_id: Option<String>,
     created_at: i64,
@@ -202,21 +201,26 @@ async fn find_admin_by_pubkey(
         .unwrap_or(admin_pubkey.trim())
         .to_lowercase();
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at
+        "SELECT user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at
          FROM admin_users
          WHERE admin_pubkey = $1",
     )
     .bind(&normalized)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query admin failed",
+        )
+    })?
     .ok_or_else(|| err(StatusCode::NOT_FOUND, 2002, "admin_pubkey not found"))?;
 
     Ok(AdminUser {
         user_id: row.get("user_id"),
         admin_pubkey: row.get("admin_pubkey"),
         role: row.get("role"),
-        status: row.get("status"),
         immutable: row.get("immutable"),
         managed_key_id: row.get("managed_key_id"),
         created_at: row.get("created_at"),
@@ -229,21 +233,26 @@ async fn find_admin_by_user_id(
     user_id: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at
+        "SELECT user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at
          FROM admin_users
          WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(&state.db)
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query admin failed"))?
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query admin failed",
+        )
+    })?
     .ok_or_else(|| err(StatusCode::NOT_FOUND, 2002, "admin user not found"))?;
 
     Ok(AdminUser {
         user_id: row.get("user_id"),
         admin_pubkey: row.get("admin_pubkey"),
         role: row.get("role"),
-        status: row.get("status"),
         immutable: row.get("immutable"),
         managed_key_id: row.get("managed_key_id"),
         created_at: row.get("created_at"),

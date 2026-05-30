@@ -72,8 +72,9 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 软删除后的 100 年内，档案号和护照号仍在 `archives` 表中占用，不进入生成池。
 - 从 `deleted_at` 的 UTC 日期起满 100 年后，`lifecycle` 在服务启动时和每日后台任务中扫描到期档案。
 - 硬删除使用单事务：锁定到期档案、写入 `archive_number_recycle_pool`、写入 `archive_hard_delete_logs`、清理删除挑战和打印记录、物理删除 `archives` 行。
+- `archive_number_recycle_pool` 只对 `used_at IS NULL` 的档案号和护照号建立唯一约束；同一号码复用后再次满 100 年硬删除，可以生成新的历史池项。
 - `archive_hard_delete_logs` 只保存 `source_archive_id / archive_no / passport_no / deleted_at / hard_deleted_at / reason`，不保存姓名、出生日期、地址等实名原文。
-- SFID 号不在 CPMS 回收；CPMS 后续通过年度导出向 SFID 更新档案号状态、公民状态和投票状态。
+- SFID 号不在 CPMS 回收；CPMS 通过年度导出向 SFID 更新档案号状态、公民状态和投票状态。
 
 ## 8. 年度状态导出
 
@@ -81,7 +82,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 导出只生成离线 JSON 文件内容，不进行联网推送。
 - 年度报告只能由超级管理员在每年 UTC 1 月 1 日到 1 月 10 日导出，导出内容为上一年度的更新数据。
 - UTC 1 月 6 日到 1 月 10 日，如果上一年度仍未导出，`OPERATOR_ADMIN` 登录和已有会话都会被锁定；超级管理员不受影响，必须先导出年度报告。
-- `cpms_status_exports` 记录每个年度最近一次导出批次、导出时间、记录数量和 `records_hash`，用于判断操作管理员是否需要锁定。
+- `cpms_status_exports` 记录每个年度首次导出的批次、导出时间、记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时返回同一份文件，不重新生成签名批次。
 - `status_records` 只包含 `archive_no / citizen_status / voting_eligible / status_updated_at`，用于 SFID 更新公民状态和投票资格。
 - `number_release_records` 只包含 `archive_no / passport_no / hard_deleted_at`，用于表达 100 年硬删除后号码可复用；该列表不表示公民状态变化。
 - 导出文件不得包含姓名、出生日期、地址、钱包地址、钱包公钥等实名或绑定细节。

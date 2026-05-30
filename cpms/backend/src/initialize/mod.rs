@@ -173,7 +173,6 @@ struct BindSuperAdminData {
     user_id: String,
     admin_pubkey: String,
     role: String,
-    status: String,
     managed_key_id: String,
 }
 
@@ -210,7 +209,7 @@ async fn install_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<InstallStatusData>>, (StatusCode, Json<ApiError>)> {
     let install_row = sqlx::query(
-        "SELECT sfid_number, province_name, city_name, cpms_pubkey
+        "SELECT sfid_number, province_code, city_code, province_name, city_name, cpms_pubkey
          FROM system_install
          WHERE id = 1",
     )
@@ -227,10 +226,14 @@ async fn install_status(
     let sfid_number = install_row
         .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("sfid_number").ok().flatten());
-    let (province_code, city_code) = sfid_number
-        .as_deref()
-        .map(parse_sfid_area_codes)
-        .unwrap_or((None, None));
+    let province_code = install_row.as_ref().and_then(|r| {
+        r.try_get::<Option<String>, _>("province_code")
+            .ok()
+            .flatten()
+    });
+    let city_code = install_row
+        .as_ref()
+        .and_then(|r| r.try_get::<Option<String>, _>("city_code").ok().flatten());
     let province_name = install_row.as_ref().and_then(|r| {
         r.try_get::<Option<String>, _>("province_name")
             .ok()
@@ -248,18 +251,17 @@ async fn install_status(
         .iter()
         .any(|k| k.key_id == ARCHIVE_SIGN_KEY_ID && k.status == "ACTIVE");
 
-    let super_admin_bound_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN' AND status = 'ACTIVE'",
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "query super admin failed",
-        )
-    })?;
+    let super_admin_bound_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "query super admin failed",
+                )
+            })?;
 
     Ok(Json(ok(InstallStatusData {
         initialized: sfid_number.is_some() && archive_signing_ready,
@@ -295,6 +297,11 @@ async fn initialize_install(
         .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
     validate_sfid_install_qr(&qr_payload)
         .map_err(|reason| err(StatusCode::BAD_REQUEST, 4002, &reason))?;
+    let (province_code, city_code) = parse_sfid_area_codes(qr_payload.sfid_number.as_str());
+    let province_code = province_code
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 4002, "invalid install sfid_number"))?;
+    let city_code = city_code
+        .ok_or_else(|| err(StatusCode::BAD_REQUEST, 4002, "invalid install sfid_number"))?;
 
     let install_secret_stored = encrypt_install_secret(qr_payload.install_secret.as_str())
         .map_err(|reason| err(StatusCode::SERVICE_UNAVAILABLE, 5003, &reason))?;
@@ -337,14 +344,16 @@ async fn initialize_install(
     sqlx::query(
         "INSERT INTO system_install (
              id, sfid_number, install_secret, install_secret_hash, install_sig,
-             province_name, city_name, cpms_pubkey, initialized_at
+             province_code, city_code, province_name, city_name, cpms_pubkey, initialized_at
          )
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO UPDATE SET
              sfid_number = EXCLUDED.sfid_number,
              install_secret = EXCLUDED.install_secret,
              install_secret_hash = EXCLUDED.install_secret_hash,
              install_sig = EXCLUDED.install_sig,
+             province_code = EXCLUDED.province_code,
+             city_code = EXCLUDED.city_code,
              province_name = EXCLUDED.province_name,
              city_name = EXCLUDED.city_name,
              cpms_pubkey = EXCLUDED.cpms_pubkey,
@@ -354,6 +363,8 @@ async fn initialize_install(
     .bind(&install_secret_stored)
     .bind(install_secret_hash(qr_payload.install_secret.as_str()))
     .bind(qr_payload.sig.trim())
+    .bind(&province_code)
+    .bind(&city_code)
     .bind(qr_payload.province_name.trim())
     .bind(qr_payload.city_name.trim())
     .bind(&cpms_pubkey)
@@ -484,8 +495,8 @@ async fn bind_super_admin_from_wumin(
     }
 
     sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, role, status, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, 'SUPER_ADMIN', 'ACTIVE', TRUE, $3, $4, $5)",
+        "INSERT INTO admin_users (user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, 'SUPER_ADMIN', TRUE, $3, $4, $5)",
     )
     .bind(&user_id)
     .bind(&admin_pubkey)
@@ -517,7 +528,6 @@ async fn bind_super_admin_from_wumin(
         user_id,
         admin_pubkey,
         role: "SUPER_ADMIN".to_string(),
-        status: "ACTIVE".to_string(),
         managed_key_id: ARCHIVE_SIGN_KEY_ID.to_string(),
     })))
 }
@@ -573,7 +583,7 @@ pub(crate) async fn load_cpms_install_runtime(
     state: &AppState,
 ) -> Result<CpmsInstallRuntime, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT sfid_number, install_secret, cpms_pubkey
+        "SELECT sfid_number, province_code, city_code, install_secret, cpms_pubkey
          FROM system_install
          WHERE id = 1",
     )
@@ -595,12 +605,11 @@ pub(crate) async fn load_cpms_install_runtime(
         .ok_or_else(|| err(StatusCode::CONFLICT, 4003, "install_secret not found"))?;
 
     let sfid_number = read_required_text(&row, "sfid_number")?;
-    let (province_code, city_code) = parse_sfid_area_codes(&sfid_number);
 
     Ok(CpmsInstallRuntime {
         sfid_number,
-        province_code: province_code.unwrap_or_default(),
-        city_code: city_code.unwrap_or_default(),
+        province_code: read_required_text(&row, "province_code")?,
+        city_code: read_required_text(&row, "city_code")?,
         install_secret,
         cpms_pubkey: read_required_text(&row, "cpms_pubkey")?,
     })

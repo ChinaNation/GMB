@@ -37,7 +37,7 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 `install_secret_hash = blake2b_256(install_secret)`。CPMS 离线保存安装材料，不依赖外置 SFID 公钥完成初始化。
 
 ## 4. 数据落库
-- `system_install`：保存 `sfid_number / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
+- `system_install`：保存 `sfid_number / province_code / city_code / province_name / city_name / install_secret / install_secret_hash / cpms_pubkey`。
 - `qr_sign_keys`：保存本机 `ARCHIVE` 签发密钥。
 - `admin_users`：保存超级管理员和操作员账号。
 - `address_towns/address_villages`：在同一初始化事务内重建安装码对应市的镇/村路运行表。
@@ -50,6 +50,7 @@ sfid-cpms-v1|install|{sfid_number}|{province_name}|{city_name}|{install_secret_h
 - 初始化必须先完成 INSTALL 校验、主密钥校验、ARCHIVE 密钥生成、安装材料落库、地址表重建和超级管理员绑定前置校验；任何一步失败都不得提交半初始化状态。
 - `system_install.sfid_number` 已存在时拒绝重复初始化；本阶段按清库重装处理，不提供旧库迁移兼容。
 - 超级管理员只允许绑定 1 个，`admin_pubkey` 不允许重复。
+- `admin_users` 不保留停用状态字段；超级管理员不可删除，操作管理员删除即物理删除并清理会话。
 
 ## 6. 模块边界
 - 初始化相关路由与本机安装材料读取集中在 `initialize`。

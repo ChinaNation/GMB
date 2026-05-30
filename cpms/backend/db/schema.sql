@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS system_install (
   install_secret TEXT,
   install_secret_hash TEXT,
   install_sig TEXT,
+  province_code TEXT,
+  city_code TEXT,
   province_name TEXT,
   city_name TEXT,
   cpms_pubkey TEXT,
@@ -33,7 +35,6 @@ CREATE TABLE IF NOT EXISTS admin_users (
   admin_pubkey TEXT NOT NULL UNIQUE,
   admin_name TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
-  status TEXT NOT NULL CHECK (status = 'ACTIVE'),
   immutable BOOLEAN NOT NULL DEFAULT FALSE,
   managed_key_id TEXT UNIQUE,
   created_at BIGINT NOT NULL,
@@ -84,18 +85,18 @@ CREATE TABLE IF NOT EXISTS archives (
   city_code TEXT NOT NULL,
   last_name TEXT NOT NULL,
   first_name TEXT NOT NULL,
-  birth_date TEXT NOT NULL CHECK (birth_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+  birth_date DATE NOT NULL,
   gender_code TEXT NOT NULL CHECK (gender_code IN ('M', 'W')),
   height_cm REAL NOT NULL CHECK (height_cm BETWEEN 30 AND 260),
   passport_no TEXT NOT NULL UNIQUE,
   town_code TEXT NOT NULL DEFAULT '',
   village_id TEXT NOT NULL DEFAULT '',
   address TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DELETED')),
   citizen_status TEXT NOT NULL CHECK (citizen_status IN ('NORMAL', 'REVOKED')),
   voting_eligible BOOLEAN NOT NULL DEFAULT TRUE,
-  valid_from TEXT NOT NULL DEFAULT '',
-  valid_until TEXT NOT NULL DEFAULT '',
+  valid_from DATE NOT NULL,
+  valid_until DATE NOT NULL CHECK (valid_until >= valid_from),
   citizen_status_updated_at BIGINT NOT NULL DEFAULT 0,
   wallet_address TEXT,
   wallet_pubkey TEXT,
@@ -107,7 +108,13 @@ CREATE TABLE IF NOT EXISTS archives (
   deleted_by TEXT,
   delete_reason TEXT,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  CHECK (citizen_status <> 'REVOKED' OR voting_eligible = FALSE),
+  CHECK (
+    (status = 'ACTIVE' AND deleted_at IS NULL)
+    OR
+    (status = 'DELETED' AND deleted_at IS NOT NULL AND citizen_status = 'REVOKED' AND voting_eligible = FALSE)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_archives_last_first_name ON archives (last_name, first_name);
@@ -120,18 +127,33 @@ CREATE TABLE IF NOT EXISTS sequence_counters (
 
 CREATE TABLE IF NOT EXISTS archive_number_recycle_pool (
   pool_id TEXT PRIMARY KEY,
-  archive_no TEXT NOT NULL UNIQUE,
-  passport_no TEXT NOT NULL UNIQUE,
+  archive_no TEXT NOT NULL,
+  passport_no TEXT NOT NULL,
   source_archive_id TEXT NOT NULL UNIQUE,
   deleted_at BIGINT NOT NULL,
   released_at BIGINT NOT NULL,
   used_at BIGINT,
-  used_by_archive_id TEXT UNIQUE
+  used_by_archive_id TEXT,
+  CHECK (released_at >= deleted_at),
+  CHECK (
+    (used_at IS NULL AND used_by_archive_id IS NULL)
+    OR
+    (used_at IS NOT NULL AND used_by_archive_id IS NOT NULL)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_archive_number_recycle_pool_available
   ON archive_number_recycle_pool (released_at, pool_id)
   WHERE used_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_archive_number_recycle_pool_available_archive_no
+  ON archive_number_recycle_pool (archive_no)
+  WHERE used_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_archive_number_recycle_pool_available_passport_no
+  ON archive_number_recycle_pool (passport_no)
+  WHERE used_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_archive_number_recycle_pool_used_by_archive_id
+  ON archive_number_recycle_pool (used_by_archive_id)
+  WHERE used_by_archive_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS archive_hard_delete_logs (
   hard_delete_id TEXT PRIMARY KEY,
@@ -152,7 +174,8 @@ CREATE TABLE IF NOT EXISTS cpms_status_exports (
   exported_at BIGINT NOT NULL,
   records_hash TEXT NOT NULL,
   status_records_count BIGINT NOT NULL,
-  number_release_records_count BIGINT NOT NULL
+  number_release_records_count BIGINT NOT NULL,
+  export_file JSONB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS qr_print_records (

@@ -93,13 +93,16 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 ## 5. 数据库表
 | 表 | 说明 |
 |------|------|
-| `system_install` | INSTALL 安装授权状态 |
+| `system_install` | INSTALL 安装授权状态，显式保存 `sfid_number / province_code / city_code` |
 | `qr_sign_keys` | ARCHIVE 签发密钥 |
-| `admin_users` | 管理员 |
+| `admin_users` | 管理员；不保留停用状态字段，操作管理员删除即物理删除 |
 | `sessions` | HttpOnly Cookie 对应的本机会话 |
 | `login_challenges` | 扫码登录挑战 |
 | `qr_login_results` | 扫码登录结果 |
-| `archives` | 公民档案、护照号、投票账户与 `archive_qr_payload` |
+| `archives` | 公民档案、护照号、投票账户与 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用 `DATE` |
+| `archive_number_recycle_pool` | 满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史 |
+| `archive_hard_delete_logs` | 满 100 年硬删除最小日志，不保存实名原文 |
+| `cpms_status_exports` | 年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告 |
 | `archive_delete_challenges` | 档案软删除前的 wumin 签名挑战 |
 | `address_towns` | 当前 CPMS 实例所属市的镇/街道 |
 | `address_villages` | 当前 CPMS 实例所属市的村/路 |
@@ -108,6 +111,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `audit_logs` | 操作审计日志 |
 
 本阶段不提供旧库迁移兼容；旧库可删除后按当前基准结构初始化。
+数据库层同时约束 `archives.status IN ('ACTIVE','DELETED')`、注销公民不得拥有投票资格、软删除档案必须有 `deleted_at`，防止绕过 API 写入非法状态组合。
 
 ## 6. 环境变量
 | 变量 | 说明 | 默认值 |
