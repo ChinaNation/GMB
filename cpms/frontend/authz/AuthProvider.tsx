@@ -21,6 +21,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
+    const handleAuthExpired = () => {
+      sessionStorage.removeItem('cpms_user');
+      setUser(null);
+    };
+
+    window.addEventListener('cpms-auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('cpms-auth-expired', handleAuthExpired);
+  }, []);
+
+  useEffect(() => {
     authMe()
       .then(res => {
         if (res.data) {

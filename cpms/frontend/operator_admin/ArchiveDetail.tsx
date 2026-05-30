@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
 import * as api from './api';
-import type { Archive } from './types';
+import type { Archive, ArchiveMaterial, ArchiveMaterialType } from './types';
 import type { Town, Village } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
 import { startCameraScanner } from '../qr/cameraScanner';
@@ -28,6 +28,28 @@ function formatYmdZh(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return '-';
   return `${match[1]}年${match[2]}月${match[3]}日`;
+}
+
+const materialTypeLabels: Record<ArchiveMaterialType, string> = {
+  PHOTO: '照片',
+  BIRTH_CERTIFICATE: '出生纸',
+  COPY: '复印件',
+  VIDEO: '视频',
+  OTHER: '其他资料',
+};
+
+function formatFileSize(value: number): string {
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function isImageMaterial(item: ArchiveMaterial): boolean {
+  return item.mime_type.startsWith('image/');
+}
+
+function isVideoMaterial(item: ArchiveMaterial): boolean {
+  return item.mime_type.startsWith('video/');
 }
 
 export default function ArchiveDetail() {
@@ -60,14 +82,29 @@ export default function ArchiveDetail() {
   // 编辑用镇村列表
   const [towns, setTowns] = useState<Town[]>([]);
   const [villages, setVillages] = useState<Village[]>([]);
+  const [materials, setMaterials] = useState<ArchiveMaterial[]>([]);
+  const [materialType, setMaterialType] = useState<ArchiveMaterialType>('PHOTO');
+  const [materialNote, setMaterialNote] = useState('');
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [materialBusy, setMaterialBusy] = useState(false);
+  const [materialError, setMaterialError] = useState('');
+  const materialInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadArchive = () => {
     if (!id) return;
     api.getArchive(id).then(res => { if (res.data) setArchive(res.data); }).finally(() => setLoading(false));
   };
 
+  const loadMaterials = () => {
+    if (!id) return;
+    api.listArchiveMaterials(id)
+      .then(res => { if (res.data) setMaterials(res.data.items); })
+      .catch(e => setMaterialError(e instanceof Error ? e.message : '加载公民资料库失败'));
+  };
+
   useEffect(() => {
     loadArchive();
+    loadMaterials();
     installStatus().then(res => {
       if (res.data?.province_name) setProvinceName(res.data.province_name);
       if (res.data?.city_name) setCityName(res.data.city_name);
@@ -355,9 +392,49 @@ export default function ArchiveDetail() {
     setDeleteScannerReady(false);
   };
 
+  const handleMaterialUpload = async () => {
+    if (!id || !materialFile) {
+      setMaterialError('请选择要上传的公民资料');
+      return;
+    }
+    setMaterialBusy(true);
+    setMaterialError('');
+    try {
+      const body = new FormData();
+      body.append('material_type', materialType);
+      body.append('note', materialNote.trim());
+      body.append('file', materialFile);
+      const res = await api.uploadArchiveMaterial(id, body);
+      const uploaded = res.data?.item;
+      if (uploaded) setMaterials(items => [uploaded, ...items]);
+      setMaterialFile(null);
+      setMaterialNote('');
+      if (materialInputRef.current) materialInputRef.current.value = '';
+    } catch (e) {
+      setMaterialError(e instanceof Error ? e.message : '上传公民资料失败');
+    } finally {
+      setMaterialBusy(false);
+    }
+  };
+
+  const handleMaterialDelete = async (materialId: string) => {
+    if (!id || materialBusy) return;
+    setMaterialBusy(true);
+    setMaterialError('');
+    try {
+      await api.deleteArchiveMaterial(id, materialId);
+      setMaterials(items => items.filter(item => item.material_id !== materialId));
+    } catch (e) {
+      setMaterialError(e instanceof Error ? e.message : '删除公民资料失败');
+    } finally {
+      setMaterialBusy(false);
+    }
+  };
+
   if (loading) return <div className="card">加载中...</div>;
   if (!archive) return <div className="card">档案不存在</div>;
   const archiveDeleted = archive.status === 'DELETED' || archive.deleted_at !== null;
+  const archiveId = id || archive.archive_id;
 
   return (
     <>
@@ -378,9 +455,9 @@ export default function ArchiveDetail() {
         )}
         <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>档案号：{archive.archive_no}</div>
 
-        <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
+        <div className="archive-detail-body">
           {/* 左侧：公民信息 */}
-          <div style={{ flex: 1 }}>
+          <div className="archive-detail-main">
             {editing && !archiveDeleted ? (
               <>
                 <div className="form-row">
@@ -446,8 +523,14 @@ export default function ArchiveDetail() {
                   <div className="archive-validity-field">
                     <strong>有效期</strong>
                     <span className="archive-validity-lines">
-                      <span>：{formatYmdZh(archive.valid_from)}</span>
-                      <span>-{formatYmdZh(archive.valid_until)}</span>
+                      <span className="archive-validity-row">
+                        <span className="archive-validity-mark">：</span>
+                        <span>{formatYmdZh(archive.valid_from)}</span>
+                      </span>
+                      <span className="archive-validity-row">
+                        <span className="archive-validity-mark">-</span>
+                        <span>{formatYmdZh(archive.valid_until)}</span>
+                      </span>
                     </span>
                   </div>
                   <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
@@ -477,7 +560,7 @@ export default function ArchiveDetail() {
                     ) : (
                       <>
                         <span className="print-only">未绑定</span>
-                        <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 520, flex: '1 1 640px', maxWidth: 960 }}>
+                        <div className="no-print archive-wallet-bind-row">
                           <input
                             className="form-input"
                             value=""
@@ -507,7 +590,7 @@ export default function ArchiveDetail() {
           </div>
 
           {/* 右侧：ARCHIVE 二维码 */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 200 }}>
+          <div className="archive-detail-qr">
             {archive.archive_qr_payload ? (
               <>
                 <div data-archive-qr="" style={{ lineHeight: 0 }}>
@@ -534,6 +617,103 @@ export default function ArchiveDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card archive-material-section">
+        <div className="card__title flex-between">
+          公民资料库
+          <span className="archive-material-count">{materials.length}</span>
+        </div>
+        {materialError && (
+          <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 12 }}>{materialError}</div>
+        )}
+        {!archiveDeleted && (
+          <div className="archive-material-upload no-print">
+            <div className="form-group">
+              <label>资料类型</label>
+              <select
+                className="form-input"
+                value={materialType}
+                onChange={e => setMaterialType(e.target.value as ArchiveMaterialType)}
+                disabled={materialBusy}
+              >
+                {Object.entries(materialTypeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>文件</label>
+              <input
+                ref={materialInputRef}
+                className="form-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf,video/mp4,video/quicktime,video/webm"
+                onChange={e => setMaterialFile(e.target.files?.[0] ?? null)}
+                disabled={materialBusy}
+              />
+            </div>
+            <div className="form-group">
+              <label>备注</label>
+              <input
+                className="form-input"
+                maxLength={200}
+                value={materialNote}
+                onChange={e => setMaterialNote(e.target.value)}
+                disabled={materialBusy}
+              />
+            </div>
+            <button className="btn btn--primary" onClick={handleMaterialUpload} disabled={materialBusy || !materialFile}>
+              {materialBusy ? '上传中...' : '上传'}
+            </button>
+          </div>
+        )}
+        {materials.length === 0 ? (
+          <div className="archive-material-empty">暂无资料</div>
+        ) : (
+          <div className="archive-material-grid">
+            {materials.map(item => {
+              const url = api.archiveMaterialDownloadUrl(archiveId, item.material_id);
+              return (
+                <div className="archive-material-card" key={item.material_id}>
+                  <div className="archive-material-preview">
+                    {isImageMaterial(item) ? (
+                      <img src={url} alt={item.original_file_name} />
+                    ) : isVideoMaterial(item) ? (
+                      <video src={url} controls />
+                    ) : (
+                      <div className="archive-material-file">{item.mime_type === 'application/pdf' ? 'PDF' : '文件'}</div>
+                    )}
+                  </div>
+                  <div className="archive-material-meta">
+                    <div className="archive-material-name" title={item.original_file_name}>
+                      {item.original_file_name}
+                    </div>
+                    <div className="archive-material-sub">
+                      {materialTypeLabels[item.material_type]} · {formatFileSize(item.file_size)}
+                    </div>
+                    <div className="archive-material-sub">
+                      {new Date(item.uploaded_at * 1000).toLocaleString()}
+                    </div>
+                    {item.note && <div className="archive-material-note">{item.note}</div>}
+                  </div>
+                  <div className="archive-material-actions no-print">
+                    <a className="btn btn--ghost btn--sm" href={url} download={item.original_file_name}>下载</a>
+                    {!archiveDeleted && (
+                      <button
+                        className="btn btn--danger btn--sm"
+                        onClick={() => void handleMaterialDelete(item.material_id)}
+                        disabled={materialBusy}
+                      >
+                        删除
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {walletModalOpen && (

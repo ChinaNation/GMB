@@ -144,6 +144,7 @@ async fn main() {
         .merge(login::router())
         .merge(super_admin::router())
         .merge(operator_admin::router())
+        .merge(dangan::router())
         .merge(address::router())
         .with_state(state.clone())
         .fallback_service(serve_frontend);
@@ -351,7 +352,7 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         }
         "invalid citizen_status" => "CPMS_INTAKE_CITIZEN_STATUS_INVALID",
         "annual status export required" => "CPMS_ANNUAL_STATUS_EXPORT_REQUIRED",
-        "annual status export window closed" => "CPMS_ANNUAL_STATUS_EXPORT_WINDOW_CLOSED",
+        "annual status export not required" => "CPMS_ANNUAL_STATUS_EXPORT_NOT_REQUIRED",
         "qr encode failed" => "CPMS_ISSUE_QR_GENERATE_FAILED",
         "save print record failed" => "CPMS_AUDIT_WRITE_FAILED",
         "archive wallet required" => "CPMS_ARCHIVE_WALLET_REQUIRED",
@@ -364,6 +365,13 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         "delete signer mismatch" => "CPMS_ARCHIVE_DELETE_SIGNER_MISMATCH",
         "delete signature verify failed" => "CPMS_ARCHIVE_DELETE_SIGNATURE_INVALID",
         "delete payload hash mismatch" => "CPMS_ARCHIVE_DELETE_PAYLOAD_HASH_MISMATCH",
+        "material not found" => "CPMS_ARCHIVE_MATERIAL_NOT_FOUND",
+        "material file not found" => "CPMS_ARCHIVE_MATERIAL_FILE_NOT_FOUND",
+        "material type invalid" => "CPMS_ARCHIVE_MATERIAL_TYPE_INVALID",
+        "material mime invalid" => "CPMS_ARCHIVE_MATERIAL_MIME_INVALID",
+        "material file required" => "CPMS_ARCHIVE_MATERIAL_FILE_REQUIRED",
+        "material file too large" => "CPMS_ARCHIVE_MATERIAL_FILE_TOO_LARGE",
+        "material file empty" => "CPMS_ARCHIVE_MATERIAL_FILE_EMPTY",
         _ if status == StatusCode::UNAUTHORIZED => "CPMS_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "CPMS_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "CPMS_REQUEST_INVALID",

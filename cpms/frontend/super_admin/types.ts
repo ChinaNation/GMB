@@ -32,3 +32,14 @@ export interface CpmsStatusExportFile {
   }>;
   sig: string;
 }
+
+export interface CpmsStatusExportState {
+  now_utc: number;
+  pending_export_year: number | null;
+  can_export: boolean;
+  reminder_active: boolean;
+  operator_lock_active: boolean;
+  exported: boolean;
+  next_export_available_at: number | null;
+  disabled_reason: string | null;
+}

@@ -106,6 +106,8 @@ pub(crate) async fn run_due_archive_hard_delete(db: &sqlx::PgPool) -> Result<u64
             .await
             .map_err(|e| format!("hard delete archive failed: {e}"))?;
 
+        super::remove_archive_material_files(&archive_id).await?;
+
         tx.commit()
             .await
             .map_err(|e| format!("commit archive hard delete tx failed: {e}"))?;

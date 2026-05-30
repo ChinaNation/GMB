@@ -15,7 +15,7 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `authz/`：HttpOnly Cookie session 校验与角色检查。
 - `super_admin/`：操作员新增/删除和年度状态导出入口。
 - `operator_admin/`：档案创建、查询、更新、软删除、ARCHIVE 生成和打印记录。
-- `dangan/`：档案号生成、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
+- `dangan/`：档案号生成、公民资料库、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
 - `address.rs`：镇、村/路地址维护。
 
 ## 2.1 前端模块
@@ -24,10 +24,10 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `login/`：QR-only 登录页面和登录 API。
 - `authz/`：登录态上下文与路由守卫。
 - `super_admin/`：超级管理员页面、操作员管理、年度报告导出 API 和类型。
-- `operator_admin/`：档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 API 和类型。
+- `operator_admin/`：档案列表、创建、详情、编辑、公民资料库入口、软删除签名、档案 QR 操作 API 和类型。
 - `address/`：镇村查询 API 和类型。
 - `qr/`：WUMIN_QR_V1 解析与浏览器扫码工具。
-- `common/`：通用 HTTP 封装、共享类型和基础布局组件。
+- `common/`：通用 HTTP 封装、共享类型和基础布局组件；`401` 只通知认证上下文清理用户镜像，不直接改写路由。
 
 ## 3. 初始化流程
 1. CPMS 扫描或粘贴 SFID 生成的 `SFID_CPMS_V1 / INSTALL`。
@@ -95,6 +95,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `login_challenges`：登录挑战。
 - `qr_login_results`：扫码登录结果。
 - `archives`：公民档案和 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用数据库 `DATE`。
+- `archive_materials`：公民资料库元数据；文件正文由 `dangan/materials.rs` 保存到本机资料目录。
 - `archive_number_recycle_pool`：满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史。
 - `archive_hard_delete_logs`：满 100 年硬删除最小日志，不保存实名原文。
 - `cpms_status_exports`：年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告。
@@ -107,6 +108,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串。
 - `CPMS_BIND`：监听地址。
 - `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
+- `CPMS_MATERIALS_DIR`：公民资料库文件正文保存目录，默认 `data/archive-materials`。
 
 ## 8. API 总览
 初始化：
@@ -125,6 +127,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `GET /api/v1/admin/operators`
 - `POST /api/v1/admin/operators`
 - `DELETE /api/v1/admin/operators/:id`
+- `GET /api/v1/archives/status-export/state`
 - `GET /api/v1/archives/status-export`
 
 操作员：
@@ -133,6 +136,9 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `GET /api/v1/archives/:archive_id`
 - `PUT /api/v1/archives/:archive_id`
 - `POST /api/v1/archives/:archive_id/wallet`
+- `GET /POST /api/v1/archives/:archive_id/materials`
+- `GET /api/v1/archives/:archive_id/materials/:material_id/download`
+- `DELETE /api/v1/archives/:archive_id/materials/:material_id`
 - `POST /api/v1/archives/:archive_id/qr/generate`
 - `POST /api/v1/archives/:archive_id/qr/print`
 - `POST /api/v1/archives/:archive_id/delete/challenge`
@@ -147,6 +153,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - 伪 CPMS 即使仿造 ARCHIVE 明文字段，也无法构造正确 `geo_seal / sig`。
 - 其他 CPMS 和普通扫码方不能从 ARCHIVE 明文字段看出档案号属于哪个市。
 - CPMS 不直接连接 SFID 在线接口，不直接对接区块链。
+- CPMS 只负责年度状态导出文件生成和操作管理员逾期锁定；SFID 是否收到文件、是否禁用 CPMS 安装码由 SFID 系统实现。
 
 ## 10. 配置项
 - `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。

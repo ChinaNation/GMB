@@ -99,9 +99,12 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
     });
   };
 
+  // 中文注释:INSTALL 安装码完成首个 ARCHIVE 验真后即视为已使用,运行态不再提供下载。
+  const installUsed = status === 'ACTIVE' && site.cpms_pubkey_bound;
+
   // 决定显示哪个二维码
   const qrPayload = status === 'PENDING' ? site.qr1_payload : undefined;
-  const qrLabel = status === 'PENDING' ? '安装码' : '无需展示二维码';
+  const qrLabel = status === 'PENDING' ? '安装码' : installUsed ? '安装码已使用' : '无需展示二维码';
   const isDisabledOrRevoked = status === 'DISABLED' || status === 'REVOKED';
 
   return (
@@ -132,7 +135,7 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
               <QRCode value={qrPayload} size={160} bordered={false} />
             ) : (
               <div style={{ width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0', borderRadius: 4 }}>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>无二维码</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{qrLabel}</Typography.Text>
               </div>
             )}
             {/* 禁用/吊销覆盖图标 */}
@@ -155,12 +158,17 @@ export const CpmsSitePanel: React.FC<Props> = ({ auth, site, canWrite, onChanged
               {status === 'ACTIVE' && (
                 <>
                   <Popconfirm title="确认禁用 CPMS 站点?" onConfirm={onDisable}>
-                    <Button size="small" danger loading={busy}>禁用</Button>
+                    <Button
+                      size="small"
+                      loading={busy}
+                      style={{ borderColor: '#f59e0b', color: '#b45309', background: '#fffbeb' }}
+                    >
+                      禁用
+                    </Button>
                   </Popconfirm>
                   <Popconfirm title="确认吊销?此操作不可逆" onConfirm={onRevoke}>
                     <Button size="small" danger loading={busy}>吊销</Button>
                   </Popconfirm>
-                  <Button size="small" onClick={onDownload}>下载</Button>
                 </>
               )}
               {status === 'DISABLED' && (
