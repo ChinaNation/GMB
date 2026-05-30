@@ -5,6 +5,8 @@
 mod export;
 mod lifecycle;
 mod materials;
+mod routes;
+mod stats;
 
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
@@ -22,6 +24,7 @@ use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
 
 pub(crate) use lifecycle::run_due_archive_hard_delete;
 pub(crate) use materials::remove_archive_material_files;
+pub(crate) use stats::adjust_archive_stats;
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -36,7 +39,7 @@ pub(crate) use export::{
 };
 
 pub(crate) fn router() -> Router<AppState> {
-    materials::router()
+    routes::router().merge(materials::router())
 }
 
 /// SFID_CPMS_V1 / ARCHIVE 档案二维码载荷。

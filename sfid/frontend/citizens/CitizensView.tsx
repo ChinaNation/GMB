@@ -1,22 +1,21 @@
 // 中文注释:从 App.tsx 迁移(任务卡 20260408-sfid-frontend-app-tsx-split 步 4)
 // 注册局顶层视图 —— activeView === 'citizens' 分支。
-// 包含:citizen 列表 + 搜索栏 + 表格 + 身份ID绑定弹窗 + 操作扫码 Modal。
+// 包含:citizen 列表 + 搜索栏 + 表格 + 身份ID绑定弹窗 + 年度报告导入弹窗。
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag, Typography, message } from 'antd';
+import { Button, Card, Descriptions, Form, Input, Modal, Space, Table, Tag, message } from 'antd';
 
 import type { ColumnsType } from 'antd/es/table';
 import {
   listCitizens,
-  scanCpmsStatusQr,
   type CitizenRow,
 } from './api';
 import { decodeSs58 } from '../utils/ss58';
-import { startCameraScanner } from '../utils/cameraScanner';
 import { useAuth } from '../hooks/useAuth';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { BindModal } from './BindModal';
+import { StatusExportImportModal } from './StatusExportImportModal';
 
 
 export function CitizensView() {
@@ -28,13 +27,7 @@ export function CitizensView() {
   const [bindModalOpen, setBindModalOpen] = useState(false);
   const [bindTargetRecord, setBindTargetRecord] = useState<CitizenRow | null>(null);
   const [detailRecord, setDetailRecord] = useState<CitizenRow | null>(null);
-
-  // 操作扫码(公民状态码扫描)—— 原 opScan 系列
-  const [opScanOpen, setOpScanOpen] = useState(false);
-  const [opScannerReady, setOpScannerReady] = useState(false);
-  const [, setOpScanSubmitting] = useState(false);
-  const opVideoRef = useRef<HTMLVideoElement | null>(null);
-  const opScanCleanupRef = useRef<(() => void) | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
 
   const refreshList = async (keyword?: string, silent?: boolean) => {
     if (!auth) return;
@@ -64,8 +57,7 @@ export function CitizensView() {
     if (!auth) {
       setRows([]);
       setBindModalOpen(false);
-      setOpScanOpen(false);
-      stopOpScanner();
+      setImportModalOpen(false);
       return;
     }
     void refreshList(undefined, true);
@@ -85,46 +77,6 @@ export function CitizensView() {
     await refreshList(keyword);
   };
 
-  const stopOpScanner = () => {
-    if (opScanCleanupRef.current) {
-      opScanCleanupRef.current();
-      opScanCleanupRef.current = null;
-    }
-    setOpScannerReady(false);
-  };
-
-  const onHandleOperationQr = async (raw: string) => {
-    if (!auth) return;
-    setOpScanSubmitting(true);
-    try {
-      const result = await scanCpmsStatusQr(auth, { qr_payload: raw });
-      message.success(`状态已更新：${result.archive_no} -> ${result.status}`);
-      await refreshList(undefined, true);
-      setOpScanOpen(false);
-      stopOpScanner();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '扫码处理失败';
-      message.error(msg);
-    } finally {
-      setOpScanSubmitting(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!opScanOpen || !opVideoRef.current) {
-      stopOpScanner();
-      return;
-    }
-    opScanCleanupRef.current = startCameraScanner(
-      opVideoRef.current,
-      (raw) => void onHandleOperationQr(raw),
-      () => setOpScannerReady(true),
-      (msg) => message.error(msg),
-    );
-    return () => stopOpScanner();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opScanOpen, auth]);
-
   const openBindModal = (record: CitizenRow | null) => {
     setBindTargetRecord(record);
     setBindModalOpen(true);
@@ -137,12 +89,12 @@ export function CitizensView() {
   };
 
   const statusTag = (status: string | undefined) => (
-    status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">异常</Tag>
+    status === 'NORMAL' ? <Tag color="green">正常</Tag> : <Tag color="red">注销</Tag>
   );
 
   const citizenStatusText = (status: string | undefined) => {
     if (status === 'NORMAL') return '正常';
-    if (status === 'ABNORMAL') return '异常';
+    if (status === 'REVOKED') return '注销';
     return '-';
   };
 
@@ -218,6 +170,11 @@ export function CitizensView() {
         headStyle={glassCardHeadStyle}
         extra={
           <Space>
+            {auth && (
+              <Button onClick={() => setImportModalOpen(true)}>
+                导入年度报告
+              </Button>
+            )}
             {capabilities.canBusinessWrite && (
               <Button type="primary" onClick={() => openBindModal(null)}>
                 新增身份ID绑定
@@ -289,47 +246,12 @@ export function CitizensView() {
         />
       )}
 
-      <Modal
-        title="状态变更扫码"
-        open={opScanOpen}
-        footer={null}
-        onCancel={() => {
-          setOpScanOpen(false);
-          stopOpScanner();
-        }}
-        destroyOnClose
-      >
-        <Typography.Paragraph type="secondary">
-          请使用本机摄像头扫描二维码。
-        </Typography.Paragraph>
-        <div
-          style={{
-            width: '100%',
-            aspectRatio: '1 / 1',
-            background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-            borderRadius: 16,
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-            border: '2px solid #334155',
-            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.3)',
-          }}
-        >
-          <div style={{ position: 'absolute', top: 8, left: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderTopLeftRadius: 4, zIndex: 2 }} />
-          <div style={{ position: 'absolute', top: 8, right: 8, width: 16, height: 16, borderTop: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderTopRightRadius: 4, zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: 8, left: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderLeft: '2px solid #0d9488', borderBottomLeftRadius: 4, zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: 8, right: 8, width: 16, height: 16, borderBottom: '2px solid #0d9488', borderRight: '2px solid #0d9488', borderBottomRightRadius: 4, zIndex: 2 }} />
-          <video ref={opVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
-          {!opScannerReady && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
-              <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>摄像头初始化中...</Typography.Text>
-            </div>
-          )}
-        </div>
-      </Modal>
+      <StatusExportImportModal
+        auth={auth}
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImported={() => refreshList(undefined, true)}
+      />
     </>
   );
 }

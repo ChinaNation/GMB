@@ -39,12 +39,17 @@
 - `memory/08-tasks/open/20260530-cpms-p26-number-revoke.md`
 - `memory/08-tasks/open/20260530-cpms-frontend-structure.md`
 - `memory/08-tasks/open/20260530-cpms-db-schema-hardening.md`
+- `memory/08-tasks/open/20260530-cpms-sfid-annual-report-import.md`
 - `memory/08-tasks/open/20260530-cpms-status-export.md`
 - `memory/08-tasks/open/20260530-cpms-status-export-sfid-fields.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
 
+- `memory/08-tasks/done/20260530-cpms-archive-list-search-align.md`
+- `memory/08-tasks/done/20260530-cpms-migration-baseline-cleanup.md`
+- `memory/08-tasks/done/20260530-cpms-archive-list-town-column.md`
+- `memory/08-tasks/done/20260530-cpms-dangan-cursor-pagination.md`
 - `memory/08-tasks/done/20260529-cpms安全与残留整改.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`

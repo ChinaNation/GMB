@@ -12,7 +12,9 @@ use zeroize::Zeroize;
 
 use crate::login::{AdminSession, LoginChallenge, QrLoginResultRecord};
 
-use crate::citizens::model::{CitizenBindChallenge, CitizenRecord, CitizenStatus};
+use crate::citizens::model::{
+    CitizenBindChallenge, CitizenRecord, CitizenStatus, CpmsStatusExportImportRecord,
+};
 use crate::cpms::model::CpmsSiteKeys;
 
 #[derive(Clone, Serialize, Deserialize, Default)]
@@ -79,6 +81,9 @@ pub(crate) struct Store {
     /// 绑定 challenge 池
     #[serde(default)]
     pub(crate) citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
+    /// CPMS 年度报告导入幂等记录，key = "{sfid_number}|{export_year}"。
+    #[serde(default)]
+    pub(crate) cpms_status_export_imports: HashMap<String, CpmsStatusExportImportRecord>,
     pub(crate) admin_users_by_pubkey: HashMap<String, super::role::AdminUser>,
     pub(crate) sheng_admin_province_by_pubkey: HashMap<String, String>,
     /// 中文注释:省管理员一主两备的 SFID 本地备用槽记录。

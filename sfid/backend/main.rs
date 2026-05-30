@@ -135,6 +135,8 @@ struct CitizenStoreSnapshot {
     /// 中文注释:绑定 challenge 属于公民绑定短期状态,必须跨请求可读,
     /// 但不再写入旧 runtime 整包 JSON。
     citizen_bind_challenges: HashMap<String, CitizenBindChallenge>,
+    /// 中文注释:CPMS 年度报告导入幂等记录,随公民模块快照持久化。
+    cpms_status_export_imports: HashMap<String, CpmsStatusExportImportRecord>,
     consumed_qr_ids: HashMap<String, DateTime<Utc>>,
     reward_state_by_pubkey: HashMap<String, RewardStateRecord>,
     vote_verify_cache: HashMap<String, VoteVerifyCacheEntry>,
@@ -149,6 +151,7 @@ impl CitizenStoreSnapshot {
             citizen_id_by_archive_no: store.citizen_id_by_archive_no.clone(),
             citizen_id_by_sfid_code: store.citizen_id_by_sfid_code.clone(),
             citizen_bind_challenges: store.citizen_bind_challenges.clone(),
+            cpms_status_export_imports: store.cpms_status_export_imports.clone(),
             consumed_qr_ids: store.consumed_qr_ids.clone(),
             reward_state_by_pubkey: store.reward_state_by_pubkey.clone(),
             vote_verify_cache: store.vote_verify_cache.clone(),
@@ -162,6 +165,7 @@ impl CitizenStoreSnapshot {
         store.citizen_id_by_archive_no = self.citizen_id_by_archive_no;
         store.citizen_id_by_sfid_code = self.citizen_id_by_sfid_code;
         store.citizen_bind_challenges = self.citizen_bind_challenges;
+        store.cpms_status_export_imports = self.cpms_status_export_imports;
         store.consumed_qr_ids = self.consumed_qr_ids;
         store.reward_state_by_pubkey = self.reward_state_by_pubkey;
         store.vote_verify_cache = self.vote_verify_cache;
@@ -1011,8 +1015,8 @@ fn main() {
                 post(institutions::handler::reconcile_public_security),
             )
             .route(
-                "/api/v1/admin/cpms-status/scan",
-                post(citizens::status::admin_cpms_status_scan),
+                "/api/v1/admin/citizens/cpms-status-export/import",
+                post(citizens::status_export_import::admin_import_cpms_status_export),
             )
             .route(
                 "/api/v1/admin/audit-logs",

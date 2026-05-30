@@ -9,10 +9,9 @@ pub(crate) mod binding;
 pub(crate) mod chain_joint_vote;
 /// 中文注释:公民投票凭证签发接口。
 pub(crate) mod chain_vote;
-pub(crate) mod cpms_qr;
 pub(crate) mod handler;
 pub(crate) mod model;
-pub(crate) mod status;
+pub(crate) mod status_export_import;
 pub(crate) mod vote;
 
 #[allow(unused_imports)]

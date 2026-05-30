@@ -22,18 +22,23 @@ export interface CpmsStatusExportFile {
   cpms_pubkey: string;
   export_batch_id: string;
   exported_at: number;
-  status_records_count: number;
-  archive_release_records_count: number;
+  citizen_binding_records_count: number;
+  binding_release_records_count: number;
   records_hash: string;
-  status_records: Array<{
+  citizen_binding_records: Array<{
     archive_no: string;
+    wallet_address: string;
+    wallet_pubkey: string;
+    wallet_sig_alg: 'sr25519';
+    wallet_bound_at: number;
     citizen_status: string;
     voting_eligible: boolean;
     status_updated_at: number;
   }>;
-  archive_release_records: Array<{
+  binding_release_records: Array<{
     archive_no: string;
     released_at: number;
+    release_reason: 'ARCHIVE_HARD_DELETED_AFTER_100_YEARS';
   }>;
   sig: string;
 }

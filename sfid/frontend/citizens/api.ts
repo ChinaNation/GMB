@@ -4,16 +4,18 @@
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';
 
+export type CitizenState = 'NORMAL' | 'REVOKED';
+
 export type CitizenRow = {
   id: number;
   wallet_pubkey?: string;
   wallet_address?: string;
   archive_no?: string;
   sfid_code?: string;
-  citizen_status?: 'NORMAL' | 'ABNORMAL';
+  citizen_status?: CitizenState;
   voting_eligible: boolean;
-  vote_status: 'NORMAL' | 'ABNORMAL';
-  identity_status?: 'NORMAL' | 'ABNORMAL';
+  vote_status: CitizenState;
+  identity_status?: CitizenState;
   valid_from?: string;
   valid_until?: string;
   status_updated_at?: number;
@@ -27,7 +29,7 @@ export type CitizenBindChallengeResult = {
   archive_no: string;
   wallet_address: string;
   wallet_pubkey: string;
-  citizen_status: 'NORMAL' | 'ABNORMAL';
+  citizen_status: CitizenState;
   voting_eligible: boolean;
   valid_from: string;
   valid_until: string;
@@ -43,20 +45,57 @@ export type CitizenBindResult = {
   wallet_address?: string;
   archive_no?: string;
   sfid_code?: string;
-  citizen_status?: 'NORMAL' | 'ABNORMAL';
+  citizen_status?: CitizenState;
   voting_eligible: boolean;
-  vote_status: 'NORMAL' | 'ABNORMAL';
-  identity_status: 'NORMAL' | 'ABNORMAL';
+  vote_status: CitizenState;
+  identity_status: CitizenState;
   valid_from?: string;
   valid_until?: string;
   status_updated_at?: number;
   bind_status: 'PENDING' | 'BOUND';
 };
 
-export type CpmsStatusScanResult = {
-  archive_no: string;
-  status: 'NORMAL' | 'ABNORMAL';
-  message: string;
+export type CpmsStatusExportFile = {
+  proto: 'SFID_CPMS_V1';
+  type: 'CPMS_STATUS_EXPORT';
+  version: number;
+  export_year: number;
+  sfid_number: string;
+  cpms_pubkey: string;
+  export_batch_id: string;
+  exported_at: number;
+  citizen_binding_records_count: number;
+  binding_release_records_count: number;
+  records_hash: string;
+  citizen_binding_records: Array<{
+    archive_no: string;
+    wallet_address: string;
+    wallet_pubkey: string;
+    wallet_sig_alg: 'sr25519';
+    wallet_bound_at: number;
+    citizen_status: CitizenState;
+    voting_eligible: boolean;
+    status_updated_at: number;
+  }>;
+  binding_release_records: Array<{
+    archive_no: string;
+    released_at: number;
+    release_reason: 'ARCHIVE_HARD_DELETED_AFTER_100_YEARS';
+  }>;
+  sig: string;
+};
+
+export type CpmsStatusExportImportResult = {
+  sfid_number: string;
+  export_year: number;
+  export_batch_id: string;
+  already_imported: boolean;
+  imported_binding_records: number;
+  updated_binding_records: number;
+  wallet_replaced_records: number;
+  released_binding_records: number;
+  unmatched_binding_records: string[];
+  unmatched_release_records: string[];
 };
 
 export async function listCitizens(auth: AdminAuth, keyword?: string): Promise<CitizenRow[]> {
@@ -103,16 +142,16 @@ export async function citizenBind(
   });
 }
 
-export async function scanCpmsStatusQr(
+export async function importCpmsStatusExport(
   auth: AdminAuth,
-  payload: { qr_payload: string },
-): Promise<CpmsStatusScanResult> {
-  return request<CpmsStatusScanResult>('/api/v1/admin/cpms-status/scan', {
+  exportFile: CpmsStatusExportFile,
+): Promise<CpmsStatusExportImportResult> {
+  return request<CpmsStatusExportImportResult>('/api/v1/admin/citizens/cpms-status-export/import', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...adminHeaders(auth),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ export_file: exportFile }),
   });
 }

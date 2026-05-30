@@ -38,9 +38,8 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | sfid_tool_province | `src/main.rs` | 编译期直接引用 SFID 系统 `sfid/backend/sfid/province.rs` 行政区唯一源 |
 | address | `src/address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
 | super_admin | `src/super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
-| operator_admin | `src/operator_admin/mod.rs` | 档案创建/查询、软删除、ARCHIVE 更新/打印 |
 | number | `src/number/mod.rs` | 档案号与护照号生成 |
-| dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
+| dangan | `src/dangan/` | 档案创建/查询、游标分页、软删除、ARCHIVE 更新/打印、`geo_seal`、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
 
 ## 2.1 前端模块结构
 | 模块 | 目录 | 说明 |
@@ -49,7 +48,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
 | login | `frontend/login/` | QR-only 登录页面和 API |
 | super_admin | `frontend/super_admin/` | 超级管理员系统设置、管理员管理、年度报告导出 |
-| operator_admin | `frontend/operator_admin/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
+| dangan | `frontend/dangan/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇村查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
 | common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
@@ -105,6 +104,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `login_challenges` | 扫码登录挑战 |
 | `qr_login_results` | 扫码登录结果 |
 | `archives` | 公民档案、护照号、投票账户与 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用 `DATE` |
+| `archive_stats` | 档案列表总量统计；创建和注销软删除同事务维护，列表页不得实时 `COUNT(*)` |
 | `archive_materials` | 公民资料库元数据；文件正文保存在本机 `CPMS_MATERIALS_DIR` 或默认资料目录 |
 | `archive_number_recycle_pool` | 满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史 |
 | `archive_hard_delete_logs` | 满 100 年硬删除最小日志，不保存实名原文 |
@@ -119,9 +119,17 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 本阶段不提供旧库迁移兼容；旧库可删除后按当前基准结构初始化。
 数据库层同时约束 `archives.status IN ('ACTIVE','DELETED')`、注销公民不得拥有投票资格、软删除档案必须有 `deleted_at`，防止绕过 API 写入非法状态组合。
 
-## 5.1 年度状态导出
+## 5.1 数据库 migration 规则
 
-- 年度报告类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`，只导出给 SFID 手工导入的状态更新 JSON。
+- CPMS 尚未正式发行前，开发期 migration 只保留当前完整基线 `0001_init_cpms_pg.sql`；修改基线后必须执行 `./cpms.sh --reset` 重建开发库。
+- `MIGRATOR.run()` 必须保留，用于保护数据库结构与当前程序携带的 migration 校验一致。
+- 正式版发布时冻结当时全部 migration；从第一个正式版本开始，任何已经发布的 migration 文件都不得再修改。
+- 正式版后续升级只允许新增 migration，例如 `0002_xxx.sql`、`0003_xxx.sql`，由程序启动时自动执行，用户数据库不得清空。
+- `schema.sql` 始终表示当前完整结构，供全新安装和人工审查使用；正式版升级以 `db/migrations/` 的追加 migration 为准。
+
+## 5.2 年度状态导出
+
+- 年度报告类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`，只导出给 SFID 手工导入的绑定状态 JSON。
 - 超级管理员从每年 UTC 1 月 1 日起可以导出上一年度数据；如果存在多年未导出，CPMS 按最早未导出年度依次补导。
 - 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，新装 CPMS 不补导安装前历史年度。
 - 导出成功后该年度按钮置灰并隐藏角标，下一年 UTC 1 月 1 日出现新的待导出年度后再变为可导出。
@@ -129,13 +137,25 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - CPMS 不判断 SFID 是否收到文件，也不禁用安装码；SFID 逾期禁用 CPMS 授权由 SFID 系统单独实现。
 - `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作管理员锁定状态。
 - `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
-- `status_records` 只导出 `archive_no / citizen_status / voting_eligible / status_updated_at`。
-- `archive_release_records` 只导出满 100 年硬删除后需要 SFID 释放绑定关系的 `archive_no / released_at`。
-- 年度报告不得导出护照号；护照号是 CPMS 内部号码，与 SFID 导入无关。
+- `citizen_binding_records` 导出当前仍有钱包绑定的档案快照：`archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`。
+- `binding_release_records` 只导出当年度满 100 年硬删除后需要 SFID 释放三者绑定关系的 `archive_no / released_at / release_reason`。
+- 年度报告不得导出姓名、出生日期、地址、护照号；护照号是 CPMS 内部号码，与 SFID 导入无关。
 
-## 5.2 公民资料库
+## 5.3 档案列表分页与检索
 
-- 公民资料库后端主体在 `src/dangan/materials.rs`，`operator_admin` 只作为档案详情页入口调用接口。
+- 档案列表归属 `dangan` 模块，不归属操作管理员角色模块；`SUPER_ADMIN / OPERATOR_ADMIN` 只是访问权限。
+- `GET /api/v1/archives` 使用游标分页，不接受 `page / page_size / q` 小表分页参数，也不接受 `archive_no / passport_no / name` 选择器式查询参数。
+- 默认每页 `50` 条，前端可选 `20 / 50 / 100`，后端最大限制 `100`。
+- 默认排序固定为 `created_at DESC, archive_id DESC`，cursor 由后端编码 `created_at / archive_id`，前端只透传。
+- 响应返回 `items / limit / next_cursor / has_next / total_active`，不返回总页数。
+- 前端列表在“年龄”和“公民状态”之间显示“市镇”列；内容只显示当前档案 `town_code` 对应的镇/街道名称，不显示市名、村/路或详细地址。
+- `total_active` 来自 `archive_stats.active_count`，不得在列表请求中实时执行 `COUNT(*) FROM archives`。
+- 前端只提供统一精确检索输入框，参数为 `search`；后端用 `archive_no = search OR passport_no = search OR (last_name || first_name) = search` 精确匹配，不做字段选择器。
+- 检索只允许索引化精确检索：`search / birth_date / town_code / village_id / citizen_status`；不得恢复 `%keyword% LIKE` 全表模糊搜索。
+
+## 5.4 公民资料库
+
+- 公民资料库后端主体在 `src/dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx`。
 - 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
 - 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
 - 文件正文默认保存在 `data/archive-materials/<archive_id>/`，可通过 `CPMS_MATERIALS_DIR` 改到部署指定目录。
@@ -143,7 +163,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 上传、下载、删除资料写入审计；100 年硬删除档案时同步清理该档案资料文件目录。
 - 资料上传入口有本机 IP 级限流；单文件仍由 100 MB 请求体上限兜底。
 
-## 5.3 安全运行约束
+## 5.4 安全运行约束
 
 - 后端统一设置 `Content-Security-Policy`、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy`。
 - 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
@@ -197,8 +217,7 @@ CPMS 只有两种管理员:
 最多 4 个。管理员删除为物理删除，并同步清理本机会话，只保留审计快照。
 
 公民姓名字段统一为 `last_name / first_name`，前端、后端和数据库不再使用 `full_name`
-作为新接口字段。公民档案列表搜索使用 `q` 参数，同时匹配 `last_name`、`first_name`、
-`last_name || first_name` 与完整档案号 `archive_no`。
+作为新接口字段。公民档案列表使用游标分页和索引化精确检索，不再使用 `q` 参数或总页数分页。
 列表展示当前 CPMS 安装省市、完整档案号和由出生日期计算的年龄；省市只来自 `system_install`。
 详情页在出生日期/年龄下方展示护照号和电子护照有效期。创建档案当天未满 16 周岁时有效期为
 5 年，已满 16 周岁时有效期为 10 年；生日当天视为已满对应周岁。

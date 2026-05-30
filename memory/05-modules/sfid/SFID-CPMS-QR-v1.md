@@ -133,21 +133,26 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
   "cpms_pubkey": "0x...",
   "export_batch_id": "cse_...",
   "exported_at": 1780185600,
-  "status_records_count": 1,
-  "archive_release_records_count": 1,
+  "citizen_binding_records_count": 1,
+  "binding_release_records_count": 1,
   "records_hash": "0x...",
-  "status_records": [
+  "citizen_binding_records": [
     {
       "archive_no": "K8M4ZP7W2Q1C9T6R5N3X8V2Y1A-7H",
-      "citizen_status": "REVOKED",
-      "voting_eligible": false,
+      "wallet_address": "5...",
+      "wallet_pubkey": "0x...",
+      "wallet_sig_alg": "sr25519",
+      "wallet_bound_at": 1780185600,
+      "citizen_status": "NORMAL",
+      "voting_eligible": true,
       "status_updated_at": 1780185600
     }
   ],
-  "archive_release_records": [
+  "binding_release_records": [
     {
       "archive_no": "OLDARCHIVE",
-      "released_at": 4933872000
+      "released_at": 4933872000,
+      "release_reason": "ARCHIVE_HARD_DELETED_AFTER_100_YEARS"
     }
   ],
   "sig": "0x..."
@@ -157,12 +162,13 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
 状态规则：
 
 - CPMS 从每年 UTC 1 月 1 日起允许超级管理员导出上一年度更新数据；若存在多年未导出，按最早未导出年度依次补导。
-- 导出记录按 `export_year` 表示所属年度；`status_records` 只包含该年度内状态更新时间落入范围的档案，`archive_release_records` 只包含该年度内硬删除释放时间落入范围的档案号释放记录。
+- 导出记录按 `export_year` 表示所属年度；`citizen_binding_records` 是导出时 CPMS 当前仍有钱包绑定的档案快照，`binding_release_records` 只包含该年度内硬删除释放时间落入范围的档案号释放记录。
 - UTC 1 月 11 日起，如果存在超过 1 月 10 日仍未导出的年度报告，CPMS 锁定操作管理员登录和操作，超级管理员仍可登录补导。
 - `citizen_status=NORMAL` 表示正常；此时 `voting_eligible` 可以为 `true` 或 `false`。
 - `citizen_status=REVOKED` 表示注销；此时 `voting_eligible` 必须为 `false`。
-- CPMS 软删除档案就是注销，用 `status_records` 通知 SFID 更新公民状态和投票资格。
-- CPMS 100 年硬删除后，使用 `archive_release_records` 告知 SFID 释放该档案号与 SFID 号、钱包地址的绑定关系；护照号属于 CPMS 内部号码，不导出给 SFID。
+- CPMS 软删除档案就是注销，用 `citizen_binding_records` 中的 `citizen_status=REVOKED / voting_eligible=false` 通知 SFID 更新公民状态和投票资格。
+- CPMS 100 年硬删除后，使用 `binding_release_records` 告知 SFID 释放该档案号与身份 ID、钱包地址的绑定关系；护照号属于 CPMS 内部号码，不导出给 SFID。
+- SFID 导入前必须确认 `sfid_number` 对应 CPMS 授权有效，且 `cpms_pubkey` 已通过 ARCHIVE 档案码验真绑定；未绑定公钥的年度报告不得作为首次信任来源。
 
 签名原文：
 
@@ -170,9 +176,9 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
 sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}
 ```
 
-`records_hash = blake2b_256(json({status_records, archive_release_records}))`。
+`records_hash = blake2b_256(json({citizen_binding_records, binding_release_records}))`。
 
-导出文件不得包含姓名、出生日期、地址、护照号、钱包地址、钱包公钥等实名或 CPMS 内部号码/绑定细节。
+导出文件不得包含姓名、出生日期、地址、护照号等实名或 CPMS 内部号码；钱包地址和钱包公钥属于 SFID 覆盖绑定状态所需字段。
 
 ## SFID 验证 ARCHIVE 顺序
 

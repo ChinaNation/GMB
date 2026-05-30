@@ -70,6 +70,12 @@ wait_backend_ready() {
   local retries=120
   local i
   for ((i=1; i<=retries; i++)); do
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+      echo "Backend exited before becoming ready."
+      echo "如果日志里出现 VersionMismatch / VersionMissing / Dirty，说明开发库和当前 migration 不一致。"
+      echo "CPMS 仍处于开发期，可执行：./cpms.sh --reset 重建开发库。"
+      return 1
+    fi
     if curl -fsS "$CPMS_HEALTHCHECK_URL" >/dev/null 2>&1; then
       return 0
     fi
