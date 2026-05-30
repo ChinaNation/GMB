@@ -4,7 +4,7 @@
 CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，前端使用 React/Vite，数据使用 PostgreSQL 持久化。
 
 当前实现基线：
-- 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie。
+- 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie；超级管理员 15 分钟无活动过期，操作管理员 30 分钟无活动过期。
 - 角色访问控制：`SUPER_ADMIN / OPERATOR_ADMIN`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
@@ -25,7 +25,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | 数据库 | PostgreSQL 16 / sqlx 0.8 |
 | 密码学 | schnorrkel, blake2, sha2, aes-gcm |
 | 前端 | React + TypeScript + Vite |
-| 部署 | Docker / systemd |
+| 部署 | systemd 主机安装包，后端直接托管前端静态文件 |
 
 ## 2. 后端模块结构
 | 模块 | 文件 | 说明 |
@@ -34,9 +34,10 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | authz | `src/authz/mod.rs` | Cookie session 校验、角色检查 |
 | login | `src/login/mod.rs` | QR-only 扫码登录、会话查询和登出 |
 | initialize | `src/initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
+| rate_limit | `src/rate_limit.rs` | 登录、初始化、删除签名和资料上传的本机内存限流 |
 | sfid_tool_province | `src/main.rs` | 编译期直接引用 SFID 系统 `sfid/backend/sfid/province.rs` 行政区唯一源 |
 | address | `src/address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
-| super_admin | `src/super_admin/mod.rs` | 操作员新增/删除、年度状态导出 |
+| super_admin | `src/super_admin/mod.rs` | 管理员新增、姓名编辑、删除、年度状态导出 |
 | operator_admin | `src/operator_admin/mod.rs` | 档案创建/查询、软删除、ARCHIVE 更新/打印 |
 | number | `src/number/mod.rs` | 档案号与护照号生成 |
 | dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
@@ -47,7 +48,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | authz | `frontend/authz/` | 登录态上下文与路由守卫 |
 | initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
 | login | `frontend/login/` | QR-only 登录页面和 API |
-| super_admin | `frontend/super_admin/` | 超级管理员系统设置、操作员管理、年度报告导出 |
+| super_admin | `frontend/super_admin/` | 超级管理员系统设置、管理员管理、年度报告导出 |
 | operator_admin | `frontend/operator_admin/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇村查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
@@ -67,9 +68,10 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `POST /api/v1/admin/auth/logout`
 
 管理：
-- `GET /POST /api/v1/admin/operators`
-- `DELETE /api/v1/admin/operators/:id`
+- `GET /POST /api/v1/admin/admins`
+- `PUT /DELETE /api/v1/admin/admins/:id`
 - `GET /api/v1/archives/status-export`
+- `GET /api/v1/archives/status-export/state`
 
 档案：
 - `POST /GET /api/v1/archives`
@@ -98,7 +100,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 |------|------|
 | `system_install` | INSTALL 安装授权状态，显式保存 `sfid_number / province_code / city_code` |
 | `qr_sign_keys` | ARCHIVE 签发密钥 |
-| `admin_users` | 管理员；不保留停用状态字段，操作管理员删除即物理删除 |
+| `admin_users` | 管理员；不保留停用状态字段，初始超级管理员不可删除，其他管理员删除即物理删除 |
 | `sessions` | HttpOnly Cookie 对应的本机会话 |
 | `login_challenges` | 扫码登录挑战 |
 | `qr_login_results` | 扫码登录结果 |
@@ -127,6 +129,9 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - CPMS 不判断 SFID 是否收到文件，也不禁用安装码；SFID 逾期禁用 CPMS 授权由 SFID 系统单独实现。
 - `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作管理员锁定状态。
 - `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
+- `status_records` 只导出 `archive_no / citizen_status / voting_eligible / status_updated_at`。
+- `archive_release_records` 只导出满 100 年硬删除后需要 SFID 释放绑定关系的 `archive_no / released_at`。
+- 年度报告不得导出护照号；护照号是 CPMS 内部号码，与 SFID 导入无关。
 
 ## 5.2 公民资料库
 
@@ -136,6 +141,14 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 文件正文默认保存在 `data/archive-materials/<archive_id>/`，可通过 `CPMS_MATERIALS_DIR` 改到部署指定目录。
 - 软删除档案仍可查看和下载已有资料，但不能新增或删除资料。
 - 上传、下载、删除资料写入审计；100 年硬删除档案时同步清理该档案资料文件目录。
+- 资料上传入口有本机 IP 级限流；单文件仍由 100 MB 请求体上限兜底。
+
+## 5.3 安全运行约束
+
+- 后端统一设置 `Content-Security-Policy`、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy`。
+- 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
+- `CPMS_KEY_ENCRYPT_SECRET` 在已初始化实例启动时必须能解密 `system_install.install_secret` 和 `qr_sign_keys` 中的 ARCHIVE 私钥，否则拒绝启动。
+- 正式安装包包含 `frontend/dist`，安装到 `/opt/cpms/frontend`，并通过 `CPMS_FRONTEND_DIR` 由后端直接托管；不再提供 Docker 部署入口。
 
 ## 6. 环境变量
 | 变量 | 说明 | 默认值 |
@@ -144,6 +157,8 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `CPMS_MATERIALS_DIR` | 公民资料库文件正文保存目录 | `data/archive-materials` |
 | `CPMS_BIND` | 监听地址 | `0.0.0.0:8080` |
 | `CPMS_KEY_ENCRYPT_SECRET` | 本机密钥加密主密钥，32 字节 hex；缺失时拒绝初始化或读取已加密密钥 | 无 |
+| `CPMS_FRONTEND_DIR` | 正式部署前端静态文件目录；设置后必须存在 `index.html` | 未设置时使用 `./frontend` |
+| `CPMS_COOKIE_SECURE` | 设置为 `true/1/yes` 时给 session Cookie 增加 `Secure`，用于 HTTPS 部署 | 未启用 |
 
 ## 7. 验证
 - `cargo fmt && cargo check && cargo test`
@@ -171,18 +186,25 @@ CPMS 只有两种管理员:
 | 修改公民状态 | 可以 | 可以 |
 | 删除公民档案 | 可以 | 可以 |
 | 查看系统设置 | 可以 | 不可以 |
-| 创建/删除操作员 | 可以 | 不可以 |
+| 创建管理员 | 可以 | 不可以 |
+| 编辑管理员姓名 | 可以 | 不可以 |
+| 删除非初始管理员 | 可以 | 不可以 |
 
-后端档案业务接口统一使用 `authz::require_archive_admin`，允许超级管理员和操作员管理员。
-系统设置、操作员管理继续使用 `SUPER_ADMIN` 专属权限。超级管理员不能被删除；操作管理员删除
-为物理删除，并同步清理本机会话，只保留审计快照。
+后端档案业务接口统一使用 `authz::require_archive_admin`，允许超级管理员和操作管理员。
+系统设置、管理员管理继续使用 `SUPER_ADMIN` 专属权限。初始化时绑定的超级管理员固定为
+不可删除的初始管理员，并固定显示在管理员列表第一行；后续新增的超级管理员和操作管理员都
+只能编辑姓名，且都可以被删除。超级管理员总数最多 5 个，包括初始化时的 1 个和后续新增的
+最多 4 个。管理员删除为物理删除，并同步清理本机会话，只保留审计快照。
 
 公民姓名字段统一为 `last_name / first_name`，前端、后端和数据库不再使用 `full_name`
-作为新接口字段。公民信息列表搜索使用 `q` 参数，同时匹配 `last_name`、`first_name`、
+作为新接口字段。公民档案列表搜索使用 `q` 参数，同时匹配 `last_name`、`first_name`、
 `last_name || first_name` 与完整档案号 `archive_no`。
-列表展示完整档案号和由出生日期计算的年龄，省份不在列表中重复展示；省市在详情页展示。
+列表展示当前 CPMS 安装省市、完整档案号和由出生日期计算的年龄；省市只来自 `system_install`。
 详情页在出生日期/年龄下方展示护照号和电子护照有效期。创建档案当天未满 16 周岁时有效期为
 5 年，已满 16 周岁时有效期为 10 年；生日当天视为已满对应周岁。
+公民档案创建/编辑时，详细地址、公民状态和选举资格均为必填；出生日期必须早于当前 UTC 日期，
+不得选择当天或未来日期。公民状态为 `REVOKED` 时，选举资格固定为 `false`，只有状态为
+`NORMAL` 时才允许选择有/无选举资格。
 
 ## 9.1 档案软删除
 
@@ -207,13 +229,16 @@ CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expire
 - sr25519 签名验证通过。
 
 通过后 `archives.status` 更新为 `DELETED`，并记录 `deleted_at / deleted_by / delete_reason`。
+任何删除 challenge、签名人、payload hash、过期时间或验签失败都会写入 `DELETE_ARCHIVE / FAILED`
+审计，不消费 challenge，也不修改档案。
 列表默认隐藏已删除档案；已删除档案不能继续编辑、绑定投票账户、更新档案码、下载或打印。
 
 ## 10. 投票账户
 
 ARCHIVE 投票账户字段、签名原文和签出流程见
 `memory/05-modules/cpms/ARCHIVE_WALLET_PROOF.md`。无钱包地址的档案不得签出
-ARCHIVE。档案详情页档案码操作统一显示为“更新 / 下载 / 打印”；“更新”表示刷新当前
+ARCHIVE。同一个钱包账户在档案生命周期内只能绑定一个公民档案；软删除期间仍占用钱包账户，
+只有满 100 年硬删除并物理删除档案后，钱包账户、档案号和护照号才自然释放。档案详情页档案码操作统一显示为“更新 / 下载 / 打印”；“更新”表示刷新当前
 ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打印”会记录打印审计并调用浏览器打印，
 打印媒体只输出“公民档案详情”卡片，不打印侧栏、顶部栏和删除/编辑/返回列表/
 更换/更新/下载/打印等操作按钮。详情页电子护照有效期按两行展示，第一行 `有效期：起始日期`，
@@ -232,5 +257,5 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
   唯一市公安局。
 - CPMS 初始化和已初始化实例启动时会按安装码 R5 段重建 `address_towns/address_villages`，
   地址接口只返回当前市数据。
-- 公民档案的出生日期、性别、身高均为必填；出生日期固定 `YYYY-MM-DD`，身高范围为
-  `30-260 cm`。
+- 公民档案的出生日期、性别、身高、详细地址均为必填；出生日期固定 `YYYY-MM-DD` 且必须
+  早于当前 UTC 日期，身高范围为 `30-260 cm`。

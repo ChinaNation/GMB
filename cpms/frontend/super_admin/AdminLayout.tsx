@@ -11,6 +11,8 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const roleLabel = isSuperAdmin ? '超级管理员' : '操作管理员';
+  const adminName = user?.admin_name?.trim() || '暂未设置';
   const [exportState, setExportState] = useState<CpmsStatusExportState | null>(null);
 
   const loadExportState = useCallback(() => {
@@ -40,13 +42,13 @@ export default function AdminLayout() {
     : '';
   const tabs = [
     { key: '/admin', label: '首页', visible: true, badge: '' },
-    { key: '/admin/operators', label: '管理员', visible: isSuperAdmin, badge: '' },
+    { key: '/admin/admins', label: '管理员', visible: isSuperAdmin, badge: '' },
     { key: '/admin/settings', label: '系统设置', visible: isSuperAdmin, badge: settingsBadge },
   ];
 
   const activeTab = (() => {
     // 精确匹配或前缀匹配（/admin/create, /admin/archives/:id 都归首页）
-    if (location.pathname.startsWith('/admin/operators')) return '/admin/operators';
+    if (location.pathname.startsWith('/admin/admins')) return '/admin/admins';
     if (location.pathname.startsWith('/admin/settings')) return '/admin/settings';
     return '/admin';
   })();
@@ -95,8 +97,11 @@ export default function AdminLayout() {
             background: 'rgba(255,255,255,0.12)',
             padding: '6px 16px', borderRadius: 8,
             border: '1px solid rgba(255,255,255,0.15)',
+            display: 'inline-flex', alignItems: 'center', gap: 8,
           }}>
-            {isSuperAdmin ? '超级管理员' : '系统管理员'}
+            <span>{roleLabel}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
+            <span>{adminName}</span>
           </span>
           <button
             onClick={handleLogout}

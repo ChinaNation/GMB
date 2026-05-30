@@ -57,7 +57,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
 CREATE TABLE IF NOT EXISTS login_challenges (
   challenge_id TEXT PRIMARY KEY,
   admin_pubkey TEXT NOT NULL,
-  challenge_payload TEXT NOT NULL,
   session_id TEXT NOT NULL,
   expire_at BIGINT NOT NULL,
   consumed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -174,7 +173,7 @@ CREATE TABLE IF NOT EXISTS cpms_status_exports (
   exported_at BIGINT NOT NULL,
   records_hash TEXT NOT NULL,
   status_records_count BIGINT NOT NULL,
-  number_release_records_count BIGINT NOT NULL,
+  archive_release_records_count BIGINT NOT NULL,
   export_file JSONB NOT NULL
 );
 

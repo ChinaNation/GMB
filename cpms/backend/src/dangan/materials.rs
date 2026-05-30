@@ -2,12 +2,13 @@
 
 use std::{
     env,
+    net::SocketAddr,
     path::{Path, PathBuf},
 };
 
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, Multipart, Path as AxumPath, State},
+    extract::{ConnectInfo, DefaultBodyLimit, Multipart, Path as AxumPath, State},
     http::{header, HeaderMap, HeaderValue, Response, StatusCode},
     routing::{delete, get},
     Json, Router,
@@ -19,7 +20,7 @@ use sqlx::Row;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::{authz, err, ok, write_audit, ApiError, ApiResponse, AppState};
+use crate::{authz, err, ok, rate_limit, write_audit, ApiError, ApiResponse, AppState};
 
 const MAX_MATERIAL_BYTES: u64 = 100 * 1024 * 1024;
 
@@ -89,10 +90,21 @@ async fn list_materials(
 
 async fn upload_material(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     AxumPath(archive_id): AxumPath<String>,
     mut multipart: Multipart,
 ) -> Result<Json<ApiResponse<MaterialUploadData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(
+        &state,
+        client_addr,
+        &headers,
+        "archive_material_upload",
+        20,
+        60,
+    )
+    .await?;
+
     let ctx = authz::require_archive_admin(&state, &headers).await?;
     ensure_archive_active(&state, &archive_id).await?;
 

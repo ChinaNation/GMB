@@ -27,10 +27,10 @@ pub(crate) struct CpmsStatusExportFile {
     export_batch_id: String,
     pub(crate) exported_at: i64,
     status_records_count: usize,
-    number_release_records_count: usize,
+    archive_release_records_count: usize,
     records_hash: String,
     status_records: Vec<CpmsStatusRecord>,
-    number_release_records: Vec<CpmsNumberReleaseRecord>,
+    archive_release_records: Vec<CpmsArchiveReleaseRecord>,
     sig: String,
 }
 
@@ -55,22 +55,21 @@ struct CpmsStatusRecord {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-struct CpmsNumberReleaseRecord {
+struct CpmsArchiveReleaseRecord {
     archive_no: String,
-    passport_no: String,
-    hard_deleted_at: i64,
+    released_at: i64,
 }
 
 #[derive(Serialize)]
 struct ExportRecordsForHash<'a> {
     status_records: &'a [CpmsStatusRecord],
-    number_release_records: &'a [CpmsNumberReleaseRecord],
+    archive_release_records: &'a [CpmsArchiveReleaseRecord],
 }
 
 /// 构造 CPMS 离线年度状态导出文件。
 ///
-/// 中文注释：导出文件只给 SFID 更新状态和号码释放事实，不包含姓名、出生日期、地址、
-/// 钱包地址等实名或绑定细节；CPMS 仍保持永不联网，由管理员手工导出文件。
+/// 中文注释：导出文件只给 SFID 更新状态和档案号绑定释放事实，不包含姓名、出生日期、
+/// 地址、护照号、钱包地址等实名或 CPMS 内部号码/绑定细节。
 pub(crate) async fn build_and_record_cpms_status_export(
     state: &AppState,
 ) -> Result<CpmsStatusExportFile, (StatusCode, Json<ApiError>)> {
@@ -91,7 +90,7 @@ pub(crate) async fn build_and_record_cpms_status_export(
 
     let result = sqlx::query(
         "INSERT INTO cpms_status_exports
-         (export_year, export_batch_id, exported_at, records_hash, status_records_count, number_release_records_count, export_file)
+         (export_year, export_batch_id, exported_at, records_hash, status_records_count, archive_release_records_count, export_file)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (export_year) DO NOTHING",
     )
@@ -100,7 +99,7 @@ pub(crate) async fn build_and_record_cpms_status_export(
     .bind(export_file.exported_at)
     .bind(&export_file.records_hash)
     .bind(export_file.status_records_count as i64)
-    .bind(export_file.number_release_records_count as i64)
+    .bind(export_file.archive_release_records_count as i64)
     .bind(sqlx::types::Json(&export_file))
     .execute(&state.db)
     .await
@@ -159,10 +158,10 @@ async fn build_cpms_status_export(
 
     let (start_ts, end_ts) = export_year_bounds(export_year)?;
     let status_records = load_status_records(state, start_ts, end_ts).await?;
-    let number_release_records = load_number_release_records(state, start_ts, end_ts).await?;
+    let archive_release_records = load_archive_release_records(state, start_ts, end_ts).await?;
     let exported_at = now.timestamp();
     let export_batch_id = format!("cse_{}", Uuid::new_v4().simple());
-    let records_hash = records_hash(&status_records, &number_release_records)?;
+    let records_hash = records_hash(&status_records, &archive_release_records)?;
     let sign_source = build_status_export_sign_source(
         &install.sfid_number,
         &sign_key.pubkey,
@@ -182,10 +181,10 @@ async fn build_cpms_status_export(
         export_batch_id,
         exported_at,
         status_records_count: status_records.len(),
-        number_release_records_count: number_release_records.len(),
+        archive_release_records_count: archive_release_records.len(),
         records_hash,
         status_records,
-        number_release_records,
+        archive_release_records,
         sig,
     })
 }
@@ -237,13 +236,13 @@ async fn load_status_records(
         .collect()
 }
 
-async fn load_number_release_records(
+async fn load_archive_release_records(
     state: &AppState,
     start_ts: i64,
     end_ts: i64,
-) -> Result<Vec<CpmsNumberReleaseRecord>, (StatusCode, Json<ApiError>)> {
+) -> Result<Vec<CpmsArchiveReleaseRecord>, (StatusCode, Json<ApiError>)> {
     let rows = sqlx::query(
-        "SELECT archive_no, passport_no, hard_deleted_at
+        "SELECT archive_no, hard_deleted_at
          FROM archive_hard_delete_logs
          WHERE hard_deleted_at >= $1
            AND hard_deleted_at < $2
@@ -257,16 +256,15 @@ async fn load_number_release_records(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query number release records failed",
+            "query archive release records failed",
         )
     })?;
 
     Ok(rows
         .into_iter()
-        .map(|row| CpmsNumberReleaseRecord {
+        .map(|row| CpmsArchiveReleaseRecord {
             archive_no: row.get("archive_no"),
-            passport_no: row.get("passport_no"),
-            hard_deleted_at: row.get("hard_deleted_at"),
+            released_at: row.get("hard_deleted_at"),
         })
         .collect())
 }
@@ -303,11 +301,11 @@ async fn load_recorded_status_export(
 
 fn records_hash(
     status_records: &[CpmsStatusRecord],
-    number_release_records: &[CpmsNumberReleaseRecord],
+    archive_release_records: &[CpmsArchiveReleaseRecord],
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     let json = serde_json::to_vec(&ExportRecordsForHash {
         status_records,
-        number_release_records,
+        archive_release_records,
     })
     .map_err(|_| {
         err(
@@ -519,7 +517,7 @@ fn export_year_bounds(export_year: i32) -> Result<(i64, i64), (StatusCode, Json<
 mod tests {
     use super::{
         build_status_export_sign_source, export_year_bounds, first_missing_export_year,
-        is_operator_lock_active, latest_exportable_year, records_hash, CpmsNumberReleaseRecord,
+        is_operator_lock_active, latest_exportable_year, records_hash, CpmsArchiveReleaseRecord,
         CpmsStatusRecord,
     };
     use chrono::{NaiveDate, Utc};
@@ -545,10 +543,9 @@ mod tests {
             voting_eligible: true,
             status_updated_at: 1,
         }];
-        let release_records = vec![CpmsNumberReleaseRecord {
+        let release_records = vec![CpmsArchiveReleaseRecord {
             archive_no: "ARCHIVE-OLD".to_string(),
-            passport_no: "GD000000001".to_string(),
-            hard_deleted_at: 2,
+            released_at: 2,
         }];
 
         let first_hash = match records_hash(&status_records, &release_records) {

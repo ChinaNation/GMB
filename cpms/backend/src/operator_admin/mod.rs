@@ -1,10 +1,10 @@
-//! # 操作员管理模块 (operator_admin)
+//! # 公民档案操作模块 (operator_admin)
 //!
 //! 档案创建/查询、投票账户绑定、软删除、ARCHIVE 二维码更新/打印。
 //! 中文注释：档案业务允许 SUPER_ADMIN 与 OPERATOR_ADMIN；系统管理才仅限 SUPER_ADMIN。
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
     http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
@@ -12,12 +12,13 @@ use axum::{
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::Row;
+use sqlx::{Error as SqlxError, Row};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
-    address, authz, dangan, err, find_admin_by_user_id, initialize, ok, ss58, write_audit,
-    ApiError, ApiResponse, AppState, Archive,
+    address, authz, dangan, err, find_admin_by_user_id, initialize, ok, rate_limit, ss58,
+    write_audit, ApiError, ApiResponse, AppState, Archive,
 };
 
 #[derive(Deserialize)]
@@ -217,7 +218,10 @@ async fn create_archive(
     )
     .await?;
 
-    let addr = req.address.unwrap_or_default();
+    let addr = req.address.unwrap_or_default().trim().to_string();
+    if addr.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "address is required"));
+    }
     if addr.chars().count() > 100 {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -432,6 +436,26 @@ async fn save_archive_wallet(
     let wallet_address = req.wallet_address.trim();
     let wallet_pubkey = ss58::ss58_to_pubkey_hex(wallet_address)
         .ok_or_else(|| err(StatusCode::BAD_REQUEST, 1001, "invalid wallet_address"))?;
+    let existing_archive: Option<String> = sqlx::query_scalar(
+        "SELECT archive_id
+         FROM archives
+         WHERE wallet_pubkey = $1 AND archive_id <> $2
+         LIMIT 1",
+    )
+    .bind(&wallet_pubkey)
+    .bind(&archive_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query archive wallet failed",
+        )
+    })?;
+    if existing_archive.is_some() {
+        return Err(err(StatusCode::CONFLICT, 3009, "wallet already bound"));
+    }
 
     // 中文注释:CPMS 线下只确认并保存钱包地址;钱包签名验证统一放到 SFID 绑定阶段。
     let result = sqlx::query(
@@ -448,12 +472,16 @@ async fn save_archive_wallet(
     .bind(&archive_id)
     .execute(&state.db)
     .await
-    .map_err(|_| {
-        err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            5001,
-            "update archive wallet failed",
-        )
+    .map_err(|e| {
+        if is_unique_constraint(&e, "uq_archives_wallet_pubkey_lifetime") {
+            err(StatusCode::CONFLICT, 3009, "wallet already bound")
+        } else {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "update archive wallet failed",
+            )
+        }
     })?;
     if result.rows_affected() == 0 {
         return Err(err(StatusCode::NOT_FOUND, 3004, "archive not found"));
@@ -519,14 +547,18 @@ async fn update_archive(
     }
     address::validate_town_village(&state, &archive.town_code, &archive.village_id).await?;
     if let Some(v) = req.address {
-        if v.chars().count() > 100 {
+        let address = v.trim().to_string();
+        if address.is_empty() {
+            return Err(err(StatusCode::BAD_REQUEST, 1001, "address is required"));
+        }
+        if address.chars().count() > 100 {
             return Err(err(
                 StatusCode::BAD_REQUEST,
                 1001,
                 "address too long (max 100)",
             ));
         }
-        archive.address = v;
+        archive.address = address;
     }
     if let Some(v) = req.citizen_status {
         dangan::validate_citizen_status(&v)?;
@@ -764,14 +796,33 @@ async fn create_archive_delete_challenge(
 
 async fn complete_archive_delete(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Path(archive_id): Path<String>,
     Json(req): Json<ArchiveDeleteCompleteRequest>,
 ) -> Result<Json<ApiResponse<ArchiveDeleteCompleteData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(
+        &state,
+        client_addr,
+        &headers,
+        "archive_delete_complete",
+        20,
+        60,
+    )
+    .await?;
+
     let ctx = authz::require_archive_admin(&state, &headers).await?;
     let admin = find_admin_by_user_id(&state, &ctx.user_id).await?;
 
     if req.sig_alg != "sr25519" {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete signature algorithm invalid",
+        )
+        .await;
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3014,
@@ -785,7 +836,7 @@ async fn complete_archive_delete(
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
-    let row = sqlx::query(
+    let row = match sqlx::query(
         "SELECT challenge_id, archive_id, archive_no, admin_id, admin_pubkey, delete_payload, expire_at, consumed
          FROM archive_delete_challenges
          WHERE challenge_id = $1
@@ -800,8 +851,24 @@ async fn complete_archive_delete(
             5001,
             "query delete challenge failed",
         )
-    })?
-    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "delete challenge not found"))?;
+    })? {
+        Some(row) => row,
+        None => {
+            audit_archive_delete_failure(
+                &state,
+                &ctx.user_id,
+                &archive_id,
+                req.challenge_id.trim(),
+                "delete challenge not found",
+            )
+            .await;
+            return Err(err(
+                StatusCode::NOT_FOUND,
+                3004,
+                "delete challenge not found",
+            ));
+        }
+    };
 
     let challenge_archive_id: String = row.get("archive_id");
     let challenge_admin_id: String = row.get("admin_id");
@@ -811,6 +878,14 @@ async fn complete_archive_delete(
     let consumed: bool = row.get("consumed");
 
     if consumed {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete challenge already consumed",
+        )
+        .await;
         return Err(err(
             StatusCode::CONFLICT,
             3011,
@@ -818,9 +893,25 @@ async fn complete_archive_delete(
         ));
     }
     if expire_at < Utc::now().timestamp() {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete challenge expired",
+        )
+        .await;
         return Err(err(StatusCode::GONE, 3012, "delete challenge expired"));
     }
     if challenge_archive_id != archive_id || challenge_admin_id != ctx.user_id {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete challenge mismatch",
+        )
+        .await;
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3013,
@@ -828,7 +919,7 @@ async fn complete_archive_delete(
         ));
     }
 
-    let archive_row = sqlx::query(
+    let archive_row = match sqlx::query(
         "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
          FROM archives
          WHERE archive_id = $1
@@ -837,11 +928,41 @@ async fn complete_archive_delete(
     .bind(&archive_id)
     .fetch_optional(tx.as_mut())
     .await
-    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))?
-    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3004, "archive not found"))?;
+    .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archive failed"))? {
+        Some(row) => row,
+        None => {
+            audit_archive_delete_failure(
+                &state,
+                &ctx.user_id,
+                &archive_id,
+                req.challenge_id.trim(),
+                "archive not found",
+            )
+            .await;
+            return Err(err(StatusCode::NOT_FOUND, 3004, "archive not found"));
+        }
+    };
     let archive = row_to_archive(archive_row);
-    ensure_archive_not_deleted(&archive)?;
+    if archive.status == "DELETED" || archive.deleted_at.is_some() {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "archive already deleted",
+        )
+        .await;
+        return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
+    }
     if archive.archive_no != row.get::<String, _>("archive_no") {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete challenge mismatch",
+        )
+        .await;
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3013,
@@ -849,13 +970,21 @@ async fn complete_archive_delete(
         ));
     }
 
-    let signed_pubkey = normalize_pubkey_hex(&req.pubkey).ok_or_else(|| {
-        err(
+    let Some(signed_pubkey) = normalize_pubkey_hex(&req.pubkey) else {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete signer mismatch",
+        )
+        .await;
+        return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3014,
             "delete signer mismatch",
-        )
-    })?;
+        ));
+    };
     let expected_pubkey = normalize_pubkey_hex(&challenge_admin_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -871,6 +1000,14 @@ async fn complete_archive_delete(
         )
     })?;
     if signed_pubkey != expected_pubkey || signed_pubkey != current_admin_pubkey {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete signer mismatch",
+        )
+        .await;
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3014,
@@ -880,6 +1017,14 @@ async fn complete_archive_delete(
 
     let expected_hash = payload_sha256_hex(delete_payload.as_bytes());
     if req.payload_hash.to_lowercase() != expected_hash {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete payload hash mismatch",
+        )
+        .await;
         return Err(err(
             StatusCode::UNPROCESSABLE_ENTITY,
             3015,
@@ -887,6 +1032,14 @@ async fn complete_archive_delete(
         ));
     }
     if req.signed_at > expire_at + 30 {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "delete challenge expired",
+        )
+        .await;
         return Err(err(StatusCode::GONE, 3012, "delete challenge expired"));
     }
 
@@ -895,14 +1048,12 @@ async fn complete_archive_delete(
         &delete_payload,
         req.signature.trim(),
     ) {
-        let _ = write_audit(
+        audit_archive_delete_failure(
             &state,
-            Some(ctx.user_id.clone()),
-            "DELETE_ARCHIVE",
-            "CITIZEN_ARCHIVE",
-            Some(req.challenge_id.clone()),
-            "FAILED",
-            serde_json::json!({"reason": reason}),
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            reason,
         )
         .await;
         return Err(err(
@@ -933,6 +1084,14 @@ async fn complete_archive_delete(
         )
     })?;
     if delete_result.rows_affected() == 0 {
+        audit_archive_delete_failure(
+            &state,
+            &ctx.user_id,
+            &archive_id,
+            req.challenge_id.trim(),
+            "archive already deleted",
+        )
+        .await;
         return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
     }
 
@@ -977,6 +1136,29 @@ async fn complete_archive_delete(
         deleted_at,
         deleted_by: ctx.user_id,
     })))
+}
+
+async fn audit_archive_delete_failure(
+    state: &AppState,
+    operator_user_id: &str,
+    archive_id: &str,
+    challenge_id: &str,
+    reason: &str,
+) {
+    let _ = write_audit(
+        state,
+        Some(operator_user_id.to_string()),
+        "DELETE_ARCHIVE",
+        "CITIZEN_ARCHIVE",
+        Some(archive_id.to_string()),
+        "FAILED",
+        serde_json::json!({
+            "archive_id": archive_id,
+            "challenge_id": challenge_id,
+            "reason": reason,
+        }),
+    )
+    .await;
 }
 
 async fn export_status_file(
@@ -1166,10 +1348,17 @@ fn validate_birth_date(value: &str) -> Result<NaiveDate, (StatusCode, Json<ApiEr
     }
     let birth_date = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
-    if birth_date > Utc::now().date_naive() {
+    if birth_date >= Utc::now().date_naive() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"));
     }
     Ok(birth_date)
+}
+
+fn is_unique_constraint(error: &SqlxError, constraint: &str) -> bool {
+    error
+        .as_database_error()
+        .and_then(|db_error| db_error.constraint())
+        .is_some_and(|name| name == constraint)
 }
 
 fn validate_height_cm(value: f32) -> Result<(), (StatusCode, Json<ApiError>)> {

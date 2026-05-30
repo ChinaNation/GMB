@@ -40,6 +40,7 @@
 - `memory/08-tasks/open/20260530-cpms-frontend-structure.md`
 - `memory/08-tasks/open/20260530-cpms-db-schema-hardening.md`
 - `memory/08-tasks/open/20260530-cpms-status-export.md`
+- `memory/08-tasks/open/20260530-cpms-status-export-sfid-fields.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done

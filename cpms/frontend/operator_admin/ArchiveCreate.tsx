@@ -1,5 +1,5 @@
 // 新建公民档案。省份和城市从 INSTALL 初始化信息自动获取，不可修改。
-// 镇和村/路从后端地址 API 加载，联动选择。具体地址文本输入（最长 100 字符）。
+// 镇和村/路从后端地址 API 加载，联动选择。详细地址文本输入（最长 100 字符）。
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -8,9 +8,17 @@ import { installStatus } from '../initialize/api';
 import { createArchive } from './api';
 import type { Town, Village } from '../address/types';
 
+function formatLocalYmd(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function ArchiveCreate() {
   const navigate = useNavigate();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalYmd(new Date());
+  const maxBirthDate = formatLocalYmd(new Date(Date.now() - 24 * 60 * 60 * 1000));
   const [provinceCode, setProvinceCode] = useState('');
   const [cityCode, setCityCode] = useState('');
   const [provinceName, setProvinceName] = useState('');
@@ -56,7 +64,14 @@ export default function ArchiveCreate() {
   }, [selectedTown]);
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-  const isValidBirthDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= today;
+  const setCitizenStatus = (value: string) => {
+    setForm(f => ({
+      ...f,
+      citizen_status: value,
+      voting_eligible: value === 'REVOKED' ? false : f.voting_eligible,
+    }));
+  };
+  const isValidBirthDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && value < today;
   const isValidHeight = (value: string) => {
     const n = Number(value);
     return Number.isFinite(n) && n >= 30 && n <= 260;
@@ -71,6 +86,7 @@ export default function ArchiveCreate() {
     if (!provinceCode || !cityCode) { setError('省市信息未加载'); return; }
     if (!selectedTown) { setError('请选择镇'); return; }
     if (!selectedVillage) { setError('请选择村/路'); return; }
+    if (!addressText.trim()) { setError('请输入详细地址'); return; }
     setError('');
     setLoading(true);
     try {
@@ -120,7 +136,7 @@ export default function ArchiveCreate() {
         </div>
       </div>
       <div className="form-group">
-        <label>具体地址</label>
+        <label>详细地址 *</label>
         <input className="form-input" placeholder="详细门牌号等（最长100字符）" maxLength={100} value={addressText} onChange={e => setAddressText(e.target.value)} />
       </div>
       <div className="form-row">
@@ -128,7 +144,7 @@ export default function ArchiveCreate() {
         <div className="form-group"><label>名字 *</label><input className="form-input" value={form.first_name} onChange={e => set('first_name', e.target.value)} /></div>
       </div>
       <div className="form-row">
-        <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={today} value={form.birth_date} onChange={e => set('birth_date', e.target.value)} /></div>
+        <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={maxBirthDate} value={form.birth_date} onChange={e => set('birth_date', e.target.value)} /></div>
         <div className="form-group">
           <label>性别 *</label>
           <select className="form-input" value={form.gender_code} onChange={e => set('gender_code', e.target.value)}>
@@ -141,14 +157,19 @@ export default function ArchiveCreate() {
       <div className="form-row">
         <div className="form-group">
           <label>公民状态 *</label>
-          <select className="form-input" value={form.citizen_status} onChange={e => set('citizen_status', e.target.value)}>
+          <select className="form-input" value={form.citizen_status} onChange={e => setCitizenStatus(e.target.value)}>
             <option value="NORMAL">正常</option>
             <option value="REVOKED">注销</option>
           </select>
         </div>
         <div className="form-group">
           <label>选举资格 *</label>
-          <select className="form-input" value={String(form.voting_eligible)} onChange={e => setForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}>
+          <select
+            className="form-input"
+            value={String(form.citizen_status === 'REVOKED' ? false : form.voting_eligible)}
+            onChange={e => setForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
+            disabled={form.citizen_status === 'REVOKED'}
+          >
             <option value="true">有选举资格</option>
             <option value="false">无选举资格</option>
           </select>

@@ -30,6 +30,13 @@ function formatYmdZh(value: string): string {
   return `${match[1]}年${match[2]}月${match[3]}日`;
 }
 
+function formatLocalYmd(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const materialTypeLabels: Record<ArchiveMaterialType, string> = {
   PHOTO: '照片',
   BIRTH_CERTIFICATE: '出生纸',
@@ -55,7 +62,8 @@ function isVideoMaterial(item: ArchiveMaterial): boolean {
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatLocalYmd(new Date());
+  const maxBirthDate = formatLocalYmd(new Date(Date.now() - 24 * 60 * 60 * 1000));
   const [archive, setArchive] = useState<Archive | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -203,6 +211,14 @@ export default function ArchiveDetail() {
     }
   };
 
+  const handleEditCitizenStatusChange = (value: string) => {
+    setEditForm(f => ({
+      ...f,
+      citizen_status: value,
+      voting_eligible: value === 'REVOKED' ? false : f.voting_eligible,
+    }));
+  };
+
   const handleSave = async () => {
     if (!id) return;
     setError('');
@@ -210,17 +226,19 @@ export default function ArchiveDetail() {
     const heightText = String(editForm.height_cm ?? '');
     if (!String(editForm.last_name || '').trim()) { setError('请输入姓氏'); return; }
     if (!String(editForm.first_name || '').trim()) { setError('请输入名字'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || birthDate > today) { setError('请选择正确的出生日期'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || birthDate >= today) { setError('请选择正确的出生日期'); return; }
     if (!String(editForm.gender_code || '')) { setError('请选择性别'); return; }
     const height = Number(heightText);
     if (!Number.isFinite(height) || height < 30 || height > 260) { setError('请输入正确的身高'); return; }
     if (!String(editForm.town_code || '')) { setError('请选择镇/街道'); return; }
     if (!String(editForm.village_id || '')) { setError('请选择村/路'); return; }
+    if (!String(editForm.address || '').trim()) { setError('请输入详细地址'); return; }
     setSaving(true);
     try {
       const body: Record<string, unknown> = { ...editForm };
       body.last_name = String(body.last_name || '').trim();
       body.first_name = String(body.first_name || '').trim();
+      body.address = String(body.address || '').trim();
       body.height_cm = height;
       const res = await api.updateArchive(id, body);
       if (res.data) setArchive(res.data);
@@ -287,7 +305,10 @@ export default function ArchiveDetail() {
       walletScanCleanupRef.current = null;
       setWalletModalOpen(false);
     } catch (e) {
-      setWalletScanError(e instanceof Error ? e.message : '保存投票账户失败');
+      const message = e instanceof Error ? e.message : '保存投票账户失败';
+      setWalletScanError(message.includes('wallet already bound')
+        ? '该钱包账户已绑定其他公民档案，不能重复绑定。'
+        : message);
     } finally {
       setWalletBusy(false);
     }
@@ -465,7 +486,7 @@ export default function ArchiveDetail() {
                   <div className="form-group"><label>名字 *</label><input className="form-input" value={String(editForm.first_name || '')} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} /></div>
                 </div>
                 <div className="form-row mt-16">
-                  <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={today} value={String(editForm.birth_date || '')} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></div>
+                  <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={maxBirthDate} value={String(editForm.birth_date || '')} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></div>
                   <div className="form-group">
                     <label>性别 *</label>
                     <select className="form-input" value={String(editForm.gender_code || 'M')} onChange={e => setEditForm(f => ({ ...f, gender_code: e.target.value }))}>
@@ -490,17 +511,22 @@ export default function ArchiveDetail() {
                     </select>
                   </div>
                 </div>
-                <div className="form-group mt-16"><label>具体地址</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
+                <div className="form-group mt-16"><label>详细地址 *</label><input className="form-input" maxLength={100} value={String(editForm.address || '')} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} /></div>
                 <div className="form-row mt-16">
                   <div className="form-group">
-                    <label>公民状态</label>
-                    <select className="form-input" value={String(editForm.citizen_status || 'NORMAL')} onChange={e => setEditForm(f => ({ ...f, citizen_status: e.target.value }))}>
+                    <label>公民状态 *</label>
+                    <select className="form-input" value={String(editForm.citizen_status || 'NORMAL')} onChange={e => handleEditCitizenStatusChange(e.target.value)}>
                       <option value="NORMAL">正常</option><option value="REVOKED">注销</option>
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>选举资格</label>
-                    <select className="form-input" value={String(editForm.voting_eligible ?? true)} onChange={e => setEditForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}>
+                    <label>选举资格 *</label>
+                    <select
+                      className="form-input"
+                      value={String(editForm.citizen_status === 'REVOKED' ? false : (editForm.voting_eligible ?? true))}
+                      onChange={e => setEditForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
+                      disabled={editForm.citizen_status === 'REVOKED'}
+                    >
                       <option value="true">有选举资格</option><option value="false">无选举资格</option>
                     </select>
                   </div>
@@ -535,7 +561,7 @@ export default function ArchiveDetail() {
                   </div>
                   <div><strong>省份：</strong>{provinceName || archive.province_code}</div>
                   <div><strong>城市：</strong>{cityName || archive.city_code}</div>
-                  <div style={{ gridColumn: '1 / -1' }}><strong>地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
+                  <div style={{ gridColumn: '1 / -1' }}><strong>详细地址：</strong>{[townName, villageName, archive.address].filter(Boolean).join(' ') || '-'}</div>
                 </div>
                 <div className="form-row mt-16">
                   <div><strong>公民状态：</strong>

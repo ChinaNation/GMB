@@ -70,6 +70,8 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 
 - 公民状态只允许 `NORMAL`（正常）和 `REVOKED`（注销）。
 - 正常公民允许 `voting_eligible=true/false`；注销公民必须 `voting_eligible=false`。
+- 创建/编辑档案时，后端按同一规则归一化选举资格；前端只允许正常公民选择选举资格。
+- 出生日期必须早于当前 UTC 日期；当天出生和未来日期都不得录入。
 - 公民档案详情页删除按钮对应注销软删除，后端保存 `status = DELETED`、`citizen_status = REVOKED`、`voting_eligible = false`、`deleted_at`、`deleted_by`、`delete_reason`。
 - 软删除后的 100 年内，档案号和护照号仍在 `archives` 表中占用，不进入生成池。
 - 从 `deleted_at` 的 UTC 日期起满 100 年后，`lifecycle` 在服务启动时和每日后台任务中扫描到期档案。
@@ -86,6 +88,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - `archive_materials` 只保存元数据：资料类型、原始文件名、本机存储文件名、MIME、大小、SHA-256、备注、上传人、上传时间和软删除字段。
 - 文件正文默认保存到 `data/archive-materials/<archive_id>/`；部署时可用 `CPMS_MATERIALS_DIR` 指向专用资料盘。
 - 单文件上限 100 MB；后端按资料类型校验 MIME，拒绝类型不匹配或空文件。
+- 上传入口增加本机 IP 级限流，避免内网脚本误传或连续大文件请求压垮主机。
 - 软删除档案可以查看和下载已有资料，不能新增或删除资料；100 年硬删除档案时同步删除资料目录。
 - 上传、下载、删除分别记录 `ARCHIVE_MATERIAL_UPLOAD / ARCHIVE_MATERIAL_DOWNLOAD / ARCHIVE_MATERIAL_DELETE` 审计事件。
 
@@ -100,8 +103,8 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - `GET /api/v1/archives/status-export/state` 返回待导出年度、按钮可用状态、角标状态和操作管理员锁定状态，供前端系统设置页展示。
 - `cpms_status_exports` 记录每个年度首次导出的批次、导出时间、记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时返回同一份文件，不重新生成签名批次。
 - `status_records` 只包含 `archive_no / citizen_status / voting_eligible / status_updated_at`，用于 SFID 更新公民状态和投票资格。
-- `number_release_records` 只包含 `archive_no / passport_no / hard_deleted_at`，用于表达 100 年硬删除后号码可复用；该列表不表示公民状态变化。
-- 导出文件不得包含姓名、出生日期、地址、钱包地址、钱包公钥等实名或绑定细节。
+- `archive_release_records` 只包含 `archive_no / released_at`，用于表达 100 年硬删除后 SFID 可以释放该档案号与 SFID 号、钱包地址的绑定关系；该列表不表示公民状态变化。
+- 导出文件不得包含姓名、出生日期、地址、护照号、钱包地址、钱包公钥等实名或 CPMS 内部号码/绑定细节。
 - 导出文件使用 CPMS ARCHIVE 签发密钥签名，签名原文为 `sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}`。
 
 ## 10. 测试覆盖

@@ -134,7 +134,7 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
   "export_batch_id": "cse_...",
   "exported_at": 1780185600,
   "status_records_count": 1,
-  "number_release_records_count": 1,
+  "archive_release_records_count": 1,
   "records_hash": "0x...",
   "status_records": [
     {
@@ -144,11 +144,10 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
       "status_updated_at": 1780185600
     }
   ],
-  "number_release_records": [
+  "archive_release_records": [
     {
       "archive_no": "OLDARCHIVE",
-      "passport_no": "GD7K3M9X2QH",
-      "hard_deleted_at": 4933872000
+      "released_at": 4933872000
     }
   ],
   "sig": "0x..."
@@ -157,13 +156,13 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
 
 状态规则：
 
-- CPMS 只允许在每年 UTC 1 月 1 日到 1 月 10 日导出上一年度更新数据。
-- 导出记录按 `export_year` 表示所属年度；`status_records` 只包含该年度内状态更新时间落入范围的档案，`number_release_records` 只包含该年度内硬删除时间落入范围的号码释放记录。
-- UTC 1 月 6 日到 1 月 10 日仍未导出上一年度报告时，CPMS 锁定操作管理员登录和操作，超级管理员仍可登录导出。
+- CPMS 从每年 UTC 1 月 1 日起允许超级管理员导出上一年度更新数据；若存在多年未导出，按最早未导出年度依次补导。
+- 导出记录按 `export_year` 表示所属年度；`status_records` 只包含该年度内状态更新时间落入范围的档案，`archive_release_records` 只包含该年度内硬删除释放时间落入范围的档案号释放记录。
+- UTC 1 月 11 日起，如果存在超过 1 月 10 日仍未导出的年度报告，CPMS 锁定操作管理员登录和操作，超级管理员仍可登录补导。
 - `citizen_status=NORMAL` 表示正常；此时 `voting_eligible` 可以为 `true` 或 `false`。
 - `citizen_status=REVOKED` 表示注销；此时 `voting_eligible` 必须为 `false`。
 - CPMS 软删除档案就是注销，用 `status_records` 通知 SFID 更新公民状态和投票资格。
-- CPMS 100 年硬删除只释放档案号和护照号复用，用 `number_release_records` 表达号码释放事实，不表示公民状态变化。
+- CPMS 100 年硬删除后，使用 `archive_release_records` 告知 SFID 释放该档案号与 SFID 号、钱包地址的绑定关系；护照号属于 CPMS 内部号码，不导出给 SFID。
 
 签名原文：
 
@@ -171,9 +170,9 @@ CPMS 每年通过离线 JSON 文件向 SFID 更新本 CPMS 内档案号对应的
 sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}
 ```
 
-`records_hash = blake2b_256(json({status_records, number_release_records}))`。
+`records_hash = blake2b_256(json({status_records, archive_release_records}))`。
 
-导出文件不得包含姓名、出生日期、地址、钱包地址、钱包公钥等实名或绑定细节。
+导出文件不得包含姓名、出生日期、地址、护照号、钱包地址、钱包公钥等实名或 CPMS 内部号码/绑定细节。
 
 ## SFID 验证 ARCHIVE 顺序
 

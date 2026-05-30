@@ -34,6 +34,8 @@
 - `npm run build`（`cpms/frontend`）：通过。
 - `git diff --check`：通过。
 - 浏览器烟测：使用本地 mock API 打开 `/admin/archives/mock-archive`，确认“公民资料库”、照片、出生纸资料和上传控件可渲染；同时修复窄屏详情页二维码压到公民信息的问题。
+- 打印回归修复：窄屏响应式规则已限定为 `screen`，避免打印介质误用移动端上下布局导致二维码跑到第二页。
+- 宽度回归修复：移除“公民资料库”独立 `max-width`，与上方“公民档案详情”使用同一卡片宽度。
 - 残留扫描：未发现旧“出生纸待开发”、`CPMS_INSTALL_FILE`、`archive_wallet_challenges` 等残留；`full_name` 仅保留在技术文档“不再使用”说明中。
 
 ## 验收标准

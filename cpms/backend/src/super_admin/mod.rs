@@ -1,12 +1,12 @@
 //! # 超级管理员模块 (super_admin)
 //!
-//! 操作员 CRUD 仅 SUPER_ADMIN 角色可访问。
+//! 管理员管理仅 SUPER_ADMIN 角色可访问。
 //! 中文注释：公民状态变更属于档案业务，允许 SUPER_ADMIN 与 OPERATOR_ADMIN。
 
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{delete, get, put},
+    routing::{get, put},
     Json, Router,
 };
 use chrono::Utc;
@@ -14,24 +14,30 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{
-    authz, dangan, err, find_admin_by_pubkey, ok, write_audit, ApiError, ApiResponse, AppState,
-    Archive,
-};
+use crate::{authz, dangan, err, ok, ss58, write_audit, ApiError, ApiResponse, AppState, Archive};
 
 #[derive(Deserialize)]
-struct CreateOperatorRequest {
+struct CreateAdminRequest {
+    role: String,
     admin_pubkey: String,
-    #[serde(default)]
-    admin_name: Option<String>,
+    admin_name: String,
 }
 
 #[derive(Serialize)]
-struct OperatorData {
+struct AdminData {
     user_id: String,
     admin_pubkey: String,
+    admin_address: String,
     admin_name: String,
     role: String,
+    immutable: bool,
+    can_edit_name: bool,
+    can_delete: bool,
+}
+
+#[derive(Deserialize)]
+struct UpdateAdminNameRequest {
+    admin_name: String,
 }
 
 #[derive(Deserialize)]
@@ -49,28 +55,36 @@ struct UpdateCitizenStatusData {
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/admin/admins", get(list_admins).post(create_admin))
         .route(
-            "/api/v1/admin/operators",
-            get(list_operators).post(create_operator),
+            "/api/v1/admin/admins/:id",
+            put(update_admin_name).delete(delete_admin),
         )
-        .route("/api/v1/admin/operators/:id", delete(delete_operator))
         .route(
             "/api/v1/archives/:archive_id/citizen-status",
             put(update_archive_citizen_status),
         )
 }
 
-async fn list_operators(
+async fn list_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<ApiResponse<Vec<OperatorData>>>, (StatusCode, Json<ApiError>)> {
+) -> Result<Json<ApiResponse<Vec<AdminData>>>, (StatusCode, Json<ApiError>)> {
     authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
 
     let rows = sqlx::query(
-        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name,
+                role, immutable
          FROM admin_users
-         WHERE role = 'OPERATOR_ADMIN'
-         ORDER BY user_id",
+         WHERE role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
+         ORDER BY
+           CASE
+             WHEN role = 'SUPER_ADMIN' AND immutable = TRUE THEN 0
+             WHEN role = 'SUPER_ADMIN' THEN 1
+             ELSE 2
+           END,
+           created_at,
+           user_id",
     )
     .fetch_all(&state.db)
     .await
@@ -78,57 +92,82 @@ async fn list_operators(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query operators failed",
+            "query admins failed",
         )
     })?;
 
-    let operators = rows
-        .into_iter()
-        .map(|r| OperatorData {
-            user_id: r.get("user_id"),
-            admin_pubkey: r.get("admin_pubkey"),
-            admin_name: r.get("admin_name"),
-            role: r.get("role"),
-        })
-        .collect::<Vec<OperatorData>>();
+    let admins = rows.into_iter().map(row_to_admin_data).collect::<Vec<_>>();
 
-    Ok(Json(ok(operators)))
+    Ok(Json(ok(admins)))
 }
 
-async fn create_operator(
+async fn create_admin(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<CreateOperatorRequest>,
-) -> Result<Json<ApiResponse<OperatorData>>, (StatusCode, Json<ApiError>)> {
+    Json(req): Json<CreateAdminRequest>,
+) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
-    let raw_input = req.admin_pubkey.trim().to_string();
-    if raw_input.is_empty() {
-        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
+    let role = req.role.trim();
+    if role != "SUPER_ADMIN" && role != "OPERATOR_ADMIN" {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin role"));
     }
-    // 归一化公钥：支持 SS58 地址或 0x hex
-    let admin_pubkey = {
-        let stripped = raw_input
-            .strip_prefix("0x")
-            .or_else(|| raw_input.strip_prefix("0X"))
-            .unwrap_or(&raw_input);
-        if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
-            stripped.to_lowercase()
-        } else if let Some(hex_with_prefix) = crate::ss58::ss58_to_pubkey_hex(&raw_input) {
-            hex_with_prefix
-                .strip_prefix("0x")
-                .unwrap_or(&hex_with_prefix)
-                .to_lowercase()
-        } else {
-            return Err(err(
-                StatusCode::BAD_REQUEST,
-                1001,
-                "admin_pubkey must be SS58 address or 32-byte hex",
-            ));
-        }
+    let admin_name = validate_admin_name(req.admin_name.as_str())?;
+    let admin_pubkey = normalize_admin_pubkey(req.admin_pubkey.as_str())?;
+    let now_ts = Utc::now().timestamp();
+    let user_id = if role == "SUPER_ADMIN" {
+        format!("u_super_{}", Uuid::new_v4().simple())
+    } else {
+        format!("u_operator_{}", Uuid::new_v4().simple())
     };
-    let admin_name = req.admin_name.as_deref().unwrap_or("").trim().to_string();
 
-    if find_admin_by_pubkey(&state, &admin_pubkey).await.is_ok() {
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
+
+    // 中文注释：超级管理员总数上限必须和插入共用锁，避免并发新增突破 5 个。
+    sqlx::query("LOCK TABLE admin_users IN SHARE ROW EXCLUSIVE MODE")
+        .execute(tx.as_mut())
+        .await
+        .map_err(|_| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "lock admins failed",
+            )
+        })?;
+
+    if role == "SUPER_ADMIN" {
+        let super_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM admin_users WHERE role = 'SUPER_ADMIN'")
+                .fetch_one(tx.as_mut())
+                .await
+                .map_err(|_| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "count super admins failed",
+                    )
+                })?;
+        if super_count >= 5 {
+            return Err(err(StatusCode::CONFLICT, 3001, "super admin limit reached"));
+        }
+    }
+
+    let insert_result = sqlx::query(
+        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, immutable, managed_key_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
+    )
+    .bind(&user_id)
+    .bind(&admin_pubkey)
+    .bind(&admin_name)
+    .bind(role)
+    .bind(now_ts)
+    .bind(now_ts)
+    .execute(tx.as_mut())
+    .await;
+    if insert_result.is_err() {
         return Err(err(
             StatusCode::CONFLICT,
             3001,
@@ -136,43 +175,79 @@ async fn create_operator(
         ));
     }
 
-    let now_ts = Utc::now().timestamp();
-    let operator = OperatorData {
-        user_id: format!("u_operator_{}", Uuid::new_v4().simple()),
+    tx.commit()
+        .await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
+
+    let admin = AdminData {
+        user_id,
+        admin_address: admin_address_for_pubkey(&admin_pubkey),
         admin_pubkey,
         admin_name,
-        role: "OPERATOR_ADMIN".to_string(),
+        role: role.to_string(),
+        immutable: false,
+        can_edit_name: true,
+        can_delete: true,
     };
-
-    sqlx::query(
-        "INSERT INTO admin_users (user_id, admin_pubkey, admin_name, role, immutable, managed_key_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, FALSE, NULL, $5, $6)",
-    )
-    .bind(&operator.user_id)
-    .bind(&operator.admin_pubkey)
-    .bind(&operator.admin_name)
-    .bind(&operator.role)
-    .bind(now_ts)
-    .bind(now_ts)
-    .execute(&state.db)
-    .await
-    .map_err(|_| err(StatusCode::CONFLICT, 3001, "admin_pubkey already exists"))?;
 
     write_audit(
         &state,
         Some(ctx.user_id),
-        "CREATE_OPERATOR",
+        "CREATE_ADMIN",
         "ADMIN_USER",
-        Some(operator.user_id.clone()),
+        Some(admin.user_id.clone()),
         "SUCCESS",
-        serde_json::json!({"role": operator.role}),
+        serde_json::json!({"role": admin.role, "admin_name": admin.admin_name}),
     )
     .await?;
 
-    Ok(Json(ok(operator)))
+    Ok(Json(ok(admin)))
 }
 
-async fn delete_operator(
+async fn update_admin_name(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateAdminNameRequest>,
+) -> Result<Json<ApiResponse<AdminData>>, (StatusCode, Json<ApiError>)> {
+    let ctx = authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let admin_name = validate_admin_name(req.admin_name.as_str())?;
+    let now = Utc::now().timestamp();
+    let row = sqlx::query(
+        "UPDATE admin_users
+         SET admin_name = $1, updated_at = $2
+         WHERE user_id = $3 AND role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
+         RETURNING user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable",
+    )
+    .bind(&admin_name)
+    .bind(now)
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "update admin failed",
+        )
+    })?
+    .ok_or_else(|| err(StatusCode::NOT_FOUND, 3002, "admin not found"))?;
+
+    write_audit(
+        &state,
+        Some(ctx.user_id),
+        "UPDATE_ADMIN_NAME",
+        "ADMIN_USER",
+        Some(id),
+        "SUCCESS",
+        serde_json::json!({"admin_name": admin_name}),
+    )
+    .await?;
+
+    Ok(Json(ok(row_to_admin_data(row))))
+}
+
+async fn delete_admin(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -186,9 +261,9 @@ async fn delete_operator(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable
          FROM admin_users
-         WHERE user_id = $1
+         WHERE user_id = $1 AND role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')
          FOR UPDATE",
     )
     .bind(&id)
@@ -198,22 +273,24 @@ async fn delete_operator(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query operator failed",
+            "query admin failed",
         )
     })?;
 
     let Some(row) = row else {
-        return Err(err(StatusCode::NOT_FOUND, 3002, "operator not found"));
+        return Err(err(StatusCode::NOT_FOUND, 3002, "admin not found"));
     };
     let role: String = row.get("role");
-    if role != "OPERATOR_ADMIN" {
+    let immutable: bool = row.get("immutable");
+    if immutable {
         return Err(err(
-            StatusCode::BAD_REQUEST,
+            StatusCode::CONFLICT,
             3003,
-            "target is not operator admin",
+            "initial super admin cannot be deleted",
         ));
     }
     let admin_pubkey: String = row.get("admin_pubkey");
+    let admin_address = admin_address_for_pubkey(&admin_pubkey);
     let admin_name: String = row.get("admin_name");
 
     sqlx::query("DELETE FROM sessions WHERE user_id = $1")
@@ -224,7 +301,7 @@ async fn delete_operator(
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5001,
-                "delete operator sessions failed",
+                "delete admin sessions failed",
             )
         })?;
     sqlx::query("DELETE FROM admin_users WHERE user_id = $1")
@@ -235,14 +312,14 @@ async fn delete_operator(
             err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 5001,
-                "delete operator failed",
+                "delete admin failed",
             )
         })?;
 
-    // 中文注释：操作管理员物理删除后只靠审计快照追溯，不保留旧状态分支。
+    // 中文注释：除初始超级管理员外，管理员物理删除后只靠审计快照追溯。
     sqlx::query(
         "INSERT INTO audit_logs (log_id, operator_user_id, action, target_type, target_id, result, detail, created_at)
-         VALUES ($1, $2, 'DELETE_OPERATOR', 'ADMIN_USER', $3, 'SUCCESS', $4, $5)",
+         VALUES ($1, $2, 'DELETE_ADMIN', 'ADMIN_USER', $3, 'SUCCESS', $4, $5)",
     )
     .bind(format!("log_{}", Uuid::new_v4().simple()))
     .bind(&ctx.user_id)
@@ -250,8 +327,10 @@ async fn delete_operator(
     .bind(sqlx::types::Json(serde_json::json!({
         "deleted_user_id": id,
         "admin_pubkey": admin_pubkey,
+        "admin_address": admin_address,
         "admin_name": admin_name,
-        "role": role
+        "role": role,
+        "immutable": immutable
     })))
     .bind(Utc::now().timestamp())
     .execute(tx.as_mut())
@@ -263,6 +342,61 @@ async fn delete_operator(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     Ok(Json(ok(serde_json::json!({}))))
+}
+
+fn row_to_admin_data(row: sqlx::postgres::PgRow) -> AdminData {
+    let admin_pubkey: String = row.get("admin_pubkey");
+    let immutable: bool = row.get("immutable");
+    AdminData {
+        user_id: row.get("user_id"),
+        admin_address: admin_address_for_pubkey(&admin_pubkey),
+        admin_pubkey,
+        admin_name: row.get("admin_name"),
+        role: row.get("role"),
+        immutable,
+        can_edit_name: true,
+        can_delete: !immutable,
+    }
+}
+
+fn validate_admin_name(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let name = value.trim();
+    if name.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "admin name required"));
+    }
+    if name.chars().count() > 50 {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "admin name too long"));
+    }
+    Ok(name.to_string())
+}
+
+fn normalize_admin_pubkey(value: &str) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let raw_input = value.trim();
+    if raw_input.is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid admin_pubkey"));
+    }
+    let stripped = raw_input
+        .strip_prefix("0x")
+        .or_else(|| raw_input.strip_prefix("0X"))
+        .unwrap_or(raw_input);
+    if stripped.len() == 64 && stripped.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Ok(stripped.to_lowercase());
+    }
+    if let Some(hex_with_prefix) = ss58::ss58_to_pubkey_hex(raw_input) {
+        return Ok(hex_with_prefix
+            .strip_prefix("0x")
+            .unwrap_or(&hex_with_prefix)
+            .to_lowercase());
+    }
+    Err(err(
+        StatusCode::BAD_REQUEST,
+        1001,
+        "admin_pubkey must be SS58 address or 32-byte hex",
+    ))
+}
+
+fn admin_address_for_pubkey(admin_pubkey: &str) -> String {
+    ss58::pubkey_hex_to_ss58(admin_pubkey).unwrap_or_else(|| admin_pubkey.to_string())
 }
 
 async fn update_archive_citizen_status(
@@ -397,4 +531,31 @@ async fn update_archive_citizen_status(
         citizen_status: archive.citizen_status,
         voting_eligible: archive.voting_eligible,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_admin_pubkey, validate_admin_name};
+
+    #[test]
+    fn validate_admin_name_requires_trimmed_name() {
+        assert!(validate_admin_name(" 张三 ").is_ok());
+        assert!(validate_admin_name("   ").is_err());
+    }
+
+    #[test]
+    fn validate_admin_name_rejects_over_50_chars() {
+        let long_name = "名".repeat(51);
+        assert!(validate_admin_name(&long_name).is_err());
+    }
+
+    #[test]
+    fn normalize_admin_pubkey_accepts_32_byte_hex() {
+        let hex = format!("0x{}", "AB".repeat(32));
+        let normalized = match normalize_admin_pubkey(&hex) {
+            Ok(value) => value,
+            Err(_) => panic!("hex pubkey should normalize"),
+        };
+        assert_eq!(normalized, "ab".repeat(32));
+    }
 }

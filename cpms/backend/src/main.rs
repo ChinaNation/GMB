@@ -1,6 +1,13 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, path::Path, sync::Arc};
 
-use axum::{http::StatusCode, routing::get, Json, Router};
+use axum::{
+    body::Body,
+    http::{HeaderName, HeaderValue, Request, StatusCode},
+    middleware::{self, Next},
+    response::Response,
+    routing::get,
+    Json, Router,
+};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -16,6 +23,7 @@ mod login;
 mod number;
 mod operator_admin;
 mod qr;
+mod rate_limit;
 // 中文注释：行政区数据唯一源是 SFID 系统 sfid 工具；CPMS 只在编译期直接引用，
 // 不在 CPMS 源码树保存 province.rs 或 city_codes 的第二份文件。
 #[allow(dead_code)]
@@ -31,12 +39,14 @@ struct AppState {
     db: PgPool,
     // 登录和二维码场景需要快速本地互斥逻辑，仍保留轻量进程内锁用于并发窗口控制。
     qr_result_gc_lock: Arc<RwLock<()>>,
+    rate_limiter: Arc<rate_limit::RateLimiter>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 struct AdminUser {
     user_id: String,
     admin_pubkey: String,
+    admin_name: String,
     role: String,
     immutable: bool,
     managed_key_id: Option<String>,
@@ -128,12 +138,14 @@ async fn main() {
     let state = AppState {
         db,
         qr_result_gc_lock: Arc::new(RwLock::new(())),
+        rate_limiter: Arc::new(rate_limit::RateLimiter::new()),
     };
 
     let cleanup_store = store::StoreDb::new(state.db.clone());
 
     // 前端静态文件目录：优先 CPMS_FRONTEND_DIR 环境变量，默认 ./frontend
     let frontend_dir = env::var("CPMS_FRONTEND_DIR").unwrap_or_else(|_| "./frontend".to_string());
+    validate_frontend_dir(&frontend_dir);
     let serve_frontend = tower_http::services::ServeDir::new(&frontend_dir).fallback(
         tower_http::services::ServeFile::new(format!("{}/index.html", frontend_dir)),
     );
@@ -147,7 +159,8 @@ async fn main() {
         .merge(dangan::router())
         .merge(address::router())
         .with_state(state.clone())
-        .fallback_service(serve_frontend);
+        .fallback_service(serve_frontend)
+        .layer(middleware::from_fn(security_headers));
 
     let addr: SocketAddr = env::var("CPMS_BIND")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
@@ -183,11 +196,56 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("bind failed");
-    axum::serve(listener, app).await.expect("server failed");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("server failed");
 }
 
 async fn health() -> Json<ApiResponse<serde_json::Value>> {
     Json(ok(serde_json::json!({"status": "ok"})))
+}
+
+fn validate_frontend_dir(frontend_dir: &str) {
+    let index_path = Path::new(frontend_dir).join("index.html");
+    if env::var("CPMS_FRONTEND_DIR").is_ok() && !index_path.is_file() {
+        panic!(
+            "CPMS_FRONTEND_DIR is set but index.html is missing: {}",
+            index_path.display()
+        );
+    }
+}
+
+async fn security_headers(req: Request<Body>, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static(
+            "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+        ),
+    );
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+        ),
+    );
+    response
 }
 
 async fn find_admin_by_pubkey(
@@ -202,7 +260,7 @@ async fn find_admin_by_pubkey(
         .unwrap_or(admin_pubkey.trim())
         .to_lowercase();
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable, managed_key_id, created_at, updated_at
          FROM admin_users
          WHERE admin_pubkey = $1",
     )
@@ -221,6 +279,7 @@ async fn find_admin_by_pubkey(
     Ok(AdminUser {
         user_id: row.get("user_id"),
         admin_pubkey: row.get("admin_pubkey"),
+        admin_name: row.get("admin_name"),
         role: row.get("role"),
         immutable: row.get("immutable"),
         managed_key_id: row.get("managed_key_id"),
@@ -234,7 +293,7 @@ async fn find_admin_by_user_id(
     user_id: &str,
 ) -> Result<AdminUser, (StatusCode, Json<ApiError>)> {
     let row = sqlx::query(
-        "SELECT user_id, admin_pubkey, role, immutable, managed_key_id, created_at, updated_at
+        "SELECT user_id, admin_pubkey, COALESCE(admin_name, '') AS admin_name, role, immutable, managed_key_id, created_at, updated_at
          FROM admin_users
          WHERE user_id = $1",
     )
@@ -253,6 +312,7 @@ async fn find_admin_by_user_id(
     Ok(AdminUser {
         user_id: row.get("user_id"),
         admin_pubkey: row.get("admin_pubkey"),
+        admin_name: row.get("admin_name"),
         role: row.get("role"),
         immutable: row.get("immutable"),
         managed_key_id: row.get("managed_key_id"),
@@ -357,6 +417,7 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         "save print record failed" => "CPMS_AUDIT_WRITE_FAILED",
         "archive wallet required" => "CPMS_ARCHIVE_WALLET_REQUIRED",
         "invalid wallet_address" => "CPMS_ARCHIVE_WALLET_ADDRESS_INVALID",
+        "wallet already bound" => "CPMS_ARCHIVE_WALLET_ALREADY_BOUND",
         "archive already deleted" => "CPMS_ARCHIVE_ALREADY_DELETED",
         "delete challenge not found" => "CPMS_ARCHIVE_DELETE_CHALLENGE_NOT_FOUND",
         "delete challenge already consumed" => "CPMS_ARCHIVE_DELETE_CHALLENGE_CONSUMED",
@@ -372,6 +433,14 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         "material file required" => "CPMS_ARCHIVE_MATERIAL_FILE_REQUIRED",
         "material file too large" => "CPMS_ARCHIVE_MATERIAL_FILE_TOO_LARGE",
         "material file empty" => "CPMS_ARCHIVE_MATERIAL_FILE_EMPTY",
+        "invalid admin role" => "CPMS_ADMIN_ROLE_INVALID",
+        "admin name required" => "CPMS_ADMIN_NAME_REQUIRED",
+        "admin name too long" => "CPMS_ADMIN_NAME_TOO_LONG",
+        "super admin limit reached" => "CPMS_ADMIN_SUPER_ADMIN_LIMIT_REACHED",
+        "initial super admin cannot be deleted" => "CPMS_ADMIN_INITIAL_SUPER_ADMIN_IMMUTABLE",
+        "admin not found" => "CPMS_ADMIN_NOT_FOUND",
+        "admin_pubkey already exists" => "CPMS_ADMIN_PUBKEY_DUPLICATED",
+        "too many requests" => "CPMS_RATE_LIMITED",
         _ if status == StatusCode::UNAUTHORIZED => "CPMS_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "CPMS_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "CPMS_REQUEST_INVALID",
@@ -381,6 +450,7 @@ fn cpms_error_code(status: StatusCode, message: &str) -> &'static str {
         _ if status == StatusCode::UNPROCESSABLE_ENTITY => "CPMS_BUSINESS_VALIDATION_FAILED",
         _ if status == StatusCode::SERVICE_UNAVAILABLE => "CPMS_SERVICE_UNAVAILABLE",
         _ if status == StatusCode::LOCKED => "CPMS_RESOURCE_LOCKED",
+        _ if status == StatusCode::TOO_MANY_REQUESTS => "CPMS_RATE_LIMITED",
         _ => "CPMS_INTERNAL_ERROR",
     }
 }

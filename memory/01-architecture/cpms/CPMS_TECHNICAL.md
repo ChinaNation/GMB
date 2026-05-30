@@ -13,7 +13,8 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `initialize/`：消费 INSTALL 安装码、保存安装授权材料、生成 ARCHIVE 签发密钥、绑定超级管理员。
 - `login/`：QR-only 扫码登录、会话查询和登出。
 - `authz/`：HttpOnly Cookie session 校验与角色检查。
-- `super_admin/`：操作员新增/删除和年度状态导出入口。
+- `rate_limit.rs`：登录、初始化、删除签名和资料上传的本机内存限流。
+- `super_admin/`：管理员新增、姓名编辑、删除和年度状态导出入口。
 - `operator_admin/`：档案创建、查询、更新、软删除、ARCHIVE 生成和打印记录。
 - `dangan/`：档案号生成、公民资料库、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
 - `address.rs`：镇、村/路地址维护。
@@ -23,7 +24,7 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 - `initialize/`：安装初始化页面、初始化 API 和安装状态类型。
 - `login/`：QR-only 登录页面和登录 API。
 - `authz/`：登录态上下文与路由守卫。
-- `super_admin/`：超级管理员页面、操作员管理、年度报告导出 API 和类型。
+- `super_admin/`：超级管理员页面、管理员管理、年度报告导出 API 和类型。
 - `operator_admin/`：档案列表、创建、详情、编辑、公民资料库入口、软删除签名、档案 QR 操作 API 和类型。
 - `address/`：镇村查询 API 和类型。
 - `qr/`：WUMIN_QR_V1 解析与浏览器扫码工具。
@@ -45,10 +46,15 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 本阶段不提供旧库迁移兼容；旧数据库可清空后按新基准结构启动。
 
 ## 4. 角色模型
-- `SUPER_ADMIN`：绑定产生，负责操作员管理、地址维护、公民状态和选举资格维护。
+- `SUPER_ADMIN`：初始化绑定或由超级管理员新增，负责管理员管理、地址维护、公民状态和选举资格维护；总数最多 5 个，初始超级管理员不可删除。
 - `OPERATOR_ADMIN`：由超级管理员创建，负责档案录入、查询和二维码打印。
 
 所有业务接口均由后端校验角色，不依赖前端按钮隐藏。
+登录态用户镜像包含 `user_id / role / admin_name`，前端顶部按 `超级管理员 · 姓名` 或
+`操作管理员 · 姓名` 展示；姓名为空时显示预留名。
+
+档案创建/编辑时，出生日期必须早于当前 UTC 日期；详细地址、公民状态和选举资格为必填。
+公民状态为 `REVOKED` 时，选举资格固定为无选举资格；只有 `NORMAL` 状态允许选择选举资格。
 
 ## 5. ARCHIVE 档案号
 - 格式：`<26位Base32>-<2位Base32校验>`。
@@ -108,6 +114,8 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串。
 - `CPMS_BIND`：监听地址。
 - `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
+- `CPMS_FRONTEND_DIR`：正式部署前端静态文件目录，设置后必须存在 `index.html`。
+- `CPMS_COOKIE_SECURE`：设置为 `true/1/yes` 时给 session Cookie 增加 `Secure`。
 - `CPMS_MATERIALS_DIR`：公民资料库文件正文保存目录，默认 `data/archive-materials`。
 
 ## 8. API 总览
@@ -124,13 +132,14 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `POST /api/v1/admin/auth/logout`
 
 超级管理员：
-- `GET /api/v1/admin/operators`
-- `POST /api/v1/admin/operators`
-- `DELETE /api/v1/admin/operators/:id`
+- `GET /api/v1/admin/admins`
+- `POST /api/v1/admin/admins`
+- `PUT /api/v1/admin/admins/:id`
+- `DELETE /api/v1/admin/admins/:id`
 - `GET /api/v1/archives/status-export/state`
 - `GET /api/v1/archives/status-export`
 
-操作员：
+操作管理员：
 - `POST /api/v1/archives`
 - `GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`
@@ -154,13 +163,29 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - 其他 CPMS 和普通扫码方不能从 ARCHIVE 明文字段看出档案号属于哪个市。
 - CPMS 不直接连接 SFID 在线接口，不直接对接区块链。
 - CPMS 只负责年度状态导出文件生成和操作管理员逾期锁定；SFID 是否收到文件、是否禁用 CPMS 安装码由 SFID 系统实现。
+- 同一个钱包账户在档案生命周期内只能绑定一个未硬删除档案；软删除不释放钱包账户、档案号或护照号。
+- 初始化绑定的超级管理员不可删除且列表固定第一；后续新增超级管理员可删除。超级管理员总数最多 5 个，所有管理员只能编辑姓名。
 
 ## 10. 配置项
 - `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串，优先级高于 `DATABASE_URL`。
 - `DATABASE_URL`：PostgreSQL 连接串兜底配置。
 - `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
+- `CPMS_FRONTEND_DIR`：前端静态文件目录；正式安装脚本写入 `/opt/cpms/frontend`。
+- `CPMS_COOKIE_SECURE`：HTTPS 部署时启用 Secure Cookie，内网 HTTP 部署默认关闭。
 
-## 11. 验证命令
+## 11. 安全运行约束
+- 超级管理员 15 分钟无活动过期，操作管理员 30 分钟无活动过期；所有请求成功鉴权后按角色滑动续期。
+- 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机 IP 级限流，超限返回 `429 / CPMS_RATE_LIMITED`。
+- 已初始化实例启动时必须用 `CPMS_KEY_ENCRYPT_SECRET` 解密现有 `install_secret` 和 ARCHIVE 私钥，失败则拒绝启动。
+- 后端统一设置 CSP、禁止 iframe 嵌入、禁止 MIME 嗅探、无 referrer 和最小浏览器权限策略。
+- 删除档案完成接口在 challenge、签名人、payload hash、过期时间或验签失败时写 `DELETE_ARCHIVE / FAILED` 审计，失败不消费 challenge、不修改档案。
+
+## 12. 部署
+- 正式安装包由 `cpms/scripts/build_linux_host_installer.sh` 构建，脚本同时构建后端 release binary 和前端 `dist`。
+- `install_host.sh` 把前端静态文件安装到 `/opt/cpms/frontend`，后端通过 `CPMS_FRONTEND_DIR` 直接托管。
+- CPMS 不再提供 Docker 部署入口；开发联调使用本机数据库脚本和 Vite dev server。
+
+## 13. 验证命令
 - `cd cpms/backend && cargo fmt && cargo check && cargo test`
 - `cd cpms/frontend && npm run build`

@@ -1,12 +1,15 @@
-import { del, get, post } from '../common/http';
-import type { AdminUser, CpmsStatusExportFile, CpmsStatusExportState } from './types';
+import { del, get, post, put } from '../common/http';
+import type { AdminRole, AdminUser, CpmsStatusExportFile, CpmsStatusExportState } from './types';
 
-export const listOperators = () => get<AdminUser[]>('/api/v1/admin/operators');
+export const listAdmins = () => get<AdminUser[]>('/api/v1/admin/admins');
 
-export const createOperator = (admin_pubkey: string, admin_name: string) =>
-  post<AdminUser>('/api/v1/admin/operators', { admin_pubkey, admin_name });
+export const createAdmin = (body: { role: AdminRole; admin_pubkey: string; admin_name: string }) =>
+  post<AdminUser>('/api/v1/admin/admins', body);
 
-export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators/${id}`);
+export const updateAdminName = (id: string, admin_name: string) =>
+  put<AdminUser>(`/api/v1/admin/admins/${id}`, { admin_name });
+
+export const deleteAdmin = (id: string) => del<null>(`/api/v1/admin/admins/${id}`);
 
 export const exportStatusFile = () =>
   get<{ file_name: string; export_file: CpmsStatusExportFile }>('/api/v1/archives/status-export');

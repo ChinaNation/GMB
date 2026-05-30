@@ -7,7 +7,7 @@ import NotFound from './common/NotFound';
 import LoginPage from './login/LoginPage';
 import InstallPage from './initialize/InstallPage';
 import AdminLayout from './super_admin/AdminLayout';
-import OperatorList from './super_admin/OperatorList';
+import AdminList from './super_admin/AdminList';
 import SystemSettings from './super_admin/SystemSettings';
 import ArchiveList from './operator_admin/ArchiveList';
 import ArchiveCreate from './operator_admin/ArchiveCreate';
@@ -52,7 +52,7 @@ export default function App() {
               <Route path="/admin/archives/:id" element={<ArchiveDetail />} />
               <Route element={<ProtectedRoute role="SUPER_ADMIN" />}>
                 {/* 管理员与系统设置仅超级管理员可访问 */}
-                <Route path="/admin/operators" element={<OperatorList />} />
+                <Route path="/admin/admins" element={<AdminList />} />
                 <Route path="/admin/settings" element={<SystemSettings />} />
               </Route>
             </Route>
