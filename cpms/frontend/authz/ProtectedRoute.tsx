@@ -1,7 +1,7 @@
 // 路由守卫：未登录跳转登录页，角色不匹配跳转 404
 
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../auth';
+import { useAuth } from './AuthProvider';
 
 export default function ProtectedRoute({ role }: { role?: string }) {
   const { ready, user } = useAuth();

@@ -37,7 +37,7 @@ GMB/
 - `memory/`：AI 编程系统、项目长期记忆、产品文档与模块文档真源
 - `citizenchain/`：区块链 runtime、节点程序、节点桌面 UI、打包发布
 - `sfid/`：在线身份系统
-- `cpms/`：离线实名系统
+- `cpms/`：离线实名系统，包含 Rust 后端、React/Vite 前端、数据库迁移和部署脚本
 - `wumin/`：冷钱包，负责离线签名、扫码识别和冷钱包 UI
 - `wuminapp/`：手机 App
 - `website/`：GMB 官网前端工程，当前使用 React + TypeScript + Vite 构建静态站点

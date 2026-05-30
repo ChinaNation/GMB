@@ -16,7 +16,7 @@
 - `citizenchain/node`：Rust + Substrate / Polkadot SDK + Tauri + React + TypeScript + Vite
 - `citizenchain/runtime`：Rust + Substrate / Polkadot SDK
 - `sfid`：React + TypeScript + Vite 前端，Rust + Axum 后端，PostgreSQL
-- `cpms`：Rust + Axum + SQLx + PostgreSQL；当前仓库只有预留前端目录，没有独立前端实现落地
+- `cpms`：Rust + Axum + SQLx + PostgreSQL 后端，React + TypeScript + Vite 前端
 - `wuminapp`：Flutter + Dart + Isar
 
 ### Architect Agent

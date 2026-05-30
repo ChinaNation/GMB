@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import * as api from '../api';
-import type { InstallStatus } from '../types';
-import { startCameraScanner, scanImageQr } from '../utils/cameraScanner';
+import * as api from './api';
+import type { InstallStatus } from './types';
+import { startCameraScanner, scanImageQr } from '../qr/cameraScanner';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { UserContactBody } from '../qr/wuminQr';
 import { ScanIcon } from '../components/ScanIcon';

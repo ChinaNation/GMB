@@ -11,12 +11,23 @@ CPMS 是市公安局使用的离线公民档案管理系统。当前基线只保
 ## 2. 后端模块
 - `main.rs`：应用启动、PostgreSQL 连接池、迁移、通用响应与审计。
 - `initialize/`：消费 INSTALL 安装码、保存安装授权材料、生成 ARCHIVE 签发密钥、绑定超级管理员。
-- `login/`：管理员 challenge 登录和扫码登录。
-- `authz/`：Bearer token 鉴权与角色校验。
-- `super_admin/`：操作员管理、公民状态和选举资格管理。
-- `operator_admin/`：档案创建、查询、ARCHIVE 生成和打印记录。
-- `dangan/`：档案号生成、`geo_seal` 加密、ARCHIVE 签名。
+- `login/`：QR-only 扫码登录、会话查询和登出。
+- `authz/`：HttpOnly Cookie session 校验与角色检查。
+- `super_admin/`：操作员新增/删除和年度状态导出入口。
+- `operator_admin/`：档案创建、查询、更新、软删除、ARCHIVE 生成和打印记录。
+- `dangan/`：档案号生成、100 年硬删除、年度状态导出、`geo_seal` 加密、ARCHIVE 签名。
 - `address.rs`：镇、村/路地址维护。
+
+## 2.1 前端模块
+- `cpms/frontend`：Vite 工程根目录，不再保留 `web` 或 `src` 包装层。
+- `initialize/`：安装初始化页面、初始化 API 和安装状态类型。
+- `login/`：QR-only 登录页面和登录 API。
+- `authz/`：登录态上下文与路由守卫。
+- `super_admin/`：超级管理员页面、操作员管理、年度报告导出 API 和类型。
+- `operator_admin/`：档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 API 和类型。
+- `address/`：镇村查询 API 和类型。
+- `qr/`：WUMIN_QR_V1 解析与浏览器扫码工具。
+- `common/`：通用 HTTP 封装、共享类型和基础布局组件。
 
 ## 3. 初始化流程
 1. CPMS 扫描或粘贴 SFID 生成的 `SFID_CPMS_V1 / INSTALL`。
@@ -101,29 +112,32 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - `POST /api/v1/install/super-admin/bind`
 
 登录：
-- `POST /api/v1/admin/auth/identify`
-- `POST /api/v1/admin/auth/challenge`
-- `POST /api/v1/admin/auth/verify`
 - `POST /api/v1/admin/auth/qr/challenge`
 - `POST /api/v1/admin/auth/qr/complete`
 - `GET /api/v1/admin/auth/qr/result`
+- `GET /api/v1/admin/auth/me`
 - `POST /api/v1/admin/auth/logout`
 
 超级管理员：
 - `GET /api/v1/admin/operators`
 - `POST /api/v1/admin/operators`
-- `PUT /api/v1/admin/operators/:id`
 - `DELETE /api/v1/admin/operators/:id`
-- `PUT /api/v1/admin/operators/:id/status`
-- `PUT /api/v1/archives/:archive_id/citizen-status`
-- 地址管理 API：`/api/v1/address/*`
+- `GET /api/v1/archives/status-export`
 
 操作员：
 - `POST /api/v1/archives`
 - `GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`
+- `PUT /api/v1/archives/:archive_id`
+- `POST /api/v1/archives/:archive_id/wallet`
 - `POST /api/v1/archives/:archive_id/qr/generate`
 - `POST /api/v1/archives/:archive_id/qr/print`
+- `POST /api/v1/archives/:archive_id/delete/challenge`
+- `POST /api/v1/archives/:archive_id/delete/complete`
+
+地址：
+- `GET /api/v1/address/towns`
+- `GET /api/v1/address/villages`
 
 ## 9. 安全边界
 - 未经 SFID 签发 INSTALL 的 CPMS 无法产生可被 SFID 验证通过的 ARCHIVE。
@@ -139,4 +153,4 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 
 ## 11. 验证命令
 - `cd cpms/backend && cargo fmt && cargo check && cargo test`
-- `cd cpms/frontend/web && npm run build`
+- `cd cpms/frontend && npm run build`

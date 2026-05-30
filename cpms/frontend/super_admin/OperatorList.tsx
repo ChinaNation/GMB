@@ -2,11 +2,11 @@
 // 新增管理员：标题右侧内联展开姓名+账户输入框，账户输入框右侧扫码图标。
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import * as api from '../api';
-import type { AdminUser } from '../types';
+import * as api from './api';
+import type { AdminUser } from './types';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { UserContactBody } from '../qr/wuminQr';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { startCameraScanner } from '../qr/cameraScanner';
 import { ScanIcon } from '../components/ScanIcon';
 
 export default function OperatorList() {

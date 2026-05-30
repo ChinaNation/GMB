@@ -84,7 +84,7 @@
 | `citizenchain/node/` | 节点桌面端 | node | 原生节点、Tauri 后端和桌面前端 |
 | `sfid/` | 在线身份系统 | sfid | SFID 后端、前端和部署配置 |
 | `sfid/backend/sfid/` | SFID 核心规则 | sfid-core | SFID 后端核心身份号码、省市码和校验规则唯一源码目录 |
-| `cpms/` | 离线实名系统 | cpms | CPMS 后端、部署配置和预留前端 |
+| `cpms/` | 离线实名系统 | cpms | CPMS 后端、前端、数据库和部署配置 |
 | `wumin/` | 冷钱包 | wumin | 离线签名、扫码识别和冷钱包 UI |
 | `wuminapp/` | 手机热钱包 | wuminapp | Flutter 移动端和轻节点能力 |
 | `wuminapp/lib/isar/` | wuminapp 本地数据库 | wuminapp-isar | wuminapp Isar 本地持久化实体、schema 和数据库入口 |
@@ -136,6 +136,14 @@
 | CPMS 档案生命周期 | `lifecycle` | `cpms/backend/src/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
 | CPMS 状态导出 | `export` | `cpms/backend/src/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
 | CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与号码释放凭证 |
+| CPMS 前端鉴权 | `authz` | `cpms/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
+| CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
+| CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
+| CPMS 前端超级管理员 | `super_admin` | `cpms/frontend/super_admin/` | CPMS 前端超级管理员页面、操作员管理和年度报告导出 |
+| CPMS 前端操作管理员 | `operator_admin` | `cpms/frontend/operator_admin/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
+| CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇村查询 API 和类型 |
+| CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 WUMIN_QR_V1 解析和浏览器扫码工具 |
+| CPMS 前端通用层 | `common` | `cpms/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |
 
 ## 6. 新命名登记模板
 

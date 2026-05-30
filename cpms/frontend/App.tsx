@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './auth';
-import * as api from './api';
-import ProtectedRoute from './common/ProtectedRoute';
+import { AuthProvider, useAuth } from './authz/AuthProvider';
+import { installStatus } from './initialize/api';
+import ProtectedRoute from './authz/ProtectedRoute';
 import NotFound from './common/NotFound';
 import LoginPage from './login/LoginPage';
-import InstallPage from './install/InstallPage';
-import AdminLayout from './admin/AdminLayout';
-import OperatorList from './admin/OperatorList';
-import SystemSettings from './admin/SystemSettings';
-import ArchiveList from './operator/ArchiveList';
-import ArchiveCreate from './operator/ArchiveCreate';
-import ArchiveDetail from './operator/ArchiveDetail';
+import InstallPage from './initialize/InstallPage';
+import AdminLayout from './super_admin/AdminLayout';
+import OperatorList from './super_admin/OperatorList';
+import SystemSettings from './super_admin/SystemSettings';
+import ArchiveList from './operator_admin/ArchiveList';
+import ArchiveCreate from './operator_admin/ArchiveCreate';
+import ArchiveDetail from './operator_admin/ArchiveDetail';
 
 function RootRedirect() {
   const { ready, user } = useAuth();
@@ -19,7 +19,7 @@ function RootRedirect() {
   const [initialized, setInitialized] = useState(true);
 
   useEffect(() => {
-    api.installStatus().then(res => {
+    installStatus().then(res => {
       const data = res.data;
       if (!data || !data.initialized || data.super_admin_bound_count < 1) {
         setInitialized(false);

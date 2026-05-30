@@ -3,10 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import * as api from '../api';
-import type { Archive } from '../types';
+import { listTowns, listVillages } from '../address/api';
+import { installStatus } from '../initialize/api';
+import * as api from './api';
+import type { Archive } from './types';
+import type { Town, Village } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { startCameraScanner } from '../qr/cameraScanner';
 import { ScanIcon } from '../components/ScanIcon';
 
 function calcAge(birthDate: string): string {
@@ -55,8 +58,8 @@ export default function ArchiveDetail() {
   const [townName, setTownName] = useState('');
   const [villageName, setVillageName] = useState('');
   // 编辑用镇村列表
-  const [towns, setTowns] = useState<{ town_code: string; town_name: string }[]>([]);
-  const [villages, setVillages] = useState<{ village_id: string; village_name: string }[]>([]);
+  const [towns, setTowns] = useState<Town[]>([]);
+  const [villages, setVillages] = useState<Village[]>([]);
 
   const loadArchive = () => {
     if (!id) return;
@@ -65,11 +68,11 @@ export default function ArchiveDetail() {
 
   useEffect(() => {
     loadArchive();
-    api.installStatus().then(res => {
+    installStatus().then(res => {
       if (res.data?.province_name) setProvinceName(res.data.province_name);
       if (res.data?.city_name) setCityName(res.data.city_name);
     }).catch(() => {});
-    api.listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
+    listTowns().then(res => { if (res.data) setTowns(res.data); }).catch(() => {});
   }, [id]);
 
   // 解析镇村名称
@@ -78,7 +81,7 @@ export default function ArchiveDetail() {
     const t = towns.find(t => t.town_code === archive.town_code);
     if (t) setTownName(t.town_name);
     if (archive.village_id) {
-      api.listVillages(archive.town_code).then(res => {
+      listVillages(archive.town_code).then(res => {
         if (res.data) {
           setVillages(res.data);
           const v = res.data.find(v => v.village_id === archive.village_id);
@@ -150,14 +153,14 @@ export default function ArchiveDetail() {
     setError('');
     // 加载编辑用村列表
     if (archive.town_code) {
-      api.listVillages(archive.town_code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+      listVillages(archive.town_code).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
     }
   };
 
   const handleEditTownChange = (tc: string) => {
     setEditForm(f => ({ ...f, town_code: tc, village_id: '' }));
     if (tc) {
-      api.listVillages(tc).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
+      listVillages(tc).then(res => { if (res.data) setVillages(res.data); }).catch(() => {});
     } else {
       setVillages([]);
     }

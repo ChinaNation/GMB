@@ -1,7 +1,7 @@
 # CPMS Technical Notes
 
 ## 0. 系统概述
-CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，数据使用 PostgreSQL 持久化。
+CPMS（Citizen Passport Management System）是市公安局使用的公民档案管理系统，后端使用 Rust/Axum，前端使用 React/Vite，数据使用 PostgreSQL 持久化。
 
 当前实现基线：
 - 管理员只允许使用 `WUMIN_QR_V1 / login_challenge` 扫码登录，登录态写入 HttpOnly Cookie。
@@ -24,9 +24,10 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | 异步运行时 | Tokio |
 | 数据库 | PostgreSQL 16 / sqlx 0.8 |
 | 密码学 | schnorrkel, blake2, sha2, aes-gcm |
+| 前端 | React + TypeScript + Vite |
 | 部署 | Docker / systemd |
 
-## 2. 模块结构
+## 2. 后端模块结构
 | 模块 | 文件 | 说明 |
 |------|------|------|
 | main | `src/main.rs` | 入口、路由、公共工具函数、过期数据清理 |
@@ -35,10 +36,22 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | initialize | `src/initialize/mod.rs` | INSTALL 初始化、ARCHIVE 签发密钥、超级管理员绑定 |
 | sfid_tool_province | `src/main.rs` | 编译期直接引用 SFID 系统 `sfid/backend/sfid/province.rs` 行政区唯一源 |
 | address | `src/address.rs` | 按安装码所属市重建镇/村路地址表并提供查询接口 |
-| super_admin | `src/super_admin/mod.rs` | 操作员新增/删除、公民状态变更 |
+| super_admin | `src/super_admin/mod.rs` | 操作员新增/删除、年度状态导出 |
 | operator_admin | `src/operator_admin/mod.rs` | 档案创建/查询、软删除、ARCHIVE 更新/打印 |
 | number | `src/number/mod.rs` | 档案号与护照号生成 |
-| dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期 |
+| dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期、年度状态导出、100 年硬删除 |
+
+## 2.1 前端模块结构
+| 模块 | 目录 | 说明 |
+|------|------|------|
+| authz | `frontend/authz/` | 登录态上下文与路由守卫 |
+| initialize | `frontend/initialize/` | 安装初始化页面、API 和类型 |
+| login | `frontend/login/` | QR-only 登录页面和 API |
+| super_admin | `frontend/super_admin/` | 超级管理员系统设置、操作员管理、年度报告导出 |
+| operator_admin | `frontend/operator_admin/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
+| address | `frontend/address/` | 镇村查询 API 和类型 |
+| qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
+| common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
 
 ## 3. API 清单
 系统初始化：
@@ -56,7 +69,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 管理：
 - `GET /POST /api/v1/admin/operators`
 - `DELETE /api/v1/admin/operators/:id`
-- `PUT /api/v1/archives/:archive_id/citizen-status`
+- `GET /api/v1/archives/status-export`
 
 档案：
 - `POST /GET /api/v1/archives`
@@ -105,7 +118,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 
 ## 7. 验证
 - `cargo fmt && cargo check && cargo test`
-- `cd frontend/web && npm run build`
+- `cd frontend && npm run build`
 
 ## 8. 错误码
 

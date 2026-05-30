@@ -82,7 +82,8 @@ sfid / cpms 前端只是扫码 UI 宿主:
 **注意**:CPMS 的 `SFID_CPMS_V1 / INSTALL` 与 `ARCHIVE` 是**另一套完全独立的协议**,与 `WUMIN_QR_V1` 无关,永远不合并。相关代码位于:
 - `cpms/backend/src/initialize/mod.rs`
 - `cpms/backend/src/dangan/mod.rs`
-- `cpms/frontend/web/src/install/`
-- `cpms/frontend/web/src/admin/`
+- `cpms/frontend/initialize/`
+- `cpms/frontend/super_admin/`
+- `cpms/frontend/operator_admin/`
 
 这些目录在协议统一任务的零命中 grep 扫描中**被排除**。

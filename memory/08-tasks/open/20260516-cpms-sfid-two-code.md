@@ -56,6 +56,6 @@
 验证记录：
 - `cd cpms/backend && cargo fmt && cargo check`
 - `cd cpms/backend && cargo fmt && cargo test`
-- `cd cpms/frontend/web && npm run build`
+- `cd cpms/frontend && npm run build`
 - `rg` 检查 CPMS 源码、脚本、当前有效文档和本任务卡中的旧中间注册链路关键词，结果为零命中。
 - 2026-05-16：`cd cpms/backend && cargo fmt && cargo check && cargo test` 通过；`rg` 检查当前有效 SFID/CPMS 代码和文档中的档案号旧前缀，结果为零命中。

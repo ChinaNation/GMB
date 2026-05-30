@@ -55,8 +55,8 @@ else
   }
 fi
 
-if [[ ! -d "$ROOT_DIR/frontend/web/node_modules" ]]; then
-  (cd "$ROOT_DIR/frontend/web" && npm install)
+if [[ ! -d "$ROOT_DIR/frontend/node_modules" ]]; then
+  (cd "$ROOT_DIR/frontend" && npm install)
 fi
 
 BACKEND_PID=""
@@ -83,7 +83,7 @@ wait_backend_ready
 echo "=== 后端就绪 ==="
 
 echo "=== 启动前端（端口 ${CPMS_FRONTEND_PORT}）==="
-(cd "$ROOT_DIR/frontend/web" && npx vite --port "$CPMS_FRONTEND_PORT") &
+(cd "$ROOT_DIR/frontend" && npx vite --port "$CPMS_FRONTEND_PORT") &
 FRONTEND_PID="$!"
 
 echo ""
