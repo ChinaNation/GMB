@@ -7,18 +7,25 @@ PAYLOAD_DIR="${OUT_DIR}/payload"
 
 # 中文注释：行政区数据由 CPMS 后端编译期直接引用 sfid/backend/sfid 唯一源，
 # 打包脚本不得再把 province.rs 或 city_codes 写入 CPMS 源码树。
-echo "[1/4] Build backend release binary"
+echo "[1/5] Build backend release binary"
 cargo build --release --manifest-path "${ROOT_DIR}/backend/Cargo.toml"
 
-echo "[2/4] Prepare installer layout"
-rm -rf "${OUT_DIR}"
-mkdir -p "${PAYLOAD_DIR}/bin" "${PAYLOAD_DIR}/db" "${PAYLOAD_DIR}/systemd"
+echo "[2/5] Build frontend static files"
+if [[ ! -d "${ROOT_DIR}/frontend/node_modules" ]]; then
+  (cd "${ROOT_DIR}/frontend" && npm ci)
+fi
+(cd "${ROOT_DIR}/frontend" && npm run build)
 
-echo "[3/4] Copy payload files"
+echo "[3/5] Prepare installer layout"
+rm -rf "${OUT_DIR}"
+mkdir -p "${PAYLOAD_DIR}/bin" "${PAYLOAD_DIR}/db" "${PAYLOAD_DIR}/frontend" "${PAYLOAD_DIR}/systemd"
+
+echo "[4/5] Copy payload files"
 cp "${ROOT_DIR}/backend/target/release/cpms-backend" "${PAYLOAD_DIR}/bin/cpms-backend"
 cp "${ROOT_DIR}/deploy/linux/backup_to_storage.sh" "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 cp "${ROOT_DIR}/backend/db/schema.sql" "${PAYLOAD_DIR}/db/schema.sql"
 cp "${ROOT_DIR}/backend/db/seed.sql" "${PAYLOAD_DIR}/db/seed.sql"
+cp -R "${ROOT_DIR}/frontend/dist/." "${PAYLOAD_DIR}/frontend/"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backend.service" "${PAYLOAD_DIR}/systemd/cpms-backend.service"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backup.service" "${PAYLOAD_DIR}/systemd/cpms-backup.service"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backup.timer" "${PAYLOAD_DIR}/systemd/cpms-backup.timer"
@@ -33,7 +40,7 @@ chmod +x \
   "${PAYLOAD_DIR}/bin/cpms-backend" \
   "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 
-echo "[4/4] Create archive"
+echo "[5/5] Create archive"
 tar -C "${ROOT_DIR}/dist" -czf "${ROOT_DIR}/dist/cpms-host-linux-x64.tar.gz" "cpms-host-linux-x64"
 
 echo

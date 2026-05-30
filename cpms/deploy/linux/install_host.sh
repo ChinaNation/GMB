@@ -9,6 +9,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="${SCRIPT_DIR}/payload"
 BIN_SRC="${PAYLOAD_DIR}/bin/cpms-backend"
+FRONTEND_SRC="${PAYLOAD_DIR}/frontend"
 SCHEMA_SQL="${PAYLOAD_DIR}/db/schema.sql"
 SEED_SQL="${PAYLOAD_DIR}/db/seed.sql"
 SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backend.service"
@@ -18,6 +19,10 @@ BACKUP_TIMER_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.timer"
 
 if [[ ! -x "${BIN_SRC}" ]]; then
   echo "ERROR: missing backend binary at ${BIN_SRC}"
+  exit 1
+fi
+if [[ ! -f "${FRONTEND_SRC}/index.html" ]]; then
+  echo "ERROR: missing frontend static payload at ${FRONTEND_SRC}"
   exit 1
 fi
 if [[ ! -f "${SCHEMA_SQL}" || ! -f "${SEED_SQL}" ]]; then
@@ -83,6 +88,7 @@ setup_database() {
 CPMS_BIND=0.0.0.0:8080
 CPMS_DATABASE_URL=postgresql://${db_user}:${db_password}@127.0.0.1:5432/${db_name}
 CPMS_KEY_ENCRYPT_SECRET=${key_encrypt_secret}
+CPMS_FRONTEND_DIR=/opt/cpms/frontend
 EOF
   chmod 0600 /etc/cpms/cpms-backend.env
   chown root:cpms /etc/cpms/cpms-backend.env
@@ -98,11 +104,15 @@ EOF
 
 install_backend() {
   install -d -m 0755 /opt/cpms/bin
+  install -d -m 0755 /opt/cpms/frontend
   install -d -m 0750 /var/lib/cpms/runtime
   install -m 0755 "${BIN_SRC}" /opt/cpms/bin/cpms-backend
+  rm -rf /opt/cpms/frontend/*
+  cp -R "${FRONTEND_SRC}/." /opt/cpms/frontend/
   if [[ -f "${BACKUP_SCRIPT_SRC}" ]]; then
     install -m 0755 "${BACKUP_SCRIPT_SRC}" /opt/cpms/bin/backup_to_storage.sh
   fi
+  chown -R root:root /opt/cpms/frontend
   chown -R cpms:cpms /var/lib/cpms
 }
 

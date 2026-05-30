@@ -213,6 +213,20 @@ a:hover { text-decoration: underline; }
   background: #f0fdfa;
 }
 
+/* 管理员列表需要表头与内容在每列中居中对齐。 */
+.admin-table th,
+.admin-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.admin-table__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
 /* ── 按钮 ─────────────────────────────── */
 
 .btn {
@@ -510,10 +524,6 @@ a:hover { text-decoration: underline; }
   max-width: 960px;
 }
 
-.archive-material-section {
-  max-width: 1180px;
-}
-
 .archive-material-count {
   min-width: 28px;
   height: 22px;
@@ -625,7 +635,7 @@ a:hover { text-decoration: underline; }
   display: none;
 }
 
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .archive-detail-body {
     flex-direction: column;
   }

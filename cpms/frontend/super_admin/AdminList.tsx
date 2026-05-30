@@ -1,19 +1,22 @@
-// 系统管理员列表。
+// 管理员列表。
 // 新增管理员：标题右侧内联展开姓名+账户输入框，账户输入框右侧扫码图标。
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as api from './api';
-import type { AdminUser } from './types';
+import type { AdminRole, AdminUser } from './types';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import type { UserContactBody } from '../qr/wuminQr';
 import { startCameraScanner } from '../qr/cameraScanner';
 import { ScanIcon } from '../components/ScanIcon';
 
-export default function OperatorList() {
-  const [operators, setOperators] = useState<AdminUser[]>([]);
+export default function AdminList() {
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [addOpen, setAddOpen] = useState(false);
+  const [newRole, setNewRole] = useState<AdminRole | ''>('');
   const [newName, setNewName] = useState('');
   const [newPubkey, setNewPubkey] = useState('');
+  const [editingUserId, setEditingUserId] = useState('');
+  const [editingName, setEditingName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // 扫码弹窗
@@ -25,21 +28,30 @@ export default function OperatorList() {
 
   const load = useCallback(async () => {
     try {
-      const res = await api.listOperators();
-      if (res.data) setOperators(res.data);
+      const res = await api.listAdmins();
+      if (res.data) setAdmins(res.data);
     } catch { /* ignore */ }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  const superAdminCount = admins.filter(admin => admin.role === 'SUPER_ADMIN').length;
+
   const handleCreate = async () => {
+    if (!newRole) { setError('请选择管理员类型'); return; }
+    if (!newName.trim()) { setError('请输入管理员姓名'); return; }
     if (!newPubkey.trim()) { setError('请输入管理员账户'); return; }
     setError('');
     setLoading(true);
     try {
-      await api.createOperator(newPubkey.trim(), newName.trim());
+      await api.createAdmin({
+        role: newRole,
+        admin_name: newName.trim(),
+        admin_pubkey: newPubkey.trim(),
+      });
       setNewPubkey('');
       setNewName('');
+      setNewRole('');
       setAddOpen(false);
       await load();
     } catch (e) {
@@ -48,12 +60,44 @@ export default function OperatorList() {
     setLoading(false);
   };
 
-  const handleDelete = async (op: AdminUser) => {
-    if (!confirm(`确认删除管理员 ${op.admin_name || op.user_id}？`)) return;
+  const handleEdit = (admin: AdminUser) => {
+    setEditingUserId(admin.user_id);
+    setEditingName(admin.admin_name);
+    setError('');
+  };
+
+  const handleSaveName = async (admin: AdminUser) => {
+    if (!editingName.trim()) { setError('请输入管理员姓名'); return; }
+    setLoading(true);
+    setError('');
     try {
-      await api.deleteOperator(op.user_id);
+      await api.updateAdminName(admin.user_id, editingName.trim());
+      setEditingUserId('');
+      setEditingName('');
       await load();
-    } catch { /* ignore */ }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败');
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async (admin: AdminUser) => {
+    if (!admin.can_delete) return;
+    if (!confirm(`确认删除管理员 ${admin.admin_name || admin.user_id}？`)) return;
+    try {
+      await api.deleteAdmin(admin.user_id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败');
+    }
+  };
+
+  const resetAddForm = () => {
+    setAddOpen(false);
+    setError('');
+    setNewRole('');
+    setNewName('');
+    setNewPubkey('');
   };
 
   // ── 扫码 ──
@@ -98,10 +142,20 @@ export default function OperatorList() {
   return (
     <div className="card">
       <div className="card__title flex-between">
-        <span>系统管理员列表</span>
+        <span>管理员列表</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {addOpen && (
           <>
+            <select
+              className="form-input"
+              style={{ width: 150, flexShrink: 0 }}
+              value={newRole}
+              onChange={e => setNewRole(e.target.value as AdminRole | '')}
+            >
+              <option value="">请选择类型</option>
+              <option value="SUPER_ADMIN" disabled={superAdminCount >= 5}>超级管理员</option>
+              <option value="OPERATOR_ADMIN">操作管理员</option>
+            </select>
             <input
               className="form-input"
               style={{ width: 140, flexShrink: 0 }}
@@ -138,10 +192,7 @@ export default function OperatorList() {
             className={addOpen ? 'btn btn--ghost' : 'btn btn--primary'}
             onClick={() => {
               if (addOpen) {
-                setAddOpen(false);
-                setError('');
-                setNewName('');
-                setNewPubkey('');
+                resetAddForm();
               } else {
                 setAddOpen(true);
               }
@@ -154,21 +205,42 @@ export default function OperatorList() {
 
       {error && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
-      <table className="table">
+      <table className="table admin-table">
         <thead>
           <tr><th>姓名</th><th>用户ID</th><th>账户</th><th>角色</th><th>操作</th></tr>
         </thead>
         <tbody>
-          {operators.length === 0 ? (
+          {admins.length === 0 ? (
             <tr><td colSpan={5} className="text-center" style={{ color: 'var(--color-text-secondary)' }}>暂无管理员</td></tr>
-          ) : operators.map(op => (
-            <tr key={op.user_id}>
-              <td>{op.admin_name || '—'}</td>
-              <td><span className="text-ellipsis">{op.user_id}</span></td>
-              <td><span className="text-ellipsis" style={{ maxWidth: 160 }}>{op.admin_pubkey}</span></td>
-              <td>{op.role === 'OPERATOR_ADMIN' ? '系统管理员' : op.role}</td>
-              <td style={{ display: 'flex', gap: 4 }}>
-                <button className="btn btn--danger btn--sm" onClick={() => handleDelete(op)}>删除</button>
+          ) : admins.map(admin => (
+            <tr key={admin.user_id}>
+              <td>
+                {editingUserId === admin.user_id ? (
+                  <input
+                    className="form-input"
+                    style={{ width: 160 }}
+                    value={editingName}
+                    onChange={e => setEditingName(e.target.value)}
+                  />
+                ) : admin.admin_name || '—'}
+              </td>
+              <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.user_id}</td>
+              <td style={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{admin.admin_address || admin.admin_pubkey}</td>
+              <td>{admin.role === 'SUPER_ADMIN' ? '超级管理员' : '操作管理员'}</td>
+              <td>
+                <div className="admin-table__actions">
+                  {editingUserId === admin.user_id ? (
+                    <>
+                      <button className="btn btn--primary btn--sm" onClick={() => void handleSaveName(admin)} disabled={loading}>保存</button>
+                      <button className="btn btn--ghost btn--sm" onClick={() => { setEditingUserId(''); setEditingName(''); }}>取消</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn btn--ghost btn--sm" onClick={() => handleEdit(admin)} disabled={!admin.can_edit_name}>编辑</button>
+                      <button className="btn btn--danger btn--sm" onClick={() => handleDelete(admin)} disabled={!admin.can_delete}>删除</button>
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

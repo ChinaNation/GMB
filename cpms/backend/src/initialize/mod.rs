@@ -1,12 +1,12 @@
-use std::env;
+use std::{env, net::SocketAddr};
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use axum::{
-    extract::State,
-    http::StatusCode,
+    extract::{ConnectInfo, State},
+    http::{HeaderMap, StatusCode},
     routing::{get, post},
     Json, Router,
 };
@@ -19,7 +19,7 @@ use schnorrkel::MiniSecretKey;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
-use crate::{err, ok, write_audit, ApiError, ApiResponse, AppState};
+use crate::{err, ok, rate_limit, write_audit, ApiError, ApiResponse, AppState};
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -201,6 +201,37 @@ pub(crate) async fn ensure_secret_config(db: &sqlx::PgPool) -> Result<(), String
     .map_err(|e| format!("query CPMS secret state failed: {e}"))?;
     if has_stored_secret {
         master_encrypt_key()?;
+        verify_stored_secret_materials(db).await?;
+    }
+    Ok(())
+}
+
+async fn verify_stored_secret_materials(db: &sqlx::PgPool) -> Result<(), String> {
+    if let Some(stored) = sqlx::query_scalar::<_, String>(
+        "SELECT install_secret
+         FROM system_install
+         WHERE id = 1 AND install_secret IS NOT NULL AND install_secret <> ''",
+    )
+    .fetch_optional(db)
+    .await
+    .map_err(|e| format!("query install_secret failed: {e}"))?
+    {
+        decrypt_install_secret(&stored)
+            .ok_or_else(|| "decrypt install_secret failed".to_string())?;
+    }
+
+    let rows = sqlx::query("SELECT key_id, secret FROM qr_sign_keys")
+        .fetch_all(db)
+        .await
+        .map_err(|e| format!("query qr_sign_keys failed: {e}"))?;
+    for row in rows {
+        let key_id: String = row.get("key_id");
+        let secret: String = row.get("secret");
+        let bytes = decrypt_secret(&key_id, &secret)
+            .ok_or_else(|| format!("decrypt {key_id} key failed"))?;
+        if bytes.len() != 32 {
+            return Err(format!("{key_id} key secret length invalid"));
+        }
     }
     Ok(())
 }
@@ -283,8 +314,12 @@ async fn install_status(
 /// 已初始化实例如需换绑，按当前任务口径直接清库重装，不走旧数据兼容分支。
 async fn initialize_install(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<InstallInitializeRequest>,
 ) -> Result<Json<ApiResponse<InstallInitializeData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(&state, client_addr, &headers, "install_initialize", 5, 60).await?;
+
     if req.sfid_init_qr_content.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -438,8 +473,20 @@ async fn initialize_install(
 
 async fn bind_super_admin_from_wumin(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<BindSuperAdminRequest>,
 ) -> Result<Json<ApiResponse<BindSuperAdminData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(
+        &state,
+        client_addr,
+        &headers,
+        "install_super_admin_bind",
+        5,
+        60,
+    )
+    .await?;
+
     let _install = load_cpms_install_runtime(&state).await?;
     let raw_input = req.admin_pubkey.trim().to_string();
     if raw_input.is_empty() {

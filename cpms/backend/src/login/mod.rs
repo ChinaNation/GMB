@@ -1,5 +1,7 @@
+use std::{env, net::SocketAddr};
+
 use axum::{
-    extract::{Query, State},
+    extract::{ConnectInfo, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -12,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::{authz, err, find_admin_by_pubkey, ok, ApiError, ApiResponse, AppState};
+use crate::{authz, err, find_admin_by_pubkey, ok, rate_limit, ApiError, ApiResponse, AppState};
 
 /// 中文注释：用 CSPRNG 生成 32 字节随机 token，比 UUID 更安全。
 fn generate_secure_token(prefix: &str) -> String {
@@ -21,16 +23,25 @@ fn generate_secure_token(prefix: &str) -> String {
     format!("{}_{}", prefix, hex::encode(buf))
 }
 
-/// 普通管理员 session 过期时间（30 分钟无操作后过期）。
-pub(crate) const TOKEN_EXPIRES_SECONDS: i64 = 30 * 60;
-/// 超级管理员 session 不过期（10 年）。
-pub(crate) const SUPER_ADMIN_TOKEN_EXPIRES_SECONDS: i64 = 10 * 365 * 24 * 3600;
+/// 超级管理员 session 空闲过期时间（15 分钟无操作后过期）。
+pub(crate) const SUPER_ADMIN_IDLE_EXPIRES_SECONDS: i64 = 15 * 60;
+/// 操作管理员 session 空闲过期时间（30 分钟无操作后过期）。
+pub(crate) const OPERATOR_ADMIN_IDLE_EXPIRES_SECONDS: i64 = 30 * 60;
 const CHALLENGE_EXPIRES_SECONDS: i64 = 90;
+
+pub(crate) fn session_ttl_seconds(role: &str) -> i64 {
+    if role == "SUPER_ADMIN" {
+        SUPER_ADMIN_IDLE_EXPIRES_SECONDS
+    } else {
+        OPERATOR_ADMIN_IDLE_EXPIRES_SECONDS
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct SessionUser {
     user_id: String,
     role: String,
+    admin_name: String,
 }
 
 #[derive(Deserialize)]
@@ -42,7 +53,6 @@ struct QrChallengeRequest {
 #[derive(Serialize)]
 struct QrChallengeData {
     challenge_id: String,
-    challenge_payload: String,
     login_qr_payload: String,
     origin: String,
     domain: String,
@@ -52,7 +62,6 @@ struct QrChallengeData {
 
 #[derive(Deserialize)]
 struct QrCompleteRequest {
-    #[serde(alias = "challenge")]
     challenge_id: String,
     session_id: String,
     admin_pubkey: String,
@@ -61,7 +70,6 @@ struct QrCompleteRequest {
 
 #[derive(Deserialize)]
 struct QrResultQuery {
-    #[serde(alias = "challenge")]
     challenge_id: String,
     session_id: String,
 }
@@ -85,8 +93,12 @@ pub(crate) fn router() -> Router<AppState> {
 
 async fn auth_qr_challenge(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<QrChallengeRequest>,
 ) -> Result<Json<ApiResponse<QrChallengeData>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(&state, client_addr, &headers, "auth_qr_challenge", 20, 60).await?;
+
     let origin = req.origin.unwrap_or_default().trim().to_string();
     if origin.is_empty() {
         return Err(err(StatusCode::BAD_REQUEST, 1001, "origin is required"));
@@ -102,16 +114,6 @@ async fn auth_qr_challenge(
     let challenge_id = format!("chl_{}", Uuid::new_v4().simple());
     let issued_at = Utc::now().timestamp();
     let expire_at = (Utc::now() + Duration::seconds(CHALLENGE_EXPIRES_SECONDS)).timestamp();
-    // 中文注释：challenge_payload 只保存当前 QR 登录挑战摘要，用于回放保护。
-    // 实际客户端签名原文在验证时通过 qr::build_signature_message 重建。
-    let challenge_payload = format!(
-        "{}|{}|{}|{}|{}|",
-        crate::qr::WUMIN_QR_V1,
-        crate::qr::QrKind::LoginReceipt.wire(),
-        challenge_id,
-        "cpms",
-        expire_at
-    );
     let (sys_pubkey, sys_sig) = build_login_qr_system_signature(
         &state,
         "cpms",
@@ -122,11 +124,10 @@ async fn auth_qr_challenge(
     .await?;
 
     sqlx::query(
-        "INSERT INTO login_challenges (challenge_id, admin_pubkey, challenge_payload, session_id, expire_at, consumed, created_at)
-         VALUES ($1, '', $2, $3, $4, FALSE, $5)",
+        "INSERT INTO login_challenges (challenge_id, admin_pubkey, session_id, expire_at, consumed, created_at)
+         VALUES ($1, '', $2, $3, FALSE, $4)",
     )
     .bind(&challenge_id)
-    .bind(&challenge_payload)
     .bind(&session_id)
     .bind(expire_at)
     .bind(issued_at)
@@ -148,7 +149,6 @@ async fn auth_qr_challenge(
 
     Ok(Json(ok(QrChallengeData {
         challenge_id,
-        challenge_payload,
         login_qr_payload,
         origin,
         domain,
@@ -159,8 +159,12 @@ async fn auth_qr_challenge(
 
 async fn auth_qr_complete(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<QrCompleteRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(&state, client_addr, &headers, "auth_qr_complete", 30, 60).await?;
+
     if req.challenge_id.trim().is_empty()
         || req.session_id.trim().is_empty()
         || req.admin_pubkey.trim().is_empty()
@@ -181,7 +185,7 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "begin tx failed"))?;
 
     let row = sqlx::query(
-        "SELECT challenge_payload, session_id, expire_at, consumed
+        "SELECT session_id, expire_at, consumed
          FROM login_challenges
          WHERE challenge_id = $1
          FOR UPDATE",
@@ -221,8 +225,6 @@ async fn auth_qr_complete(
         ));
     }
 
-    let challenge_payload: String = row.get("challenge_payload");
-
     // 先验签和查管理员，全部通过后才消费 challenge（失败时 tx 自动回滚）
     let admin = find_admin_by_pubkey(&state, req.admin_pubkey.trim()).await?;
     if admin.role == "OPERATOR_ADMIN" {
@@ -237,7 +239,6 @@ async fn auth_qr_complete(
         Some(expire_at),
         req.admin_pubkey.trim(),
     );
-    let _ = &challenge_payload; // 仅用于回放保护,不用于签名验证
     if verify_wumin_login_signature(
         req.admin_pubkey.trim(),
         &verify_message,
@@ -275,11 +276,7 @@ async fn auth_qr_complete(
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
 
     let access_token = generate_secure_token("atk");
-    let ttl = if admin.role == "SUPER_ADMIN" {
-        SUPER_ADMIN_TOKEN_EXPIRES_SECONDS
-    } else {
-        TOKEN_EXPIRES_SECONDS
-    };
+    let ttl = session_ttl_seconds(&admin.role);
     let expires_at = (Utc::now() + Duration::seconds(ttl)).timestamp();
 
     let mut tx2 = state
@@ -338,8 +335,12 @@ async fn auth_qr_complete(
 
 async fn auth_qr_result(
     State(state): State<AppState>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Query(query): Query<QrResultQuery>,
 ) -> Result<Response, (StatusCode, Json<ApiError>)> {
+    rate_limit::check(&state, client_addr, &headers, "auth_qr_result", 120, 60).await?;
+
     if query.challenge_id.trim().is_empty() || query.session_id.trim().is_empty() {
         return Err(err(
             StatusCode::BAD_REQUEST,
@@ -364,9 +365,11 @@ async fn auth_qr_result(
         })?;
 
     if let Some(row) = sqlx::query(
-        "SELECT session_id, access_token, expires_in, user_id, role
-         FROM qr_login_results
-         WHERE challenge_id = $1",
+        "SELECT r.session_id, r.access_token, r.expires_in, r.user_id, r.role,
+                COALESCE(a.admin_name, '') AS admin_name
+         FROM qr_login_results r
+         JOIN admin_users a ON a.user_id = r.user_id
+         WHERE r.challenge_id = $1",
     )
     .bind(query.challenge_id.trim())
     .fetch_optional(&state.db)
@@ -391,6 +394,7 @@ async fn auth_qr_result(
         let user = SessionUser {
             user_id: row.get("user_id"),
             role: row.get("role"),
+            admin_name: row.get("admin_name"),
         };
         if user.role == "OPERATOR_ADMIN" {
             crate::dangan::ensure_operator_annual_export_unlocked(&state).await?;
@@ -505,26 +509,45 @@ async fn auth_me(
     headers: HeaderMap,
 ) -> Result<Json<ApiResponse<SessionUser>>, (StatusCode, Json<ApiError>)> {
     let ctx = authz::require_auth(&state, &headers).await?;
+    let admin = crate::find_admin_by_user_id(&state, &ctx.user_id).await?;
     Ok(Json(ok(SessionUser {
         user_id: ctx.user_id,
         role: ctx.role,
+        admin_name: admin.admin_name,
     })))
 }
 
-fn session_cookie(access_token: &str, max_age: i64) -> String {
+fn session_cookie(access_token: &str, _max_age: i64) -> String {
+    let secure = if cookie_secure_enabled() {
+        "; Secure"
+    } else {
+        ""
+    };
     format!(
-        "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}",
+        "{}={}; Path=/; HttpOnly; SameSite=Strict{}",
         authz::SESSION_COOKIE_NAME,
         access_token,
-        max_age
+        secure
     )
 }
 
 fn clear_session_cookie() -> String {
+    let secure = if cookie_secure_enabled() {
+        "; Secure"
+    } else {
+        ""
+    };
     format!(
-        "{}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0",
-        authz::SESSION_COOKIE_NAME
+        "{}=; Path=/; HttpOnly; SameSite=Strict{}; Max-Age=0",
+        authz::SESSION_COOKIE_NAME,
+        secure
     )
+}
+
+fn cookie_secure_enabled() -> bool {
+    env::var("CPMS_COOKIE_SECURE")
+        .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
 }
 
 fn extract_domain_from_origin(origin: &str) -> Option<String> {
@@ -549,7 +572,7 @@ fn extract_domain_from_origin(origin: &str) -> Option<String> {
 
 pub(crate) fn verify_wumin_login_signature(
     admin_pubkey: &str,
-    challenge_payload: &str,
+    signed_message: &str,
     signature: &str,
 ) -> Result<(), &'static str> {
     let pubkey_bytes = crate::decode_bytes(admin_pubkey).ok_or("invalid admin_pubkey encoding")?;
@@ -564,7 +587,7 @@ pub(crate) fn verify_wumin_login_signature(
     let pk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| "invalid sr25519 public key")?;
     let sig = Signature::from_bytes(&sig_bytes).map_err(|_| "invalid sr25519 signature")?;
     pk.verify(
-        signing_context(b"substrate").bytes(challenge_payload.as_bytes()),
+        signing_context(b"substrate").bytes(signed_message.as_bytes()),
         &sig,
     )
     .map_err(|_| "sr25519 verify failed")

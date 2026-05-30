@@ -87,39 +87,37 @@ pub(crate) async fn require_auth(
     let role: String = row.get("role");
     let expires_at: i64 = row.get("expires_at");
 
-    // 超管 session 不过期；普通管理员检查过期 + 滑动续期 30 分钟。
-    if role != "SUPER_ADMIN" {
-        if role == "OPERATOR_ADMIN" {
-            match crate::dangan::ensure_operator_annual_export_unlocked(state).await {
-                Ok(()) => {}
-                Err((status, body)) if status == StatusCode::LOCKED => {
-                    let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
-                        .bind(&token)
-                        .execute(&state.db)
-                        .await;
-                    return Err((status, body));
-                }
-                Err(e) => return Err(e),
+    if role == "OPERATOR_ADMIN" {
+        match crate::dangan::ensure_operator_annual_export_unlocked(state).await {
+            Ok(()) => {}
+            Err((status, body)) if status == StatusCode::LOCKED => {
+                let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
+                    .bind(&token)
+                    .execute(&state.db)
+                    .await;
+                return Err((status, body));
             }
+            Err(e) => return Err(e),
         }
-        if expires_at < Utc::now().timestamp() {
-            // 过期则删除 session，强制重新登录
-            let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
-                .bind(&token)
-                .execute(&state.db)
-                .await;
-            return Err(err(StatusCode::UNAUTHORIZED, 2009, "session expired"));
-        }
-        // 滑动续期：每次请求刷新过期时间
-        let new_expires = (Utc::now()
-            + chrono::Duration::seconds(crate::login::TOKEN_EXPIRES_SECONDS))
-        .timestamp();
-        let _ = sqlx::query("UPDATE sessions SET expires_at = $1 WHERE access_token = $2")
-            .bind(new_expires)
+    }
+
+    if expires_at < Utc::now().timestamp() {
+        // 中文注释：所有管理员都按角色使用滑动空闲期；超管 15 分钟，操作管理员 30 分钟。
+        let _ = sqlx::query("DELETE FROM sessions WHERE access_token = $1")
             .bind(&token)
             .execute(&state.db)
             .await;
+        return Err(err(StatusCode::UNAUTHORIZED, 2009, "session expired"));
     }
+
+    let new_expires = (Utc::now()
+        + chrono::Duration::seconds(crate::login::session_ttl_seconds(&role)))
+    .timestamp();
+    let _ = sqlx::query("UPDATE sessions SET expires_at = $1 WHERE access_token = $2")
+        .bind(new_expires)
+        .bind(&token)
+        .execute(&state.db)
+        .await;
 
     Ok(AuthContext {
         user_id: row.get("user_id"),

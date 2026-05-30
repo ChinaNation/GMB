@@ -11,7 +11,7 @@
 - wumin 登录回执签名验签
 - 登录结果轮询，且结果领取一次后立即删除
 - 登录会话创建与登出
-- 当前登录管理员查询
+- 当前登录管理员查询；`auth/me` 和 QR 登录成功结果返回 `user_id / role / admin_name`
 - 登录相关状态持久化（`sessions/login_challenges/qr_login_results`）
 
 ### 2.2 本模块不负责
@@ -35,15 +35,18 @@
 - `qr_login_results`
 
 短期登录状态由 CPMS 本机 PostgreSQL 承载。`sessions.access_token` 只写入
-`cpms_session` HttpOnly Cookie，前端不再保存 token。定时清理逻辑删除过期 session、
-过期 challenge 和超时二维码登录结果。
+`cpms_session` HttpOnly Cookie，前端不再保存 token。Cookie 默认不设置浏览器 Max-Age，
+实际空闲过期以数据库 `sessions.expires_at` 为准；HTTPS 部署可通过 `CPMS_COOKIE_SECURE`
+给 Cookie 增加 `Secure`。定时清理逻辑删除过期 session、过期 challenge 和超时二维码登录结果。
 
 ## 5. 安全约束
 - QR challenge 由后端生成 `challenge_id/session_id`，前端不得自带会话 ID。
 - challenge 与 `session_id` 绑定，带有效期，完成登录后标记消费，防重放。
 - `qr_login_results` 中的成功结果领取一次后立即删除。
-- 操作管理员被删除后，对应 session 被清理；无管理员记录的 session 视为无效。
+- 管理员被删除后，对应 session 被清理；无管理员记录的 session 视为无效。
 - 签名必须通过 `sr25519` 验签，且签名公钥必须属于管理员。
+- 超级管理员 15 分钟无活动过期，操作管理员 30 分钟无活动过期；每次鉴权成功按角色滑动续期。
+- 登录 challenge、登录完成和登录结果轮询均有本机 IP 级限流，超限返回 `429 / CPMS_RATE_LIMITED`。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的 `CPMS_STATUS_EXPORT` 年度报告，`OPERATOR_ADMIN` 登录完成和登录结果领取都会被拒绝；已有操作管理员会话在鉴权时也会被清理。`SUPER_ADMIN` 不受该锁定影响，用于补导年度报告。
 
 ## 6. 扫码登录协议（与 wumin 对齐）

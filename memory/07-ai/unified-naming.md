@@ -135,7 +135,7 @@
 | CPMS 编号工具 | `number` | `cpms/backend/src/number/` | CPMS 后端档案号与护照号生成模块 |
 | CPMS 档案生命周期 | `lifecycle` | `cpms/backend/src/dangan/lifecycle.rs` | CPMS 档案软删除满 100 年后的硬删除与档案号/护照号回收逻辑 |
 | CPMS 状态导出 | `export` | `cpms/backend/src/dangan/export.rs` | CPMS 离线年度状态导出模块，生成 `CPMS_STATUS_EXPORT` 文件 |
-| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与号码释放凭证 |
+| CPMS 状态导出文件 | `CPMS_STATUS_EXPORT` | CPMS/SFID 离线 JSON 文件 | CPMS 给 SFID 导入的年度状态与档案号绑定释放凭证 |
 | CPMS 前端鉴权 | `authz` | `cpms/frontend/authz/` | CPMS 前端登录态上下文和路由守卫 |
 | CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
 | CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |

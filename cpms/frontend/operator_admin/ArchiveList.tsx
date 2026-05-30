@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listArchives } from './api';
+import { installStatus } from '../initialize/api';
 import type { Archive } from './types';
 
 const PAGE_SIZE = 20;
@@ -24,6 +25,8 @@ export default function ArchiveList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [scopeProvince, setScopeProvince] = useState('');
+  const [scopeCity, setScopeCity] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,12 +42,41 @@ export default function ArchiveList() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    installStatus()
+      .then(res => {
+        const province = res.data?.province_name || res.data?.province_code || '';
+        const city = res.data?.city_name || res.data?.city_code || '';
+        setScopeProvince(province);
+        setScopeCity(city);
+      })
+      .catch(() => {
+        setScopeProvince('');
+        setScopeCity('');
+      });
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasScope = Boolean(scopeProvince || scopeCity);
 
   return (
     <div className="card">
-      <div className="card__title" style={{ textAlign: 'center', borderLeft: 'none', paddingLeft: 0 }}>
-        公民信息列表
+      <div className="card__title" style={{ borderLeft: 'none', paddingLeft: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {hasScope ? (
+              <>
+                {scopeProvince && <span>{scopeProvince}</span>}
+                {scopeProvince && scopeCity && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 8, lineHeight: 1 }}>·</span>
+                )}
+                {scopeCity && <span>{scopeCity}</span>}
+              </>
+            ) : '—'}
+          </span>
+          <span>公民档案列表</span>
+          <span />
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

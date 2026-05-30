@@ -39,7 +39,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 ## 4. 数据边界
 
 - 前端不得提交护照号。
-- 操作员不得手工指定护照号。
+- 操作管理员不得手工指定护照号。
 - `archives.passport_no` 必须非空唯一。
 - `sequence_counters` 保存本机档案号序列和本市护照号序列。
 - `archive_number_recycle_pool` 保存满 100 年硬删除后释放的一对档案号和护照号；唯一约束只作用于未使用池项，避免同一号码多轮复用后再次硬删除被历史池项挡住。

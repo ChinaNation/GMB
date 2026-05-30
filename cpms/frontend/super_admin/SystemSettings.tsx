@@ -1,4 +1,4 @@
-// 系统设置页：展示 INSTALL 安装授权、超级管理员绑定和 ARCHIVE 签发状态。
+// 系统设置页：展示 INSTALL 授权、ARCHIVE 签发状态和年度报告导出状态。
 
 import { useState, useEffect } from 'react';
 import { listTowns, listVillages } from '../address/api';
@@ -26,7 +26,6 @@ export default function SystemSettings() {
   useEffect(() => { load(); }, []);
 
   const initialized = status?.initialized ?? false;
-  const adminBound = (status?.super_admin_bound_count ?? 0) >= 1;
   const signingReady = status?.archive_signing_ready ?? false;
   const pendingExportYear = exportState?.pending_export_year ?? null;
   const canExport = signingReady && (exportState?.can_export ?? false);
@@ -84,16 +83,7 @@ export default function SystemSettings() {
 
       <Divider />
 
-      <Section step={2} title="超级管理员" done={adminBound}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <InfoRow label="已绑定数量" value={String(status?.super_admin_bound_count ?? 0)} />
-          <InfoRow label="状态" value={adminBound ? '已绑定' : '未绑定'} />
-        </div>
-      </Section>
-
-      <Divider />
-
-      <Section step={3} title="档案签发" done={signingReady}>
+      <Section step={2} title="档案签发" done={signingReady}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <InfoRow label="签发状态" value={signingReady ? '已就绪' : '未就绪'} />
           <InfoRow label="CPMS 公钥" value={status?.cpms_pubkey || '—'} />
@@ -102,7 +92,7 @@ export default function SystemSettings() {
 
       <Divider />
 
-      <Section step={4} title="年度报告" done={signingReady}>
+      <Section step={3} title="年度报告" done={signingReady}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {exportState?.reminder_active && (
             <span style={{

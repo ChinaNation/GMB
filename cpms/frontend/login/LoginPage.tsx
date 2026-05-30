@@ -10,6 +10,7 @@ import { useAuth } from '../authz/AuthProvider';
 import * as api from './api';
 import { parseQrEnvelope, QrParseError } from '../qr/wuminQr';
 import { startCameraScanner } from '../qr/cameraScanner';
+import type { SessionUser } from '../common/types';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -46,7 +47,7 @@ export default function LoginPage() {
     }
   };
 
-  const doLogin = (user: { user_id: string; role: string }) => {
+  const doLogin = (user: SessionUser) => {
     if (loggedInRef.current) return;
     loggedInRef.current = true;
     stopPolling();

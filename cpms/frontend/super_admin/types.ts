@@ -1,10 +1,16 @@
 // CPMS 超级管理员模块类型。
 
+export type AdminRole = 'SUPER_ADMIN' | 'OPERATOR_ADMIN';
+
 export interface AdminUser {
   user_id: string;
   admin_pubkey: string;
+  admin_address: string;
   admin_name: string;
-  role: string;
+  role: AdminRole;
+  immutable: boolean;
+  can_edit_name: boolean;
+  can_delete: boolean;
 }
 
 export interface CpmsStatusExportFile {
@@ -17,7 +23,7 @@ export interface CpmsStatusExportFile {
   export_batch_id: string;
   exported_at: number;
   status_records_count: number;
-  number_release_records_count: number;
+  archive_release_records_count: number;
   records_hash: string;
   status_records: Array<{
     archive_no: string;
@@ -25,10 +31,9 @@ export interface CpmsStatusExportFile {
     voting_eligible: boolean;
     status_updated_at: number;
   }>;
-  number_release_records: Array<{
+  archive_release_records: Array<{
     archive_no: string;
-    passport_no: string;
-    hard_deleted_at: number;
+    released_at: number;
   }>;
   sig: string;
 }
