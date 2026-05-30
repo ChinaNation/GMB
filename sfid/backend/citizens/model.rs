@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum CitizenStatus {
     Normal,
-    Abnormal,
+    Revoked,
 }
 
 // ── 公民身份记录（新模型）──────────────────────────────────────────────
@@ -61,18 +61,18 @@ impl CitizenRecord {
 
     pub(crate) fn computed_identity_status_on_date(&self, today: NaiveDate) -> CitizenStatus {
         if self.citizen_status != Some(CitizenStatus::Normal) {
-            return CitizenStatus::Abnormal;
+            return CitizenStatus::Revoked;
         }
         let Some(valid_from) = parse_archive_date(self.archive_valid_from.as_deref()) else {
-            return CitizenStatus::Abnormal;
+            return CitizenStatus::Revoked;
         };
         let Some(valid_until) = parse_archive_date(self.archive_valid_until.as_deref()) else {
-            return CitizenStatus::Abnormal;
+            return CitizenStatus::Revoked;
         };
         if valid_from <= today && today <= valid_until {
             CitizenStatus::Normal
         } else {
-            CitizenStatus::Abnormal
+            CitizenStatus::Revoked
         }
     }
 
@@ -80,7 +80,7 @@ impl CitizenRecord {
         if self.voting_eligible && self.citizen_status == Some(CitizenStatus::Normal) {
             CitizenStatus::Normal
         } else {
-            CitizenStatus::Abnormal
+            CitizenStatus::Revoked
         }
     }
 }
@@ -118,6 +118,20 @@ pub(crate) struct CitizenBindChallenge {
     pub(crate) city_code: String,
     pub(crate) expire_at: DateTime<Utc>,
     pub(crate) created_at: DateTime<Utc>,
+}
+
+/// CPMS 年度报告导入幂等记录。
+///
+/// 中文注释：同一 CPMS 同一年度只允许导入同一份记录哈希，避免重复导入或用
+/// 不同文件覆盖已经完成的年度对账结果。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CpmsStatusExportImportRecord {
+    pub(crate) sfid_number: String,
+    pub(crate) export_year: i32,
+    pub(crate) export_batch_id: String,
+    pub(crate) records_hash: String,
+    pub(crate) imported_at: DateTime<Utc>,
+    pub(crate) imported_by: String,
 }
 
 // ── 公民电子护照绑定接口类型 ──
@@ -244,53 +258,6 @@ pub(crate) struct MyIdStatusOutput {
     pub(crate) status_updated_at: Option<i64>,
 }
 
-#[derive(Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct BindScanInput {
-    pub(crate) qr_payload: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct CitizenQrPayload {
-    pub(crate) ver: String,
-    pub(crate) issuer_id: String,
-    pub(crate) site_sfid: String,
-    pub(crate) archive_no: String,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-    pub(crate) qr_id: String,
-    pub(crate) sig_alg: String,
-    pub(crate) status: CitizenStatus,
-    pub(crate) signature: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
-pub(crate) struct CitizenStatusQrPayload {
-    pub(crate) ver: String,
-    pub(crate) issuer_id: String,
-    pub(crate) site_sfid: String,
-    pub(crate) archive_no: String,
-    pub(crate) status: CitizenStatus,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-    pub(crate) qr_id: String,
-    pub(crate) sig_alg: String,
-    pub(crate) signature: String,
-}
-
-#[derive(Serialize)]
-#[allow(dead_code)]
-pub(crate) struct BindScanOutput {
-    pub(crate) site_sfid: String,
-    pub(crate) archive_no: String,
-    pub(crate) qr_id: String,
-    pub(crate) status: CitizenStatus,
-    pub(crate) issued_at: i64,
-    pub(crate) expire_at: i64,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,7 +321,7 @@ mod tests {
         );
         assert_eq!(
             record.computed_identity_status_on_date(NaiveDate::from_ymd_opt(2036, 5, 24).unwrap()),
-            CitizenStatus::Abnormal
+            CitizenStatus::Revoked
         );
         assert_eq!(record.computed_vote_status(), CitizenStatus::Normal);
     }

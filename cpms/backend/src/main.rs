@@ -21,7 +21,6 @@ mod dangan;
 mod initialize;
 mod login;
 mod number;
-mod operator_admin;
 mod qr;
 mod rate_limit;
 // 中文注释：行政区数据唯一源是 SFID 系统 sfid 工具；CPMS 只在编译期直接引用，
@@ -155,7 +154,6 @@ async fn main() {
         .merge(initialize::router())
         .merge(login::router())
         .merge(super_admin::router())
-        .merge(operator_admin::router())
         .merge(dangan::router())
         .merge(address::router())
         .with_state(state.clone())
@@ -467,7 +465,7 @@ mod tests {
     fn citizen_status_validation_works() {
         assert!(validate_citizen_status("NORMAL").is_ok());
         assert!(validate_citizen_status("REVOKED").is_ok());
-        assert!(validate_citizen_status("ABNORMAL").is_err());
+        assert!(validate_citizen_status("DELETED").is_err());
         assert!(validate_citizen_status("UNKNOWN").is_err());
     }
 

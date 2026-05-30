@@ -1,7 +1,7 @@
 # CPMS Dangan 模块技术文档
 
 ## 1. 模块定位
-`backend/src/dangan/` 负责 `SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案生命周期硬删除和年度状态导出。
+`backend/src/dangan/` 负责 CPMS 档案业务：档案创建/查询、列表游标分页、`SFID_CPMS_V1 / ARCHIVE` 档案二维码构建与签名、公民状态校验、有效期计算、公民资料库、档案生命周期硬删除和年度状态导出。
 
 本模块不保存实名归属判断逻辑；省市归属来自 `initialize` 保存的 INSTALL 授权材料，并只写入加密 `geo_seal`。
 
@@ -9,6 +9,9 @@
 - `build_archive_qr_payload(...)`：构造 ARCHIVE 二维码。
 - `validate_citizen_status(...)`：校验 `NORMAL / REVOKED`。
 - `archive_valid_from(...) / archive_valid_until(...) / archive_validity_years(...)`：计算电子护照有效期。
+- `routes::router(...)`：提供档案创建、详情、编辑、投票账户绑定、删除签名、打印和列表接口。
+- `routes::list_archives(...)`：使用 `created_at DESC, archive_id DESC` 游标分页返回档案列表。
+- `stats::adjust_archive_stats(...)`：在档案创建和注销软删除事务中维护 `archive_stats`。
 - `materials::router(...)`：提供公民资料库上传、列表、下载和删除接口。
 - `lifecycle::run_due_archive_hard_delete(...)`：硬删除软删除满 100 年的档案资料，并释放档案号和护照号。
 - `export::build_and_record_cpms_status_export(...)`：生成 CPMS 给 SFID 手工导入的年度状态更新文件，并记录导出批次。
@@ -61,10 +64,21 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - ARCHIVE 签名上下文：`substrate`。
 
 ## 6. 模块边界
-- 本模块只提供 ARCHIVE 算法和电子护照有效期规则。
-- 公民资料库文件存储、元数据和硬删除清理归属本模块；`operator_admin` 只负责页面入口和档案管理调用。
+- 本模块承载档案领域业务；操作管理员只是 `authz` 中的一种角色，不得作为档案业务实现模块。
+- 公民资料库文件存储、元数据和硬删除清理归属本模块。
 - 安装材料读取由 `initialize` 提供。
-- 业务权限和请求校验由 `operator_admin` / `authz` 负责。
+- 业务权限由 `authz::require_archive_admin` 统一校验，允许 `SUPER_ADMIN / OPERATOR_ADMIN` 调用档案接口。
+
+## 6.1 列表分页与检索
+
+- `GET /api/v1/archives` 不接收 `page / page_size / q` 参数，也不接收 `archive_no / passport_no / name` 选择器式查询参数。
+- 默认 `limit=50`，最大 `100`；前端可选 `20 / 50 / 100`。
+- 翻页使用不透明 cursor，cursor 内部只包含排序所需的 `created_at / archive_id`。
+- SQL 固定按 `created_at DESC, archive_id DESC` 排序，并用 `(created_at, archive_id) < (cursor_created_at, cursor_archive_id)` 取下一页。
+- 响应字段固定为 `items / limit / next_cursor / has_next / total_active`，不返回 `total_pages`。
+- `total_active` 读取 `archive_stats.active_count`；列表请求不得实时 `COUNT(*) FROM archives`。
+- 统一检索字段为 `search`，后端精确匹配 `archive_no = search OR passport_no = search OR (last_name || first_name) = search`，禁止恢复前端字段选择器。
+- 检索字段只允许 `search / birth_date / town_code / village_id / citizen_status` 的索引化精确过滤，禁止恢复 `%keyword% LIKE` 全表模糊搜索。
 
 ## 7. 档案生命周期
 
@@ -83,7 +97,7 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 ## 8. 公民资料库
 
 - 公民资料库命名为“公民资料库”，在公民档案详情页下半部分展示。
-- 后端入口固定在 `backend/src/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进 `operator_admin`。
+- 后端入口固定在 `backend/src/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进角色模块。
 - 资料类型固定为 `PHOTO / BIRTH_CERTIFICATE / COPY / VIDEO / OTHER`，分别对应照片、出生纸、复印件、视频和其他资料。
 - `archive_materials` 只保存元数据：资料类型、原始文件名、本机存储文件名、MIME、大小、SHA-256、备注、上传人、上传时间和软删除字段。
 - 文件正文默认保存到 `data/archive-materials/<archive_id>/`；部署时可用 `CPMS_MATERIALS_DIR` 指向专用资料盘。
@@ -101,10 +115,10 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 年度报告不再在 UTC 1 月 10 日后关闭导出窗口；只要存在待导出年度，超级管理员一直可以导出。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，`OPERATOR_ADMIN` 登录和已有会话都会被锁定；超级管理员不受影响，必须先补导年度报告。
 - `GET /api/v1/archives/status-export/state` 返回待导出年度、按钮可用状态、角标状态和操作管理员锁定状态，供前端系统设置页展示。
-- `cpms_status_exports` 记录每个年度首次导出的批次、导出时间、记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时返回同一份文件，不重新生成签名批次。
-- `status_records` 只包含 `archive_no / citizen_status / voting_eligible / status_updated_at`，用于 SFID 更新公民状态和投票资格。
-- `archive_release_records` 只包含 `archive_no / released_at`，用于表达 100 年硬删除后 SFID 可以释放该档案号与 SFID 号、钱包地址的绑定关系；该列表不表示公民状态变化。
-- 导出文件不得包含姓名、出生日期、地址、护照号、钱包地址、钱包公钥等实名或 CPMS 内部号码/绑定细节。
+- `cpms_status_exports` 记录每个年度首次导出的批次、导出时间、绑定记录数量、释放记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时返回同一份文件，不重新生成签名批次。
+- `citizen_binding_records` 是当前仍有钱包绑定的档案快照，包含 `archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`，用于 SFID 按档案号覆盖本地绑定状态。
+- `binding_release_records` 只包含 `archive_no / released_at / release_reason`，用于表达 100 年硬删除后 SFID 可以释放该档案号与身份 ID、钱包地址的绑定关系。
+- 导出文件不得包含姓名、出生日期、地址、护照号等实名或 CPMS 内部号码。
 - 导出文件使用 CPMS ARCHIVE 签发密钥签名，签名原文为 `sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}`。
 
 ## 10. 测试覆盖

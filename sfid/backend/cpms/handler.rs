@@ -1206,7 +1206,7 @@ pub(crate) async fn verify_cpms_archive_qr(
         ));
     }
     let cpms_pubkey_hash = hash_hex(archive_code.cpms_pubkey.as_bytes());
-    let citizen_status = citizen_status_from_cpms(archive_code.citizen_status.as_str());
+    let citizen_status = citizen_status_from_cpms(archive_code.citizen_status.as_str())?;
     bind_cpms_pubkey_if_needed(
         state,
         &province_name,
@@ -1259,11 +1259,17 @@ fn validate_archive_validity(
     Ok(())
 }
 
-fn citizen_status_from_cpms(value: &str) -> crate::citizens::model::CitizenStatus {
-    if value.trim().eq_ignore_ascii_case("NORMAL") {
-        crate::citizens::model::CitizenStatus::Normal
-    } else {
-        crate::citizens::model::CitizenStatus::Abnormal
+fn citizen_status_from_cpms(
+    value: &str,
+) -> Result<crate::citizens::model::CitizenStatus, (StatusCode, u32, String)> {
+    match value.trim() {
+        "NORMAL" => Ok(crate::citizens::model::CitizenStatus::Normal),
+        "REVOKED" => Ok(crate::citizens::model::CitizenStatus::Revoked),
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            1001,
+            "citizen_status must be NORMAL or REVOKED".to_string(),
+        )),
     }
 }
 

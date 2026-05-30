@@ -140,7 +140,7 @@
 | CPMS 前端初始化 | `initialize` | `cpms/frontend/initialize/` | CPMS 前端安装初始化页面、API 和类型 |
 | CPMS 前端登录 | `login` | `cpms/frontend/login/` | CPMS 前端 QR-only 登录页面和 API |
 | CPMS 前端超级管理员 | `super_admin` | `cpms/frontend/super_admin/` | CPMS 前端超级管理员页面、操作员管理和年度报告导出 |
-| CPMS 前端操作管理员 | `operator_admin` | `cpms/frontend/operator_admin/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
+| CPMS 前端档案业务 | `dangan` | `cpms/frontend/dangan/` | CPMS 前端档案创建、查询、编辑、软删除和档案 QR 操作 |
 | CPMS 前端地址 | `address` | `cpms/frontend/address/` | CPMS 前端镇村查询 API 和类型 |
 | CPMS 前端二维码 | `qr` | `cpms/frontend/qr/` | CPMS 前端 WUMIN_QR_V1 解析和浏览器扫码工具 |
 | CPMS 前端通用层 | `common` | `cpms/frontend/common/` | CPMS 前端 HTTP 封装、共享类型和通用组件 |

@@ -582,7 +582,7 @@ fn build_challenge_text(
 ) -> String {
     let citizen_status_text = match citizen_status {
         CitizenStatus::Normal => "NORMAL",
-        CitizenStatus::Abnormal => "ABNORMAL",
+        CitizenStatus::Revoked => "REVOKED",
     };
     format!(
         "sfid-citizen-bind-v1|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
@@ -613,7 +613,7 @@ fn build_citizen_bind_sign_request(
 ) -> String {
     let citizen_status_text = match citizen_status {
         CitizenStatus::Normal => "正常",
-        CitizenStatus::Abnormal => "异常",
+        CitizenStatus::Revoked => "注销",
     };
     let voting_eligible_text = if voting_eligible { "有" } else { "无" };
     let mode_label = if mode == "replace" {

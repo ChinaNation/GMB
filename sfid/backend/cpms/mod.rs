@@ -14,6 +14,5 @@ pub(crate) use model::*;
 pub(crate) use handler::{
     archive_verify, delete_cpms_keys, disable_cpms_keys, enable_cpms_keys,
     generate_cpms_install_qr, get_cpms_site_by_institution, list_cpms_keys, reissue_install_token,
-    resolve_site_province_via_shard, revoke_cpms_keys, revoke_install_token,
-    verify_cpms_archive_qr,
+    revoke_cpms_keys, revoke_install_token, verify_cpms_archive_qr,
 };

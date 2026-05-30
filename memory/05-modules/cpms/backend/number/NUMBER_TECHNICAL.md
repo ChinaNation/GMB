@@ -57,8 +57,7 @@ passport_no = province_code + crockford_base32_8(body_number) + check
 ## 6. 模块边界
 
 - `number` 只负责编号生成和校验字符计算。
-- `dangan` 负责 ARCHIVE 载荷、签名、`geo_seal`、有效期规则，以及档案生命周期硬删除。
-- `operator_admin` 负责创建档案时调用 `number` 并写入数据库。
+- `dangan` 负责档案创建流程、调用 `number`、写入数据库、ARCHIVE 载荷、签名、`geo_seal`、有效期规则，以及档案生命周期硬删除。
 - `initialize` 负责提供安装码解析得到的省市代码和 `install_secret`。
 
 ## 7. 测试覆盖

@@ -1,4 +1,4 @@
-//! # 公民档案操作模块 (operator_admin)
+//! # 公民档案业务路由
 //!
 //! 档案创建/查询、投票账户绑定、软删除、ARCHIVE 二维码更新/打印。
 //! 中文注释：档案业务允许 SUPER_ADMIN 与 OPERATOR_ADMIN；系统管理才仅限 SUPER_ADMIN。
@@ -9,10 +9,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::{Error as SqlxError, Row};
+use sqlx::{Error as SqlxError, Postgres, QueryBuilder, Row};
 use std::net::SocketAddr;
 use uuid::Uuid;
 
@@ -48,10 +49,32 @@ struct CreateArchiveData {
 }
 
 #[derive(Deserialize)]
-struct ListQuery {
-    q: Option<String>,
-    page: Option<usize>,
-    page_size: Option<usize>,
+// 中文注释：档案列表只接受游标分页和索引化精确检索参数；旧的 page/page_size/q 和选择器式字段参数会被拒绝。
+#[serde(deny_unknown_fields)]
+struct ArchiveListQuery {
+    limit: Option<usize>,
+    cursor: Option<String>,
+    search: Option<String>,
+    birth_date: Option<String>,
+    town_code: Option<String>,
+    village_id: Option<String>,
+    citizen_status: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ArchiveListData {
+    items: Vec<Archive>,
+    limit: usize,
+    next_cursor: Option<String>,
+    has_next: bool,
+    total_active: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+// 中文注释：游标绑定稳定排序键，避免百万级档案使用 OFFSET 扫描。
+struct ArchiveListCursor {
+    created_at: i64,
+    archive_id: String,
 }
 
 #[derive(Serialize)]
@@ -300,6 +323,9 @@ async fn create_archive(
     .await
     .map_err(|_| err(StatusCode::CONFLICT, 3005, "archive_no conflict, retry exhausted"))?;
 
+    // 中文注释：档案列表总数来自统计表；创建档案时和档案写入同事务递增。
+    dangan::adjust_archive_stats(tx.as_mut(), 1, 0, now_ts).await?;
+
     tx.commit()
         .await
         .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "commit tx failed"))?;
@@ -327,91 +353,162 @@ async fn create_archive(
 async fn list_archives(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<ListQuery>,
-) -> Result<Json<ApiResponse<serde_json::Value>>, (StatusCode, Json<ApiError>)> {
+    Query(query): Query<ArchiveListQuery>,
+) -> Result<Json<ApiResponse<ArchiveListData>>, (StatusCode, Json<ApiError>)> {
     authz::require_archive_admin(&state, &headers).await?;
 
-    let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
-    let offset = ((page - 1) * page_size) as i64;
-    let limit = page_size as i64;
+    // 中文注释：单页上限固定为 100，防止一次请求拖垮市级百万档案列表。
+    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let cursor = decode_archive_list_cursor(query.cursor.as_deref())?;
+    validate_archive_list_query(&query)?;
 
-    let keyword = query
-        .q
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
+    let mut qb = QueryBuilder::<Postgres>::new(
+        "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
+         FROM archives
+         WHERE status = 'ACTIVE'",
+    );
+    push_archive_list_filters(&mut qb, &query);
+    if let Some(cursor) = cursor {
+        qb.push(" AND (created_at, archive_id) < (");
+        qb.push_bind(cursor.created_at);
+        qb.push(", ");
+        qb.push_bind(cursor.archive_id);
+        qb.push(")");
+    }
+    qb.push(" ORDER BY created_at DESC, archive_id DESC LIMIT ");
+    qb.push_bind((limit + 1) as i64);
 
-    let (total, rows) = if let Some(keyword) = keyword {
-        let pattern = format!("%{}%", keyword);
-        let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM archives
-             WHERE status <> 'DELETED'
-               AND (last_name LIKE $1 OR first_name LIKE $1 OR (last_name || first_name) LIKE $1 OR archive_no LIKE $1)",
+    let rows = qb.build().fetch_all(&state.db).await.map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query archives failed",
         )
-        .bind(&pattern)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "count archives failed",
-            )
-        })?;
+    })?;
 
-        let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
-             FROM archives
-             WHERE status <> 'DELETED'
-               AND (last_name LIKE $1 OR first_name LIKE $1 OR (last_name || first_name) LIKE $1 OR archive_no LIKE $1)
-             ORDER BY archive_id
-             LIMIT $2 OFFSET $3",
-        )
-        .bind(&pattern)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archives failed"))?;
-
-        (total, rows)
+    let has_next = rows.len() > limit;
+    let mut items: Vec<Archive> = rows.into_iter().take(limit).map(row_to_archive).collect();
+    let next_cursor = if has_next {
+        items
+            .last()
+            .map(|archive| encode_archive_list_cursor(archive.created_at, &archive.archive_id))
+            .transpose()?
     } else {
-        let total: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM archives WHERE status <> 'DELETED'")
-                .fetch_one(&state.db)
-                .await
-                .map_err(|_| {
-                    err(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        5001,
-                        "count archives failed",
-                    )
-                })?;
-
-        let rows = sqlx::query(
-            "SELECT archive_id, archive_no, province_code, city_code, last_name, first_name, birth_date::TEXT AS birth_date, gender_code, height_cm, passport_no, COALESCE(town_code,'') AS town_code, COALESCE(village_id,'') AS village_id, COALESCE(address,'') AS address, status, citizen_status, COALESCE(voting_eligible,true) AS voting_eligible, valid_from::TEXT AS valid_from, valid_until::TEXT AS valid_until, COALESCE(citizen_status_updated_at, updated_at) AS citizen_status_updated_at, wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg,'sr25519') AS wallet_sig_alg, wallet_bound_at, wallet_bound_by, COALESCE(archive_qr_payload,'') AS archive_qr_payload, deleted_at, deleted_by, delete_reason, created_at, updated_at
-             FROM archives
-             WHERE status <> 'DELETED'
-             ORDER BY archive_id
-             LIMIT $1 OFFSET $2",
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, 5001, "query archives failed"))?;
-
-        (total, rows)
+        None
     };
+    items.shrink_to_fit();
+    let total_active = super::stats::load_active_archive_count(&state.db).await?;
 
-    let items: Vec<Archive> = rows.into_iter().map(row_to_archive).collect();
+    Ok(Json(ok(ArchiveListData {
+        items,
+        limit,
+        next_cursor,
+        has_next,
+        total_active,
+    })))
+}
 
-    Ok(Json(ok(serde_json::json!({
-        "items": items,
-        "page": page,
-        "page_size": page_size,
-        "total": total
-    }))))
+fn push_archive_list_filters(qb: &mut QueryBuilder<'_, Postgres>, query: &ArchiveListQuery) {
+    if let Some(search) = trimmed_opt(query.search.as_deref()) {
+        // 中文注释：统一输入框只做精确匹配，不做 LIKE；由 PostgreSQL 用各字段索引组合执行。
+        qb.push(" AND (archive_no = ");
+        qb.push_bind(search.to_string());
+        qb.push(" OR passport_no = ");
+        qb.push_bind(search.to_string());
+        qb.push(" OR (last_name || first_name) = ");
+        qb.push_bind(search.to_string());
+        qb.push(")");
+    }
+    if let Some(birth_date) = trimmed_opt(query.birth_date.as_deref()) {
+        qb.push(" AND birth_date = ");
+        qb.push_bind(birth_date.to_string());
+        qb.push("::DATE");
+    }
+    if let Some(town_code) = trimmed_opt(query.town_code.as_deref()) {
+        qb.push(" AND town_code = ");
+        qb.push_bind(town_code.to_string());
+    }
+    if let Some(village_id) = trimmed_opt(query.village_id.as_deref()) {
+        qb.push(" AND village_id = ");
+        qb.push_bind(village_id.to_string());
+    }
+    if let Some(citizen_status) = trimmed_opt(query.citizen_status.as_deref()) {
+        qb.push(" AND citizen_status = ");
+        qb.push_bind(citizen_status.to_string());
+    }
+}
+
+fn validate_archive_list_query(
+    query: &ArchiveListQuery,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    validate_short_filter(query.search.as_deref(), "search", 64)?;
+    validate_short_filter(query.town_code.as_deref(), "town_code", 32)?;
+    validate_short_filter(query.village_id.as_deref(), "village_id", 64)?;
+    if let Some(birth_date) = trimmed_opt(query.birth_date.as_deref()) {
+        NaiveDate::parse_from_str(birth_date, "%Y-%m-%d")
+            .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
+    }
+    if let Some(citizen_status) = trimmed_opt(query.citizen_status.as_deref()) {
+        dangan::validate_citizen_status(citizen_status)?;
+    }
+    Ok(())
+}
+
+fn validate_short_filter(
+    value: Option<&str>,
+    field: &str,
+    max_chars: usize,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    if let Some(value) = value {
+        let trimmed = value.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > max_chars {
+            return Err(err(
+                StatusCode::BAD_REQUEST,
+                1001,
+                &format!("invalid {field}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn trimmed_opt(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|v| !v.is_empty())
+}
+
+fn encode_archive_list_cursor(
+    created_at: i64,
+    archive_id: &str,
+) -> Result<String, (StatusCode, Json<ApiError>)> {
+    let cursor = ArchiveListCursor {
+        created_at,
+        archive_id: archive_id.to_string(),
+    };
+    let json = serde_json::to_vec(&cursor).map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "encode cursor failed",
+        )
+    })?;
+    Ok(URL_SAFE_NO_PAD.encode(json))
+}
+
+fn decode_archive_list_cursor(
+    raw: Option<&str>,
+) -> Result<Option<ArchiveListCursor>, (StatusCode, Json<ApiError>)> {
+    let Some(raw) = trimmed_opt(raw) else {
+        return Ok(None);
+    };
+    let bytes = URL_SAFE_NO_PAD
+        .decode(raw.as_bytes())
+        .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid cursor"))?;
+    let cursor: ArchiveListCursor = serde_json::from_slice(&bytes)
+        .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid cursor"))?;
+    if cursor.archive_id.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, 1001, "invalid cursor"));
+    }
+    Ok(Some(cursor))
 }
 
 async fn get_archive(
@@ -1094,6 +1191,9 @@ async fn complete_archive_delete(
         .await;
         return Err(err(StatusCode::CONFLICT, 3008, "archive already deleted"));
     }
+
+    // 中文注释：注销软删除会从有效档案总数扣减，避免列表页实时 COUNT 百万级档案。
+    dangan::adjust_archive_stats(tx.as_mut(), -1, 1, deleted_at).await?;
 
     sqlx::query(
         "UPDATE archive_delete_challenges SET consumed=true, consumed_at=$1 WHERE challenge_id=$2 AND consumed=false",

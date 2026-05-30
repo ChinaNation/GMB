@@ -36,7 +36,7 @@
 - `GET  /api/v1/app/myid/status?wallet_address=<walletAddress>` -> `citizens::vote::app_myid_status`
 - `POST /api/v1/app/vote/credential` -> `citizens::chain_vote::app_vote_credential`
 - `GET  /api/v1/app/voters/count` -> `citizens::chain_joint_vote::app_voters_count`
-- `POST /api/v1/admin/cpms-status/scan` -> `citizens::status::admin_cpms_status_scan`
+- `POST /api/v1/admin/citizens/cpms-status-export/import` -> `citizens::status_export_import::admin_import_cpms_status_export`
 - `GET  /api/v1/admin/citizens` -> `citizens::handler::admin_list_citizens`
 - `GET  /api/v1/public/identity/search` -> `citizens::handler::public_identity_search`
 
@@ -49,15 +49,17 @@
 - 边界：
   - 电子护照绑定必须以 CPMS `ARCHIVE` 档案码为入口。
   - 绑定必须使用 wuminapp 对 SFID challenge 的 sr25519 签名。
-  - `citizens` 不实现投票流程；公民投票只调用投票凭证签发接口。
-  - 公民 DTO 放 `citizens/model.rs`，不得塞入全局 `models`。
+- `citizens` 不实现投票流程；公民投票只调用投票凭证签发接口。
+- 公民 DTO 放 `citizens/model.rs`，不得塞入全局 `models`。
+- CPMS 年度报告导入实现放 `citizens/status_export_import.rs`，不再保留旧 CPMS 状态扫码入口。
 
 ## 5. 关键一致性约束
 
 - 三端字段统一：`archive_no / citizen_status / voting_eligible / vote_status / identity_status / valid_from / valid_until / status_updated_at / wallet_address / wallet_pubkey / wallet_sig_alg / sfid_code / bind_status`。
 - `bind_status` 只表达电子护照绑定状态：`PENDING / BOUND`；`identity_status` 表达身份 ID 当前有效状态；`vote_status` 由 `citizen_status + voting_eligible` 计算。
 - `citizen_status` 当前只允许 `NORMAL / REVOKED`；`REVOKED` 表示 CPMS 软删除注销，必须对应 `voting_eligible=false`。
-- CPMS 年度 `CPMS_STATUS_EXPORT` 后续导入时，只更新档案号对应的公民状态与投票资格；`archive_release_records` 只用于释放档案号与 SFID 号、钱包地址的绑定关系，不作为公民状态更新，也不处理 CPMS 护照号。
+- CPMS 年度 `CPMS_STATUS_EXPORT` 导入时，`citizen_binding_records` 按 `archive_no` 覆盖已有 SFID 绑定记录的钱包地址、公民状态和投票资格，但不自动生成新的身份 ID；`binding_release_records` 用于释放档案号、身份 ID、钱包地址三者绑定关系，不处理 CPMS 护照号。
+- SFID 导入年度报告前必须校验 CPMS 授权处于 `ACTIVE`、CPMS 公钥已经由档案码验真绑定、`records_hash` 与签名均正确；同一 CPMS 同一年度只允许导入相同 `records_hash`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
 - `archive_no / sfid_code / wallet_pubkey` 三者保持一对一唯一关系。
@@ -68,6 +70,5 @@
 | 事件 | 触发场景 | 关键字段 |
 |------|---------|---------|
 | `CITIZEN_BIND` | 管理员完成电子护照绑定 | wallet_pubkey, archive_no, sfid_code |
-| `CPMS_STATUS_SCAN` | CPMS 站点扫公民状态 | sfid_number, qr_id, new_status |
-| `CPMS_STATUS_SCAN_META` | 状态扫码元数据 | request_id, actor_ip |
+| `CPMS_STATUS_EXPORT_IMPORT` | 管理员导入 CPMS 年度报告 | sfid_number, export_year, records_hash |
 | `APP_VOTE_CREDENTIAL` | wuminapp 请求公民投票凭证 | wallet_pubkey, proposal_id |

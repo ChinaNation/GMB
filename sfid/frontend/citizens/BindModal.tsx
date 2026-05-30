@@ -284,7 +284,7 @@ export function BindModal({ auth, open, record, onClose, onBound }: BindModalPro
             <Descriptions.Item label="档案号">{bindChallenge.archive_no}</Descriptions.Item>
             <Descriptions.Item label="选举权利">{bindChallenge.voting_eligible ? '有' : '无'}</Descriptions.Item>
             <Descriptions.Item label="公民状态">
-              {bindChallenge.citizen_status === 'NORMAL' ? '正常' : '异常'}
+              {bindChallenge.citizen_status === 'NORMAL' ? '正常' : '注销'}
             </Descriptions.Item>
             <Descriptions.Item label="投票账户">{bindChallenge.wallet_address}</Descriptions.Item>
           </Descriptions>

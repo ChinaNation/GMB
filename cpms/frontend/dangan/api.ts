@@ -5,13 +5,35 @@ import type { Archive, ArchiveMaterial, CreateArchiveRequest } from './types';
 export const createArchive = (body: CreateArchiveRequest) =>
   post<{ archive_id: string; archive_no: string; passport_no: string }>('/api/v1/archives', body);
 
-export const listArchives = (params?: { q?: string; page?: number; page_size?: number }) => {
+export interface ArchiveListParams {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+  birth_date?: string;
+  town_code?: string;
+  village_id?: string;
+  citizen_status?: string;
+}
+
+export interface ArchiveListResponse {
+  items: Archive[];
+  limit: number;
+  next_cursor: string | null;
+  has_next: boolean;
+  total_active: number;
+}
+
+export const listArchives = (params?: ArchiveListParams) => {
   const qs = new URLSearchParams();
-  if (params?.q) qs.set('q', params.q);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.page_size) qs.set('page_size', String(params.page_size));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.cursor) qs.set('cursor', params.cursor);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.birth_date) qs.set('birth_date', params.birth_date);
+  if (params?.town_code) qs.set('town_code', params.town_code);
+  if (params?.village_id) qs.set('village_id', params.village_id);
+  if (params?.citizen_status) qs.set('citizen_status', params.citizen_status);
   const query = qs.toString();
-  return get<{ items: Archive[]; total: number }>(`/api/v1/archives${query ? '?' + query : ''}`);
+  return get<ArchiveListResponse>(`/api/v1/archives${query ? '?' + query : ''}`);
 };
 
 export const getArchive = (id: string) => get<Archive>(`/api/v1/archives/${id}`);

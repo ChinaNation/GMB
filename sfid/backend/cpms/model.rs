@@ -191,15 +191,3 @@ pub(crate) struct CpmsArchiveVerifyOutput {
     pub(crate) sfid_number: String,
     pub(crate) status: &'static str,
 }
-
-#[derive(Deserialize)]
-pub(crate) struct CpmsStatusScanInput {
-    pub(crate) qr_payload: String,
-}
-
-#[derive(Serialize)]
-pub(crate) struct CpmsStatusScanOutput {
-    pub(crate) archive_no: String,
-    pub(crate) status: crate::citizens::model::CitizenStatus,
-    pub(crate) message: &'static str,
-}

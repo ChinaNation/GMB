@@ -1,4 +1,4 @@
-// CPMS 操作管理员模块类型：档案创建、查询、更新、打印和删除签名共用。
+// CPMS 档案模块类型：档案创建、查询、更新、打印和删除签名共用。
 
 export interface Archive {
   archive_id: string;

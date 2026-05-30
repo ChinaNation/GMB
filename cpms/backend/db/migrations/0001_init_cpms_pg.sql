@@ -116,8 +116,39 @@ CREATE TABLE IF NOT EXISTS archives (
   )
 );
 
-CREATE INDEX IF NOT EXISTS idx_archives_last_first_name ON archives (last_name, first_name);
 CREATE INDEX IF NOT EXISTS idx_archives_status ON archives (status);
+CREATE INDEX IF NOT EXISTS idx_archives_active_created_cursor
+  ON archives (created_at DESC, archive_id DESC)
+  WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_archives_active_archive_no
+  ON archives (archive_no)
+  WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_archives_active_passport_no
+  ON archives (passport_no)
+  WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_archives_active_name_birth_cursor
+  ON archives ((last_name || first_name), birth_date, created_at DESC, archive_id DESC)
+  WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_archives_active_area_cursor
+  ON archives (town_code, village_id, created_at DESC, archive_id DESC)
+  WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_archives_active_citizen_status_cursor
+  ON archives (citizen_status, created_at DESC, archive_id DESC)
+  WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_archives_wallet_pubkey_lifetime
+  ON archives (wallet_pubkey)
+  WHERE wallet_pubkey IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS archive_stats (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  active_count BIGINT NOT NULL DEFAULT 0 CHECK (active_count >= 0),
+  deleted_count BIGINT NOT NULL DEFAULT 0 CHECK (deleted_count >= 0),
+  updated_at BIGINT NOT NULL
+);
+
+INSERT INTO archive_stats (id, active_count, deleted_count, updated_at)
+VALUES (1, 0, 0, 0)
+ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS sequence_counters (
   seq_key TEXT PRIMARY KEY,
@@ -167,13 +198,39 @@ CREATE TABLE IF NOT EXISTS archive_hard_delete_logs (
 CREATE INDEX IF NOT EXISTS idx_archive_hard_delete_logs_deleted_at
   ON archive_hard_delete_logs (hard_deleted_at);
 
+CREATE TABLE IF NOT EXISTS archive_materials (
+  material_id TEXT PRIMARY KEY,
+  archive_id TEXT NOT NULL REFERENCES archives(archive_id) ON DELETE CASCADE,
+  material_type TEXT NOT NULL CHECK (material_type IN (
+    'PHOTO',
+    'BIRTH_CERTIFICATE',
+    'COPY',
+    'VIDEO',
+    'OTHER'
+  )),
+  original_file_name TEXT NOT NULL,
+  stored_file_name TEXT NOT NULL UNIQUE,
+  mime_type TEXT NOT NULL,
+  file_size BIGINT NOT NULL CHECK (file_size > 0),
+  sha256 TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  uploaded_by TEXT NOT NULL,
+  uploaded_at BIGINT NOT NULL,
+  deleted_at BIGINT,
+  deleted_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_materials_archive_id
+  ON archive_materials (archive_id, uploaded_at DESC)
+  WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS cpms_status_exports (
   export_year INT PRIMARY KEY,
   export_batch_id TEXT NOT NULL UNIQUE,
   exported_at BIGINT NOT NULL,
   records_hash TEXT NOT NULL,
-  status_records_count BIGINT NOT NULL,
-  archive_release_records_count BIGINT NOT NULL,
+  citizen_binding_records_count BIGINT NOT NULL,
+  binding_release_records_count BIGINT NOT NULL,
   export_file JSONB NOT NULL
 );
 

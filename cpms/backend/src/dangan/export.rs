@@ -26,11 +26,11 @@ pub(crate) struct CpmsStatusExportFile {
     cpms_pubkey: String,
     export_batch_id: String,
     pub(crate) exported_at: i64,
-    status_records_count: usize,
-    archive_release_records_count: usize,
+    citizen_binding_records_count: usize,
+    binding_release_records_count: usize,
     records_hash: String,
-    status_records: Vec<CpmsStatusRecord>,
-    archive_release_records: Vec<CpmsArchiveReleaseRecord>,
+    citizen_binding_records: Vec<CpmsCitizenBindingRecord>,
+    binding_release_records: Vec<CpmsBindingReleaseRecord>,
     sig: String,
 }
 
@@ -47,29 +47,34 @@ pub(crate) struct CpmsStatusExportState {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-struct CpmsStatusRecord {
+struct CpmsCitizenBindingRecord {
     archive_no: String,
+    wallet_address: String,
+    wallet_pubkey: String,
+    wallet_sig_alg: String,
+    wallet_bound_at: i64,
     citizen_status: String,
     voting_eligible: bool,
     status_updated_at: i64,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-struct CpmsArchiveReleaseRecord {
+struct CpmsBindingReleaseRecord {
     archive_no: String,
     released_at: i64,
+    release_reason: String,
 }
 
 #[derive(Serialize)]
 struct ExportRecordsForHash<'a> {
-    status_records: &'a [CpmsStatusRecord],
-    archive_release_records: &'a [CpmsArchiveReleaseRecord],
+    citizen_binding_records: &'a [CpmsCitizenBindingRecord],
+    binding_release_records: &'a [CpmsBindingReleaseRecord],
 }
 
 /// 构造 CPMS 离线年度状态导出文件。
 ///
-/// 中文注释：导出文件只给 SFID 更新状态和档案号绑定释放事实，不包含姓名、出生日期、
-/// 地址、护照号、钱包地址等实名或 CPMS 内部号码/绑定细节。
+/// 中文注释：导出文件只给 SFID 更新档案号、钱包、公民状态和投票资格绑定事实。
+/// 姓名、出生日期、地址、护照号等 CPMS 内部实名资料不进入年度报告。
 pub(crate) async fn build_and_record_cpms_status_export(
     state: &AppState,
 ) -> Result<CpmsStatusExportFile, (StatusCode, Json<ApiError>)> {
@@ -90,7 +95,7 @@ pub(crate) async fn build_and_record_cpms_status_export(
 
     let result = sqlx::query(
         "INSERT INTO cpms_status_exports
-         (export_year, export_batch_id, exported_at, records_hash, status_records_count, archive_release_records_count, export_file)
+         (export_year, export_batch_id, exported_at, records_hash, citizen_binding_records_count, binding_release_records_count, export_file)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (export_year) DO NOTHING",
     )
@@ -98,8 +103,8 @@ pub(crate) async fn build_and_record_cpms_status_export(
     .bind(&export_file.export_batch_id)
     .bind(export_file.exported_at)
     .bind(&export_file.records_hash)
-    .bind(export_file.status_records_count as i64)
-    .bind(export_file.archive_release_records_count as i64)
+    .bind(export_file.citizen_binding_records_count as i64)
+    .bind(export_file.binding_release_records_count as i64)
     .bind(sqlx::types::Json(&export_file))
     .execute(&state.db)
     .await
@@ -157,11 +162,11 @@ async fn build_cpms_status_export(
     }
 
     let (start_ts, end_ts) = export_year_bounds(export_year)?;
-    let status_records = load_status_records(state, start_ts, end_ts).await?;
-    let archive_release_records = load_archive_release_records(state, start_ts, end_ts).await?;
+    let citizen_binding_records = load_citizen_binding_records(state).await?;
+    let binding_release_records = load_binding_release_records(state, start_ts, end_ts).await?;
     let exported_at = now.timestamp();
     let export_batch_id = format!("cse_{}", Uuid::new_v4().simple());
-    let records_hash = records_hash(&status_records, &archive_release_records)?;
+    let records_hash = records_hash(&citizen_binding_records, &binding_release_records)?;
     let sign_source = build_status_export_sign_source(
         &install.sfid_number,
         &sign_key.pubkey,
@@ -180,36 +185,35 @@ async fn build_cpms_status_export(
         cpms_pubkey: sign_key.pubkey,
         export_batch_id,
         exported_at,
-        status_records_count: status_records.len(),
-        archive_release_records_count: archive_release_records.len(),
+        citizen_binding_records_count: citizen_binding_records.len(),
+        binding_release_records_count: binding_release_records.len(),
         records_hash,
-        status_records,
-        archive_release_records,
+        citizen_binding_records,
+        binding_release_records,
         sig,
     })
 }
 
-async fn load_status_records(
+async fn load_citizen_binding_records(
     state: &AppState,
-    start_ts: i64,
-    end_ts: i64,
-) -> Result<Vec<CpmsStatusRecord>, (StatusCode, Json<ApiError>)> {
+) -> Result<Vec<CpmsCitizenBindingRecord>, (StatusCode, Json<ApiError>)> {
     let rows = sqlx::query(
-        "SELECT archive_no, status, citizen_status, voting_eligible, citizen_status_updated_at, updated_at
+        "SELECT archive_no, status, citizen_status, voting_eligible,
+                COALESCE(citizen_status_updated_at, updated_at) AS status_updated_at,
+                wallet_address, wallet_pubkey, COALESCE(wallet_sig_alg, 'sr25519') AS wallet_sig_alg,
+                COALESCE(wallet_bound_at, updated_at) AS wallet_bound_at
          FROM archives
-         WHERE citizen_status_updated_at >= $1
-           AND citizen_status_updated_at < $2
+         WHERE COALESCE(wallet_address, '') <> ''
+           AND COALESCE(wallet_pubkey, '') <> ''
          ORDER BY archive_no",
     )
-    .bind(start_ts)
-    .bind(end_ts)
     .fetch_all(&state.db)
     .await
     .map_err(|_| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query status export records failed",
+            "query citizen binding export records failed",
         )
     })?;
 
@@ -224,23 +228,33 @@ async fn load_status_records(
             };
             super::validate_citizen_status(&citizen_status)?;
             let requested_voting = row.try_get::<bool, _>("voting_eligible").ok();
-            Ok(CpmsStatusRecord {
+            let wallet_sig_alg: String = row.get("wallet_sig_alg");
+            if wallet_sig_alg != "sr25519" {
+                return Err(err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "archive wallet signature algorithm invalid",
+                ));
+            }
+            Ok(CpmsCitizenBindingRecord {
                 archive_no: row.get("archive_no"),
+                wallet_address: row.get("wallet_address"),
+                wallet_pubkey: row.get("wallet_pubkey"),
+                wallet_sig_alg,
+                wallet_bound_at: row.get("wallet_bound_at"),
                 citizen_status: citizen_status.clone(),
                 voting_eligible: normalize_voting_eligible(&citizen_status, requested_voting),
-                status_updated_at: row
-                    .try_get("citizen_status_updated_at")
-                    .unwrap_or_else(|_| row.get("updated_at")),
+                status_updated_at: row.get("status_updated_at"),
             })
         })
         .collect()
 }
 
-async fn load_archive_release_records(
+async fn load_binding_release_records(
     state: &AppState,
     start_ts: i64,
     end_ts: i64,
-) -> Result<Vec<CpmsArchiveReleaseRecord>, (StatusCode, Json<ApiError>)> {
+) -> Result<Vec<CpmsBindingReleaseRecord>, (StatusCode, Json<ApiError>)> {
     let rows = sqlx::query(
         "SELECT archive_no, hard_deleted_at
          FROM archive_hard_delete_logs
@@ -256,15 +270,16 @@ async fn load_archive_release_records(
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
             5001,
-            "query archive release records failed",
+            "query binding release records failed",
         )
     })?;
 
     Ok(rows
         .into_iter()
-        .map(|row| CpmsArchiveReleaseRecord {
+        .map(|row| CpmsBindingReleaseRecord {
             archive_no: row.get("archive_no"),
             released_at: row.get("hard_deleted_at"),
+            release_reason: "ARCHIVE_HARD_DELETED_AFTER_100_YEARS".to_string(),
         })
         .collect())
 }
@@ -300,12 +315,12 @@ async fn load_recorded_status_export(
 }
 
 fn records_hash(
-    status_records: &[CpmsStatusRecord],
-    archive_release_records: &[CpmsArchiveReleaseRecord],
+    citizen_binding_records: &[CpmsCitizenBindingRecord],
+    binding_release_records: &[CpmsBindingReleaseRecord],
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
     let json = serde_json::to_vec(&ExportRecordsForHash {
-        status_records,
-        archive_release_records,
+        citizen_binding_records,
+        binding_release_records,
     })
     .map_err(|_| {
         err(
@@ -517,16 +532,20 @@ fn export_year_bounds(export_year: i32) -> Result<(i64, i64), (StatusCode, Json<
 mod tests {
     use super::{
         build_status_export_sign_source, export_year_bounds, first_missing_export_year,
-        is_operator_lock_active, latest_exportable_year, records_hash, CpmsArchiveReleaseRecord,
-        CpmsStatusRecord,
+        is_operator_lock_active, latest_exportable_year, records_hash, CpmsBindingReleaseRecord,
+        CpmsCitizenBindingRecord,
     };
     use chrono::{NaiveDate, Utc};
     use std::collections::HashSet;
 
     #[test]
     fn revoked_status_record_never_exports_voting_eligible() {
-        let record = CpmsStatusRecord {
+        let record = CpmsCitizenBindingRecord {
             archive_no: "ARCHIVE-1".to_string(),
+            wallet_address: "addr2027".to_string(),
+            wallet_pubkey: "0xabc".to_string(),
+            wallet_sig_alg: "sr25519".to_string(),
+            wallet_bound_at: 1,
             citizen_status: "REVOKED".to_string(),
             voting_eligible: false,
             status_updated_at: 1,
@@ -537,22 +556,27 @@ mod tests {
 
     #[test]
     fn export_records_hash_is_stable_for_same_ordered_records() {
-        let status_records = vec![CpmsStatusRecord {
+        let binding_records = vec![CpmsCitizenBindingRecord {
             archive_no: "ARCHIVE-1".to_string(),
+            wallet_address: "addr2027".to_string(),
+            wallet_pubkey: "0xabc".to_string(),
+            wallet_sig_alg: "sr25519".to_string(),
+            wallet_bound_at: 1,
             citizen_status: "NORMAL".to_string(),
             voting_eligible: true,
             status_updated_at: 1,
         }];
-        let release_records = vec![CpmsArchiveReleaseRecord {
+        let release_records = vec![CpmsBindingReleaseRecord {
             archive_no: "ARCHIVE-OLD".to_string(),
             released_at: 2,
+            release_reason: "ARCHIVE_HARD_DELETED_AFTER_100_YEARS".to_string(),
         }];
 
-        let first_hash = match records_hash(&status_records, &release_records) {
+        let first_hash = match records_hash(&binding_records, &release_records) {
             Ok(hash) => hash,
             Err(_) => panic!("records hash"),
         };
-        let second_hash = match records_hash(&status_records, &release_records) {
+        let second_hash = match records_hash(&binding_records, &release_records) {
             Ok(hash) => hash,
             Err(_) => panic!("records hash"),
         };

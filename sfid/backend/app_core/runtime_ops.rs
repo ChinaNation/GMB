@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::Utc;
 use std::{collections::HashMap, hash::Hash};
 
 use crate::sheng_admins::province_admins::sheng_admin_mains;
@@ -115,18 +115,11 @@ pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
     }
 }
 
-pub(crate) fn cleanup_consumed_qr_ids(store: &mut Store, now: DateTime<Utc>) {
-    store
-        .consumed_qr_ids
-        .retain(|_, consumed_at| *consumed_at > now - Duration::hours(24));
-}
-
 #[allow(dead_code)]
 // 中文注释:vote_cache_key / cleanup_vote_cache 配套于已下架的 verify_vote_eligibility
 // dead route(`POST /api/v1/vote/verify`),2026-05-01 一并移除。当前 chain pull 的
 // /api/v1/app/vote/credential 不依赖 cache,vote_verify_cache 只在投票账户绑定状态
 // 变化时才被 invalidate_vote_cache_for_pubkey 清理。
-
 pub(crate) fn cleanup_stale_citizen_bind_records(state: &AppState) -> usize {
     let mut store = match state.store.write() {
         Ok(v) => v,
