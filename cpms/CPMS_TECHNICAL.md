@@ -39,7 +39,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | super_admin | `src/super_admin/mod.rs` | 操作员新增/删除、年度状态导出 |
 | operator_admin | `src/operator_admin/mod.rs` | 档案创建/查询、软删除、ARCHIVE 更新/打印 |
 | number | `src/number/mod.rs` | 档案号与护照号生成 |
-| dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期、年度状态导出、100 年硬删除 |
+| dangan | `src/dangan/mod.rs` | `geo_seal`、ARCHIVE 签名、电子护照有效期、公民资料库、年度状态导出、100 年硬删除 |
 
 ## 2.1 前端模块结构
 | 模块 | 目录 | 说明 |
@@ -75,6 +75,9 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `POST /GET /api/v1/archives`
 - `GET /api/v1/archives/:archive_id`
 - `POST /api/v1/archives/:archive_id/wallet`
+- `GET /POST /api/v1/archives/:archive_id/materials`
+- `GET /api/v1/archives/:archive_id/materials/:material_id/download`
+- `DELETE /api/v1/archives/:archive_id/materials/:material_id`
 - `POST /api/v1/archives/:archive_id/qr/generate`
 - `POST /api/v1/archives/:archive_id/qr/print`
 - `POST /api/v1/archives/:archive_id/delete/challenge`
@@ -100,6 +103,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `login_challenges` | 扫码登录挑战 |
 | `qr_login_results` | 扫码登录结果 |
 | `archives` | 公民档案、护照号、投票账户与 `archive_qr_payload`；`birth_date / valid_from / valid_until` 使用 `DATE` |
+| `archive_materials` | 公民资料库元数据；文件正文保存在本机 `CPMS_MATERIALS_DIR` 或默认资料目录 |
 | `archive_number_recycle_pool` | 满 100 年硬删除后释放的档案号和护照号对；只约束未使用号码唯一，允许多轮复用历史 |
 | `archive_hard_delete_logs` | 满 100 年硬删除最小日志，不保存实名原文 |
 | `cpms_status_exports` | 年度状态导出记录和已签名导出 JSON，用于重复下载同一份报告 |
@@ -113,10 +117,31 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 本阶段不提供旧库迁移兼容；旧库可删除后按当前基准结构初始化。
 数据库层同时约束 `archives.status IN ('ACTIVE','DELETED')`、注销公民不得拥有投票资格、软删除档案必须有 `deleted_at`，防止绕过 API 写入非法状态组合。
 
+## 5.1 年度状态导出
+
+- 年度报告类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`，只导出给 SFID 手工导入的状态更新 JSON。
+- 超级管理员从每年 UTC 1 月 1 日起可以导出上一年度数据；如果存在多年未导出，CPMS 按最早未导出年度依次补导。
+- 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，新装 CPMS 不补导安装前历史年度。
+- 导出成功后该年度按钮置灰并隐藏角标，下一年 UTC 1 月 1 日出现新的待导出年度后再变为可导出。
+- UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，操作管理员登录和已有会话会被锁定，直到超级管理员完成补导。
+- CPMS 不判断 SFID 是否收到文件，也不禁用安装码；SFID 逾期禁用 CPMS 授权由 SFID 系统单独实现。
+- `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作管理员锁定状态。
+- `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
+
+## 5.2 公民资料库
+
+- 公民资料库后端主体在 `src/dangan/materials.rs`，`operator_admin` 只作为档案详情页入口调用接口。
+- 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
+- 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
+- 文件正文默认保存在 `data/archive-materials/<archive_id>/`，可通过 `CPMS_MATERIALS_DIR` 改到部署指定目录。
+- 软删除档案仍可查看和下载已有资料，但不能新增或删除资料。
+- 上传、下载、删除资料写入审计；100 年硬删除档案时同步清理该档案资料文件目录。
+
 ## 6. 环境变量
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `CPMS_DATABASE_URL` | PostgreSQL 连接串 | `postgres://cpms:cpms@127.0.0.1:5433/cpms_dev` |
+| `CPMS_MATERIALS_DIR` | 公民资料库文件正文保存目录 | `data/archive-materials` |
 | `CPMS_BIND` | 监听地址 | `0.0.0.0:8080` |
 | `CPMS_KEY_ENCRYPT_SECRET` | 本机密钥加密主密钥，32 字节 hex；缺失时拒绝初始化或读取已加密密钥 | 无 |
 
@@ -129,6 +154,9 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 CPMS 后端错误响应包含数字 `code` 和稳定业务 `error_code`。HTTP `401` 只表示当前
 管理员登录态无效；challenge 过期返回 `410`，签名验签失败返回 `422`，权限不足返回
 `403`。完整规则见 `memory/05-modules/cpms/ERROR_CODES.md`。
+
+前端收到 `401` 时只清理本地用户镜像并通知认证上下文，不在 HTTP 封装中强制跳转；
+根路由先检查安装状态，未初始化进入 `/install`，受保护页面未登录才进入 `/login`。
 
 ## 9. 管理员权限
 

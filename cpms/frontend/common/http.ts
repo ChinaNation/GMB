@@ -11,12 +11,10 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText })) as Partial<ApiError>;
-    // 中文注释：登录态由 HttpOnly Cookie 承载；401 时只清理前端用户镜像。
+    // 中文注释：登录态由 HttpOnly Cookie 承载；401 只通知认证上下文清理用户镜像，页面去向交给路由判断。
     if (res.status === 401) {
       sessionStorage.removeItem('cpms_user');
-      if (!['/login', '/install'].includes(window.location.pathname)) {
-        window.location.href = '/login';
-      }
+      window.dispatchEvent(new Event('cpms-auth-expired'));
     }
     throw new Error(err.message || `HTTP ${res.status}`);
   }

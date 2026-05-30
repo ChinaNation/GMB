@@ -4,6 +4,7 @@ use blake2::{Blake2b, Digest};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::{err, initialize, ApiError, AppState};
@@ -31,6 +32,18 @@ pub(crate) struct CpmsStatusExportFile {
     status_records: Vec<CpmsStatusRecord>,
     number_release_records: Vec<CpmsNumberReleaseRecord>,
     sig: String,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct CpmsStatusExportState {
+    now_utc: i64,
+    pending_export_year: Option<i32>,
+    can_export: bool,
+    reminder_active: bool,
+    operator_lock_active: bool,
+    exported: bool,
+    next_export_available_at: Option<i64>,
+    disabled_reason: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -62,7 +75,15 @@ pub(crate) async fn build_and_record_cpms_status_export(
     state: &AppState,
 ) -> Result<CpmsStatusExportFile, (StatusCode, Json<ApiError>)> {
     let now = Utc::now();
-    let export_year = current_export_year(now)?;
+    let export_year = resolve_pending_export_year(state, now)
+        .await?
+        .ok_or_else(|| {
+            err(
+                StatusCode::CONFLICT,
+                3018,
+                "annual status export not required",
+            )
+        })?;
     if let Some(export_file) = load_recorded_status_export(state, export_year).await? {
         return Ok(export_file);
     }
@@ -100,13 +121,18 @@ pub(crate) async fn build_and_record_cpms_status_export(
         })
 }
 
+pub(crate) async fn status_export_state(
+    state: &AppState,
+) -> Result<CpmsStatusExportState, (StatusCode, Json<ApiError>)> {
+    let now = Utc::now();
+    resolve_status_export_state(state, now).await
+}
+
 pub(crate) async fn ensure_operator_annual_export_unlocked(
     state: &AppState,
 ) -> Result<(), (StatusCode, Json<ApiError>)> {
-    let Some(export_year) = operator_lock_export_year(Utc::now()) else {
-        return Ok(());
-    };
-    if annual_export_exists(state, export_year).await? {
+    let export_state = resolve_status_export_state(state, Utc::now()).await?;
+    if !export_state.operator_lock_active {
         return Ok(());
     }
     Err(err(
@@ -245,23 +271,6 @@ async fn load_number_release_records(
         .collect())
 }
 
-async fn annual_export_exists(
-    state: &AppState,
-    export_year: i32,
-) -> Result<bool, (StatusCode, Json<ApiError>)> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM cpms_status_exports WHERE export_year = $1)")
-        .bind(export_year)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "query annual status export failed",
-            )
-        })
-}
-
 async fn load_recorded_status_export(
     state: &AppState,
     export_year: i32,
@@ -324,21 +333,160 @@ fn build_status_export_sign_source(
     )
 }
 
-fn current_export_year(now: DateTime<Utc>) -> Result<i32, (StatusCode, Json<ApiError>)> {
-    if now.month() == 1 && (1..=10).contains(&now.day()) {
-        Ok(now.year() - 1)
+async fn resolve_status_export_state(
+    state: &AppState,
+    now: DateTime<Utc>,
+) -> Result<CpmsStatusExportState, (StatusCode, Json<ApiError>)> {
+    let first_export_year = load_first_export_year(state).await?;
+    let latest_exportable_year = latest_exportable_year(now);
+    let pending_export_year = match first_export_year {
+        Some(first_year) if first_year <= latest_exportable_year => {
+            let exported_years =
+                load_exported_years(state, first_year, latest_exportable_year).await?;
+            first_missing_export_year(first_year, latest_exportable_year, &exported_years)
+        }
+        _ => None,
+    };
+    let operator_lock_active = pending_export_year
+        .map(|year| is_operator_lock_active(now, year))
+        .unwrap_or(false);
+    let exported = match first_export_year {
+        Some(first_year) if first_year <= latest_exportable_year => pending_export_year.is_none(),
+        _ => false,
+    };
+    let disabled_reason = if pending_export_year.is_some() {
+        None
+    } else if first_export_year.is_none() {
+        Some("system not initialized".to_string())
     } else {
-        Err(err(
-            StatusCode::CONFLICT,
-            3017,
-            "annual status export window closed",
-        ))
-    }
+        Some("annual status export not required".to_string())
+    };
+
+    Ok(CpmsStatusExportState {
+        now_utc: now.timestamp(),
+        pending_export_year,
+        can_export: pending_export_year.is_some(),
+        reminder_active: pending_export_year.is_some(),
+        operator_lock_active,
+        exported,
+        next_export_available_at: pending_export_year
+            .is_none()
+            .then(|| next_export_available_at(now))
+            .transpose()?,
+        disabled_reason,
+    })
 }
 
-fn operator_lock_export_year(now: DateTime<Utc>) -> Option<i32> {
-    // 中文注释：1 月 6 日到 1 月 10 日仍未导出上一年度报告时，只锁操作管理员。
-    (now.month() == 1 && (6..=10).contains(&now.day())).then(|| now.year() - 1)
+async fn resolve_pending_export_year(
+    state: &AppState,
+    now: DateTime<Utc>,
+) -> Result<Option<i32>, (StatusCode, Json<ApiError>)> {
+    Ok(resolve_status_export_state(state, now)
+        .await?
+        .pending_export_year)
+}
+
+async fn load_first_export_year(
+    state: &AppState,
+) -> Result<Option<i32>, (StatusCode, Json<ApiError>)> {
+    let initialized_at: Option<i64> =
+        sqlx::query_scalar("SELECT initialized_at FROM system_install WHERE id = 1")
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| {
+                err(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    5001,
+                    "query system install failed",
+                )
+            })?;
+
+    initialized_at
+        .map(|ts| {
+            chrono::DateTime::<Utc>::from_timestamp(ts, 0)
+                .map(|dt| dt.year())
+                .ok_or_else(|| {
+                    err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        5001,
+                        "system initialized_at invalid",
+                    )
+                })
+        })
+        .transpose()
+}
+
+async fn load_exported_years(
+    state: &AppState,
+    start_year: i32,
+    end_year: i32,
+) -> Result<HashSet<i32>, (StatusCode, Json<ApiError>)> {
+    let rows = sqlx::query(
+        "SELECT export_year FROM cpms_status_exports
+         WHERE export_year >= $1 AND export_year <= $2
+         ORDER BY export_year",
+    )
+    .bind(start_year)
+    .bind(end_year)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| {
+        err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            5001,
+            "query annual status export failed",
+        )
+    })?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| row.get::<i32, _>("export_year"))
+        .collect())
+}
+
+fn latest_exportable_year(now: DateTime<Utc>) -> i32 {
+    now.year() - 1
+}
+
+fn first_missing_export_year(
+    first_year: i32,
+    latest_year: i32,
+    exported_years: &HashSet<i32>,
+) -> Option<i32> {
+    (first_year..=latest_year).find(|year| !exported_years.contains(year))
+}
+
+fn is_operator_lock_active(now: DateTime<Utc>, pending_export_year: i32) -> bool {
+    // 中文注释：某年度报告在下一年 1 月 10 日后仍未导出时，操作管理员持续锁定直到补导完成。
+    annual_export_lock_start_at(pending_export_year)
+        .map(|lock_start| now.timestamp() >= lock_start)
+        .unwrap_or(false)
+}
+
+fn annual_export_lock_start_at(export_year: i32) -> Result<i64, (StatusCode, Json<ApiError>)> {
+    NaiveDate::from_ymd_opt(export_year + 1, 1, 11)
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|dt| dt.and_utc().timestamp())
+        .ok_or_else(|| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "annual export year invalid",
+            )
+        })
+}
+
+fn next_export_available_at(now: DateTime<Utc>) -> Result<i64, (StatusCode, Json<ApiError>)> {
+    NaiveDate::from_ymd_opt(now.year() + 1, 1, 1)
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|dt| dt.and_utc().timestamp())
+        .ok_or_else(|| {
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                5001,
+                "annual export year invalid",
+            )
+        })
 }
 
 fn export_year_bounds(export_year: i32) -> Result<(i64, i64), (StatusCode, Json<ApiError>)> {
@@ -370,10 +518,12 @@ fn export_year_bounds(export_year: i32) -> Result<(i64, i64), (StatusCode, Json<
 #[cfg(test)]
 mod tests {
     use super::{
-        build_status_export_sign_source, current_export_year, export_year_bounds,
-        operator_lock_export_year, records_hash, CpmsNumberReleaseRecord, CpmsStatusRecord,
+        build_status_export_sign_source, export_year_bounds, first_missing_export_year,
+        is_operator_lock_active, latest_exportable_year, records_hash, CpmsNumberReleaseRecord,
+        CpmsStatusRecord,
     };
     use chrono::{NaiveDate, Utc};
+    use std::collections::HashSet;
 
     #[test]
     fn revoked_status_record_never_exports_voting_eligible() {
@@ -427,16 +577,13 @@ mod tests {
     }
 
     #[test]
-    fn annual_export_window_uses_previous_year() {
+    fn annual_export_uses_previous_year_after_january_first() {
         let now = NaiveDate::from_ymd_opt(2027, 1, 10)
             .unwrap()
             .and_hms_opt(12, 0, 0)
             .unwrap()
             .and_utc();
-        let year = match current_export_year(now) {
-            Ok(year) => year,
-            Err(_) => panic!("export year"),
-        };
+        let year = latest_exportable_year(now);
         assert_eq!(year, 2026);
         let (start, end) = match export_year_bounds(year) {
             Ok(bounds) => bounds,
@@ -457,19 +604,36 @@ mod tests {
     }
 
     #[test]
-    fn operator_lock_starts_after_january_fifth() {
-        let jan_5 = NaiveDate::from_ymd_opt(2027, 1, 5)
+    fn first_missing_export_year_picks_earliest_gap() {
+        let exported_years = HashSet::from([2025, 2027]);
+        assert_eq!(
+            first_missing_export_year(2025, 2028, &exported_years),
+            Some(2026)
+        );
+        let all_exported = HashSet::from([2025, 2026]);
+        assert_eq!(first_missing_export_year(2025, 2026, &all_exported), None);
+    }
+
+    #[test]
+    fn operator_lock_starts_after_january_tenth_and_persists() {
+        let jan_10 = NaiveDate::from_ymd_opt(2027, 1, 10)
             .unwrap()
             .and_hms_opt(23, 59, 59)
             .unwrap()
             .and_utc();
-        let jan_6 = NaiveDate::from_ymd_opt(2027, 1, 6)
+        let jan_11 = NaiveDate::from_ymd_opt(2027, 1, 11)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
+        let may_30 = NaiveDate::from_ymd_opt(2027, 5, 30)
             .unwrap()
             .and_hms_opt(0, 0, 0)
             .unwrap()
             .and_utc();
 
-        assert_eq!(operator_lock_export_year(jan_5), None);
-        assert_eq!(operator_lock_export_year(jan_6), Some(2026));
+        assert!(!is_operator_lock_active(jan_10, 2026));
+        assert!(is_operator_lock_active(jan_11, 2026));
+        assert!(is_operator_lock_active(may_30, 2026));
     }
 }

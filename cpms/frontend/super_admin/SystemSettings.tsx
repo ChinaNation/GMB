@@ -5,10 +5,12 @@ import { listTowns, listVillages } from '../address/api';
 import { installStatus } from '../initialize/api';
 import type { Town, Village } from '../address/types';
 import type { InstallStatus } from '../initialize/types';
-import { exportStatusFile } from './api';
+import { exportStatusFile, getStatusExportState } from './api';
+import type { CpmsStatusExportState } from './types';
 
 export default function SystemSettings() {
   const [status, setStatus] = useState<InstallStatus | null>(null);
+  const [exportState, setExportState] = useState<CpmsStatusExportState | null>(null);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
 
@@ -16,6 +18,9 @@ export default function SystemSettings() {
     installStatus()
       .then(res => { if (res.data) setStatus(res.data); })
       .catch(e => setError(e instanceof Error ? e.message : '状态加载失败'));
+    getStatusExportState()
+      .then(res => { if (res.data?.state) setExportState(res.data.state); })
+      .catch(e => setError(e instanceof Error ? e.message : '年度导出状态加载失败'));
   };
 
   useEffect(() => { load(); }, []);
@@ -23,9 +28,18 @@ export default function SystemSettings() {
   const initialized = status?.initialized ?? false;
   const adminBound = (status?.super_admin_bound_count ?? 0) >= 1;
   const signingReady = status?.archive_signing_ready ?? false;
+  const pendingExportYear = exportState?.pending_export_year ?? null;
+  const canExport = signingReady && (exportState?.can_export ?? false);
+  const exportDisabled = !canExport || exporting;
+  const exportButtonText = exporting
+    ? '导出中...'
+    : pendingExportYear
+      ? `导出 ${pendingExportYear} 年度报告`
+      : '导出年度报告';
 
   const handleExport = async () => {
     setError('');
+    if (exportDisabled) return;
     setExporting(true);
     try {
       const res = await exportStatusFile();
@@ -38,6 +52,8 @@ export default function SystemSettings() {
         a.download = res.data.file_name;
         a.click();
         URL.revokeObjectURL(url);
+        load();
+        window.dispatchEvent(new Event('cpms-status-export-updated'));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : '导出失败');
@@ -87,9 +103,29 @@ export default function SystemSettings() {
       <Divider />
 
       <Section step={4} title="年度报告" done={signingReady}>
-        <button className="btn btn--primary" onClick={handleExport} disabled={!signingReady || exporting}>
-          {exporting ? '导出中...' : '导出年度报告'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {exportState?.reminder_active && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px',
+              borderRadius: 4, fontSize: 12, fontWeight: 600,
+              background: exportState.operator_lock_active ? '#fee2e2' : '#fef3c7',
+              color: exportState.operator_lock_active ? 'var(--color-danger)' : 'var(--color-warning)',
+            }}>
+              {exportState.operator_lock_active ? '逾期未导出' : '待导出'}
+            </span>
+          )}
+          <button className="btn btn--primary" onClick={handleExport} disabled={exportDisabled}>
+            {exportButtonText}
+          </button>
+        </div>
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginTop: 8 }}>
+          {exportStatusText(signingReady, exportState)}
+        </div>
+        {exportState?.operator_lock_active && (
+          <div style={{ color: 'var(--color-danger)', fontSize: 13, marginTop: 6 }}>
+            操作管理员登录已锁定，完成年度报告导出后自动恢复。
+          </div>
+        )}
       </Section>
 
       <Divider />
@@ -97,6 +133,29 @@ export default function SystemSettings() {
       <AddressScope />
     </div>
   );
+}
+
+function exportStatusText(signingReady: boolean, exportState: CpmsStatusExportState | null) {
+  if (!signingReady) return '档案签发密钥未就绪，暂不能导出年度报告。';
+  if (!exportState) return '正在读取年度导出状态。';
+  if (exportState.pending_export_year) {
+    return `${exportState.pending_export_year} 年度报告尚未导出。`;
+  }
+  if (exportState.exported) {
+    const next = exportState.next_export_available_at
+      ? formatUtcDate(exportState.next_export_available_at)
+      : '下一年度 1 月 1 日';
+    return `当前无待导出年度，${next} 后开放下一次导出。`;
+  }
+  return '当前无待导出年度。';
+}
+
+function formatUtcDate(ts: number) {
+  const date = new Date(ts * 1000);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day} UTC`;
 }
 
 function Section({ step, title, done, children }: {
@@ -159,7 +218,7 @@ function AddressScope() {
   useEffect(() => { loadVillages(selectedTown); }, [selectedTown]);
 
   return (
-    <Section step={4} title="行政区数据" done={towns.length > 0}>
+    <Section step={5} title="行政区数据" done={towns.length > 0}>
       <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>镇/街道</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         {towns.map(t => (

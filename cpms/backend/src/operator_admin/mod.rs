@@ -104,6 +104,11 @@ struct StatusExportData {
     export_file: dangan::CpmsStatusExportFile,
 }
 
+#[derive(Serialize)]
+struct StatusExportStateData {
+    state: dangan::CpmsStatusExportState,
+}
+
 // 编辑档案请求
 #[derive(Deserialize)]
 struct UpdateArchiveRequest {
@@ -145,6 +150,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/archives/:archive_id/delete/complete",
             post(complete_archive_delete),
+        )
+        .route(
+            "/api/v1/archives/status-export/state",
+            get(status_export_state),
         )
         .route("/api/v1/archives/status-export", get(export_status_file))
 }
@@ -980,6 +989,17 @@ async fn export_status_file(
     Ok(Json(ok(StatusExportData {
         file_name,
         export_file,
+    })))
+}
+
+async fn status_export_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<StatusExportStateData>>, (StatusCode, Json<ApiError>)> {
+    authz::require_role(&state, &headers, "SUPER_ADMIN").await?;
+    let export_state = dangan::status_export_state(&state).await?;
+    Ok(Json(ok(StatusExportStateData {
+        state: export_state,
     })))
 }
 

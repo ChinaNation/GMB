@@ -35,7 +35,7 @@
 - [x] 软删除强制注销和无投票资格。
 - [x] 导出文件包含状态记录和号码释放记录。
 - [x] 清理前端、数据库、文档中的 `ABNORMAL` 残留。
-- [x] 增加年度报告导出窗口、超级管理员权限和操作管理员逾期锁定。
+- [x] 增加年度报告导出状态、超级管理员权限和操作管理员逾期锁定。
 - [x] 运行 CPMS 后端格式化、测试、clippy 和前端构建。
 
 ## 完成记录
@@ -43,6 +43,6 @@
 - 2026-05-30：新增 `cpms/backend/src/dangan/export.rs`，生成 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT` 离线 JSON 文件。
 - 2026-05-30：统一公民状态为 `NORMAL / REVOKED`，软删除时同步写入注销状态和无投票资格。
 - 2026-05-30：系统设置页新增状态更新文件导出按钮，前端文案清理为“正常/注销”。
-- 2026-05-30：年度报告仅 SUPER_ADMIN 可导出；UTC 1 月 6 日到 1 月 10 日未导出上一年度报告时锁定 OPERATOR_ADMIN 登录和已有会话。
+- 2026-05-30：年度报告仅 SUPER_ADMIN 可导出；当前规则改为每年 UTC 1 月 1 日后可补导最早未导出年度，UTC 1 月 11 日后仍未导出则持续锁定 OPERATOR_ADMIN 登录和已有会话，直到补导完成。
 - 2026-05-30：同步 CPMS/SFID 协议、命名和模块文档，登记 `CPMS_STATUS_EXPORT`。
 - 2026-05-30：已运行 `cargo fmt`、`cargo test`、`cargo clippy --all-targets -- -D warnings` 和 `npm run build`，均通过。

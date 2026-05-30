@@ -1,13 +1,33 @@
+import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../authz/AuthProvider';
 import { authLogout } from '../login/api';
 import { QrIcon } from '../components/QrIcon';
+import { getStatusExportState } from './api';
+import type { CpmsStatusExportState } from './types';
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const [exportState, setExportState] = useState<CpmsStatusExportState | null>(null);
+
+  const loadExportState = useCallback(() => {
+    if (!isSuperAdmin) {
+      setExportState(null);
+      return;
+    }
+    getStatusExportState()
+      .then(res => setExportState(res.data?.state ?? null))
+      .catch(() => setExportState(null));
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    loadExportState();
+    window.addEventListener('cpms-status-export-updated', loadExportState);
+    return () => window.removeEventListener('cpms-status-export-updated', loadExportState);
+  }, [loadExportState]);
 
   const handleLogout = async () => {
     try { await authLogout(); } catch { /* ignore */ }
@@ -15,10 +35,13 @@ export default function AdminLayout() {
     navigate('/login');
   };
 
+  const settingsBadge = exportState?.reminder_active
+    ? (exportState.operator_lock_active ? '逾期' : '待导出')
+    : '';
   const tabs = [
-    { key: '/admin', label: '首页', visible: true },
-    { key: '/admin/operators', label: '管理员', visible: isSuperAdmin },
-    { key: '/admin/settings', label: '系统设置', visible: isSuperAdmin },
+    { key: '/admin', label: '首页', visible: true, badge: '' },
+    { key: '/admin/operators', label: '管理员', visible: isSuperAdmin, badge: '' },
+    { key: '/admin/settings', label: '系统设置', visible: isSuperAdmin, badge: settingsBadge },
   ];
 
   const activeTab = (() => {
@@ -108,12 +131,24 @@ export default function AdminLayout() {
                 padding: '8px 20px', borderRadius: 10, border: 'none',
                 cursor: 'pointer', fontSize: 14, fontWeight: 500,
                 transition: 'all 0.2s ease',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
                 ...(activeTab === tab.key
                   ? { background: 'linear-gradient(135deg, #0d9488, #0f766e)', color: '#fff', boxShadow: '0 2px 8px rgba(13,148,136,0.35)' }
                   : { background: 'transparent', color: 'rgba(255,255,255,0.7)' }),
               }}
             >
               {tab.label}
+              {tab.badge && (
+                <span style={{
+                  height: 18, padding: '0 6px', borderRadius: 4,
+                  display: 'inline-flex', alignItems: 'center',
+                  fontSize: 11, fontWeight: 700,
+                  background: exportState?.operator_lock_active ? '#fee2e2' : '#fef3c7',
+                  color: exportState?.operator_lock_active ? '#b91c1c' : '#92400e',
+                }}>
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>

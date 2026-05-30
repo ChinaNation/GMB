@@ -53,3 +53,18 @@ export interface QrPrintRecord {
   voting_eligible: boolean;
   printed_at: number;
 }
+
+export type ArchiveMaterialType = 'PHOTO' | 'BIRTH_CERTIFICATE' | 'COPY' | 'VIDEO' | 'OTHER';
+
+export interface ArchiveMaterial {
+  material_id: string;
+  archive_id: string;
+  material_type: ArchiveMaterialType;
+  original_file_name: string;
+  mime_type: string;
+  file_size: number;
+  sha256: string;
+  note: string;
+  uploaded_by: string;
+  uploaded_at: number;
+}

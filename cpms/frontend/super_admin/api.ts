@@ -1,5 +1,5 @@
 import { del, get, post } from '../common/http';
-import type { AdminUser, CpmsStatusExportFile } from './types';
+import type { AdminUser, CpmsStatusExportFile, CpmsStatusExportState } from './types';
 
 export const listOperators = () => get<AdminUser[]>('/api/v1/admin/operators');
 
@@ -10,3 +10,6 @@ export const deleteOperator = (id: string) => del<null>(`/api/v1/admin/operators
 
 export const exportStatusFile = () =>
   get<{ file_name: string; export_file: CpmsStatusExportFile }>('/api/v1/archives/status-export');
+
+export const getStatusExportState = () =>
+  get<{ state: CpmsStatusExportState }>('/api/v1/archives/status-export/state');

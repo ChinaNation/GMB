@@ -1,5 +1,6 @@
-import { get, post, put } from '../common/http';
-import type { Archive, CreateArchiveRequest } from './types';
+import { del, get, post, put } from '../common/http';
+import type { ApiError, ApiResponse } from '../common/types';
+import type { Archive, ArchiveMaterial, CreateArchiveRequest } from './types';
 
 export const createArchive = (body: CreateArchiveRequest) =>
   post<{ archive_id: string; archive_no: string; passport_no: string }>('/api/v1/archives', body);
@@ -46,3 +47,30 @@ export const completeArchiveDelete = (id: string, body: {
     `/api/v1/archives/${id}/delete/complete`,
     body
   );
+
+export const listArchiveMaterials = (id: string) =>
+  get<{ items: ArchiveMaterial[] }>(`/api/v1/archives/${id}/materials`);
+
+export const uploadArchiveMaterial = async (id: string, body: FormData) => {
+  // 中文注释：资料上传使用浏览器自动生成 multipart boundary，不能走 JSON HTTP 封装。
+  const res = await fetch(`/api/v1/archives/${id}/materials`, {
+    method: 'POST',
+    body,
+    credentials: 'same-origin',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as Partial<ApiError>;
+    if (res.status === 401) {
+      sessionStorage.removeItem('cpms_user');
+      window.dispatchEvent(new Event('cpms-auth-expired'));
+    }
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<ApiResponse<{ item: ArchiveMaterial }>>;
+};
+
+export const deleteArchiveMaterial = (archiveId: string, materialId: string) =>
+  del<{ deleted_at: number }>(`/api/v1/archives/${archiveId}/materials/${materialId}`);
+
+export const archiveMaterialDownloadUrl = (archiveId: string, materialId: string) =>
+  `/api/v1/archives/${archiveId}/materials/${materialId}/download`;

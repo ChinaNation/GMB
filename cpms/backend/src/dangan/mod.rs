@@ -4,12 +4,13 @@
 
 mod export;
 mod lifecycle;
+mod materials;
 
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
 };
-use axum::{http::StatusCode, Json};
+use axum::{http::StatusCode, Json, Router};
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
@@ -20,6 +21,7 @@ use serde::Serialize;
 use crate::{err, initialize::QrSignKeyRuntime, ApiError, AppState, Archive};
 
 pub(crate) use lifecycle::run_due_archive_hard_delete;
+pub(crate) use materials::remove_archive_material_files;
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -30,8 +32,12 @@ const GEO_SEAL_PREFIX: &str = "g1";
 
 pub(crate) use export::{
     build_and_record_cpms_status_export, ensure_operator_annual_export_unlocked,
-    CpmsStatusExportFile,
+    status_export_state, CpmsStatusExportFile, CpmsStatusExportState,
 };
+
+pub(crate) fn router() -> Router<AppState> {
+    materials::router()
+}
 
 /// SFID_CPMS_V1 / ARCHIVE 档案二维码载荷。
 #[derive(Clone, Serialize)]
