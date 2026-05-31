@@ -10,14 +10,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="${SCRIPT_DIR}/payload"
 BIN_SRC="${PAYLOAD_DIR}/bin/cpms-backend"
 FRONTEND_SRC="${PAYLOAD_DIR}/frontend"
-SCHEMA_SQL="${PAYLOAD_DIR}/db/schema.sql"
-SEED_SQL="${PAYLOAD_DIR}/db/seed.sql"
 SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backend.service"
 BACKUP_SCRIPT_SRC="${PAYLOAD_DIR}/bin/backup_to_storage.sh"
 BACKUP_SERVICE_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.service"
 BACKUP_TIMER_SRC="${PAYLOAD_DIR}/systemd/cpms-backup.timer"
 NGINX_SRC="${PAYLOAD_DIR}/nginx/cpms.conf"
 CERT_SCRIPT_SRC="${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"
+INSTALL_GUIDE_SRC="${PAYLOAD_DIR}/docs/CPMS安装配置手册.pdf"
 DEBS_DIR="${PAYLOAD_DIR}/debs"
 MANIFEST_SRC="${PAYLOAD_DIR}/manifest.env"
 
@@ -30,10 +29,6 @@ check_payload() {
     echo "ERROR: missing frontend static payload at ${FRONTEND_SRC}"
     exit 1
   fi
-  if [[ ! -f "${SCHEMA_SQL}" || ! -f "${SEED_SQL}" ]]; then
-    echo "ERROR: missing database sql payload"
-    exit 1
-  fi
   if [[ ! -f "${SERVICE_SRC}" ]]; then
     echo "ERROR: missing systemd service file"
     exit 1
@@ -44,6 +39,10 @@ check_payload() {
   fi
   if [[ ! -f "${NGINX_SRC}" || ! -f "${CERT_SCRIPT_SRC}" ]]; then
     echo "ERROR: missing nginx or certificate payload"
+    exit 1
+  fi
+  if [[ ! -f "${INSTALL_GUIDE_SRC}" ]]; then
+    echo "ERROR: missing install guide PDF at ${INSTALL_GUIDE_SRC}"
     exit 1
   fi
   if ! compgen -G "${DEBS_DIR}/*.deb" >/dev/null; then
@@ -125,6 +124,10 @@ ensure_postgres_service() {
   systemctl enable --now postgresql
 }
 
+stop_existing_backend() {
+  systemctl stop cpms-backend >/dev/null 2>&1 || true
+}
+
 ensure_cpms_user() {
   if ! id -u cpms >/dev/null 2>&1; then
     useradd --system --home-dir /var/lib/cpms --create-home --shell /usr/sbin/nologin cpms
@@ -188,15 +191,37 @@ EOF
   su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='${db_name}'\" | grep -q 1" \
     || su - postgres -c "psql -c \"CREATE DATABASE ${db_name} OWNER ${db_user};\""
 
-  su - postgres -c "psql -d ${db_name} -v ON_ERROR_STOP=1 -f '${SCHEMA_SQL}'"
-  su - postgres -c "psql -d ${db_name} -v ON_ERROR_STOP=1 -f '${SEED_SQL}'"
+  # 中文注释：正式安装不导入 schema.sql；数据库结构唯一入口是后端启动时的 MIGRATOR.run()。
+  # 这里仅创建/修正库、schema 和旧安装残留对象的归属，避免 cpms 用户执行 migration 时无权限。
+  su - postgres -c "psql -v ON_ERROR_STOP=1 -c \"ALTER DATABASE ${db_name} OWNER TO ${db_user};\""
+  su - postgres -c "psql -d ${db_name} -v ON_ERROR_STOP=1" <<SQL
+ALTER SCHEMA public OWNER TO ${db_user};
+GRANT ALL PRIVILEGES ON DATABASE ${db_name} TO ${db_user};
+GRANT USAGE, CREATE ON SCHEMA public TO ${db_user};
+
+DO \$\$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('ALTER TABLE public.%I OWNER TO ${db_user}', r.tablename);
+    EXECUTE format('GRANT ALL PRIVILEGES ON TABLE public.%I TO ${db_user}', r.tablename);
+  END LOOP;
+
+  FOR r IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP
+    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO ${db_user}', r.sequencename);
+    EXECUTE format('GRANT ALL PRIVILEGES ON SEQUENCE public.%I TO ${db_user}', r.sequencename);
+  END LOOP;
+END \$\$;
+SQL
 }
 
 install_backend() {
   install -d -m 0755 /opt/cpms/bin
+  install -d -m 0755 /opt/cpms/docs
   install -d -m 0755 /opt/cpms/frontend
   install -m 0755 "${BIN_SRC}" /opt/cpms/bin/cpms-backend
   install -m 0755 "${CERT_SCRIPT_SRC}" /opt/cpms/bin/generate_cpms_certs.sh
+  install -m 0644 "${INSTALL_GUIDE_SRC}" /opt/cpms/docs/CPMS安装配置手册.pdf
   rm -rf /opt/cpms/frontend/*
   cp -R "${FRONTEND_SRC}/." /opt/cpms/frontend/
   if [[ -f "${BACKUP_SCRIPT_SRC}" ]]; then
@@ -208,6 +233,13 @@ install_backend() {
 
 install_certs() {
   /opt/cpms/bin/generate_cpms_certs.sh
+}
+
+trust_local_root_ca() {
+  if [[ -f /etc/cpms/certs/cpms-root-ca.crt ]]; then
+    install -m 0644 /etc/cpms/certs/cpms-root-ca.crt /usr/local/share/ca-certificates/cpms-root-ca.crt
+    update-ca-certificates
+  fi
 }
 
 configure_nginx() {
@@ -260,10 +292,12 @@ main() {
   check_os
   install_offline_deps
   ensure_postgres_service
+  stop_existing_backend
   ensure_cpms_user
   setup_database
   install_backend
   install_certs
+  trust_local_root_ca
   install_service
   configure_nginx
   prepare_backup_env
@@ -271,6 +305,7 @@ main() {
   echo "CPMS host install complete."
   echo "Login page: https://www.cpms.com/login"
   echo "Root CA certificate: /etc/cpms/certs/cpms-root-ca.crt"
+  echo "Install guide: /opt/cpms/docs/CPMS安装配置手册.pdf"
   echo "Service status: systemctl status cpms-backend"
   echo "Nginx status: systemctl status nginx"
   echo "Backup config: /etc/cpms/backup.env"

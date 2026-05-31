@@ -49,7 +49,7 @@ export function CitizensView() {
       if (list.length === 0) {
         Modal.warning({
           title: '查询结果',
-          content: '没有的公民信息',
+          content: '未查询到公民信息',
         });
       }
     } catch (err) {
@@ -211,7 +211,7 @@ export function CitizensView() {
             )}
             <Form layout="inline" onFinish={onSearch}>
               <Form.Item name="keyword" style={{ marginBottom: 0 }}>
-                <Input style={{ width: 420 }} placeholder="请输入投票账户、档案号或身份ID" allowClear />
+                <Input style={{ width: 420 }} placeholder="请输入档案号、身份ID、投票账户检索" allowClear />
               </Form.Item>
               <Form.Item style={{ marginBottom: 0 }}>
                 <Button htmlType="submit" loading={loading}>

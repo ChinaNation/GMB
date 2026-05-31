@@ -26,7 +26,8 @@ import { useAuth } from './hooks/useAuth';
 import { writeStoredAuth, clearStoredAuth } from './utils/storedAuth';
 import type { AdminAuth } from './auth/types';
 import { adminLogout, checkAdminAuth } from './auth/api';
-import { getSfidMeta, type SfidMetaResult } from './sfid/api';
+import type { SfidMetaResult } from './sfid/api';
+import { loadCachedSfidMeta } from './sfid/metaCache';
 import { LoginView } from './auth/LoginView';
 import { InstitutionsView } from './institutions/InstitutionsView';
 import { OperatorsView } from './admins/OperatorsView';
@@ -63,6 +64,10 @@ function AppInner() {
   const [activeView, setActiveView] = useState<ActiveView>('citizens');
   // 中文注释:sfidMeta 仍需在 App.tsx 持有,因为它由 Tab 点击事件统一拉取后传给 InstitutionsView。
   const [sfidMeta, setSfidMeta] = useState<SfidMetaResult | null>(null);
+
+  useEffect(() => {
+    setSfidMeta(null);
+  }, [auth?.admin_pubkey, auth?.role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,14 +120,16 @@ function AppInner() {
     setAuth(null);
     clearStoredAuth();
     setActiveView('citizens');
+    setSfidMeta(null);
     message.success('已退出登录');
   };
 
   /** 点击机构类 Tab 时统一加载省份列表(传给 InstitutionsView) */
   const loadSfidMetaForInstitutions = async () => {
     if (!auth) return;
+    if (sfidMeta) return;
     try {
-      const meta = await getSfidMeta(auth);
+      const meta = await loadCachedSfidMeta(auth);
       setSfidMeta(meta);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '加载省份列表失败');

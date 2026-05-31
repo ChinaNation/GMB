@@ -67,8 +67,9 @@
 - SFID 导入年度报告前必须校验 CPMS 授权处于 `ACTIVE`、CPMS 公钥已经由档案码验真绑定、`records_hash` 与签名均正确；同一 CPMS 同一年度只允许导入相同 `records_hash`。
 - 后台公民精确查询、绑定 challenge、年度报告导入均按管理员省/市 scope 过滤:
   省级管理员只看本省,市级管理员只操作本市。
-- 管理员端公民查询不默认返回任何全量列表；必须输入投票账户、档案号或身份ID，后端返回 `{ items, page_size, next_cursor, has_more }`。
-- `sfid_citizens` 是管理员浏览器查询用行表；绑定完成后同步写入，唯一约束保证 `archive_no / sfid_code / wallet_pubkey / wallet_address` 一对一。
+- 管理员端公民查询不默认返回任何全量列表；必须输入档案号、身份ID、投票账户地址或投票账户公钥，后端返回 `{ items, page_size, next_cursor, has_more }`。
+- SFID 公民模块不保存公民姓名，任何公民检索都不得按姓名匹配。
+- `sfid_citizens` 是管理员浏览器查询用行表；绑定完成和 CPMS 年度报告导入后同步写入，唯一约束保证 `archive_no / sfid_code / wallet_pubkey / wallet_address` 一对一。
 - 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。

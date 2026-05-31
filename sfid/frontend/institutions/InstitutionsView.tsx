@@ -60,10 +60,8 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
   const lockedProvince = scope.lockedProvince;
   const lockedCity = scope.lockedCity;
 
-  // 中文注释:公安局机构的数据由后端启动钩子 backfill_and_reconcile_public_security
-  // 按 sfid 工具权威市清单一次性对齐好了,运行时静态不变。前端直接 list,不再每次进省
-  // 页面 reconcile(那会触发全量 Store 持久化,500ms~2s 抖动)。
-  // 当 sfid 工具的 city_codes 更新时发布新版 → 重启后端自动重跑启动对账。
+  // 中文注释:公安局是确定性机构,不走普通公权机构搜索。
+  // 前端进入 tab 后由 InstitutionListTable 先读本地缓存,没有缓存才请求后端专用接口。
   const isPublicSecurity = category === 'PUBLIC_SECURITY';
 
   // 机构详情页:InstitutionsView 本身不再渲染 Card,由 DetailPage 自己管
@@ -103,8 +101,11 @@ export const InstitutionsView: React.FC<Props> = ({ auth, category, sfidMeta }) 
     // ── 任务卡 6:公安局省详情 = 该省所有公安局表格(跳过市卡片层,无"新增"按钮)──
     // 机构数据由后端 reconcile 按 sfid 工具市清单自动维护,前端不能新建。
     const canGoBack = !scope.skipProvinceList;
+    const titleText = scope.lockedCity
+      ? `${effectiveProvince} · ${scope.lockedCity}`
+      : effectiveProvince;
     title = makeCenteredTitle(
-      effectiveProvince,
+      titleText,
       canGoBack ? () => setSelectedProvince(null) : undefined,
       '返回省列表'
     );

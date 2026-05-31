@@ -2,12 +2,13 @@
 // 步 0 目标:提供一个统一的加载点,后续机构详情页、注册弹窗、三机构视图等都用这一份。
 // 设计:
 //   - auth 为 null 时不发请求,直接返回 { meta: null, loading: false }
-//   - 按需调用 reload() 手动刷新
+//   - 按需调用 reload() 手动刷新;确定性元数据优先命中本地缓存
 //   - 失败时把错误写到 error,不抛到组件外
 
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminAuth } from '../auth/types';
-import { getSfidMeta, type SfidMetaResult } from '../sfid/api';
+import type { SfidMetaResult } from '../sfid/api';
+import { loadCachedSfidMeta } from '../sfid/metaCache';
 
 export interface UseSfidMetaResult {
   meta: SfidMetaResult | null;
@@ -30,7 +31,7 @@ export function useSfidMeta(auth: AdminAuth | null): UseSfidMetaResult {
     setLoading(true);
     setError(null);
     try {
-      const next = await getSfidMeta(auth);
+      const next = await loadCachedSfidMeta(auth);
       setMeta(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -50,7 +51,7 @@ export function useSfidMeta(auth: AdminAuth | null): UseSfidMetaResult {
     }
     setLoading(true);
     setError(null);
-    getSfidMeta(auth)
+    loadCachedSfidMeta(auth)
       .then((next) => {
         if (!cancelled) setMeta(next);
       })

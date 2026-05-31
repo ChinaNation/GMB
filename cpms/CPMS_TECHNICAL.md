@@ -126,7 +126,8 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `MIGRATOR.run()` 必须保留，用于保护数据库结构与当前程序携带的 migration 校验一致。
 - 正式版发布时冻结当时全部 migration；从第一个正式版本开始，任何已经发布的 migration 文件都不得再修改。
 - 正式版后续升级只允许新增 migration，例如 `0002_xxx.sql`、`0003_xxx.sql`，由程序启动时自动执行，用户数据库不得清空。
-- `schema.sql` 始终表示当前完整结构，供全新安装和人工审查使用；正式版升级以 `db/migrations/` 的追加 migration 为准。
+- `schema.sql` 只表示当前完整结构，供开发、测试和人工审查使用；正式安装包不携带、不执行
+  `schema.sql / seed.sql`，全新正式库也统一由后端 `MIGRATOR.run()` 创建。
 
 ## 5.2 年度状态导出
 
@@ -172,11 +173,12 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - `CPMS_KEY_ENCRYPT_SECRET` 在已初始化实例启动时必须能解密 `system_install.install_secret` 和 `qr_sign_keys` 中的 ARCHIVE 私钥，否则拒绝启动。
 - 正式安装包按 CPU 架构分为 `cpms-ubuntu24-amd64.run` 和 `cpms-ubuntu24-arm64.run`，均包含后端、
   `frontend/dist`、PostgreSQL/nginx/openssl 等 Ubuntu 24.04 离线 deb 依赖、systemd、nginx
-  配置和证书生成脚本；安装过程不得联网。
+  配置、证书生成脚本和 `CPMS安装配置手册.pdf`；安装过程不得联网。
 - 后端正式部署只监听 `127.0.0.1:8080`，局域网入口统一由 nginx 提供
   `https://www.cpms.com/`。客户端 DNS 由公安局内网自行配置到 CPMS 主机地址。
 - 安装时生成 `/etc/cpms/certs/cpms-root-ca.crt` 和 `www.cpms.com` 服务端证书；客户端需要信任该
   本机私有 CA 后访问 HTTPS。
+- 安装手册安装到 `/opt/cpms/docs/CPMS安装配置手册.pdf`，手动 CI artifact 也单独包含同一份 PDF。
 - 前端所有二维码读取入口统一使用 `frontend/qr/CameraQrScanner.tsx` 摄像头组件，只保留摄像头扫码模式。
 
 ## 6. 环境变量
@@ -305,14 +307,17 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 - push / pull_request 只执行编译与测试 CI，不上传正式安装包；只有手动 `workflow_dispatch`
   运行成功后才上传正式版 artifact。
 - `cpms/scripts/build_linux_host_installer.sh` 构建自解压 `.run`：payload 包含 `cpms-backend`、
-  前端静态文件、数据库 schema/seed、systemd 文件、nginx 配置、证书脚本、备份脚本和 Ubuntu
-  24.04 当前架构运行依赖 deb 闭包。
+  前端静态文件、安装配置 PDF 手册、systemd 文件、nginx 配置、证书脚本、备份脚本和 Ubuntu
+  24.04 当前架构运行依赖 deb 闭包；正式 payload 不包含 `schema.sql / seed.sql`。
 - 每个安装包内置 `payload/manifest.env`，声明 `CPMS_PACKAGE_ARCH=amd64|arm64`；安装脚本必须用
   `dpkg --print-architecture` 校验目标机架构，架构不一致时拒绝安装。
 - 运行依赖 deb 闭包必须在官方 `ubuntu:24.04` Docker 容器内解析和下载，禁止使用 GitHub
   runner 主机 apt 环境，避免第三方源、预装软件或虚拟包污染依赖版本。
 - `cpms/deploy/linux/install_host.sh` 只从 payload 的 `debs/` 安装依赖，禁止 `apt-get update`
   或访问外部 apt 源；目标机无需联网。
+- 正式安装脚本只创建 PostgreSQL 角色、数据库、schema 权限和服务环境文件，不导入数据库
+  SQL；数据库表结构唯一由后端服务启动时的 `MIGRATOR.run()` 创建。脚本会修正旧错误安装残留
+  对象的 owner 和权限，避免 `permission denied for table system_install` 导致后端启动失败。
 - 安装后后端服务为 `cpms-backend.service`，工作目录 `/var/lib/cpms`，环境文件
   `/etc/cpms/cpms-backend.env`，资料目录 `/var/lib/cpms/materials`。
 - nginx 站点文件为 `/etc/nginx/sites-available/cpms.conf`，启用后监听 80/443，80 自动跳转

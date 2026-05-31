@@ -169,7 +169,7 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 - 初始化绑定的超级管理员不可删除且列表固定第一；后续新增超级管理员可删除。超级管理员总数最多 5 个，所有管理员只能编辑姓名。
 
 ## 10. 配置项
-- `CPMS_BIND`：服务监听地址，默认 `0.0.0.0:8080`。
+- `CPMS_BIND`：服务监听地址；正式安装固定为 `127.0.0.1:8080`，由 nginx 提供局域网 HTTPS 入口。
 - `CPMS_DATABASE_URL`：PostgreSQL 连接串，优先级高于 `DATABASE_URL`。
 - `DATABASE_URL`：PostgreSQL 连接串兜底配置。
 - `CPMS_KEY_ENCRYPT_SECRET`：本机密钥加密主密钥，32 字节 hex。
@@ -186,6 +186,9 @@ sfid-cpms-v1|archive|{ano}|{cs}|{ve}|{cpms_pubkey}|{geo_seal_hash}
 ## 12. 部署
 - 正式安装包由 `cpms/scripts/build_linux_host_installer.sh` 构建，脚本同时构建后端 release binary 和前端 `dist`。
 - `install_host.sh` 把前端静态文件安装到 `/opt/cpms/frontend`，后端通过 `CPMS_FRONTEND_DIR` 直接托管。
+- 正式安装不导入 `schema.sql / seed.sql`；安装脚本只创建 PostgreSQL 角色、数据库和 schema 权限，
+  数据库结构由后端启动时的 `MIGRATOR.run()` 创建。
+- 安装手册随安装包提供，并安装到 `/opt/cpms/docs/CPMS安装配置手册.pdf`。
 - CPMS 不再提供 Docker 部署入口；开发联调使用本机数据库脚本和 Vite dev server。
 
 ## 13. 验证命令

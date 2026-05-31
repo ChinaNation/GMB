@@ -20,7 +20,8 @@ import {
   type InstitutionCategory,
 } from './api';
 import type { AdminAuth } from '../auth/types';
-import { listSfidCities, type SfidCityItem } from '../sfid/api';
+import type { SfidCityItem } from '../sfid/api';
+import { loadCachedSfidCities } from '../sfid/metaCache';
 import { dynamicLocksForA3, locksForCategory } from './locks';
 
 interface Props {
@@ -100,7 +101,7 @@ export const CreateInstitutionModal: React.FC<Props> = ({
     if (!open || !lockedProvince) return;
     let cancelled = false;
     setCitiesLoading(true);
-    listSfidCities(auth, lockedProvince)
+    loadCachedSfidCities(auth, lockedProvince)
       .then((rows) => {
         if (!cancelled) setCities(rows.filter((c) => c.code !== '000'));
       })

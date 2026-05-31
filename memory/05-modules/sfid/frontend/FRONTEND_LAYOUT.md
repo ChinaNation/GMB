@@ -99,7 +99,9 @@ sfid/frontend/
 - `citizens/CitizensView.tsx` 的表格行点击只负责打开详情;操作栏按钮必须阻止事件冒泡,
   点击“更换绑定”不得同时触发公民详情弹窗；顶部新增入口固定显示“新增身份ID绑定”。
 - 本 UI 边界必须使用后端绑定协议字段：`wallet_pubkey / wallet_address / citizen_status / voting_eligible / vote_status / bind_status`。
-- `institutions/InstitutionListTable.tsx` 不做本地分页承载大数据；机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。
+- `sfid/metaCache.ts` 是 SFID 前端确定性元数据缓存边界；只允许缓存省份元数据、城市清单和公安局确定性展示列表，不得缓存普通公民或普通机构业务查询结果。
+- `common/CityGrid.tsx`、注册局市列表和机构新增弹窗读取市清单时必须走 `loadCachedSfidCities`；机构类 Tab 读取省份元数据时必须走 `loadCachedSfidMeta`。
+- `institutions/InstitutionListTable.tsx` 不做普通机构本地分页承载大数据；公权机构和私权机构列表必须由服务端按精确搜索条件返回分页对象，前端只按 `next_cursor` 请求下一页。
 
 ## 管理员目录规则
 
@@ -145,6 +147,8 @@ CPMS 系统管理也不列入链交互表,归 `cpms/`。
 - 不放 SFID 内部机构创建/修改页面,这些仍归 `frontend/institutions/`。
 - 不再提供“备案”按钮、备案弹窗或备案状态组件。
 - 机构列表的“清算行资格”列只在私权机构 Tab 显示;公安局和公权机构列表不得展示该列。
+- 公安局 Tab 不显示搜索框，不复用普通机构精确搜索；首次进入调用 `/api/v1/institutions/public-security`，成功后按管理员账户、角色、省市范围写入 `sfid:public-security:public-security-v1:*` 本地缓存，再次进入优先展示缓存，点击“刷新”才清缓存并重新请求。公安局列表前端固定每页 20 条，显示“共 N 条 / 第 X 页 / 上一页 / 下一页”，本地翻页不得触发后端 cursor 请求。
+- 公民身份列表搜索框只允许输入档案号、身份ID、投票账户地址或投票账户公钥；SFID 前端不得出现“按姓名检索公民”的文案。
 - 当前封装公开查询:
   - `getInstitutionInfo(sfidNumber)`:机构展示详情。
   - `getInstitutionRegistrationInfo(sfidNumber)`:链端注册信息凭证。

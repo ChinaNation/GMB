@@ -58,6 +58,7 @@ OUT_DIR="${ROOT_DIR}/dist/${PACKAGE_BASENAME}"
 PAYLOAD_DIR="${OUT_DIR}/payload"
 RUN_FILE="${ROOT_DIR}/dist/${PACKAGE_BASENAME}.run"
 SHA256_FILE="${RUN_FILE}.sha256"
+INSTALL_GUIDE_PDF="${ROOT_DIR}/docs/CPMS安装配置手册.pdf"
 
 collect_offline_debs() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -177,9 +178,13 @@ fi
 
 echo "[3/8] Prepare installer layout"
 rm -rf "${OUT_DIR}" "${RUN_FILE}" "${SHA256_FILE}"
+if [[ ! -f "${INSTALL_GUIDE_PDF}" ]]; then
+  echo "ERROR: missing CPMS install guide PDF at ${INSTALL_GUIDE_PDF}"
+  exit 1
+fi
 mkdir -p \
   "${PAYLOAD_DIR}/bin" \
-  "${PAYLOAD_DIR}/db" \
+  "${PAYLOAD_DIR}/docs" \
   "${PAYLOAD_DIR}/frontend" \
   "${PAYLOAD_DIR}/systemd" \
   "${PAYLOAD_DIR}/nginx" \
@@ -195,8 +200,7 @@ collect_offline_debs
 echo "[5/8] Copy payload files"
 cp "${ROOT_DIR}/backend/target/release/cpms-backend" "${PAYLOAD_DIR}/bin/cpms-backend"
 cp "${ROOT_DIR}/deploy/linux/backup_to_storage.sh" "${PAYLOAD_DIR}/bin/backup_to_storage.sh"
-cp "${ROOT_DIR}/backend/db/schema.sql" "${PAYLOAD_DIR}/db/schema.sql"
-cp "${ROOT_DIR}/backend/db/seed.sql" "${PAYLOAD_DIR}/db/seed.sql"
+cp "${INSTALL_GUIDE_PDF}" "${PAYLOAD_DIR}/docs/CPMS安装配置手册.pdf"
 cp -R "${ROOT_DIR}/frontend/dist/." "${PAYLOAD_DIR}/frontend/"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backend.service" "${PAYLOAD_DIR}/systemd/cpms-backend.service"
 cp "${ROOT_DIR}/deploy/linux/systemd/cpms-backup.service" "${PAYLOAD_DIR}/systemd/cpms-backup.service"
@@ -218,6 +222,7 @@ chmod +x \
 
 echo "[7/8] Validate payload"
 test -f "${PAYLOAD_DIR}/manifest.env"
+test -f "${PAYLOAD_DIR}/docs/CPMS安装配置手册.pdf"
 test -f "${PAYLOAD_DIR}/frontend/index.html"
 test -f "${PAYLOAD_DIR}/nginx/cpms.conf"
 test -f "${PAYLOAD_DIR}/certs/generate_cpms_certs.sh"

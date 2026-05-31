@@ -197,6 +197,11 @@ export interface ListInstitutionsQuery {
   page_size?: number;
 }
 
+export interface ListPublicSecurityQuery {
+  cursor?: string | null;
+  page_size?: number;
+}
+
 // ─── API 调用 ─────────────────────────────────────────────────
 
 /**
@@ -280,6 +285,24 @@ export async function listInstitutions(
   if (query?.page_size) params.set('page_size', String(query.page_size));
   const qs = params.toString();
   const path = qs ? `/api/v1/institution/list?${qs}` : '/api/v1/institution/list';
+  return adminRequest<PageResult<InstitutionListRow>>(path, auth);
+}
+
+/**
+ * 公安局确定性列表。
+ * 后端按当前登录管理员的省市权限返回,不接收搜索词。
+ */
+export async function listPublicSecurityInstitutions(
+  auth: AdminAuth,
+  query?: ListPublicSecurityQuery,
+): Promise<PageResult<InstitutionListRow>> {
+  const params = new URLSearchParams();
+  if (query?.cursor) params.set('cursor', query.cursor);
+  if (query?.page_size) params.set('page_size', String(query.page_size));
+  const qs = params.toString();
+  const path = qs
+    ? `/api/v1/institutions/public-security?${qs}`
+    : '/api/v1/institutions/public-security';
   return adminRequest<PageResult<InstitutionListRow>>(path, auth);
 }
 

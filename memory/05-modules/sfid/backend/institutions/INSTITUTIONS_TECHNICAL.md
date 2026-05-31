@@ -100,7 +100,8 @@ SFID 不能单方面删除仍在链上的账户名称。
 | GET | `/api/v1/institution/search-parents?q=xxx` | 法人机构模糊搜索 |
 | PATCH | `/api/v1/institution/:sfid_number` | 更新机构名称 / 企业类型 / 所属法人 |
 | POST | `/api/v1/institution/:sfid_number/account/create` | 新增账户名称,不上链 |
-| GET | `/api/v1/institution/list?category=...&province=...&city=...&q=...&cursor=...` | 按权限范围精确查询机构，返回游标分页对象 |
+| GET | `/api/v1/institution/list?category=...&province=...&city=...&q=...&cursor=...` | 按权限范围精确查询私权/普通公权机构，返回游标分页对象 |
+| GET | `/api/v1/institutions/public-security?cursor=...` | 按登录管理员省市权限返回确定性公安局列表，不接收搜索词 |
 | GET | `/api/v1/institution/:sfid_number` | 机构详情,含账户列表 |
 | GET | `/api/v1/institution/:sfid_number/accounts` | 机构账户列表 |
 | DELETE | `/api/v1/institution/:sfid_number/account/:account_name` | 删除允许删除的新增账户名称 |
@@ -109,9 +110,10 @@ SFID 不能单方面删除仍在链上的账户名称。
 | GET | `/api/v1/institution/:sfid_number/documents/:doc_id/download` | 下载机构资料库文档 |
 | DELETE | `/api/v1/institution/:sfid_number/documents/:doc_id` | 删除机构资料库文档 |
 
-管理员端机构列表不默认返回全量数据。私权机构、公权机构和公安局列表共用
+管理员端普通机构列表不默认返回全量数据。私权机构、普通公权机构使用
 `sfid_institutions / sfid_institution_accounts` 行表；管理员输入机构 SFID 或机构名称后，
 后端按当前省/市权限返回 `{ items, page_size, next_cursor, has_more }`。
+公安局是确定性机构，不属于普通公权机构搜索列表；后端通过专用接口按 sfid 省市代码生成并返回。
 
 区块链软件公开查询:
 

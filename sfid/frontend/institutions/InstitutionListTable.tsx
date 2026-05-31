@@ -4,9 +4,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, message, Space, Table, Tag, Typography } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
   listInstitutions,
+  listPublicSecurityInstitutions,
   type InstitutionCategory,
   type InstitutionListRow,
 } from './api';
@@ -15,12 +17,20 @@ import {
   isSelfEligibleClearingBank,
   CLEARING_BANK_ELIGIBLE_LABEL,
 } from './utils/clearingBankEligible';
+import {
+  clearCachedPublicSecurityRows,
+  publicSecurityCacheKey,
+  readCachedPublicSecurityRows,
+  writeCachedPublicSecurityRows,
+} from '../sfid/metaCache';
 
 // 创建者角色中文映射。
 const CREATED_BY_ROLE_LABEL: Record<string, string> = {
   SHENG_ADMIN: '省级管理员',
   SHI_ADMIN: '市级管理员',
 };
+
+const PUBLIC_SECURITY_PAGE_SIZE = 20;
 
 interface Props {
   auth: AdminAuth;
@@ -32,7 +42,7 @@ interface Props {
   onSelectInstitution?: (sfidNumber: string) => void;
   /** 让父组件触发刷新 */
   refreshKey?: number;
-  /** 模糊搜索关键字(机构名称或 SFID);空=不过滤。scope 由后端按角色自动限制 */
+  /** 精确搜索关键字(机构名称或 SFID);空=返回空页。scope 由后端按角色自动限制 */
   searchQuery?: string;
 }
 
@@ -49,28 +59,47 @@ export const InstitutionListTable: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [publicSecurityPage, setPublicSecurityPage] = useState(1);
+  const isPublicSecurity = category === 'PUBLIC_SECURITY';
+  const psCacheKey = isPublicSecurity ? publicSecurityCacheKey(auth, province, city) : '';
 
-  const loadRows = (cursor?: string | null) => {
+  const loadRows = (cursor?: string | null, forceRefresh = false) => {
     const exactQuery = searchQuery?.trim() ?? '';
-    if (!exactQuery) {
+    if (!isPublicSecurity && !exactQuery) {
       setRows([]);
       setNextCursor(null);
       return () => {};
     }
+    if (isPublicSecurity && !cursor && !forceRefresh) {
+      const cachedRows = readCachedPublicSecurityRows(psCacheKey);
+      if (cachedRows) {
+        setRows(cachedRows);
+        setNextCursor(null);
+        setPublicSecurityPage(1);
+        return () => {};
+      }
+    }
     let cancelled = false;
     setLoading(true);
-    listInstitutions(auth, {
-      category,
-      province,
-      city: city || undefined,
-      q: exactQuery,
-      cursor,
-      page_size: 50,
-    })
+    const request = isPublicSecurity
+      ? listPublicSecurityInstitutions(auth, { cursor, page_size: 300 })
+      : listInstitutions(auth, {
+          category,
+          province,
+          city: city || undefined,
+          q: exactQuery,
+          cursor,
+          page_size: 50,
+        });
+    request
       .then((data) => {
         if (!cancelled) {
           setRows(data.items);
           setNextCursor(data.next_cursor ?? null);
+          if (isPublicSecurity && !cursor) {
+            setPublicSecurityPage(1);
+            writeCachedPublicSecurityRows(psCacheKey, auth, province, city, data.items);
+          }
         }
       })
       .catch((err) => {
@@ -86,8 +115,20 @@ export const InstitutionListTable: React.FC<Props> = ({
 
   useEffect(() => {
     setCursorStack([]);
+    setPublicSecurityPage(1);
     return loadRows(null);
-  }, [auth.access_token, category, province, city, refreshKey, searchQuery]);
+  }, [
+    auth.access_token,
+    auth.admin_pubkey,
+    auth.role,
+    auth.admin_province,
+    auth.admin_city,
+    category,
+    province,
+    city,
+    refreshKey,
+    searchQuery,
+  ]);
 
   const onNextPage = () => {
     if (!nextCursor) return;
@@ -103,6 +144,37 @@ export const InstitutionListTable: React.FC<Props> = ({
     setCursorStack(stack);
     loadRows(prevCursor);
   };
+
+  const onRefreshPublicSecurity = () => {
+    if (!isPublicSecurity) return;
+    clearCachedPublicSecurityRows(psCacheKey);
+    setCursorStack([]);
+    setPublicSecurityPage(1);
+    loadRows(null, true);
+  };
+
+  const publicSecurityTotalPages = Math.max(
+    1,
+    Math.ceil(rows.length / PUBLIC_SECURITY_PAGE_SIZE),
+  );
+  const publicSecurityDisplayRows = isPublicSecurity
+    ? rows.slice(
+        (publicSecurityPage - 1) * PUBLIC_SECURITY_PAGE_SIZE,
+        publicSecurityPage * PUBLIC_SECURITY_PAGE_SIZE,
+      )
+    : rows;
+  const onPrevPublicSecurityPage = () => {
+    setPublicSecurityPage((page) => Math.max(1, page - 1));
+  };
+  const onNextPublicSecurityPage = () => {
+    setPublicSecurityPage((page) => Math.min(publicSecurityTotalPages, page + 1));
+  };
+  const prevDisabled = isPublicSecurity
+    ? loading || publicSecurityPage <= 1
+    : loading || cursorStack.length === 0;
+  const nextDisabled = isPublicSecurity
+    ? loading || publicSecurityPage >= publicSecurityTotalPages
+    : loading || !nextCursor;
 
   // 中文注释:"创建用户"列仅对**私权机构**展示。
   // 公安局由后端 reconcile 批量生成,created_by 不具人类语义;
@@ -178,7 +250,7 @@ export const InstitutionListTable: React.FC<Props> = ({
       <Table<InstitutionListRow>
         rowKey={(r) => r.sfid_number}
         loading={loading}
-        dataSource={rows}
+        dataSource={publicSecurityDisplayRows}
         pagination={false}
         // 中文注释:整行可点击,跳详情页。
         onRow={(row) => ({
@@ -187,11 +259,31 @@ export const InstitutionListTable: React.FC<Props> = ({
         })}
         columns={columns}
       />
-      <Space style={{ marginTop: 12 }}>
-        <Button disabled={loading || cursorStack.length === 0} onClick={onPrevPage}>
+      <Space style={{ marginTop: 12 }} wrap>
+        {isPublicSecurity && (
+          <>
+            <Typography.Text type="secondary">
+              共 {rows.length} 条 / 第 {publicSecurityPage} 页
+            </Typography.Text>
+            <Button
+              icon={<ReloadOutlined />}
+              disabled={loading}
+              onClick={onRefreshPublicSecurity}
+            >
+              刷新
+            </Button>
+          </>
+        )}
+        <Button
+          disabled={prevDisabled}
+          onClick={isPublicSecurity ? onPrevPublicSecurityPage : onPrevPage}
+        >
           上一页
         </Button>
-        <Button disabled={loading || !nextCursor} onClick={onNextPage}>
+        <Button
+          disabled={nextDisabled}
+          onClick={isPublicSecurity ? onNextPublicSecurityPage : onNextPage}
+        >
           下一页
         </Button>
       </Space>
