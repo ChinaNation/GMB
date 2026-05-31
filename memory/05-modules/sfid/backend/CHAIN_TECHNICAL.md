@@ -25,8 +25,9 @@ SFID 后端独立 chain 业务目录已废止。SFID 后端不再维护独立 ch
 | 通用链凭证/SCALE/genesis hash | `sfid/backend/app_core/chain_runtime.rs` |
 | 通用链 RPC URL | `sfid/backend/app_core/chain_url.rs` |
 
-管理员模块当前没有活跃 `chain_*.rs` 文件。省级管理员只负责管理员治理,第 1 步
-写操作统一走 `admins/actions.rs` 的 Passkey + `WUMIN_QR_V1` 冷钱包挑战,
+管理员模块当前没有活跃 `chain_*.rs` 文件。省级管理员只负责管理员治理,
+写操作统一走 `admins/actions.rs` 的安全动作入口与 `admins/passkeys.rs` 的
+WebAuthn 辅助,
 不使用云端省级 signer。
 
 CPMS 系统安装授权、ARCHIVE 档案验真和站点状态治理归
@@ -89,8 +90,10 @@ SFID 内部资料不进入链端注册信息凭证。链上管理员、阈值、
 
 - `GET /api/v1/admin/sheng-admins` 是省级管理员列表接口,归
   `admins::catalog`,不是链交互。
-- `POST /api/v1/admin/passkeys/register/*` 与 `POST /api/v1/admin/actions/*`
-  是管理员治理安全流程,归 `admins::actions`,不是链交互。
+- `POST /api/v1/admin/passkeys/register/*` 是管理员 Passkey 注册流程,归
+  `admins::passkeys`,不是链交互。
+- `POST /api/v1/admin/actions/*` 是管理员治理安全动作流程,归
+  `admins::actions`,不是链交互。
 - 省管理员云端代签端点已删除;不得恢复为兼容入口。
 
 ## 5. 验收

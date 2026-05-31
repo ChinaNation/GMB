@@ -1,5 +1,5 @@
-// 中文注释:注册局省级管理员列表。省级管理员不再区分主/备,
-// 初始省级管理员只作为不可删除安全根保留。
+// 中文注释:注册局省级管理员列表。所有省级管理员同级,
+// 代码内置初始省级管理员只作为不可删除安全根保留。
 
 import { useMemo, useState } from 'react';
 import { Button, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
@@ -9,7 +9,7 @@ import { ScanAccountModal } from '../common/ScanAccountModal';
 import type { ShengAdminRow } from './api';
 import type { AdminActionType } from './admin_security_api';
 import { sameHexPubkey } from './shengAdminUtils';
-import { AdminPasskeyTool } from './AdminPasskeyTool';
+import { Passkey } from './Passkey';
 
 interface SuperAdminSubTabProps {
   selectedShengAdmin: ShengAdminRow;
@@ -200,7 +200,7 @@ export function SuperAdminSubTab({
                   >
                     删除
                   </Button>
-                  <AdminPasskeyTool size="small" disabled={!isSelf} />
+                  <Passkey size="small" disabled={!isSelf} />
                 </Space>
               );
             },
@@ -238,9 +238,19 @@ export function SuperAdminSubTab({
             <Input
               placeholder="请输入省级管理员账户(SS58)"
               suffix={
-                <Button type="link" size="small" onClick={() => setScanOpen(true)} style={{ paddingInline: 0 }}>
-                  扫码
-                </Button>
+                <span
+                  title="扫码识别用户码"
+                  style={{ cursor: 'pointer', display: 'inline-flex', color: '#0d9488' }}
+                  onClick={() => setScanOpen(true)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                    <rect x="7" y="7" width="10" height="10" rx="1" />
+                  </svg>
+                </span>
               }
             />
           </Form.Item>

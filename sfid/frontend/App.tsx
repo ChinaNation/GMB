@@ -35,15 +35,17 @@ import { CitizensView } from './citizens/CitizensView';
 
 const { Header, Content } = Layout;
 
-/** Header 右上角的管理员显示名称 */
-function resolveHeaderAdminName(auth: AdminAuth | null): string {
-  if (!auth) return '';
+/** Header 右上角管理员身份与姓名,样式与 CPMS 管理端保持一致。 */
+function resolveHeaderAdminIdentity(auth: AdminAuth | null): { roleLabel: string; adminName: string } {
+  if (!auth) return { roleLabel: '', adminName: '' };
   const name = typeof auth.admin_name === 'string' ? auth.admin_name.trim() : '';
-  if (name) return name;
   // 中文注释:当前只剩 SHENG_ADMIN / SHI_ADMIN 两个管理员角色。
-  if (auth.role === 'SHENG_ADMIN') return '省级管理员';
-  if (auth.role === 'SHI_ADMIN') return '市级管理员';
-  return '';
+  const roleLabel = auth.role === 'SHENG_ADMIN'
+    ? '省级管理员'
+    : auth.role === 'SHI_ADMIN'
+      ? '市级管理员'
+      : '';
+  return { roleLabel, adminName: name || '暂未设置' };
 }
 
 type ActiveView =
@@ -105,6 +107,7 @@ function AppInner() {
     }
   }, [mustUpdatePasskey, activeView]);
   const routedView: ActiveView = mustUpdatePasskey ? 'system-settings' : activeView;
+  const headerAdminIdentity = resolveHeaderAdminIdentity(auth);
 
   const onLogout = () => {
     // best-effort 通知后端销毁 session,不阻塞前端退出
@@ -212,10 +215,13 @@ function AppInner() {
                 color: '#ffffff', fontSize: 14, fontWeight: 500,
                 background: 'rgba(255,255,255,0.12)',
                 padding: '6px 16px', borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.15)'
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
               }}
             >
-              {resolveHeaderAdminName(auth)}
+              <span>{headerAdminIdentity.roleLabel}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>·</span>
+              <span>{headerAdminIdentity.adminName}</span>
             </Typography.Text>
             <Button
               size="small"

@@ -15,7 +15,7 @@ import { sameHexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import { AddOperatorModal } from './AddOperatorModal';
 import { SuperAdminSubTab } from './SuperAdminSubTab';
-import { AdminPasskeyTool } from './AdminPasskeyTool';
+import { Passkey } from './Passkey';
 
 interface ProvinceDetailViewProps {
   state: ShengAdminSharedState;
@@ -81,7 +81,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
   // sub-tab(仅在省详情内显示)
   const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
     { key: 'operators', label: effectiveCity ? '市管理员列表' : '市列表' },
-    { key: 'super-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省级管理员' },
+    { key: 'super-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省管理员列表' },
   ];
 
   // ── 决定 title / body / extra ──
@@ -327,7 +327,7 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
               <Space>
                 {canEditOperators ? <Button size="small" onClick={() => onUpdateOperator(row)}>编辑</Button> : null}
                 {canEditOperators ? <Button size="small" danger onClick={() => onDeleteOperator(row)}>删除</Button> : null}
-                <AdminPasskeyTool
+                <Passkey
                   size="small"
                   disabled={!sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey)}
                 />

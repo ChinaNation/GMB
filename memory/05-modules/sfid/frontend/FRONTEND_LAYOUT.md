@@ -18,7 +18,7 @@
   - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
   - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
   - `memory/08-tasks/done/20260531-sfid-admin-ui-closeout.md`
-  - `memory/08-tasks/open/20260531-sfid-admin-model-no-status.md`
+  - `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`
 
 ## 当前边界
 
@@ -39,7 +39,7 @@ sfid/frontend/
 ├── institutions/              # 机构本地管理页面、institutions/api.ts、chain_duoqian_info.ts
 ├── qr/
 ├── sfid/                      # SFID 元数据 API,如省市/A3/机构类型选项
-├── admins/                    # 省/市管理员页面、AdminPasskeyTool.tsx、operators_api.ts、admin_security_api.ts
+├── admins/                    # 省/市管理员页面、Passkey.tsx、operators_api.ts、admin_security_api.ts
 ├── theme/
 └── utils/                     # 通用工具,http.ts 只放请求封装,不放业务 API
 ```
@@ -56,7 +56,7 @@ sfid/frontend/
 - CPMS 系统管理接口放 `cpms/api.ts`;CPMS 组件放 `cpms/`。
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
-  市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/AdminPasskeyTool.tsx`。
+  市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
 - 管理员一般业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
 - 管理员重要写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
@@ -86,18 +86,18 @@ sfid/frontend/
 ## 管理员目录规则
 
 - `admins/`:放省级管理员列表、注册局视图、市管理员维护和管理员安全写操作。
-- 注册局-省级管理员页面由 `SuperAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
-- 省级管理员不再区分主管理员/备用管理员;仅内置初始省级管理员拥有删除新增省级管理员的权限。
+- 注册局-省管理员列表页面由 `SuperAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
+- 省级管理员采用同级模型;仅内置初始省级管理员拥有删除新增省级管理员的权限。
 - `operators_api.ts` 只保留市管理员列表读取。
 - `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
   一般业务 grant 和冷钱包签名回执提交。
-- 省级管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `AdminPasskeyTool.tsx`
+- 省级管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `Passkey.tsx`
   生成或重新生成本人 Passkey。
 - 省级管理员新增/编辑/删除、市管理员新增/编辑/删除都必须走 `runSecuredAction`。
 - 管理员列表不得展示状态栏,也不得保留启用/停用按钮。
 - 编辑市管理员只允许调整管理员姓名;账户地址和市归属只读展示,不得在前端提交修改。
 - 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。
-- `省管理员名册`、`激活签名`、`rotate 签名` 不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
+- 旧省管理员签名维护页不再作为 `App.tsx` 顶层 Tab 暴露,对应独立页面文件已删除。
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 
 ## 链交互目录规则

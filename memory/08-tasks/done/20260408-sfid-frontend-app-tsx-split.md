@@ -134,7 +134,7 @@ src/views/
 ```
 
 ### 收官步清理清单
-- 删除 dead helper:`isSr25519HexPubkey`, `sameHexPubkey`, `resolveAdminName`(合并进 resolveHeaderAdminName), `createSessionId`, `defaultInstitutionByA3`, `usesReservedProvinceCityByA3`, `institutionCodeToName`, `allowedInstitutionByA3`, `defaultP1ByA3`, `p1LockedByA3`, `reservedProvinceCityName`
+- 删除 dead helper:`isSr25519HexPubkey`, `sameHexPubkey`, `resolveAdminName`(合并进当前 Header 管理员身份展示 helper), `createSessionId`, `defaultInstitutionByA3`, `usesReservedProvinceCityByA3`, `institutionCodeToName`, `allowedInstitutionByA3`, `defaultP1ByA3`, `p1LockedByA3`, `reservedProvinceCityName`
 - 删除未用 import:`SfidCityItem`(仅被 dead helper 引用)、未使用的 `loginBg` 常量
 - 合并 Tab onClick 里三份重复的 `getSfidMeta` 逻辑到单个 `loadSfidMetaForInstitutions` helper
 - 新增顶部中文文件头注释,明确 App.tsx 的路由壳子职责与"严禁新增业务代码"铁律
