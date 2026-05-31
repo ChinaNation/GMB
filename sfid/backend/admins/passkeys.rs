@@ -19,11 +19,11 @@ use webauthn_rs::prelude::{
     RegisterPublicKeyCredential, Url, Webauthn, WebauthnBuilder,
 };
 
-use crate::citizens::binding::pubkey_hex_to_ss58;
 use crate::crypto::pubkey::same_admin_pubkey;
 use crate::models::{
     AdminPasskeyCredential, AdminPasskeyRegistrationChallenge, AdminPasskeyStatus,
 };
+use crate::qr::{build_sign_request, display_field as field};
 use crate::*;
 
 pub(crate) const ADMIN_ACTION_TTL_SECONDS: i64 = 300;
@@ -35,7 +35,6 @@ const DEV_PASSKEY_ORIGIN: &str = "http://localhost:5179";
 const ENV_PASSKEY_RP_ID: &str = "SFID_PASSKEY_RP_ID";
 const ENV_PASSKEY_ORIGIN: &str = "SFID_PASSKEY_ORIGIN";
 const ENV_PASSKEY_ALLOWED_ORIGINS: &str = "SFID_PASSKEY_ALLOWED_ORIGINS";
-const ADMIN_SIGN_ACTION: &str = "sfid_admin_action";
 
 #[derive(Debug, Clone)]
 struct PasskeyWebauthnConfig {
@@ -51,13 +50,7 @@ pub(crate) struct PasskeyStartInput {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct PasskeyAttestInput {
-    registration_id: String,
-    credential: RegisterPublicKeyCredential,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct PasskeyCompleteInput {
+pub(crate) struct PasskeyConfirmInput {
     registration_id: String,
     signer_pubkey: String,
     signature: String,
@@ -67,17 +60,23 @@ pub(crate) struct PasskeyCompleteInput {
 #[derive(Debug, Serialize)]
 pub(crate) struct PasskeyStartOutput {
     registration_id: String,
-    public_key_options: CreationChallengeResponse,
-    expires_at: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct PasskeyAttestOutput {
-    registration_id: String,
     request_id: String,
     sign_request: String,
     payload_hash: String,
     expires_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct PasskeyConfirmOutput {
+    registration_id: String,
+    public_key_options: CreationChallengeResponse,
+    expires_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PasskeyCompleteInput {
+    registration_id: String,
+    credential: RegisterPublicKeyCredential,
 }
 
 #[derive(Debug, Serialize)]
@@ -110,10 +109,6 @@ pub(crate) async fn start_passkey_registration(
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let webauthn = match webauthn() {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
     let label = input
         .label
         .unwrap_or_else(|| "管理员 Passkey".to_string())
@@ -129,31 +124,44 @@ pub(crate) async fn start_passkey_registration(
     let now = Utc::now();
     let expires_at = now + Duration::seconds(ADMIN_ACTION_TTL_SECONDS);
     let registration_id = format!("admin-passkey-{}", Uuid::new_v4());
-    let existing = {
-        let store = match store_read_or_500(&state) {
-            Ok(v) => v,
-            Err(resp) => return resp,
-        };
-        active_passkey_credentials(&store, ctx.admin_pubkey.as_str())
-            .into_iter()
-            .map(|record| record.passkey.cred_id().clone())
-            .collect::<Vec<_>>()
-    };
-    let (public_key_options, webauthn_state) = match webauthn.start_passkey_registration(
-        user_uuid_for_pubkey(ctx.admin_pubkey.as_str()),
+    let request_hash = hash_json(&json!({
+        "admin_pubkey": ctx.admin_pubkey.as_str(),
+        "label": label.as_str(),
+        "registration_id": registration_id.as_str(),
+    }));
+    let province = ctx.admin_province.clone().unwrap_or_default();
+    let payload_text = signed_payload_text(AdminSignedPayload {
+        domain: "sfid_admin_governance",
+        qr_proto: crate::qr::WUMIN_QR_V1,
+        action_id: registration_id.as_str(),
+        action_type: "PASSKEY_REGISTER",
+        actor_pubkey: ctx.admin_pubkey.as_str(),
+        actor_province: province.as_str(),
+        target: ctx.admin_pubkey.as_str(),
+        request_hash: request_hash.as_str(),
+        before_hash: "none",
+        after_hash: request_hash.as_str(),
+        expires_at: expires_at.timestamp(),
+    });
+    let payload_hash = payload_hash_for_text(payload_text.as_str());
+    let sign_request = match build_sign_request(
+        registration_id.as_str(),
+        now.timestamp(),
+        expires_at.timestamp(),
         ctx.admin_pubkey.as_str(),
-        ctx.admin_name.as_str(),
-        Some(existing),
+        payload_text.as_str(),
+        "更新管理员 Passkey",
+        vec![
+            field("action_type", "操作", "更新 Passkey"),
+            field("province", "省份", province.as_str()),
+            field("actor_pubkey", "管理员", ctx.admin_pubkey.as_str()),
+            field("target", "目标账户", ctx.admin_pubkey.as_str()),
+            field("after_hash", "变更后", request_hash.as_str()),
+            field("payload_hash", "负载哈希", payload_hash.as_str()),
+        ],
     ) {
         Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(error = %err, "start passkey registration failed");
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                1503,
-                "passkey start failed",
-            );
-        }
+        Err(resp) => return resp,
     };
     {
         let mut store = match store_write_or_500(&state) {
@@ -168,11 +176,10 @@ pub(crate) async fn start_passkey_registration(
                 admin_pubkey: ctx.admin_pubkey.clone(),
                 admin_name: ctx.admin_name.clone(),
                 label,
-                webauthn_state,
-                pending_passkey: None,
-                credential_id: None,
-                payload_text: None,
-                payload_hash: None,
+                webauthn_state: None,
+                payload_text,
+                payload_hash: payload_hash.clone(),
+                cold_wallet_confirmed: false,
                 issued_at: now,
                 expires_at,
                 consumed: false,
@@ -183,18 +190,20 @@ pub(crate) async fn start_passkey_registration(
         code: 0,
         message: "ok".to_string(),
         data: PasskeyStartOutput {
-            registration_id,
-            public_key_options,
+            registration_id: registration_id.clone(),
+            request_id: registration_id,
+            sign_request,
+            payload_hash,
             expires_at: expires_at.timestamp(),
         },
     })
     .into_response()
 }
 
-pub(crate) async fn attest_passkey_registration(
+pub(crate) async fn confirm_passkey_registration(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(input): Json<PasskeyAttestInput>,
+    Json(input): Json<PasskeyConfirmInput>,
 ) -> impl IntoResponse {
     let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
@@ -238,88 +247,49 @@ pub(crate) async fn attest_passkey_registration(
             "passkey registration owner mismatch",
         );
     }
-    let passkey =
-        match webauthn.finish_passkey_registration(&input.credential, &challenge.webauthn_state) {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::warn!(error = %err, "finish passkey registration failed");
-                return api_error(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    2004,
-                    "passkey attest failed",
-                );
-            }
-        };
-    let credential_id = credential_id_hex(&passkey);
-    if store
-        .admin_passkeys_by_credential_id
-        .contains_key(credential_id.as_str())
-    {
-        return api_error(
-            StatusCode::CONFLICT,
-            1005,
-            "passkey credential already exists",
-        );
-    }
-    let request_hash = hash_json(&json!({
-        "credential_id": credential_id,
-        "label": challenge.label,
-    }));
-    let province = ctx.admin_province.clone().unwrap_or_default();
-    let payload_text = signed_payload_text(AdminSignedPayload {
-        domain: "sfid_admin_governance",
-        qr_proto: crate::qr::WUMIN_QR_V1,
-        action_id: challenge.registration_id.as_str(),
-        action_type: "PASSKEY_REGISTER",
-        actor_pubkey: ctx.admin_pubkey.as_str(),
-        actor_province: province.as_str(),
-        target: credential_id.as_str(),
-        request_hash: request_hash.as_str(),
-        before_hash: "none",
-        after_hash: request_hash.as_str(),
-        expires_at: challenge.expires_at.timestamp(),
-    });
-    let payload_hash = payload_hash_for_text(payload_text.as_str());
-    let sign_request = match build_sign_request(
-        challenge.registration_id.as_str(),
-        now.timestamp(),
-        challenge.expires_at.timestamp(),
+    if let Err(resp) = verify_cold_wallet_signature(
         ctx.admin_pubkey.as_str(),
-        payload_text.as_str(),
-        "绑定管理员 Passkey",
-        vec![
-            field("action_type", "操作", "绑定 Passkey"),
-            field("province", "省份", province.as_str()),
-            field("actor_pubkey", "管理员", ctx.admin_pubkey.as_str()),
-            field("target", "凭据", credential_id.as_str()),
-            field("before_hash", "变更前", "none"),
-            field("after_hash", "变更后", request_hash.as_str()),
-            field("payload_hash", "负载哈希", payload_hash.as_str()),
-        ],
+        input.signer_pubkey.as_str(),
+        input.signature.as_str(),
+        input.payload_hash.as_str(),
+        challenge.payload_hash.as_str(),
+        challenge.payload_text.as_str(),
+    ) {
+        return resp;
+    }
+    let existing = active_passkey_credentials(&store, ctx.admin_pubkey.as_str())
+        .into_iter()
+        .map(|record| record.passkey.cred_id().clone())
+        .collect::<Vec<_>>();
+    let (public_key_options, webauthn_state) = match webauthn.start_passkey_registration(
+        user_uuid_for_pubkey(ctx.admin_pubkey.as_str()),
+        ctx.admin_pubkey.as_str(),
+        ctx.admin_name.as_str(),
+        Some(existing),
     ) {
         Ok(v) => v,
-        Err(resp) => return resp,
+        Err(err) => {
+            tracing::warn!(error = %err, "start passkey registration failed");
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1503,
+                "passkey start failed",
+            );
+        }
     };
     if let Some(challenge_mut) = store
         .admin_passkey_registration_challenges
         .get_mut(input.registration_id.as_str())
     {
-        challenge_mut.pending_passkey = Some(passkey);
-        challenge_mut.credential_id = Some(credential_id.clone());
-        challenge_mut.payload_text = Some(payload_text);
-        challenge_mut.payload_hash = Some(payload_hash.clone());
+        challenge_mut.webauthn_state = Some(webauthn_state);
+        challenge_mut.cold_wallet_confirmed = true;
     }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
-        data: PasskeyAttestOutput {
+        data: PasskeyConfirmOutput {
             registration_id: input.registration_id,
-            request_id: credential_id_to_request_id(
-                challenge.credential_id.as_deref(),
-                challenge.registration_id.as_str(),
-            ),
-            sign_request,
-            payload_hash,
+            public_key_options,
             expires_at: challenge.expires_at.timestamp(),
         },
     })
@@ -369,27 +339,44 @@ pub(crate) async fn complete_passkey_registration(
             "passkey registration owner mismatch",
         );
     }
-    let Some(passkey) = challenge.pending_passkey.clone() else {
+    if !challenge.cold_wallet_confirmed {
         return api_error(
             StatusCode::CONFLICT,
             1005,
-            "passkey attestation required first",
+            "cold wallet confirmation required first",
+        );
+    }
+    let Some(webauthn_state) = challenge.webauthn_state.clone() else {
+        return api_error(
+            StatusCode::CONFLICT,
+            1005,
+            "passkey registration confirmation missing",
         );
     };
-    let Some(credential_id) = challenge.credential_id.clone() else {
-        return api_error(StatusCode::CONFLICT, 1005, "passkey credential missing");
+    let passkey = match webauthn().and_then(|w| {
+        w.finish_passkey_registration(&input.credential, &webauthn_state)
+            .map_err(|err| {
+                tracing::warn!(error = %err, "finish passkey registration failed");
+                api_error(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    2004,
+                    "passkey registration failed",
+                )
+            })
+    }) {
+        Ok(v) => v,
+        Err(resp) => return resp,
     };
-    let payload_text = challenge.payload_text.clone().unwrap_or_default();
-    let payload_hash = challenge.payload_hash.clone().unwrap_or_default();
-    if let Err(resp) = verify_cold_wallet_signature(
-        ctx.admin_pubkey.as_str(),
-        input.signer_pubkey.as_str(),
-        input.signature.as_str(),
-        input.payload_hash.as_str(),
-        payload_hash.as_str(),
-        payload_text.as_str(),
-    ) {
-        return resp;
+    let credential_id = credential_id_hex(&passkey);
+    if store
+        .admin_passkeys_by_credential_id
+        .contains_key(credential_id.as_str())
+    {
+        return api_error(
+            StatusCode::CONFLICT,
+            1005,
+            "passkey credential already exists",
+        );
     }
     // 中文注释:更新密钥采用替换语义,同一管理员只保留一个有效 Passkey。
     store.admin_passkeys_by_credential_id.retain(|_, record| {
@@ -606,10 +593,6 @@ fn credential_id_hex(passkey: &Passkey) -> String {
     format!("0x{}", hex::encode(passkey.cred_id().as_ref()))
 }
 
-fn credential_id_to_request_id(_credential_id: Option<&str>, registration_id: &str) -> String {
-    registration_id.to_string()
-}
-
 pub(crate) fn cleanup_admin_security_challenges(store: &mut Store) {
     let now = Utc::now();
     store
@@ -634,53 +617,6 @@ pub(crate) fn payload_hash_for_text(text: &str) -> String {
 pub(crate) fn hash_json(value: &serde_json::Value) -> String {
     let encoded = serde_json::to_vec(value).unwrap_or_default();
     format!("0x{}", hex::encode(Sha256::digest(&encoded)))
-}
-
-pub(crate) fn field(key: &str, label: &str, value: &str) -> serde_json::Value {
-    json!({ "key": key, "label": label, "value": value })
-}
-
-pub(crate) fn build_sign_request(
-    request_id: &str,
-    issued_at: i64,
-    expires_at: i64,
-    actor_pubkey: &str,
-    payload_text: &str,
-    summary: &str,
-    fields: Vec<serde_json::Value>,
-) -> Result<String, axum::response::Response> {
-    let Some(address) = pubkey_hex_to_ss58(actor_pubkey) else {
-        return Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "actor pubkey cannot be encoded as SS58",
-        ));
-    };
-    let sign_request = json!({
-        "proto": crate::qr::WUMIN_QR_V1,
-        "kind": "sign_request",
-        "id": request_id,
-        "issued_at": issued_at,
-        "expires_at": expires_at,
-        "body": {
-            "address": address,
-            "pubkey": actor_pubkey,
-            "sig_alg": "sr25519",
-            "payload_hex": format!("0x{}", hex::encode(payload_text.as_bytes())),
-            "display": {
-                "action": ADMIN_SIGN_ACTION,
-                "summary": summary,
-                "fields": fields,
-            }
-        }
-    });
-    serde_json::to_string(&sign_request).map_err(|_| {
-        api_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            1503,
-            "encode sign request failed",
-        )
-    })
 }
 
 pub(crate) fn verify_cold_wallet_signature(

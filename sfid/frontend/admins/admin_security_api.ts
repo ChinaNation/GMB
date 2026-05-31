@@ -34,15 +34,15 @@ export type SignDisplayField = { key?: string; label: string; value: string };
 
 export type PasskeyStartOutput = {
   registration_id: string;
-  public_key_options: any;
-  expires_at: number;
-};
-
-export type PasskeyAttestOutput = {
-  registration_id: string;
   request_id: string;
   sign_request: string;
   payload_hash: string;
+  expires_at: number;
+};
+
+export type PasskeyConfirmOutput = {
+  registration_id: string;
+  public_key_options: any;
   expires_at: number;
 };
 
@@ -75,15 +75,19 @@ export async function startPasskeyRegistration(
   });
 }
 
-export async function attestPasskeyRegistration(
+export async function confirmPasskeyRegistration(
   auth: AdminAuth,
-  registrationId: string,
-  credential: unknown,
-): Promise<PasskeyAttestOutput> {
-  return adminRequest<PasskeyAttestOutput>('/api/v1/admin/passkeys/register/attest', auth, {
+  input: {
+    registration_id: string;
+    signer_pubkey: string;
+    signature: string;
+    payload_hash: string;
+  },
+): Promise<PasskeyConfirmOutput> {
+  return adminRequest<PasskeyConfirmOutput>('/api/v1/admin/passkeys/register/confirm', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ registration_id: registrationId, credential }),
+    body: JSON.stringify(input),
   });
 }
 
@@ -91,9 +95,7 @@ export async function completePasskeyRegistration(
   auth: AdminAuth,
   input: {
     registration_id: string;
-    signer_pubkey: string;
-    signature: string;
-    payload_hash: string;
+    credential: unknown;
   },
 ): Promise<{ credential_id: string; passkey_count: number }> {
   return adminRequest('/api/v1/admin/passkeys/register/complete', auth, {

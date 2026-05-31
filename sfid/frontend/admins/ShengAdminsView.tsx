@@ -4,8 +4,8 @@
 //   - 省管理员: 市列表 → 市详情(该市管理员列表)
 //   - 市管理员: 直接进入自己所在市的管理员列表(不显示省列表和市列表)
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Form, Input, Modal, QRCode, Space, Typography, message } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { Form, Input, Modal, Space, Typography, message } from 'antd';
 import type { ModalProps } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import type { OperatorRow } from './operators_api';
@@ -26,7 +26,7 @@ import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils
 import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
-import { startCameraScanner } from '../utils/cameraScanner';
+import { WuminSignatureModal } from '../common/WuminSignatureModal';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
@@ -74,19 +74,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
-  const [scannerActive, setScannerActive] = useState(false);
-  const [scannerReady, setScannerReady] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const cleanupScannerRef = useRef<(() => void) | null>(null);
-
-  const stopScanner = useCallback(() => {
-    if (cleanupScannerRef.current) {
-      cleanupScannerRef.current();
-      cleanupScannerRef.current = null;
-    }
-    setScannerReady(false);
-    setScannerActive(false);
-  }, []);
 
   // ── 数据加载 ──
 
@@ -187,26 +174,6 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShengAdmin?.admin_pubkey, auth?.access_token]);
 
-  useEffect(() => () => stopScanner(), [stopScanner]);
-
-  useEffect(() => {
-    if (!scannerActive || !videoRef.current) return;
-    cleanupScannerRef.current = startCameraScanner(
-      videoRef.current,
-      (raw) => {
-        stopScanner();
-        void handleAdminActionSignedResponse(raw);
-      },
-      () => setScannerReady(true),
-      (msg) => {
-        message.error(msg);
-        stopScanner();
-      },
-    );
-    return () => stopScanner();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scannerActive, stopScanner]);
-
   const runSecuredAction = async <T,>(actionType: AdminActionType, payload: unknown): Promise<T> => {
     if (!auth) throw new Error('请先登录');
     setAdminActionLoading(true);
@@ -230,7 +197,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
   };
 
-  const handleAdminActionSignedResponse = async (raw: string) => {
+  const handleAdminActionSignedResponse = useCallback(async (raw: string) => {
     if (!auth || !adminActionModal) return;
     setAdminActionLoading(true);
     try {
@@ -257,7 +224,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     } finally {
       setAdminActionLoading(false);
     }
-  };
+  }, [adminActionModal, auth]);
 
   // ── 事件处理 ──
 
@@ -439,35 +406,22 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   return (
     <>
       {content}
-      <Modal
+      <WuminSignatureModal
         title="冷钱包签名确认"
         open={!!adminActionModal}
         onCancel={() => {
-          stopScanner();
           adminActionModal?.reject(new Error('admin action cancelled'));
           setAdminActionModal(null);
         }}
-        footer={null}
-        destroyOnClose
-      >
-        {adminActionModal ? (
-          <Space direction="vertical" size={12} style={{ width: '100%', alignItems: 'center' }}>
-            <Typography.Text type="secondary">使用当前省管理员冷钱包扫描并签名。</Typography.Text>
-            <QRCode value={adminActionModal.signRequest} size={260} color="#134e4a" />
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#0f172a', borderRadius: 8, overflow: 'hidden' }}>
-              <video ref={videoRef} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              {!scannerReady ? (
-                <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#e5e7eb' }}>
-                  {scannerActive ? '摄像头初始化中...' : '摄像头未开启'}
-                </div>
-              ) : null}
-            </div>
-            <Button onClick={() => setScannerActive((v) => !v)} loading={adminActionLoading}>
-              {scannerActive ? '停止扫码' : '开启扫码'}
-            </Button>
-          </Space>
-        ) : null}
-      </Modal>
+        qrTitle="签名二维码"
+        qrValue={adminActionModal?.signRequest}
+        qrHint="使用当前管理员冷钱包扫码签名"
+        scannerHint="扫描冷钱包生成的签名回执二维码"
+        scannerDisabled={adminActionLoading}
+        scannerLoading={adminActionLoading}
+        onDetected={handleAdminActionSignedResponse}
+        onScannerError={(msg) => message.error(msg)}
+      />
     </>
   );
 }

@@ -21,14 +21,15 @@ use crate::admins::operators::{
     find_operator_pubkey_by_id, operator_row_from_user, MAX_ADMIN_NAME_CHARS,
 };
 use crate::admins::passkeys::{
-    active_passkeys, build_sign_request, cleanup_admin_security_challenges, field, hash_json,
-    payload_hash_for_text, signed_payload_text, update_passkey_usage, verify_cold_wallet_signature,
-    webauthn, AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
+    active_passkeys, cleanup_admin_security_challenges, hash_json, payload_hash_for_text,
+    signed_payload_text, update_passkey_usage, verify_cold_wallet_signature, webauthn,
+    AdminSignedPayload, ADMIN_ACTION_TTL_SECONDS,
 };
 use crate::admins::province_admins::sheng_admin_province;
 use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::login::AdminAuthContext;
 use crate::models::{AdminActionChallenge, AdminSecurityGrant, AdminSecurityLevel};
+use crate::qr::{build_sign_request, display_field as field};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;

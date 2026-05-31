@@ -90,7 +90,7 @@ pub(crate) struct Store {
     /// 中文注释:省/市管理员的 Passkey 凭据,只保存服务端可验证的公钥凭据。
     #[serde(default)]
     pub(crate) admin_passkeys_by_credential_id: HashMap<String, AdminPasskeyCredential>,
-    /// 中文注释:Passkey 注册必须先完成 WebAuthn attestation,再由冷钱包签名确认。
+    /// 中文注释:Passkey 注册挑战必须先完成冷钱包签名确认,再进入 WebAuthn 创建。
     #[serde(default)]
     pub(crate) admin_passkey_registration_challenges:
         HashMap<String, AdminPasskeyRegistrationChallenge>,
@@ -153,15 +153,13 @@ pub(crate) struct AdminPasskeyRegistrationChallenge {
     pub(crate) admin_pubkey: String,
     pub(crate) admin_name: String,
     pub(crate) label: String,
-    pub(crate) webauthn_state: PasskeyRegistration,
+    /// 中文注释:冷钱包确认通过后才生成并保存 WebAuthn registration state。
     #[serde(default)]
-    pub(crate) pending_passkey: Option<Passkey>,
+    pub(crate) webauthn_state: Option<PasskeyRegistration>,
+    pub(crate) payload_text: String,
+    pub(crate) payload_hash: String,
     #[serde(default)]
-    pub(crate) credential_id: Option<String>,
-    #[serde(default)]
-    pub(crate) payload_text: Option<String>,
-    #[serde(default)]
-    pub(crate) payload_hash: Option<String>,
+    pub(crate) cold_wallet_confirmed: bool,
     pub(crate) issued_at: DateTime<Utc>,
     pub(crate) expires_at: DateTime<Utc>,
     #[serde(default)]

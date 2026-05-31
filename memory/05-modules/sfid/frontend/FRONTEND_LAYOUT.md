@@ -33,7 +33,7 @@ sfid/frontend/
 ├── vite-env.d.ts
 ├── auth/                      # 登录、AuthContext、登录态类型、auth/api.ts
 ├── citizens/                  # 公民首页、绑定弹窗、citizens/api.ts
-├── common/                    # 跨业务复用组件
+├── common/                    # 跨业务复用组件,含 WUMIN_QR_V1 签名面板/弹窗
 ├── cpms/                      # CPMS 系统管理组件和 cpms/api.ts
 ├── hooks/                     # useAuth / useScope / useSfidMeta 等
 ├── institutions/              # 机构本地管理页面、institutions/api.ts、chain_duoqian_info.ts
@@ -57,10 +57,14 @@ sfid/frontend/
 - 公民电子护照绑定和 CPMS 状态扫码接口放 `citizens/api.ts`。
 - 省/市管理员本地后台接口统一放 `admins/`;省管理员目录接口放 `admins/api.ts`,
   市管理员列表接口放 `admins/operators_api.ts`,Passkey 更新工具放 `admins/Passkey.tsx`。
+- `common/WuminSignaturePanel.tsx` 与 `common/WuminSignatureModal.tsx` 是统一冷钱包签名 UI;
+  登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
 - 管理员一般业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
 - 管理员重要写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
   `WUMIN_QR_V1` 冷钱包签名流程取得一次性 grant。
+- Passkey 更新流程固定为 `start -> confirm -> complete`:先扫描冷钱包签名请求并确认当前管理员,
+  再调用浏览器 WebAuthn 创建凭据,最后提交后端落库;不得恢复先注册浏览器凭据再冷钱包确认的流程。
 
 ## 公民绑定弹窗 UI 口径
 
@@ -101,6 +105,8 @@ sfid/frontend/
 - 登录角色和会话辅助类型放在 `auth/types.ts`。
 - 本地开发的 Vite host 固定为 `localhost`;Passkey 开发配置依赖
   `http://localhost:5179`,不得用 `127.0.0.1` 或局域网 IP 打开前端注册 Passkey。
+- `npm run dev` 使用 `vite preview --host localhost --port 5179 --strictPort`;端口被占用时
+  必须失败,不得自动漂移到其它端口。
 
 ## 链交互目录规则
 

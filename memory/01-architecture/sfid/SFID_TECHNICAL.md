@@ -238,7 +238,7 @@
 - 市级管理员接口口径补充：`GET /api/v1/admin/operators` 列表返回 `admin_name` 与 `created_by_name`；新增、编辑、删除不再暴露直接 CRUD 路由，统一通过 `/api/v1/admin/actions/prepare` 和 `/api/v1/admin/actions/commit`。
 - 省级管理员列表接口：`GET /api/v1/admin/sheng-admins`。
 - 省级管理员治理动作：`CREATE_SHENG_ADMIN / UPDATE_SHENG_ADMIN / DELETE_SHENG_ADMIN`。
-- Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/attest`、`/complete`，由 `admins::passkeys` 承接。
+- Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/confirm`、`/complete`，由 `admins::passkeys` 承接；流程固定为先生成 `WUMIN_QR_V1 / sign_request` 并完成当前管理员冷钱包 sr25519 确认，再创建浏览器 Passkey 凭据并落库。
 - 管理员治理写操作接口：`POST /api/v1/admin/actions/prepare` 生成 WebAuthn assertion 选项和 `WUMIN_QR_V1 / sign_request`；`POST /api/v1/admin/actions/commit` 同时校验 Passkey assertion 与 sr25519 签名回执后落库。
 
 ### 9.6 省级管理员基线与变更策略（当前）
@@ -486,7 +486,8 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 本地开发启动最小条件：
 1. PostgreSQL 可达（示例：`docker` 容器 `sfid-pg` 映射 `127.0.0.1:5432`）。
 2. 后端环境变量设置 `DATABASE_URL`。
-3. 后端监听地址 `127.0.0.1:8899` 未被其他进程占用。
+3. `./sfid-run.sh` 会在启动前停止本机 `com.gmb.sfid-backend` launchd 服务、清理 `8899/5179` 旧监听进程，并对本地库执行 `016_finalize_admin_no_status.sql` 最终结构清理。
+4. 前端必须使用 `http://localhost:5179` 打开；Passkey 开发配置不接受 `127.0.0.1:5179`。
 - 安全相关关键环境变量：
 1. `SFID_CHAIN_TOKEN`：区块链接口静态 Token。
 2. `SFID_CHAIN_SIGNING_SECRET`：必填，链路请求强制验签。
@@ -603,7 +604,12 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
   - `backend/db/migrations/008_chain_idempotency_reward_state.sql`
   - `backend/db/migrations/009_runtime_cache_and_pii_encryption.sql`
   - `backend/db/migrations/010_drop_plaintext_pii_columns.sql`
+  - `backend/db/migrations/011_tx_indexer.sql`
+  - `backend/db/migrations/012_rename_roles.sql`
+  - `backend/db/migrations/013_rename_roles_sheng_shi.sql`
+  - `backend/db/migrations/014_finalize_admin_roles.sql`
   - `backend/db/migrations/015_store_reset.sql`
+  - `backend/db/migrations/016_finalize_admin_no_status.sql`
 - 验收标准：重复执行迁移可幂等，视图和约束稳定可查询。
 
 ### 16.3 里程碑 2：管理员认证与 RBAC（2-3 天）
