@@ -14,10 +14,10 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::crypto::pubkey::same_admin_pubkey;
+use crate::models::AdminPasskeyStatus;
 use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
-use super::guards::bootstrap_sheng_signing_pair;
 use super::model::*;
 use super::signature::{
     build_admin_display_name, build_admin_display_name_from_user, build_login_qr_system_signature,
@@ -25,6 +25,16 @@ use super::signature::{
     resolve_admin_pubkey_key, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
+
+fn admin_has_active_passkey(store: &Store, admin_pubkey: &str) -> bool {
+    store
+        .admin_passkeys_by_credential_id
+        .values()
+        .any(|record| {
+            record.status == AdminPasskeyStatus::Active
+                && same_admin_pubkey(record.admin_pubkey.as_str(), admin_pubkey)
+        })
+}
 
 pub(crate) async fn admin_auth_qr_challenge(
     State(state): State<AppState>,
@@ -226,11 +236,7 @@ pub(crate) async fn admin_auth_qr_complete(
     let Some(admin) = store.admin_users_by_pubkey.get(&login_pubkey) else {
         return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
     };
-    if admin.status != AdminStatus::Active {
-        return api_error(StatusCode::FORBIDDEN, 2003, "admin disabled");
-    }
     let login_role = admin.role.clone();
-    let login_status = admin.status.clone();
 
     if let Some(challenge) = store.login_challenges.get_mut(&input.challenge_id) {
         challenge.consumed = true;
@@ -263,11 +269,6 @@ pub(crate) async fn admin_auth_qr_complete(
         });
     }
 
-    // 任务卡 `20260409-sfid-sheng-admin-per-province-keyring` Phase 1.B 步骤 7：
-    // 为省登录管理员 bootstrap 本省签名密钥（需要 provinces 映射）。
-    let bootstrap_pubkey = login_pubkey.clone();
-    let bootstrap_role = login_role.clone();
-    let bootstrap_province = province_scope_for_role(&store, &login_pubkey, &login_role);
     store.qr_login_results.insert(
         input.challenge_id.clone(),
         QrLoginResultRecord {
@@ -276,17 +277,10 @@ pub(crate) async fn admin_auth_qr_complete(
             expire_at,
             admin_pubkey: login_pubkey,
             role: login_role,
-            status: login_status,
             created_at: now,
         },
     );
     drop(store);
-
-    if bootstrap_role == AdminRole::ShengAdmin {
-        if let Some(province) = bootstrap_province.as_deref() {
-            bootstrap_sheng_signing_pair(&state, bootstrap_pubkey.as_str(), province);
-        }
-    }
 
     Json(ApiResponse {
         code: 0,
@@ -330,7 +324,6 @@ pub(crate) async fn admin_auth_qr_result(
                 admin: Some(AdminIdentifyOutput {
                     admin_pubkey: result.admin_pubkey.clone(),
                     role: result.role.clone(),
-                    status: result.status.clone(),
                     admin_name: {
                         if let Some(admin_user) =
                             store.admin_users_by_pubkey.get(&result.admin_pubkey)
@@ -357,6 +350,7 @@ pub(crate) async fn admin_auth_qr_result(
                         .admin_users_by_pubkey
                         .get(&result.admin_pubkey)
                         .and_then(resolve_admin_city),
+                    passkey_bound: admin_has_active_passkey(&store, &result.admin_pubkey),
                 }),
             },
         })

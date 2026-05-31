@@ -4,8 +4,8 @@
 //   - PUBLIC_SECURITY / GOV_INSTITUTION → 默认布局(机构信息+CPMS+账户列表)
 // 修改某类机构的布局只需改对应模块,不影响其他类型。
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Col, Descriptions, message, Row, Tag, Typography } from 'antd';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Card, Col, Descriptions, message, Modal, QRCode, Row, Tag, Typography } from 'antd';
 import { A3_LABEL, INSTITUTION_CODE_LABEL } from './locks';
 import {
   deleteAccount,
@@ -22,6 +22,14 @@ import { AccountList } from './AccountList';
 import { CpmsSitePanel } from '../cpms/CpmsSitePanel';
 import { CreateAccountModal } from './CreateAccountModal';
 import { PrivateInstitutionLayout } from './PrivateInstitutionLayout';
+import {
+  commitAdminAction,
+  getPasskeyAssertion,
+  prepareAdminAction,
+  type AdminSecurityGrantOutput,
+} from '../admins/admin_security_api';
+import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
+import { startCameraScanner } from '../utils/cameraScanner';
 
 interface Props {
   auth: AdminAuth;
@@ -37,6 +45,14 @@ const INSTITUTION_CHAIN_STATUS_LABEL: Record<string, string> = {
   REVOKED_ON_CHAIN: '已注销',
 };
 
+type SecurityModalState = {
+  actionId: string;
+  signRequest: string;
+  passkeyAssertion: unknown;
+  resolve: (value: AdminSecurityGrantOutput) => void;
+  reject: (reason?: unknown) => void;
+};
+
 export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWrite, onBack }) => {
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,6 +61,20 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
   // ── CPMS 站点状态(仅公安局机构使用) ──
   const [cpmsSite, setCpmsSite] = useState<CpmsSiteRow | null>(null);
   const [cpmsBusy, setCpmsBusy] = useState(false);
+  const [securityModal, setSecurityModal] = useState<SecurityModalState | null>(null);
+  const [securityScannerActive, setSecurityScannerActive] = useState(false);
+  const [securityScannerReady, setSecurityScannerReady] = useState(false);
+  const securityVideoRef = useRef<HTMLVideoElement | null>(null);
+  const securityScannerCleanupRef = useRef<(() => void) | null>(null);
+
+  const stopSecurityScanner = useCallback(() => {
+    if (securityScannerCleanupRef.current) {
+      securityScannerCleanupRef.current();
+      securityScannerCleanupRef.current = null;
+    }
+    setSecurityScannerReady(false);
+    setSecurityScannerActive(false);
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -58,8 +88,64 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
     load();
   }, [load]);
 
+  const runCpmsIssueGrant = async (payload: unknown): Promise<AdminSecurityGrantOutput> => {
+    const prepared = await prepareAdminAction(auth, 'CPMS_ISSUE_INSTALL_CODE', payload);
+    if (prepared.security_level !== 'IMPORTANT' || !prepared.sign_request) {
+      throw new Error('该操作缺少冷钱包签名请求');
+    }
+    const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);
+    return new Promise<AdminSecurityGrantOutput>((resolve, reject) => {
+      setSecurityModal({
+        actionId: prepared.action_id,
+        signRequest: prepared.sign_request || '',
+        passkeyAssertion,
+        resolve,
+        reject,
+      });
+      setSecurityScannerActive(true);
+    });
+  };
+
+  const handleSecuritySignedResponse = useCallback(async (raw: string) => {
+    if (!securityModal) return;
+    setCpmsBusy(true);
+    try {
+      const signed = parseSignedReceiptPayload(raw, securityModal.actionId);
+      const grant = await commitAdminAction<AdminSecurityGrantOutput>(auth, {
+        action_id: securityModal.actionId,
+        passkey_assertion: securityModal.passkeyAssertion,
+        signer_pubkey: signed.signer_pubkey,
+        signature: signed.signature,
+        payload_hash: signed.payload_hash,
+      });
+      securityModal.resolve(grant);
+      setSecurityModal(null);
+      stopSecurityScanner();
+    } catch (err) {
+      securityModal.reject(err);
+      message.error(err instanceof Error ? err.message : '签名回执处理失败');
+    } finally {
+      setCpmsBusy(false);
+    }
+  }, [auth, securityModal, stopSecurityScanner]);
+
+  useEffect(() => {
+    if (!securityScannerActive || !securityVideoRef.current) return;
+    securityScannerCleanupRef.current = startCameraScanner(
+      securityVideoRef.current,
+      (raw) => void handleSecuritySignedResponse(raw),
+      () => setSecurityScannerReady(true),
+      (msg) => {
+        message.error(msg);
+        stopSecurityScanner();
+      },
+    );
+    return () => stopSecurityScanner();
+  }, [handleSecuritySignedResponse, securityScannerActive, stopSecurityScanner]);
+
   const inst = detail?.institution;
   const accounts = detail?.accounts || [];
+  const canManageCpms = canWrite && auth.role === 'SHENG_ADMIN';
 
   const loadCpms = useCallback(
     (instSfidNumber: string) => {
@@ -95,11 +181,13 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
     if (!inst) return;
     setCpmsBusy(true);
     try {
-      const result = await generateCpmsInstallQr(auth, {
+      const payload = {
         province: inst.province,
         city: inst.city,
         institution: inst.institution_code,
-      });
+      };
+      const grant = await runCpmsIssueGrant(payload);
+      const result = await generateCpmsInstallQr(auth, payload, grant);
       setCpmsSite({
         sfid_number: result.sfid_number,
         install_token_status: 'PENDING',
@@ -156,7 +244,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
                   </span>
                 }
                 extra={(() => {
-                  if (inst.category !== 'PUBLIC_SECURITY' || !canWrite) return null;
+                  if (inst.category !== 'PUBLIC_SECURITY' || !canManageCpms) return null;
                   if (!cpmsSite) {
                     return (
                       <Button type="primary" onClick={onGenerateCpms} loading={cpmsBusy}>
@@ -193,7 +281,7 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
                       <CpmsSitePanel
                         auth={auth}
                         site={cpmsSite}
-                        canWrite={canWrite}
+                        canWrite={canManageCpms}
                         onChanged={() => loadCpms(inst.sfid_number)}
                       />
                     </Col>
@@ -236,6 +324,33 @@ export const InstitutionDetailPage: React.FC<Props> = ({ auth, sfidNumber, canWr
           )}
         </>
       )}
+      <Modal
+        title="冷钱包签名确认"
+        open={!!securityModal}
+        onCancel={() => {
+          securityModal?.reject(new Error('已取消签名确认'));
+          setSecurityModal(null);
+          stopSecurityScanner();
+        }}
+        footer={null}
+        destroyOnClose
+        width={460}
+      >
+        {securityModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <QRCode value={securityModal.signRequest} size={220} />
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              使用省管理员冷钱包扫描后，再扫描签名回执。
+            </Typography.Text>
+            <div style={{ width: 260, height: 180, background: '#111827', borderRadius: 8, overflow: 'hidden' }}>
+              <video ref={securityVideoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+            </div>
+            <Button onClick={() => setSecurityScannerActive((v) => !v)} loading={cpmsBusy}>
+              {securityScannerActive ? (securityScannerReady ? '扫描中' : '摄像头初始化中') : '扫描签名回执'}
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

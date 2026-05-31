@@ -129,6 +129,7 @@ Runtime 升级 QR 中的 `payload_hex` 只允许放 32 字节 WASM payload hash;
 | `activate_admin` | `GMB_ACTIVATE`(12B) + `sfid_number`(48B 右补零) + `timestamp`(8B u64) + `nonce`(16B) = 84B | `sfid_number` | node_ui / sfid 后端 | 管理员激活 |
 | `decrypt_admin` | `GMB_DECRYPT_V1`(14B) + `sfid_number`(48B 右补零) + `pubkey`(32B) + `timestamp`(8B u64) + `nonce`(16B) = 118B | `sfid_number` | node_ui | 清算行管理员解密 challenge |
 | `archive_delete` | `CPMS_ARCHIVE_DELETE_V1\|challenge_id\|archive_id\|archive_no\|0x_admin_pubkey\|expires_at` | `archive_no`, `archive_id`, `admin_pubkey`, `expires_at` | cpms | CPMS 公民档案软删除 |
+| `sfid_admin_action` | `sfid_admin_governance` canonical JSON hex | `action_type`, `province`, `actor_pubkey`, `target`, `before_hash`, `after_hash`, `payload_hash` | sfid 后端 | 省管理员治理 Passkey 后的冷钱包确认 |
 
 ## 二、字段渲染规则
 

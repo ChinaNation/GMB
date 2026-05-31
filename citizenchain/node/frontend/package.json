@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "generate:docs": "node scripts/generate-local-docs.mjs",
     "predev": "npm run generate:docs",

@@ -61,4 +61,5 @@ const Map<String, String> actionLabels = {
   'register_clearing_bank': '声明清算行节点',
   'update_clearing_bank_endpoint': '更新清算行端点',
   'unregister_clearing_bank': '注销清算行节点',
+  'sfid_admin_action': 'SFID 管理员治理',
 };

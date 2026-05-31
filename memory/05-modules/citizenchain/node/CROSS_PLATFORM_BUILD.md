@@ -53,7 +53,7 @@
 - Windows 10 / 11 x86_64
 - Visual Studio 2022 Build Tools（含 MSVC v143 + Windows 10/11 SDK）
 - Rust toolchain：`rustup target add x86_64-pc-windows-msvc`
-- Node.js 20+
+- Node.js 24+
 - `cargo install tauri-cli --version "^2"` 或仓库内 `cargo tauri`（取决于工作流）
 - Tauri 会自动下载 NSIS 与 WebView2 离线 bootstrapper（首次构建联网，之后走本地缓存）
 
@@ -62,7 +62,7 @@
 - macOS 13+ (Ventura) Universal 推荐
 - Xcode Command Line Tools
 - Rust toolchain：`rustup target add aarch64-apple-darwin x86_64-apple-darwin`
-- Node.js 20+
+- Node.js 24+
 - 如需公证（distribution）：Apple Developer ID 证书 + `notarytool` 凭据
 
 ### 4.3 Linux 构建机
@@ -80,7 +80,7 @@
       file
   ```
 - Rust toolchain（默认 `x86_64-unknown-linux-gnu`）
-- Node.js 20+
+- Node.js 24+
 
 ## 5. 构建命令
 

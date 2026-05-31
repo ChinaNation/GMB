@@ -1,9 +1,11 @@
 # SFID Login 模块技术文档
 
-- 最后更新:2026-05-25
+- 最后更新:2026-05-30
 - 任务卡:
   - `memory/08-tasks/done/20260502-sfid-cleanup残留整改.md`
   - `memory/08-tasks/done/20260525-sfid-cpms-store.md`
+  - `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
+  - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
 
 ## 1. 模块目标
 
@@ -21,7 +23,7 @@ sfid/backend/login/
 ├── model.rs      # 登录 challenge、session、二维码结果、请求/响应 DTO
 ├── handler.rs    # 普通登录接口:check/logout/identify/challenge/verify
 ├── qr_login.rs   # WUMIN_QR_V1 扫码登录 challenge/complete/result
-├── guards.rs     # require_admin_* 鉴权守卫、session 校验、签名 key bootstrap
+├── guards.rs     # 登录态与省级管理员守卫、session 校验
 └── signature.rs  # sr25519 验签、公钥解析、challenge 清理、展示名辅助
 ```
 
@@ -51,10 +53,10 @@ sfid/backend/login/
 
 ### 5.1 普通 Challenge 登录
 
-1. `identify` 根据管理员身份二维码解析 `admin_pubkey` 并检查管理员状态。
+1. `identify` 根据管理员身份二维码解析 `admin_pubkey` 并返回角色、省市 scope 与 Passkey 绑定状态。
 2. `challenge` 生成带 `origin/domain/session_id/nonce` 的 challenge。
 3. `verify` 校验 sr25519 签名,一次性消费 challenge 并签发 8 小时会话。
-4. ShengAdmin 登录成功后会触发本省本人 signing keypair 本地 bootstrap。
+4. 验证成功后签发会话并同步进程内 GlobalShard。
 
 ### 5.2 二维码登录
 
@@ -72,13 +74,18 @@ sfid/backend/login/
 ## 6. 守卫函数
 
 - `require_admin_any`:读取登录态,返回 `AdminAuthContext`。
-- `require_admin_write`:当前与 `require_admin_any` 等价,保留写接口语义入口。
 - `require_sheng_admin`:只放行 `ShengAdmin`,并要求存在省域 scope。
 - `require_admin_session_middleware`:Axum 路由层会话校验中间件。
+
+写权限不再由登录守卫表达。一般写操作必须先通过 `admins/actions.rs`
+完成 Passkey 验证并换取一次性 `x-sfid-security-grant`;重要写操作必须在
+Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
 
 ## 7. 边界规则
 
 - `login` 不承载机构、公民、CPMS、省管理员治理等业务 handler。
-- 业务模块不得直接读取 session cache,只能通过 `require_admin_*` 获取认证上下文。
+- 业务模块不得直接读取 session cache,只能通过 `require_admin_any` 或
+  `require_sheng_admin` 获取认证上下文。
 - 角色范围过滤放在 `scope`,不放回 `login`。
-- 省管理员一主两备治理放在 `sheng_admins`,登录目录只负责本人登录后的本地签名密钥加载。
+- 省/市管理员治理放在 `admins`,登录目录只负责登录挑战、验签与会话守卫。
+- 管理员高危写操作的 Passkey 与冷钱包挑战归 `admins/actions.rs`,不得放回登录目录。

@@ -1,15 +1,15 @@
 use chrono::Utc;
 use std::{collections::HashMap, hash::Hash};
 
-use crate::sheng_admins::province_admins::sheng_admin_mains;
+use crate::admins::province_admins::sheng_admin_mains;
 use crate::*;
 
-/// 首次初始化：从 sheng_admins/province_admins.rs 硬编码数据创建 43 个内置省管理员。
-pub(crate) fn seed_sheng_admins(state: &AppState) {
+/// 首次初始化：从 admins/province_admins.rs 硬编码数据创建 43 个内置省管理员。
+pub(crate) fn seed_builtin_province_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!(error = %e, "seed_sheng_admins: store RwLock poisoned — initialization skipped");
+            tracing::error!(error = %e, "seed_builtin_province_admins: store RwLock poisoned — initialization skipped");
             return;
         }
     };
@@ -26,15 +26,11 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
                 admin_pubkey: pubkey,
                 admin_name: String::new(),
                 role: AdminRole::ShengAdmin,
-                status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
         store
@@ -47,11 +43,11 @@ pub(crate) fn seed_sheng_admins(state: &AppState) {
 /// - DB 是唯一真实数据源，已有省份的公钥不会被覆盖
 /// - 只补缺：province_admins.rs 中有但 DB 中没有的省份，用默认公钥创建
 /// - 同时修正 role 字段（旧 DB 可能存的是 ShengAdmin）
-pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
+pub(crate) fn sync_builtin_province_admins(state: &AppState) {
     let mut store = match state.store.write() {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!(error = %e, "sync_builtin_sheng_admins: store RwLock poisoned — sync skipped");
+            tracing::error!(error = %e, "sync_builtin_province_admins: store RwLock poisoned — sync skipped");
             return;
         }
     };
@@ -98,15 +94,11 @@ pub(crate) fn sync_builtin_sheng_admins(state: &AppState) {
                 admin_pubkey: pubkey.clone(),
                 admin_name: String::new(),
                 role: AdminRole::ShengAdmin,
-                status: AdminStatus::Active,
                 built_in: true,
                 created_by: "SYSTEM".to_string(),
                 created_at: now,
                 updated_at: Some(now),
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
         store

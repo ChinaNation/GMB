@@ -3,6 +3,9 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';
+import { createGeneralSecurityGrant } from '../admins/admin_security_api';
+
+const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
 export type CitizenState = 'NORMAL' | 'REVOKED';
 
@@ -132,10 +135,15 @@ export async function citizenBind(
     payload_hash: string;
   },
 ): Promise<CitizenBindResult> {
+  const grant = await createGeneralSecurityGrant(auth, 'CITIZEN_BIND_COMMIT', {
+    target: payload.challenge_id,
+    challenge_id: payload.challenge_id,
+  });
   return request<CitizenBindResult>('/api/v1/admin/citizen/bind', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      [SECURITY_GRANT_HEADER]: grant.grant_id,
       ...adminHeaders(auth),
     },
     body: JSON.stringify(payload),
@@ -146,10 +154,18 @@ export async function importCpmsStatusExport(
   auth: AdminAuth,
   exportFile: CpmsStatusExportFile,
 ): Promise<CpmsStatusExportImportResult> {
+  const grant = await createGeneralSecurityGrant(auth, 'CPMS_STATUS_IMPORT_CONFIRM', {
+    target: exportFile.sfid_number,
+    sfid_number: exportFile.sfid_number,
+    export_year: exportFile.export_year,
+    export_batch_id: exportFile.export_batch_id,
+    records_hash: exportFile.records_hash,
+  });
   return request<CpmsStatusExportImportResult>('/api/v1/admin/citizens/cpms-status-export/import', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      [SECURITY_GRANT_HEADER]: grant.grant_id,
       ...adminHeaders(auth),
     },
     body: JSON.stringify({ export_file: exportFile }),

@@ -1,8 +1,8 @@
-// 中文注释:ADR-008 Phase 23e(2026-05-01)整体重写。
+// 中文注释:SFID 管理员认证与省/市角色测试。
 //
 // 本文件只保留当前二角色模型相关测试:
-//   1. 三省 3-tier 签名 keypair 隔离测试(`sheng_signing_3tier_isolation`)。
-//   2. SHENG_ADMIN / SHI_ADMIN QR 登录、签名验签、admin scope、SFID/Bind 工具函数。
+//   1. SHENG_ADMIN / SHI_ADMIN QR 登录、签名验签、admin scope。
+//   2. SFID/Bind 工具函数。
 
 use super::*;
 use crate::login::AdminSession;
@@ -33,7 +33,6 @@ fn build_test_state() -> AppState {
         rate_limit_redis: Arc::new(
             redis::Client::open("redis://127.0.0.1/").expect("test redis url should be valid"),
         ),
-        sheng_admin_signing_cache: Arc::new(sheng_admins::signing_cache::ShengSigningCache::new()),
         sharded_store: {
             #[cfg(test)]
             {
@@ -48,7 +47,7 @@ fn build_test_state() -> AppState {
             }
         },
     };
-    seed_sheng_admins(&state);
+    seed_builtin_province_admins(&state);
     state
 }
 
@@ -342,15 +341,11 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
                 admin_pubkey: admin_pubkey.clone(),
                 admin_name: String::new(),
                 role: AdminRole::ShengAdmin,
-                status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
     }
@@ -408,7 +403,7 @@ async fn qr_login_sheng_admin_keeps_write_permission() {
         "authorization",
         HeaderValue::from_str(&format!("Bearer {}", token)).expect("header value"),
     );
-    assert!(require_admin_write(&state, &headers).is_ok());
+    assert!(require_admin_any(&state, &headers).is_ok());
 }
 
 #[tokio::test]
@@ -451,15 +446,11 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 admin_pubkey: login_pubkey.clone(),
                 admin_name: String::new(),
                 role: AdminRole::ShengAdmin,
-                status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
         store.admin_users_by_pubkey.insert(
@@ -469,15 +460,11 @@ async fn qr_login_rejects_signer_admin_mismatch() {
                 admin_pubkey: signer_pubkey.clone(),
                 admin_name: String::new(),
                 role: AdminRole::ShiAdmin,
-                status: AdminStatus::Active,
                 built_in: false,
                 created_by: "TEST".to_string(),
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
     }
@@ -525,15 +512,11 @@ async fn require_admin_any_should_allow_remaining_two_roles() {
                 admin_pubkey: system_pubkey.clone(),
                 admin_name: "测试系统管理员".to_string(),
                 role: AdminRole::ShiAdmin,
-                status: AdminStatus::Active,
                 built_in: false,
                 created_by: institution_pubkey.clone(),
                 created_at: Utc::now(),
                 updated_at: None,
                 city: String::new(),
-                encrypted_signing_privkey: None,
-                signing_pubkey: None,
-                signing_created_at: None,
             },
         );
         let sessions = [
@@ -588,7 +571,7 @@ fn parse_sr25519_pubkey_accepts_0x_prefix() {
 fn verify_admin_signature_accepts_0x_signature_prefix_for_sr25519() {
     let message = "sfid-qr-login|origin=http://127.0.0.1:5179|domain=127.0.0.1|session_id=sid|nonce=n|iat=1|exp=2";
     let (pubkey, signature) = sign_with_test_sr25519(33, message);
-    assert!(verify_admin_signature(&pubkey, message, &signature));
+    assert!(login::verify_admin_signature(&pubkey, message, &signature));
 }
 
 #[test]
@@ -646,74 +629,4 @@ fn sensitive_seed_debug_remains_redacted() {
     let raw_seed = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     let seed = SensitiveSeed::from(raw_seed);
     assert_eq!(format!("{seed:?}"), "SensitiveSeed(***)");
-}
-
-/// 中文注释:ADR-008 Phase 23e 核心保证 —— 三省 / 三 slot 各自独立 keypair。
-///
-/// 模拟三个不同 (province, admin_pubkey) 进 cache,断言:
-///   1. 各自从 cache 取出的 Pair 公钥唯一
-///   2. `any_for_province` 返回的是本省内某一 slot
-///   3. `unload_province` 清掉本省所有 slot,不影响其他省
-#[test]
-fn sheng_signing_3tier_isolation() {
-    let cache = sheng_admins::signing_cache::ShengSigningCache::new();
-
-    // 安徽省 main / backup_1 / backup_2(三 slot 模拟)
-    let ah_main_seed = hex_seed(0x41);
-    let ah_b1_seed = hex_seed(0x42);
-    let ah_b2_seed = hex_seed(0x43);
-    let ah_main_pair = crypto::sr25519::load_signing_key_from_seed(&ah_main_seed);
-    let ah_b1_pair = crypto::sr25519::load_signing_key_from_seed(&ah_b1_seed);
-    let ah_b2_pair = crypto::sr25519::load_signing_key_from_seed(&ah_b2_seed);
-    let ah_main_pk: [u8; 32] = ah_main_pair.public().0;
-    let ah_b1_pk: [u8; 32] = ah_b1_pair.public().0;
-    let ah_b2_pk: [u8; 32] = ah_b2_pair.public().0;
-
-    cache.load("安徽省".to_string(), ah_main_pk, ah_main_pair.clone());
-    cache.load("安徽省".to_string(), ah_b1_pk, ah_b1_pair.clone());
-    cache.load("安徽省".to_string(), ah_b2_pk, ah_b2_pair.clone());
-
-    // 广东省 main(独立省)
-    let gd_seed = hex_seed(0x51);
-    let gd_pair = crypto::sr25519::load_signing_key_from_seed(&gd_seed);
-    let gd_pk: [u8; 32] = gd_pair.public().0;
-    cache.load("广东省".to_string(), gd_pk, gd_pair.clone());
-
-    // 1. 三 slot 公钥彼此不等
-    assert_ne!(ah_main_pk, ah_b1_pk);
-    assert_ne!(ah_b1_pk, ah_b2_pk);
-    assert_ne!(ah_main_pk, ah_b2_pk);
-    assert_ne!(ah_main_pk, gd_pk);
-
-    // 2. 精确取(province, admin_pubkey)各自命中
-    let got_main = cache.get("安徽省", &ah_main_pk).expect("ah main present");
-    let got_b1 = cache.get("安徽省", &ah_b1_pk).expect("ah b1 present");
-    let got_b2 = cache.get("安徽省", &ah_b2_pk).expect("ah b2 present");
-    assert_eq!(got_main.public().0, ah_main_pk);
-    assert_eq!(got_b1.public().0, ah_b1_pk);
-    assert_eq!(got_b2.public().0, ah_b2_pk);
-
-    // 3. 跨省隔离:用安徽 admin pubkey 在广东省 cache 里取不到
-    assert!(cache.get("广东省", &ah_main_pk).is_none());
-
-    // 4. any_for_province 返回的是本省任一 slot
-    let any_ah = cache.any_for_province("安徽省").expect("ah any present");
-    let any_pk = any_ah.public().0;
-    assert!(
-        any_pk == ah_main_pk || any_pk == ah_b1_pk || any_pk == ah_b2_pk,
-        "any_for_province must return one of the loaded ah slots"
-    );
-
-    // 5. active_count 反映总 slot 数
-    assert_eq!(cache.active_count(), 4);
-
-    // 6. 驱逐安徽省 → 安徽 3 slot 全清,广东省不受影响
-    cache.unload_province("安徽省");
-    assert!(cache.get("安徽省", &ah_main_pk).is_none());
-    assert!(cache.get("安徽省", &ah_b1_pk).is_none());
-    assert!(cache.get("安徽省", &ah_b2_pk).is_none());
-    assert!(cache.any_for_province("安徽省").is_none());
-    let still_gd = cache.get("广东省", &gd_pk).expect("gd still present");
-    assert_eq!(still_gd.public().0, gd_pk);
-    assert_eq!(cache.active_count(), 1);
 }

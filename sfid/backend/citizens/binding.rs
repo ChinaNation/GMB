@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use sha2::Digest;
 use uuid::Uuid;
 
+use crate::admins::actions::{require_admin_security_grant, AdminActionType};
 use crate::cpms::CpmsArchiveCodePayload;
 use crate::login::AdminAuthContext;
 use crate::*;
@@ -25,7 +26,7 @@ pub(crate) async fn citizen_bind_challenge(
     headers: HeaderMap,
     Json(input): Json<CitizenBindChallengeInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_admin_write(&state, &headers) {
+    let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -66,6 +67,11 @@ pub(crate) async fn citizen_bind_challenge(
         Ok(v) => v,
         Err((status, code, msg)) => return api_error(status, code, msg.as_str()),
     };
+    if let Err(resp) =
+        ensure_verified_archive_in_admin_scope(&state, &ctx, verified.sfid_number.as_str())
+    {
+        return resp;
+    }
     if verified.wallet_sig_alg != "sr25519" {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -219,7 +225,7 @@ pub(crate) async fn citizen_bind(
     headers: HeaderMap,
     Json(input): Json<CitizenBindInput>,
 ) -> impl IntoResponse {
-    let ctx = match require_admin_write(&state, &headers) {
+    let ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -234,16 +240,28 @@ pub(crate) async fn citizen_bind(
             "challenge_id, pubkey, signature, payload_hash are required",
         );
     }
+    let challenge_id = input.challenge_id.trim().to_string();
+    let grant_payload = serde_json::json!({
+        "target": challenge_id.clone(),
+        "challenge_id": challenge_id.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CitizenBindCommit,
+        challenge_id.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
 
     let challenge = {
         let mut store = match store_write_or_500(&state) {
             Ok(v) => v,
             Err(resp) => return resp,
         };
-        let Some(challenge) = store
-            .citizen_bind_challenges
-            .remove(input.challenge_id.trim())
-        else {
+        let Some(challenge) = store.citizen_bind_challenges.remove(challenge_id.as_str()) else {
             return api_error(
                 StatusCode::NOT_FOUND,
                 1004,
@@ -328,6 +346,40 @@ pub(crate) async fn citizen_bind(
         data: output,
     })
     .into_response()
+}
+
+fn ensure_verified_archive_in_admin_scope(
+    state: &AppState,
+    ctx: &AdminAuthContext,
+    site_sfid: &str,
+) -> Result<(), axum::response::Response> {
+    let store = store_read_or_500(state)?;
+    let Some(site) = store.cpms_site_keys.get(site_sfid) else {
+        return Err(api_error(
+            StatusCode::NOT_FOUND,
+            1004,
+            "cpms install authorization not found",
+        ));
+    };
+    if let Some(province) = ctx.admin_province.as_deref() {
+        if site.admin_province != province {
+            return Err(api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "province out of current admin scope",
+            ));
+        }
+    }
+    if let Some(city) = ctx.admin_city.as_deref() {
+        if site.city_name != city {
+            return Err(api_error(
+                StatusCode::FORBIDDEN,
+                1003,
+                "city out of current admin scope",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn create_citizen_record(
@@ -839,6 +891,7 @@ mod tests {
             admin_name: "测试管理员".to_string(),
             admin_province: Some("广东省".to_string()),
             admin_city: None,
+            passkey_bound: false,
         };
         let challenge = CitizenBindChallenge {
             challenge_id: "challenge-replace".to_string(),

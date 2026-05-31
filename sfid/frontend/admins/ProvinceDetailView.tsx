@@ -8,13 +8,14 @@ import { Button, Card, Space, Table, Tag, Typography } from 'antd';
 import { useAuth } from '../hooks/useAuth';
 import { useScope } from '../hooks/useScope';
 import type { SfidCityItem } from '../sfid/api';
-import type { OperatorRow } from '../shi_admins/api';
+import type { OperatorRow } from './operators_api';
 import { tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import { sameHexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import { AddOperatorModal } from './AddOperatorModal';
 import { SuperAdminSubTab } from './SuperAdminSubTab';
+import { AdminPasskeyTool } from './AdminPasskeyTool';
 
 interface ProvinceDetailViewProps {
   state: ShengAdminSharedState;
@@ -54,7 +55,6 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
     operatorCities,
     operatorCitiesLoading,
     setAddOperatorOpen,
-    onToggleOperatorStatus,
     onUpdateOperator,
     onDeleteOperator,
   } = state;
@@ -74,24 +74,19 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
   };
 
   // 当前省的管理员
-  const operatorsForProvince = selectedShengAdmin
-    ? operators.filter((op) => sameHexPubkey(op.created_by, selectedShengAdmin.admin_pubkey))
-    : [];
+  const operatorsForProvince = selectedShengAdmin ? operators : [];
 
-  const isSelf = auth && selectedShengAdmin
-    ? sameHexPubkey(selectedShengAdmin.admin_pubkey, auth.admin_pubkey)
-    : false;
-  // ADR-008:省管理员只能编辑自己省内的 operators(SHI_ADMIN);跨省一律置灰
-  const canEditOperators = scope.canWrite && auth?.role === 'SHENG_ADMIN' && isSelf;
+  // 中文注释:后端按登录省域二次校验;前端只负责把省级管理员入口打开。
+  const canEditOperators = scope.canWrite && auth?.role === 'SHENG_ADMIN';
   // sub-tab(仅在省详情内显示)
   const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
     { key: 'operators', label: effectiveCity ? '市管理员列表' : '市列表' },
-    { key: 'super-admin', label: '省级管理员' },
+    { key: 'super-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省级管理员' },
   ];
 
   // ── 决定 title / body / extra ──
   let title: React.ReactNode;
-  let extra: React.ReactNode;
+  let extra: React.ReactNode = null;
   let body: React.ReactNode;
 
   if (!effectiveProvince) {
@@ -150,6 +145,10 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
         ) : selectedShengAdmin ? (
           <SuperAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
+            shengAdmins={shengAdmins}
+            shengAdminsLoading={shengAdminsLoading}
+            refreshShengAdmins={state.refreshShengAdmins}
+            runSecuredAction={state.runSecuredAction}
           />
         ) : null}
       </>
@@ -176,13 +175,16 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
             operatorListPage={operatorListPage}
             setOperatorListPage={setOperatorListPage}
             setAddOperatorOpen={setAddOperatorOpen}
-            onToggleOperatorStatus={onToggleOperatorStatus}
             onUpdateOperator={onUpdateOperator}
             onDeleteOperator={onDeleteOperator}
           />
         ) : selectedShengAdmin ? (
           <SuperAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
+            shengAdmins={shengAdmins}
+            shengAdminsLoading={shengAdminsLoading}
+            refreshShengAdmins={state.refreshShengAdmins}
+            runSecuredAction={state.runSecuredAction}
           />
         ) : null}
       </>
@@ -287,17 +289,17 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
 
 // ── 某市的管理员列表 ──
 
-function CityOperatorsView({ canEditOperators, operators, operatorsLoading, operatorListPage, setOperatorListPage, setAddOperatorOpen, onToggleOperatorStatus, onUpdateOperator, onDeleteOperator }: {
+function CityOperatorsView({ canEditOperators, operators, operatorsLoading, operatorListPage, setOperatorListPage, setAddOperatorOpen, onUpdateOperator, onDeleteOperator }: {
   canEditOperators: boolean;
   operators: OperatorRow[];
   operatorsLoading: boolean;
   operatorListPage: number;
   setOperatorListPage: (v: number) => void;
   setAddOperatorOpen: (v: boolean) => void;
-  onToggleOperatorStatus: (row: OperatorRow) => Promise<void>;
   onUpdateOperator: (row: OperatorRow) => void;
   onDeleteOperator: (row: OperatorRow) => void;
 }) {
+  const { auth } = useAuth();
   return (
     <>
       {canEditOperators && (
@@ -319,17 +321,19 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
           { title: '序号', width: 70, align: 'center', render: (_v, _row, index) => (operatorListPage - 1) * 10 + index + 1 },
           { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 160 },
           { title: '账户', dataIndex: 'admin_pubkey', align: 'center', render: (v: string) => tryEncodeSs58(v) },
-          { title: '状态', dataIndex: 'status', align: 'center', width: 100 },
-          ...(canEditOperators ? [{
-            title: '操作', width: 220, align: 'center' as const,
+          {
+            title: '操作', width: 260, align: 'center' as const,
             render: (_v: unknown, row: OperatorRow) => (
               <Space>
-                <Button size="small" onClick={() => onUpdateOperator(row)}>修改</Button>
-                <Button size="small" onClick={() => onToggleOperatorStatus(row)}>{row.status === 'ACTIVE' ? '停用' : '启用'}</Button>
-                <Button size="small" danger onClick={() => onDeleteOperator(row)}>删除</Button>
+                {canEditOperators ? <Button size="small" onClick={() => onUpdateOperator(row)}>编辑</Button> : null}
+                {canEditOperators ? <Button size="small" danger onClick={() => onDeleteOperator(row)}>删除</Button> : null}
+                <AdminPasskeyTool
+                  size="small"
+                  disabled={!sameHexPubkey(row.admin_pubkey, auth?.admin_pubkey)}
+                />
               </Space>
             ),
-          }] : []),
+          },
         ]}
       />
     </>

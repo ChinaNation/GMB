@@ -16,9 +16,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::app_core::chain_runtime::{
-    build_institution_registration_info_credential, RuntimeSignatureMeta,
-};
 use crate::institutions::service::{
     can_delete_account, is_default_account_name, DEFAULT_ACCOUNT_NAMES,
 };
@@ -57,32 +54,6 @@ pub(crate) struct AppInstitutionDetail {
 }
 
 // ─── DTO:机构注册信息凭证(链端注册专用) ────────────────────────
-
-/// 链端注册时使用的验签包装字段。
-///
-/// 中文注释:业务注册字段只有外层的 `sfid_number / institution_name / account_names`。
-/// 本结构里的字段只用于链端确认这些信息确实由 SFID 系统签发,并做防重放。
-#[derive(Serialize)]
-pub(crate) struct AppInstitutionRegistrationCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) register_nonce: String,
-    pub(crate) province: String,
-    /// 签发本次凭证的省级 admin slot 公钥,统一 `0x` + 64 位小写 hex。
-    pub(crate) signer_admin_pubkey: String,
-    pub(crate) signature: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-/// `app_get_institution_registration_info` 的响应。
-///
-/// 中文注释:不得在这里加入 a3/sub_type/parent_sfid_number 等链端注册不需要的业务字段。
-#[derive(Serialize)]
-pub(crate) struct AppInstitutionRegistrationInfo {
-    pub(crate) sfid_number: String,
-    pub(crate) institution_name: String,
-    pub(crate) account_names: Vec<String>,
-    pub(crate) credential: AppInstitutionRegistrationCredential,
-}
 
 // ─── DTO:通用机构搜索 ────────────────────────────────────────────
 
@@ -451,7 +422,7 @@ pub(crate) async fn app_get_institution_registration_info(
         Some(i) => i,
         None => return api_error(StatusCode::NOT_FOUND, 1004, "institution not found"),
     };
-    let institution_name = match inst.institution_name.as_deref().map(str::trim) {
+    let _institution_name = match inst.institution_name.as_deref().map(str::trim) {
         Some(name) if !name.is_empty() => name.to_string(),
         _ => {
             return api_error(
@@ -481,61 +452,11 @@ pub(crate) async fn app_get_institution_registration_info(
         }
     }
 
-    let signing_province = inst.province.clone();
-    // ADR-008 Phase 23e:每省 3 个 admin slot 都可以签发注册信息凭证。
-    // 返回 signer_admin_pubkey,让链端能按 (province, admin_pubkey) 查签名公钥验签。
-    let (signer_admin_pubkey, province_pair) = match state
-        .sheng_admin_signing_cache
-        .any_for_province_with_admin(signing_province.as_str())
-    {
-        Some(v) => v,
-        None => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "province signing key not loaded; ask the province admin to login first",
-            )
-        }
-    };
-    let register_nonce = Uuid::new_v4().to_string();
-    let credential = match build_institution_registration_info_credential(
-        &state,
-        sfid_number.as_str(),
-        institution_name.as_str(),
-        &account_names,
-        register_nonce,
-        signing_province.as_str(),
-        signer_admin_pubkey,
-        &province_pair,
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5002,
-                &format!("build institution registration credential failed: {e}"),
-            )
-        }
-    };
-
-    Json(ApiResponse {
-        code: 0,
-        message: "ok".to_string(),
-        data: AppInstitutionRegistrationInfo {
-            sfid_number,
-            institution_name,
-            account_names,
-            credential: AppInstitutionRegistrationCredential {
-                genesis_hash: credential.genesis_hash,
-                register_nonce: credential.register_nonce,
-                province: credential.province,
-                signer_admin_pubkey: credential.signer_admin_pubkey,
-                signature: credential.signature,
-                meta: credential.meta,
-            },
-        },
-    })
-    .into_response()
+    api_error(
+        StatusCode::NOT_IMPLEMENTED,
+        5001,
+        "institution chain registration requires the city-admin signing flow",
+    )
 }
 
 // ─── 3. 机构账户列表(脱敏) ─────────────────────────────────

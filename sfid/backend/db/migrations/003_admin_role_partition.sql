@@ -5,14 +5,13 @@ CREATE TABLE IF NOT EXISTS admins (
   admin_id BIGSERIAL PRIMARY KEY,
   admin_pubkey TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN')),
-  status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED')),
   built_in BOOLEAN NOT NULL DEFAULT FALSE,
   created_by TEXT NOT NULL DEFAULT 'SYSTEM',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_admins_role_status
-  ON admins(role, status);
+CREATE INDEX IF NOT EXISTS idx_admins_role
+  ON admins(role);
 
 -- 省份维度（用于超级管理员分省）
 CREATE TABLE IF NOT EXISTS provinces (
@@ -46,22 +45,17 @@ admins AS (
   SELECT
     e.key AS admin_pubkey,
     UPPER(COALESCE(e.value->>'role', 'OPERATOR_ADMIN')) AS role,
-    UPPER(COALESCE(e.value->>'status', 'ACTIVE')) AS status,
     COALESCE((e.value->>'built_in')::boolean, FALSE) AS built_in,
     COALESCE(NULLIF(e.value->>'created_by', ''), 'SYSTEM') AS created_by,
     COALESCE((e.value->>'created_at')::timestamptz, now()) AS created_at
   FROM raw, LATERAL jsonb_each(raw.payload->'admin_users_by_pubkey') AS e(key, value)
 )
-INSERT INTO admins(admin_pubkey, role, status, built_in, created_by, created_at)
+INSERT INTO admins(admin_pubkey, role, built_in, created_by, created_at)
 SELECT
   admin_pubkey,
   CASE
     WHEN role IN ('SUPER_ADMIN', 'OPERATOR_ADMIN') THEN role
     ELSE 'OPERATOR_ADMIN'
-  END,
-  CASE
-    WHEN status IN ('ACTIVE', 'DISABLED') THEN status
-    ELSE 'ACTIVE'
   END,
   built_in,
   created_by,
@@ -69,7 +63,6 @@ SELECT
 FROM admins
 ON CONFLICT (admin_pubkey) DO UPDATE SET
   role = EXCLUDED.role,
-  status = EXCLUDED.status,
   built_in = EXCLUDED.built_in,
   created_by = EXCLUDED.created_by,
   created_at = EXCLUDED.created_at;

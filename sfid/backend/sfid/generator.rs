@@ -3,7 +3,7 @@
 //! 中文注释:
 //! 这是 sfid 系统**唯一**的 SFID 号生成入口,供所有业务模块调用:
 //! - `cpms` 公安局 CPMS 站点 SFID 生成
-//! - `sheng_admins::multisig`     多签机构 SFID 生成
+//! - `institutions`               多签机构 SFID 生成
 //! - `citizens::binding`          公民绑定兜底 SFID 生成
 //! - `app_core::runtime_ops`      seed 阶段 SFID 生成
 //!

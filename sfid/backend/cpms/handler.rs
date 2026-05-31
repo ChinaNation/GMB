@@ -14,6 +14,7 @@ use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
 // 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
+use crate::admins::actions::{require_admin_security_grant, AdminActionType};
 use crate::sfid::validate_sfid_number_format;
 use crate::*;
 
@@ -98,6 +99,21 @@ pub(crate) async fn generate_cpms_install_qr(
         Ok(v) => v,
         Err(resp) => return resp,
     };
+    let grant_payload = serde_json::json!({
+        "province": input.province.clone(),
+        "city": input.city.clone(),
+        "institution": input.institution.clone(),
+    });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsIssueInstallCode,
+        "*",
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     if input.city.trim().is_empty() || input.institution.trim().is_empty() {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -388,6 +404,17 @@ pub(crate) async fn revoke_install_token(
         Err(resp) => return resp,
     };
     let sfid_trimmed = site_sfid.trim().to_string();
+    let grant_payload = serde_json::json!({ "target": sfid_trimmed.clone() });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsRevokeInstallToken,
+        sfid_trimmed.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     let province =
         match resolve_site_province_via_shard(&state, &sfid_trimmed, ctx.admin_province.as_deref())
             .await
@@ -463,6 +490,17 @@ pub(crate) async fn reissue_install_token(
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
+    let grant_payload = serde_json::json!({ "target": site_sfid_validated.clone() });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsReissueInstallToken,
+        site_sfid_validated.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     // 先定位省份，再读站点元数据用于 QR1 名称字段
     let province = match resolve_site_province_via_shard(
         &state,
@@ -693,6 +731,17 @@ pub(crate) async fn delete_cpms_keys(
         Ok(v) => v,
         Err(msg) => return api_error(StatusCode::BAD_REQUEST, 1001, msg),
     };
+    let grant_payload = serde_json::json!({ "target": site_sfid.clone() });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        AdminActionType::CpmsDeleteKeys,
+        site_sfid.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
+    }
     // 中文注释:先按省分片删除缓存记录,再同步模块 Store 快照。
     let province =
         match resolve_site_province_via_shard(&state, &site_sfid, ctx.admin_province.as_deref())
@@ -959,6 +1008,26 @@ async fn update_cpms_site_status(
     let reason_text = reason.unwrap_or_default().trim().to_string();
     if reason_text.chars().count() > MAX_STATUS_REASON_CHARS {
         return api_error(StatusCode::BAD_REQUEST, 1001, "reason too long");
+    }
+    let action_type = match target_status {
+        CpmsSiteStatus::Active => AdminActionType::CpmsEnableKeys,
+        CpmsSiteStatus::Disabled => AdminActionType::CpmsDisableKeys,
+        CpmsSiteStatus::Revoked => AdminActionType::CpmsRevokeKeys,
+        CpmsSiteStatus::Pending => {
+            return api_error(StatusCode::BAD_REQUEST, 1001, "invalid target status")
+        }
+    };
+    let grant_payload =
+        serde_json::json!({ "target": site_sfid.clone(), "reason": reason_text.clone() });
+    if let Err(resp) = require_admin_security_grant(
+        &state,
+        &headers,
+        &ctx,
+        action_type,
+        site_sfid.as_str(),
+        Some(&grant_payload),
+    ) {
+        return resp;
     }
     // 中文注释:从进程内省分片缓存读取 CPMS 站点状态。
     let province =
@@ -1615,7 +1684,7 @@ pub(super) fn extract_city_code_from_sfid(site_sfid: &str) -> String {
 ///
 /// ADR-008 Phase 23e:AppState 不再持有 signing seed,改从 SFID_SIGNING_SEED_HEX
 /// 环境变量按需加载。本函数只在 `generate_cpms_install_qr` 路径上签发
-/// 二维码完整性签名,与省管理员 3-tier signing pubkey 无关。
+/// 二维码完整性签名,与省/市管理员冷钱包签名无关。
 fn sign_with_main_key(_state: &AppState, message: &str) -> Result<String, String> {
     use sp_core::Pair;
     let seed_hex = std::env::var("SFID_SIGNING_SEED_HEX")

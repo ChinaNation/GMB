@@ -35,8 +35,8 @@
 - `province.rs`
   - 43 省 `PROVINCES` 常量表,只保存 SFID 号码生成需要的省市代码
   - `province_code_by_name` / `city_code_by_name` / `province_name_by_code`
-- 省管理员 main 公钥、Slot、三槽名册等已移出本模块,统一位于
-  `backend/sheng_admins/province_admins.rs`。
+- 43 省初始省级管理员公钥与省份归属已移出本模块,统一位于
+  `backend/admins/province_admins.rs`;新增省级管理员归 `backend/admins/` 管理。
 - `admin.rs`
   - 管理端 SFID 业务接口实现(legacy,`admin_generate_sfid` / `admin_sfid_meta` / `admin_sfid_cities`)
 - `model.rs`
@@ -65,7 +65,7 @@
 - `app_core/runtime_ops.rs` 的 `seed_demo_record` 也复用同一套生成工具，不再生成旧格式演示 `sfid`。
 - `cpms/handler.rs`：公安局 CPMS 安装码读取机构 `sfid_number`。
 - `login/mod.rs` 与 `scope/admin_province.rs`：通过
-  `sheng_admins::province_admins` 做角色展示和归属推断。
+  `admins::province_admins` 做角色展示和归属推断。
 
 ## 5. 命名与引用
 

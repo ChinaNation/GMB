@@ -17,13 +17,26 @@ use uuid::Uuid;
 use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
-use super::guards::{admin_auth, bearer_token, bootstrap_sheng_signing_pair};
+use super::guards::{admin_auth, bearer_token};
 use super::model::*;
 use super::signature::{
     build_admin_display_name_from_user, cleanup_expired_challenges, extract_domain_from_origin,
     parse_admin_identity_qr, resolve_admin_city, verify_admin_signature,
 };
 use super::LOGIN_CHALLENGE_TTL_SECONDS;
+
+fn admin_has_active_passkey(store: &Store, admin_pubkey: &str) -> bool {
+    store
+        .admin_passkeys_by_credential_id
+        .values()
+        .any(|record| {
+            record.status == AdminPasskeyStatus::Active
+                && crate::crypto::pubkey::same_admin_pubkey(
+                    record.admin_pubkey.as_str(),
+                    admin_pubkey,
+                )
+        })
+}
 
 pub(crate) async fn require_admin_session_middleware(
     State(state): State<AppState>,
@@ -54,6 +67,7 @@ pub(crate) async fn admin_auth_check(
             admin_name: ctx.admin_name,
             admin_province: ctx.admin_province,
             admin_city: ctx.admin_city,
+            passkey_bound: ctx.passkey_bound,
         },
     })
     .into_response()
@@ -101,9 +115,6 @@ pub(crate) async fn admin_auth_identify(
     let Some(admin) = store.admin_users_by_pubkey.get(&admin_pubkey) else {
         return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
     };
-    if admin.status != AdminStatus::Active {
-        return api_error(StatusCode::FORBIDDEN, 2003, "admin disabled");
-    }
 
     Json(ApiResponse {
         code: 0,
@@ -111,13 +122,13 @@ pub(crate) async fn admin_auth_identify(
         data: AdminIdentifyOutput {
             admin_pubkey: admin.admin_pubkey.clone(),
             role: admin.role.clone(),
-            status: admin.status.clone(),
             admin_name: {
                 let province = province_scope_for_role(&store, &admin.admin_pubkey, &admin.role);
                 build_admin_display_name_from_user(admin, province.as_deref())
             },
             admin_province: province_scope_for_role(&store, &admin.admin_pubkey, &admin.role),
             admin_city: resolve_admin_city(admin),
+            passkey_bound: admin_has_active_passkey(&store, &admin.admin_pubkey),
         },
     })
     .into_response()
@@ -165,11 +176,11 @@ pub(crate) async fn admin_auth_challenge(
         Err(resp) => return resp,
     };
     cleanup_expired_challenges(&mut store, now);
-    let Some(admin) = store.admin_users_by_pubkey.get(&input.admin_pubkey) else {
+    if !store
+        .admin_users_by_pubkey
+        .contains_key(&input.admin_pubkey)
+    {
         return api_error(StatusCode::FORBIDDEN, 2002, "admin not found");
-    };
-    if admin.status != AdminStatus::Active {
-        return api_error(StatusCode::FORBIDDEN, 2003, "admin disabled");
     }
 
     insert_bounded_map(
@@ -285,15 +296,12 @@ pub(crate) async fn admin_auth_verify(
         Some(v) => v,
         None => return api_error(StatusCode::FORBIDDEN, 2002, "admin not found"),
     };
-    if admin.status != AdminStatus::Active {
-        return api_error(StatusCode::FORBIDDEN, 2003, "admin disabled");
-    }
     let admin_pubkey = admin.admin_pubkey.clone();
     let admin_role = admin.role.clone();
-    let admin_status = admin.status.clone();
     let admin_province = province_scope_for_role(&store, &admin_pubkey, &admin_role);
     let admin_name = build_admin_display_name_from_user(admin, admin_province.as_deref());
     let admin_city = resolve_admin_city(admin);
+    let passkey_bound = admin_has_active_passkey(&store, &admin_pubkey);
 
     let access_token = Uuid::new_v4().to_string();
     let expire_at = now + Duration::hours(8);
@@ -307,8 +315,7 @@ pub(crate) async fn admin_auth_verify(
     store
         .admin_sessions
         .insert(access_token.clone(), new_session.clone());
-    // 中文注释:先释放写锁,再执行省管理员签名密钥本地 bootstrap,
-    // 避免跨后续异步写 GlobalShard 时持有 StoreWriteGuard。
+    // 中文注释:先释放写锁,避免后续异步同步 GlobalShard 时持有 StoreWriteGuard。
     drop(store);
 
     // Phase 2 admin_auth 迁移:登录成功后同步写 GlobalShard session
@@ -324,16 +331,6 @@ pub(crate) async fn admin_auth_verify(
         });
     }
 
-    // ADR-008(2026-05-01)Phase 23e:省登录管理员 3-tier 自治,首次登录时通过
-    // `sheng_admins::signing_keys::ensure_signing_keypair` 把本 (province, admin_pubkey)
-    // 的签名 keypair 加载到进程内 cache。本流程只处理 SFID 本地 seed,
-    // 不负责省管理员链上更换。
-    if admin_role == AdminRole::ShengAdmin {
-        if let Some(province) = admin_province.as_deref() {
-            bootstrap_sheng_signing_pair(&state, admin_pubkey.as_str(), province);
-        }
-    }
-
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
@@ -343,10 +340,10 @@ pub(crate) async fn admin_auth_verify(
             admin: AdminIdentifyOutput {
                 admin_pubkey,
                 role: admin_role,
-                status: admin_status,
                 admin_name,
                 admin_province,
                 admin_city,
+                passkey_bound,
             },
         },
     })

@@ -1,9 +1,10 @@
 // 省级管理员列表视图 mode='list'(从 ShengAdminsView.tsx 拆分)
 
-import { Card, Table, Tag, Tooltip } from 'antd';
+import { Card, Table } from 'antd';
 import type { ShengAdminRow } from './api';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
 import type { ShengAdminSharedState } from './shengAdminUtils';
+import { tryEncodeSs58 } from '../utils/ss58';
 
 interface ShengAdminListViewProps {
   state: ShengAdminSharedState;
@@ -36,30 +37,7 @@ export function ShengAdminListView({ state }: ShengAdminListViewProps) {
           },
           { title: '省份', dataIndex: 'province', align: 'center', width: 140 },
           { title: '姓名', dataIndex: 'admin_name', align: 'center', width: 180 },
-          { title: '公钥', dataIndex: 'admin_pubkey', align: 'center' },
-          {
-            title: '签名密钥',
-            width: 140,
-            align: 'center',
-            render: (_v: unknown, row: ShengAdminRow) => {
-              if (!row.signing_pubkey) {
-                return <Tag color="blue">未初始化</Tag>;
-              }
-              const pk = row.signing_pubkey;
-              const brief = pk.length > 14 ? `${pk.slice(0, 7)}...${pk.slice(-5)}` : pk;
-              return (
-                <Tooltip title={pk}>
-                  <Tag color="green">已激活 {brief}</Tag>
-                </Tooltip>
-              );
-            },
-          },
-          {
-            title: '类型',
-            width: 100,
-            align: 'center',
-            render: (_v: unknown, row: ShengAdminRow) => (row.built_in ? '内置' : '自定义'),
-          },
+          { title: '账户', dataIndex: 'admin_pubkey', align: 'center', render: (value: string) => tryEncodeSs58(value) },
         ]}
       />
     </Card>

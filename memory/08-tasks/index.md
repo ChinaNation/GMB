@@ -42,10 +42,14 @@
 - `memory/08-tasks/open/20260530-cpms-sfid-annual-report-import.md`
 - `memory/08-tasks/open/20260530-cpms-status-export.md`
 - `memory/08-tasks/open/20260530-cpms-status-export-sfid-fields.md`
+- `memory/08-tasks/open/20260530-sfid-admins-module-unify.md`
+- `memory/08-tasks/open/20260530-sfid-province-admin-governance-passkey.md`
 - `memory/08-tasks/open/runtime-full-audit.md`
 
 ## done
 
+- `memory/08-tasks/done/20260530-ci-node24-unification.md`
+- `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
 - `memory/08-tasks/done/20260530-cpms-archive-list-search-align.md`
 - `memory/08-tasks/done/20260530-cpms-migration-baseline-cleanup.md`
 - `memory/08-tasks/done/20260530-cpms-archive-list-town-column.md`
@@ -372,3 +376,4 @@
 - `memory/08-tasks/done/20260529-164449-cpms-删除签名请求与弹窗修复.md`
 - `memory/08-tasks/done/20260529-170516-cpms档案详情打印样式修复.md`
 - `memory/08-tasks/done/20260529-171139-cpms投票账户单行显示修复.md`
+- `memory/08-tasks/done/20260531-sfid-admin-model-no-status.md`

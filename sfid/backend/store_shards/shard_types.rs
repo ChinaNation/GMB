@@ -57,8 +57,7 @@ pub(crate) struct StoreShard {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct GlobalShard {
-    // 中文注释:旧签名轮换缓存已随 phase23e 子卡(2026-05-01)删除。
-    /// 全局管理员索引:ShengAdmin 本体(含 encrypted_signing_privkey)。
+    /// 全局管理员索引:ShengAdmin 本体。
     /// ShiAdmin 不进这里,存在对应省的 `StoreShard.local_admins`。
     pub(crate) global_admins: HashMap<String, AdminUser>,
 

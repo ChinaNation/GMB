@@ -24,13 +24,12 @@ use crate::*;
 // `04-decisions/sfid/2026-04-07-subxt-0.43-pow-chain-quirks.md`。
 // 中文注释：2026-04-20 统一 DUOQIAN_V1 单域方案：domain 字节 10B
 // (b"DUOQIAN_V1") + 1B op_tag 区分子命名空间。按 op_tag 分别标识 BIND / VOTE /
-// POP / INST。与 citizenchain `primitives::core_const::{DUOQIAN_DOMAIN, OP_SIGN_*}`
+// POP。与 citizenchain `primitives::core_const::{DUOQIAN_DOMAIN, OP_SIGN_*}`
 // 严格对齐。
 const DUOQIAN_DOMAIN: [u8; 10] = *b"DUOQIAN_V1";
 const OP_SIGN_BIND: u8 = 0x10;
 const OP_SIGN_VOTE: u8 = 0x11;
 const OP_SIGN_POP: u8 = 0x12;
-const OP_SIGN_INST: u8 = 0x13;
 #[allow(dead_code)]
 pub(crate) const POPULATION_DOMAIN_STR: &str = "DUOQIAN_V1";
 static CHAIN_GENESIS_HASH: OnceLock<[u8; 32]> = OnceLock::new();
@@ -91,17 +90,6 @@ pub(crate) struct RuntimePopulationSnapshotCredential {
     pub(crate) signature: String,
     pub(crate) genesis_hash: String,
     pub(crate) payload_digest: String,
-    pub(crate) meta: RuntimeSignatureMeta,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct RuntimeInstitutionRegistrationInfoCredential {
-    pub(crate) genesis_hash: String,
-    pub(crate) register_nonce: String,
-    pub(crate) province: String,
-    pub(crate) signer_admin_pubkey: String,
-    pub(crate) signature: String,
     pub(crate) meta: RuntimeSignatureMeta,
 }
 
@@ -207,74 +195,6 @@ pub(crate) fn build_population_snapshot_credential(
         signature,
         genesis_hash: hex::encode(genesis_hash),
         payload_digest: hex::encode(payload_digest),
-        meta: runtime_signature_meta(state),
-    })
-}
-
-/// 用**省级签名密钥**签发机构注册信息凭证。
-///
-/// 中文注释:本函数只签“链端注册真正需要的机构信息”:
-/// `sfid_number / institution_name / account_names`。`province`、`signer_admin_pubkey`、
-/// `genesis_hash`、`register_nonce` 是验签与防重放安全字段,不是业务注册字段。
-///
-/// payload 字节布局必须与链端 `sfid-system` verifier 保持一致:
-/// `blake2_256(scale_encode((
-///   DUOQIAN_DOMAIN, OP_SIGN_INST, genesis_hash,
-///   sfid_number, institution_name, account_names,
-///   register_nonce, province, signer_admin_pubkey
-/// )))`
-///
-/// 任何字段顺序、编码类型或名称列表排序变更,都必须同步改链端 verifier,
-/// 否则 sr25519 verify 必败。
-pub(crate) fn build_institution_registration_info_credential(
-    state: &AppState,
-    sfid_number: &str,
-    institution_name: &str,
-    account_names: &[String],
-    register_nonce: String,
-    province: &str,
-    signer_admin_pubkey: [u8; 32],
-    province_pair: &sp_core::sr25519::Pair,
-) -> Result<RuntimeInstitutionRegistrationInfoCredential, String> {
-    if sfid_number.trim().is_empty() {
-        return Err("sfid_number is required".to_string());
-    }
-    if institution_name.trim().is_empty() {
-        return Err("institution_name is required".to_string());
-    }
-    if account_names.is_empty() {
-        return Err("account_names is required".to_string());
-    }
-    if register_nonce.trim().is_empty() {
-        return Err("register_nonce is required".to_string());
-    }
-    if province.trim().is_empty() {
-        return Err("province is required".to_string());
-    }
-    let genesis_hash = resolve_chain_genesis_hash()?;
-    let account_name_bytes: Vec<Vec<u8>> = account_names
-        .iter()
-        .map(|name| name.as_bytes().to_vec())
-        .collect();
-    let payload = (
-        DUOQIAN_DOMAIN,
-        OP_SIGN_INST,
-        genesis_hash,
-        sfid_number.as_bytes(),
-        institution_name.as_bytes(),
-        account_name_bytes,
-        register_nonce.as_bytes(),
-        province.as_bytes(),
-        signer_admin_pubkey,
-    );
-    let payload_digest = blake2_256(&payload.encode());
-    let signature = province_pair.sign(&payload_digest).0;
-    Ok(RuntimeInstitutionRegistrationInfoCredential {
-        genesis_hash: hex::encode(genesis_hash),
-        register_nonce,
-        province: province.to_string(),
-        signer_admin_pubkey: format!("0x{}", hex::encode(signer_admin_pubkey)),
-        signature: hex::encode(signature),
         meta: runtime_signature_meta(state),
     })
 }

@@ -1,6 +1,6 @@
 // 中文注释:sfid 前端登录态 + 能力标志的全局 Context。
 // 中文注释:角色仅剩 SHENG_ADMIN / SHI_ADMIN。
-// 省管理员三槽自治(Main/Backup1/Backup2)由 sheng_admin 视图自身处理,本 context 只看 role + 三 槽位字段。
+// Passkey 绑定状态只用于引导管理员进入注册局更新密钥,不改变角色能力。
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
@@ -19,27 +19,23 @@ export type RoleCapabilities = {
   canStatusScan: boolean;
   canBusinessWrite: boolean;
   canViewSystemSettings: boolean;
-  /** 当前 SHENG_ADMIN 是否处于 main 槽(可对名册做加/删 backup) */
-  isShengMainSlot: boolean;
 };
 
 export function resolveRoleCapabilities(auth: AdminAuth | null): RoleCapabilities {
   const role = auth?.role;
   const isShengAdmin = role === 'SHENG_ADMIN';
   const isShiAdmin = role === 'SHI_ADMIN';
-  const isShengMainSlot = isShengAdmin && (auth?.unlocked_slot === 'Main');
   return {
-    canViewInstitutions: isShengAdmin,
+    canViewInstitutions: isShengAdmin || isShiAdmin,
     canViewMultisig: isShengAdmin || isShiAdmin,
     canViewShengAdmins: isShengAdmin,
     canViewShiAdmins: isShengAdmin || isShiAdmin,
     canCrudShiAdmins: isShengAdmin,
-    canManageInstitutions: isShengAdmin,
-    canRegisterInstitutions: isShengAdmin,
+    canManageInstitutions: isShengAdmin || isShiAdmin,
+    canRegisterInstitutions: isShengAdmin || isShiAdmin,
     canStatusScan: isShengAdmin || isShiAdmin,
-    canBusinessWrite: true,
+    canBusinessWrite: isShengAdmin || isShiAdmin,
     canViewSystemSettings: isShengAdmin || isShiAdmin,
-    isShengMainSlot,
   };
 }
 

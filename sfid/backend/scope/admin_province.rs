@@ -4,8 +4,8 @@
 //! 这两个函数与 `rules.rs::get_visible_scope`(从 ctx 派生 VisibleScope)互补,
 //! 用于尚未走 ctx.admin_province 的旧路径,从 pubkey 兜底查省。
 
+use crate::admins::province_admins::sheng_admin_province;
 use crate::crypto::pubkey::same_admin_pubkey;
-use crate::sheng_admins::province_admins::sheng_admin_province;
 use crate::{AdminRole, Store};
 
 /// 根据 pubkey + role 解析该管理员所属省份。

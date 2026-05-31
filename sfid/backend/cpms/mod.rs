@@ -2,7 +2,7 @@
 //!
 //! 本模块承接 CPMS 安装二维码、档案码验真、
 //! 授权状态治理等能力。它服务于公安局机构详情页,但业务归属是 CPMS 系统
-//! 管理,不再混放在 `sheng_admins` 目录。
+//! 管理,不再混放在 `admins` 目录。
 
 pub(crate) mod handler;
 pub(crate) mod model;

@@ -1,5 +1,10 @@
 # institutions/ — SFID 机构与账户名称模型
 
+- 最后更新:2026-05-31
+- 任务卡:
+  - `memory/08-tasks/done/20260530-sfid-admin-permission-step2.md`
+  - `memory/08-tasks/done/20260531-sfid-permission-closeout.md`
+
 > 中文注释(2026-05-16):`institutions` 只保留机构身份、账户名称、资料库和
 > 机构对区块链/钱包提供查询的能力。CPMS 安装授权、ARCHIVE 档案验真和
 > 授权状态治理归 `sfid/backend/cpms/`,不挂在机构模块下。
@@ -15,6 +20,16 @@ SFID 系统只负责机构身份和账户名称:
 SFID 系统不直接发起链上机构注册、链上注销、管理员阈值签名和账户激活。
 链端需要注册机构时,应通过 `institutions::chain_duoqian_info` 公开接口 pull
 `sfid_number / institution_name / account_names[]` 注册信息凭证。
+
+后台权限:
+
+- 查看机构、账户、文档:登录态 + 省/市 scope。
+- 创建机构、修改机构、新增/删除本地账户、上传/删除文档:一般业务写操作,
+  必须先通过 Passkey 换取一次性 `x-sfid-security-grant`。
+- 省级管理员可操作本省所有机构;市级管理员只能操作本市业务机构。
+- 机构资料库所有列表、上传、下载、删除入口必须先确认机构存在,再校验省/市
+  scope;不存在对应机构的孤儿文档一律按机构不存在处理,不得绕过 scope。
+- 公安局 CPMS 安装授权治理不在 `institutions` 内实现,统一归 `cpms` 模块且只允许省级管理员。
 
 开发期按彻底改造执行，当前文档只描述现行接口和状态机。
 
@@ -87,6 +102,10 @@ SFID 不能单方面删除仍在链上的账户名称。
 | GET | `/api/v1/institution/:sfid_number` | 机构详情,含账户列表 |
 | GET | `/api/v1/institution/:sfid_number/accounts` | 机构账户列表 |
 | DELETE | `/api/v1/institution/:sfid_number/account/:account_name` | 删除允许删除的新增账户名称 |
+| GET | `/api/v1/institution/:sfid_number/documents` | 查看机构资料库文档 |
+| POST | `/api/v1/institution/:sfid_number/documents` | 上传机构资料库文档 |
+| GET | `/api/v1/institution/:sfid_number/documents/:doc_id/download` | 下载机构资料库文档 |
+| DELETE | `/api/v1/institution/:sfid_number/documents/:doc_id` | 删除机构资料库文档 |
 
 区块链软件公开查询:
 

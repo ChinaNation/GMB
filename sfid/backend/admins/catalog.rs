@@ -6,7 +6,7 @@ use crate::*;
 /// 二角色均可访问,按 scope 过滤:
 /// - SHENG_ADMIN:仅返回自己所属省
 /// - SHI_ADMIN:仅返回自己上级省管理员所属省
-pub(crate) async fn list_sheng_admins(
+pub(crate) async fn list_province_admins(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
@@ -39,19 +39,22 @@ pub(crate) async fn list_sheng_admins(
                 province: province.clone(),
                 admin_pubkey: user.admin_pubkey.clone(),
                 admin_name: if user.admin_name.is_empty() {
-                    format!("{province}机构管理员")
+                    format!("{province}省级管理员")
                 } else {
                     user.admin_name.clone()
                 },
                 built_in: user.built_in,
                 created_at: user.created_at,
                 updated_at: user.updated_at,
-                signing_pubkey: user.signing_pubkey.clone(),
-                signing_created_at: user.signing_created_at,
             })
         })
         .collect();
-    rows.sort_by(|a, b| a.province.cmp(&b.province));
+    rows.sort_by(|a, b| {
+        a.province
+            .cmp(&b.province)
+            .then_with(|| b.built_in.cmp(&a.built_in))
+            .then_with(|| a.id.cmp(&b.id))
+    });
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),

@@ -11,15 +11,16 @@ export type AdminAuthCheck = {
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;
+  passkey_bound: boolean;
 };
 
 export type AdminIdentifyResult = {
   admin_pubkey: string;
   role: 'SHENG_ADMIN' | 'SHI_ADMIN';
-  status: 'ACTIVE' | 'DISABLED';
   admin_name: string;
   admin_province?: string | null;
   admin_city?: string | null;
+  passkey_bound: boolean;
 };
 
 export type AdminChallengeResult = {

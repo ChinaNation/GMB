@@ -16,7 +16,7 @@ pub(crate) async fn admin_sfid_meta(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let admin_ctx = match require_admin_write(&state, &headers) {
+    let admin_ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };
@@ -110,7 +110,7 @@ pub(crate) async fn admin_sfid_cities(
     headers: HeaderMap,
     Query(query): Query<AdminSfidCitiesQuery>,
 ) -> impl IntoResponse {
-    let admin_ctx = match require_admin_write(&state, &headers) {
+    let admin_ctx = match require_admin_any(&state, &headers) {
         Ok(v) => v,
         Err(resp) => return resp,
     };

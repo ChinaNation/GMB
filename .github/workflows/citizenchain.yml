@@ -79,7 +79,7 @@ jobs:
             cache_key: citizenchain-macos-apple
     steps:
       - name: 拉取代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 校验 runner 架构
         shell: bash
@@ -96,9 +96,10 @@ jobs:
         uses: dtolnay/rust-toolchain@1.94.0
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        # 固定使用 Node.js 24,与项目 package.json engines 和 GitHub Actions node24 运行时一致。
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: citizenchain/node/frontend/package-lock.json
 
@@ -346,7 +347,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 拉取发布上下文
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 下载五个安装包与 updater 产物
         uses: actions/download-artifact@v4
@@ -460,7 +461,7 @@ jobs:
         217.142.255.172
     steps:
       - name: 拉取部署配置
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 下载本次 Linux 安装包
         uses: actions/download-artifact@v4

@@ -2,8 +2,9 @@
 
 import type { FormInstance } from 'antd';
 import type { SfidCityItem } from '../sfid/api';
-import type { OperatorRow } from '../shi_admins/api';
+import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
+import type { AdminActionType } from './admin_security_api';
 
 /** 比较两个 hex 公钥是否相同(忽略大小写和 0x 前缀) */
 export function sameHexPubkey(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -18,6 +19,7 @@ export type AccountScanTarget = null | 'operator';
 export interface ShengAdminSharedState {
   shengAdmins: ShengAdminRow[];
   shengAdminsLoading: boolean;
+  refreshShengAdmins: () => Promise<ShengAdminRow[]>;
   selectedShengAdmin: ShengAdminRow | null;
   setSelectedShengAdmin: (v: ShengAdminRow | null) => void;
   /** 当前选中的市(三层导航:省→市→市级管理员列表) */
@@ -44,7 +46,7 @@ export interface ShengAdminSharedState {
   addOperatorForm: FormInstance<{ operator_pubkey: string; operator_name: string; operator_city: string }>;
 
   onCreateOperator: (values: { operator_pubkey: string; operator_name: string; city?: string; created_by?: string }) => Promise<void>;
-  onToggleOperatorStatus: (row: OperatorRow) => Promise<void>;
   onUpdateOperator: (row: OperatorRow) => void;
   onDeleteOperator: (row: OperatorRow) => void;
+  runSecuredAction: <T = unknown>(actionType: AdminActionType, payload: unknown) => Promise<T>;
 }

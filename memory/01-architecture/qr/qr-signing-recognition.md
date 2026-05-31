@@ -79,7 +79,18 @@
 
 仅满足以上条件时绿色放行。除此之外,任何 decode 失败都红色拒绝。
 
-## 七、action / fields 对齐规则
+## 七、SFID 管理员治理 JSON 载荷
+
+`sfid_admin_action` 使用既有 `WUMIN_QR_V1 / sign_request`,不新增协议。`payload_hex`
+是 `sfid_admin_governance` canonical JSON 的 UTF-8 hex,冷钱包必须解出并交叉校验:
+
+- `display.action == sfid_admin_action`
+- `domain == sfid_admin_governance`
+- `qr_proto == WUMIN_QR_V1`
+- `display.fields` 顺序固定为 `action_type / province / actor_pubkey / target / before_hash / after_hash / payload_hash`
+- `payload_hash` 必须等于 JSON 文本 SHA-256
+
+## 八、action / fields 对齐规则
 
 唯一详细登记:`memory/01-architecture/qr/qr-action-registry.md`
 
@@ -90,7 +101,7 @@
 3. 补 fixture 与测试。
 4. 扫描旧 action、旧 pallet/call、旧字段门控残留。
 
-## 八、已废弃识别规则
+## 九、已废弃识别规则
 
 以下规则不得恢复:
 
@@ -101,7 +112,7 @@
 - `DuoqianManage` 旧 pallet 名
 - `user_duoqian` 当前 kind
 
-## 九、验证清单
+## 十、验证清单
 
 ### 应绿色通过
 
@@ -115,6 +126,7 @@
 8. `propose_create_personal` / `propose_close_personal`
 9. `propose_transfer` / `propose_safety_fund_transfer` / `propose_sweep_to_main`
 10. `propose_runtime_upgrade` / `developer_direct_upgrade` 的 32 字节哈希直签例外
+11. `sfid_admin_action`
 
 ### 应红色拒绝
 
@@ -126,7 +138,7 @@
 6. `display.fields` 与 decoder fields 不一致
 7. 旧 `spec_version` 门控、旧 wrapper action、旧 `DuoqianManage` 名称试图作为当前协议依据
 
-## 十、拒绝的替代方案
+## 十一、拒绝的替代方案
 
 ### 10.1 envelope 内嵌 issuer_sig
 
