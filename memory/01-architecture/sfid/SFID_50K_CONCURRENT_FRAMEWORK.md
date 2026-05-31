@@ -49,8 +49,7 @@
 
 ### 5. 数据库
 
-- 现在 `runtime_cache_entries` 是一张 JSON bloat 表,单行几 MB
-- 真正的高频读写必须落到结构化表 + 索引
+- 当前模块 Store 表仍是 JSON 快照,高频读写需要继续拆到结构化表 + 索引。
 
 ---
 
@@ -112,7 +111,7 @@ async fn province_flusher(queue: Arc<ProvinceSubmitQueue>) {
 
 ### 层 2:后端 —— 内存缓存 + 写穿透
 
-**根因**:当前每个 HTTP 请求都 `load_store_postgres()` → 1.2MB JSON 反序列化。
+**根因**:当前每个 HTTP 请求会加载模块 Store 快照,高并发下仍有反序列化成本。
 
 **方案**:
 ```rust
@@ -137,11 +136,9 @@ pub(crate) struct AppState {
 - 写入走 append log → 单次写 <1ms
 - 进程崩溃恢复:从 PG WAL 重放最后 N 条
 
-**迁移策略**:
-- 不改现有 PG schema(`runtime_cache_entries`),而是**新增 `store_shards` 表**
-  (province, key, value JSONB, updated_at)
-- 老的 `runtime_cache_entries` 保留作全量快照,后台任务定期从 shards 聚合
-- 新接口路径全走 shards,老接口逐步迁移
+**目标结构**:
+- 以当前目标结构为基线继续拆分热路径表。
+- `store_shards` 仍只作为进程内缓存;需要持久化时按业务表设计,不恢复整包分片表。
 
 ### 层 3:后端 —— 水平扩展(多进程 / 多实例)
 
@@ -294,7 +291,7 @@ pub(crate) struct AppState {
 | `sfid/backend/admins/` | 1 | `replace_sheng_admin` handler 扩展级联轮换 |
 | `sfid/backend/app_core/runtime_ops.rs` | 1 | 启动钩子加"等待 unlock"状态 |
 | `sfid/backend/models/store.rs`(新建) | 2 | 43 shard 数据结构 |
-| `sfid/backend/store_shards/pg_backend.rs` | 2 | append-only WAL 写 shard changes |
+| `sfid/backend/<feature>/` | 2 | 按业务归属新增结构化热路径表 |
 | `sfid/backend/admins/institutions.rs` | 3 | 改 submit 为入队 |
 | `sfid/backend/store_shards/`(新建) | 3 | 省级 flush task + batch 聚合 |
 | `sfid/backend/Cargo.toml` | 3 | 加 `crossbeam-queue` 依赖 |

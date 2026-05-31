@@ -304,6 +304,8 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 - `cpms/scripts/build_linux_host_installer.sh` 构建自解压 `.run`：payload 包含 `cpms-backend`、
   前端静态文件、数据库 schema/seed、systemd 文件、nginx 配置、证书脚本、备份脚本和 Ubuntu
   24.04 amd64 运行依赖 deb 闭包。
+- 运行依赖 deb 闭包必须在官方 `ubuntu:24.04` Docker 容器内解析和下载，禁止使用 GitHub
+  runner 主机 apt 环境，避免第三方源、预装软件或虚拟包污染依赖版本。
 - `cpms/deploy/linux/install_host.sh` 只从 payload 的 `debs/` 安装依赖，禁止 `apt-get update`
   或访问外部 apt 源；目标机无需联网。
 - 安装后后端服务为 `cpms-backend.service`，工作目录 `/var/lib/cpms`，环境文件

@@ -9,8 +9,7 @@ use super::{generate_sfid_code, GenerateSfidInput};
 use crate::sfid::province::provinces;
 use crate::*;
 
-// 中文注释:legacy admin_generate_sfid 已删除(依赖 pending_by_pubkey / bindings_by_pubkey)。
-// SFID 生成走 institutions::handler 模块的两层模型。
+// 中文注释:本文件只保留管理端 SFID 元信息与城市列表接口。
 
 pub(crate) async fn admin_sfid_meta(
     State(state): State<AppState>,

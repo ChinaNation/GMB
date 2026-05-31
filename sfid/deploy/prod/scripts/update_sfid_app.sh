@@ -26,19 +26,8 @@ if [[ ! -x "${BUNDLE_DIR}/backend/sfid-backend" ]]; then
   exit 1
 fi
 
-if [[ ! -d "${BUNDLE_DIR}/backend/db/migrations" ]]; then
-  echo "缺少迁移目录: ${BUNDLE_DIR}/backend/db/migrations"
-  exit 1
-fi
-
-if [[ ! -x "${BUNDLE_DIR}/deploy/apply_sfid_migrations.sh" ]]; then
-  echo "缺少迁移脚本: ${BUNDLE_DIR}/deploy/apply_sfid_migrations.sh"
-  exit 1
-fi
-
 mkdir -p \
   "${APP_HOME}/bin" \
-  "${APP_HOME}/backend/db/migrations" \
   "${APP_HOME}/scripts" \
   "${APP_HOME}/releases/${RELEASE_ID}/backend"
 
@@ -46,10 +35,6 @@ install -m 755 "${BUNDLE_DIR}/backend/sfid-backend" \
   "${APP_HOME}/releases/${RELEASE_ID}/backend/sfid-backend"
 install -m 755 "${BUNDLE_DIR}/backend/sfid-backend" \
   "${APP_HOME}/bin/sfid-backend"
-rsync -a --delete "${BUNDLE_DIR}/backend/db/migrations/" \
-  "${APP_HOME}/backend/db/migrations/"
-install -m 755 "${BUNDLE_DIR}/deploy/apply_sfid_migrations.sh" \
-  "${APP_HOME}/scripts/apply_sfid_migrations.sh"
 install -m 755 "${BUNDLE_DIR}/deploy/update_sfid_app.sh" \
   "${APP_HOME}/scripts/update_sfid_app.sh"
 printf '%s\n' "${RELEASE_ID}" > "${APP_HOME}/REVISION"
@@ -71,15 +56,6 @@ fi
 set -a
 source "${ENV_FILE}"
 set +a
-
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "环境文件中缺少 DATABASE_URL: ${ENV_FILE}"
-  exit 1
-fi
-
-"${APP_HOME}/scripts/apply_sfid_migrations.sh" \
-  "${DATABASE_URL}" \
-  "${APP_HOME}/backend/db/migrations"
 
 systemctl daemon-reload
 systemctl restart "${SERVICE_NAME}"

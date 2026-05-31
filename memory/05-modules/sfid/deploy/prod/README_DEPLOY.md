@@ -9,7 +9,7 @@
 ## 脚本说明
 - `scripts/install_postgres_primary.sh`：主库初始化与复制账号配置。
 - `scripts/install_postgres_standby.sh`：备库初始化（`pg_basebackup` + 流复制）。
-- `scripts/install_sfid_app.sh`：应用安装、迁移执行、systemd 服务安装。
+- `scripts/install_sfid_app.sh`：应用安装与 systemd 服务安装。
 - `scripts/backup_to_standby.sh`：主库导出并同步到备库。
 - `systemd/sfid-backend.service`：SFID 后端服务。
 - `systemd/sfid-backup.service` + `systemd/sfid-backup.timer`：定时备份任务。
@@ -125,13 +125,9 @@ SFID_PASSKEY_ORIGIN=https://sfid.crcfrcn.com
 2. 构建 `frontend/dist`
 3. 上传发布包到服务器临时目录
 4. 执行 `update_sfid_app.sh`
-5. 同步后端二进制、前端静态资源、迁移脚本
-6. 自动执行“未应用”的数据库迁移
-7. 重启 `sfid-backend`
-8. 本地健康检查通过后结束
+5. 同步后端二进制和前端静态资源
+6. 重启 `sfid-backend`
+7. 本地健康检查通过后结束
 
-### 迁移策略
-自动部署使用 `apply_sfid_migrations.sh`：
-- 首次执行时会创建 `schema_migrations`
-- 后续只执行未执行过的 SQL
-- 若同名迁移文件内容被改动，会直接失败，避免静默污染数据库
+### 数据库结构
+SFID 后端启动时直接创建当前目标结构；发布包不携带独立 SQL 脚本。

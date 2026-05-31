@@ -1656,8 +1656,7 @@ pub(crate) async fn reconcile_public_security(
             reports.push(report);
         }
         None => {
-            // 中文注释:scope.provinces 必非空(否则无管理员有此权限);
-            // 兼容路径保留全国 fallback,但实际触发 ShengAdmin → 1 省、ShiAdmin → 1 省。
+            // 中文注释:scope.provinces 正常必非空;若为空则按全国省份执行显式对账。
             let target_provinces: Vec<String> = if scope.provinces.is_empty() {
                 crate::sfid::province::PROVINCES
                     .iter()

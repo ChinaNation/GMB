@@ -56,6 +56,6 @@ sfid/backend/institutions/model.rs
 
 - 新增业务 DTO 放到对应功能模块的 `model.rs`。
 - 只有真正跨模块共享且没有明确业务归属的模型才能放入 `models`。
-- 禁止恢复旧整包 runtime Store 表或旧 `runtime_cache_entries` 兼容层。
+- 禁止在 `models` 中承载数据库结构初始化或 Store 持久化细节。
 - 禁止在 `models` 目录恢复公民、CPMS、SFID 元信息、空权限占位、
   空会话占位或省管理员槽位 facade 文件。

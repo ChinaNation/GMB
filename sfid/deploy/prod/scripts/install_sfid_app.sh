@@ -10,7 +10,6 @@ APP_HOME="${1:-/opt/sfid}"
 BINARY_SRC="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PROJECT_ROOT="$(cd "${DEPLOY_ROOT}/../.." && pwd)"
 
 if [[ -z "${BINARY_SRC}" ]]; then
   echo "缺少后端二进制路径。用法: sudo bash install_sfid_app.sh /opt/sfid /path/to/sfid-backend-binary"
@@ -22,23 +21,15 @@ if [[ ! -f "${BINARY_SRC}" ]]; then
   exit 1
 fi
 
-if ! command -v psql >/dev/null 2>&1; then
-  echo "未检测到 psql，请先安装 PostgreSQL 客户端。"
-  exit 1
-fi
-
 if ! id -u sfid >/dev/null 2>&1; then
   useradd --system --home /opt/sfid --shell /usr/sbin/nologin sfid
 fi
 
-mkdir -p "${APP_HOME}/bin" "${APP_HOME}/backend/db/migrations" "${APP_HOME}/scripts" /etc/sfid
+mkdir -p "${APP_HOME}/bin" "${APP_HOME}/scripts" /etc/sfid
 install -m 755 "${BINARY_SRC}" "${APP_HOME}/bin/sfid-backend"
 chown -R sfid:sfid "${APP_HOME}"
 
-# 同步迁移脚本到部署目录
-cp -f "${PROJECT_ROOT}/backend/db/migrations/"*.sql "${APP_HOME}/backend/db/migrations/"
 install -m 755 "${SCRIPT_DIR}/backup_to_standby.sh" "${APP_HOME}/scripts/backup_to_standby.sh"
-install -m 755 "${SCRIPT_DIR}/apply_sfid_migrations.sh" "${APP_HOME}/scripts/apply_sfid_migrations.sh"
 install -m 755 "${SCRIPT_DIR}/update_sfid_app.sh" "${APP_HOME}/scripts/update_sfid_app.sh"
 
 # 生成环境变量模板（首次创建）
@@ -69,8 +60,6 @@ SFID_PUBLIC_SEARCH_TOKEN=
 SFID_SIGNING_SEED_HEX=CHANGE_ME_SIGNING_SEED_HEX
 SFID_KEY_ID=sfid-master-v1
 
-# PII 列加密密钥（兼容保留，基础站点部署可先留空）
-SFID_PII_KEY=
 ENVEOF
   chmod 600 /etc/sfid/sfid.env
   echo "已创建 /etc/sfid/sfid.env，请先修改后再启动服务。"
@@ -104,15 +93,6 @@ done
 install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backend.service" /etc/systemd/system/sfid-backend.service
 install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backup.service" /etc/systemd/system/sfid-backup.service
 install -m 644 "${DEPLOY_ROOT}/systemd/sfid-backup.timer" /etc/systemd/system/sfid-backup.timer
-
-# 执行数据库迁移（自动跳过已执行项）
-"${APP_HOME}/scripts/apply_sfid_migrations.sh" "${DATABASE_URL}" "${APP_HOME}/backend/db/migrations"
-
-# 收敛应用角色 DELETE 权限：仅允许必要运行时表，禁止删除审计日志
-psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 <<'SQL'
-GRANT DELETE ON TABLE binding_unique_locks, bind_reward_states, runtime_cache_entries, runtime_misc TO sfid_app;
-REVOKE DELETE ON TABLE audit_logs FROM sfid_app;
-SQL
 
 systemctl daemon-reload
 systemctl enable sfid-backend

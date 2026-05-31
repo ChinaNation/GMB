@@ -16,39 +16,79 @@ RUNTIME_PACKAGES=(
 )
 
 collect_offline_debs() {
-  if ! command -v apt-get >/dev/null 2>&1 || ! command -v apt-cache >/dev/null 2>&1; then
-    echo "ERROR: cpms-ubuntu24-amd64.run must be built on Ubuntu 24.04 with apt available."
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: cpms-ubuntu24-amd64.run must be built with Docker available."
     exit 1
   fi
 
-  echo "[4/8] Download Ubuntu 24.04 offline deb closure"
+  echo "[4/8] Download Ubuntu 24.04 offline deb closure in clean container"
   mkdir -p "${PAYLOAD_DIR}/debs"
-  (
-    cd "${PAYLOAD_DIR}/debs"
-    sudo apt-get update
-    mapfile -t packages < <(
-      {
-        printf '%s\n' "${RUNTIME_PACKAGES[@]}"
-        apt-cache depends --recurse \
+  rm -f "${PAYLOAD_DIR}/debs"/*.deb
+
+  # 中文注释：依赖闭包必须在官方 ubuntu:24.04 容器内解析，不能读取 GitHub runner 主机 apt 源。
+  docker run --rm --platform linux/amd64 \
+    -e CPMS_RUNTIME_PACKAGES="${RUNTIME_PACKAGES[*]}" \
+    -e HOST_UID="$(id -u)" \
+    -e HOST_GID="$(id -g)" \
+    -v "${PAYLOAD_DIR}/debs:/out" \
+    ubuntu:24.04 \
+    bash -lc '
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt-get update
+
+      candidate_for() {
+        apt-cache policy "$1" | awk "/Candidate:/ {print \$2; exit}"
+      }
+
+      deps_for() {
+        apt-cache depends \
           --no-recommends \
           --no-suggests \
           --no-conflicts \
           --no-breaks \
           --no-replaces \
           --no-enhances \
-          "${RUNTIME_PACKAGES[@]}" \
-        | sed -n 's/^[[:space:]]*PreDepends:[[:space:]]*//p; s/^[[:space:]]*Depends:[[:space:]]*//p' \
-        | sed 's/[<>]//g; s/|//g' \
-        | awk '{print $1}' \
-        | sed 's/:any$//'
-      } | sort -u | while read -r pkg; do
-        if apt-cache show "${pkg}" >/dev/null 2>&1; then
-          printf '%s\n' "${pkg}"
+          "$1" \
+        | sed -n "s/^[[:space:]]*PreDepends:[[:space:]]*//p; s/^[[:space:]]*Depends:[[:space:]]*//p" \
+        | sed "s/[<>]//g; s/|//g" \
+        | awk "{print \$1}" \
+        | sed "s/:any$//" \
+        | sort -u
+      }
+
+      read -r -a queue <<<"${CPMS_RUNTIME_PACKAGES}"
+      declare -A seen=()
+      resolved=()
+
+      while ((${#queue[@]} > 0)); do
+        pkg="${queue[0]}"
+        queue=("${queue[@]:1}")
+        pkg="${pkg#<}"
+        pkg="${pkg%>}"
+        pkg="${pkg%:any}"
+        [[ -z "${pkg}" || -n "${seen[$pkg]:-}" ]] && continue
+
+        candidate="$(candidate_for "${pkg}")"
+        if [[ -z "${candidate}" || "${candidate}" == "(none)" ]]; then
+          continue
         fi
+
+        seen["${pkg}"]=1
+        resolved+=("${pkg}")
+
+        while read -r dep; do
+          [[ -n "${dep}" ]] && queue+=("${dep}")
+        done < <(deps_for "${pkg}")
       done
-    )
-    sudo apt-get download "${packages[@]}"
-  )
+
+      mkdir -p /tmp/cpms-debs
+      cd /tmp/cpms-debs
+      apt-get download "${resolved[@]}"
+      mv ./*.deb /out/
+      chown -R "${HOST_UID}:${HOST_GID}" /out
+    '
 }
 
 create_run_installer() {
