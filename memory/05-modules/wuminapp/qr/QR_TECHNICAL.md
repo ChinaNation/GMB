@@ -282,8 +282,7 @@ WUMIN_QR_V1|system|challenge|expires_at
 - `signer/`：
   - `LocalSigner` 执行 sr25519 登录签名
   - `QrSigner` 提供扫码签名协议（`WUMIN_QR_V1`）
-  - `OfflineSignService` 为离线设备执行 `sign_request -> sign_response`（含 payload 交叉验证）
-  - `PayloadDecoder` 独立解码 SCALE call data，用于离线端防盲签验证
+  - 冷钱包离线解码与放行规则统一归 `wumin/lib/signer/`，wuminapp 只展示请求、扫描回执并校验回执一致性
 - `wallet/`：
   - `WalletManager` 提供钱包密钥材料
   - `capabilities/sign_service.dart` 已重构为 re-export `qr/login/` 的兼容层
@@ -305,7 +304,7 @@ WUMIN_QR_V1|system|challenge|expires_at
 ## 11. 测试覆盖
 
 - `test/qr/qr_router_test.dart`
-  - 各协议路由匹配（V2 协议标识）
+  - 各协议路由匹配（`WUMIN_QR_V1` 协议标识）
   - `gmb://account/` 和裸 SS58 地址识别
   - 旧版用户码兼容
   - 空值和未知格式处理
@@ -320,21 +319,13 @@ WUMIN_QR_V1|system|challenge|expires_at
   - 防重放
   - 钱包缺失/不匹配
 - `test/signer/qr_signer_test.dart`
-  - V2 请求/回执编解码往返（含 display、payloadHash）
+  - `sign_request / sign_response` 编解码往返（含 display、payloadHash）
   - display 校验（缺失 display、缺失 action）
   - 过期校验
   - `request_id` 和 `payload_hash` 匹配校验
   - `computePayloadHash` 确定性
-- `test/signer/offline_sign_service_test.dart`
-  - 签名与 display 交叉验证（matched / mismatched / decodeFailed）
-  - display mismatch 阻止签名
-  - pubkey 不匹配拒绝
-  - 冷钱包拒绝
-- `test/signer/payload_decoder_test.dart`
-  - transfer_keep_alive 解码
-  - internal_vote 解码(InternalVote::cast 22.0,赞成/反对)
-  - joint_vote 解码(JointVote::cast_admin 23.0)
-  - 未知 pallet / 过短 payload / 空值返回 null
+- `test/myid_page_test.dart`
+  - 电子护照绑定签名入口、状态渲染和绑定动作联动
 
 ## 12. 冷钱包扫码签名会话
 
@@ -389,12 +380,7 @@ WUMIN_QR_V1|system|challenge|expires_at
 
 ### 12.6 离线执行端页面
 
-`QrOfflineSignPage`：离线设备入口页面，负责扫描 `sign_request`、调用 `OfflineSignService.verifyPayload()` 交叉验证 display 与 payload、展示验证结果（三态颜色标识）、完成本机签名，并展示 `sign_response` 回执二维码。
-
-交叉验证状态展示：
-- 绿色横幅 — payload 解码与 display 一致（`matched`）
-- 红色横幅 — payload 解码与 display 不一致（`mismatched`），签名按钮禁用
-- 橙色横幅 — payload 无法解码（`decodeFailed`），仅展示 display 内容
+离线执行端页面在 wumin 中实现。wuminapp 只负责展示 `sign_request` 二维码并扫描 `sign_response` 回执；wumin 必须按两色规则独立验证，绿色通过才可签名，红色拒签不得生成可用回执。
 
 ## 13. 后续扩展
 

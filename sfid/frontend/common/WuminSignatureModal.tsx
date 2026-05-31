@@ -4,17 +4,20 @@
 import { Modal } from 'antd';
 import type { WuminSignaturePanelProps } from './WuminSignaturePanel';
 import { WuminSignaturePanel } from './WuminSignaturePanel';
+import { SFID_MODAL_Z_INDEX } from './modalStack';
 
 export interface WuminSignatureModalProps extends WuminSignaturePanelProps {
   open: boolean;
   title: string;
   onCancel: () => void;
+  zIndex?: number;
 }
 
 export function WuminSignatureModal({
   open,
   title,
   onCancel,
+  zIndex = SFID_MODAL_Z_INDEX.securitySignature,
   ...panelProps
 }: WuminSignatureModalProps) {
   return (
@@ -24,7 +27,10 @@ export function WuminSignatureModal({
       onCancel={onCancel}
       footer={null}
       destroyOnClose
+      maskClosable={false}
+      keyboard={false}
       width={760}
+      zIndex={zIndex}
     >
       <WuminSignaturePanel {...panelProps} />
     </Modal>

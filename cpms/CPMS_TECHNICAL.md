@@ -232,6 +232,8 @@ CPMS 只有两种管理员:
 `delete/complete`。删除签名二维码中的 `body.address / body.pubkey` 锁定当前登录 CPMS 管理员，
 其中 `body.pubkey` 和 payload 内的 `admin_pubkey` 必须统一为 `0x` + 64 位小写 hex；CPMS 管理员表
 内部可保存裸 hex，但进入 wumin 二维码前必须规范化，否则冷钱包会拒绝解析。
+冷钱包确认页的人机展示只显示档案号、管理员 SS58 地址和过期时间，`archive_id` 与原始
+`admin_pubkey` 只参与 payload 验真，不作为普通确认字段展示。
 
 删除 payload 固定为:
 

@@ -136,7 +136,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
     }
     if (!wallet.isHotWallet) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Step 1 暂仅支持热钱包提现;冷钱包路径 Step 2 接入')),
+        const SnackBar(content: Text('当前仅支持热钱包提现；冷钱包提现需可独立验证的签名协议')),
       );
       return;
     }

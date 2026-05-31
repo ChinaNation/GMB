@@ -22,6 +22,10 @@ wuminapp/lib/transaction/offchain-transaction/
 顶层交易 Tab 位于 `wuminapp/lib/transaction/transaction_tab_page.dart`。扫码、清算行端点解析、PaymentIntent 构造、签名与提交均由
 `lib/transaction/offchain-transaction/` 负责。
 
+扫码付款当前只允许本机热钱包签名。付款签名原文是 32 字节
+`NodePaymentIntent.signing_hash`;冷钱包无法从 hash 独立还原 PaymentIntent 业务字段，
+因此不得生成 `offchain_clearing_pay` 离线签名二维码。
+
 钱包页同理只保留充值 / 提现 / 余额的入口展示,真正的充值、提现、清算行余额
 查询与清算行绑定缓存均从 `lib/transaction/offchain-transaction/` 引入。
 

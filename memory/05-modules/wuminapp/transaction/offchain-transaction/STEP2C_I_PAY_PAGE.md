@@ -7,8 +7,7 @@
   `offchain_submitPayment` RPC、清算行目录查询、绑定缓存与跨行收款方主导支付。
 - **上层 ADR**:`memory/04-decisions/ADR-006-扫码支付-step1-同行MVP.md`
 - **前置**:`STEP2B_IV_A_CLEANUP.md`(老节点代码 + wuminapp 老入口下架)
-- **后续**:`STEP2C_II_RECEIVE_QR.md`(收款码与 WUMIN_QR_V1 协议完整化)与
-  `STEP2C_III_COLD_WALLET.md`(冷钱包扫签两段握手)
+- **后续**:`STEP2C_II_A_RECEIVE_QR.md`(收款码与 WUMIN_QR_V1 协议完整化)
 
 ---
 
@@ -23,7 +22,7 @@ Step 2b-iv-a 把老省储行清算代码从节点和 wuminapp 的 onchain 入口
 2026-04-29 Step 3 补齐后,付款页不再强制同行。扫码得到收款方 `bank`
 后,wuminapp 先从链上 `ClearingBankNodes[sfid_number]` 读取收款方清算节点端点,
 再把支付意图提交给**收款方清算节点**;页面同时展示付款方清算行、收款方
-清算行与同行/跨行状态。冷钱包支付授权仍留给后续 QR 往返签名流程。
+清算行与同行/跨行状态。清算行支付当前只支持热钱包；冷钱包若要接入，必须另行设计可独立验证的 PaymentIntent 原文签名协议，不能对 32 字节 signing_hash 直接放行。
 
 ---
 
@@ -78,7 +77,6 @@ storage key 布局稳定性 + 不同 bank 不同 key + hex 编解码 roundtrip +
 | 文件 | 原因 |
 |---|---|
 | `lib/rpc/offchain.dart` | 老 `submitSignedTx` / `queryTxStatus` / `queryInstitutionRate` 客户端,节点侧 Step 2b-iv-a 已删对应 RPC |
-| `lib/transaction/offchain-transaction/pages/offchain_pay_page.dart` | 老付款页,已由 `offchain_clearing_pay_page.dart` 替代 |
 
 ---
 
@@ -107,7 +105,7 @@ UI(ready):
        tx_id = Random.secure 32B,
        payer = wallet.pubkeyHex,
        payer_bank = ss58ToBytes(payer_bank),
-       recipient = _decodeAccount(qr.toAddress),    // 兼容 SS58 / 0x hex
+       recipient = _decodeAccount(qr.toAddress),    // 统一解析为 32B AccountId
        recipient_bank = hexToBytes(recipient_bank_hex),
        amount = amount_fen,
        fee = calcFeeFen(amount, rate_bp, min_fee_fen),
@@ -171,7 +169,7 @@ No issues found!  (全项目)
 | 费率查询 / 提交走独立 WSS 连接,RTT 叠加 | **P2** | 每次方法连→发→收首帧→断开,确认流程总 5 次 RTT;Step 2c-ii 考虑复用长连接 |
 | 跨行支付提交到收款方节点后,付款方余额/nonce 不在收款方本地 ledger | **已修复** | node RPC 会读链上 `DepositBalance[payer_bank][payer]` 与 `L3PaymentNonce[payer]`,并叠加本节点 pending 做早拒,不创建付款方 ghost 账户 |
 | `offchain_queryFeeRate` 返回 `rate_bp==0` 时 UI 仅显示错误,用户体验欠缺 | **P3** | 本步先 hard-fail 提示联系运维,后续可引导到"查看清算行详情"页面 |
-| 冷钱包 `isHotWallet==false` 直接 SnackBar 拒绝 | **P2** | Step 2c-iii 通过 QR 往返签名闭合 |
+| 冷钱包 `isHotWallet==false` 直接 SnackBar 拒绝 | **当前目标状态** | 当前 payload 是 32 字节 signing_hash，冷钱包不能独立还原 PaymentIntent 业务字段，必须拒绝 |
 | SFID 地址配置分叉 | **已修复** | 链下扫码支付已统一使用 `SfidApiConfig.defaultBaseUrl`;生产固定 `https://sfid.crcfrcn.com`,本地开发固定 USB reverse 到 `127.0.0.1:8899` |
 
 ---
@@ -180,7 +178,7 @@ No issues found!  (全项目)
 
 - **Step 2c-ii**:`receive_qr_page` 实时余额推送 + WUMIN_QR_V1 协议规范化(统一
   商户码格式)
-- **Step 2c-iii**:冷钱包扫签(热→冷 sign request QR + 冷→热 sign response QR)
+- **冷钱包支付**:必须先改为可独立验证的 PaymentIntent 原文签名协议，再接入 QR 签名
 - **提交成功后本地历史记录**:暂不写入本地 `LocalTxStore`(老路径用,新清算行
   历史改由订阅 `PaymentSettled` 事件沉淀,Step 2c-ii 一并实现)
 
@@ -190,10 +188,9 @@ No issues found!  (全项目)
 
 - 2026-04-20:Step 2c-i 完整落地。节点侧新增 2 个只读 RPC(`queryUserBank` /
   `queryFeeRate`)+ `OffchainClearingRpcImpl` 持 `client`;wuminapp 新增
-  `payment_intent.dart`(SCALE 编码 + 签名哈希)+ `offchain_clearing_pay_page.dart`
-  (5 阶段状态机)+ `offchain_clearing.dart` 3 方法;删除 `lib/rpc/offchain.dart`
-  和 `lib/transaction/offchain-transaction/pages/offchain_pay_page.dart` 两个老文件;扫码支付入口通过
-  offchain 独立流程跳转。`cargo check -p node --tests` 零 error;`flutter analyze` 零 issue。
+  `payment_intent.dart`(SCALE 编码 + 签名哈希)+ `offchain_pay_page.dart`
+  (5 阶段状态机)+ `offchain_clearing.dart` 3 方法;删除 `lib/rpc/offchain.dart`;
+  扫码支付入口通过 offchain 独立流程跳转。`cargo check -p node --tests` 零 error;`flutter analyze` 零 issue。
 - 2026-04-29:Step 3 补齐收款方主导跨行支付。新增
   `clearing_bank_directory.dart`,设置页真实搜索并缓存节点端点;扫码付款按收款方
   `ClearingBankNodes` 选择节点,付款页放开跨行并按收款方费率计费;钱包卡接入

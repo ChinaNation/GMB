@@ -119,10 +119,21 @@
 | `pubkey` | string | 是 | 签名者公钥,`0x` + hex |
 | `sig_alg` | string | 是 | 固定 `"sr25519"` |
 | `payload_hex` | string | 是 | 待签 payload 字节,`0x` + hex,≤32768 字符 |
-| `display` | object | 是 | 人可读摘要,见下 |
+| `display` | object | 是 | 在线端提供的人可读摘要,冷钱包必须以本地 decoder 独立解析结果为准 |
 | `display.action` | string | 是 | 动作 key,必须登记在 `qr-action-registry.md` |
 | `display.summary` | string | 是 | 一句话摘要,离线端必须显示 |
-| `display.fields` | array | 否 | 结构化字段列表,协议字段每项 `{key, label, value}`;纯辅助展示字段不得参与签名识别 |
+| `display.fields` | array | 否 | 结构化提示字段,每项 `{key, label, value}`;若 key 与 decoder 验真字段同名,value 必须逐字一致 |
+
+**真实签名内容与展示分层**:
+
+- `payload_hex` 是唯一真实待签内容。`sign_response.signature` 必须签
+  `hex_decode(payload_hex)` 的原始字节,不得签 `display`。
+- 冷钱包 decoder 必须从 `payload_hex` 解出验真字段。能独立解码并交叉验证时绿色通过;
+  不能独立解码或 display 与 decoder 冲突时红色拒签。
+- 人机确认字段只显示中文业务信息和 SS58 地址。`payload_hash`、内部 ID、nonce、原始
+  `0x<64hex>` 公钥等仅机器校验字段默认不进入确认页。
+- 机器交互可以继续使用 `0x` 公钥/哈希;所有人机可见账户必须转为 CitizenChain
+  SS58(prefix=2027),无法确认是 32 字节账户时才显示原字段。
 
 ### 4.4 `sign_response`(临时)
 

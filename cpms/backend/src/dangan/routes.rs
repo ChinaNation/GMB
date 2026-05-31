@@ -1393,7 +1393,7 @@ fn build_archive_delete_sign_request(
     payload_hex: &str,
     archive: &Archive,
 ) -> Result<String, (StatusCode, Json<ApiError>)> {
-    // 中文注释：display 字段必须与 wumin 的 payload 解码结果一致，否则 wumin 会拒签。
+    // 中文注释：payload 保留真实删除原文；展示层只放人工可核对的档案号、管理员 SS58 和过期时间。
     let admin_pubkey_hex = normalize_pubkey_hex(admin_pubkey).ok_or_else(|| {
         err(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1417,8 +1417,7 @@ fn build_archive_delete_sign_request(
                 "summary": "确认删除 CPMS 公民档案",
                 "fields": [
                     { "key": "archive_no", "label": "档案号", "value": archive.archive_no },
-                    { "key": "archive_id", "label": "档案ID", "value": archive.archive_id },
-                    { "key": "admin_pubkey", "label": "管理员公钥", "value": admin_pubkey_hex },
+                    { "key": "admin_pubkey", "label": "管理员", "value": admin_address },
                     { "key": "expires_at", "label": "过期时间", "value": expire_at.to_string() }
                 ]
             }
@@ -1529,7 +1528,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_delete_sign_request_uses_canonical_0x_admin_pubkey() {
+    fn archive_delete_sign_request_keeps_pubkey_and_displays_ss58() {
         let bare_pubkey = "22".repeat(32);
         let qr = build_archive_delete_sign_request(
             "adc_test",
@@ -1546,8 +1545,8 @@ mod tests {
 
         assert_eq!(json["body"]["pubkey"], format!("0x{}", bare_pubkey));
         assert_eq!(
-            json["body"]["display"]["fields"][2]["value"],
-            format!("0x{}", bare_pubkey)
+            json["body"]["display"]["fields"][1]["value"],
+            "5AdminAddress"
         );
     }
 }

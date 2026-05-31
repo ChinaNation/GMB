@@ -75,7 +75,7 @@ wuminapp/test/governance/admins-change/
 - `personalDuoqian`：个人多签主体，`org=3`，`kind=2`。
 - `institutionAccount`：机构账户主体，`org=4/5`，`kind=3`。
 
-`/Users/rhett/GMB/wuminapp/lib/governance/admins-change/services/institution_admin_service.dart` 是查询门面，但不再接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminSubjectIdentity`。历史上按单一字符串混用个人、机构、治理主体的入口已删除。
+`/Users/rhett/GMB/wuminapp/lib/governance/admins-change/services/institution_admin_service.dart` 是查询门面，但不接收模糊字符串身份；所有 `fetchAdmins / fetchThreshold / isAdmin / clearCache` 调用都必须传 `AdminSubjectIdentity`。按单一字符串混用个人、机构、治理主体的入口不存在。
 
 ## 管理员更换载荷与阈值
 
@@ -87,7 +87,7 @@ wuminapp/test/governance/admins-change/
 
 规则：
 
-- 不兼容旧 `[org, subject_id, new_admins]` 载荷。
+- `new_threshold` 是载荷必填字段，端上和链端按同一字节结构构造、解析和签名。
 - 内置治理机构不是创建/注册对象，wuminapp 只展示；只有进入“换管理员”提案时才构造管理员更换交易。
 - 内置治理机构不显示阈值输入框，`new_threshold` 固定为制度阈值：NRC=13，PRC=6，PRB=6。
 - 个人多签和机构账户显示动态阈值输入框，端上只做前置校验：`threshold * 2 > admin_count && threshold <= admin_count`。
@@ -98,9 +98,9 @@ wuminapp/test/governance/admins-change/
 
 管理员激活服务位于 `/Users/rhett/GMB/wuminapp/lib/governance/admins-change/services/admin_activation_service.dart`。机构管理员列表和提案上下文只引用该服务，不再从 `lib/institution/` 承载激活逻辑。
 
-激活记录使用 `activated_admins_v3`，只保存 `identityKey / subjectIdHex / org / kind / pubkeyHex / activatedAtMs`。旧 `activated_admins_v1/v2` 不读取、不迁移，避免把旧 `sfidNumber` 语义带回管理员更换模块。
+激活记录使用 `activated_admins_v3`，只保存 `identityKey / subjectIdHex / org / kind / pubkeyHex / activatedAtMs`，查询和清理都按 `subjectIdHex + pubkeyHex` 精确匹配。
 
-激活 QR 与 node 桌面端统一使用 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_subject`，字段为 `org / subject / pubkey`；旧 `GMB_ACTIVATE + sfidNumber` 只作为历史协议，不再作为当前 admins-change 激活入口。
+激活 QR 与 node 桌面端统一使用 `GMB_ACTIVATE_SUBJECT_V1 / activate_admin_subject`，字段为 `org / subject / pubkey`。
 
 ## 2026-05-10 修复记录
 

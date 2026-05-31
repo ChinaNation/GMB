@@ -123,8 +123,7 @@ pub fn build_register_sign_request(
     let (clean, bytes) = parse_pubkey(pubkey_hex)?;
     let call_data = build_register_call_data(sfid_number, peer_id, rpc_domain, rpc_port)?;
     let summary = format!("声明清算行节点 {sfid_number} @ {rpc_domain}:{rpc_port}");
-    // display.fields key/value 必须与 wumin PayloadDecoder 输出 1:1 对齐(Step 3 加 decoder)。
-    // 当前 wumin 尚未支持本 action,Step 2 dev 链端到端验证用 dry-run + 黄色盲签兜底。
+    // display.fields key/value 必须与 wumin PayloadDecoder 输出 1:1 对齐。
     let fields = serde_json::json!([
         { "key": "sfid_number", "label": "机构身份号码", "value": sfid_number },
         { "key": "peer_id", "label": "节点 PeerId", "value": peer_id },

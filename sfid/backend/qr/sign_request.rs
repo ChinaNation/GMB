@@ -15,6 +15,10 @@ pub(crate) fn display_field(key: &str, label: &str, value: &str) -> serde_json::
     json!({ "key": key, "label": label, "value": value })
 }
 
+pub(crate) fn display_account(value: &str) -> String {
+    pubkey_hex_to_ss58(value).unwrap_or_else(|| value.to_string())
+}
+
 pub(crate) fn build_sign_request(
     request_id: &str,
     issued_at: i64,

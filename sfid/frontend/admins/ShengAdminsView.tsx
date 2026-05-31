@@ -27,6 +27,7 @@ import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
 import { parseSignedReceiptPayload } from '../utils/parseSignedPayload';
 import { WuminSignatureModal } from '../common/WuminSignatureModal';
+import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
 
 export interface ShengAdminsViewProps {
   /// 'list' = 顶层 sheng_admin 列表分支(全省网格);
@@ -283,6 +284,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       title: <div style={{ textAlign: 'center', width: '100%' }}>编辑市级管理员</div>,
       icon: null,
       centered: true,
+      zIndex: SFID_MODAL_Z_INDEX.business,
       footer: centeredConfirmFooter,
       content: (
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -341,6 +343,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       title: <div style={{ textAlign: 'center', width: '100%' }}>删除市级管理员</div>,
       icon: null,
       centered: true,
+      zIndex: SFID_MODAL_Z_INDEX.business,
       footer: centeredConfirmFooter,
       content: (
         <div style={{ textAlign: 'center' }}>
@@ -360,6 +363,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         } catch (err) {
           const msg = err instanceof Error ? err.message : '删除市级管理员失败';
           message.error(msg);
+          throw err;
         } finally {
           setOperatorsLoading(false);
         }

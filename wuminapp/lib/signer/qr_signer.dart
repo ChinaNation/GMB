@@ -53,9 +53,8 @@ class QrSigner {
 
   /// 构造 sign_request envelope(wuminapp 热钱包调用)。
   ///
-  /// 注:历史 `specVersion` 入参已移除。链端验签需要的 spec_version 是 SCALE
-  /// signing payload 的 additional_signed 字段(由 caller 在 payload_hex 内部
-  /// 编码),不需要再单独放进 envelope body。strict 两色模式独家把关错误布局。
+  /// 链端验签需要的 runtime 版本信息位于 `payload_hex` 内部的签名载荷，
+  /// envelope body 不单独携带版本字段。
   SignRequestEnvelope buildRequest({
     required String requestId,
     required String address,
@@ -89,7 +88,7 @@ class QrSigner {
 
   String encodeResponse(SignResponseEnvelope response) => response.toRawJson();
 
-  /// 解析 sign_request envelope(wumin 冷钱包调用)。
+  /// 解析 sign_request envelope。
   SignRequestEnvelope parseRequest(String raw) {
     QrEnvelope<QrBody> env;
     try {
@@ -220,8 +219,7 @@ class QrSigner {
   }
 
   void _validateHexField(String value, String field) {
-    // feedback_pubkey_format_rule 铁律: 内部统一 0x 小写 hex。
-    // wumin SignRequestBody.fromJson 同要求 0x 前缀, 这里源头拦截。
+    // sign_request 机读字段统一使用 0x hex,这里源头拦截。
     if (!value.startsWith('0x')) {
       throw QrSignException(QrSignErrorCode.invalidField, '$field 必须以 0x 开头');
     }

@@ -86,7 +86,8 @@ sfid/backend/
   `start` 只生成 `WUMIN_QR_V1 / sign_request` 冷钱包签名请求,`confirm` 验证 sr25519 回执后
   才生成 WebAuthn creation options,`complete` 完成浏览器凭据 attestation 并替换当前管理员有效 Passkey。
 - 通用 `WUMIN_QR_V1 / sign_request` envelope 构造归 `qr/sign_request.rs`;业务模块只传入
-  已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。
+  已确定的签名原文、摘要和展示字段,不得在各业务模块复刻二维码协议包装。机器验真字段保留
+  `0x` 公钥/哈希,人机展示字段必须转为中文和 SS58 地址。
 - CPMS 安装授权、安装码重签发、禁用、启用、吊销、删除归省级管理员;
   市级管理员不得通过 CPMS handler 操作授权治理。
 - 跨模块链底层工具只允许放在 `sfid/backend/app_core/chain_*`。

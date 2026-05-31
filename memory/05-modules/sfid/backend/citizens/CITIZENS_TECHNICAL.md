@@ -71,6 +71,7 @@
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。
+- wuminapp 扫描 `citizen_bind` 请求时必须先独立解析 `payload_hex`，确认 action、档案号、公民状态、选举权利和钱包地址与 display 一致后才签名。
 - `archive_no / sfid_code / wallet_pubkey` 三者保持一对一唯一关系。
 - `status_updated_at` 参与 CPMS `ARCHIVE` 签名原文；旧时间戳档案码不得覆盖新状态。
 

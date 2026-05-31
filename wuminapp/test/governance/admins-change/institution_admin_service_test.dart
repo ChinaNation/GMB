@@ -270,13 +270,6 @@ void main() {
     );
 
     SharedPreferences.setMockInitialValues({
-      'activated_admins_v2': jsonEncode([
-        {
-          'pubkeyHex': 'dd' * 32,
-          'sfidNumber': 'personal:${'77' * 32}',
-          'activatedAtMs': 0,
-        }
-      ]),
       'activated_admins_v3': jsonEncode(
         [active, stale, unrelated].map((item) => item.toJson()).toList(),
       ),

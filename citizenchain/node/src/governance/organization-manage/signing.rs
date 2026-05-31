@@ -7,7 +7,8 @@
 
 use crate::governance::admins_change::types::qr_org_display_value;
 use crate::governance::signing::{
-    build_sign_request_from_call_data, encode_compact_u32_pub, VoteSignRequestResult,
+    build_sign_request_from_call_data, encode_compact_u32_pub, pubkey_to_ss58,
+    VoteSignRequestResult,
 };
 
 const DUOQIAN_PALLET_INDEX: u8 = 17;
@@ -215,13 +216,8 @@ pub fn build_propose_create_institution_sign_request(
             ),
         }));
     }
-    let signer_admin_pubkey_display = format!(
-        "0x{}",
-        signer_admin_pubkey
-            .strip_prefix("0x")
-            .unwrap_or(signer_admin_pubkey)
-            .to_ascii_lowercase()
-    );
+    let signer_admin_pubkey_bytes = parse_account32(signer_admin_pubkey)?;
+    let signer_admin_pubkey_display = pubkey_to_ss58(&signer_admin_pubkey_bytes)?;
     fields.push(serde_json::json!({
         "key": "province",
         "label": "签发省份",

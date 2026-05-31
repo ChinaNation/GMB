@@ -11,7 +11,7 @@
 ## 一、四条铁律
 
 1. **扫码协议只有一个**:`WUMIN_QR_V1`。
-2. **两色终态**:绿色 = 识别通过并允许签名;红色 = 识别失败并禁止签名。禁止黄色盲签兜底。
+2. **两色终态**:绿色 = 识别通过并允许签名;红色 = 识别失败并禁止签名。
 3. **识别 = 结构识别 + payload 交叉验证**。envelope 合法、payload 可被冷钱包完整解码、display 与 decoder 输出逐字一致,才允许签名。
 4. **不残留、不兼容、不过渡**。旧 action、旧 pallet/call、旧字段门控不得作为兼容分支保留。
 
@@ -59,16 +59,17 @@
 - `body.sig_alg == 'sr25519'`
 - `body.payload_hex` 是非空 `0x<hex>`
 - `body.display.action` 非空,且已登记在 `qr-action-registry.md`
-- `body.display.fields[*].key` 与 registry 字段逐字对齐
+- `body.display.fields[*].key` 若存在,必须是 registry 已登记字段
 - `PayloadDecoder.decode(body.payload_hex)` 返回 `decoded != null`
 - `decoded.action == body.display.action`
-- 对 `decoded.fields` 每一项 `(key, value)`,在 `body.display.fields` 中按同名 `key` 找到的 value 必须与 decoded 侧 value 逐字相等
+- 对 `decoded.fields` 每一项 `(key, value)`,在 `body.display.fields` 中按同名 `key`
+  找到的 value 必须与 decoded 侧 value 逐字相等
+- 冷钱包确认页只展示 `decoded.reviewFields`:中文标签、业务字段和 SS58 地址;内部哈希、
+  nonce、原始公钥 hex、内部 ID 不作为用户确认内容展示
 
 全过即绿色,允许生成 `sign_response`。
 
-`spec_version` 不再参与 envelope 层识别,也不存在 `supportedSpecVersions` 集合门控。链端验签所需的 runtime `spec_version` 仍在 Substrate signing payload 的 additional_signed 中,不作为 QR envelope 字段。
-
-## 六、Runtime 升级哈希直签例外
+## 六、Runtime 升级哈希签名例外
 
 `propose_runtime_upgrade` 与 `developer_direct_upgrade` 的完整 WASM call data 体积过大,不能放入 QR。当前规则:
 
@@ -87,7 +88,8 @@
 - `display.action == sfid_admin_action`
 - `domain == sfid_admin_governance`
 - `qr_proto == WUMIN_QR_V1`
-- `display.fields` 顺序固定为 `action_type / province / actor_pubkey / target / before_hash / after_hash / payload_hash`
+- `display.fields` 只放 `action_type / province / actor_pubkey / target` 等用户确认字段;
+  `before_hash / after_hash / payload_hash` 只参与机器验真,不进入确认页
 - `payload_hash` 必须等于 JSON 文本 SHA-256
 
 ## 八、action / fields 对齐规则
@@ -103,14 +105,8 @@
 
 ## 九、已废弃识别规则
 
-以下规则不得恢复:
-
-- `supportedSpecVersions` / `isSupported` envelope 门控
-- `allowedHashedActions` 黄色盲签白名单
-- `VotingEngine(9)` 旧投票 action
-- 业务 pallet 的 `execute_*` / `cancel_failed_*` wrapper action
-- `DuoqianManage` 旧 pallet 名
-- `user_duoqian` 当前 kind
+任何不在 `qr-protocol-spec.md` 与 `qr-action-registry.md` 当前登记内的 kind、action、
+field 或 pallet/call 组合都不得恢复。
 
 ## 十、验证清单
 
@@ -125,7 +121,7 @@
 7. `propose_create_institution` / `propose_close_institution`
 8. `propose_create_personal` / `propose_close_personal`
 9. `propose_transfer` / `propose_safety_fund_transfer` / `propose_sweep_to_main`
-10. `propose_runtime_upgrade` / `developer_direct_upgrade` 的 32 字节哈希直签例外
+10. `propose_runtime_upgrade` / `developer_direct_upgrade` 的 32 字节哈希签名例外
 11. `sfid_admin_action`
 
 ### 应红色拒绝
@@ -144,10 +140,6 @@
 
 桌面端和移动端都是客户端程序,反编译即可拿到打包私钥。把来源证明放到客户端不能建立稳定 provenance,反而会制造两套判断模型。拒绝。
 
-### 10.2 黄色盲签兜底
-
-白名单按 action 字符串猜来源,无法验证 payload 实际内容。任何 decode 失败都必须红色拒绝。拒绝。
-
-### 10.3 老版兼容模式
+### 10.2 老版兼容模式
 
 本仓库处于重新创世前收口阶段,协议固定前必须清掉旧分支。拒绝。

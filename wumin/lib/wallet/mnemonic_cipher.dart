@@ -83,7 +83,11 @@ class MnemonicCipher {
 
       final output = Uint8List(cipher.getOutputSize(ciphertextAndTag.length));
       final len = cipher.processBytes(
-        ciphertextAndTag, 0, ciphertextAndTag.length, output, 0,
+        ciphertextAndTag,
+        0,
+        ciphertextAndTag.length,
+        output,
+        0,
       );
       final totalLen = len + cipher.doFinal(output, len);
 
@@ -93,28 +97,12 @@ class MnemonicCipher {
     }
   }
 
-  /// 判断存储值是否为加密格式。
-  ///
-  /// 明文助记词是空格分隔的英文单词，加密密文是 Base64。
-  /// 用于透明迁移：旧版本存储的明文可自动升级为加密格式。
-  static bool isEncrypted(String value) {
-    // 明文助记词含空格，Base64 不含空格
-    if (value.contains(' ')) return false;
-    if (value.length < 40) return false;
-    try {
-      final decoded = base64Decode(value);
-      return decoded.length >= _ivLen + _tagLen + 1;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// 获取或生成 AEK。
   ///
   /// 优先从内存缓存读取；未命中则从 SecureStorage 读取；
   /// 首次使用时生成随机 AEK 并尝试持久化。
   /// 若 SecureStorage 写入失败，仍使用内存中的 AEK 保证当前会话可用，
-  /// 下次启动会重新生成（此时旧密文不可解密，但不会导致崩溃）。
+  /// 下次启动会重新生成（当前密文不可解密，但不会导致崩溃）。
   static Future<Uint8List> _ensureAek() async {
     final cached = _cachedAek;
     if (cached != null) return cached;

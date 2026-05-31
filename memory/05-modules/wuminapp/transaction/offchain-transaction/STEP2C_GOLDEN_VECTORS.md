@@ -89,7 +89,7 @@ mock 修好后暴露出 3 个之前因编译失败而根本无法运行的业务
 
 ```
 $ cd citizenchain && cargo test --package offchain-transaction --lib 'batch_item::tests'
-test result: ok. 5 passed; 0 failed  # 3 个 golden + 2 个旧 signing_hash 基础测试
+test result: ok. 5 passed; 0 failed  # 3 个 golden + 2 个 signing_hash 基础测试
 
 $ cd wuminapp && flutter test test/trade/payment_intent_golden_test.dart
 All tests passed!  # 5 个
@@ -107,8 +107,8 @@ E2E 冒烟第二层(启 dev chain + 走真实 bind/deposit/pay)需要:
 - SFID 后端 mock 或 skip
 - 进程管理 test harness
 
-工作量 1-2 天。本步**先不做**,第一层协议字节锁定已经覆盖 Step 2c-i 引入的
-最大风险(字节对齐)。第二层在 Step 2c-iii / Step 3 前视需要再做。
+工作量 1-2 天。本步**先不做**,第一层协议字节锁定已经覆盖当前付款页引入的
+最大风险(字节对齐)。第二层在 Step 3 前视需要再做。
 
 ---
 

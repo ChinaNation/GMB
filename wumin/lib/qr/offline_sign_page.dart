@@ -285,8 +285,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           alignment: Alignment.bottomCenter,
           child: Container(
             margin: const EdgeInsets.only(bottom: 48, left: 48, right: 48),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
               color: AppTheme.surfaceCard.withAlpha(200),
               borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -369,8 +368,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
           text: '警告:交易内容与摘要不符,禁止签名',
         );
       case DisplayMatchStatus.decodeFailed:
-        // 两色识别模型(2026-04-22): 无法解码 → 红色拒签,
-        // 不再展示"来自请求方的黄色信息"(feedback_no_compatibility)。
+        // 两色识别模型:无法解码 → 红色拒签。
         statusBanner = _buildBanner(
           color: AppTheme.danger,
           icon: Icons.dangerous_rounded,
@@ -385,21 +383,20 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     if (decoded != null) {
       detailRows = [
         _detailRow('交易类型', actionLabel),
-        ...decoded.fields.entries.map((e) {
+        ...decoded.reviewFields.entries.map((e) {
           // 优先从 display.fields 中找中文标签
           final displayLabel = display.fields
               .where((f) => f.key == e.key)
               .map((f) => f.label)
               .firstOrNull;
-          return _detailRow(
-              displayLabel ?? e.key, _fieldValue(e.key, e.value));
+          return _detailRow(displayLabel ?? e.key, _fieldValue(e.key, e.value));
         }),
       ];
     } else {
       detailRows = [
         _detailRow('交易类型', actionLabel),
         ...display.fields.map(
-          (f) => _detailRow(f.label, _fieldValue(f.label, f.value)),
+          (f) => _detailRow(f.label, _fieldValue(f.key ?? f.label, f.value)),
         ),
       ];
     }
@@ -486,7 +483,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
     final verification = _verification;
     final isMismatched =
         verification?.displayMatch == DisplayMatchStatus.mismatched;
-    // 两色识别模型(2026-04-22): decodeFailed 一律红色拒签,不再走白名单兜底。
+    // 两色识别模型:decodeFailed 一律红色拒签。
     final isDecodeFailed =
         verification?.displayMatch == DisplayMatchStatus.decodeFailed;
 
@@ -507,9 +504,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                expired
-                    ? '签名请求已过期，请重新扫描'
-                    : '签名请求有效期剩余：${_remainingSeconds}s',
+                expired ? '签名请求已过期，请重新扫描' : '签名请求有效期剩余：${_remainingSeconds}s',
                 style: TextStyle(
                   color: expired ? AppTheme.danger : AppTheme.success,
                   fontWeight: FontWeight.w600,
@@ -663,9 +658,7 @@ class _OfflineSignPageState extends State<OfflineSignPage> {
       ),
       body: response != null
           ? _buildResponseView(response)
-          : (request != null
-              ? _buildRequestSummary(request)
-              : _buildScanner()),
+          : (request != null ? _buildRequestSummary(request) : _buildScanner()),
     );
   }
 }

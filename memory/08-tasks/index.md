@@ -56,6 +56,9 @@
 
 ## done
 
+- `memory/08-tasks/done/20260531-sfid-signature-modal-stack.md`
+- `memory/08-tasks/done/20260531-统一签名协议复查残留修复.md`
+- `memory/08-tasks/done/20260531-统一签名协议整改.md`
 - `memory/08-tasks/done/20260320-193702-完善-ai-编程系统的启动验收-任务卡硬规则-细粒度文档校验和轻量中文注释门禁.md`
 - `memory/08-tasks/done/20260320-194945-删除已无业务代码的-citizenchain-node-目录-并将桌面节点功能统一收口到.md`
 - `memory/08-tasks/done/20260320-220031-修复-citizenchain-node-backend-对-runtime-primitives-的错误路径引用.md`
@@ -380,6 +383,8 @@
 - `memory/08-tasks/done/20260529-cpms安全与残留整改.md`
 - `memory/08-tasks/done/20260530-193458-sfid-本地启动端口与数据库残留修复.md`
 - `memory/08-tasks/done/20260530-202322-sfid统一冷钱包签名组件与passkey注册流程.md`
+- `memory/08-tasks/done/20260530-203838-passkey更新密钥首次登录红色角标.md`
+- `memory/08-tasks/done/20260530-204022-passkey更新密钥红色角标放大.md`
 - `memory/08-tasks/done/20260530-ci-node24-unification.md`
 - `memory/08-tasks/done/20260530-cpms-archive-list-search-align.md`
 - `memory/08-tasks/done/20260530-cpms-archive-list-town-column.md`

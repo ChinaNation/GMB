@@ -17,7 +17,8 @@ class DecodedPayload {
     required this.action,
     required this.summary,
     required this.fields,
-  });
+    Map<String, String>? reviewFields,
+  }) : reviewFields = reviewFields ?? fields;
 
   /// 动作标识，与 display.action 一致。
   final String action;
@@ -27,6 +28,12 @@ class DecodedPayload {
 
   /// 结构化字段，用于与 display.fields 逐一比对。
   final Map<String, String> fields;
+
+  /// 用户确认页展示字段。
+  ///
+  /// 中文注释：`fields` 保留独立验真的机器字段，`reviewFields` 只放人能判断的
+  /// 中文业务信息和 SS58 地址，避免把 payload_hash、内部 ID、原始公钥 hex 暴露为确认内容。
+  final Map<String, String> reviewFields;
 }
 
 /// SCALE call data 解码器。
@@ -305,79 +312,9 @@ class PayloadDecoder {
       }
 
       // ── OnchainIssuance(25) · 链上发行代币(Plain FT, ADR-011 v3) ──
-      // 框架阶段:10 个 propose_X 解码暂用 _decodeOnchainAssetPlaceholder 兜底,
-      // 后续任务卡 D 实装具体 SCALE 解码(参考 _decodeProposeTransfer 等同款)。
+      // 当前未实现完整 SCALE 字段解析,不能独立验证业务内容,因此红色拒签。
       if (palletIndex == PalletRegistry.onchainIssuancePallet) {
-        if (callIndex == PalletRegistry.proposeIssueCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_onchain_asset_issue',
-            summary: '发起 创建用户代币 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMintCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_onchain_asset_mint',
-            summary: '发起 增发用户代币 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeBurnCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_onchain_asset_burn',
-            summary: '发起 销毁用户代币 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeCloseAssetCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_onchain_asset_close',
-            summary: '发起 关闭用户代币 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeAssetTransferCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_onchain_asset_transfer',
-            summary: '发起 用户代币转账 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMonitorFreezeCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_monitor_freeze',
-            summary: '发起 NRC 监管 冻结持仓 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMonitorUnfreezeCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_monitor_unfreeze',
-            summary: '发起 NRC 监管 解冻持仓 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMonitorConfiscateCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_monitor_confiscate',
-            summary: '发起 NRC 监管 强制 burn 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMonitorForceTransferCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_monitor_force_transfer',
-            summary: '发起 NRC 监管 强制划转 提案(待解码业务字段)',
-          );
-        }
-        if (callIndex == PalletRegistry.proposeMonitorForceCloseCall) {
-          return _decodeOnchainAssetPlaceholder(
-            bytes,
-            action: 'propose_monitor_force_close',
-            summary: '发起 NRC 监管 整币封禁 提案(待解码业务字段)',
-          );
-        }
+        return null;
       }
 
       return null;
@@ -408,17 +345,25 @@ class PayloadDecoder {
         return null;
       }
       final payloadHash = '0x${sha256.convert(raw).toString()}';
+      final actorAddress = _pubkeyHexToSs58OrRaw(actorPubkey);
+      final targetAddress = _pubkeyHexToSs58OrRaw(target);
       return DecodedPayload(
         action: 'sfid_admin_action',
         summary: 'SFID 管理员治理',
         fields: <String, String>{
           'action_type': _sfidAdminActionLabel(actionType),
           'province': province,
-          'actor_pubkey': actorPubkey,
-          'target': target,
+          'actor_pubkey': actorAddress,
+          'target': targetAddress,
           'before_hash': beforeHash,
           'after_hash': afterHash,
           'payload_hash': payloadHash,
+        },
+        reviewFields: <String, String>{
+          'action_type': _sfidAdminActionLabel(actionType),
+          'province': province,
+          'actor_pubkey': actorAddress,
+          'target': targetAddress,
         },
       );
     } catch (_) {
@@ -429,36 +374,54 @@ class PayloadDecoder {
   static String _sfidAdminActionLabel(String actionType) {
     switch (actionType) {
       case 'PASSKEY_REGISTER':
-        return '绑定 Passkey';
+        return '更新 Passkey';
       case 'CREATE_OPERATOR':
         return '新增市级管理员';
       case 'UPDATE_OPERATOR':
-        return '修改市级管理员';
-      case 'SET_OPERATOR_STATUS':
-        return '停用/启用市级管理员';
+        return '编辑市级管理员';
       case 'DELETE_OPERATOR':
         return '删除市级管理员';
-      case 'SET_BACKUP_ADMIN':
-        return '新增/更换备用省管理员';
+      case 'CREATE_SHENG_ADMIN':
+        return '新增省级管理员';
+      case 'UPDATE_SHENG_ADMIN':
+        return '编辑省级管理员';
+      case 'DELETE_SHENG_ADMIN':
+        return '删除省级管理员';
+      case 'INSTITUTION_CREATE':
+        return '创建机构';
+      case 'INSTITUTION_UPDATE':
+        return '更新机构';
+      case 'INSTITUTION_CREATE_ACCOUNT':
+        return '新增机构账户';
+      case 'INSTITUTION_DELETE_ACCOUNT':
+        return '删除机构账户';
+      case 'INSTITUTION_UPLOAD_DOCUMENT':
+        return '上传机构文档';
+      case 'INSTITUTION_DELETE_DOCUMENT':
+        return '删除机构文档';
+      case 'PUBLIC_SECURITY_RECONCILE':
+        return '公安局机构对账';
+      case 'CITIZEN_BIND_COMMIT':
+        return '确认电子护照绑定';
+      case 'CPMS_STATUS_IMPORT_CONFIRM':
+        return '导入 CPMS 年度报告';
+      case 'CPMS_ISSUE_INSTALL_CODE':
+        return '签发 CPMS 安装码';
+      case 'CPMS_REVOKE_INSTALL_TOKEN':
+        return '作废 CPMS 安装令牌';
+      case 'CPMS_REISSUE_INSTALL_TOKEN':
+        return '重新签发 CPMS 安装码';
+      case 'CPMS_DISABLE_KEYS':
+        return '禁用 CPMS 授权';
+      case 'CPMS_ENABLE_KEYS':
+        return '启用 CPMS 授权';
+      case 'CPMS_REVOKE_KEYS':
+        return '吊销 CPMS 授权';
+      case 'CPMS_DELETE_KEYS':
+        return '删除 CPMS 授权';
       default:
         return actionType;
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // OnchainIssuance 框架阶段占位解码:仅返回 action / summary,业务字段待后续任务卡 D 落地
-  // (参考 _decodeProposeTransfer 等同款,把 SCALE 字段映射到 SignDisplayField list)
-  // ---------------------------------------------------------------------------
-  static DecodedPayload _decodeOnchainAssetPlaceholder(
-    Uint8List bytes, {
-    required String action,
-    required String summary,
-  }) {
-    return DecodedPayload(
-      action: action,
-      summary: summary,
-      fields: const <String, String>{},
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -664,7 +627,7 @@ class PayloadDecoder {
   //
   // (province, signer_admin_pubkey) 必须进 payload — 链端 RuntimeSfidVoteVerifier
   // 走 sheng_signing_pubkey_for_admin(province, admin) 双层匹配查派生公钥,
-  // signer_admin_pubkey 不进 SCALE 即被拒签 → decoder 拒绝旧凭证字节流。
+  // signer_admin_pubkey 不进 SCALE 即被拒签。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeCastReferendum(Uint8List bytes) {
     // 最小：2 + 8 + 32 + 1(nonce compact) + 1(sig compact)
@@ -715,7 +678,7 @@ class PayloadDecoder {
         'proposal_id': proposalId.toString(),
         'approve': approve.toString(),
         'province': province,
-        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
+        'signer_admin_pubkey': _bytesToSs58(signerAdminPubkey),
       },
     );
   }
@@ -766,7 +729,12 @@ class PayloadDecoder {
       fields: {
         'org': _orgName(org),
         'subject': _bytesToLowerHex(subjectBytes),
-        'pubkey': _bytesToLowerHex(pubkey),
+        'pubkey': _bytesToSs58(pubkey),
+      },
+      reviewFields: {
+        'org': _orgName(org),
+        'subject': subject.label,
+        'pubkey': _bytesToSs58(pubkey),
       },
     );
   }
@@ -818,7 +786,7 @@ class PayloadDecoder {
   //
   // SCALE 顺序与上述完全一致。链端 RuntimeSfidInstitutionVerifier 走
   // sheng_signing_pubkey_for_admin(province, signer_admin_pubkey) 双层匹配。
-  // 禁止在尾部追加 a3/sub_type/parent_sfid_number 等旧字段。
+  // 禁止在尾部追加 a3/sub_type/parent_sfid_number 等多余字段。
   // ---------------------------------------------------------------------------
   static DecodedPayload? _decodeProposeCreateInstitution(Uint8List bytes) {
     if (bytes.length < 10) return null;
@@ -931,7 +899,7 @@ class PayloadDecoder {
       fields['amount_${entry.key}'] = '${_fenToYuan(entry.value)} GMB';
     }
     fields['province'] = province;
-    fields['signer_admin_pubkey'] = _bytesToLowerHex(signerAdminPubkey);
+    fields['signer_admin_pubkey'] = _bytesToSs58(signerAdminPubkey);
 
     return DecodedPayload(
       action: 'propose_create_institution',
@@ -1030,7 +998,7 @@ class PayloadDecoder {
         'allocation_count': allocLen.toString(),
         'eligible_total': eligibleTotal.toString(),
         'province': province,
-        'signer_admin_pubkey': _bytesToLowerHex(signerAdminPubkey),
+        'signer_admin_pubkey': _bytesToSs58(signerAdminPubkey),
       },
     );
   }
@@ -1214,9 +1182,12 @@ class PayloadDecoder {
     offset += countSize;
 
     final admins = <String>[];
+    final adminAddresses = <String>[];
     for (var i = 0; i < adminCount; i++) {
       if (offset + 32 > bytes.length) return null;
-      admins.add(_bytesToLowerHex(bytes.sublist(offset, offset + 32)));
+      final admin = bytes.sublist(offset, offset + 32);
+      admins.add(_bytesToLowerHex(admin));
+      adminAddresses.add(_bytesToSs58(admin));
       offset += 32;
     }
     if (offset + 4 != bytes.length) return null;
@@ -1234,6 +1205,12 @@ class PayloadDecoder {
         'org': _orgName(org),
         'subject': _bytesToLowerHex(subjectBytes),
         'new_admins': admins.join(','),
+        'new_threshold': thresholdLabel,
+      },
+      reviewFields: {
+        'org': _orgName(org),
+        'subject': subject.label,
+        'new_admins': adminAddresses.join(','),
         'new_threshold': thresholdLabel,
       },
     );
@@ -1416,9 +1393,30 @@ class PayloadDecoder {
   // 工具方法
   // ---------------------------------------------------------------------------
 
-  /// 0x 小写 hex(feedback_pubkey_format_rule.md 铁律)。
+  /// 0x 小写 hex。
   static String _bytesToLowerHex(Uint8List bytes) {
     return '0x${bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  /// 32 字节账户/公钥 bytes → CitizenChain SS58 地址。
+  static String _bytesToSs58(Uint8List bytes) {
+    return Keyring().encodeAddress(bytes.toList(), _ss58Prefix);
+  }
+
+  /// 人机界面统一显示 SS58 地址；无法确认是 32 字节账户时保留原值。
+  static String _pubkeyHexToSs58OrRaw(String value) {
+    final trimmed = value.trim();
+    final clean = trimmed.startsWith('0x') || trimmed.startsWith('0X')
+        ? trimmed.substring(2)
+        : trimmed;
+    if (clean.length != 64 || !RegExp(r'^[0-9a-fA-F]+$').hasMatch(clean)) {
+      return value;
+    }
+    try {
+      return _bytesToSs58(_hexToBytes(clean));
+    } catch (_) {
+      return value;
+    }
   }
 
   static ({int kind, String label})? _decodeSpendSubjectId(Uint8List bytes) {
@@ -1434,7 +1432,7 @@ class PayloadDecoder {
             ? null
             : (
                 kind: _subjectKindPersonalDuoqian,
-                label: '个人多签 ${_shortHex(account)}'
+                label: '个人多签 ${_pubkeyHexToSs58OrRaw(account)}'
               );
       case _subjectKindInstitutionAccount:
         final account =
@@ -1443,7 +1441,7 @@ class PayloadDecoder {
             ? null
             : (
                 kind: _subjectKindInstitutionAccount,
-                label: '机构账户 ${_shortHex(account)}'
+                label: '机构账户 ${_pubkeyHexToSs58OrRaw(account)}'
               );
       default:
         return null;
@@ -1472,13 +1470,10 @@ class PayloadDecoder {
         .join();
   }
 
-  static String _shortHex(String hex) {
-    if (hex.length <= 14) return hex;
-    return '${hex.substring(0, 8)}...${hex.substring(hex.length - 6)}';
-  }
-
   static Uint8List _hexToBytes(String input) {
-    final text = input.startsWith('0x') ? input.substring(2) : input;
+    final text = (input.startsWith('0x') || input.startsWith('0X'))
+        ? input.substring(2)
+        : input;
     if (text.isEmpty || text.length.isOdd) return Uint8List(0);
     return Uint8List.fromList(List<int>.generate(
       text.length ~/ 2,
@@ -1676,6 +1671,7 @@ class PayloadDecoder {
     final archiveNo = parts[3];
     final adminPubkey = parts[4];
     final expiresAt = parts[5];
+    final adminAddress = _pubkeyHexToSs58OrRaw(adminPubkey);
     if (challengeId.isEmpty ||
         archiveId.isEmpty ||
         archiveNo.isEmpty ||
@@ -1689,7 +1685,12 @@ class PayloadDecoder {
       fields: {
         'archive_no': archiveNo,
         'archive_id': archiveId,
-        'admin_pubkey': adminPubkey,
+        'admin_pubkey': adminAddress,
+        'expires_at': expiresAt,
+      },
+      reviewFields: {
+        'archive_no': archiveNo,
+        'admin_pubkey': adminAddress,
         'expires_at': expiresAt,
       },
     );

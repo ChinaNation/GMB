@@ -15,7 +15,7 @@ import 'package:wuminapp_mobile/wallet/core/wallet_manager.dart';
 ///   原省储行绑定页 + `bind_clearing_institution` extrinsic 已在 Step 2b-iv-b
 ///   随老 pallet 一起删除。
 /// - 绑定即开户,**无预存、无业务开户费**;链上仅产生付费调用 1 元/次。
-/// - 本步**仅支持热钱包**(冷钱包扫码签名 Step 2 接入,与旧页面保持一致风格)。
+/// - 本步仅支持热钱包;冷钱包必须等绑定 payload 可独立展示和验证后再接入。
 /// - 2026-04-23:原来的清算行入口页 / 清算行列表页 / 收款码页已整体下线,本页目
 ///   前无活跃入口,等「设置清算行」真实交互落地时再复用。
 class BindClearingBankPage extends StatefulWidget {
@@ -105,9 +105,8 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
 
     final wallet = widget.wallet;
     if (!wallet.isHotWallet) {
-      // Step 2 增加冷钱包 QR 签名路径，沿用钱包冷签名流程。
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Step 1 暂仅支持热钱包绑定;冷钱包路径 Step 2 接入')),
+        const SnackBar(content: Text('当前仅支持热钱包绑定；冷钱包绑定需可独立验证的签名协议')),
       );
       return;
     }
@@ -165,7 +164,8 @@ class _BindClearingBankPageState extends State<BindClearingBankPage> {
           ),
         );
       } else {
-        await ClearingBankPrefs.save(wallet.walletIndex, widget.bank.sfidNumber);
+        await ClearingBankPrefs.save(
+            wallet.walletIndex, widget.bank.sfidNumber);
       }
 
       if (!mounted) return;

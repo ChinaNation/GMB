@@ -441,7 +441,8 @@ class _InstitutionDuoqianCreatePageState
               SignDisplayField(
                   key: 'signer_admin_pubkey',
                   label: '签发管理员',
-                  value: registrationInfo.credential.signerAdminPubkey),
+                  value: _hexToSs58(
+                      registrationInfo.credential.signerAdminPubkey)),
             ],
           ),
         );

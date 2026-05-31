@@ -269,7 +269,7 @@
 | `sfid/backend/scope/` | 权限范围 | scope | 权限范围和访问边界 |
 | `sfid/backend/scripts/` | 脚本 | scripts | 后端维护脚本 |
 | `sfid/backend/sfid/` | SFID 核心 | sfid-core | 身份号码、省市码和校验规则 |
-| `sfid/backend/sheng_admins/` | 省级管理员 | sheng-admins | 省级管理员管理 |
+| `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
 | `sfid/backend/store_shards/` | 存储分片 | store-shards | 存储分片相关能力 |
 | `sfid/backend/tests/` | 测试 | tests | 后端测试 |
 
@@ -286,8 +286,7 @@
 | `sfid/frontend/institutions/` | 机构 | institutions | 机构管理界面 |
 | `sfid/frontend/qr/` | QR | qr | 二维码界面和工具 |
 | `sfid/frontend/sfid/` | SFID 核心 | sfid-core | SFID 核心展示和工具 |
-| `sfid/frontend/sheng_admins/` | 省级管理员 | sheng-admins | 省级管理员界面 |
-| `sfid/frontend/shi_admins/` | 市级管理员 | shi-admins | 市级管理员界面 |
+| `sfid/frontend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战前端流程 |
 | `sfid/frontend/theme/` | 主题 | theme | 主题变量和样式边界 |
 | `sfid/frontend/utils/` | 工具 | utils | 前端通用工具；业务 API 不放在这里 |
 

@@ -160,6 +160,8 @@
 ### 7.3 签名与密钥
 - 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
 - 省管理员治理写操作使用 Passkey + 既有 `WUMIN_QR_V1 / sign_request` 冷钱包 sr25519 签名，业务域为 `sfid_admin_governance`，不新增二维码协议。
+- 管理端前端执行 Passkey + 冷钱包签名时,业务编辑/新增/删除弹窗必须保留在底层,
+  冷钱包签名弹窗使用统一最高层级覆盖在前面;不得通过提前关闭业务弹窗来规避遮挡。
 - 后端只保存 Passkey 可验证公钥凭据和短期挑战状态，不保存省管理员云端业务私钥。
 - Passkey WebAuthn 域名由后端环境变量控制:开发默认 `SFID_PASSKEY_RP_ID=localhost`
   与 `SFID_PASSKEY_ORIGIN=http://localhost:5179`;生产环境 `SFID_ENV=prod|production`
@@ -202,12 +204,6 @@
 - 管理员视图：
 2. `v_sheng_admins`
 3. `v_shi_admins`
-- 历史兼容表（仍在迁移历史中）：
-1. `bind_requests`
-2. `archive_bindings`
-3. `admin_login_challenges`
-4. `audit_logs`
-5. `cpms_site_keys`
 
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
@@ -422,13 +418,12 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 说明：`system` 标识回执来源系统（`sfid` 或 `cpms`），`payload_hash` 为签名原文的 SHA-256 哈希，用于防篡改校验。
 
 ### 12.5 SFID 验签顺序
-1. 解析回执并读取 `request_id/pubkey/signature`。
-2. 按 `request_id` 查挑战缓存，校验 `proto/system/request_id/challenge/nonce/issued_at/expires_at` 字段完整性与格式。
+1. 解析 `WUMIN_QR_V1 / login_receipt` 并读取 envelope `id`、`body.pubkey`、`body.signature`。
+2. 按 envelope `id` 查挑战缓存，校验 `proto/kind/body/issued_at/expires_at` 字段完整性与格式。
 3. 校验系统固定为 `sfid`。
 4. 校验挑战固定 `90` 秒时效：`expires_at - issued_at == 90` 且当前未过期。
-5. 按固定拼串 `WUMIN_QR_V1|system|request_id|challenge|nonce|expires_at` 重建用户签名原文并执行 `sr25519` 验签。
-6. 校验 `request_id` 未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
-7. 服务端接收回执时应兼容 `request_id|challenge_id`、`pubkey|admin_pubkey|public_key`、`signature|sig` 字段别名。
+5. 按统一签名原文 `WUMIN_QR_V1|login_receipt|id|system|expires_at|pubkey` 执行 `sr25519` 验签。
+6. 校验挑战未消费后一次性消费，再做管理员授权判定（是管理员登录，不是管理员拒绝）。
 - `archive_no` 校验位算法与 SFID `sfid_code` 统一：`BLAKE2b` 摘要字节和 `mod 10`。
 - 投票资格最终以 CPMS 档案码中的 `citizen_status + voting_eligible` 为准。
 

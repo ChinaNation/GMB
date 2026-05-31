@@ -4,8 +4,7 @@
 /// 链升级调整 pallet 顺序后，需同步更新此文件中的常量。
 ///
 /// 防误签靠两色严格模式:decoder 解析失败 / display.action 与 decoded.action 不一致
-/// 直接拒签,无需依赖 spec_version 门控(原 supportedSpecVersions / isSupported 已删,
-/// 因为它跟 strict 模式重叠且阻塞合法新 spec)。
+/// 直接红色拒签。
 ///
 /// 投票引擎统一入口:
 /// - 业务 pallet 不承载投票,管理员投票走 `InternalVote::cast`(22.0)

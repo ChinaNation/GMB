@@ -29,7 +29,7 @@ use crate::admins::province_admins::sheng_admin_province;
 use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::login::AdminAuthContext;
 use crate::models::{AdminActionChallenge, AdminSecurityGrant, AdminSecurityLevel};
-use crate::qr::{build_sign_request, display_field as field};
+use crate::qr::{build_sign_request, display_account, display_field as field};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
@@ -319,8 +319,6 @@ pub(crate) async fn prepare_admin_action(
                 expires_at: expires_at.timestamp(),
             });
             let payload_hash = payload_hash_for_text(payload_text.as_str());
-            let mut display_fields = preview.display_fields.clone();
-            display_fields.push(field("payload_hash", "负载哈希", payload_hash.as_str()));
             let sign_request = match build_sign_request(
                 action_id.as_str(),
                 now.timestamp(),
@@ -328,7 +326,7 @@ pub(crate) async fn prepare_admin_action(
                 ctx.admin_pubkey.as_str(),
                 payload_text.as_str(),
                 input.action_type.label(),
-                display_fields,
+                preview.display_fields.clone(),
             ) {
                 Ok(v) => v,
                 Err(resp) => return resp,
@@ -822,8 +820,8 @@ fn base_fields(
     action_type: &AdminActionType,
     ctx: &AdminAuthContext,
     target: &str,
-    before_hash: &str,
-    after_hash: &str,
+    _before_hash: &str,
+    _after_hash: &str,
 ) -> Vec<serde_json::Value> {
     vec![
         field("action_type", "操作", action_type.label()),
@@ -832,10 +830,12 @@ fn base_fields(
             "省份",
             ctx.admin_province.as_deref().unwrap_or_default(),
         ),
-        field("actor_pubkey", "管理员", ctx.admin_pubkey.as_str()),
-        field("target", "目标", target),
-        field("before_hash", "变更前", before_hash),
-        field("after_hash", "变更后", after_hash),
+        field(
+            "actor_pubkey",
+            "管理员",
+            display_account(ctx.admin_pubkey.as_str()).as_str(),
+        ),
+        field("target", "目标", display_account(target).as_str()),
     ]
 }
 
