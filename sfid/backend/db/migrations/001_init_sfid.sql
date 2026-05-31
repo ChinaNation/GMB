@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'admin_role') THEN
-    CREATE TYPE admin_role AS ENUM ('SUPER_ADMIN', 'OPERATOR_ADMIN');
+    CREATE TYPE admin_role AS ENUM ('SHENG_ADMIN', 'SHI_ADMIN');
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'admin_status') THEN
     CREATE TYPE admin_status AS ENUM ('ACTIVE', 'DISABLED');
@@ -162,32 +162,32 @@ CREATE TRIGGER trg_cpms_site_keys_touch_updated_at
 BEFORE UPDATE ON cpms_site_keys
 FOR EACH ROW EXECUTE FUNCTION sfid_touch_updated_at();
 
--- Protect SUPER_ADMIN records from delete/role-downgrade.
-CREATE OR REPLACE FUNCTION sfid_protect_super_admin()
+-- Protect SHENG_ADMIN records from delete/role-downgrade.
+CREATE OR REPLACE FUNCTION sfid_protect_sheng_admin()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF TG_OP = 'DELETE' AND OLD.role = 'SUPER_ADMIN' THEN
-    RAISE EXCEPTION 'SUPER_ADMIN record cannot be deleted';
+  IF TG_OP = 'DELETE' AND OLD.role = 'SHENG_ADMIN' THEN
+    RAISE EXCEPTION 'SHENG_ADMIN record cannot be deleted';
   END IF;
 
-  IF TG_OP = 'UPDATE' AND OLD.role = 'SUPER_ADMIN' AND NEW.role <> 'SUPER_ADMIN' THEN
-    RAISE EXCEPTION 'SUPER_ADMIN role cannot be downgraded';
+  IF TG_OP = 'UPDATE' AND OLD.role = 'SHENG_ADMIN' AND NEW.role <> 'SHENG_ADMIN' THEN
+    RAISE EXCEPTION 'SHENG_ADMIN role cannot be downgraded';
   END IF;
 
   RETURN COALESCE(NEW, OLD);
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_admin_users_protect_super_admin_delete ON admin_users;
-CREATE TRIGGER trg_admin_users_protect_super_admin_delete
+DROP TRIGGER IF EXISTS trg_admin_users_protect_sheng_admin_delete ON admin_users;
+CREATE TRIGGER trg_admin_users_protect_sheng_admin_delete
 BEFORE DELETE ON admin_users
-FOR EACH ROW EXECUTE FUNCTION sfid_protect_super_admin();
+FOR EACH ROW EXECUTE FUNCTION sfid_protect_sheng_admin();
 
-DROP TRIGGER IF EXISTS trg_admin_users_protect_super_admin_update ON admin_users;
-CREATE TRIGGER trg_admin_users_protect_super_admin_update
+DROP TRIGGER IF EXISTS trg_admin_users_protect_sheng_admin_update ON admin_users;
+CREATE TRIGGER trg_admin_users_protect_sheng_admin_update
 BEFORE UPDATE ON admin_users
-FOR EACH ROW EXECUTE FUNCTION sfid_protect_super_admin();
+FOR EACH ROW EXECUTE FUNCTION sfid_protect_sheng_admin();
 
 COMMIT;

@@ -1,10 +1,10 @@
 //! 管理员安全动作:Passkey 与 WUMIN_QR_V1/sign_request 冷钱包签名。
 //!
-//! 中文注释:省管理员治理写操作仍在这里直接 apply；省/市管理员业务写操作
-//! 只在这里换取一次性安全 grant,再由所属业务模块消费 grant 后落库。
+//! 中文注释:PASSKEY_CHALLENGE 治理写操作在这里直接 apply；业务写操作
+//! 在这里换取一次性安全 grant,再由所属业务模块消费 grant 后落库。
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
@@ -16,9 +16,13 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{PublicKeyCredential, RequestChallengeResponse};
 
+use crate::admins::operation_auth::{
+    ensure_action_role_allowed, parse_action_type, AdminActionType, AdminOperationAuth,
+};
 use crate::admins::operators::{
-    allocate_next_admin_user_id, can_manage_operator, ensure_city_in_creator_province,
-    find_operator_pubkey_by_id, operator_row_from_user, MAX_ADMIN_NAME_CHARS,
+    allocate_next_admin_user_id, can_manage_operator, count_shi_admins_in_city,
+    ensure_city_in_creator_province, find_operator_pubkey_by_id, operator_row_from_user,
+    MAX_ADMIN_NAME_CHARS, MAX_SHI_ADMINS_PER_CITY,
 };
 use crate::admins::passkeys::{
     active_passkeys, cleanup_admin_security_challenges, hash_json, payload_hash_for_text,
@@ -28,147 +32,13 @@ use crate::admins::passkeys::{
 use crate::admins::province_admins::sheng_admin_province;
 use crate::crypto::pubkey::{normalize_admin_pubkey, same_admin_pubkey};
 use crate::login::AdminAuthContext;
-use crate::models::{AdminActionChallenge, AdminSecurityGrant, AdminSecurityLevel};
+use crate::models::{AdminActionChallenge, AdminSecurityGrant};
 use crate::qr::{build_sign_request, display_account, display_field as field};
 use crate::*;
 
 const ADMIN_SECURITY_GRANT_TTL_SECONDS: i64 = 120;
+const MAX_SHENG_ADMINS_PER_PROVINCE: usize = 5;
 pub(crate) const ADMIN_SECURITY_GRANT_HEADER: &str = "x-sfid-security-grant";
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(crate) enum AdminActionType {
-    CreateOperator,
-    UpdateOperator,
-    DeleteOperator,
-    CreateShengAdmin,
-    UpdateShengAdmin,
-    DeleteShengAdmin,
-    InstitutionCreate,
-    InstitutionUpdate,
-    InstitutionCreateAccount,
-    InstitutionDeleteAccount,
-    InstitutionUploadDocument,
-    InstitutionDeleteDocument,
-    PublicSecurityReconcile,
-    CitizenBindCommit,
-    CpmsStatusImportConfirm,
-    CpmsIssueInstallCode,
-    CpmsRevokeInstallToken,
-    CpmsReissueInstallToken,
-    CpmsDisableKeys,
-    CpmsEnableKeys,
-    CpmsRevokeKeys,
-    CpmsDeleteKeys,
-}
-
-impl AdminActionType {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            Self::CreateOperator => "CREATE_OPERATOR",
-            Self::UpdateOperator => "UPDATE_OPERATOR",
-            Self::DeleteOperator => "DELETE_OPERATOR",
-            Self::CreateShengAdmin => "CREATE_SHENG_ADMIN",
-            Self::UpdateShengAdmin => "UPDATE_SHENG_ADMIN",
-            Self::DeleteShengAdmin => "DELETE_SHENG_ADMIN",
-            Self::InstitutionCreate => "INSTITUTION_CREATE",
-            Self::InstitutionUpdate => "INSTITUTION_UPDATE",
-            Self::InstitutionCreateAccount => "INSTITUTION_CREATE_ACCOUNT",
-            Self::InstitutionDeleteAccount => "INSTITUTION_DELETE_ACCOUNT",
-            Self::InstitutionUploadDocument => "INSTITUTION_UPLOAD_DOCUMENT",
-            Self::InstitutionDeleteDocument => "INSTITUTION_DELETE_DOCUMENT",
-            Self::PublicSecurityReconcile => "PUBLIC_SECURITY_RECONCILE",
-            Self::CitizenBindCommit => "CITIZEN_BIND_COMMIT",
-            Self::CpmsStatusImportConfirm => "CPMS_STATUS_IMPORT_CONFIRM",
-            Self::CpmsIssueInstallCode => "CPMS_ISSUE_INSTALL_CODE",
-            Self::CpmsRevokeInstallToken => "CPMS_REVOKE_INSTALL_TOKEN",
-            Self::CpmsReissueInstallToken => "CPMS_REISSUE_INSTALL_TOKEN",
-            Self::CpmsDisableKeys => "CPMS_DISABLE_KEYS",
-            Self::CpmsEnableKeys => "CPMS_ENABLE_KEYS",
-            Self::CpmsRevokeKeys => "CPMS_REVOKE_KEYS",
-            Self::CpmsDeleteKeys => "CPMS_DELETE_KEYS",
-        }
-    }
-
-    fn label(&self) -> &'static str {
-        match self {
-            Self::CreateOperator => "新增市级管理员",
-            Self::UpdateOperator => "编辑市级管理员",
-            Self::DeleteOperator => "删除市级管理员",
-            Self::CreateShengAdmin => "新增省级管理员",
-            Self::UpdateShengAdmin => "编辑省级管理员",
-            Self::DeleteShengAdmin => "删除省级管理员",
-            Self::InstitutionCreate => "创建机构",
-            Self::InstitutionUpdate => "更新机构",
-            Self::InstitutionCreateAccount => "新增机构账户",
-            Self::InstitutionDeleteAccount => "删除机构账户",
-            Self::InstitutionUploadDocument => "上传机构文档",
-            Self::InstitutionDeleteDocument => "删除机构文档",
-            Self::PublicSecurityReconcile => "公安局机构对账",
-            Self::CitizenBindCommit => "确认电子护照绑定",
-            Self::CpmsStatusImportConfirm => "导入 CPMS 年度报告",
-            Self::CpmsIssueInstallCode => "签发 CPMS 安装码",
-            Self::CpmsRevokeInstallToken => "作废 CPMS 安装令牌",
-            Self::CpmsReissueInstallToken => "重新签发 CPMS 安装码",
-            Self::CpmsDisableKeys => "禁用 CPMS 授权",
-            Self::CpmsEnableKeys => "启用 CPMS 授权",
-            Self::CpmsRevokeKeys => "吊销 CPMS 授权",
-            Self::CpmsDeleteKeys => "删除 CPMS 授权",
-        }
-    }
-
-    fn security_level(&self) -> AdminSecurityLevel {
-        match self {
-            Self::CreateOperator
-            | Self::UpdateOperator
-            | Self::DeleteOperator
-            | Self::CreateShengAdmin
-            | Self::UpdateShengAdmin
-            | Self::DeleteShengAdmin
-            | Self::CpmsIssueInstallCode
-            | Self::CpmsRevokeInstallToken
-            | Self::CpmsReissueInstallToken
-            | Self::CpmsDisableKeys
-            | Self::CpmsEnableKeys
-            | Self::CpmsRevokeKeys
-            | Self::CpmsDeleteKeys => AdminSecurityLevel::Important,
-            Self::InstitutionCreate
-            | Self::InstitutionUpdate
-            | Self::InstitutionCreateAccount
-            | Self::InstitutionDeleteAccount
-            | Self::InstitutionUploadDocument
-            | Self::InstitutionDeleteDocument
-            | Self::PublicSecurityReconcile
-            | Self::CitizenBindCommit
-            | Self::CpmsStatusImportConfirm => AdminSecurityLevel::General,
-        }
-    }
-
-    fn is_governance(&self) -> bool {
-        matches!(
-            self,
-            Self::CreateOperator
-                | Self::UpdateOperator
-                | Self::DeleteOperator
-                | Self::CreateShengAdmin
-                | Self::UpdateShengAdmin
-                | Self::DeleteShengAdmin
-        )
-    }
-
-    fn is_cpms(&self) -> bool {
-        matches!(
-            self,
-            Self::CpmsIssueInstallCode
-                | Self::CpmsRevokeInstallToken
-                | Self::CpmsReissueInstallToken
-                | Self::CpmsDisableKeys
-                | Self::CpmsEnableKeys
-                | Self::CpmsRevokeKeys
-                | Self::CpmsDeleteKeys
-        )
-    }
-}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PrepareAdminActionInput {
@@ -192,7 +62,7 @@ pub(crate) struct CommitAdminActionInput {
 pub(crate) struct AdminSecurityGrantOutput {
     grant_id: String,
     action_type: String,
-    security_level: AdminSecurityLevel,
+    auth_type: AdminOperationAuth,
     target: String,
     expires_at: i64,
 }
@@ -211,7 +81,7 @@ pub(crate) struct PrepareAdminActionOutput {
     webauthn_options: RequestChallengeResponse,
     sign_request: Option<String>,
     payload_hash: String,
-    security_level: AdminSecurityLevel,
+    auth_type: AdminOperationAuth,
     expires_at: i64,
 }
 
@@ -242,6 +112,12 @@ struct UpdateShengAdminActionPayload {
     admin_name: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UpdateAdminNameInput {
+    admin_name: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct ShengAdminIdPayload {
     id: u64,
@@ -251,7 +127,7 @@ struct ActionPreview {
     before_hash: String,
     after_hash: String,
     target: String,
-    security_level: AdminSecurityLevel,
+    auth_type: AdminOperationAuth,
     display_fields: Vec<serde_json::Value>,
 }
 
@@ -266,6 +142,15 @@ pub(crate) async fn prepare_admin_action(
     };
     if let Err(resp) = ensure_action_role_allowed(&ctx, &input.action_type) {
         return resp;
+    }
+    // 中文注释:LOGIN_STATE 操作只允许在对应业务 handler 中直接执行,
+    // 不进入 Passkey / 冷钱包安全动作通道。
+    if input.action_type.is_login_state() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "login state action cannot be prepared",
+        );
     }
     let webauthn = match webauthn() {
         Ok(v) => v,
@@ -304,7 +189,7 @@ pub(crate) async fn prepare_admin_action(
         };
     let request_hash = hash_json(&input.payload);
     let (payload_text, payload_hash, sign_request) =
-        if preview.security_level == AdminSecurityLevel::Important {
+        if preview.auth_type == AdminOperationAuth::PasskeyChallenge {
             let payload_text = signed_payload_text(AdminSignedPayload {
                 domain: "sfid_admin_governance",
                 qr_proto: crate::qr::WUMIN_QR_V1,
@@ -350,7 +235,7 @@ pub(crate) async fn prepare_admin_action(
                 actor_role: ctx.role.clone(),
                 actor_province: province,
                 actor_city: ctx.admin_city.clone(),
-                security_level: preview.security_level.clone(),
+                auth_type: preview.auth_type.clone(),
                 target: preview.target,
                 payload_text,
                 payload_hash: payload_hash.clone(),
@@ -363,6 +248,9 @@ pub(crate) async fn prepare_admin_action(
                 consumed: false,
             },
         );
+        if let Err(resp) = store.persist_or_500() {
+            return resp;
+        }
     }
     Json(ApiResponse {
         code: 0,
@@ -373,7 +261,7 @@ pub(crate) async fn prepare_admin_action(
             webauthn_options,
             sign_request,
             payload_hash,
-            security_level: preview.security_level,
+            auth_type: preview.auth_type,
             expires_at: expires_at.timestamp(),
         },
     })
@@ -424,6 +312,20 @@ pub(crate) async fn commit_admin_action(
     if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
         return resp;
     }
+    if action_type.is_login_state() || challenge.auth_type == AdminOperationAuth::LoginState {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "login state action cannot be committed",
+        );
+    }
+    if challenge.auth_type != action_type.auth_type() {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "admin action auth type mismatch",
+        );
+    }
     let auth_result = match webauthn
         .finish_passkey_authentication(&input.passkey_assertion, &challenge.webauthn_state)
     {
@@ -446,7 +348,7 @@ pub(crate) async fn commit_admin_action(
     ) {
         return resp;
     }
-    if challenge.security_level == AdminSecurityLevel::Important {
+    if challenge.auth_type == AdminOperationAuth::PasskeyChallenge {
         let signer_pubkey = match input.signer_pubkey.as_deref() {
             Some(v) => v,
             None => return api_error(StatusCode::BAD_REQUEST, 1001, "signer_pubkey is required"),
@@ -489,7 +391,7 @@ pub(crate) async fn commit_admin_action(
             actor_role: ctx.role.clone(),
             actor_province: ctx.admin_province.clone().unwrap_or_default(),
             actor_city: ctx.admin_city.clone(),
-            security_level: challenge.security_level.clone(),
+            auth_type: challenge.auth_type.clone(),
             target: challenge.target.clone(),
             payload_hash: hash_json(&challenge.request_payload),
             issued_at: now,
@@ -500,7 +402,7 @@ pub(crate) async fn commit_admin_action(
         CommitAdminActionOutput::Grant(AdminSecurityGrantOutput {
             grant_id,
             action_type: action_type.as_str().to_string(),
-            security_level: challenge.security_level.clone(),
+            auth_type: challenge.auth_type.clone(),
             target: challenge.target.clone(),
             expires_at: grant_expires_at.timestamp(),
         })
@@ -511,10 +413,89 @@ pub(crate) async fn commit_admin_action(
     {
         challenge_mut.consumed = true;
     }
+    if let Err(resp) = store.persist_or_500() {
+        return resp;
+    }
     Json(ApiResponse {
         code: 0,
         message: "ok".to_string(),
         data: output,
+    })
+    .into_response()
+}
+
+pub(crate) async fn update_operator_login_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<u64>,
+    Json(input): Json<UpdateAdminNameInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let action_type = AdminActionType::UpdateOperator;
+    if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
+        return resp;
+    }
+    let payload = UpdateOperatorActionPayload {
+        id,
+        admin_name: Some(input.admin_name),
+    };
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // 中文注释:修改市级管理员姓名属于 LOGIN_STATE 操作,仍复用同一套后端范围校验和审计。
+    let data = match apply_update_operator(&mut store, &ctx, &payload) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = store.persist_or_500() {
+        return resp;
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data,
+    })
+    .into_response()
+}
+
+pub(crate) async fn update_sheng_admin_login_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<u64>,
+    Json(input): Json<UpdateAdminNameInput>,
+) -> impl IntoResponse {
+    let ctx = match require_admin_any(&state, &headers) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let action_type = AdminActionType::UpdateShengAdmin;
+    if let Err(resp) = ensure_action_role_allowed(&ctx, &action_type) {
+        return resp;
+    }
+    let payload = UpdateShengAdminActionPayload {
+        id,
+        admin_name: input.admin_name,
+    };
+    let mut store = match store_write_or_500(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // 中文注释:修改省级管理员姓名只依赖登录态,但省域和角色校验仍在后端执行。
+    let data = match apply_update_sheng_admin(&mut store, &ctx, &payload) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(resp) = store.persist_or_500() {
+        return resp;
+    }
+    Json(ApiResponse {
+        code: 0,
+        message: "ok".to_string(),
+        data,
     })
     .into_response()
 }
@@ -527,6 +508,13 @@ pub(crate) fn require_admin_security_grant(
     target: &str,
     request_payload: Option<&serde_json::Value>,
 ) -> Result<(), axum::response::Response> {
+    if action_type.is_login_state() {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            1003,
+            "login state action does not accept security grant",
+        ));
+    }
     let grant_id = headers
         .get(ADMIN_SECURITY_GRANT_HEADER)
         .and_then(|v| v.to_str().ok())
@@ -558,11 +546,11 @@ pub(crate) fn require_admin_security_grant(
             "security grant action mismatch",
         ));
     }
-    if grant.security_level != action_type.security_level() {
+    if grant.auth_type != action_type.auth_type() {
         return Err(api_error(
             StatusCode::FORBIDDEN,
             1003,
-            "security grant level mismatch",
+            "security grant auth type mismatch",
         ));
     }
     if !same_admin_pubkey(grant.actor_pubkey.as_str(), ctx.admin_pubkey.as_str())
@@ -619,27 +607,6 @@ fn normalize_security_target(target: &str) -> String {
     }
 }
 
-fn ensure_action_role_allowed(
-    ctx: &AdminAuthContext,
-    action_type: &AdminActionType,
-) -> Result<(), axum::response::Response> {
-    if ctx.admin_province.is_none() {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "admin province scope missing",
-        ));
-    }
-    if (action_type.is_governance() || action_type.is_cpms()) && ctx.role != AdminRole::ShengAdmin {
-        return Err(api_error(
-            StatusCode::FORBIDDEN,
-            1003,
-            "sheng admin required",
-        ));
-    }
-    Ok(())
-}
-
 fn preview_action(
     store: &Store,
     ctx: &AdminAuthContext,
@@ -664,7 +631,7 @@ fn preview_action(
                 before_hash: "none".to_string(),
                 after_hash: after_hash.clone(),
                 target: admin_pubkey.clone(),
-                security_level: action_type.security_level(),
+                auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
                     ctx,
@@ -674,26 +641,11 @@ fn preview_action(
                 ),
             })
         }
-        AdminActionType::UpdateOperator => {
-            let input: UpdateOperatorActionPayload = serde_json::from_value(payload.clone())
-                .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "invalid update payload"))?;
-            let (before, after, target) = preview_update_operator(store, ctx, &input)?;
-            let before_hash = hash_serialized(&before);
-            let after_hash = hash_serialized(&after);
-            Ok(ActionPreview {
-                before_hash: before_hash.clone(),
-                after_hash: after_hash.clone(),
-                target: target.clone(),
-                security_level: action_type.security_level(),
-                display_fields: base_fields(
-                    action_type,
-                    ctx,
-                    target.as_str(),
-                    before_hash.as_str(),
-                    after_hash.as_str(),
-                ),
-            })
-        }
+        AdminActionType::UpdateOperator => Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "update operator is login state action",
+        )),
         AdminActionType::DeleteOperator => {
             let input: OperatorIdPayload = serde_json::from_value(payload.clone())
                 .map_err(|_| api_error(StatusCode::BAD_REQUEST, 1001, "invalid delete payload"))?;
@@ -707,7 +659,7 @@ fn preview_action(
                 before_hash: before_hash.clone(),
                 after_hash: after_hash.clone(),
                 target: operator.admin_pubkey.clone(),
-                security_level: action_type.security_level(),
+                auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
                     ctx,
@@ -728,7 +680,7 @@ fn preview_action(
                 before_hash: "none".to_string(),
                 after_hash: after_hash.clone(),
                 target: target.clone(),
-                security_level: action_type.security_level(),
+                auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
                     ctx,
@@ -738,28 +690,11 @@ fn preview_action(
                 ),
             })
         }
-        AdminActionType::UpdateShengAdmin => {
-            let input: UpdateShengAdminActionPayload = serde_json::from_value(payload.clone())
-                .map_err(|_| {
-                    api_error(StatusCode::BAD_REQUEST, 1001, "invalid sheng admin payload")
-                })?;
-            let (before, after, target) = preview_update_sheng_admin(store, ctx, &input)?;
-            let before_hash = hash_serialized(&before);
-            let after_hash = hash_serialized(&after);
-            Ok(ActionPreview {
-                before_hash: before_hash.clone(),
-                after_hash: after_hash.clone(),
-                target: target.clone(),
-                security_level: action_type.security_level(),
-                display_fields: base_fields(
-                    action_type,
-                    ctx,
-                    target.as_str(),
-                    before_hash.as_str(),
-                    after_hash.as_str(),
-                ),
-            })
-        }
+        AdminActionType::UpdateShengAdmin => Err(api_error(
+            StatusCode::BAD_REQUEST,
+            1001,
+            "update sheng admin is login state action",
+        )),
         AdminActionType::DeleteShengAdmin => {
             let input: ShengAdminIdPayload =
                 serde_json::from_value(payload.clone()).map_err(|_| {
@@ -772,7 +707,7 @@ fn preview_action(
                 before_hash: before_hash.clone(),
                 after_hash: after_hash.clone(),
                 target: target.clone(),
-                security_level: action_type.security_level(),
+                auth_type: action_type.auth_type(),
                 display_fields: base_fields(
                     action_type,
                     ctx,
@@ -805,7 +740,7 @@ fn preview_security_action(
         before_hash: "security-grant".to_string(),
         after_hash: request_hash.clone(),
         target: target.clone(),
-        security_level: action_type.security_level(),
+        auth_type: action_type.auth_type(),
         display_fields: base_fields(
             action_type,
             ctx,
@@ -837,6 +772,25 @@ fn base_fields(
         ),
         field("target", "目标", display_account(target).as_str()),
     ]
+}
+
+fn find_existing_admin_by_pubkey<'a>(
+    store: &'a Store,
+    admin_pubkey: &str,
+) -> Option<&'a AdminUser> {
+    store
+        .admin_users_by_pubkey
+        .values()
+        .find(|user| same_admin_pubkey(user.admin_pubkey.as_str(), admin_pubkey))
+}
+
+fn duplicate_admin_pubkey_error(existing: &AdminUser) -> axum::response::Response {
+    // 中文注释:管理员公钥全局唯一;返回已存在角色,由前端按当前目标动作展示中文提示。
+    let message = match &existing.role {
+        AdminRole::ShengAdmin => "admin pubkey already exists as sheng admin",
+        AdminRole::ShiAdmin => "admin pubkey already exists as shi admin",
+    };
+    api_error(StatusCode::CONFLICT, 1005, message)
 }
 
 fn validate_create_operator(
@@ -893,18 +847,19 @@ fn validate_create_operator(
             normalized
         }
     };
-    if store
-        .admin_users_by_pubkey
-        .keys()
-        .any(|existing| same_admin_pubkey(existing.as_str(), admin_pubkey.as_str()))
+    if let Some(existing) = find_existing_admin_by_pubkey(store, admin_pubkey.as_str()) {
+        return Err(duplicate_admin_pubkey_error(existing));
+    }
+    let (province, city) =
+        ensure_city_in_creator_province(store, created_by.as_str(), input.city.as_str())?;
+    if count_shi_admins_in_city(store, province.as_str(), city.as_str()) >= MAX_SHI_ADMINS_PER_CITY
     {
         return Err(api_error(
             StatusCode::CONFLICT,
             1005,
-            "operator already exists",
+            "shi admin city limit reached",
         ));
     }
-    let city = ensure_city_in_creator_province(store, created_by.as_str(), input.city.as_str())?;
     Ok((admin_pubkey, admin_name, city, created_by))
 }
 
@@ -1000,6 +955,17 @@ fn sheng_admin_scope(store: &Store, admin_pubkey: &str) -> Option<String> {
         .or_else(|| sheng_admin_province(admin_pubkey).map(|v| v.to_string()))
 }
 
+fn count_sheng_admins_in_province(store: &Store, province: &str) -> usize {
+    store
+        .admin_users_by_pubkey
+        .values()
+        .filter(|user| user.role == AdminRole::ShengAdmin)
+        .filter(|user| {
+            sheng_admin_scope(store, user.admin_pubkey.as_str()).as_deref() == Some(province)
+        })
+        .count()
+}
+
 fn require_actor_province(ctx: &AdminAuthContext) -> Result<String, axum::response::Response> {
     ctx.admin_province
         .clone()
@@ -1053,15 +1019,14 @@ fn validate_create_sheng_admin(
         ));
     };
     let admin_name = validate_sheng_admin_name(input.admin_name.as_str())?;
-    if store
-        .admin_users_by_pubkey
-        .keys()
-        .any(|existing| same_admin_pubkey(existing.as_str(), admin_pubkey.as_str()))
-    {
+    if let Some(existing) = find_existing_admin_by_pubkey(store, admin_pubkey.as_str()) {
+        return Err(duplicate_admin_pubkey_error(existing));
+    }
+    if count_sheng_admins_in_province(store, province.as_str()) >= MAX_SHENG_ADMINS_PER_PROVINCE {
         return Err(api_error(
             StatusCode::CONFLICT,
             1005,
-            "sheng admin already exists",
+            "sheng admin province limit reached",
         ));
     }
     Ok((admin_pubkey, admin_name, province))
@@ -1114,18 +1079,6 @@ fn require_manageable_sheng_admin(
         ));
     }
     Ok((admin, target_province))
-}
-
-fn preview_update_sheng_admin(
-    store: &Store,
-    ctx: &AdminAuthContext,
-    input: &UpdateShengAdminActionPayload,
-) -> Result<(serde_json::Value, serde_json::Value, String), axum::response::Response> {
-    let (mut admin, _) = require_manageable_sheng_admin(store, ctx, input.id)?;
-    let before = sheng_admin_row_value(store, &admin)?;
-    admin.admin_name = validate_sheng_admin_name(input.admin_name.as_str())?;
-    let after = sheng_admin_row_value(store, &admin)?;
-    Ok((before, after, admin.admin_pubkey))
 }
 
 fn preview_delete_sheng_admin(
@@ -1182,38 +1135,6 @@ fn recheck_preview(
     Ok(())
 }
 
-fn parse_action_type(action_type: &str) -> Result<AdminActionType, axum::response::Response> {
-    match action_type {
-        "CREATE_OPERATOR" => Ok(AdminActionType::CreateOperator),
-        "UPDATE_OPERATOR" => Ok(AdminActionType::UpdateOperator),
-        "DELETE_OPERATOR" => Ok(AdminActionType::DeleteOperator),
-        "CREATE_SHENG_ADMIN" => Ok(AdminActionType::CreateShengAdmin),
-        "UPDATE_SHENG_ADMIN" => Ok(AdminActionType::UpdateShengAdmin),
-        "DELETE_SHENG_ADMIN" => Ok(AdminActionType::DeleteShengAdmin),
-        "INSTITUTION_CREATE" => Ok(AdminActionType::InstitutionCreate),
-        "INSTITUTION_UPDATE" => Ok(AdminActionType::InstitutionUpdate),
-        "INSTITUTION_CREATE_ACCOUNT" => Ok(AdminActionType::InstitutionCreateAccount),
-        "INSTITUTION_DELETE_ACCOUNT" => Ok(AdminActionType::InstitutionDeleteAccount),
-        "INSTITUTION_UPLOAD_DOCUMENT" => Ok(AdminActionType::InstitutionUploadDocument),
-        "INSTITUTION_DELETE_DOCUMENT" => Ok(AdminActionType::InstitutionDeleteDocument),
-        "PUBLIC_SECURITY_RECONCILE" => Ok(AdminActionType::PublicSecurityReconcile),
-        "CITIZEN_BIND_COMMIT" => Ok(AdminActionType::CitizenBindCommit),
-        "CPMS_STATUS_IMPORT_CONFIRM" => Ok(AdminActionType::CpmsStatusImportConfirm),
-        "CPMS_ISSUE_INSTALL_CODE" => Ok(AdminActionType::CpmsIssueInstallCode),
-        "CPMS_REVOKE_INSTALL_TOKEN" => Ok(AdminActionType::CpmsRevokeInstallToken),
-        "CPMS_REISSUE_INSTALL_TOKEN" => Ok(AdminActionType::CpmsReissueInstallToken),
-        "CPMS_DISABLE_KEYS" => Ok(AdminActionType::CpmsDisableKeys),
-        "CPMS_ENABLE_KEYS" => Ok(AdminActionType::CpmsEnableKeys),
-        "CPMS_REVOKE_KEYS" => Ok(AdminActionType::CpmsRevokeKeys),
-        "CPMS_DELETE_KEYS" => Ok(AdminActionType::CpmsDeleteKeys),
-        _ => Err(api_error(
-            StatusCode::BAD_REQUEST,
-            1001,
-            "unknown action_type",
-        )),
-    }
-}
-
 fn apply_action(
     store: &mut Store,
     ctx: &AdminAuthContext,
@@ -1260,13 +1181,6 @@ fn apply_action(
                 )
             })
         }
-        AdminActionType::UpdateOperator => {
-            let input: UpdateOperatorActionPayload =
-                serde_json::from_value(challenge.request_payload.clone()).map_err(|_| {
-                    api_error(StatusCode::BAD_REQUEST, 1001, "invalid update payload")
-                })?;
-            apply_update_operator(store, ctx, &input)
-        }
         AdminActionType::DeleteOperator => {
             let input: OperatorIdPayload =
                 serde_json::from_value(challenge.request_payload.clone()).map_err(|_| {
@@ -1301,13 +1215,6 @@ fn apply_action(
                     api_error(StatusCode::BAD_REQUEST, 1001, "invalid sheng admin payload")
                 })?;
             apply_create_sheng_admin(store, ctx, &input)
-        }
-        AdminActionType::UpdateShengAdmin => {
-            let input: UpdateShengAdminActionPayload =
-                serde_json::from_value(challenge.request_payload.clone()).map_err(|_| {
-                    api_error(StatusCode::BAD_REQUEST, 1001, "invalid sheng admin payload")
-                })?;
-            apply_update_sheng_admin(store, ctx, &input)
         }
         AdminActionType::DeleteShengAdmin => {
             let input: ShengAdminIdPayload =
@@ -1489,4 +1396,107 @@ fn apply_delete_sheng_admin(
         format!("sheng_admin_id={} reassigned_city_admins=true", removed.id),
     );
     Ok(json!({ "deleted": true, "admin_pubkey": pubkey }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_admin_pubkey(n: u8) -> String {
+        format!("0x{:064x}", n)
+    }
+
+    fn insert_sheng_admin(store: &mut Store, id: u64, province: &str) {
+        let admin_pubkey = test_admin_pubkey(id as u8);
+        store.admin_users_by_pubkey.insert(
+            admin_pubkey.clone(),
+            AdminUser {
+                id,
+                admin_pubkey: admin_pubkey.clone(),
+                admin_name: format!("省级管理员{id}"),
+                role: AdminRole::ShengAdmin,
+                built_in: id == 1,
+                created_by: "SYSTEM".to_string(),
+                created_at: Utc::now(),
+                updated_at: None,
+                city: String::new(),
+            },
+        );
+        store
+            .sheng_admin_province_by_pubkey
+            .insert(admin_pubkey, province.to_string());
+    }
+
+    fn insert_shi_admin(store: &mut Store, id: u64, creator_pubkey: &str, city: &str) {
+        let admin_pubkey = test_admin_pubkey(id as u8);
+        store.admin_users_by_pubkey.insert(
+            admin_pubkey.clone(),
+            AdminUser {
+                id,
+                admin_pubkey,
+                admin_name: format!("市级管理员{id}"),
+                role: AdminRole::ShiAdmin,
+                built_in: false,
+                created_by: creator_pubkey.to_string(),
+                created_at: Utc::now(),
+                updated_at: None,
+                city: city.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn validate_create_sheng_admin_rejects_when_province_has_five_admins() {
+        let province = "广东省";
+        let mut store = Store::default();
+        for id in 1..=5 {
+            insert_sheng_admin(&mut store, id, province);
+        }
+        let ctx = AdminAuthContext {
+            admin_pubkey: test_admin_pubkey(1),
+            role: AdminRole::ShengAdmin,
+            admin_name: "初始省级管理员".to_string(),
+            admin_province: Some(province.to_string()),
+            admin_city: None,
+            passkey_bound: true,
+        };
+        let input = CreateShengAdminActionPayload {
+            admin_pubkey: test_admin_pubkey(6),
+            admin_name: "新增省级管理员".to_string(),
+        };
+
+        let err = validate_create_sheng_admin(&store, &ctx, &input).expect_err("limit reached");
+
+        assert_eq!(err.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn validate_create_operator_rejects_when_city_has_thirty_admins() {
+        let province = "广东省";
+        let city = "广州市";
+        let mut store = Store::default();
+        insert_sheng_admin(&mut store, 1, province);
+        let creator_pubkey = test_admin_pubkey(1);
+        for id in 2..=31 {
+            insert_shi_admin(&mut store, id, creator_pubkey.as_str(), city);
+        }
+        let ctx = AdminAuthContext {
+            admin_pubkey: creator_pubkey,
+            role: AdminRole::ShengAdmin,
+            admin_name: "初始省级管理员".to_string(),
+            admin_province: Some(province.to_string()),
+            admin_city: None,
+            passkey_bound: true,
+        };
+        let input = CreateOperatorInput {
+            admin_pubkey: test_admin_pubkey(32),
+            admin_name: "新增市级管理员".to_string(),
+            city: city.to_string(),
+            created_by: None,
+        };
+
+        let err = validate_create_operator(&store, &ctx, &input).expect_err("limit reached");
+
+        assert_eq!(err.status(), StatusCode::CONFLICT);
+    }
 }

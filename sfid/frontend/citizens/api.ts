@@ -3,7 +3,7 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, request } from '../utils/http';
-import { createGeneralSecurityGrant } from '../admins/admin_security_api';
+import { createPasskeySecurityGrant } from '../admins/admin_security_api';
 
 const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
@@ -135,7 +135,7 @@ export async function citizenBind(
     payload_hash: string;
   },
 ): Promise<CitizenBindResult> {
-  const grant = await createGeneralSecurityGrant(auth, 'CITIZEN_BIND_COMMIT', {
+  const grant = await createPasskeySecurityGrant(auth, 'CITIZEN_BIND_COMMIT', {
     target: payload.challenge_id,
     challenge_id: payload.challenge_id,
   });
@@ -154,7 +154,7 @@ export async function importCpmsStatusExport(
   auth: AdminAuth,
   exportFile: CpmsStatusExportFile,
 ): Promise<CpmsStatusExportImportResult> {
-  const grant = await createGeneralSecurityGrant(auth, 'CPMS_STATUS_IMPORT_CONFIRM', {
+  const grant = await createPasskeySecurityGrant(auth, 'CPMS_STATUS_IMPORT_CONFIRM', {
     target: exportFile.sfid_number,
     sfid_number: exportFile.sfid_number,
     export_year: exportFile.export_year,

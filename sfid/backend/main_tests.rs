@@ -251,6 +251,37 @@ fn sign_with_test_sr25519(seed_byte: u8, message: &str) -> (String, String) {
     )
 }
 
+#[test]
+fn admin_pubkey_duplicate_error_codes_are_role_specific() {
+    // 中文注释:管理员公钥全局唯一,重复冲突必须暴露已存在角色而不是笼统 409。
+    assert_eq!(
+        sfid_error_code(
+            StatusCode::CONFLICT,
+            "admin pubkey already exists as sheng admin"
+        ),
+        "SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN"
+    );
+    assert_eq!(
+        sfid_error_code(
+            StatusCode::CONFLICT,
+            "admin pubkey already exists as shi admin"
+        ),
+        "SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN"
+    );
+    assert_eq!(
+        sfid_error_code(StatusCode::CONFLICT, "sheng admin province limit reached"),
+        "SFID_ADMIN_SHENG_ADMIN_PROVINCE_LIMIT_REACHED"
+    );
+    assert_eq!(
+        sfid_error_code(StatusCode::CONFLICT, "shi admin city limit reached"),
+        "SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED"
+    );
+    assert_eq!(
+        sfid_error_code(StatusCode::INTERNAL_SERVER_ERROR, "store persist failed"),
+        "SFID_STORE_PERSIST_FAILED"
+    );
+}
+
 #[tokio::test]
 async fn qr_login_non_admin_should_be_rejected() {
     let state = build_test_state();

@@ -16,7 +16,7 @@ if [[ -z "${CPMS_KEY_ENCRYPT_SECRET:-}" ]]; then
   fi
   export CPMS_KEY_ENCRYPT_SECRET="$(tr -d ' \n' <"${CPMS_KEY_FILE}")"
 fi
-CPMS_BIND="${CPMS_BIND:-0.0.0.0:8080}"
+CPMS_BIND="${CPMS_BIND:-127.0.0.1:8080}"
 CPMS_PORT="${CPMS_BIND##*:}"
 CPMS_HEALTHCHECK_URL="http://127.0.0.1:${CPMS_PORT}/api/v1/health"
 CPMS_FRONTEND_PORT=5174

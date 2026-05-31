@@ -40,14 +40,16 @@
 ### 4.1 管理员类型
 - 省级管理员（`SHENG_ADMIN`）：
 1. 每省有 1 个代码内置初始省级管理员，初始管理员只承担不可删除安全根职责。
-2. 每省可新增 N 个省级管理员，所有省级管理员采用同级模型。
+2. 每省最多 5 个省级管理员：1 个代码内置初始省级管理员 + 最多 4 个后续新增省级管理员；所有省级管理员采用同级模型。
 3. 查看市级管理员列表只需要有效登录态。
-4. 新增、编辑、删除市级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
-5. 新增、编辑省级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
-6. 删除省级管理员只能由本省初始省级管理员发起；初始省级管理员不可删除自己，也不可被删除。
-7. 后端不得为省级管理员保存或使用云端业务 signer、seed、cache。
+4. 新增、删除市级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
+5. 编辑市级管理员姓名只需要有效登录态，后端仍校验省域范围与角色。
+6. 新增、删除省级管理员必须使用 Passkey + 当前省级管理员冷钱包 sr25519 挑战签名。
+7. 编辑省级管理员姓名只需要有效登录态，后端仍校验省域范围与角色。
+8. 删除省级管理员只能由本省初始省级管理员发起；初始省级管理员不可删除自己，也不可被删除。
+9. 后端不得为省级管理员保存或使用云端业务 signer、seed、cache。
 - 市级管理员（`SHI_ADMIN`）：
-1. 数量不设上限。
+1. 每省每市最多 30 个市级管理员。
 2. 由省级管理员按本省范围创建、编辑、删除。
 3. 登录后执行电子护照绑定、状态扫码、查询用户信息，不可管理管理员账号。
 4. 管理员不存在 `ACTIVE / DISABLED` 状态字段；删除即物理失效并清理会话与密钥。
@@ -57,6 +59,8 @@
 
 ### 4.2 账户模型
 - 管理员账户标识为公钥（`admin_pubkey`）。
+- 管理员公钥全局唯一，同一公钥不能同时成为省级管理员和市级管理员。
+- 新增管理员时，若公钥已存在，后端按已有角色返回 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN`，前端不得解析 `message` 判断业务分支。
 - 不使用用户名密码模式作为主登录机制。
 - 管理员私钥仅用于签名，不上传、不落库。
 
@@ -110,6 +114,10 @@
 ### 6.3 权限控制实现要求
 - 机构管理接口（机构身份识别码生成、机构扫码录入、机构更新/禁用/撤销/删除/查询）仅允许：`SHENG_ADMIN`。
 - 市级管理员管理接口的对象权限：省级管理员只能管理本省范围内的市级管理员。
+- 管理端操作权限统一分为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 三类；所有管理端写操作必须登记到 `admins/operation_auth.rs`，未登记或类型不匹配的操作直接拒绝。
+- `LOGIN_STATE`：登录态即可执行，如查看列表、修改省/市管理员姓名、公民绑定 challenge 创建。
+- `PASSKEY`：必须完成浏览器 Passkey 后取得一次性 grant，如创建/更新机构、新增机构账户、上传机构文档、公民绑定提交、导入 CPMS 状态报告。
+- `PASSKEY_CHALLENGE`：必须完成 Passkey + 当前管理员冷钱包挑战签名，如新增/删除省市管理员、删除机构账户、删除机构文档、CPMS 安装授权治理。
 - 省级数据强隔离：省级管理员只能查看和操作本省数据；市级管理员只能进行业务操作。
 - 隔离范围：机构（CPMS 机构登记）、公民绑定信息、SFID 生成与状态变更。
 - `cpms_site_keys` 必须记录 `admin_province`，并在机构查询、扫码验签、状态变更时做后端强校验。
@@ -152,14 +160,14 @@
 2. `backend/app_core/`：跨业务底层工具,含 HTTP 安全、运行期工具与 `chain_*` 通用链工具。
 3. `backend/citizens/`：公民身份、绑定、投票凭证、CPMS 状态扫码。
 4. `backend/institutions/`：机构创建、机构资料、账户名称、机构链交互 `chain_duoqian_info*`。
-5. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、Passkey 注册与冷钱包挑战写操作。
+5. `backend/admins/`：管理员域统一目录，承载省级管理员、市级管理员账号维护、`operation_auth.rs` 权限分级、Passkey 注册与冷钱包挑战写操作。
 6. `backend/scope/`：省/市可见范围与写权限判断。
 7. `backend/sfid/`：SFID 生成与元数据模块。
 8. `backend/models/`：统一数据结构模块。
 
 ### 7.3 签名与密钥
 - 管理员登录仍使用冷钱包 sr25519 challenge 签名，管理员私钥不上传、不落库。
-- 省管理员治理写操作使用 Passkey + 既有 `WUMIN_QR_V1 / sign_request` 冷钱包 sr25519 签名，业务域为 `sfid_admin_governance`，不新增二维码协议。
+- 管理端高危写操作使用 Passkey + 既有 `WUMIN_QR_V1 / sign_request` 冷钱包 sr25519 签名，业务域为 `sfid_admin_governance`，不新增二维码协议。
 - 管理端前端执行 Passkey + 冷钱包签名时,业务编辑/新增/删除弹窗必须保留在底层,
   冷钱包签名弹窗使用统一最高层级覆盖在前面;不得通过提前关闭业务弹窗来规避遮挡。
 - 后端只保存 Passkey 可验证公钥凭据和短期挑战状态，不保存省管理员云端业务私钥。
@@ -180,7 +188,8 @@
 - `backend/citizens/chain_vote.rs`：公民投票凭证。
 - `backend/citizens/chain_joint_vote.rs`：联合投票人口快照凭证。
 - `backend/admins/passkeys.rs`：管理员 Passkey 注册、WebAuthn 配置、凭据使用记录和短期挑战清理。
-- `backend/admins/actions.rs`：省/市管理员治理写操作 prepare/commit 与一次性安全 grant 入口。
+- `backend/admins/operation_auth.rs`：管理端操作权限分级真源，统一输出 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`。
+- `backend/admins/actions.rs`：`PASSKEY / PASSKEY_CHALLENGE` 操作 prepare/commit 与一次性安全 grant 入口；省/市管理员姓名修改不进入该入口。
 - `backend/app_core/chain_*.rs`：跨业务链底层工具。
 - `backend/sfid/admin.rs`：管理端 SFID 生成、元数据与城市列表查询业务。
 - `backend/scope/*.rs`：省域隔离、审计范围和 CPMS 站点范围判定。
@@ -188,8 +197,8 @@
 - 管理员密钥规则（强约束）：
 1. 管理员业务私钥只存在各自冷钱包设备，SFID 后端不保存、不代签。
 2. 管理员登录使用冷钱包 sr25519 挑战签名。
-3. 管理员一般写操作使用 Passkey 换取一次性安全 grant。
-4. 管理员重要写操作使用 Passkey + 冷钱包 sr25519 签名确认。
+3. 管理员 `PASSKEY` 写操作使用 Passkey 换取一次性安全 grant。
+4. 管理员 `PASSKEY_CHALLENGE` 写操作使用 Passkey + 冷钱包 sr25519 签名确认。
 5. 管理员首次登录若未绑定 Passkey，前端强制进入注册局管理员列表，由本人在操作栏点击“更新密钥”完成绑定。
 
 ## 8. 数据模型
@@ -207,7 +216,9 @@
 
 ### 8.2 关键约束
 - `admins.admin_pubkey` 全局唯一。
-- `sheng_admin_scope` 记录省级管理员与省份归属；同一省允许 N 名省级管理员。
+- 管理员新增入口必须共用全局公钥查重逻辑，重复时区分“已是省级管理员 / 已是市级管理员”。
+- `sheng_admin_scope` 记录省级管理员与省份归属；同一省最多 5 名省级管理员，数据库不得对 `province_name` 设置唯一约束。
+- 市级管理员数量由后端按 `省份 + 市名` 强制限制，同一省同一市最多 30 名 `SHI_ADMIN`；市名可能跨省重复，统计时不得只按市名计数。
 - `chain_idempotency_requests` 双唯一：`(route_key, request_id)` 与 `(route_key, nonce)`。
 - 公民电子护照绑定唯一关系：`archive_no / sfid_code / wallet_pubkey` 三者一对一。
 - `archive_no` 与 `sfid_code` 首次绑定后永久绑定，不允许解绑、不允许换档案号、不允许把同一档案号绑定到其他身份ID，也不允许把同一身份ID改绑到其他档案号；后续只允许使用同一 `archive_no` 的 ARCHIVE 档案码更换 `wallet_pubkey / wallet_address`。
@@ -231,11 +242,11 @@
 - `POST /api/v1/admin/auth/qr/challenge`：生成网页登录二维码 challenge。
 - `POST /api/v1/admin/auth/qr/complete`：提交签名结果（`challenge_id/request_id + admin_pubkey + signature`，`session_id` 可选）。
 - `GET /api/v1/admin/auth/qr/result`：网页登录页轮询二维码登录结果。
-- 市级管理员接口口径补充：`GET /api/v1/admin/operators` 列表返回 `admin_name` 与 `created_by_name`；新增、编辑、删除不再暴露直接 CRUD 路由，统一通过 `/api/v1/admin/actions/prepare` 和 `/api/v1/admin/actions/commit`。
+- 市级管理员接口口径补充：`GET /api/v1/admin/operators` 列表返回 `admin_name` 与 `created_by_name`；新增、删除通过 `/api/v1/admin/actions/prepare` 和 `/api/v1/admin/actions/commit`；新增时后端按省市校验单市 30 人上限；编辑姓名使用 `PATCH /api/v1/admin/operators/:id` 登录态接口。
 - 省级管理员列表接口：`GET /api/v1/admin/sheng-admins`。
-- 省级管理员治理动作：`CREATE_SHENG_ADMIN / UPDATE_SHENG_ADMIN / DELETE_SHENG_ADMIN`。
+- 省级管理员治理动作：`CREATE_SHENG_ADMIN / DELETE_SHENG_ADMIN`；编辑姓名使用 `PATCH /api/v1/admin/sheng-admins/:id` 登录态接口。
 - Passkey 注册接口：`POST /api/v1/admin/passkeys/register/start`、`/confirm`、`/complete`，由 `admins::passkeys` 承接；流程固定为先生成 `WUMIN_QR_V1 / sign_request` 并完成当前管理员冷钱包 sr25519 确认，再创建浏览器 Passkey 凭据并落库。
-- 管理员治理写操作接口：`POST /api/v1/admin/actions/prepare` 生成 WebAuthn assertion 选项和 `WUMIN_QR_V1 / sign_request`；`POST /api/v1/admin/actions/commit` 同时校验 Passkey assertion 与 sr25519 签名回执后落库。
+- 管理员安全写操作接口：`POST /api/v1/admin/actions/prepare` 生成 WebAuthn assertion 选项；当 `auth_type=PASSKEY_CHALLENGE` 时同时返回 `WUMIN_QR_V1 / sign_request`；`POST /api/v1/admin/actions/commit` 按 `auth_type` 校验 Passkey 或 Passkey + sr25519 签名回执。
 
 ### 9.6 省级管理员基线与变更策略（当前）
 1. 省级管理员初始安全根采用 `province_name + admin_pubkey` 固化清单初始化（代码维护）。
@@ -337,8 +348,7 @@
 
 ## 10. 安全与合规
 - 管理员登录采用“公钥身份识别 + challenge 二维码签名验签”。
-- 省管理员治理写操作必须二次校验 Passkey 与冷钱包 sr25519 签名,任一失败不得落库。
-- `demo-sign` 测试入口已下线，所有登录测试与联调均使用真实钱包签名。
+- 管理端高危写操作必须二次校验 Passkey 与冷钱包 sr25519 签名,任一失败不得落库。
 - 电子护照绑定必须管理员执行，非管理员不可执行。
 - 建议电子护照绑定启用双人复核。
 - CPMS 二维码必须验签，防伪造与重放。
@@ -503,7 +513,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
 - 可完成“wuminapp 选择钱包 -> CPMS 出具 ARCHIVE -> SFID 扫码生成签名请求 -> wuminapp 签名 -> SFID 完成绑定 -> wuminapp 查询结果”闭环。
 - 可投票人数统计接口可稳定返回。
 - 绑定有效性校验接口返回准确。
-- 省级管理员可通过 Passkey + 冷钱包挑战完成市级管理员增删改查；市级管理员无该权限。
+- 省级管理员可通过 Passkey + 冷钱包挑战新增、删除市级管理员；市级管理员姓名修改只需要登录态；市级管理员无管理员账号管理权限。
 - 非管理员公钥扫码登录必须被拒绝（返回 403）。
 - 省级管理员与市级管理员使用同一前端页面；省级管理员仅多一个”市级管理员管理”功能域。
 - 公开查询需携带查询 Token，可查询档案号、身份识别码、钱包公钥三项信息。
@@ -594,7 +604,7 @@ proto|system|request_id|challenge|nonce|issued_at|expires_at
   - `backend/db/migrations/003_admin_role_partition.sql`
   - `backend/db/migrations/004_finalize_no_runtime_store.sql`
   - `backend/db/migrations/005_drop_sfid_prefix.sql`
-  - `backend/db/migrations/006_super_admin_catalog.sql`
+  - `backend/db/migrations/006_sheng_admin_catalog.sql`
   - `backend/db/migrations/007_refresh_admin_views.sql`
   - `backend/db/migrations/008_chain_idempotency_reward_state.sql`
   - `backend/db/migrations/009_runtime_cache_and_pii_encryption.sql`

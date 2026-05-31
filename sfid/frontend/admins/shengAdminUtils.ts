@@ -6,6 +6,8 @@ import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { AdminActionType } from './admin_security_api';
 
+export const MAX_SHI_ADMINS_PER_CITY = 30;
+
 /** 比较两个 hex 公钥是否相同(忽略大小写和 0x 前缀) */
 export function sameHexPubkey(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
@@ -25,8 +27,8 @@ export interface ShengAdminSharedState {
   /** 当前选中的市(三层导航:省→市→市级管理员列表) */
   selectedCity: string | null;
   setSelectedCity: (v: string | null) => void;
-  adminDetailTab: 'operators' | 'super-admin';
-  setAdminDetailTab: (v: 'operators' | 'super-admin') => void;
+  adminDetailTab: 'operators' | 'sheng-admin';
+  setAdminDetailTab: (v: 'operators' | 'sheng-admin') => void;
 
   operators: OperatorRow[];
   operatorsLoading: boolean;

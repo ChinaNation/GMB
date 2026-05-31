@@ -25,18 +25,18 @@ install -m 0644 "${TIMER_SRC}" /etc/systemd/system/cpms-backup.timer
 install -d -m 0750 /etc/cpms
 if [[ ! -f /etc/cpms/backup.env ]]; then
   cat >/etc/cpms/backup.env <<'EOF'
-# Storage computer SSH address
+# 备份存储机 SSH 地址
 STORAGE_HOST=CHANGE_ME
 STORAGE_PORT=22
 STORAGE_USER=CHANGE_ME
 
-# Absolute remote directory path, e.g. /data/cpms-backups
+# 备份存储机上的绝对目录，例如 /data/cpms-backups
 STORAGE_PATH=/data/cpms-backups
 
-# Keep remote backups forever when set to 0
+# 远端保留天数；0 表示永久保留
 RETENTION_DAYS=0
 
-# Keep local backups forever when set to 0
+# 本机保留天数；0 表示永久保留
 LOCAL_RETENTION_DAYS=0
 EOF
   chmod 0600 /etc/cpms/backup.env

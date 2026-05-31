@@ -39,7 +39,8 @@ use chrono::Utc;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::admins::actions::{require_admin_security_grant, AdminActionType};
+use crate::admins::actions::require_admin_security_grant;
+use crate::admins::operation_auth::AdminActionType;
 use crate::app_core::runtime_ops::append_audit_log;
 use crate::crypto::pubkey::normalize_admin_pubkey;
 use crate::institutions::model::{

@@ -77,10 +77,11 @@ sfid/backend/login/
 - `require_sheng_admin`:只放行 `ShengAdmin`,并要求存在省域 scope。
 - `require_admin_session_middleware`:Axum 路由层会话校验中间件。
 
-写权限不再由登录守卫表达。一般写操作必须先通过 `admins/actions.rs`
-发起安全动作,并由 `admins/passkeys.rs` 完成 WebAuthn 验证后换取一次性
-`x-sfid-security-grant`;重要写操作必须在 Passkey 基础上再完成当前管理员
-冷钱包 sr25519 签名。
+写权限不再由登录守卫表达。管理端操作权限统一为
+`LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`:登录态操作只校验会话、角色和 scope;
+`PASSKEY` 写操作必须先通过 `admins/actions.rs` 发起安全动作,并由
+`admins/passkeys.rs` 完成 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;
+`PASSKEY_CHALLENGE` 写操作必须在 Passkey 基础上再完成当前管理员冷钱包 sr25519 签名。
 
 ## 7. 边界规则
 

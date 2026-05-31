@@ -9,7 +9,7 @@ use axum::{
     routing::{get, put},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -466,35 +466,19 @@ async fn update_archive_citizen_status(
 
     let before = archive.citizen_status.clone();
     archive.citizen_status = req.citizen_status.trim().to_string();
-    archive.voting_eligible = dangan::normalize_voting_eligible(&archive.citizen_status, None);
-    archive.citizen_status_updated_at = Utc::now().timestamp();
+    let now = Utc::now().timestamp();
+    let birth_date = NaiveDate::parse_from_str(&archive.birth_date, "%Y-%m-%d")
+        .map_err(|_| err(StatusCode::BAD_REQUEST, 1001, "invalid birth_date"))?;
+    archive.voting_eligible =
+        dangan::resolve_voting_eligible(&archive.citizen_status, birth_date, None, true, now)?;
+    archive.citizen_status_updated_at = now;
     archive.updated_at = archive.citizen_status_updated_at;
-    archive.archive_qr_payload = if archive
-        .wallet_address
-        .as_deref()
-        .is_some_and(|v| !v.is_empty())
-        && archive
-            .wallet_pubkey
-            .as_deref()
-            .is_some_and(|v| !v.is_empty())
-    {
-        let archive_qr = dangan::build_archive_qr_payload(&state, &archive).await?;
-        serde_json::to_string(&archive_qr).map_err(|_| {
-            err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                5001,
-                "archive code encode failed",
-            )
-        })?
-    } else {
-        String::new()
-    };
+    archive.archive_qr_payload = String::new();
 
-    sqlx::query("UPDATE archives SET citizen_status = $1, voting_eligible = $2, citizen_status_updated_at = $3, archive_qr_payload = $4, updated_at = $5 WHERE archive_id = $6")
+    sqlx::query("UPDATE archives SET citizen_status = $1, voting_eligible = $2, citizen_status_updated_at = $3, updated_at = $4 WHERE archive_id = $5")
         .bind(&archive.citizen_status)
         .bind(archive.voting_eligible)
         .bind(archive.citizen_status_updated_at)
-        .bind(&archive.archive_qr_payload)
         .bind(archive.updated_at)
         .bind(&archive_id)
         .execute(&state.db)
@@ -506,6 +490,7 @@ async fn update_archive_citizen_status(
                 "update archive failed",
             )
         })?;
+    dangan::clear_archive_qr_payload(&state, &archive_id, archive.updated_at).await?;
 
     write_audit(
         &state,

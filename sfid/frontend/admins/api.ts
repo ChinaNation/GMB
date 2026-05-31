@@ -24,3 +24,15 @@ export async function listShengAdmins(auth: AdminAuth): Promise<ShengAdminRow[]>
     headers: adminHeaders(auth),
   });
 }
+
+export async function updateShengAdminName(
+  auth: AdminAuth,
+  id: number,
+  adminName: string,
+): Promise<ShengAdminRow> {
+  return request<ShengAdminRow>(`/api/v1/admin/sheng-admins/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
+    body: JSON.stringify({ admin_name: adminName }),
+  });
+}

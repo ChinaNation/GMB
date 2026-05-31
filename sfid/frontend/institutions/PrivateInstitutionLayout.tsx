@@ -37,6 +37,7 @@ import {
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { AdminAuth } from '../auth/types';
+import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
 import {
   A3_LABEL,
   INSTITUTION_CODE_LABEL,
@@ -78,6 +79,10 @@ interface Props {
   loading: boolean;
   onReload: () => void;
   onDeleteAccount: (accountName: string) => void;
+  createPasskeyChallengeGrant: (
+    actionType: AdminActionType,
+    payload: unknown,
+  ) => Promise<AdminSecurityGrantOutput>;
 }
 
 interface InfoFormValues {
@@ -94,6 +99,7 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
   loading,
   onReload,
   onDeleteAccount,
+  createPasskeyChallengeGrant,
 }) => {
   const inst = detail.institution;
   const accounts = detail.accounts;
@@ -596,7 +602,12 @@ export const PrivateInstitutionLayout: React.FC<Props> = ({
       </Card>
 
       {/* 下:资料库(自治模块) */}
-      <DocumentLibrary auth={auth} sfidNumber={inst.sfid_number} canWrite={canWrite} />
+      <DocumentLibrary
+        auth={auth}
+        sfidNumber={inst.sfid_number}
+        canWrite={canWrite}
+        createPasskeyChallengeGrant={createPasskeyChallengeGrant}
+      />
 
       <CreateAccountModal
         auth={auth}

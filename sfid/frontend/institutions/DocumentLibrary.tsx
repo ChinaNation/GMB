@@ -15,11 +15,16 @@ import {
   uploadDocument,
 } from './api';
 import type { AdminAuth } from '../auth/types';
+import type { AdminActionType, AdminSecurityGrantOutput } from '../admins/admin_security_api';
 
 interface Props {
   auth: AdminAuth;
   sfidNumber: string;
   canWrite: boolean;
+  createPasskeyChallengeGrant: (
+    actionType: AdminActionType,
+    payload: unknown,
+  ) => Promise<AdminSecurityGrantOutput>;
 }
 
 function formatFileSize(bytes: number): string {
@@ -36,7 +41,12 @@ const DOC_TYPE_COLORS: Record<string, string> = {
   '其他': 'default',
 };
 
-export const DocumentLibrary: React.FC<Props> = ({ auth, sfidNumber, canWrite }) => {
+export const DocumentLibrary: React.FC<Props> = ({
+  auth,
+  sfidNumber,
+  canWrite,
+  createPasskeyChallengeGrant,
+}) => {
   const [docs, setDocs] = useState<InstitutionDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -80,7 +90,12 @@ export const DocumentLibrary: React.FC<Props> = ({ auth, sfidNumber, canWrite })
 
   const onDelete = async (doc: InstitutionDocument) => {
     try {
-      await deleteDocument(auth, sfidNumber, doc.id);
+      const grant = await createPasskeyChallengeGrant('INSTITUTION_DELETE_DOCUMENT', {
+        target: sfidNumber,
+        sfid_number: sfidNumber,
+        doc_id: String(doc.id),
+      });
+      await deleteDocument(auth, sfidNumber, doc.id, grant);
       message.success('文件已删除');
       load();
     } catch (err) {

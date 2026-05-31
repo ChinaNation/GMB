@@ -25,6 +25,7 @@ set +a
 
 required_vars=(
   CPMS_DATABASE_URL
+  CPMS_MATERIALS_DIR
   STORAGE_HOST
   STORAGE_USER
   STORAGE_PATH
@@ -54,18 +55,21 @@ mkdir -p "${LOCAL_BACKUP_DIR}"
 
 DB_DUMP_FILE="${LOCAL_BACKUP_DIR}/${HOST_TAG}_cpms_${TIME_TAG}.dump"
 RUNTIME_TAR_FILE="${LOCAL_BACKUP_DIR}/${HOST_TAG}_runtime_${TIME_TAG}.tar.gz"
+MATERIALS_TAR_FILE="${LOCAL_BACKUP_DIR}/${HOST_TAG}_materials_${TIME_TAG}.tar.gz"
 CHECKSUM_FILE="${LOCAL_BACKUP_DIR}/${HOST_TAG}_backup_${TIME_TAG}.sha256"
 
+mkdir -p "${CPMS_MATERIALS_DIR}"
 pg_dump --format=custom --file="${DB_DUMP_FILE}" "${CPMS_DATABASE_URL}"
 tar -C /var/lib/cpms -czf "${RUNTIME_TAR_FILE}" runtime
-sha256sum "${DB_DUMP_FILE}" "${RUNTIME_TAR_FILE}" >"${CHECKSUM_FILE}"
+tar -C "$(dirname "${CPMS_MATERIALS_DIR}")" -czf "${MATERIALS_TAR_FILE}" "$(basename "${CPMS_MATERIALS_DIR}")"
+sha256sum "${DB_DUMP_FILE}" "${RUNTIME_TAR_FILE}" "${MATERIALS_TAR_FILE}" >"${CHECKSUM_FILE}"
 
 REMOTE_DIR="${STORAGE_PATH%/}/${HOST_TAG}/${DATE_TAG}"
 SSH_TARGET="${STORAGE_USER}@${STORAGE_HOST}"
 
 ssh -p "${STORAGE_PORT}" "${SSH_TARGET}" "mkdir -p '${REMOTE_DIR}'"
 rsync -az --partial --progress -e "ssh -p ${STORAGE_PORT}" \
-  "${DB_DUMP_FILE}" "${RUNTIME_TAR_FILE}" "${CHECKSUM_FILE}" \
+  "${DB_DUMP_FILE}" "${RUNTIME_TAR_FILE}" "${MATERIALS_TAR_FILE}" "${CHECKSUM_FILE}" \
   "${SSH_TARGET}:${REMOTE_DIR}/"
 
 # Remote retention: 0 means keep forever.

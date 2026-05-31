@@ -1,7 +1,7 @@
 //! 省管理员查看市管理员列表与内部变更辅助函数。
 //!
-//! 中文注释:列表读取只需要登录态;新增、编辑、删除市管理员统一由
-//! `admins::actions` 的 Passkey + 冷钱包签名挑战提交,本文件不再暴露写接口。
+//! 中文注释:列表读取和姓名修改只需要登录态;新增、删除市管理员统一由
+//! `admins::actions` 的 Passkey + 冷钱包签名挑战提交。
 
 use axum::{
     extract::{Query, State},
@@ -15,6 +15,7 @@ use crate::scope::admin_province::province_scope_for_role;
 use crate::*;
 
 pub(crate) const MAX_ADMIN_NAME_CHARS: usize = 200;
+pub(crate) const MAX_SHI_ADMINS_PER_CITY: usize = 30;
 
 pub(crate) async fn list_operators(
     State(state): State<AppState>,
@@ -120,6 +121,22 @@ pub(crate) fn operator_row_from_user(store: &Store, operator: &AdminUser) -> Ope
     }
 }
 
+pub(crate) fn count_shi_admins_in_city(store: &Store, province: &str, city: &str) -> usize {
+    // 中文注释:市名可能跨省重复,所以必须同时按省份和市名统计。
+    let city = city.trim();
+    store
+        .admin_users_by_pubkey
+        .values()
+        .filter(|user| user.role == AdminRole::ShiAdmin)
+        .filter(|user| user.city == city)
+        .filter(|user| {
+            province_scope_for_role(store, user.admin_pubkey.as_str(), &user.role)
+                .map(|operator_province| operator_province == province)
+                .unwrap_or(false)
+        })
+        .count()
+}
+
 pub(crate) fn creator_display_name(store: &Store, creator_pubkey: &str) -> String {
     let Some(creator) = store.admin_users_by_pubkey.get(creator_pubkey) else {
         return creator_pubkey.to_string();
@@ -139,7 +156,7 @@ pub(crate) fn ensure_city_in_creator_province(
     store: &Store,
     creator_pubkey: &str,
     city: &str,
-) -> Result<String, axum::response::Response> {
+) -> Result<(String, String), axum::response::Response> {
     let city = city.trim();
     if city.is_empty() {
         return Err(api_error(StatusCode::BAD_REQUEST, 1001, "city is required"));
@@ -168,5 +185,5 @@ pub(crate) fn ensure_city_in_creator_province(
             "province-level city (000) is not allowed",
         ));
     }
-    Ok(city.to_string())
+    Ok((province_name, city.to_string()))
 }

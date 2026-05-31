@@ -4,7 +4,10 @@
 
 import type { AdminAuth } from '../auth/types';
 import { adminHeaders, adminRequest } from '../utils/http';
-import { createGeneralSecurityGrant } from '../admins/admin_security_api';
+import {
+  createPasskeySecurityGrant,
+  type AdminSecurityGrantOutput,
+} from '../admins/admin_security_api';
 
 const SECURITY_GRANT_HEADER = 'x-sfid-security-grant';
 
@@ -220,7 +223,7 @@ export async function createInstitution(
     institution_name: input.institution_name ?? null,
     sub_type: null,
   };
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);
+  const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_CREATE', grantPayload);
   return adminRequest<CreateInstitutionOutput>('/api/v1/institution/create', auth, {
     method: 'POST',
     headers: { 'content-type': 'application/json', [SECURITY_GRANT_HEADER]: grant.grant_id },
@@ -239,7 +242,7 @@ export async function createAccount(
   accountName: string
 ): Promise<CreateAccountOutput> {
   const grantPayload = { target: sfidNumber, sfid_number: sfidNumber, account_name: accountName };
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_CREATE_ACCOUNT', grantPayload);
+  const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_CREATE_ACCOUNT', grantPayload);
   return adminRequest<CreateAccountOutput>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/create`,
     auth,
@@ -301,7 +304,7 @@ export async function updateInstitution(
     sub_type: input.sub_type ?? null,
     parent_sfid_number: input.parent_sfid_number ?? null,
   };
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_UPDATE', grantPayload);
+  const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_UPDATE', grantPayload);
   return adminRequest<MultisigInstitution>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}`,
     auth,
@@ -350,7 +353,7 @@ export async function reconcilePublicSecurity(
 ): Promise<ReconcileReport[]> {
   const qs = province ? `?province=${encodeURIComponent(province)}` : '';
   const target = province?.trim() || '*';
-  const grant = await createGeneralSecurityGrant(auth, 'PUBLIC_SECURITY_RECONCILE', {
+  const grant = await createPasskeySecurityGrant(auth, 'PUBLIC_SECURITY_RECONCILE', {
     target,
     province: province ?? null,
   });
@@ -367,14 +370,13 @@ export async function reconcilePublicSecurity(
 export async function deleteAccount(
   auth: AdminAuth,
   sfidNumber: string,
-  accountName: string
+  accountName: string,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<{ deleted: boolean }> {
-  const grantPayload = { target: sfidNumber, sfid_number: sfidNumber, account_name: accountName };
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_DELETE_ACCOUNT', grantPayload);
   return adminRequest<{ deleted: boolean }>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/account/${encodeURIComponent(accountName)}`,
     auth,
-    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: grant.grant_id } }
+    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } }
   );
 }
 
@@ -398,7 +400,7 @@ export async function uploadDocument(
   file: File,
   docType: string,
 ): Promise<InstitutionDocument> {
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_UPLOAD_DOCUMENT', {
+  const grant = await createPasskeySecurityGrant(auth, 'INSTITUTION_UPLOAD_DOCUMENT', {
     target: sfidNumber,
     sfid_number: sfidNumber,
     file_name: file.name,
@@ -446,15 +448,11 @@ export async function deleteDocument(
   auth: AdminAuth,
   sfidNumber: string,
   docId: number,
+  securityGrant: AdminSecurityGrantOutput,
 ): Promise<void> {
-  const grant = await createGeneralSecurityGrant(auth, 'INSTITUTION_DELETE_DOCUMENT', {
-    target: sfidNumber,
-    sfid_number: sfidNumber,
-    doc_id: String(docId),
-  });
   await adminRequest<string>(
     `/api/v1/institution/${encodeURIComponent(sfidNumber)}/documents/${docId}`,
     auth,
-    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: grant.grant_id } },
+    { method: 'DELETE', headers: { [SECURITY_GRANT_HEADER]: securityGrant.grant_id } },
   );
 }

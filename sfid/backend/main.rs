@@ -2,7 +2,7 @@ use axum::{
     http::StatusCode,
     middleware,
     response::IntoResponse,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -105,6 +105,19 @@ impl std::ops::Deref for StoreWriteGuard {
 impl std::ops::DerefMut for StoreWriteGuard {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.store
+    }
+}
+
+impl StoreWriteGuard {
+    pub(crate) fn persist_or_500(&self) -> Result<(), axum::response::Response> {
+        self.backend.save_store(&self.store).map_err(|err| {
+            error!(error = %err, "store persist failed before response");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                1004,
+                "store persist failed",
+            )
+        })
     }
 }
 
@@ -618,7 +631,17 @@ impl StoreHandle {
                  ALTER TABLE IF EXISTS admins
                    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
                  ALTER TABLE IF EXISTS admins
-                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';",
+                   ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT '';
+                 ALTER TABLE IF EXISTS sheng_admin_scope
+                   DROP CONSTRAINT IF EXISTS sheng_admin_scope_province_name_key;
+                 DROP INDEX IF EXISTS sheng_admin_scope_province_name_key;
+                 DO $$
+                 BEGIN
+                   IF to_regclass('public.sheng_admin_scope') IS NOT NULL THEN
+                     CREATE INDEX IF NOT EXISTS idx_sheng_admin_scope_province_name
+                       ON sheng_admin_scope(province_name);
+                   END IF;
+                 END $$;",
                 )
                 .map_err(|e| format!("init runtime tables failed: {e}"))?;
             let mut clients = Vec::with_capacity(pool_size);
@@ -863,6 +886,10 @@ fn main() {
         let admin_routes = Router::new()
             .route("/api/v1/admin/operators", get(admins::list_operators))
             .route(
+                "/api/v1/admin/operators/:id",
+                patch(admins::actions::update_operator_login_state),
+            )
+            .route(
                 "/api/v1/admin/passkeys/register/start",
                 post(admins::passkeys::start_passkey_registration),
             )
@@ -885,6 +912,10 @@ fn main() {
             .route(
                 "/api/v1/admin/sheng-admins",
                 get(admins::list_province_admins),
+            )
+            .route(
+                "/api/v1/admin/sheng-admins/:id",
+                patch(admins::actions::update_sheng_admin_login_state),
             )
             .route("/api/v1/admin/cpms-keys", get(cpms::list_cpms_keys))
             .route(
@@ -1167,6 +1198,11 @@ fn sfid_error_code(status: StatusCode, message: &str) -> &'static str {
         "cpms_pubkey does not match installed CPMS" => "SFID_CITIZEN_ARCHIVE_PUBKEY_MISMATCH",
         "qr expired" => "SFID_CITIZEN_QR_EXPIRED",
         "qr header invalid" => "SFID_CITIZEN_QR_HEADER_INVALID",
+        "admin pubkey already exists as sheng admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN",
+        "admin pubkey already exists as shi admin" => "SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN",
+        "sheng admin province limit reached" => "SFID_ADMIN_SHENG_ADMIN_PROVINCE_LIMIT_REACHED",
+        "shi admin city limit reached" => "SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED",
+        "store persist failed" => "SFID_STORE_PERSIST_FAILED",
         _ if status == StatusCode::UNAUTHORIZED => "SFID_AUTH_UNAUTHORIZED",
         _ if status == StatusCode::FORBIDDEN => "SFID_AUTH_FORBIDDEN",
         _ if status == StatusCode::BAD_REQUEST => "SFID_REQUEST_INVALID",

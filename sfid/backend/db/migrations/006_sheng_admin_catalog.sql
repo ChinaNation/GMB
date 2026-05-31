@@ -1,19 +1,24 @@
 BEGIN;
 
-ALTER TABLE super_admin_scope
+ALTER TABLE sheng_admin_scope
   ADD COLUMN IF NOT EXISTS scope_no INTEGER;
-ALTER TABLE super_admin_scope
-  DROP CONSTRAINT IF EXISTS super_admin_scope_scope_no_key;
-ALTER TABLE super_admin_scope
-  ADD CONSTRAINT super_admin_scope_scope_no_key UNIQUE (scope_no);
+ALTER TABLE sheng_admin_scope
+  DROP CONSTRAINT IF EXISTS sheng_admin_scope_scope_no_key;
+ALTER TABLE sheng_admin_scope
+  ADD CONSTRAINT sheng_admin_scope_scope_no_key UNIQUE (scope_no);
+ALTER TABLE sheng_admin_scope
+  DROP CONSTRAINT IF EXISTS sheng_admin_scope_province_name_key;
+DROP INDEX IF EXISTS sheng_admin_scope_province_name_key;
+CREATE INDEX IF NOT EXISTS idx_sheng_admin_scope_province_name
+  ON sheng_admin_scope(province_name);
 
-CREATE TEMP TABLE tmp_super_admin_catalog (
+CREATE TEMP TABLE tmp_sheng_admin_catalog (
   scope_no INTEGER PRIMARY KEY,
   province_name TEXT NOT NULL UNIQUE,
   admin_pubkey TEXT NOT NULL UNIQUE
 ) ON COMMIT DROP;
 
-INSERT INTO tmp_super_admin_catalog(scope_no, province_name, admin_pubkey) VALUES
+INSERT INTO tmp_sheng_admin_catalog(scope_no, province_name, admin_pubkey) VALUES
   (1, '中枢省', '0x21bc9e12d717e4d55666501fd21f8f3fdfbf98d513d6584424f34162397ac1be'),
   (2, '岭南省', '0xfaf75f9cb6945e1f61cb42a26d8b6c35614794830ecfc06477e8ace8e1c844b8'),
   (3, '广东省', '0x86eaef716945c2080b9348b8bc9aaede939be2bd875ddb2d3043edbcf2c42ddc'),
@@ -59,23 +64,23 @@ INSERT INTO tmp_super_admin_catalog(scope_no, province_name, admin_pubkey) VALUE
   (43, '合江省', '0xeb85e6981f71269f7dc22f4715119f943b675bb98a0ae5427ede0004f2bad626');
 
 INSERT INTO provinces(province_name)
-SELECT province_name FROM tmp_super_admin_catalog
+SELECT province_name FROM tmp_sheng_admin_catalog
 ON CONFLICT (province_name) DO NOTHING;
 
-DELETE FROM operator_admin_scope
-WHERE super_admin_id IN (SELECT admin_id FROM admins WHERE role = 'SUPER_ADMIN');
+DELETE FROM shi_admin_scope
+WHERE sheng_admin_id IN (SELECT admin_id FROM admins WHERE role = 'SHENG_ADMIN');
 
-DELETE FROM super_admin_scope;
-DELETE FROM admins WHERE role = 'SUPER_ADMIN';
+DELETE FROM sheng_admin_scope;
+DELETE FROM admins WHERE role = 'SHENG_ADMIN';
 
 INSERT INTO admins(admin_pubkey, role, built_in, created_by, created_at)
-SELECT admin_pubkey, 'SUPER_ADMIN', TRUE, 'SYSTEM', now()
-FROM tmp_super_admin_catalog
+SELECT admin_pubkey, 'SHENG_ADMIN', TRUE, 'SYSTEM', now()
+FROM tmp_sheng_admin_catalog
 ORDER BY scope_no;
 
-INSERT INTO super_admin_scope(admin_id, province_name, scope_no)
+INSERT INTO sheng_admin_scope(admin_id, province_name, scope_no)
 SELECT a.admin_id, c.province_name, c.scope_no
-FROM tmp_super_admin_catalog c
+FROM tmp_sheng_admin_catalog c
 JOIN admins a ON a.admin_pubkey = c.admin_pubkey
 ORDER BY c.scope_no;
 

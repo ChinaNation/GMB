@@ -15,7 +15,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-use crate::admins::actions::{require_admin_security_grant, AdminActionType};
+use crate::admins::actions::require_admin_security_grant;
+use crate::admins::operation_auth::AdminActionType;
 use crate::citizens::binding::{pubkey_hex_to_ss58, ss58_to_pubkey_hex};
 use crate::login::AdminAuthContext;
 use crate::*;

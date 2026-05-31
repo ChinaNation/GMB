@@ -7,12 +7,12 @@ import { useAuth } from '../hooks/useAuth';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../common/ScanAccountModal';
 import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
-import type { ShengAdminRow } from './api';
-import type { AdminActionType } from './admin_security_api';
+import { updateShengAdminName, type ShengAdminRow } from './api';
+import { formatAdminCreateError, type AdminActionType } from './admin_security_api';
 import { sameHexPubkey } from './shengAdminUtils';
 import { Passkey } from './Passkey';
 
-interface SuperAdminSubTabProps {
+interface ShengAdminSubTabProps {
   selectedShengAdmin: ShengAdminRow;
   shengAdmins: ShengAdminRow[];
   shengAdminsLoading: boolean;
@@ -25,13 +25,13 @@ type AddFormValues = {
   admin_pubkey: string;
 };
 
-export function SuperAdminSubTab({
+export function ShengAdminSubTab({
   selectedShengAdmin,
   shengAdmins,
   shengAdminsLoading,
   refreshShengAdmins,
   runSecuredAction,
-}: SuperAdminSubTabProps) {
+}: ShengAdminSubTabProps) {
   const { auth } = useAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
@@ -46,6 +46,7 @@ export function SuperAdminSubTab({
     ? provinceAdmins.find((row) => sameHexPubkey(row.admin_pubkey, auth.admin_pubkey)) || null
     : null;
   const canAddShengAdmin = auth?.role === 'SHENG_ADMIN';
+  const shengAdminLimitReached = provinceAdmins.length >= 5;
   const canDeleteShengAdmin = (row: ShengAdminRow) =>
     !!currentAdminRow?.built_in
     && !row.built_in
@@ -75,7 +76,7 @@ export function SuperAdminSubTab({
       setAddOpen(false);
       await refreshShengAdmins();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '新增省级管理员失败');
+      message.error(formatAdminCreateError(error, 'SHENG_ADMIN', '新增省级管理员失败'));
     } finally {
       setAddLoading(false);
     }
@@ -122,10 +123,8 @@ export function SuperAdminSubTab({
           throw new Error('admin_name is required');
         }
         try {
-          await runSecuredAction<ShengAdminRow>('UPDATE_SHENG_ADMIN', {
-            id: row.id,
-            admin_name: adminName,
-          });
+          if (!auth) throw new Error('请先登录');
+          await updateShengAdminName(auth, row.id, adminName);
           message.success('省级管理员已更新');
           await refreshShengAdmins();
         } catch (error) {
@@ -172,9 +171,19 @@ export function SuperAdminSubTab({
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Typography.Text type="secondary">
+          本省省级管理员：{provinceAdmins.length} / 5
+        </Typography.Text>
         {canAddShengAdmin ? (
-          <Button type="primary" onClick={() => setAddOpen(true)}>新增省级管理员</Button>
+          <Button
+            type="primary"
+            disabled={shengAdminLimitReached}
+            title={shengAdminLimitReached ? '本省省级管理员已满 5 人' : undefined}
+            onClick={() => setAddOpen(true)}
+          >
+            新增省级管理员
+          </Button>
         ) : null}
       </div>
       <Table<ShengAdminRow>

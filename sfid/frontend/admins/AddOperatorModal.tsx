@@ -6,7 +6,7 @@ import { Button, Form, Input, Modal, Select } from 'antd';
 import { decodeSs58 } from '../utils/ss58';
 import { ScanAccountModal } from '../common/ScanAccountModal';
 import { SFID_MODAL_Z_INDEX } from '../common/modalStack';
-import type { ShengAdminSharedState } from './shengAdminUtils';
+import { MAX_SHI_ADMINS_PER_CITY, type ShengAdminSharedState } from './shengAdminUtils';
 
 interface AddOperatorModalProps {
   state: ShengAdminSharedState;
@@ -18,6 +18,7 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
     setAddOperatorOpen,
     addOperatorLoading,
     addOperatorForm,
+    operators,
     operatorCities,
     operatorCitiesLoading,
     selectedCity,
@@ -25,6 +26,12 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
     accountScanTarget,
     setAccountScanTarget,
   } = state;
+  const selectedOperatorCity = Form.useWatch('operator_city', addOperatorForm);
+  // 中文注释:新增弹窗只做提前拦截,单市 30 人上限最终以后端校验为准。
+  const cityOperatorCount = (city: string) => operators.filter((item) => item.city === city).length;
+  const selectedCityLimitReached = selectedOperatorCity
+    ? cityOperatorCount(selectedOperatorCity) >= MAX_SHI_ADMINS_PER_CITY
+    : false;
 
   // selectedCity 有值时预填城市字段
   useEffect(() => {
@@ -58,6 +65,8 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
             key="submit"
             type="primary"
             loading={addOperatorLoading}
+            disabled={selectedCityLimitReached}
+            title={selectedCityLimitReached ? `本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人` : undefined}
             onClick={() => addOperatorForm.submit()}
           >
             确认新增
@@ -89,7 +98,17 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
           <Form.Item
             label="市"
             name="operator_city"
-            rules={[{ required: true, message: '请选择市' }]}
+            rules={[
+              { required: true, message: '请选择市' },
+              {
+                validator: async (_rule, value) => {
+                  if (!value) return;
+                  if (cityOperatorCount(String(value)) >= MAX_SHI_ADMINS_PER_CITY) {
+                    throw new Error(`本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人`);
+                  }
+                },
+              },
+            ]}
           >
             <Select
               placeholder="请选择市"
@@ -97,7 +116,14 @@ export function AddOperatorModal({ state }: AddOperatorModalProps) {
               disabled={selectedCity !== null}
               options={operatorCities
                 .filter((c) => c.code !== '000')
-                .map((c) => ({ label: `${c.name} (${c.code})`, value: c.name }))}
+                .map((c) => {
+                  const count = cityOperatorCount(c.name);
+                  return {
+                    label: `${c.name} (${c.code}) ${count}/${MAX_SHI_ADMINS_PER_CITY}`,
+                    value: c.name,
+                    disabled: count >= MAX_SHI_ADMINS_PER_CITY,
+                  };
+                })}
             />
           </Form.Item>
           <Form.Item

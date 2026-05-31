@@ -47,7 +47,7 @@ sfid/backend/
 ├── qr/                        # QR 协议辅助,含统一 sign_request 构造
 ├── scope/                     # 省/市可见范围与过滤规则,不放 handler
 ├── sfid/                      # SFID 生成、校验、省市代码、A3/机构码、admin 元信息 DTO
-├── admins/                    # 省/市管理员治理和安全分级,含 actions.rs / passkeys.rs / 冷钱包 grant
+├── admins/                    # 省/市管理员治理和安全分级,含 operation_auth.rs / actions.rs / passkeys.rs
 ├── store_shards/              # 进程内省分片缓存,不再持久化到旧 store_shards 表
 ├── db/                        # 数据库迁移和 seed,不是 Rust 源码模块
 ├── scripts/                   # 后端开发脚本,不是 Rust 源码模块
@@ -67,16 +67,20 @@ sfid/backend/
 - 公民 DTO 归 `citizens/model.rs`,CPMS DTO 归 `cpms/model.rs`,SFID 元信息 DTO 归
   `sfid/model.rs`,不得塞回 `models/`。
 - `scope/` 只放权限范围规则,不得放 HTTP handler、CPMS 专用判断或 pubkey 工具。
-- 省管理员治理写操作不得直接在 `operators.rs` 或 `catalog.rs` 暴露写 handler;
-  必须统一走 `admins/actions.rs` 的治理动作入口,Passkey 注册与 WebAuthn 工具归
-  `admins/passkeys.rs`。
+- 管理端操作权限类型只允许 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`,统一登记在
+  `admins/operation_auth.rs`;未登记或类型不匹配的操作必须拒绝。
+- 新增、删除省/市管理员不得在 `operators.rs` 或 `catalog.rs` 暴露写 handler;
+  必须统一走 `admins/actions.rs` 的 `PASSKEY_CHALLENGE` 治理动作入口。
+- 新增市级管理员必须由 `admins/actions.rs` 调用 `admins/operators.rs` 的省市校验和数量统计；
+  同一省同一市最多 30 名市级管理员，市名可能跨省重复，统计时必须带省份。
+- 省/市管理员姓名修改属于 `LOGIN_STATE`,使用登录态 PATCH handler,但仍必须做省域和角色校验。
 - 市级管理员地址属于身份根,`UPDATE_OPERATOR` 不接收 `admin_pubkey`;修改市级管理员
   只允许调整管理员姓名。
-- 省级管理员采用同级模型;新增、编辑、删除省级管理员统一走
-  `CREATE_SHENG_ADMIN / UPDATE_SHENG_ADMIN / DELETE_SHENG_ADMIN` 安全动作。
+- 省级管理员采用同级模型;新增、删除省级管理员统一走
+  `CREATE_SHENG_ADMIN / DELETE_SHENG_ADMIN` 安全动作;编辑姓名使用登录态 PATCH handler。
 - 管理员不存在停用状态字段;删除管理员时必须同步清理会话、Passkey、短期挑战和安全 grant。
-- 一般业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
-  提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;重要业务写操作必须再叠加
+- `PASSKEY` 业务写操作必须先在 `admins/actions.rs` 发起安全动作,由 `admins/passkeys.rs`
+  提供 WebAuthn 验证后换取一次性 `x-sfid-security-grant`;`PASSKEY_CHALLENGE` 写操作必须再叠加
   当前管理员冷钱包 sr25519 签名。
 - `admins/passkeys.rs` 的 WebAuthn 配置读取 `SFID_PASSKEY_RP_ID`、
   `SFID_PASSKEY_ORIGIN` 和可选 `SFID_PASSKEY_ALLOWED_ORIGINS`;未配置时开发默认
@@ -123,3 +127,8 @@ cd sfid/backend && cargo fmt && cargo check
 SFID 后端统一通过 `ApiError.error_code` 暴露稳定业务错误码。HTTP `401` 只表示管理员
 登录态无效;公民绑定 challenge 过期、账户不匹配、签名失败、ARCHIVE 验真失败等业务错误
 不得返回 `401`。完整规则见 `memory/05-modules/sfid/ERROR_CODES.md`。
+管理员新增入口必须以规范化 `admin_pubkey` 做全局唯一校验；重复账号按已有角色返回
+`SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN` 或 `SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN`。
+省级管理员每省最多 5 人；市级管理员每省每市最多 30 人；`sheng_admin_scope.province_name` 只能建普通索引,不得建唯一约束。
+管理员安全写操作必须在返回成功前显式完成 Store 持久化；持久化失败返回
+`SFID_STORE_PERSIST_FAILED`。

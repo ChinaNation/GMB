@@ -9,8 +9,9 @@ import * as api from './api';
 import type { Archive, ArchiveMaterial, ArchiveMaterialType } from './types';
 import type { Town, Village } from '../address/types';
 import { parseQrEnvelope, type SignResponseBody } from '../qr/wuminQr';
-import { startCameraScanner } from '../qr/cameraScanner';
+import CameraQrScanner from '../qr/CameraQrScanner';
 import { ScanIcon } from '../components/ScanIcon';
+import DateInput, { isAtLeastAgeYmd, isPastYmd } from '../components/DateInput';
 
 function calcAge(birthDate: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return '-';
@@ -30,13 +31,6 @@ function formatYmdZh(value: string): string {
   return `${match[1]}年${match[2]}月${match[3]}日`;
 }
 
-function formatLocalYmd(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 const materialTypeLabels: Record<ArchiveMaterialType, string> = {
   PHOTO: '照片',
   BIRTH_CERTIFICATE: '出生纸',
@@ -44,6 +38,31 @@ const materialTypeLabels: Record<ArchiveMaterialType, string> = {
   VIDEO: '视频',
   OTHER: '其他资料',
 };
+
+const archiveQrErrorLabels: Record<string, string> = {
+  'archive qr requires last_name': '档案码生成条件未满足：姓氏',
+  'archive qr requires first_name': '档案码生成条件未满足：名字',
+  'archive qr requires gender': '档案码生成条件未满足：性别',
+  'archive qr requires height': '档案码生成条件未满足：身高',
+  'archive qr requires birth_date': '档案码生成条件未满足：出生日期',
+  'archive qr requires passport_no': '档案码生成条件未满足：护照号',
+  'archive qr requires valid_from': '档案码生成条件未满足：有效期',
+  'archive qr requires valid_until': '档案码生成条件未满足：有效期',
+  'archive qr requires province': '档案码生成条件未满足：省份',
+  'archive qr requires city': '档案码生成条件未满足：城市',
+  'archive qr requires normal citizen_status': '档案码生成条件未满足：公民状态必须为正常',
+  'archive qr requires voting_eligible': '档案码生成条件未满足：选举资格必须为有',
+  'archive qr requires age 16': '档案码生成条件未满足：公民必须年满16周岁',
+  'archive qr requires wallet_address': '档案码生成条件未满足：投票账户',
+  'archive qr requires wallet_pubkey': '档案码生成条件未满足：投票账户',
+  'archive qr requires photo': '档案码生成条件未满足：照片至少1张',
+  'archive qr requires birth_certificate': '档案码生成条件未满足：出生纸至少1张',
+};
+
+function archiveQrActionError(e: unknown, fallback: string): string {
+  const message = e instanceof Error ? e.message : '';
+  return archiveQrErrorLabels[message] ?? (message || fallback);
+}
 
 function formatFileSize(value: number): string {
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -62,8 +81,6 @@ function isVideoMaterial(item: ArchiveMaterial): boolean {
 export default function ArchiveDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const today = formatLocalYmd(new Date());
-  const maxBirthDate = formatLocalYmd(new Date(Date.now() - 24 * 60 * 60 * 1000));
   const [archive, setArchive] = useState<Archive | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -71,17 +88,14 @@ export default function ArchiveDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [walletScannerActive, setWalletScannerActive] = useState(false);
   const [walletScanError, setWalletScanError] = useState('');
   const [walletBusy, setWalletBusy] = useState(false);
-  const walletVideoRef = useRef<HTMLVideoElement | null>(null);
-  const walletScanCleanupRef = useRef<(() => void) | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteChallenge, setDeleteChallenge] = useState<{ challenge_id: string; sign_request: string; expire_at: number } | null>(null);
+  const [deleteScannerActive, setDeleteScannerActive] = useState(false);
   const [deleteScanError, setDeleteScanError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [deleteScannerReady, setDeleteScannerReady] = useState(false);
-  const deleteVideoRef = useRef<HTMLVideoElement | null>(null);
-  const deleteScanCleanupRef = useRef<(() => void) | null>(null);
   // 名称解析
   const [provinceName, setProvinceName] = useState('');
   const [cityName, setCityName] = useState('');
@@ -136,50 +150,6 @@ export default function ArchiveDetail() {
     }
   }, [archive?.town_code, archive?.village_id, towns]);
 
-  useEffect(() => {
-    if (!walletModalOpen || !walletVideoRef.current) return;
-    setWalletScanError('');
-    walletScanCleanupRef.current?.();
-    walletScanCleanupRef.current = startCameraScanner(
-      walletVideoRef.current,
-      (raw) => {
-        void handleBindWallet(raw);
-      },
-      () => setWalletScanError(''),
-      (msg) => setWalletScanError(msg),
-    );
-    return () => {
-      walletScanCleanupRef.current?.();
-      walletScanCleanupRef.current = null;
-    };
-  }, [walletModalOpen]);
-
-  useEffect(() => {
-    if (!deleteModalOpen || !deleteVideoRef.current || !deleteChallenge) return;
-    setDeleteScanError('');
-    setDeleteScannerReady(false);
-    deleteScanCleanupRef.current?.();
-    deleteScanCleanupRef.current = startCameraScanner(
-      deleteVideoRef.current,
-      (raw) => {
-        void handleDeleteReceipt(raw);
-      },
-      () => {
-        setDeleteScanError('');
-        setDeleteScannerReady(true);
-      },
-      (msg) => {
-        setDeleteScannerReady(false);
-        setDeleteScanError(msg);
-      },
-    );
-    return () => {
-      deleteScanCleanupRef.current?.();
-      deleteScanCleanupRef.current = null;
-      setDeleteScannerReady(false);
-    };
-  }, [deleteModalOpen, deleteChallenge?.challenge_id]);
-
   const startEdit = () => {
     if (!archive) return;
     setEditForm({
@@ -215,9 +185,18 @@ export default function ArchiveDetail() {
     setEditForm(f => ({
       ...f,
       citizen_status: value,
-      voting_eligible: value === 'REVOKED' ? false : f.voting_eligible,
+      voting_eligible: value === 'REVOKED' || !isAtLeastAgeYmd(String(f.birth_date || ''), 16) ? false : f.voting_eligible,
     }));
   };
+  const handleEditBirthDateChange = (value: string) => {
+    setEditForm(f => ({
+      ...f,
+      birth_date: value,
+      voting_eligible: isAtLeastAgeYmd(value, 16) ? f.voting_eligible : false,
+    }));
+  };
+  const canSetEditVotingEligible =
+    editForm.citizen_status === 'NORMAL' && isAtLeastAgeYmd(String(editForm.birth_date || ''), 16);
 
   const handleSave = async () => {
     if (!id) return;
@@ -226,7 +205,8 @@ export default function ArchiveDetail() {
     const heightText = String(editForm.height_cm ?? '');
     if (!String(editForm.last_name || '').trim()) { setError('请输入姓氏'); return; }
     if (!String(editForm.first_name || '').trim()) { setError('请输入名字'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || birthDate >= today) { setError('请选择正确的出生日期'); return; }
+    if (!isPastYmd(birthDate)) { setError('请选择正确的出生日期'); return; }
+    if (editForm.voting_eligible === true && !isAtLeastAgeYmd(birthDate, 16)) { setError('未满16周岁的公民不能设置为有选举资格'); return; }
     if (!String(editForm.gender_code || '')) { setError('请选择性别'); return; }
     const height = Number(heightText);
     if (!Number.isFinite(height) || height < 30 || height > 260) { setError('请输入正确的身高'); return; }
@@ -275,6 +255,7 @@ export default function ArchiveDetail() {
     setError('');
     setWalletScanError('');
     setWalletModalOpen(true);
+    setWalletScannerActive(true);
   };
 
   const extractWalletAddress = (raw: string) => {
@@ -292,18 +273,28 @@ export default function ArchiveDetail() {
     }
   };
 
-  const handleBindWallet = async (raw: string) => {
+  const handleWalletScanned = (raw: string) => {
+    let walletAddress = '';
+    try {
+      walletAddress = extractWalletAddress(raw);
+    } catch (e) {
+      setWalletScanError(e instanceof Error ? e.message : '钱包二维码格式无效');
+      return false;
+    }
+    void saveWalletAddress(walletAddress);
+    return true;
+  };
+
+  const saveWalletAddress = async (walletAddress: string) => {
     if (!id) return;
     setError('');
     setWalletScanError('');
     setWalletBusy(true);
     try {
-      const walletAddress = extractWalletAddress(raw);
       const res = await api.bindArchiveWallet(id, walletAddress);
       if (res.data) setArchive(res.data);
-      walletScanCleanupRef.current?.();
-      walletScanCleanupRef.current = null;
       setWalletModalOpen(false);
+      setWalletScannerActive(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : '保存投票账户失败';
       setWalletScanError(message.includes('wallet already bound')
@@ -315,15 +306,15 @@ export default function ArchiveDetail() {
   };
 
   const closeWalletModal = () => {
-    walletScanCleanupRef.current?.();
-    walletScanCleanupRef.current = null;
     setWalletModalOpen(false);
+    setWalletScannerActive(false);
     setWalletScanError('');
   };
 
   const handleGenerateArchiveQr = async () => {
     if (!id) return;
     setError('');
+    if (!ensureArchiveQrReady()) return;
     setWalletBusy(true);
     try {
       const res = await api.generateArchiveQr(id);
@@ -333,7 +324,7 @@ export default function ArchiveDetail() {
         loadArchive();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '生成档案码失败');
+      setError(archiveQrActionError(e, '生成档案码失败'));
     } finally {
       setWalletBusy(false);
     }
@@ -342,12 +333,13 @@ export default function ArchiveDetail() {
   const handlePrintArchiveQr = async () => {
     if (!id) return;
     setError('');
+    if (!ensureArchiveQrReady()) return;
     setWalletBusy(true);
     try {
       await api.printArchiveQr(id);
       window.print();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '打印档案码失败');
+      setError(archiveQrActionError(e, '打印档案码失败'));
     } finally {
       setWalletBusy(false);
     }
@@ -357,13 +349,13 @@ export default function ArchiveDetail() {
     if (!id) return;
     setError('');
     setDeleteScanError('');
-    setDeleteScannerReady(false);
     setDeleteBusy(true);
     try {
       const res = await api.createArchiveDeleteChallenge(id);
       if (!res.data) throw new Error('创建删除签名请求失败');
       setDeleteChallenge(res.data);
       setDeleteModalOpen(true);
+      setDeleteScannerActive(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建删除签名请求失败');
     } finally {
@@ -371,10 +363,8 @@ export default function ArchiveDetail() {
     }
   };
 
-  const handleDeleteReceipt = async (raw: string) => {
-    if (!id || !deleteChallenge || deleteBusy) return;
-    setDeleteBusy(true);
-    setDeleteScanError('');
+  const handleDeleteReceiptScanned = (raw: string) => {
+    if (!id || !deleteChallenge || deleteBusy) return false;
     try {
       const env = parseQrEnvelope(raw.trim());
       if (env.kind !== 'sign_response') {
@@ -384,6 +374,19 @@ export default function ArchiveDetail() {
         throw new Error('删除签名回执和当前请求不一致');
       }
       const body = env.body as SignResponseBody;
+      void completeDeleteReceipt(body);
+      return true;
+    } catch (e) {
+      setDeleteScanError(e instanceof Error ? e.message : '删除签名验证失败');
+      return false;
+    }
+  };
+
+  const completeDeleteReceipt = async (body: SignResponseBody) => {
+    if (!id || !deleteChallenge) return;
+    setDeleteBusy(true);
+    setDeleteScanError('');
+    try {
       await api.completeArchiveDelete(id, {
         challenge_id: deleteChallenge.challenge_id,
         pubkey: body.pubkey,
@@ -392,10 +395,8 @@ export default function ArchiveDetail() {
         payload_hash: body.payload_hash,
         signed_at: body.signed_at,
       });
-      deleteScanCleanupRef.current?.();
-      deleteScanCleanupRef.current = null;
       setDeleteModalOpen(false);
-      setDeleteScannerReady(false);
+      setDeleteScannerActive(false);
       navigate('/admin');
     } catch (e) {
       setDeleteScanError(e instanceof Error ? e.message : '删除签名验证失败');
@@ -405,12 +406,10 @@ export default function ArchiveDetail() {
   };
 
   const closeDeleteModal = () => {
-    deleteScanCleanupRef.current?.();
-    deleteScanCleanupRef.current = null;
     setDeleteModalOpen(false);
+    setDeleteScannerActive(false);
     setDeleteChallenge(null);
     setDeleteScanError('');
-    setDeleteScannerReady(false);
   };
 
   const handleMaterialUpload = async () => {
@@ -445,11 +444,40 @@ export default function ArchiveDetail() {
     try {
       await api.deleteArchiveMaterial(id, materialId);
       setMaterials(items => items.filter(item => item.material_id !== materialId));
+      setArchive(current => current ? { ...current, archive_qr_payload: '' } : current);
     } catch (e) {
       setMaterialError(e instanceof Error ? e.message : '删除公民资料失败');
     } finally {
       setMaterialBusy(false);
     }
+  };
+
+  const archiveQrMissingReasons = () => {
+    if (!archive) return ['档案不存在'];
+    const reasons: string[] = [];
+    if (!archive.last_name.trim()) reasons.push('姓氏');
+    if (!archive.first_name.trim()) reasons.push('名字');
+    if (archive.gender_code !== 'M' && archive.gender_code !== 'W') reasons.push('性别');
+    if (archive.height_cm === null || !Number.isFinite(Number(archive.height_cm))) reasons.push('身高');
+    if (!isPastYmd(archive.birth_date)) reasons.push('出生日期');
+    if (!archive.passport_no.trim()) reasons.push('护照号');
+    if (!archive.valid_from.trim() || !archive.valid_until.trim()) reasons.push('有效期');
+    if (!archive.province_code.trim()) reasons.push('省份');
+    if (!archive.city_code.trim()) reasons.push('城市');
+    if (archive.citizen_status !== 'NORMAL') reasons.push('公民状态必须为正常');
+    if (!archive.voting_eligible) reasons.push('选举资格必须为有');
+    if (archive.voting_eligible && !isAtLeastAgeYmd(archive.birth_date, 16)) reasons.push('年满16周岁');
+    if (!archive.wallet_address?.trim() || !archive.wallet_pubkey?.trim()) reasons.push('投票账户');
+    if (!materials.some(item => item.material_type === 'PHOTO')) reasons.push('照片至少1张');
+    if (!materials.some(item => item.material_type === 'BIRTH_CERTIFICATE')) reasons.push('出生纸至少1张');
+    return reasons;
+  };
+
+  const ensureArchiveQrReady = () => {
+    const reasons = archiveQrMissingReasons();
+    if (reasons.length === 0) return true;
+    setError(`档案码生成条件未满足：${reasons.join('、')}`);
+    return false;
   };
 
   if (loading) return <div className="card">加载中...</div>;
@@ -486,7 +514,7 @@ export default function ArchiveDetail() {
                   <div className="form-group"><label>名字 *</label><input className="form-input" value={String(editForm.first_name || '')} onChange={e => setEditForm(f => ({ ...f, first_name: e.target.value }))} /></div>
                 </div>
                 <div className="form-row mt-16">
-                  <div className="form-group"><label>出生日期 *</label><input className="form-input" type="date" max={maxBirthDate} value={String(editForm.birth_date || '')} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></div>
+                  <div className="form-group"><label>出生日期 *</label><DateInput value={String(editForm.birth_date || '')} onChange={handleEditBirthDateChange} required /></div>
                   <div className="form-group">
                     <label>性别 *</label>
                     <select className="form-input" value={String(editForm.gender_code || 'M')} onChange={e => setEditForm(f => ({ ...f, gender_code: e.target.value }))}>
@@ -523,9 +551,9 @@ export default function ArchiveDetail() {
                     <label>选举资格 *</label>
                     <select
                       className="form-input"
-                      value={String(editForm.citizen_status === 'REVOKED' ? false : (editForm.voting_eligible ?? true))}
+                      value={String(canSetEditVotingEligible ? (editForm.voting_eligible ?? true) : false)}
                       onChange={e => setEditForm(f => ({ ...f, voting_eligible: e.target.value === 'true' }))}
-                      disabled={editForm.citizen_status === 'REVOKED'}
+                      disabled={!canSetEditVotingEligible}
                     >
                       <option value="true">有选举资格</option><option value="false">无选举资格</option>
                     </select>
@@ -747,11 +775,14 @@ export default function ArchiveDetail() {
           <div className="modal" style={{ width: 340, minWidth: 340, maxWidth: 340 }}>
             <div className="modal__title">扫描钱包二维码</div>
             {walletScanError && <div style={{ color: 'var(--color-danger)', fontSize: 13, marginBottom: 8 }}>{walletScanError}</div>}
-            <video
-              ref={walletVideoRef}
-              muted
-              playsInline
-              style={{ width: 292, height: 292, display: 'block', objectFit: 'cover', borderRadius: 8, background: '#111827' }}
+            <CameraQrScanner
+              active={walletScannerActive}
+              onActiveChange={setWalletScannerActive}
+              onDetected={handleWalletScanned}
+              onError={setWalletScanError}
+              size={292}
+              busy={walletBusy}
+              loadingText="摄像头初始化中..."
             />
             <div className="modal__footer">
               <button className="btn btn--ghost" onClick={closeWalletModal} disabled={walletBusy}>取消</button>
@@ -796,38 +827,15 @@ export default function ArchiveDetail() {
 
               <div style={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text)', marginBottom: 12 }}>扫码窗口</div>
-                <div style={{
-                  width: 260, height: 260,
-                  background: 'linear-gradient(145deg, #0f172a, #1e293b)',
-                  borderRadius: 16,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  position: 'relative',
-                  border: '2px solid #334155',
-                }}>
-                  <video
-                    ref={deleteVideoRef}
-                    muted
-                    playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                  {!deleteScannerReady && (
-                    <div style={{
-                      position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                      alignItems: 'center', justifyContent: 'center', gap: 8,
-                    }}>
-                      <ScanIcon size={32} color="rgba(255,255,255,0.25)" />
-                      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                        摄像头初始化中...
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                  扫描 wumin 返回的删除签名回执
-                </div>
+                <CameraQrScanner
+                  active={deleteScannerActive}
+                  onActiveChange={setDeleteScannerActive}
+                  onDetected={handleDeleteReceiptScanned}
+                  onError={setDeleteScanError}
+                  hint="扫描 wumin 返回的删除签名回执"
+                  busy={deleteBusy}
+                  loadingText="摄像头初始化中..."
+                />
               </div>
             </div>
             <div className="modal__footer">

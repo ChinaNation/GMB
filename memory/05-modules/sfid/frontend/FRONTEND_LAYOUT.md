@@ -62,14 +62,19 @@ sfid/frontend/
   登录页、Passkey 更新和管理员重要操作都复用登录页同款“左二维码 + 右扫码窗口”布局。
 - `common/modalStack.ts` 是 SFID 前端弹窗层级唯一入口。普通业务弹窗固定在业务层,
   扫码账户弹窗在其上,Passkey 后续冷钱包签名弹窗固定在最高安全层。
-- 管理员一般业务写操作不得直接裸调用 CRUD 端点;必须先通过
+- 管理端权限类型统一为 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE`;前端类型必须与后端
+  `admins/operation_auth.rs` 对齐,不得恢复旧二级权限命名。
+- `PASSKEY` 业务写操作不得直接裸调用 CRUD 端点;必须先通过
   `admins/admin_security_api.ts` 触发浏览器 Passkey 并取得一次性 grant。
-- 管理员重要写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
+- `PASSKEY_CHALLENGE` 写操作必须通过 `admins/admin_security_api.ts` 的 Passkey +
   `WUMIN_QR_V1` 冷钱包签名流程取得一次性 grant。
-- 管理员重要写操作触发 Passkey + 冷钱包签名时,不得为了规避遮挡而关闭编辑、新增或删除确认弹窗。
+- `PASSKEY_CHALLENGE` 写操作触发 Passkey + 冷钱包签名时,不得为了规避遮挡而关闭编辑、新增或删除确认弹窗。
   正确顺序是:底层业务弹窗保持打开并进入 loading/禁用状态,浏览器 Passkey 原生验证完成后,
   `WuminSignatureModal` 以最高安全层展示在所有业务弹窗前面;签名成功后先关闭签名弹窗,
   再关闭或刷新原业务弹窗。失败或取消时底层业务弹窗保留,方便用户修改后重试。
+- 签名弹窗扫码按钮不得复用底层业务 loading。底层业务 loading 只负责防止重复提交;
+  扫码按钮只在已经识别到签名回执并提交 `commitAdminAction` 时进入 loading/禁用,
+  Passkey 完成后刚打开签名弹窗时必须允许用户点击“开启扫码”。
 - Passkey 更新流程固定为 `start -> confirm -> complete`:先扫描冷钱包签名请求并确认当前管理员,
   再调用浏览器 WebAuthn 创建凭据,最后提交后端落库;不得恢复先注册浏览器凭据再冷钱包确认的流程。
 
@@ -97,16 +102,20 @@ sfid/frontend/
 ## 管理员目录规则
 
 - `admins/`:放省级管理员列表、注册局视图、市管理员维护和管理员安全写操作。
-- 注册局-省管理员列表页面由 `SuperAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
-- 省级管理员采用同级模型;仅内置初始省级管理员拥有删除新增省级管理员的权限。
-- `operators_api.ts` 只保留市管理员列表读取。
+- 注册局-省管理员列表页面由 `ShengAdminSubTab.tsx` 承接,按“序号 / 姓名 / 账户 / 操作”表格展示。
+- 省级管理员采用同级模型;每省最多 5 人,仅内置初始省级管理员拥有删除新增省级管理员的权限。
+- 市级管理员列表必须显示 `本市市级管理员：x / 30`;市列表卡片显示该市 `x / 30`;
+  达到 30 人的市禁用新增按钮和新增弹窗里的市选项,但最终上限仍以后端校验为准。
+- `operators_api.ts` 保留市管理员列表读取和姓名登录态修改。
 - `admin_security_api.ts` 负责 Passkey 注册、写操作 prepare/commit、浏览器 WebAuthn、
-  一般业务 grant 和冷钱包签名回执提交。
+  `PASSKEY` grant、`PASSKEY_CHALLENGE` 冷钱包签名回执提交和管理员新增错误码文案转换。
+- 管理员新增失败时，前端只能按 `ApiError.errorCode` 展示角色级重复、省级管理员上限和市级管理员上限提示，禁止解析后端
+  `message`。
 - 省级管理员和市级管理员都在管理员列表操作栏通过“更新密钥”使用 `Passkey.tsx`
   生成或重新生成本人 Passkey。
 - 当 `auth.passkey_bound === false` 时,`Passkey.tsx` 只在当前登录管理员本人那一行的
   “更新密钥”按钮右上角显示红色角标;更新成功并刷新登录态后角标自动消失。
-- 省级管理员新增/编辑/删除、市管理员新增/编辑/删除都必须走 `runSecuredAction`。
+- 省/市管理员新增、删除必须走 `runSecuredAction`;编辑姓名只走登录态 PATCH 接口。
 - 管理员列表不得展示状态栏,也不得保留启用/停用按钮。
 - 编辑市管理员只允许调整管理员姓名;账户地址和市归属只读展示,不得在前端提交修改。
 - 删除市管理员确认弹窗必须展示 SS58 地址,不直接展示 hex 公钥。

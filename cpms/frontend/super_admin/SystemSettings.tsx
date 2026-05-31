@@ -33,7 +33,9 @@ export default function SystemSettings() {
   const exportButtonText = exporting
     ? '导出中...'
     : pendingExportYear
-      ? `导出 ${pendingExportYear} 年度报告`
+      ? exportState?.exported
+        ? `重新导出 ${pendingExportYear} 年度报告`
+        : `导出 ${pendingExportYear} 年度报告`
       : '导出年度报告';
 
   const handleExport = async () => {
@@ -128,6 +130,9 @@ export default function SystemSettings() {
 function exportStatusText(signingReady: boolean, exportState: CpmsStatusExportState | null) {
   if (!signingReady) return '档案签发密钥未就绪，暂不能导出年度报告。';
   if (!exportState) return '正在读取年度导出状态。';
+  if (exportState.exported && exportState.pending_export_year) {
+    return `${exportState.pending_export_year} 年度报告已导出，可重新导出以生成最新档案数据。`;
+  }
   if (exportState.pending_export_year) {
     return `${exportState.pending_export_year} 年度报告尚未导出。`;
   }

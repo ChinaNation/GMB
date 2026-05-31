@@ -1,15 +1,13 @@
 // 中文注释:管理员安全动作 API。
-// 一般写操作走 Passkey grant;重要写操作叠加 WUMIN_QR_V1/sign_request 冷钱包签名。
+// 管理端权限统一为 LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE 三类。
 
 import type { AdminAuth } from '../auth/types';
-import { adminRequest } from '../utils/http';
+import { ApiError, adminRequest } from '../utils/http';
 
 export type AdminActionType =
   | 'CREATE_OPERATOR'
-  | 'UPDATE_OPERATOR'
   | 'DELETE_OPERATOR'
   | 'CREATE_SHENG_ADMIN'
-  | 'UPDATE_SHENG_ADMIN'
   | 'DELETE_SHENG_ADMIN'
   | 'INSTITUTION_CREATE'
   | 'INSTITUTION_UPDATE'
@@ -28,7 +26,8 @@ export type AdminActionType =
   | 'CPMS_REVOKE_KEYS'
   | 'CPMS_DELETE_KEYS';
 
-export type AdminSecurityLevel = 'GENERAL' | 'IMPORTANT';
+export type AdminOperationAuth = 'LOGIN_STATE' | 'PASSKEY' | 'PASSKEY_CHALLENGE';
+export type AdminRoleTarget = 'SHENG_ADMIN' | 'SHI_ADMIN';
 
 export type SignDisplayField = { key?: string; label: string; value: string };
 
@@ -52,17 +51,41 @@ export type PrepareAdminActionOutput = {
   webauthn_options: any;
   sign_request?: string | null;
   payload_hash: string;
-  security_level: AdminSecurityLevel;
+  auth_type: AdminOperationAuth;
   expires_at: number;
 };
 
 export type AdminSecurityGrantOutput = {
   grant_id: string;
   action_type: AdminActionType;
-  security_level: AdminSecurityLevel;
+  auth_type: AdminOperationAuth;
   target: string;
   expires_at: number;
 };
+
+export function formatAdminCreateError(error: unknown, targetRole: AdminRoleTarget, fallback: string): string {
+  if (!(error instanceof ApiError)) {
+    return error instanceof Error ? error.message : fallback;
+  }
+  // 中文注释:管理员新增失败统一按稳定 error_code 显示,不解析后端 message。
+  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_SHENG_ADMIN') {
+    return targetRole === 'SHENG_ADMIN'
+      ? '该账户已是省级管理员，不能重复新增'
+      : '该账户已是省级管理员，不能新增为市级管理员';
+  }
+  if (error.errorCode === 'SFID_ADMIN_PUBKEY_EXISTS_AS_SHI_ADMIN') {
+    return targetRole === 'SHENG_ADMIN'
+      ? '该账户已是市级管理员，不能新增为省级管理员'
+      : '该账户已是市级管理员，不能重复新增';
+  }
+  if (error.errorCode === 'SFID_ADMIN_SHENG_ADMIN_PROVINCE_LIMIT_REACHED') {
+    return '本省省级管理员已满 5 人，不能继续新增';
+  }
+  if (error.errorCode === 'SFID_ADMIN_SHI_ADMIN_CITY_LIMIT_REACHED') {
+    return '本市市级管理员已满 30 人，不能继续新增';
+  }
+  return error.message || fallback;
+}
 
 export async function startPasskeyRegistration(
   auth: AdminAuth,
@@ -134,13 +157,13 @@ export async function commitAdminAction<T>(
   });
 }
 
-export async function createGeneralSecurityGrant(
+export async function createPasskeySecurityGrant(
   auth: AdminAuth,
   actionType: AdminActionType,
   payload: unknown,
 ): Promise<AdminSecurityGrantOutput> {
   const prepared = await prepareAdminAction(auth, actionType, payload);
-  if (prepared.security_level !== 'GENERAL') {
+  if (prepared.auth_type !== 'PASSKEY') {
     throw new Error('该操作需要冷钱包签名确认');
   }
   const passkeyAssertion = await getPasskeyAssertion(prepared.webauthn_options);

@@ -23,3 +23,15 @@ export async function listOperators(auth: AdminAuth): Promise<OperatorRow[]> {
   });
   return data.rows;
 }
+
+export async function updateOperatorName(
+  auth: AdminAuth,
+  id: number,
+  adminName: string,
+): Promise<OperatorRow> {
+  return request<OperatorRow>(`/api/v1/admin/operators/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', ...adminHeaders(auth) },
+    body: JSON.stringify({ admin_name: adminName }),
+  });
+}

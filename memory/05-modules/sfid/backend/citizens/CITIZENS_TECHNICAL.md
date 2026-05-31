@@ -48,7 +48,7 @@
 
 - 依赖：
   - `cpms::verify_cpms_archive_qr`：验 CPMS 档案码和归属密文。
-  - `admins::actions::require_admin_security_grant`：确认一般业务写操作已经通过 Passkey。
+  - `admins::actions::require_admin_security_grant`：确认 `PASSKEY` 写操作已经通过 Passkey。
   - `login::parse_sr25519_pubkey_bytes`：解析 wuminapp 钱包公钥。
   - 全局公共能力：鉴权、审计、状态存储。
 - 边界：
@@ -67,7 +67,7 @@
 - SFID 导入年度报告前必须校验 CPMS 授权处于 `ACTIVE`、CPMS 公钥已经由档案码验真绑定、`records_hash` 与签名均正确；同一 CPMS 同一年度只允许导入相同 `records_hash`。
 - 后台公民列表、绑定 challenge、年度报告导入均按管理员省/市 scope 过滤:
   省级管理员只看本省,市级管理员只操作本市。
-- 完成绑定和年度报告导入属于一般业务写操作,必须携带 Passkey 换取的一次性
+- 完成绑定和年度报告导入属于 `PASSKEY` 写操作,必须携带 Passkey 换取的一次性
   `x-sfid-security-grant`。
 - `citizen_bind_challenge` 必须锁定 `ARCHIVE` 中的钱包字段；前端提交绑定时不得重新传钱包地址或档案字段。
 - `citizen_bind` 必须校验 `sign_response.pubkey` 等于 challenge 锁定的 `wallet_pubkey`，并校验 `payload_hash` 等于 challenge 原文哈希。

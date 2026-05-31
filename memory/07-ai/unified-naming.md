@@ -270,6 +270,7 @@
 | `sfid/backend/scripts/` | 脚本 | scripts | 后端维护脚本 |
 | `sfid/backend/sfid/` | SFID 核心 | sfid-core | 身份号码、省市码和校验规则 |
 | `sfid/backend/admins/` | 管理员 | admins | 省级管理员、市级管理员、Passkey 和冷钱包挑战写操作 |
+| `sfid/backend/admins/operation_auth.rs` | 管理端操作权限 | operation-auth | SFID 管理端 `LOGIN_STATE / PASSKEY / PASSKEY_CHALLENGE` 权限分级真源 |
 | `sfid/backend/store_shards/` | 存储分片 | store-shards | 存储分片相关能力 |
 | `sfid/backend/tests/` | 测试 | tests | 后端测试 |
 

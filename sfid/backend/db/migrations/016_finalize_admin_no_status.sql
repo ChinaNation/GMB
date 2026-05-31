@@ -4,8 +4,6 @@
 
 BEGIN;
 
-DROP VIEW IF EXISTS v_super_admins;
-DROP VIEW IF EXISTS v_operator_admins;
 DROP VIEW IF EXISTS v_sheng_admins;
 DROP VIEW IF EXISTS v_shi_admins;
 

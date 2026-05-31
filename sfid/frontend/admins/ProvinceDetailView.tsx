@@ -11,10 +11,10 @@ import type { SfidCityItem } from '../sfid/api';
 import type { OperatorRow } from './operators_api';
 import { tryEncodeSs58 } from '../utils/ss58';
 import { glassCardStyle, glassCardHeadStyle } from '../common/cardStyles';
-import { sameHexPubkey } from './shengAdminUtils';
+import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { ShengAdminSharedState } from './shengAdminUtils';
 import { AddOperatorModal } from './AddOperatorModal';
-import { SuperAdminSubTab } from './SuperAdminSubTab';
+import { ShengAdminSubTab } from './ShengAdminSubTab';
 import { Passkey } from './Passkey';
 
 interface ProvinceDetailViewProps {
@@ -79,9 +79,9 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
   // 中文注释:后端按登录省域二次校验;前端只负责把省级管理员入口打开。
   const canEditOperators = scope.canWrite && auth?.role === 'SHENG_ADMIN';
   // sub-tab(仅在省详情内显示)
-  const subTabs: Array<{ key: 'operators' | 'super-admin'; label: string }> = [
+  const subTabs: Array<{ key: 'operators' | 'sheng-admin'; label: string }> = [
     { key: 'operators', label: effectiveCity ? '市管理员列表' : '市列表' },
-    { key: 'super-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省管理员列表' },
+    { key: 'sheng-admin', label: auth?.role === 'SHI_ADMIN' ? '安全设置' : '省管理员列表' },
   ];
 
   // ── 决定 title / body / extra ──
@@ -143,7 +143,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
             onSelectCity={setSelectedCity}
           />
         ) : selectedShengAdmin ? (
-          <SuperAdminSubTab
+          <ShengAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
             shengAdmins={shengAdmins}
             shengAdminsLoading={shengAdminsLoading}
@@ -179,7 +179,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
             onDeleteOperator={onDeleteOperator}
           />
         ) : selectedShengAdmin ? (
-          <SuperAdminSubTab
+          <ShengAdminSubTab
             selectedShengAdmin={selectedShengAdmin}
             shengAdmins={shengAdmins}
             shengAdminsLoading={shengAdminsLoading}
@@ -212,7 +212,7 @@ export function ProvinceDetailView({ state }: ProvinceDetailViewProps) {
 function SubTabBar({ tabs, active, onChange }: {
   tabs: Array<{ key: string; label: string }>;
   active: string;
-  onChange: (key: 'operators' | 'super-admin') => void;
+  onChange: (key: 'operators' | 'sheng-admin') => void;
 }) {
   return (
     <div style={{
@@ -224,7 +224,7 @@ function SubTabBar({ tabs, active, onChange }: {
       {tabs.map((t) => (
         <button
           key={t.key}
-          onClick={() => onChange(t.key as 'operators' | 'super-admin')}
+          onClick={() => onChange(t.key as 'operators' | 'sheng-admin')}
           style={{
             padding: '6px 18px', borderRadius: 8, border: 'none',
             cursor: 'pointer', fontSize: 13, fontWeight: 500,
@@ -279,7 +279,12 @@ function CityGrid({ cities, citiesLoading, operators, onSelectCity }: {
             }}
           >
             <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a' }}>{city.name}</div>
-            {count > 0 && <Tag color="teal" style={{ marginTop: 6 }}>{count} 名管理员</Tag>}
+            <Tag
+              color={count >= MAX_SHI_ADMINS_PER_CITY ? 'red' : 'teal'}
+              style={{ marginTop: 6 }}
+            >
+              {count} / {MAX_SHI_ADMINS_PER_CITY}
+            </Tag>
           </div>
         );
       })}
@@ -300,13 +305,32 @@ function CityOperatorsView({ canEditOperators, operators, operatorsLoading, oper
   onDeleteOperator: (row: OperatorRow) => void;
 }) {
   const { auth } = useAuth();
+  // 中文注释:本列表已经按当前市过滤,所以长度就是该市市级管理员数量。
+  const cityLimitReached = operators.length >= MAX_SHI_ADMINS_PER_CITY;
   return (
     <>
-      {canEditOperators && (
-        <div style={{ marginBottom: 12, textAlign: 'right' }}>
-          <Button type="primary" onClick={() => setAddOperatorOpen(true)}>新增市级管理员</Button>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+      }}>
+        <Typography.Text type="secondary">
+          本市市级管理员：{operators.length} / {MAX_SHI_ADMINS_PER_CITY}
+        </Typography.Text>
+        <div>
+          {canEditOperators && (
+            <Button
+              type="primary"
+              disabled={cityLimitReached}
+              title={cityLimitReached ? `本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人` : undefined}
+              onClick={() => setAddOperatorOpen(true)}
+            >
+              新增市级管理员
+            </Button>
+          )}
         </div>
-      )}
+      </div>
       <Table<OperatorRow>
         rowKey={(r) => `${r.id}-${r.admin_pubkey}`}
         loading={operatorsLoading}

@@ -20,8 +20,8 @@ SFID 是在线身份绑定系统，用于接收线下二维码并服务区块链
 - 前端 UI 体系与 CPMS、CitizenNode 保持统一，当前实现基于 Ant Design。
 
 ## 管理员体系
-- 省级管理员（`SHENG_ADMIN`）：每省 1 个代码内置初始管理员,可继续新增同省省级管理员。
-- 市级管理员（`SHI_ADMIN`）：数量不限，由省级管理员增删改查。
+- 省级管理员（`SHENG_ADMIN`）：每省 1 个代码内置初始管理员,同省省级管理员总数最多 5 人。
+- 市级管理员（`SHI_ADMIN`）：每省每市最多 30 人，由省级管理员按本省范围新增、删除和修改姓名。
 - 权限边界：
 2. 省级管理员：可管理本省省/市管理员,并负责 CPMS 安装授权等公安局治理业务。
 3. 市级管理员：仅可执行被授权的业务操作，不可管理管理员账号和 CPMS 安装授权。
@@ -71,7 +71,7 @@ docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/002_runtime_
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/003_admin_role_partition.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/004_finalize_no_runtime_store.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/005_drop_sfid_prefix.sql
-docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/006_super_admin_catalog.sql
+docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/006_sheng_admin_catalog.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/007_refresh_admin_views.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/008_chain_idempotency_reward_state.sql
 docker exec -i sfid-pg psql -U sfid -d sfid < backend/db/migrations/009_runtime_cache_and_pii_encryption.sql
@@ -243,7 +243,6 @@ curl http://127.0.0.1:8899/api/v1/health
 - 返回：`found`、`archive_no`、`identity_code`、`account_pubkey`
 
 ## 测试说明（真实登录）
-- 已关闭 `demo-sign` 登录测试入口。
 - `backend/scripts/smoke.sh` 需要外部提供真实管理员 `ADMIN_TOKEN`（通过真实钱包登录获取）。
 
 详细设计与完整接口定义见 `SFID_TECHNICAL.md`。

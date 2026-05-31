@@ -11,9 +11,10 @@ import { useAuth } from '../hooks/useAuth';
 import type { OperatorRow } from './operators_api';
 import type { ShengAdminRow } from './api';
 import type { SfidCityItem } from '../sfid/api';
-import { listOperators } from './operators_api';
+import { listOperators, updateOperatorName } from './operators_api';
 import {
   commitAdminAction,
+  formatAdminCreateError,
   getPasskeyAssertion,
   prepareAdminAction,
   type AdminActionType,
@@ -21,7 +22,7 @@ import {
 import { listShengAdmins } from './api';
 import { listSfidCities } from '../sfid/api';
 import { decodeSs58, tryEncodeSs58 } from '../utils/ss58';
-import { sameHexPubkey } from './shengAdminUtils';
+import { MAX_SHI_ADMINS_PER_CITY, sameHexPubkey } from './shengAdminUtils';
 import type { AccountScanTarget, ShengAdminSharedState } from './shengAdminUtils';
 import { ShengAdminListView } from './ShengAdminListView';
 import { ProvinceDetailView } from './ProvinceDetailView';
@@ -58,7 +59,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [shengAdminsLoading, setShengAdminsLoading] = useState(false);
   const [selectedShengAdmin, setSelectedShengAdmin] = useState<ShengAdminRow | null>(null);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
-  const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'super-admin'>('operators');
+  const [adminDetailTab, setAdminDetailTab] = useState<'operators' | 'sheng-admin'>('operators');
 
   const [operators, setOperators] = useState<OperatorRow[]>([]);
   const [operatorsLoading, setOperatorsLoading] = useState(false);
@@ -75,6 +76,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
   const [addOperatorForm] = Form.useForm<{ operator_pubkey: string; operator_name: string; operator_city: string }>();
   const [adminActionModal, setAdminActionModal] = useState<AdminActionModalState | null>(null);
   const [adminActionLoading, setAdminActionLoading] = useState(false);
+  const [adminActionCommitLoading, setAdminActionCommitLoading] = useState(false);
 
   // ── 数据加载 ──
 
@@ -155,7 +157,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       return;
     }
     setOperatorCities([]);
-    setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'super-admin' : 'operators');
+    setAdminDetailTab(auth.passkey_bound === false && auth.role === 'SHENG_ADMIN' ? 'sheng-admin' : 'operators');
     setOperatorListPage(1);
     setOperatorCitiesLoading(true);
     let cancelled = false;
@@ -200,7 +202,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
 
   const handleAdminActionSignedResponse = useCallback(async (raw: string) => {
     if (!auth || !adminActionModal) return;
-    setAdminActionLoading(true);
+    setAdminActionCommitLoading(true);
     try {
       const signed = parseSignedReceiptPayload(raw, adminActionModal.actionId);
       if (signed.challenge_id !== adminActionModal.actionId) {
@@ -223,7 +225,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       message.error(msg);
       adminActionModal.reject(error);
     } finally {
-      setAdminActionLoading(false);
+      setAdminActionCommitLoading(false);
     }
   }, [adminActionModal, auth]);
 
@@ -244,6 +246,11 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
     }
     if (!city) {
       message.error('请选择市');
+      return;
+    }
+    const cityOperatorCount = operators.filter((item) => item.city === city).length;
+    if (cityOperatorCount >= MAX_SHI_ADMINS_PER_CITY) {
+      message.error(`本市市级管理员已满 ${MAX_SHI_ADMINS_PER_CITY} 人，不能继续新增`);
       return;
     }
     let admin_pubkey: string;
@@ -269,7 +276,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
       });
       await refreshOperators();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '新增管理员失败';
+      const msg = formatAdminCreateError(err, 'SHI_ADMIN', '新增管理员失败');
       message.error(msg);
     } finally {
       setAddOperatorLoading(false);
@@ -319,10 +326,7 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         }
         setOperatorsLoading(true);
         try {
-          await runSecuredAction<OperatorRow>('UPDATE_OPERATOR', {
-            id: row.id,
-            admin_name,
-          });
+          await updateOperatorName(auth, row.id, admin_name);
           message.success('市级管理员信息已更新');
           await refreshOperators();
         } catch (err) {
@@ -416,13 +420,14 @@ export function ShengAdminsView({ mode }: ShengAdminsViewProps) {
         onCancel={() => {
           adminActionModal?.reject(new Error('admin action cancelled'));
           setAdminActionModal(null);
+          setAdminActionCommitLoading(false);
         }}
         qrTitle="签名二维码"
         qrValue={adminActionModal?.signRequest}
         qrHint="使用当前管理员冷钱包扫码签名"
         scannerHint="扫描冷钱包生成的签名回执二维码"
-        scannerDisabled={adminActionLoading}
-        scannerLoading={adminActionLoading}
+        scannerDisabled={adminActionCommitLoading}
+        scannerLoading={adminActionCommitLoading}
         onDetected={handleAdminActionSignedResponse}
         onScannerError={(msg) => message.error(msg)}
       />

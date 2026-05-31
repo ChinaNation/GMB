@@ -14,7 +14,8 @@ use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 
 // 中文注释:SFID 工具统一从 crate::sfid 拿,见 feedback_sfid_module_is_single_entry.md
-use crate::admins::actions::{require_admin_security_grant, AdminActionType};
+use crate::admins::actions::require_admin_security_grant;
+use crate::admins::operation_auth::AdminActionType;
 use crate::sfid::validate_sfid_number_format;
 use crate::*;
 

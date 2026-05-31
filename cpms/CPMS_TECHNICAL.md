@@ -8,7 +8,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 角色访问控制：`SUPER_ADMIN / OPERATOR_ADMIN`。
 - 消费 SFID 签发的 `SFID_CPMS_V1 / INSTALL` 安装码。
 - CPMS 通用发行版只内置编译后的只读行政区数据，安装码决定运行实例所属市公安局。
-- 安装后生成 `SFID_CPMS_V1 / ARCHIVE` 公民档案二维码；签出前必须先绑定用户投票账户。
+- 安装后生成 `SFID_CPMS_V1 / ARCHIVE` 公民档案二维码；签出前必须先绑定用户投票账户，并满足档案码完整性门槛。
 - ARCHIVE 包含档案号、公民状态、选举资格、电子护照有效期、公民状态更新时间、CPMS 签发公钥、`geo_seal`、投票账户地址/公钥和签名，不包含 `code_id` 或使用次数。
 - 档案号不暴露省、市、机构号。
 - 档案号格式为 `<26位Base32>-<2位Base32校验>`，不带固定业务前缀。
@@ -51,6 +51,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | dangan | `frontend/dangan/` | 档案列表、创建、详情、编辑、软删除签名、档案 QR 操作 |
 | address | `frontend/address/` | 镇村查询 API 和类型 |
 | qr | `frontend/qr/` | WUMIN_QR_V1 解析和浏览器扫码工具 |
+| components | `frontend/components/` | 通用展示与输入组件，日期输入统一使用 `DateInput` |
 | common | `frontend/common/` | HTTP 封装、共享类型和通用组件 |
 
 ## 3. API 清单
@@ -117,7 +118,7 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 | `audit_logs` | 操作审计日志 |
 
 本阶段不提供旧库迁移兼容；旧库可删除后按当前基准结构初始化。
-数据库层同时约束 `archives.status IN ('ACTIVE','DELETED')`、注销公民不得拥有投票资格、软删除档案必须有 `deleted_at`，防止绕过 API 写入非法状态组合。
+数据库层同时约束 `archives.status IN ('ACTIVE','DELETED')`、注销公民不得拥有投票资格、软删除档案必须有 `deleted_at`，防止绕过 API 写入非法状态组合。16 周岁年龄线由后端 API 根据出生日期统一判断；未满 16 周岁不得保存为有选举资格。
 
 ## 5.1 数据库 migration 规则
 
@@ -132,12 +133,12 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 年度报告类型固定为 `SFID_CPMS_V1 / CPMS_STATUS_EXPORT`，只导出给 SFID 手工导入的绑定状态 JSON。
 - 超级管理员从每年 UTC 1 月 1 日起可以导出上一年度数据；如果存在多年未导出，CPMS 按最早未导出年度依次补导。
 - 首个需要导出的年度从 `system_install.initialized_at` 所在年份开始，新装 CPMS 不补导安装前历史年度。
-- 导出成功后该年度按钮置灰并隐藏角标，下一年 UTC 1 月 1 日出现新的待导出年度后再变为可导出。
+- 年度报告导出按钮始终从当前最新档案数据重新生成报告；同一年度重复导出会覆盖 `cpms_status_exports` 中该年度记录，不返回旧 JSON。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，操作管理员登录和已有会话会被锁定，直到超级管理员完成补导。
 - CPMS 不判断 SFID 是否收到文件，也不禁用安装码；SFID 逾期禁用 CPMS 授权由 SFID 系统单独实现。
 - `GET /api/v1/archives/status-export/state` 返回系统设置页按钮状态、角标状态和操作管理员锁定状态。
 - `GET /api/v1/archives/status-export` 生成或返回最早未导出年度的已签名报告。
-- `citizen_binding_records` 导出当前仍有钱包绑定的档案快照：`archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`。
+- `citizen_binding_records` 导出当前仍有钱包绑定的档案快照：`archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`；导出时再次按公民状态和 16 周岁年龄线计算有效选举资格，不把未成年档案导出为有选举资格。
 - `binding_release_records` 只导出当年度满 100 年硬删除后需要 SFID 释放三者绑定关系的 `archive_no / released_at / release_reason`。
 - 年度报告不得导出姓名、出生日期、地址、护照号；护照号是 CPMS 内部号码，与 SFID 导入无关。
 
@@ -158,9 +159,10 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 公民资料库后端主体在 `src/dangan/materials.rs`，档案详情页入口在 `frontend/dangan/ArchiveDetail.tsx`。
 - 支持资料类型：照片、出生纸、复印件、视频和其他资料；后端按类型校验 MIME，单文件上限 100 MB。
 - 数据库 `archive_materials` 只保存元数据、哈希和本机存储文件名，不保存文件正文。
-- 文件正文默认保存在 `data/archive-materials/<archive_id>/`，可通过 `CPMS_MATERIALS_DIR` 改到部署指定目录。
+- 开发默认文件正文保存在 `data/archive-materials/<archive_id>/`；正式离线安装包固定通过
+  `CPMS_MATERIALS_DIR=/var/lib/cpms/materials` 写入本机资料目录。
 - 软删除档案仍可查看和下载已有资料，但不能新增或删除资料。
-- 上传、下载、删除资料写入审计；100 年硬删除档案时同步清理该档案资料文件目录。
+- 上传、下载、删除资料写入审计；上传或删除资料会清空旧档案码，100 年硬删除档案时同步清理该档案资料文件目录。
 - 资料上传入口有本机 IP 级限流；单文件仍由 100 MB 请求体上限兜底。
 
 ## 5.4 安全运行约束
@@ -168,14 +170,20 @@ CPMS（Citizen Passport Management System）是市公安局使用的公民档案
 - 后端统一设置 `Content-Security-Policy`、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy`。
 - 登录 QR、安装初始化、超级管理员初始化绑定、删除签名完成和资料上传入口使用本机内存限流；触发后返回 `429 / CPMS_RATE_LIMITED`。
 - `CPMS_KEY_ENCRYPT_SECRET` 在已初始化实例启动时必须能解密 `system_install.install_secret` 和 `qr_sign_keys` 中的 ARCHIVE 私钥，否则拒绝启动。
-- 正式安装包包含 `frontend/dist`，安装到 `/opt/cpms/frontend`，并通过 `CPMS_FRONTEND_DIR` 由后端直接托管；不再提供 Docker 部署入口。
+- 正式安装包为 `cpms-ubuntu24-amd64.run`，包含后端、`frontend/dist`、PostgreSQL/nginx/openssl
+  等 Ubuntu 24.04 amd64 离线 deb 依赖、systemd、nginx 配置和证书生成脚本；安装过程不得联网。
+- 后端正式部署只监听 `127.0.0.1:8080`，局域网入口统一由 nginx 提供
+  `https://www.cpms.com/`。客户端 DNS 由公安局内网自行配置到 CPMS 主机地址。
+- 安装时生成 `/etc/cpms/certs/cpms-root-ca.crt` 和 `www.cpms.com` 服务端证书；客户端需要信任该
+  本机私有 CA 后访问 HTTPS。
+- 前端所有二维码读取入口统一使用 `frontend/qr/CameraQrScanner.tsx` 摄像头组件，只保留摄像头扫码模式。
 
 ## 6. 环境变量
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `CPMS_DATABASE_URL` | PostgreSQL 连接串 | `postgres://cpms:cpms@127.0.0.1:5433/cpms_dev` |
-| `CPMS_MATERIALS_DIR` | 公民资料库文件正文保存目录 | `data/archive-materials` |
-| `CPMS_BIND` | 监听地址 | `0.0.0.0:8080` |
+| `CPMS_MATERIALS_DIR` | 公民资料库文件正文保存目录；正式安装为 `/var/lib/cpms/materials` | `data/archive-materials` |
+| `CPMS_BIND` | 监听地址；正式安装由 nginx 反代到本机回环地址 | `127.0.0.1:8080` |
 | `CPMS_KEY_ENCRYPT_SECRET` | 本机密钥加密主密钥，32 字节 hex；缺失时拒绝初始化或读取已加密密钥 | 无 |
 | `CPMS_FRONTEND_DIR` | 正式部署前端静态文件目录；设置后必须存在 `index.html` | 未设置时使用 `./frontend` |
 | `CPMS_COOKIE_SECURE` | 设置为 `true/1/yes` 时给 session Cookie 增加 `Secure`，用于 HTTPS 部署 | 未启用 |
@@ -222,8 +230,12 @@ CPMS 只有两种管理员:
 详情页在出生日期/年龄下方展示护照号和电子护照有效期。创建档案当天未满 16 周岁时有效期为
 5 年，已满 16 周岁时有效期为 10 年；生日当天视为已满对应周岁。
 公民档案创建/编辑时，详细地址、公民状态和选举资格均为必填；出生日期必须早于当前 UTC 日期，
-不得选择当天或未来日期。公民状态为 `REVOKED` 时，选举资格固定为 `false`，只有状态为
-`NORMAL` 时才允许选择有/无选举资格。
+不得选择当天或未来日期。选举资格必须同时满足公民状态 `NORMAL` 和已满 16 周岁；公民状态为
+`REVOKED` 或出生日期未满 16 周岁时，选举资格固定为 `false`，前端不可选择“有选举资格”，后端也拒绝保存。
+
+前端所有日期输入必须使用 `frontend/components/DateInput.tsx`，不得在页面中散落原生日期
+输入标签。出生日期和出生日期搜索默认使用该组件的昨日 `max` 约束，保证档案
+列表搜索、创建档案和编辑档案的年份、月份、日期输入行为一致。
 
 ## 9.1 档案软删除
 
@@ -258,7 +270,9 @@ CPMS_ARCHIVE_DELETE_V1|challenge_id|archive_id|archive_no|0x_admin_pubkey|expire
 
 ARCHIVE 投票账户字段、签名原文和签出流程见
 `memory/05-modules/cpms/ARCHIVE_WALLET_PROOF.md`。无钱包地址的档案不得签出
-ARCHIVE。同一个钱包账户在档案生命周期内只能绑定一个公民档案；软删除期间仍占用钱包账户，
+ARCHIVE；姓氏、名字、性别、身高、出生日期、护照号、有效期、省份、城市、公民状态、选举资格、
+投票账户、照片和出生纸未齐全时也不得签出 ARCHIVE。公民状态必须为 `NORMAL`，选举资格必须为
+`true`，照片和出生纸各至少 1 张。同一个钱包账户在档案生命周期内只能绑定一个公民档案；软删除期间仍占用钱包账户，
 只有满 100 年硬删除并物理删除档案后，钱包账户、档案号和护照号才自然释放。档案详情页档案码操作统一显示为“更新 / 下载 / 打印”；“更新”表示刷新当前
 ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打印”会记录打印审计并调用浏览器打印，
 打印媒体只输出“公民档案详情”卡片，不打印侧栏、顶部栏和删除/编辑/返回列表/
@@ -279,4 +293,26 @@ ARCHIVE 二维码，不再使用“生成档案码”作为按钮文案。“打
 - CPMS 初始化和已初始化实例启动时会按安装码 R5 段重建 `address_towns/address_villages`，
   地址接口只返回当前市数据。
 - 公民档案的出生日期、性别、身高、详细地址均为必填；出生日期固定 `YYYY-MM-DD` 且必须
-  早于当前 UTC 日期，身高范围为 `30-260 cm`。
+  早于当前 UTC 日期，身高范围为 `30-260 cm`；未满 16 周岁的公民不得设置为有选举资格。
+- 前端日期控件统一走 `frontend/components/DateInput.tsx`，出生日期类输入默认不允许选择
+  当天或未来日期。
+
+## 12. Ubuntu 24.04 离线主机安装
+
+- 发行产物名称固定为 `cpms-ubuntu24-amd64.run`，由 GitHub Actions 在 `ubuntu-24.04` runner
+  上构建并上传；正式交付只使用这一份离线自解压安装包。
+- `cpms/scripts/build_linux_host_installer.sh` 构建自解压 `.run`：payload 包含 `cpms-backend`、
+  前端静态文件、数据库 schema/seed、systemd 文件、nginx 配置、证书脚本、备份脚本和 Ubuntu
+  24.04 amd64 运行依赖 deb 闭包。
+- `cpms/deploy/linux/install_host.sh` 只从 payload 的 `debs/` 安装依赖，禁止 `apt-get update`
+  或访问外部 apt 源；目标机无需联网。
+- 安装后后端服务为 `cpms-backend.service`，工作目录 `/var/lib/cpms`，环境文件
+  `/etc/cpms/cpms-backend.env`，资料目录 `/var/lib/cpms/materials`。
+- nginx 站点文件为 `/etc/nginx/sites-available/cpms.conf`，启用后监听 80/443，80 自动跳转
+  HTTPS，443 反代到 `127.0.0.1:8080`。
+- 证书由 `/opt/cpms/bin/generate_cpms_certs.sh` 安装时生成；Root CA 路径为
+  `/etc/cpms/certs/cpms-root-ca.crt`，服务端证书只绑定 `DNS:www.cpms.com`。
+- 备份脚本 `/opt/cpms/bin/backup_to_storage.sh` 同时备份 PostgreSQL dump、`/var/lib/cpms/runtime`
+  和 `/var/lib/cpms/materials`，并生成同批次 sha256 校验文件。
+- 卸载脚本只移除 CPMS 服务、nginx 站点和 `/opt/cpms/bin` 内程序；PostgreSQL、数据库、
+  `/etc/cpms`、`/var/lib/cpms` 和 `/var/backups/cpms` 默认保留，避免误删实名档案资料。

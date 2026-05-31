@@ -7,9 +7,12 @@
 
 ## 2. 负责范围
 - `build_archive_qr_payload(...)`：构造 ARCHIVE 二维码。
+- `clear_archive_qr_payload(...)`：统一清空旧 ARCHIVE 二维码。
 - `validate_citizen_status(...)`：校验 `NORMAL / REVOKED`。
+- `effective_voting_eligible(...) / resolve_voting_eligible(...)`：按公民状态和 16 周岁年龄线计算或校验选举资格。
 - `archive_valid_from(...) / archive_valid_until(...) / archive_validity_years(...)`：计算电子护照有效期。
 - `routes::router(...)`：提供档案创建、详情、编辑、投票账户绑定、删除签名、打印和列表接口。
+- `routes::ensure_archive_qr_ready(...)`：生成或打印 ARCHIVE 前校验档案完整性。
 - `routes::list_archives(...)`：使用 `created_at DESC, archive_id DESC` 游标分页返回档案列表。
 - `stats::adjust_archive_stats(...)`：在档案创建和注销软删除事务中维护 `archive_stats`。
 - `materials::router(...)`：提供公民资料库上传、列表、下载和删除接口。
@@ -49,6 +52,7 @@
 
 二维码明文字段不得出现 `sfid_number / province_code / city_code`。归属密文 `geo_seal` 只加密 `sfid_number`，由 SFID 根据安装授权中的 `install_secret` 解密。
 ARCHIVE 不包含 `code_id` 或使用次数；重复绑定由 SFID 的 `archive_no / sfid_code / wallet_pubkey` 三者唯一关系约束。
+生成和打印 ARCHIVE 前必须满足完整性门槛：姓氏、名字、性别、身高、出生日期、护照号、有效期、省份、城市、公民状态、选举资格、投票账户、照片和出生纸齐全；公民状态必须为 `NORMAL`，选举资格必须为 `true`，照片和出生纸各至少 1 张。
 
 ## 5. 签名与加密
 - `geo_seal` 使用 AES-256-GCM。
@@ -83,10 +87,13 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 ## 7. 档案生命周期
 
 - 公民状态只允许 `NORMAL`（正常）和 `REVOKED`（注销）。
-- 正常公民允许 `voting_eligible=true/false`；注销公民必须 `voting_eligible=false`。
-- 创建/编辑档案时，后端按同一规则归一化选举资格；前端只允许正常公民选择选举资格。
+- 正常且已满 16 周岁的公民允许 `voting_eligible=true/false`；注销公民或未满 16 周岁的公民必须 `voting_eligible=false`。
+- 创建/编辑档案、修改公民状态和年度导出时，后端按同一规则计算选举资格；前端只允许正常且已满 16 周岁的公民选择“有选举资格”。
 - 出生日期必须早于当前 UTC 日期；当天出生和未来日期都不得录入。
+- 前端列表搜索、创建和编辑出生日期统一使用 `cpms/frontend/components/DateInput.tsx`，
+  页面内不得散落直接的日期输入实现。
 - 公民档案详情页删除按钮对应注销软删除，后端保存 `status = DELETED`、`citizen_status = REVOKED`、`voting_eligible = false`、`deleted_at`、`deleted_by`、`delete_reason`。
+- 编辑实名字段、修改公民状态、绑定/更换投票账户、上传资料或删除资料会调用 `clear_archive_qr_payload(...)` 清空旧 `archive_qr_payload`；旧档案码不得继续作为当前档案状态展示。
 - 软删除后的 100 年内，档案号和护照号仍在 `archives` 表中占用，不进入生成池。
 - 从 `deleted_at` 的 UTC 日期起满 100 年后，`lifecycle` 在服务启动时和每日后台任务中扫描到期档案。
 - 硬删除使用单事务：锁定到期档案、写入 `archive_number_recycle_pool`、写入 `archive_hard_delete_logs`、清理删除挑战和打印记录、物理删除 `archives` 行，并清理该档案的资料库文件目录。
@@ -100,11 +107,13 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 后端入口固定在 `backend/src/dangan/materials.rs`，路由由 `dangan::router()` 挂载；不得把资料库存储和生命周期逻辑放进角色模块。
 - 资料类型固定为 `PHOTO / BIRTH_CERTIFICATE / COPY / VIDEO / OTHER`，分别对应照片、出生纸、复印件、视频和其他资料。
 - `archive_materials` 只保存元数据：资料类型、原始文件名、本机存储文件名、MIME、大小、SHA-256、备注、上传人、上传时间和软删除字段。
-- 文件正文默认保存到 `data/archive-materials/<archive_id>/`；部署时可用 `CPMS_MATERIALS_DIR` 指向专用资料盘。
+- 开发默认文件正文保存到 `data/archive-materials/<archive_id>/`；正式离线安装包固定设置
+  `CPMS_MATERIALS_DIR=/var/lib/cpms/materials`，备份脚本必须同步备份该目录。
 - 单文件上限 100 MB；后端按资料类型校验 MIME，拒绝类型不匹配或空文件。
 - 上传入口增加本机 IP 级限流，避免内网脚本误传或连续大文件请求压垮主机。
 - 软删除档案可以查看和下载已有资料，不能新增或删除资料；100 年硬删除档案时同步删除资料目录。
 - 上传、下载、删除分别记录 `ARCHIVE_MATERIAL_UPLOAD / ARCHIVE_MATERIAL_DOWNLOAD / ARCHIVE_MATERIAL_DELETE` 审计事件。
+- 上传或删除照片、出生纸等公民资料会清空旧 `archive_qr_payload`；重新更新档案码时仍要求照片和出生纸各至少 1 张。
 
 ## 9. 年度状态导出
 
@@ -115,8 +124,8 @@ sfid-cpms-v1|archive|{archive_no}|{citizen_status}|{voting_eligible}|{valid_from
 - 年度报告不再在 UTC 1 月 10 日后关闭导出窗口；只要存在待导出年度，超级管理员一直可以导出。
 - UTC 每年 1 月 11 日起，如果存在已超过 1 月 10 日仍未导出的年度报告，`OPERATOR_ADMIN` 登录和已有会话都会被锁定；超级管理员不受影响，必须先补导年度报告。
 - `GET /api/v1/archives/status-export/state` 返回待导出年度、按钮可用状态、角标状态和操作管理员锁定状态，供前端系统设置页展示。
-- `cpms_status_exports` 记录每个年度首次导出的批次、导出时间、绑定记录数量、释放记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时返回同一份文件，不重新生成签名批次。
-- `citizen_binding_records` 是当前仍有钱包绑定的档案快照，包含 `archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`，用于 SFID 按档案号覆盖本地绑定状态。
+- `cpms_status_exports` 记录每个年度最近一次导出的批次、导出时间、绑定记录数量、释放记录数量、`records_hash` 和完整已签名 JSON；重复点击导出时必须从当前档案数据重新生成并覆盖同年度记录。
+- `citizen_binding_records` 是当前仍有钱包绑定的档案快照，包含 `archive_no / wallet_address / wallet_pubkey / wallet_sig_alg / wallet_bound_at / citizen_status / voting_eligible / status_updated_at`，用于 SFID 按档案号覆盖本地绑定状态；`voting_eligible` 导出前按公民状态和 16 周岁年龄线重新计算。
 - `binding_release_records` 只包含 `archive_no / released_at / release_reason`，用于表达 100 年硬删除后 SFID 可以释放该档案号与身份 ID、钱包地址的绑定关系。
 - 导出文件不得包含姓名、出生日期、地址、护照号等实名或 CPMS 内部号码。
 - 导出文件使用 CPMS ARCHIVE 签发密钥签名，签名原文为 `sfid-cpms-v1|cpms-status-export|{sfid_number}|{cpms_pubkey}|{export_batch_id}|{exported_at}|{records_hash}`。
